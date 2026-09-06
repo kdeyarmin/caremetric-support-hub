@@ -241,7 +241,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
           {config.demoMode && (
             <div className="preview-banner">
               <Sparkles size={17} />
-              <span><strong>Live implementation preview.</strong> Changes work in this session; production connection awaits the dedicated Supabase project.</span>
+              <span><strong>Live implementation preview.</strong> Demo data stays in this session; the dedicated backend is provisioned and remains gated until administrator and compliance setup is complete.</span>
             </div>
           )}
           <Routes>
