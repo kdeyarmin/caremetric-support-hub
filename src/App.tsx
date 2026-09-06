@@ -128,8 +128,7 @@ function ErrorScreen({ message, onRetry }: { message: string; onRetry: () => voi
 
 function SignInScreen() {
   const [email, setEmail] = useState("");
-  const [otp, setOtp] = useState("");
-  const [step, setStep] = useState<"email" | "otp">("email");
+  const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [message, setMessage] = useState("");
@@ -139,19 +138,21 @@ function SignInScreen() {
     if (!supabase || !email.trim()) return;
     setBusy(true);
     setHasError(false);
-    const { error } = step === "email"
-      ? await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: true } })
-      : await supabase.auth.verifyOtp({ email: email.trim(), token: otp.trim(), type: "email" });
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: window.location.origin,
+      },
+    });
     setBusy(false);
     if (error) {
       setHasError(true);
       setMessage(error.message);
       return;
     }
-    if (step === "email") {
-      setStep("otp");
-      setMessage("Enter the six-digit code sent to your email.");
-    }
+    setSent(true);
+    setMessage("Check your email and click the secure sign-in link. It will return you here.");
   };
 
   return (
@@ -175,29 +176,14 @@ function SignInScreen() {
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="you@company.com"
-            disabled={step === "otp"}
+            disabled={sent}
             required
           />
-          {step === "otp" && <>
-            <label htmlFor="otp">Six-digit code</label>
-            <input
-              id="otp"
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={otp}
-              onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="000000"
-              pattern="[0-9]{6}"
-              required
-              autoFocus
-            />
-          </>}
-          <button className="button button-primary" disabled={busy || (step === "otp" && otp.length !== 6)}>
+          <button className="button button-primary" disabled={busy || sent}>
             {busy ? <LoaderCircle className="spin" size={17} /> : <Mail size={17} />}
-            {step === "email" ? "Email secure sign-in code" : "Verify and sign in"}
+            {sent ? "Check your email" : "Email secure sign-in link"}
           </button>
-          {step === "otp" && !busy && <button type="button" className="button button-secondary" onClick={() => { setStep("email"); setOtp(""); setMessage(""); }}>Use a different email</button>}
+          {sent && !busy && <button type="button" className="button button-secondary" onClick={() => { setSent(false); setMessage(""); }}>Use a different email</button>}
           {message && <p className={`form-message ${hasError ? "form-error" : "form-success"}`}>{message}</p>}
         </form>
         <div className="privacy-note"><ShieldCheck size={16} /> CareMetric-managed support. Never include patient information in a support request.</div>
