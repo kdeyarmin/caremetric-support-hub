@@ -1,0 +1,33 @@
+alter table private.staff_permissions enable row level security;
+alter table private.case_notes enable row level security;
+alter table private.case_sla enable row level security;
+alter table private.audit_events enable row level security;
+alter table private.federation_issuers enable row level security;
+alter table private.federated_principals enable row level security;
+alter table private.federated_tenants enable row level security;
+alter table private.context_nonces enable row level security;
+
+create index case_messages_author_idx on hub.case_messages(author_id) where author_id is not null;
+create index case_notes_author_idx on private.case_notes(author_id) where author_id is not null;
+create index content_publications_revision_idx on hub.content_publications(revision_id);
+create index content_publications_item_revision_idx on hub.content_publications(item_id, revision_id);
+create index content_publications_published_by_idx on hub.content_publications(published_by) where published_by is not null;
+create index content_revisions_overlay_idx on hub.content_revisions(product_overlay_id) where product_overlay_id is not null;
+create index content_revisions_created_by_idx on hub.content_revisions(created_by) where created_by is not null;
+create index content_revisions_approved_by_idx on hub.content_revisions(approved_by) where approved_by is not null;
+create index content_items_owner_product_idx on hub.content_items(owner_product_id) where owner_product_id is not null;
+create index content_items_created_by_idx on hub.content_items(created_by) where created_by is not null;
+create index content_relations_child_idx on hub.content_relations(child_item_id);
+create index media_assets_content_item_idx on hub.media_assets(content_item_id);
+create index media_assets_product_idx on hub.media_assets(product_id) where product_id is not null;
+create index support_contacts_product_idx on hub.support_contacts(product_id) where product_id is not null;
+create index support_contacts_tenant_idx on hub.support_contacts(tenant_id) where tenant_id is not null;
+create index support_contacts_verified_by_idx on hub.support_contacts(verified_by) where verified_by is not null;
+create index tenant_products_product_idx on hub.tenant_products(product_id);
+create index staff_permissions_product_idx on private.staff_permissions(product_id) where product_id is not null;
+create index staff_permissions_granted_by_idx on private.staff_permissions(granted_by) where granted_by is not null;
+create index federation_issuers_product_idx on private.federation_issuers(product_id);
+create index federated_principals_user_idx on private.federated_principals(hub_user_id);
+create index federated_tenants_tenant_idx on private.federated_tenants(hub_tenant_id);
+create index context_nonces_issuer_idx on private.context_nonces(issuer_id);
+

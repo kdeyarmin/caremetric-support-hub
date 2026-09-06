@@ -13,10 +13,10 @@
 
 ## Phase 1 — provision and validate
 
-1. Create the private GitHub repository.
-2. Create a dedicated Supabase project in the selected organization and region.
+1. ✅ Create the private GitHub repository.
+2. ✅ Create a dedicated Supabase project in the selected organization and region.
 3. Configure High Compliance prerequisites before accepting support traffic.
-4. Apply the schema iteratively, fix advisors, and generate the official migration.
+4. ✅ Apply the schema iteratively, fix blocking advisors, and record the official migrations.
 5. Provision the first CareMetric platform administrator through a one-time audited bootstrap script.
 6. Add the first tenant/product memberships.
 7. Deploy the preview behind an internal-only Railway URL.

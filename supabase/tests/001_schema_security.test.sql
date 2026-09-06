@@ -1,6 +1,6 @@
 begin;
 
-select plan(13);
+select plan(15);
 
 select has_schema('hub', 'hub schema exists');
 select has_schema('private', 'private schema exists');
@@ -16,6 +16,16 @@ select ok(
 select ok(
   (select relrowsecurity from pg_class where oid = 'hub.case_messages'::regclass),
   'customer-visible case messages have RLS enabled'
+);
+
+select ok(
+  (select relrowsecurity from pg_class where oid = 'private.case_notes'::regclass),
+  'private case notes have defense-in-depth RLS enabled'
+);
+
+select ok(
+  (select relrowsecurity from pg_class where oid = 'private.audit_events'::regclass),
+  'private audit events have defense-in-depth RLS enabled'
 );
 
 select ok(

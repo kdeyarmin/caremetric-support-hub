@@ -21,9 +21,24 @@ const exposedTables = [
   "course_links",
 ];
 
+const privateTables = [
+  "staff_permissions",
+  "case_notes",
+  "case_sla",
+  "audit_events",
+  "federation_issuers",
+  "federated_principals",
+  "federated_tenants",
+  "context_nonces",
+];
+
 describe("Support Hub schema contract", () => {
   it.each(exposedTables)("enables RLS on hub.%s", (table) => {
     expect(schema).toContain(`alter table hub.${table} enable row level security;`);
+  });
+
+  it.each(privateTables)("enables defense-in-depth RLS on private.%s", (table) => {
+    expect(schema).toContain(`alter table private.${table} enable row level security;`);
   });
 
   it("makes every exposed view security-invoker", () => {

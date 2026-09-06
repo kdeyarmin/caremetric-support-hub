@@ -15,7 +15,7 @@ Version `0.1.0` implements the first vertical slice:
 - A dedicated `hub`/`private` Supabase schema design, RLS policies, narrow grants, atomic case RPCs, physically separate internal notes, and metadata-only audit records.
 - A polished implementation preview that works without credentials. Demo mode is never a production data store.
 
-The dedicated GitHub repository and Supabase project are the remaining external provisioning boundaries. No existing CareMetric production database is modified by this code.
+The private GitHub repository and isolated `CareMetric Support Hub` Supabase project (`xgauehtwksmnoqhgqegm`, `us-east-2`) are provisioned. The live database has the three reviewed migrations in `supabase/migrations`, RLS enabled on every application table, and a Data API restricted to `hub`. No existing CareMetric production database was modified.
 
 ## Ownership boundary
 
@@ -68,7 +68,7 @@ Do not connect this application to `CM Train`, PennFit, CMbackup, or any other e
 
 1. Establish the required Supabase plan, BAA, HIPAA add-on, MFA, PITR, SSL enforcement, and network restrictions before enabling PHI-capable support.
 2. Expose only the `hub` schema through the Data API. Never expose `private`.
-3. Apply `supabase/schema.sql` to the isolated project for review and iteration.
+3. Apply the reviewed files in `supabase/migrations`; `supabase/schema.sql` is the consolidated reference schema.
 4. Run database/security advisors and the pgTAP tests.
 5. Pull the approved result into a CLI-generated migration. Do not invent a migration timestamp manually.
 6. Configure `VITE_SUPABASE_URL` and the publishable key. Never put a secret or service-role key in a browser variable.

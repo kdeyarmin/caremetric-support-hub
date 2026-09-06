@@ -362,9 +362,32 @@ create index support_cases_tenant_product_queue_idx on hub.support_cases(tenant_
 create index support_cases_assigned_idx on hub.support_cases(assigned_to, status, updated_at desc) where assigned_to is not null;
 create index case_participants_user_idx on hub.case_participants(user_id, case_id) where revoked_at is null;
 create index case_messages_case_time_idx on hub.case_messages(case_id, created_at, id);
+create index case_messages_author_idx on hub.case_messages(author_id) where author_id is not null;
 create index case_notes_case_time_idx on private.case_notes(case_id, created_at, id);
+create index case_notes_author_idx on private.case_notes(author_id) where author_id is not null;
 create index content_publications_product_idx on hub.content_publications(product_id, published_at desc);
+create index content_publications_revision_idx on hub.content_publications(revision_id);
+create index content_publications_item_revision_idx on hub.content_publications(item_id, revision_id);
+create index content_publications_published_by_idx on hub.content_publications(published_by) where published_by is not null;
 create index content_revisions_item_idx on hub.content_revisions(item_id, locale, revision_no desc);
+create index content_revisions_overlay_idx on hub.content_revisions(product_overlay_id) where product_overlay_id is not null;
+create index content_revisions_created_by_idx on hub.content_revisions(created_by) where created_by is not null;
+create index content_revisions_approved_by_idx on hub.content_revisions(approved_by) where approved_by is not null;
+create index content_items_owner_product_idx on hub.content_items(owner_product_id) where owner_product_id is not null;
+create index content_items_created_by_idx on hub.content_items(created_by) where created_by is not null;
+create index content_relations_child_idx on hub.content_relations(child_item_id);
+create index media_assets_content_item_idx on hub.media_assets(content_item_id);
+create index media_assets_product_idx on hub.media_assets(product_id) where product_id is not null;
+create index support_contacts_product_idx on hub.support_contacts(product_id) where product_id is not null;
+create index support_contacts_tenant_idx on hub.support_contacts(tenant_id) where tenant_id is not null;
+create index support_contacts_verified_by_idx on hub.support_contacts(verified_by) where verified_by is not null;
+create index tenant_products_product_idx on hub.tenant_products(product_id);
+create index staff_permissions_product_idx on private.staff_permissions(product_id) where product_id is not null;
+create index staff_permissions_granted_by_idx on private.staff_permissions(granted_by) where granted_by is not null;
+create index federation_issuers_product_idx on private.federation_issuers(product_id);
+create index federated_principals_user_idx on private.federated_principals(hub_user_id);
+create index federated_tenants_tenant_idx on private.federated_tenants(hub_tenant_id);
+create index context_nonces_issuer_idx on private.context_nonces(issuer_id);
 create index audit_events_case_idx on private.audit_events(case_id, created_at desc) where case_id is not null;
 
 create or replace function private.set_updated_at()
@@ -603,6 +626,14 @@ alter table hub.content_publications enable row level security;
 alter table hub.content_relations enable row level security;
 alter table hub.media_assets enable row level security;
 alter table hub.course_links enable row level security;
+alter table private.staff_permissions enable row level security;
+alter table private.case_notes enable row level security;
+alter table private.case_sla enable row level security;
+alter table private.audit_events enable row level security;
+alter table private.federation_issuers enable row level security;
+alter table private.federated_principals enable row level security;
+alter table private.federated_tenants enable row level security;
+alter table private.context_nonces enable row level security;
 
 create policy products_public_read on hub.products for select to anon, authenticated
 using (status <> 'retired' and support_enabled);
@@ -1062,6 +1093,12 @@ revoke insert, update, delete on all tables in schema hub from anon, authenticat
 revoke all on all tables in schema private from anon, authenticated;
 revoke all on all sequences in schema hub from anon, authenticated;
 revoke all on all sequences in schema private from anon, authenticated;
+
+-- Expose the application schema through PostgREST while keeping both public
+-- and private out of the Data API surface. This is an intentional manual
+-- override; changes must be made through reviewed migrations.
+alter role authenticator set pgrst.db_schemas = 'hub';
+notify pgrst, 'reload config';
 
 -- Product registry. Phone/email values are not seeded until an owner verifies
 -- them; fake contact information must never reach customer-facing applications.
