@@ -15,7 +15,7 @@
 
 1. ✅ Create the private GitHub repository.
 2. ✅ Create a dedicated Supabase project in the selected organization and region.
-3. Configure High Compliance prerequisites before accepting support traffic.
+3. Confirm signed BAAs and complete operational verification of the remaining High Compliance prerequisites before accepting PHI-capable support traffic.
 4. ✅ Apply the schema iteratively, fix blocking advisors, and record the official migrations.
 5. Provision the first CareMetric platform administrator through a one-time audited bootstrap script.
 6. Add the first tenant/product memberships.
@@ -75,7 +75,7 @@ HeyGen receives synthetic, approved, PHI-free scripts and screenshots only. Penn
 
 ## Phase 5 — channels and operations
 
-- Verify and publish one central support email and one central support phone route.
+- ✅ Publish the owner-verified central support routes: `(877) 521-2890` and `support@caremetric.ai`.
 - Add email ingestion with idempotent provider-message envelopes.
 - Add telephone call disposition and case-linking adapters without making the carrier the case system.
 - Implement versioned SLA calendars and deadlines.

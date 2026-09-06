@@ -128,24 +128,30 @@ function ErrorScreen({ message, onRetry }: { message: string; onRetry: () => voi
 
 function SignInScreen() {
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [otp, setOtp] = useState("");
+  const [step, setStep] = useState<"email" | "otp">("email");
+  const [busy, setBusy] = useState(false);
+  const [hasError, setHasError] = useState(false);
   const [message, setMessage] = useState("");
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!supabase || !email.trim()) return;
-    setStatus("sending");
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: { emailRedirectTo: window.location.href.split("#")[0] },
-    });
+    setBusy(true);
+    setHasError(false);
+    const { error } = step === "email"
+      ? await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: true } })
+      : await supabase.auth.verifyOtp({ email: email.trim(), token: otp.trim(), type: "email" });
+    setBusy(false);
     if (error) {
-      setStatus("error");
+      setHasError(true);
       setMessage(error.message);
       return;
     }
-    setStatus("sent");
-    setMessage("Check your email for a secure sign-in link.");
+    if (step === "email") {
+      setStep("otp");
+      setMessage("Enter the six-digit code sent to your email.");
+    }
   };
 
   return (
@@ -169,13 +175,30 @@ function SignInScreen() {
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="you@company.com"
+            disabled={step === "otp"}
             required
           />
-          <button className="button button-primary" disabled={status === "sending"}>
-            {status === "sending" ? <LoaderCircle className="spin" size={17} /> : <Mail size={17} />}
-            Email secure sign-in link
+          {step === "otp" && <>
+            <label htmlFor="otp">Six-digit code</label>
+            <input
+              id="otp"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={otp}
+              onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="000000"
+              pattern="[0-9]{6}"
+              required
+              autoFocus
+            />
+          </>}
+          <button className="button button-primary" disabled={busy || (step === "otp" && otp.length !== 6)}>
+            {busy ? <LoaderCircle className="spin" size={17} /> : <Mail size={17} />}
+            {step === "email" ? "Email secure sign-in code" : "Verify and sign in"}
           </button>
-          {message && <p className={`form-message ${status === "error" ? "form-error" : "form-success"}`}>{message}</p>}
+          {step === "otp" && !busy && <button type="button" className="button button-secondary" onClick={() => { setStep("email"); setOtp(""); setMessage(""); }}>Use a different email</button>}
+          {message && <p className={`form-message ${hasError ? "form-error" : "form-success"}`}>{message}</p>}
         </form>
         <div className="privacy-note"><ShieldCheck size={16} /> CareMetric-managed support. Never include patient information in a support request.</div>
       </section>
@@ -234,6 +257,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
                 <button className={!staff ? "active" : ""} onClick={() => onPersonaChange("customer")}><UserRound size={15} /> Customer</button>
               </div>
             )}
+            {!config.demoMode && <button className="button button-secondary" onClick={() => void supabase?.auth.signOut()}>Sign out</button>}
             <button className="icon-button" aria-label="Help"><CircleHelp size={19} /></button>
           </div>
         </header>

@@ -15,7 +15,9 @@ Version `0.1.0` implements the first vertical slice:
 - A dedicated `hub`/`private` Supabase schema design, RLS policies, narrow grants, atomic case RPCs, physically separate internal notes, and metadata-only audit records.
 - A polished implementation preview that works without credentials. Demo mode is never a production data store.
 
-The private GitHub repository and isolated `CareMetric Support Hub` Supabase project (`xgauehtwksmnoqhgqegm`, `us-east-2`) are provisioned. The live database has the three reviewed migrations in `supabase/migrations`, RLS enabled on every application table, and a Data API restricted to `hub`. No existing CareMetric production database was modified.
+The private GitHub repository and isolated `CareMetric Support Hub` Supabase project (`xgauehtwksmnoqhgqegm`, `us-east-2`) are provisioned. The live database has the reviewed migrations in `supabase/migrations`, RLS enabled on every application table, and a Data API restricted to `hub`. No existing CareMetric production database was modified.
+
+Owner-verified central routing is `(877) 521-2890` and `support@caremetric.ai`. `kdeyarmin@comcast.net` is the bootstrap platform administrator after that exact email completes Supabase verification. The owner has confirmed that the applicable BAAs are signed; the remaining High Compliance controls still require operational verification before PHI-capable intake is enabled.
 
 ## Ownership boundary
 
@@ -66,14 +68,14 @@ npm run check
 
 Do not connect this application to `CM Train`, PennFit, CMbackup, or any other existing production database. Create one dedicated Support Hub project in the selected Supabase organization.
 
-1. Establish the required Supabase plan, BAA, HIPAA add-on, MFA, PITR, SSL enforcement, and network restrictions before enabling PHI-capable support.
+1. Confirm the signed BAAs and verify the required Supabase HIPAA add-on, MFA, PITR, SSL enforcement, and network restrictions before enabling PHI-capable support.
 2. Expose only the `hub` schema through the Data API. Never expose `private`.
 3. Apply the reviewed files in `supabase/migrations`; `supabase/schema.sql` is the consolidated reference schema.
 4. Run database/security advisors and the pgTAP tests.
 5. Pull the approved result into a CLI-generated migration. Do not invent a migration timestamp manually.
 6. Configure `VITE_SUPABASE_URL` and the publishable key. Never put a secret or service-role key in a browser variable.
 7. Provision product entitlements, tenant memberships, and explicit staff permissions.
-8. Verify the real central email and telephone routing before adding those contact rows.
+8. Verify the published central routing remains `(877) 521-2890` and `support@caremetric.ai`.
 9. Set `VITE_DEMO_MODE=false`, build, and deploy.
 
 Supabase changed new-project Data API exposure defaults in 2026. The schema therefore includes explicit grants, but the project must also explicitly expose `hub` in its API settings.

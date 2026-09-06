@@ -73,6 +73,19 @@ describe("Support Hub schema contract", () => {
     expect(schema).not.toMatch(/[a-z]+@(example|caremetricai?)\.com/i);
   });
 
+  it("publishes only the owner-verified central support routes", () => {
+    expect(schema).toContain("+18775212890");
+    expect(schema).toContain("support@caremetric.ai");
+    expect(schema).not.toContain("+18144710627");
+    expect(schema).not.toContain("(814) 471-0627");
+  });
+
+  it("grants the bootstrap administrator only after exact-email confirmation", () => {
+    expect(schema).toContain("lower(coalesce(new.email, '')) = 'kdeyarmin@comcast.net'");
+    expect(schema).toContain("new.email_confirmed_at is not null");
+    expect(schema).toContain("values (new.id, null, 'platform.admin', new.id)");
+  });
+
   it("blocks direct client writes to support and content tables", () => {
     expect(schema).toContain("revoke insert, update, delete on all tables in schema hub from anon, authenticated;");
     expect(schema).not.toMatch(/grant\s+(insert|update|delete)[^;]+to\s+(anon|authenticated)/i);
