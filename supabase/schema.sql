@@ -1335,20 +1335,30 @@ declare
 begin
   if (select auth.uid()) is null then raise exception 'Authentication required' using errcode = '28000'; end if;
   if not private.can_view_case_id(p_case_id) then raise exception 'Support case not found.' using errcode = '42501'; end if;
-  select product_id into v_product_id from hub.support_cases where id = p_case_id;
+  select support_case.product_id
+  into v_product_id
+  from hub.support_cases as support_case
+  where support_case.id = p_case_id;
   v_is_staff := private.has_staff_permission('case.read', v_product_id) or private.has_staff_permission('case.write', v_product_id);
 
   return query
-  select message.id, message.case_id, message.author_id, message.author_display_name,
-    message.author_role, 'customer'::text, message.body, message.created_at
-  from hub.case_messages message
-  where message.case_id = p_case_id
-  union all
-  select note.id, note.case_id, note.author_id, note.author_display_name,
-    note.author_role, 'internal'::text, note.body, note.created_at
-  from private.case_notes note
-  where note.case_id = p_case_id and v_is_staff
-  order by created_at, id;
+  select thread_entry.id, thread_entry.case_id, thread_entry.author_id,
+    thread_entry.author_display_name, thread_entry.author_role,
+    thread_entry.visibility, thread_entry.body, thread_entry.created_at
+  from (
+    select message.id, message.case_id, message.author_id,
+      message.author_display_name, message.author_role, 'customer'::text as visibility,
+      message.body, message.created_at
+    from hub.case_messages as message
+    where message.case_id = p_case_id
+    union all
+    select note.id, note.case_id, note.author_id,
+      note.author_display_name, note.author_role, 'internal'::text as visibility,
+      note.body, note.created_at
+    from private.case_notes as note
+    where note.case_id = p_case_id and v_is_staff
+  ) as thread_entry
+  order by thread_entry.created_at, thread_entry.id;
 end;
 $$;
 
