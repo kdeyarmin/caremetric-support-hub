@@ -1,13 +1,19 @@
-import { describe, expect, it } from "vitest";
-import { buildHelpUrl } from "./index";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildHelpUrl, DEFAULT_HELP_BASE_URL, openHelp } from "./index";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("buildHelpUrl", () => {
   it("adds only approved context fields", () => {
     const url = new URL(
       buildHelpUrl({
         baseUrl: "https://support-hub-web-production.up.railway.app",
+        routeAllowlist: ["/members/invite"],
+        featureAllowlist: ["member-invitations"],
         context: {
-          product: "pennfit",
+          product: "breathe",
           route: "/members/invite",
           feature: "member-invitations",
           appVersion: "3.8.2",
@@ -20,7 +26,7 @@ describe("buildHelpUrl", () => {
     expect(url.origin).toBe("https://support-hub-web-production.up.railway.app");
     expect(url.pathname).toBe("/help");
     expect(Object.fromEntries(url.searchParams)).toEqual({
-      product: "pennfit",
+      product: "breathe",
       route: "/members/invite",
       feature: "member-invitations",
       app_version: "3.8.2",
@@ -29,7 +35,7 @@ describe("buildHelpUrl", () => {
     });
   });
 
-  it("truncates untrusted route context", () => {
+  it("omits overlong unregistered route context", () => {
     const url = new URL(
       buildHelpUrl({
         baseUrl: "https://support-hub-web-production.up.railway.app",
@@ -37,6 +43,152 @@ describe("buildHelpUrl", () => {
       }),
     );
 
-    expect(url.searchParams.get("route")).toHaveLength(256);
+    expect(url.searchParams.has("route")).toBe(false);
+  });
+
+  it("uses the live Support Hub when a base URL is omitted", () => {
+    const url = new URL(buildHelpUrl({ context: { product: "breathe" } }));
+
+    expect(url.origin).toBe(DEFAULT_HELP_BASE_URL);
+    expect(url.pathname).toBe("/help");
+    expect(url.searchParams.get("product")).toBe("breathe");
+  });
+
+  it("removes query strings and fragments from route context", () => {
+    const url = new URL(
+      buildHelpUrl({
+        routeAllowlist: ["/patients/route-template"],
+        context: {
+          product: "pennsync",
+          route: "/patients/route-template?patient=do-not-send#clinical-record",
+        },
+      }),
+    );
+
+    expect(url.searchParams.get("route")).toBe("/patients/route-template");
+    expect(url.toString()).not.toContain("do-not-send");
+    expect(url.toString()).not.toContain("clinical-record");
+  });
+
+  it("fails closed when route context is not in the caller's static registry", () => {
+    for (const route of [
+      "/patients/4535a2d2-3e4e-4c72-a3f6-77a1dc372be6",
+      "/patients/12345",
+      "/patients/Jane-Doe",
+      "/patients/MRNABC123",
+      "/accounts/acme-health",
+      "/patients/01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "/patients/name%40example.com",
+      "not-an-absolute-route",
+    ]) {
+      const url = new URL(buildHelpUrl({
+        routeAllowlist: ["/patients/:patientId"],
+        context: { product: "caremetric-emr", route },
+      }));
+      expect(url.searchParams.has("route")).toBe(false);
+    }
+  });
+
+  it("omits route and feature context when no static registry is supplied", () => {
+    const url = new URL(buildHelpUrl({
+      context: {
+        product: "breathe",
+        route: "/patients/Jane-Doe",
+        feature: "MRNABC123",
+      },
+    }));
+
+    expect(Object.fromEntries(url.searchParams)).toEqual({ product: "breathe" });
+  });
+
+  it("accepts only version-shaped application versions", () => {
+    const accepted = new URL(buildHelpUrl({
+      context: { product: "carebase", appVersion: "v3.8.2-beta.1" },
+    }));
+    const rejected = new URL(buildHelpUrl({
+      context: { product: "carebase", appVersion: "MRNABC123" },
+    }));
+
+    expect(accepted.searchParams.get("app_version")).toBe("v3.8.2-beta.1");
+    expect(rejected.searchParams.has("app_version")).toBe(false);
+  });
+
+  it("ignores fields outside the approved context contract", () => {
+    const url = new URL(
+      buildHelpUrl({
+        context: {
+          product: "breathe",
+          environment: "invalid-at-runtime",
+          patientId: "do-not-send",
+          accessToken: "do-not-send",
+        } as unknown as Parameters<typeof buildHelpUrl>[0]["context"],
+      }),
+    );
+
+    expect(Object.fromEntries(url.searchParams)).toEqual({ product: "breathe" });
+    expect(url.toString()).not.toContain("do-not-send");
+  });
+
+  it("rejects an empty product and base URLs with embedded credentials", () => {
+    expect(() => buildHelpUrl({
+      context: { product: "unknown" } as unknown as Parameters<typeof buildHelpUrl>[0]["context"],
+    })).toThrow("product slug");
+    expect(() =>
+      buildHelpUrl({
+        baseUrl: "https://user:secret@support.example.com",
+        context: { product: "breathe" },
+      }),
+    ).toThrow("must not include credentials");
+  });
+
+  it("rejects insecure and localhost Hub destinations", () => {
+    expect(() => buildHelpUrl({
+      baseUrl: "http://support.example.com",
+      context: { product: "breathe" },
+    })).toThrow("must use https");
+    for (const baseUrl of [
+      "https://localhost:4173",
+      "https://localhost.:4173",
+      "https://preview.localhost",
+      "https://127.0.0.2",
+      "https://[::1]",
+      "https://[::ffff:127.0.0.1]",
+      "https://[::ffff:7f00:1]",
+      "https://[::ffff:127.1.2.3]",
+    ]) {
+      expect(() => buildHelpUrl({
+        baseUrl,
+        context: { product: "breathe" },
+      })).toThrow("loopback");
+    }
+  });
+});
+
+describe("openHelp", () => {
+  it("opens the live portal in an isolated tab by default", () => {
+    const opened = { opener: {} };
+    const open = vi.fn(() => opened);
+    vi.stubGlobal("window", { open });
+
+    openHelp({
+      featureAllowlist: ["member-invitations"],
+      context: { product: "breathe", feature: "member-invitations" },
+    });
+
+    expect(open).toHaveBeenCalledOnce();
+    expect(open).toHaveBeenCalledWith(
+      `${DEFAULT_HELP_BASE_URL}/help?product=breathe&feature=member-invitations`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+    expect(opened.opener).toBeNull();
+  });
+
+  it("fails clearly when invoked during server rendering", () => {
+    vi.stubGlobal("window", undefined);
+
+    expect(() => openHelp({ context: { product: "breathe" } })).toThrow(
+      "can only be called in a browser",
+    );
   });
 });

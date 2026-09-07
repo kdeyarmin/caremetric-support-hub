@@ -73,6 +73,7 @@ const emptyData: HubData = {
 };
 
 const pendingHelpPathKey = "caremetric.pendingHelpPath";
+const registeredProductSlugs = new Set(["breathe", "carebase", "caremetric-emr", "pennsync"]);
 
 const navItems = [
   { to: "/overview", label: "Overview", icon: LayoutDashboard },
@@ -106,7 +107,8 @@ function supportContactDisplay(contact: SupportContact): string {
 }
 
 function courseLaunchUrl(item: ContentItem): string | null {
-  if (!config.pennTrainBaseUrl || !item.courseLaunchPath?.startsWith("/")) return null;
+  const canonicalCoursePath = /^\/app\/courses\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!config.pennTrainBaseUrl || !item.courseLaunchPath || !canonicalCoursePath.test(item.courseLaunchPath)) return null;
 
   try {
     const baseUrl = new URL(config.pennTrainBaseUrl);
@@ -137,12 +139,20 @@ function placementsFor(item: ContentItem): NonNullable<ContentItem["placements"]
   }));
 }
 
-function rememberCurrentHelpPath(): void {
-  if (window.location.pathname !== "/help") return;
-  const value = `${window.location.pathname}${window.location.search}`;
+function rememberPendingPortalPath(value = `${window.location.pathname}${window.location.search}`): void {
   if (value.length > 2048) return;
   try {
-    window.localStorage.setItem(pendingHelpPathKey, value);
+    const parsed = new URL(value, window.location.origin);
+    if (parsed.origin !== window.location.origin || !["/help", "/cases"].includes(parsed.pathname)) return;
+    if (parsed.pathname === "/cases") {
+      const product = (parsed.searchParams.get("product") ?? "").toLowerCase();
+      const safe = new URLSearchParams();
+      if (parsed.searchParams.get("new") === "1") safe.set("new", "1");
+      if (registeredProductSlugs.has(product)) safe.set("product", product);
+      window.localStorage.setItem(pendingHelpPathKey, `/cases${safe.size ? `?${safe}` : ""}`);
+      return;
+    }
+    window.localStorage.setItem(pendingHelpPathKey, "/help");
   } catch {
     // Sign-in still works when browser storage is unavailable.
   }
@@ -154,8 +164,13 @@ function takePendingHelpPath(): string | null {
     window.localStorage.removeItem(pendingHelpPathKey);
     if (!value || value.length > 2048) return null;
     const parsed = new URL(value, window.location.origin);
-    if (parsed.origin !== window.location.origin || parsed.pathname !== "/help") return null;
-    return `${parsed.pathname}${parsed.search}`;
+    if (parsed.origin !== window.location.origin || !["/help", "/cases"].includes(parsed.pathname)) return null;
+    if (parsed.pathname === "/help") return "/help";
+    const product = (parsed.searchParams.get("product") ?? "").toLowerCase();
+    const safe = new URLSearchParams();
+    if (parsed.searchParams.get("new") === "1") safe.set("new", "1");
+    if (registeredProductSlugs.has(product)) safe.set("product", product);
+    return `/cases${safe.size ? `?${safe}` : ""}`;
   } catch {
     return null;
   }
@@ -209,7 +224,7 @@ function SignInScreen() {
     if (!supabase || !email.trim()) return;
     setBusy(true);
     setHasError(false);
-    rememberCurrentHelpPath();
+    rememberPendingPortalPath();
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
       options: {
@@ -338,6 +353,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/products" element={<ProductsPage data={data} />} />
             <Route path="/integration" element={<IntegrationPage data={data} />} />
             <Route path="/help" element={<ContextualHelpPage data={data} />} />
+            <Route path="/learn" element={<PublicLearningPage data={data} />} />
             <Route path="*" element={<Navigate to="/overview" replace />} />
           </Routes>
         </main>
@@ -354,10 +370,18 @@ function PublicHelpShell({ data }: { data: HubData }) {
           <span className="brand-icon"><CircleHelp size={21} /></span>
           <span><strong>CareMetric</strong><small>Support Hub</small></span>
         </div>
-        <NavLink className="button button-secondary" to="/">Staff and customer sign-in</NavLink>
+        <nav className="public-help-nav" aria-label="Public support navigation">
+          <NavLink to="/help">Help center</NavLink>
+          <NavLink to="/learn">Learning library</NavLink>
+          <NavLink className="button button-secondary" to="/">Staff and customer sign-in</NavLink>
+        </nav>
       </header>
       <main className="public-help-wrap">
-        <ContextualHelpPage data={data} />
+        <Routes>
+          <Route path="/help" element={<ContextualHelpPage data={data} />} />
+          <Route path="/learn" element={<PublicLearningPage data={data} />} />
+          <Route path="*" element={<Navigate to="/help" replace />} />
+        </Routes>
       </main>
     </div>
   );
@@ -446,21 +470,24 @@ function OverviewPage({ data }: { data: HubData }) {
 interface CasesPageProps { data: HubData }
 
 function CasesPage({ data }: CasesPageProps) {
+  const location = useLocation();
   const staff = isSupportStaff(data.actor.role);
+  const params = new URLSearchParams(location.search);
+  const requestedProduct = data.products.find((product) => product.slug === params.get("product"));
   const [selectedId, setSelectedId] = useState(data.cases[0]?.id ?? null);
   const [thread, setThread] = useState<CaseMessage[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<CaseStatus | "all">("all");
-  const [showCreate, setShowCreate] = useState(!staff && data.cases.length === 0);
+  const [showCreate, setShowCreate] = useState(!staff && (data.cases.length === 0 || params.get("new") === "1"));
   const [refresh, setRefresh] = useState(0);
   const [caseRows, setCaseRows] = useState(data.cases);
 
-  const reloadCases = useCallback(async (preferId?: string) => {
+  const reloadCases = async (preferId?: string) => {
     const rows = await repository.listCases();
     setCaseRows(rows);
     setSelectedId(preferId ?? ((current) => current && rows.some((item) => item.id === current) ? current : rows[0]?.id ?? null));
     setRefresh((value) => value + 1);
-  }, []);
+  };
 
   useEffect(() => {
     if (!selectedId) return;
@@ -489,7 +516,7 @@ function CasesPage({ data }: CasesPageProps) {
         action={!staff ? <button className="button button-primary" onClick={() => setShowCreate(true)}><Plus size={17} /> New case</button> : undefined}
       />
       {showCreate && !staff && (
-        <NewCasePanel data={data} onCancel={() => setShowCreate(false)} onCreated={(id) => { setShowCreate(false); void reloadCases(id); }} />
+        <NewCasePanel data={data} preferredProductId={requestedProduct?.id} onCancel={() => setShowCreate(false)} onCreated={(id) => { setShowCreate(false); void reloadCases(id); }} />
       )}
       <section className="case-workspace">
         <div className="case-list-panel">
@@ -535,8 +562,8 @@ function CasesPage({ data }: CasesPageProps) {
   );
 }
 
-function NewCasePanel({ data, onCancel, onCreated }: { data: HubData; onCancel: () => void; onCreated: (id: string) => void }) {
-  const [productId, setProductId] = useState(data.products[0]?.id ?? "");
+function NewCasePanel({ data, preferredProductId, onCancel, onCreated }: { data: HubData; preferredProductId?: string; onCancel: () => void; onCreated: (id: string) => void }) {
+  const [productId, setProductId] = useState(preferredProductId ?? data.products[0]?.id ?? "");
   const [subject, setSubject] = useState("");
   const [category, setCategory] = useState<CaseCategory>("general");
   const [priority, setPriority] = useState<CasePriority>("normal");
@@ -744,6 +771,96 @@ function ContentLibraryPage({ data }: { data: HubData }) {
   );
 }
 
+function formatCourseDuration(minutes?: number): string | null {
+  if (minutes === undefined) return null;
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder ? `${hours} hr ${remainder} min` : `${hours} hr`;
+}
+
+function PublicLearningPage({ data }: { data: HubData }) {
+  const location = useLocation();
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("all");
+  const requestedSlug = (new URLSearchParams(location.search).get("product") ?? "").trim().toLowerCase();
+  const normalizedSlug = requestedSlug === "pennfit" ? "breathe" : requestedSlug;
+  const requestedProduct = data.products.find((product) => product.slug === normalizedSlug);
+  const courses = useMemo(() => data.content
+    .filter((item) => item.kind === "course" && item.status === "published")
+    .filter((item) => !requestedProduct || item.productIds.includes(requestedProduct.id))
+    .sort((left, right) => left.title.localeCompare(right.title)), [data.content, requestedProduct]);
+  const categories = useMemo(() => Array.from(new Set(courses
+    .map((item) => item.contentCategory)
+    .filter((value): value is string => Boolean(value))))
+    .sort((left, right) => left.localeCompare(right)), [courses]);
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return courses.filter((course) =>
+      (category === "all" || course.contentCategory === category) &&
+      (!needle || `${course.title} ${course.summary} ${course.contentCategory ?? ""}`.toLowerCase().includes(needle)));
+  }, [category, courses, search]);
+  const videoCount = courses.reduce((total, course) => total + (course.courseVideoCount ?? 0), 0);
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="CareMetric learning library"
+        title={requestedProduct ? `Training for ${requestedProduct.name}` : "One governed course catalog for every CareMetric product."}
+        description="Browse shared CareMetric training here, then open CareBase to enroll, complete quizzes, and manage certificates. Course content is maintained once and reused across the software ecosystem."
+        action={<NavLink className="button button-secondary" to={`/help${requestedProduct ? `?product=${encodeURIComponent(requestedProduct.slug)}` : ""}`}><CircleHelp size={17} /> Get support</NavLink>}
+      />
+      <section className="learning-metrics" aria-label="Learning catalog summary">
+        <div><strong>{courses.length}</strong><span>Published courses</span></div>
+        <div><strong>{categories.length}</strong><span>Training categories</span></div>
+        <div><strong>{videoCount}</strong><span>Included video lessons</span></div>
+        <div><strong>{data.products.length}</strong><span>Connected products</span></div>
+      </section>
+      <section className="learning-toolbar panel">
+        <label className="search-box large"><Search size={18} /><input aria-label="Search learning library" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search courses, topics, and requirements" /></label>
+        <select aria-label="Filter courses by category" value={category} onChange={(event) => setCategory(event.target.value)}>
+          <option value="all">All categories</option>
+          {categories.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
+        <span className="learning-result-count">{filtered.length} result{filtered.length === 1 ? "" : "s"}</span>
+      </section>
+      {filtered.length ? (
+        <section className="learning-grid" aria-label="Published CareMetric courses">
+          {filtered.map((course) => {
+            const launchUrl = courseLaunchUrl(course);
+            const duration = formatCourseDuration(course.courseDurationMinutes);
+            return (
+              <article className="learning-card" key={course.id}>
+                <div className="learning-card-top">
+                  <span className="course-icon"><GraduationCap /></span>
+                  <span className="publication-status published">Published</span>
+                </div>
+                <span className="learning-category">{course.contentCategory ?? "CareMetric training"}</span>
+                <h2>{course.title}</h2>
+                <p>{course.summary}</p>
+                <div className="learning-card-meta">
+                  {duration && <span><Clock3 size={14} /> {duration}</span>}
+                  {(course.courseVideoCount ?? 0) > 0 && <span><Video size={14} /> {course.courseVideoCount} video{course.courseVideoCount === 1 ? "" : "s"}</span>}
+                  <span><Boxes size={14} /> {course.productIds.length} products</span>
+                </div>
+                {launchUrl
+                  ? <a className="button button-primary" href={launchUrl} target="_blank" rel="noreferrer">Open in CareBase <ExternalLink size={15} /></a>
+                  : <button className="button button-secondary" disabled>Course unavailable <LockKeyhole size={15} /></button>}
+              </article>
+            );
+          })}
+        </section>
+      ) : (
+        <section className="panel empty-state learning-empty"><Search /><strong>No courses match</strong><p>Try a broader search or a different category.</p></section>
+      )}
+      <section className="learning-boundary panel">
+        <ShieldCheck size={21} />
+        <div><strong>Catalog here. Learning records in CareBase.</strong><p>The Support Hub shares approved course metadata across products. Enrollments, progress, quiz scores, attestations, and certificates remain protected inside CareMetric CareBase.</p></div>
+      </section>
+    </>
+  );
+}
+
 function ProductsPage({ data }: { data: HubData }) {
   return (
     <>
@@ -780,12 +897,16 @@ function ContextualHelpPage({ data }: { data: HubData }) {
         (!product || placement.productId === product.id) &&
         Boolean(placement.routePattern) &&
         routeMatches(placement.routePattern, route));
-      return Number(matches(right)) - Number(matches(left));
+      const routePriority = Number(matches(right)) - Number(matches(left));
+      if (routePriority) return routePriority;
+      const kindPriority = { article: 0, video: 1, course: 2 } as const;
+      return kindPriority[left.kind] - kindPriority[right.kind] || left.title.localeCompare(right.title);
     });
   const relevant = productContent.filter((item) => placementsFor(item).some((placement) =>
     (!product || placement.productId === product.id) && routeMatches(placement.routePattern, route)));
   const results = (relevant.length ? relevant : productContent).slice(0, 8);
   const verifiedContacts = data.contacts.filter((item) => item.verified && item.channel !== "web");
+  const casePath = `/cases?new=1${product ? `&product=${encodeURIComponent(product.slug)}` : ""}`;
 
   return (
     <>
@@ -797,7 +918,7 @@ function ContextualHelpPage({ data }: { data: HubData }) {
           : requestedSlug
             ? `We did not recognize “${requestedSlug}”. The shared catalog and central support team are still available below.`
             : "Search the shared CareMetric library or contact the central support team."}
-        action={<NavLink className="button button-primary" to="/cases"><MessageSquareText size={17} /> Open support</NavLink>}
+        action={<div className="heading-actions"><NavLink className="button button-secondary" to={`/learn${product ? `?product=${encodeURIComponent(product.slug)}` : ""}`}><GraduationCap size={17} /> Learning library</NavLink><NavLink className="button button-primary" to={casePath} onClick={() => { if (!data.actor.id) rememberPendingPortalPath(casePath); }}><MessageSquareText size={17} /> Open support</NavLink></div>}
       />
       {(route || feature || appVersion || environment) && (
         <section className="context-strip" aria-label="Application context">
@@ -847,11 +968,15 @@ function IntegrationPage({ data }: { data: HubData }) {
   const [copied, setCopied] = useState(false);
   const code = `import { openHelp } from "@caremetric/help-sdk";
 
+const supportRoutes = {
+  adminSupport: "/admin/support"
+} as const;
+
 openHelp({
-  baseUrl: "${config.helpBaseUrl}",
+  routeAllowlist: Object.values(supportRoutes),
   context: {
-    product: "pennfit",
-    route: window.location.pathname,
+    product: "breathe",
+    route: supportRoutes.adminSupport,
     appVersion: APP_VERSION,
     environment: "production"
   }
@@ -915,7 +1040,7 @@ export default function App() {
           if (pendingPath) navigate(pendingPath, { replace: true });
         }
         void load();
-      } else if (window.location.pathname === "/help") void loadPublicHelp();
+      } else if (["/help", "/learn"].includes(window.location.pathname)) void loadPublicHelp();
       else setLoading(false);
     });
     const subscription = supabase?.auth.onAuthStateChange((_event, session) => {
@@ -926,7 +1051,7 @@ export default function App() {
           if (pendingPath) navigate(pendingPath, { replace: true });
         }
         void load();
-      } else if (window.location.pathname === "/help") void loadPublicHelp();
+      } else if (["/help", "/learn"].includes(window.location.pathname)) void loadPublicHelp();
     });
     return () => subscription?.data.subscription.unsubscribe();
   }, [load, loadPublicHelp, navigate, location.pathname]);
@@ -936,10 +1061,10 @@ export default function App() {
     await load();
   };
 
-  const publicHelp = !authenticated && !config.demoMode && location.pathname === "/help";
-  if (!authenticated && !config.demoMode && !publicHelp) return <SignInScreen />;
+  const publicPortal = !authenticated && !config.demoMode && ["/help", "/learn"].includes(location.pathname);
+  if (!authenticated && !config.demoMode && !publicPortal) return <SignInScreen />;
   if (loading) return <LoadingScreen />;
-  if (error) return <ErrorScreen message={error} onRetry={() => void (publicHelp ? loadPublicHelp() : load())} />;
-  if (publicHelp) return <PublicHelpShell data={data} />;
+  if (error) return <ErrorScreen message={error} onRetry={() => void (publicPortal ? loadPublicHelp() : load())} />;
+  if (publicPortal) return <PublicHelpShell data={data} />;
   return <AppShell data={data} onPersonaChange={(mode) => void changePersona(mode)} />;
 }

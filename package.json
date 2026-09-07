@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "packages/help-sdk"
+  ],
   "engines": {
     "node": ">=22"
   },
@@ -12,9 +15,12 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
+    "build:sdk": "npm run build --workspace @caremetric/help-sdk",
+    "test:sdk": "npm run test --workspace @caremetric/help-sdk",
+    "pack:sdk": "npm pack --workspace @caremetric/help-sdk",
     "test:watch": "vitest",
     "lint": "eslint .",
-    "check": "npm run typecheck && npm run lint && npm run test && npm run build",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run build:sdk && npm run build",
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:test": "supabase test db"

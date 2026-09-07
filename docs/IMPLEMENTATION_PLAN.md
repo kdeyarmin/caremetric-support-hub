@@ -10,6 +10,11 @@
 - Headless integration SDK and safe URL-context tests.
 - Migration-ready dedicated Supabase schema, RLS, grants, RPCs, audit boundaries, and initial seed catalog.
 - Automated type, lint, unit, security-contract, and production-build checks.
+- Public production `/help` and `/learn` routes at the Railway origin.
+- A non-PHI CareBase snapshot containing 80 published courses, 70 published help articles, 22 categories, and metadata for 65 video lessons.
+- Reconciliation of all 65 current video lessons to completed HeyGen jobs and
+  existing private CareBase Storage objects; playback remains in CareBase.
+- An installable, dependency-free `@caremetric/help-sdk` with a production URL default and fail-closed context validation.
 
 ## Phase 1 — provision and validate
 
@@ -17,9 +22,9 @@
 2. ✅ Create a dedicated Supabase project in the selected organization and region.
 3. Confirm signed BAAs and complete operational verification of the remaining High Compliance prerequisites before accepting PHI-capable support traffic.
 4. ✅ Apply the schema iteratively, fix blocking advisors, and record the official migrations.
-5. Provision the first CareMetric platform administrator through a one-time audited bootstrap script.
+5. ✅ Provision the first CareMetric platform administrator through a one-time audited bootstrap script, then permanently close bootstrap.
 6. Add the first tenant/product memberships.
-7. Deploy the preview behind an internal-only Railway URL.
+7. ✅ Deploy the portal at the production Railway URL.
 
 Exit criteria:
 
@@ -31,7 +36,7 @@ Exit criteria:
 
 ## Phase 2 — PennFit SDK pilot
 
-1. Publish `@caremetric/help-sdk` from a private package source or consume it by pinned Git commit.
+1. Build and version the installable `@caremetric/help-sdk` tarball; consume it from each application's private source tree until a CareMetric-owned package registry is approved.
 2. Add the launcher to PennFit with product slug, version, environment, and route template only.
 3. Build the server-signed context exchange and verified identity mapping.
 4. Add a feature flag and keep PennFit’s local help as a temporary fallback.
@@ -46,14 +51,15 @@ Exit criteria:
 
 ## Phase 3 — content migration
 
-1. Import PennTrain help articles and course metadata in preview mode.
+1. ✅ Import published, organization-neutral PennTrain help articles and course metadata through an idempotent non-PHI migration.
 2. Import DocStudio articles, media manifests, and source scripts.
 3. Reconcile PennFit’s patient and staff help stores.
 4. Reconcile PennSync’s divergent static help pages.
 5. Classify each record as shared core, product overlay, or independent content.
 6. Preserve legacy paths through redirects and freeze legacy editing after cutover.
 
-Import guarantees:
+Requirements for the follow-on incremental synchronizer (the current import is
+a reviewed, one-time snapshot):
 
 - Stable `content_key` values are canonical.
 - Revisions are immutable.
@@ -69,7 +75,7 @@ Import guarantees:
 3. Download the final MP4 and captions; do not publish a temporary HeyGen URL.
 4. Human-review captions and transcript.
 5. Store the final asset privately and publish a stable Hub pointer.
-6. Import PennTrain course metadata and trusted relative launch paths only.
+6. ✅ Import PennTrain course metadata and trusted relative launch paths only.
 
 HeyGen receives synthetic, approved, PHI-free scripts and screenshots only. PennTrain remains the owner of enrollment, completion, quiz, and certificate records.
 

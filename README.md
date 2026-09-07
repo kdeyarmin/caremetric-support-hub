@@ -4,20 +4,23 @@ CareMetric Support Hub is the first-party support, knowledge, media, course-cata
 
 ## Current implementation status
 
-Version `0.1.0` implements the first vertical slice:
+Version `0.1.0` now runs as the first production vertical slice:
 
 - A unified customer portal and CareMetric agent console.
 - Multi-product case intake, queue filtering, assignment, status and priority updates, customer replies, and staff-only notes.
 - A canonical knowledge catalog with one-to-many product placements.
-- Shared HeyGen video and PennTrain course metadata surfaces.
+- Shared CareBase course metadata and course-level HeyGen video counts. The
+  current Hub is launch-only; it does not expose or proxy private video files.
+- A public, searchable learning library at `/learn` with 80 governed CareBase courses across 22 categories and 65 cataloged video lessons.
+- A governed import of 70 published CareBase help articles; no learner, employee, resident, organization, assignment, progress, or ticket records were copied.
 - A verified product/contact registry that refuses to publish fake or unverified phone/email values.
 - A framework-neutral `@caremetric/help-sdk` that passes only safe product context.
 - A dedicated `hub`/`private` Supabase schema design, RLS policies, narrow grants, atomic case RPCs, physically separate internal notes, and metadata-only audit records.
 - A polished implementation preview that works without credentials. Demo mode is never a production data store.
 
-The private GitHub repository and isolated `CareMetric Support Hub` Supabase project (`xgauehtwksmnoqhgqegm`, `us-east-2`) are provisioned. The live database has the reviewed migrations in `supabase/migrations`, RLS enabled on every application table, and a Data API restricted to `hub`. No existing CareMetric production database was modified.
+The private GitHub repository, isolated `CareMetric Support Hub` Supabase project (`xgauehtwksmnoqhgqegm`, `us-east-2`), and Railway deployment are provisioned. The live portal is `https://support-hub-web-production.up.railway.app`; direct `/help` and `/learn` links use production routing rather than localhost. The live database has the reviewed migrations in `supabase/migrations`, RLS enabled on every application table, and a Data API restricted to `hub`. Existing application databases remain independent; the CareBase catalog import reads only published platform metadata.
 
-Owner-verified central routing is `(877) 521-2890` and `support@caremetric.ai`. `kdeyarmin@comcast.net` is the bootstrap platform administrator after that exact email completes Supabase verification. The owner has confirmed that the applicable BAAs are signed; the remaining High Compliance controls still require operational verification before PHI-capable intake is enabled.
+Owner-verified central routing is `(877) 521-2890` and `support@caremetric.ai`. `kdeyarmin@comcast.net` is the active platform administrator. The owner has confirmed that the applicable BAAs are signed; the remaining High Compliance controls still require operational verification before PHI-capable intake is enabled.
 
 ## Ownership boundary
 
@@ -41,7 +44,7 @@ flowchart TD
   Hub --> DB["Dedicated Supabase project"]
   Hub --> Content["Knowledge + media catalog"]
   Content --> HeyGen["HeyGen render adapter"]
-  Content --> PennTrain["PennTrain course links"]
+  Content --> PennTrain["CareBase course catalog"]
 ```
 
 The first deployment is a modular monolith. Services can be extracted only when scale, risk, or operational ownership justifies the additional failure modes.
@@ -72,7 +75,7 @@ Do not connect this application to `CM Train`, PennFit, CMbackup, or any other e
 2. Expose only the `hub` schema through the Data API. Never expose `private`.
 3. Apply the reviewed files in `supabase/migrations`; `supabase/schema.sql` is the consolidated reference schema.
 4. Run database/security advisors and the pgTAP tests.
-5. Pull the approved result into a CLI-generated migration. Do not invent a migration timestamp manually.
+5. Keep every production change represented by a reviewed, idempotent migration.
 6. Configure `VITE_SUPABASE_URL` and the publishable key. Never put a secret or service-role key in a browser variable.
 7. Provision product entitlements, tenant memberships, and explicit staff permissions.
 8. Verify the published central routing remains `(877) 521-2890` and `support@caremetric.ai`.
@@ -110,4 +113,8 @@ docs/                        API, integration, and rollout guidance
 - PennFit is the recommended first external SDK pilot.
 - PennSync and CareMetric EMR follow after the pilot validates identity and route context.
 
-Content is imported through previewable, idempotent adapters. Legacy source IDs are provenance only; stable Support Hub `content_key` values are canonical.
+The first CareBase snapshot now includes 80 published courses and 70 published help articles. Content is imported through previewable, idempotent adapters. Legacy source IDs are provenance only; stable Support Hub `content_key` values are canonical.
+
+See [docs/VIDEO_GOVERNANCE.md](docs/VIDEO_GOVERNANCE.md) for the verified
+HeyGen/Storage inventory and the caption, checksum, and entitlement gates for
+future inline playback.

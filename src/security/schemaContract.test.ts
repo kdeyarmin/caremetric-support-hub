@@ -2,6 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const schema = readFileSync(new URL("../../supabase/schema.sql", import.meta.url), "utf8");
+const pennTrainCatalogMigration = readFileSync(
+  new URL("../../supabase/migrations/20260907143500_import_penntrain_catalog.sql", import.meta.url),
+  "utf8",
+);
 
 const exposedTables = [
   "products",
@@ -103,6 +107,25 @@ describe("Support Hub schema contract", () => {
     expect(schema).toMatch(/revoke select\s+on table[\s\S]*hub\.content_items[\s\S]*hub\.media_assets[\s\S]*hub\.published_content\s+from anon, authenticated;/);
     expect(schema).toContain("private.can_access_content_publication(item_id, revision_id, product_id)");
     expect(schema).toContain("private.has_active_content_audience(publication.product_id, publication.audience)");
+  });
+
+  it("exposes only safe learning metadata through the sanitized RPC", () => {
+    expect(schema).toContain("content_category text");
+    expect(schema).toContain("course_duration_minutes integer");
+    expect(schema).toContain("course_video_count integer");
+    expect(schema).not.toContain("course_video_url");
+  });
+
+  it("imports the complete non-PHI PennTrain catalog snapshot", () => {
+    const courseIds = new Set(
+      [...pennTrainCatalogMigration.matchAll(/"launch_path":"\/app\/courses\/([0-9a-f-]{36})"/g)]
+        .map((match) => match[1]),
+    );
+    expect(courseIds.size).toBe(80);
+    expect(pennTrainCatalogMigration.match(/"content_key":"penntrain\.help\./g)).toHaveLength(70);
+    expect(pennTrainCatalogMigration).not.toContain("video_url");
+    expect(pennTrainCatalogMigration).not.toContain("course_progress");
+    expect(pennTrainCatalogMigration).not.toContain("support_ticket_messages");
   });
 
   it("does not copy full row bodies into the audit trail", () => {

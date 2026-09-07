@@ -26,6 +26,8 @@ const asString = (value: unknown, field: string): string => {
 };
 
 const nullableString = (value: unknown): string | null => (typeof value === "string" ? value : null);
+const nullableNumber = (value: unknown): number | null =>
+  typeof value === "number" && Number.isFinite(value) ? value : null;
 const stringArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 const contentPlacements = (value: unknown): NonNullable<ContentItem["placements"]> =>
@@ -143,6 +145,9 @@ function mapContent(value: unknown): ContentItem {
     routePattern: nullableString(row.route_pattern),
     videoStatus: nullableString(row.video_status) as ContentItem["videoStatus"],
     courseLaunchPath: nullableString(row.course_launch_path) ?? undefined,
+    contentCategory: nullableString(row.content_category) ?? undefined,
+    courseDurationMinutes: nullableNumber(row.course_duration_minutes) ?? undefined,
+    courseVideoCount: nullableNumber(row.course_video_count) ?? undefined,
     placements: contentPlacements(row.placements),
   };
 }

@@ -92,6 +92,9 @@ export interface ContentItem {
   routePattern: string | null;
   videoStatus?: "ready" | "rendering" | "review";
   courseLaunchPath?: string;
+  contentCategory?: string;
+  courseDurationMinutes?: number;
+  courseVideoCount?: number;
   placements?: Array<{
     productId: string;
     audience: string[];
