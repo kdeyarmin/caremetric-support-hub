@@ -69,6 +69,25 @@ input::placeholder, textarea::placeholder { color: #97a9a6; }
 .sign-in-support a strong { margin-top: 3px; overflow-wrap: anywhere; font-size: 11px; }
 .privacy-note { margin-top: 24px; display: flex; gap: 8px; align-items: flex-start; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .privacy-note svg { color: var(--teal); flex: 0 0 auto; }
+.mfa-page { min-height: 100vh; padding: 32px 20px; display: grid; place-items: center; background: radial-gradient(circle at 50% 0%, #dff2ed, transparent 45%), #f4f7f6; }
+.mfa-panel { width: min(100%, 590px); padding: 38px; border: 1px solid var(--line); border-radius: 22px; background: white; box-shadow: 0 24px 80px rgba(17,48,44,.12); }
+.mfa-copy { margin: 34px 0 24px; }
+.mfa-copy h1 { margin-bottom: 13px; font-size: clamp(28px, 5vw, 38px); line-height: 1.1; letter-spacing: -.04em; }
+.mfa-copy p { margin-bottom: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.mfa-start { width: 100%; min-height: 48px; }
+.mfa-setup { margin-bottom: 20px; padding: 16px; display: grid; grid-template-columns: 152px minmax(0,1fr); gap: 18px; align-items: center; border: 1px solid #cfe6e2; border-radius: 15px; background: #f5fbf9; }
+.mfa-setup img { width: 152px; height: 152px; padding: 6px; border-radius: 10px; background: white; }
+.mfa-setup strong { font-size: 13px; }
+.mfa-setup p { margin: 6px 0 9px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.mfa-setup code { display: block; padding: 8px 9px; overflow-wrap: anywhere; border: 1px solid #d7e4e1; border-radius: 8px; background: white; color: #294844; font-size: 10px; letter-spacing: .04em; }
+.mfa-form { display: grid; gap: 12px; }
+.mfa-form label { color: #445d59; font-size: 12px; font-weight: 700; }
+.mfa-form input { height: 52px; text-align: center; font-size: 20px; font-weight: 800; letter-spacing: .32em; }
+.mfa-form .button { min-height: 48px; }
+.mfa-panel > .form-message { margin-top: 14px; }
+.mfa-actions { margin-top: 18px; display: flex; justify-content: center; gap: 18px; }
+.mfa-actions a, .mfa-actions button { padding: 0; border: 0; background: transparent; color: var(--teal); cursor: pointer; font-size: 11px; font-weight: 700; }
+.mfa-actions a:hover, .mfa-actions button:hover { color: var(--teal-dark); text-decoration: underline; }
 .sign-in-aside { position: relative; overflow: hidden; background: linear-gradient(145deg, #092e31 0%, #09584f 60%, #0b7a6e 100%); }
 .sign-in-aside::before { content: ""; position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px); background-size: 32px 32px; mask-image: linear-gradient(to bottom right, black, transparent 75%); }
 .aside-orbit { position: absolute; border: 1px solid rgba(255,255,255,.12); border-radius: 50%; }
@@ -185,6 +204,20 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .security-strip > span { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; color: var(--teal); background: white; }
 .security-strip strong { font-size: 11px; }
 .security-strip p { margin: 4px 0 0; color: #5d746f; font-size: 9px; line-height: 1.5; }
+.security-settings-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(360px,.9fr); gap: 14px; align-items: start; }
+.security-factor-panel .panel-heading > svg { color: var(--teal); }
+.factor-list { display: grid; }
+.factor-row { min-height: 72px; padding: 13px 18px; display: grid; grid-template-columns: 38px minmax(0,1fr) auto; gap: 12px; align-items: center; border-bottom: 1px solid #edf2f1; }
+.factor-icon { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 11px; color: var(--teal); background: var(--teal-light); }
+.factor-row strong, .factor-row small { display: block; }
+.factor-row strong { font-size: 11px; }
+.factor-row small { margin-top: 4px; color: var(--muted); font-size: 9px; }
+.factor-recovery-note { margin: 15px 18px 18px; padding: 12px; display: flex; gap: 9px; border: 1px solid #ecd8b8; border-radius: 10px; background: #fff9ef; color: #76552d; font-size: 10px; line-height: 1.5; }
+.factor-recovery-note svg { flex: 0 0 auto; color: var(--amber); }
+.security-enroll-body { padding: 18px; display: grid; gap: 14px; }
+.security-enroll-body label > span { display: block; margin-bottom: 7px; color: #445d59; font-size: 12px; font-weight: 700; }
+.security-enroll-body > .button { width: 100%; }
+.security-qr { margin-bottom: 3px; }
 
 .case-workspace { min-height: 660px; display: grid; grid-template-columns: 350px minmax(0,1fr); border: 1px solid var(--line); border-radius: 15px; overflow: hidden; background: white; box-shadow: var(--shadow); }
 .case-list-panel { min-width: 0; border-right: 1px solid var(--line); background: #fbfcfc; }
@@ -453,6 +486,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .case-list-panel { border-right: 0; border-bottom: 1px solid var(--line); }
   .case-list { max-height: 300px; overflow: auto; }
   .integration-grid { grid-template-columns: 1fr; }
+  .security-settings-grid { grid-template-columns: 1fr; }
   .context-help-grid { grid-template-columns: 1fr; }
   .central-contact-panel { position: static; }
   .sign-in-page { grid-template-columns: 1fr; }
@@ -498,4 +532,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .public-help-header .button { padding: 0 11px; font-size: 10px; }
   .public-help-wrap { width: min(100% - 24px,1180px); padding-top: 24px; }
   .sign-in-panel { padding: 38px 25px; }
+  .mfa-panel { padding: 28px 22px; }
+  .mfa-setup { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+  .mfa-setup div { width: 100%; }
 }

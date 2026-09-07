@@ -56,6 +56,7 @@ import {
 } from "./domain";
 import { config } from "./lib/config";
 import { supabase } from "./lib/supabase";
+import { decideMfaGate, normalizeAuthenticatorLevel, type MfaGate } from "./security/mfaGate";
 
 interface HubData {
   actor: ActorContext;
@@ -83,6 +84,7 @@ const navItems = [
   { to: "/library", label: "Videos & courses", icon: Library },
   { to: "/products", label: "Products & contacts", icon: Boxes },
   { to: "/integration", label: "App integration", icon: Link2 },
+  { to: "/security", label: "Security", icon: ShieldCheck },
 ] as const;
 
 function formatDate(value: string): string {
@@ -291,6 +293,275 @@ function SignInScreen() {
   );
 }
 
+async function inspectMfaGate(actor: ActorContext): Promise<MfaGate> {
+  if (!supabase) return { status: "ready" };
+
+  const [assurance, factors] = await Promise.all([
+    supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
+    supabase.auth.mfa.listFactors(),
+  ]);
+  if (assurance.error) throw assurance.error;
+  if (factors.error) throw factors.error;
+
+  const currentLevel = normalizeAuthenticatorLevel(assurance.data.currentLevel);
+  const nextLevel = normalizeAuthenticatorLevel(assurance.data.nextLevel);
+  if (!currentLevel || !nextLevel) throw new Error("The secure session is missing authenticator assurance data. Sign out and try again.");
+
+  return decideMfaGate({
+    currentLevel,
+    nextLevel,
+    verifiedTotpFactors: factors.data.totp.map((factor, index) => ({
+      id: factor.id,
+      label: factor.friendly_name?.trim() || `Authenticator ${index + 1}`,
+    })),
+    requiresMfa: isSupportStaff(actor.role),
+  });
+}
+
+function MfaScreen({ gate, onVerified }: { gate: Extract<MfaGate, { status: "enroll" | "challenge" }>; onVerified: () => Promise<void> }) {
+  const [setup, setSetup] = useState<{ factorId: string; qrCode: string; secret: string } | null>(null);
+  const [selectedFactorId, setSelectedFactorId] = useState(gate.status === "challenge" ? gate.factors[0]?.id ?? "" : "");
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const startEnrollment = async () => {
+    if (!supabase) return;
+    setBusy(true); setMessage("");
+    try {
+      const factors = await supabase.auth.mfa.listFactors();
+      if (factors.error) throw factors.error;
+      for (const factor of factors.data.all.filter((item) => item.factor_type === "totp" && item.status === "unverified")) {
+        const removal = await supabase.auth.mfa.unenroll({ factorId: factor.id });
+        if (removal.error) throw removal.error;
+      }
+
+      const enrollment = await supabase.auth.mfa.enroll({
+        factorType: "totp",
+        friendlyName: "CareMetric Support Hub",
+      });
+      if (enrollment.error) throw enrollment.error;
+      setSetup({
+        factorId: enrollment.data.id,
+        qrCode: enrollment.data.totp.qr_code,
+        secret: enrollment.data.totp.secret,
+      });
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : "Authenticator setup could not be started.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verify = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!supabase) return;
+    const factorId = gate.status === "challenge" ? selectedFactorId : setup?.factorId;
+    if (!factorId || !/^\d{6}$/.test(code)) return;
+
+    setBusy(true); setMessage("");
+    try {
+      const verification = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
+      if (verification.error) throw verification.error;
+      await onVerified();
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : "The authenticator code could not be verified.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const enrolling = gate.status === "enroll";
+
+  return (
+    <main className="mfa-page">
+      <section className="mfa-panel">
+        <div className="brand-lockup brand-lockup-large">
+          <span className="brand-icon"><ShieldCheck size={25} /></span>
+          <span><strong>CareMetric</strong><small>Support Hub security</small></span>
+        </div>
+        <div className="mfa-copy">
+          <span className="eyebrow">Two-step verification required</span>
+          <h1>{enrolling ? "Protect your Support Hub account." : "Enter your authenticator code."}</h1>
+          <p>{enrolling
+            ? "Set up a time-based code in your authenticator app before opening customer support data."
+            : "Your secure email link completed the first step. Use the six-digit code from your authenticator app to continue."}</p>
+        </div>
+
+        {enrolling && !setup ? (
+          <button className="button button-primary mfa-start" disabled={busy} onClick={() => void startEnrollment()}>
+            {busy ? <LoaderCircle className="spin" size={17} /> : <LockKeyhole size={17} />}
+            Set up authenticator
+          </button>
+        ) : (
+          <>
+            {setup && (
+              <div className="mfa-setup">
+                <img src={setup.qrCode} alt="QR code for CareMetric Support Hub authenticator setup" />
+                <div><strong>Scan this QR code</strong><p>Or enter this setup key manually:</p><code>{setup.secret}</code></div>
+              </div>
+            )}
+            <form className="mfa-form" onSubmit={verify}>
+              {gate.status === "challenge" && gate.factors.length > 1 && (
+                <label htmlFor="mfa-factor">Authenticator device
+                  <select id="mfa-factor" value={selectedFactorId} onChange={(event) => setSelectedFactorId(event.target.value)}>
+                    {gate.factors.map((factor) => <option key={factor.id} value={factor.id}>{factor.label}</option>)}
+                  </select>
+                </label>
+              )}
+              <label htmlFor="mfa-code">Six-digit authenticator code</label>
+              <input
+                id="mfa-code"
+                value={code}
+                onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                placeholder="000000"
+                autoFocus
+                required
+              />
+              <button className="button button-primary" disabled={busy || code.length !== 6}>
+                {busy ? <LoaderCircle className="spin" size={17} /> : <ShieldCheck size={17} />}
+                Verify and continue
+              </button>
+            </form>
+          </>
+        )}
+
+        {message && <p className="form-message form-error"><AlertCircle size={15} /> {message}</p>}
+        <div className="mfa-actions">
+          <button type="button" onClick={() => void supabase?.auth.signOut().then(() => { window.location.assign("/help"); })}>Open public help</button>
+          <button type="button" onClick={() => void supabase?.auth.signOut()}>Sign out</button>
+        </div>
+        <div className="sign-in-support" aria-label="Central support contacts">
+          <a href={`tel:${config.centralSupportPhone}`}><Phone size={17} /><span><small>Call central support</small><strong>{config.centralSupportPhoneDisplay}</strong></span></a>
+          <a href={`mailto:${config.centralSupportEmail}`}><Mail size={17} /><span><small>Email central support</small><strong>{config.centralSupportEmail}</strong></span></a>
+        </div>
+        <div className="privacy-note"><ShieldCheck size={16} /> MFA protects customer support data. Never include patient information in a support request.</div>
+      </section>
+    </main>
+  );
+}
+
+function SecurityPage({ actor }: { actor: ActorContext }) {
+  const [factors, setFactors] = useState<Array<{ id: string; label: string; createdAt: string }>>([]);
+  const [friendlyName, setFriendlyName] = useState("Backup authenticator");
+  const [setup, setSetup] = useState<{ factorId: string; qrCode: string; secret: string } | null>(null);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(true);
+  const [message, setMessage] = useState("");
+  const [hasError, setHasError] = useState(false);
+
+  const refreshFactors = useCallback(async () => {
+    if (!supabase) return;
+    const result = await supabase.auth.mfa.listFactors();
+    if (result.error) throw result.error;
+    setFactors(result.data.totp.map((factor, index) => ({
+      id: factor.id,
+      label: factor.friendly_name?.trim() || `Authenticator ${index + 1}`,
+      createdAt: factor.created_at,
+    })));
+  }, []);
+
+  useEffect(() => {
+    void Promise.resolve().then(() => refreshFactors())
+      .catch((caught) => { setHasError(true); setMessage(caught instanceof Error ? caught.message : "Authenticator devices could not be loaded."); })
+      .finally(() => setBusy(false));
+  }, [refreshFactors]);
+
+  const beginEnrollment = async () => {
+    if (!supabase || !friendlyName.trim()) return;
+    setBusy(true); setMessage(""); setHasError(false);
+    try {
+      const enrollment = await supabase.auth.mfa.enroll({
+        factorType: "totp",
+        friendlyName: friendlyName.trim().slice(0, 64),
+      });
+      if (enrollment.error) throw enrollment.error;
+      setSetup({ factorId: enrollment.data.id, qrCode: enrollment.data.totp.qr_code, secret: enrollment.data.totp.secret });
+      setCode("");
+    } catch (caught) {
+      setHasError(true); setMessage(caught instanceof Error ? caught.message : "Authenticator setup could not be started.");
+    } finally { setBusy(false); }
+  };
+
+  const verifyEnrollment = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!supabase || !setup || !/^\d{6}$/.test(code)) return;
+    setBusy(true); setMessage(""); setHasError(false);
+    try {
+      const result = await supabase.auth.mfa.challengeAndVerify({ factorId: setup.factorId, code });
+      if (result.error) throw result.error;
+      setSetup(null); setCode(""); setFriendlyName("Another authenticator");
+      await refreshFactors();
+      setMessage("Authenticator added. Keep at least two verified devices for administrator recovery.");
+    } catch (caught) {
+      setHasError(true); setMessage(caught instanceof Error ? caught.message : "The authenticator code could not be verified.");
+    } finally { setBusy(false); }
+  };
+
+  const removeFactor = async (factorId: string) => {
+    if (!supabase || factors.length < 2) return;
+    setBusy(true); setMessage(""); setHasError(false);
+    try {
+      const result = await supabase.auth.mfa.unenroll({ factorId });
+      if (result.error) throw result.error;
+      await refreshFactors();
+      setMessage("Authenticator removed.");
+    } catch (caught) {
+      setHasError(true); setMessage(caught instanceof Error ? caught.message : "The authenticator could not be removed.");
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="Account protection"
+        title="Authenticator security"
+        description={`Manage time-based authenticator devices for ${actor.name}. Staff access requires an AAL2 session.`}
+      />
+      <div className="security-settings-grid">
+        <section className="panel security-factor-panel">
+          <div className="panel-heading"><div><h2>Verified authenticators</h2><p>Keep a second device as a recovery factor.</p></div><ShieldCheck size={20} /></div>
+          <div className="factor-list">
+            {factors.map((factor) => (
+              <div className="factor-row" key={factor.id}>
+                <span className="factor-icon"><LockKeyhole size={17} /></span>
+                <div><strong>{factor.label}</strong><small>Added {formatDate(factor.createdAt)}</small></div>
+                <button className="button button-secondary button-small" disabled={busy || factors.length < 2} onClick={() => void removeFactor(factor.id)}>Remove</button>
+              </div>
+            ))}
+            {!busy && factors.length === 0 && <div className="empty-state"><LockKeyhole /><strong>No verified authenticator</strong><p>Add one before using staff tools.</p></div>}
+          </div>
+          <div className="factor-recovery-note"><AlertCircle size={16} /><span>Recovery codes are not available. The last verified authenticator cannot be removed here; use a second device or controlled Supabase administrator recovery.</span></div>
+        </section>
+
+        <section className="panel security-enroll-panel">
+          <div className="panel-heading"><div><h2>Add an authenticator</h2><p>Use any standards-based TOTP authenticator app.</p></div></div>
+          <div className="security-enroll-body">
+            {!setup ? (
+              <>
+                <label htmlFor="factor-name"><span>Device name</span><input id="factor-name" value={friendlyName} maxLength={64} onChange={(event) => setFriendlyName(event.target.value)} /></label>
+                <button className="button button-primary" disabled={busy || !friendlyName.trim()} onClick={() => void beginEnrollment()}>{busy ? <LoaderCircle className="spin" size={17} /> : <Plus size={17} />} Create setup code</button>
+              </>
+            ) : (
+              <form className="mfa-form" onSubmit={verifyEnrollment}>
+                <div className="mfa-setup security-qr"><img src={setup.qrCode} alt="QR code for a new Support Hub authenticator" /><div><strong>Scan this QR code</strong><p>Or enter this setup key manually:</p><code>{setup.secret}</code></div></div>
+                <label htmlFor="new-factor-code">Six-digit authenticator code</label>
+                <input id="new-factor-code" value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} placeholder="000000" autoFocus required />
+                <button className="button button-primary" disabled={busy || code.length !== 6}>{busy ? <LoaderCircle className="spin" size={17} /> : <ShieldCheck size={17} />} Verify authenticator</button>
+              </form>
+            )}
+            {message && <p className={`form-message ${hasError ? "form-error" : "form-success"}`}>{hasError ? <AlertCircle size={15} /> : <CheckCircle2 size={15} />} {message}</p>}
+          </div>
+        </section>
+      </div>
+    </>
+  );
+}
+
 function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (mode: "staff" | "customer") => void }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const staff = isSupportStaff(data.actor.role);
@@ -353,6 +624,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/library" element={<ContentLibraryPage data={data} />} />
             <Route path="/products" element={<ProductsPage data={data} />} />
             <Route path="/integration" element={<IntegrationPage data={data} />} />
+            <Route path="/security" element={<SecurityPage actor={data.actor} />} />
             <Route path="/help" element={<ContextualHelpPage data={data} />} />
             <Route path="/learn" element={<PublicLearningPage data={data} />} />
             <Route path="*" element={<Navigate to="/overview" replace />} />
@@ -1015,12 +1287,13 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [authenticated, setAuthenticated] = useState(config.demoMode);
+  const [mfaGate, setMfaGate] = useState<MfaGate>(config.demoMode ? { status: "ready" } : { status: "checking" });
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (actorOverride?: ActorContext) => {
     setLoading(true); setError("");
     try {
       const [actor, products, contacts, cases, content] = await Promise.all([
-        repository.getActorContext(), repository.listProducts(), repository.listContacts(), repository.listCases(), repository.listContent(),
+        actorOverride ?? repository.getActorContext(), repository.listProducts(), repository.listContacts(), repository.listCases(), repository.listContent(),
       ]);
       setData({ actor, products, contacts, cases, content });
     } catch (caught) {
@@ -1040,31 +1313,57 @@ export default function App() {
     } finally { setLoading(false); }
   }, []);
 
+  const loadAuthenticated = useCallback(async () => {
+    setLoading(true); setError("");
+    try {
+      const actor = await repository.getActorContext();
+      const gate = await inspectMfaGate(actor);
+      setMfaGate(gate);
+      if (gate.status !== "ready") {
+        setLoading(false);
+        return;
+      }
+      if (window.location.pathname === "/") {
+        const pendingPath = takePendingHelpPath();
+        if (pendingPath) navigate(pendingPath, { replace: true });
+      }
+      await load(actor);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Two-step verification could not be checked.");
+      setLoading(false);
+    }
+  }, [load, navigate]);
+
   useEffect(() => {
-    if (config.demoMode) { void Promise.resolve().then(load); return; }
+    if (config.demoMode) { void Promise.resolve().then(() => load()); return; }
     void supabase?.auth.getSession().then(({ data: sessionData }) => {
       setAuthenticated(Boolean(sessionData.session));
       if (sessionData.session) {
-        if (window.location.pathname === "/") {
-          const pendingPath = takePendingHelpPath();
-          if (pendingPath) navigate(pendingPath, { replace: true });
-        }
-        void load();
+        void loadAuthenticated();
       } else if (["/help", "/learn"].includes(window.location.pathname)) void loadPublicHelp();
-      else setLoading(false);
+      else { setMfaGate({ status: "checking" }); setLoading(false); }
     });
     const subscription = supabase?.auth.onAuthStateChange((_event, session) => {
       setAuthenticated(Boolean(session));
       if (session) {
-        if (window.location.pathname === "/") {
-          const pendingPath = takePendingHelpPath();
-          if (pendingPath) navigate(pendingPath, { replace: true });
-        }
-        void load();
+        void loadAuthenticated();
       } else if (["/help", "/learn"].includes(window.location.pathname)) void loadPublicHelp();
+      else { setMfaGate({ status: "checking" }); setLoading(false); }
     });
     return () => subscription?.data.subscription.unsubscribe();
-  }, [load, loadPublicHelp, navigate, location.pathname]);
+  }, [load, loadAuthenticated, loadPublicHelp, location.pathname]);
+
+  const completeMfa = async () => {
+    const actor = await repository.getActorContext();
+    const gate = await inspectMfaGate(actor);
+    if (gate.status !== "ready") throw new Error("Two-step verification did not complete. Try a new code.");
+    setMfaGate(gate);
+    if (window.location.pathname === "/") {
+      const pendingPath = takePendingHelpPath();
+      if (pendingPath) navigate(pendingPath, { replace: true });
+    }
+    await load(actor);
+  };
 
   const changePersona = async (mode: "staff" | "customer") => {
     demoRepository.setActorRole(mode);
@@ -1074,7 +1373,11 @@ export default function App() {
   const publicPortal = !authenticated && !config.demoMode && ["/help", "/learn"].includes(location.pathname);
   if (!authenticated && !config.demoMode && !publicPortal) return <SignInScreen />;
   if (loading) return <LoadingScreen />;
-  if (error) return <ErrorScreen message={error} onRetry={() => void (publicPortal ? loadPublicHelp() : load())} />;
+  if (error) return <ErrorScreen message={error} onRetry={() => void (publicPortal ? loadPublicHelp() : authenticated ? loadAuthenticated() : load())} />;
+  if (authenticated && !config.demoMode && (mfaGate.status === "enroll" || mfaGate.status === "challenge")) {
+    return <MfaScreen gate={mfaGate} onVerified={completeMfa} />;
+  }
+  if (authenticated && !config.demoMode && mfaGate.status !== "ready") return <LoadingScreen />;
   if (publicPortal) return <PublicHelpShell data={data} />;
   return <AppShell data={data} onPersonaChange={(mode) => void changePersona(mode)} />;
 }
