@@ -5,7 +5,7 @@ describe("buildHelpUrl", () => {
   it("adds only approved context fields", () => {
     const url = new URL(
       buildHelpUrl({
-        baseUrl: "https://help.caremetric.ai",
+        baseUrl: "https://support-hub-web-production.up.railway.app",
         context: {
           product: "pennfit",
           route: "/members/invite",
@@ -17,7 +17,7 @@ describe("buildHelpUrl", () => {
       }),
     );
 
-    expect(url.origin).toBe("https://help.caremetric.ai");
+    expect(url.origin).toBe("https://support-hub-web-production.up.railway.app");
     expect(url.pathname).toBe("/help");
     expect(Object.fromEntries(url.searchParams)).toEqual({
       product: "pennfit",
@@ -32,7 +32,7 @@ describe("buildHelpUrl", () => {
   it("truncates untrusted route context", () => {
     const url = new URL(
       buildHelpUrl({
-        baseUrl: "https://help.caremetric.ai",
+        baseUrl: "https://support-hub-web-production.up.railway.app",
         context: { product: "pennsync", route: `/${"x".repeat(400)}` },
       }),
     );

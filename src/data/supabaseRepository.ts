@@ -28,6 +28,19 @@ const asString = (value: unknown, field: string): string => {
 const nullableString = (value: unknown): string | null => (typeof value === "string" ? value : null);
 const stringArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+const contentPlacements = (value: unknown): NonNullable<ContentItem["placements"]> =>
+  Array.isArray(value)
+    ? value.flatMap((placement) => {
+        if (!placement || typeof placement !== "object" || Array.isArray(placement)) return [];
+        const row = placement as JsonObject;
+        if (typeof row.product_id !== "string") return [];
+        return [{
+          productId: row.product_id,
+          audience: stringArray(row.audience),
+          routePattern: nullableString(row.route_pattern),
+        }];
+      })
+    : [];
 
 const client = () => {
   if (!supabase) throw new Error("Supabase is not configured. Enable demo mode or provide environment variables.");
@@ -130,6 +143,7 @@ function mapContent(value: unknown): ContentItem {
     routePattern: nullableString(row.route_pattern),
     videoStatus: nullableString(row.video_status) as ContentItem["videoStatus"],
     courseLaunchPath: nullableString(row.course_launch_path) ?? undefined,
+    placements: contentPlacements(row.placements),
   };
 }
 
@@ -168,7 +182,7 @@ export class SupabaseSupportRepository implements HubRepository {
   }
 
   async listContent(): Promise<ContentItem[]> {
-    const { data, error } = await hub().from("published_content").select("*").order("title");
+    const { data, error } = await hub().rpc("list_published_content");
     if (error) throw error;
     return (data ?? []).map(mapContent);
   }

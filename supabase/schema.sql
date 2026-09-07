@@ -425,17 +425,6 @@ begin
   )
   on conflict (id) do nothing;
 
-  if lower(coalesce(new.email, '')) = 'kdeyarmin@comcast.net'
-     and new.email_confirmed_at is not null then
-    insert into private.staff_permissions (user_id, product_id, permission, granted_by)
-    values (new.id, null, 'platform.admin', new.id)
-    on conflict (user_id, product_id, permission)
-    do update set
-      revoked_at = null,
-      granted_by = excluded.granted_by,
-      granted_at = now();
-  end if;
-
   return new;
 end;
 $$;
@@ -444,11 +433,6 @@ revoke all on function private.handle_new_user() from public, anon, authenticate
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users for each row execute function private.handle_new_user();
 drop trigger if exists on_auth_user_confirmed on auth.users;
-create trigger on_auth_user_confirmed
-after update of email_confirmed_at on auth.users
-for each row
-when (old.email_confirmed_at is distinct from new.email_confirmed_at and new.email_confirmed_at is not null)
-execute function private.handle_new_user();
 
 create or replace function private.has_staff_permission(p_permission private.staff_permission, p_product_id uuid default null)
 returns boolean
@@ -510,6 +494,38 @@ as $$
         and tenant.status = 'active'
         and product.status <> 'retired'
         and product.support_enabled
+    );
+$$;
+
+create or replace function private.can_read_membership_row(
+  p_tenant_id uuid,
+  p_product_id uuid,
+  p_target_user_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select (select auth.uid()) is not null
+    and (
+      p_target_user_id = (select auth.uid())
+      or (
+        private.is_active_member(p_tenant_id, p_product_id)
+        and exists (
+          select 1
+          from hub.tenant_product_memberships self_membership
+          where self_membership.tenant_id = p_tenant_id
+            and self_membership.product_id = p_product_id
+            and self_membership.user_id = (select auth.uid())
+            and self_membership.role = 'tenant_admin'
+            and self_membership.can_manage_members
+            and self_membership.status = 'active'
+            and self_membership.revoked_at is null
+        )
+      )
+      or private.has_staff_permission('tenant.manage', p_product_id)
     );
 $$;
 
@@ -619,12 +635,14 @@ $$;
 revoke all on function private.has_staff_permission(private.staff_permission, uuid) from public, anon;
 revoke all on function private.is_support_staff() from public, anon;
 revoke all on function private.is_active_member(uuid, uuid) from public, anon;
+revoke all on function private.can_read_membership_row(uuid, uuid, uuid) from public, anon, authenticated;
 revoke all on function private.can_view_case(uuid, uuid, uuid, uuid) from public, anon;
 revoke all on function private.can_view_case_id(uuid) from public, anon;
 revoke all on function private.can_view_content_item(uuid) from public, anon;
 grant execute on function private.has_staff_permission(private.staff_permission, uuid) to authenticated;
 grant execute on function private.is_support_staff() to authenticated;
 grant execute on function private.is_active_member(uuid, uuid) to authenticated;
+grant execute on function private.can_read_membership_row(uuid, uuid, uuid) to authenticated;
 grant execute on function private.can_view_case(uuid, uuid, uuid, uuid) to authenticated;
 grant execute on function private.can_view_case_id(uuid) to authenticated;
 grant execute on function private.can_view_content_item(uuid) to anon, authenticated;
@@ -685,21 +703,7 @@ using (
 
 create policy memberships_self_or_admin_read on hub.tenant_product_memberships for select to authenticated
 using (
-  user_id = (select auth.uid())
-  or (
-    private.is_active_member(tenant_id, product_id)
-    and exists (
-      select 1 from hub.tenant_product_memberships self_membership
-      where self_membership.tenant_id = tenant_product_memberships.tenant_id
-        and self_membership.product_id = tenant_product_memberships.product_id
-        and self_membership.user_id = (select auth.uid())
-        and self_membership.role = 'tenant_admin'
-        and self_membership.can_manage_members
-        and self_membership.status = 'active'
-        and self_membership.revoked_at is null
-    )
-  )
-  or private.has_staff_permission('tenant.manage', product_id)
+  private.can_read_membership_row(tenant_id, product_id, user_id)
 );
 
 create policy support_cases_read on hub.support_cases for select to authenticated
@@ -1134,7 +1138,7 @@ on conflict (id) do update set
 
 insert into hub.support_contacts (id, channel, label, value, hours, priority_order, verified_at)
 values
-  ('10000000-0000-4000-8000-000000000001', 'web', 'Central support portal', 'https://help.caremetric.ai', 'Available anytime', 1, now()),
+  ('10000000-0000-4000-8000-000000000001', 'web', 'Central support portal', 'https://support-hub-web-production.up.railway.app', 'Available anytime', 1, now()),
   ('10000000-0000-4000-8000-000000000002', 'phone', 'Central support phone', '+18775212890', null, 2, now()),
   ('10000000-0000-4000-8000-000000000003', 'email', 'Central support email', 'support@caremetric.ai', null, 3, now())
 on conflict (id) do update set
@@ -1193,9 +1197,11 @@ values
     '30000000-0000-4000-8000-000000000004',
     '20000000-0000-4000-8000-000000000004',
     1,
-    'CareMetric administrator onboarding',
-    'Shared orientation course with product-specific modules and assignments.',
-    null, null, 'approved', null, now(), 'seed:v1'
+    'CareMetric CareBase course catalog',
+    'Open the central CareMetric course catalog for governed training, assignments, quizzes, and certificates.',
+    'Courses are maintained once in CareMetric CareBase and can be assigned across supported organizations. Sign in to browse the current governed catalog.',
+    'Courses are maintained once in CareMetric CareBase and can be assigned across supported organizations. Sign in to browse the current governed catalog.',
+    'approved', null, now(), 'seed:v1'
   )
 on conflict (id) do nothing;
 
@@ -1220,11 +1226,445 @@ on conflict (item_id, product_id) do nothing;
 insert into hub.course_links (content_item_id, penntrain_course_id, source_version, launch_path, duration_minutes, level, objectives)
 values (
   '20000000-0000-4000-8000-000000000004',
-  'pending-penntrain-import',
-  'seed:v1',
-  '/courses/caremetric-administrator-onboarding',
-  35,
-  'beginner',
-  array['Navigate CareMetric products', 'Invite and manage users', 'Find support and training']
+  'catalog:caremetric-carebase',
+  'PennTrain:e4737ac86af1ccdcb734cc60389730674e6c7a98',
+  '/app/courses',
+  null,
+  null,
+  array['Browse governed CareMetric training', 'Assign courses from the central catalog', 'Track quizzes and certificates in CareMetric CareBase']
 )
 on conflict (content_item_id) do nothing;
+
+-- Final least-privilege content and tenant authorization contract. These
+-- replacements intentionally appear after the seed so this standalone schema
+-- reaches the same state as the ordered production migrations.
+create or replace function private.can_view_tenant(p_tenant_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select (select auth.uid()) is not null
+    and (
+      exists (
+        select 1
+        from hub.tenant_product_memberships membership
+        where membership.user_id = (select auth.uid())
+          and membership.tenant_id = p_tenant_id
+          and membership.status = 'active'
+          and membership.revoked_at is null
+          and private.is_active_member(membership.tenant_id, membership.product_id)
+      )
+      or private.has_staff_permission('tenant.manage', null)
+      or exists (
+        select 1
+        from hub.tenant_products entitlement
+        where entitlement.tenant_id = p_tenant_id
+          and (
+            private.has_staff_permission('case.read', entitlement.product_id)
+            or private.has_staff_permission('case.write', entitlement.product_id)
+            or private.has_staff_permission('tenant.manage', entitlement.product_id)
+          )
+      )
+    );
+$$;
+
+create or replace function private.has_active_content_audience(
+  p_product_id uuid,
+  p_audience text[]
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select (select auth.uid()) is not null
+    and exists (
+      select 1
+      from hub.tenant_product_memberships membership
+      join hub.tenant_products entitlement
+        on entitlement.tenant_id = membership.tenant_id
+       and entitlement.product_id = membership.product_id
+      join hub.tenants tenant on tenant.id = membership.tenant_id
+      join hub.products product on product.id = membership.product_id
+      where membership.user_id = (select auth.uid())
+        and membership.product_id = p_product_id
+        and membership.status = 'active'
+        and membership.revoked_at is null
+        and entitlement.status = 'active'
+        and tenant.status = 'active'
+        and product.status <> 'retired'
+        and product.support_enabled
+        and (
+          'all' = any(coalesce(p_audience, array[]::text[]))
+          or (
+            membership.role = 'tenant_admin'
+            and coalesce(p_audience, array[]::text[]) && array['customer-admin', 'manager']::text[]
+          )
+          or (
+            membership.role = 'customer'
+            and 'customer' = any(coalesce(p_audience, array[]::text[]))
+          )
+        )
+    );
+$$;
+
+create or replace function private.can_access_content_publication(
+  p_item_id uuid,
+  p_revision_id uuid,
+  p_product_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from hub.content_publications publication
+    join hub.content_items item
+      on item.id = publication.item_id
+    join hub.content_revisions revision
+      on revision.id = publication.revision_id
+     and revision.item_id = publication.item_id
+    join hub.products publication_product
+      on publication_product.id = publication.product_id
+    where publication.item_id = p_item_id
+      and publication.revision_id = p_revision_id
+      and publication.product_id = p_product_id
+      and (revision.product_overlay_id is null or revision.product_overlay_id = publication.product_id)
+      and (
+        private.has_staff_permission('content.read', publication.product_id)
+        or private.has_staff_permission('content.write', publication.product_id)
+        or (
+          item.status = 'published'
+          and revision.review_state = 'approved'
+          and publication_product.status <> 'retired'
+          and publication_product.support_enabled
+          and publication.published_at <= now()
+          and (publication.expires_at is null or publication.expires_at > now())
+          and (
+            (
+              item.access_level = 'public'
+              and 'all' = any(coalesce(publication.audience, array[]::text[]))
+            )
+            or (
+              item.access_level = 'customer'
+              and private.has_active_content_audience(publication.product_id, publication.audience)
+            )
+          )
+        )
+      )
+  );
+$$;
+
+create or replace function private.can_view_content_item(p_item_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from hub.content_items item
+    where item.id = p_item_id
+      and (
+        private.has_staff_permission('content.read', item.owner_product_id)
+        or private.has_staff_permission('content.write', item.owner_product_id)
+        or exists (
+          select 1
+          from hub.content_publications publication
+          where publication.item_id = item.id
+            and private.can_access_content_publication(
+              publication.item_id,
+              publication.revision_id,
+              publication.product_id
+            )
+        )
+      )
+  );
+$$;
+
+create or replace function private.can_view_content_revision(p_revision_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from hub.content_revisions revision
+    join hub.content_items item on item.id = revision.item_id
+    where revision.id = p_revision_id
+      and (
+        private.has_staff_permission(
+          'content.read',
+          coalesce(revision.product_overlay_id, item.owner_product_id)
+        )
+        or private.has_staff_permission(
+          'content.write',
+          coalesce(revision.product_overlay_id, item.owner_product_id)
+        )
+        or exists (
+          select 1
+          from hub.content_publications publication
+          where publication.item_id = revision.item_id
+            and publication.revision_id = revision.id
+            and private.can_access_content_publication(
+              publication.item_id,
+              publication.revision_id,
+              publication.product_id
+            )
+        )
+      )
+  );
+$$;
+
+create or replace function private.can_view_media_asset(p_asset_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from hub.media_assets media
+    join hub.content_items item on item.id = media.content_item_id
+    join hub.content_revisions revision
+      on revision.id = media.revision_id
+     and revision.item_id = media.content_item_id
+    where media.id = p_asset_id
+      and (
+        revision.product_overlay_id is null
+        or media.product_id is null
+        or media.product_id = revision.product_overlay_id
+      )
+      and (
+        private.has_staff_permission(
+          'content.read',
+          coalesce(media.product_id, revision.product_overlay_id, item.owner_product_id)
+        )
+        or private.has_staff_permission(
+          'content.write',
+          coalesce(media.product_id, revision.product_overlay_id, item.owner_product_id)
+        )
+        or exists (
+          select 1
+          from hub.content_publications publication
+          where publication.item_id = media.content_item_id
+            and publication.revision_id = media.revision_id
+            and (media.product_id is null or media.product_id = publication.product_id)
+            and private.can_access_content_publication(
+              publication.item_id,
+              publication.revision_id,
+              publication.product_id
+            )
+            and (
+              private.has_staff_permission('content.read', publication.product_id)
+              or private.has_staff_permission('content.write', publication.product_id)
+              or (
+                media.render_status = 'ready'
+                and media.data_classification = 'none'
+                and (
+                  (media.access_level = 'public' and item.access_level = 'public')
+                  or (
+                    media.access_level = 'customer'
+                    and item.access_level = 'customer'
+                    and private.has_active_content_audience(
+                      publication.product_id,
+                      publication.audience
+                    )
+                  )
+                )
+              )
+            )
+        )
+      )
+  );
+$$;
+
+revoke all on function private.can_view_tenant(uuid) from public, anon, authenticated;
+revoke all on function private.has_active_content_audience(uuid, text[]) from public, anon, authenticated;
+revoke all on function private.can_access_content_publication(uuid, uuid, uuid) from public, anon, authenticated;
+revoke all on function private.can_view_content_item(uuid) from public, anon, authenticated;
+revoke all on function private.can_view_content_revision(uuid) from public, anon, authenticated;
+revoke all on function private.can_view_media_asset(uuid) from public, anon, authenticated;
+
+grant execute on function private.can_view_tenant(uuid) to authenticated;
+grant execute on function private.can_access_content_publication(uuid, uuid, uuid) to anon, authenticated;
+grant execute on function private.can_view_content_item(uuid) to anon, authenticated;
+grant execute on function private.can_view_content_revision(uuid) to anon, authenticated;
+grant execute on function private.can_view_media_asset(uuid) to anon, authenticated;
+
+drop policy if exists tenants_member_read on hub.tenants;
+create policy tenants_member_read on hub.tenants
+for select to authenticated
+using (private.can_view_tenant(id));
+
+drop policy if exists content_items_read on hub.content_items;
+create policy content_items_read on hub.content_items
+for select to anon, authenticated
+using (private.can_view_content_item(id));
+
+drop policy if exists content_revisions_read on hub.content_revisions;
+create policy content_revisions_read on hub.content_revisions
+for select to anon, authenticated
+using (private.can_view_content_revision(id));
+
+drop policy if exists content_publications_read on hub.content_publications;
+create policy content_publications_read on hub.content_publications
+for select to anon, authenticated
+using (private.can_access_content_publication(item_id, revision_id, product_id));
+
+drop policy if exists media_assets_read on hub.media_assets;
+create policy media_assets_read on hub.media_assets
+for select to anon, authenticated
+using (private.can_view_media_asset(id));
+
+create or replace function hub.list_published_content()
+returns table (
+  id uuid,
+  content_key text,
+  kind hub.content_kind,
+  title text,
+  summary text,
+  body_markdown text,
+  status hub.content_status,
+  access_level hub.access_level,
+  product_ids uuid[],
+  audience text[],
+  locale text,
+  revision_no integer,
+  source_system hub.content_source,
+  route_pattern text,
+  video_status text,
+  course_launch_path text,
+  placements jsonb
+)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  with accessible_publications as (
+    select
+      publication.id as publication_id,
+      publication.item_id,
+      publication.revision_id,
+      publication.product_id,
+      publication.audience,
+      publication.route_pattern
+    from hub.content_publications publication
+    join hub.content_items item
+      on item.id = publication.item_id
+    join hub.content_revisions revision
+      on revision.id = publication.revision_id
+     and revision.item_id = publication.item_id
+    join hub.products product
+      on product.id = publication.product_id
+    where item.status = 'published'
+      and revision.review_state = 'approved'
+      and product.status <> 'retired'
+      and product.support_enabled
+      and (revision.product_overlay_id is null or revision.product_overlay_id = publication.product_id)
+      and publication.published_at <= now()
+      and (publication.expires_at is null or publication.expires_at > now())
+      and private.can_access_content_publication(
+        publication.item_id,
+        publication.revision_id,
+        publication.product_id
+      )
+  ),
+  grouped_publications as (
+    select
+      publication.item_id,
+      publication.revision_id,
+      array_agg(distinct publication.product_id) as product_ids,
+      coalesce(
+        (
+          select array_agg(distinct audience_value order by audience_value)
+          from accessible_publications audience_publication
+          cross join lateral unnest(audience_publication.audience) as audience_value
+          where audience_publication.item_id = publication.item_id
+            and audience_publication.revision_id = publication.revision_id
+        ),
+        array[]::text[]
+      ) as audience,
+      case
+        when count(distinct publication.route_pattern)
+          filter (where publication.route_pattern is not null) <= 1
+        then min(publication.route_pattern)
+        else null
+      end as route_pattern,
+      jsonb_agg(
+        jsonb_build_object(
+          'product_id', publication.product_id,
+          'audience', publication.audience,
+          'route_pattern', publication.route_pattern
+        )
+        order by publication.product_id
+      ) as placements
+    from accessible_publications publication
+    group by publication.item_id, publication.revision_id
+  )
+  select
+    revision.id,
+    item.content_key,
+    item.kind,
+    revision.title,
+    revision.summary,
+    revision.body_markdown,
+    item.status,
+    item.access_level,
+    grouped.product_ids,
+    grouped.audience,
+    revision.locale,
+    revision.revision_no,
+    item.source_system,
+    grouped.route_pattern,
+    media.render_status as video_status,
+    course.launch_path as course_launch_path,
+    grouped.placements
+  from grouped_publications grouped
+  join hub.content_items item on item.id = grouped.item_id
+  join hub.content_revisions revision on revision.id = grouped.revision_id
+  left join lateral (
+    select asset.render_status
+    from hub.media_assets asset
+    where asset.content_item_id = grouped.item_id
+      and asset.revision_id = grouped.revision_id
+      and private.can_view_media_asset(asset.id)
+      and exists (
+        select 1
+        from accessible_publications publication
+        where publication.item_id = asset.content_item_id
+          and publication.revision_id = asset.revision_id
+          and (asset.product_id is null or asset.product_id = publication.product_id)
+      )
+    order by
+      (asset.published_at is not null) desc,
+      asset.published_at desc nulls last,
+      case asset.render_status
+        when 'ready' then 1
+        when 'review' then 2
+        when 'rendering' then 3
+        when 'failed' then 4
+        when 'retired' then 5
+        else 6
+      end,
+      asset.created_at desc,
+      asset.id desc
+    limit 1
+  ) media on true
+  left join hub.course_links course on course.content_item_id = item.id
+  order by revision.title;
+$$;
+
+revoke all on function hub.list_published_content() from public, anon, authenticated;
+grant execute on function hub.list_published_content() to anon, authenticated;

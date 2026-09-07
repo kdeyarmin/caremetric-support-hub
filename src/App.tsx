@@ -36,7 +36,7 @@ import {
   Zap,
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { demoRepository, repository } from "./data";
 import {
   categoryLabels,
@@ -72,6 +72,8 @@ const emptyData: HubData = {
   content: [],
 };
 
+const pendingHelpPathKey = "caremetric.pendingHelpPath";
+
 const navItems = [
   { to: "/overview", label: "Overview", icon: LayoutDashboard },
   { to: "/cases", label: "Support cases", icon: Inbox },
@@ -88,6 +90,75 @@ function formatDate(value: string): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function supportContactHref(contact: SupportContact): string {
+  if (contact.channel === "phone") return `tel:${contact.value.replace(/[^+\d]/g, "")}`;
+  if (contact.channel === "email") return `mailto:${contact.value}`;
+  return contact.value.startsWith("http") ? contact.value : `https://${contact.value}`;
+}
+
+function supportContactDisplay(contact: SupportContact): string {
+  if (contact.channel === "phone" && contact.value.replace(/\D/g, "") === "18775212890") {
+    return config.centralSupportPhoneDisplay;
+  }
+  return contact.value.replace(/^https?:\/\//, "").replace(/\/$/, "");
+}
+
+function courseLaunchUrl(item: ContentItem): string | null {
+  if (!config.pennTrainBaseUrl || !item.courseLaunchPath?.startsWith("/")) return null;
+
+  try {
+    const baseUrl = new URL(config.pennTrainBaseUrl);
+    const launchUrl = new URL(item.courseLaunchPath, baseUrl.origin);
+    if (baseUrl.protocol !== "https:" || launchUrl.origin !== baseUrl.origin) return null;
+    return launchUrl.toString();
+  } catch {
+    return null;
+  }
+}
+
+function routeMatches(pattern: string | null, route: string): boolean {
+  if (!pattern || !route) return !pattern;
+  const escaped = pattern
+    .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+    .replaceAll("**", "__DOUBLE_STAR__")
+    .replaceAll("*", "[^/]*")
+    .replaceAll("__DOUBLE_STAR__", ".*");
+  return new RegExp(`^${escaped}$`, "i").test(route);
+}
+
+function placementsFor(item: ContentItem): NonNullable<ContentItem["placements"]> {
+  if (item.placements?.length) return item.placements;
+  return item.productIds.map((productId) => ({
+    productId,
+    audience: item.audience,
+    routePattern: item.routePattern,
+  }));
+}
+
+function rememberCurrentHelpPath(): void {
+  if (window.location.pathname !== "/help") return;
+  const value = `${window.location.pathname}${window.location.search}`;
+  if (value.length > 2048) return;
+  try {
+    window.localStorage.setItem(pendingHelpPathKey, value);
+  } catch {
+    // Sign-in still works when browser storage is unavailable.
+  }
+}
+
+function takePendingHelpPath(): string | null {
+  try {
+    const value = window.localStorage.getItem(pendingHelpPathKey);
+    window.localStorage.removeItem(pendingHelpPathKey);
+    if (!value || value.length > 2048) return null;
+    const parsed = new URL(value, window.location.origin);
+    if (parsed.origin !== window.location.origin || parsed.pathname !== "/help") return null;
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return null;
+  }
 }
 
 function caseCode(value: number): string {
@@ -138,10 +209,11 @@ function SignInScreen() {
     if (!supabase || !email.trim()) return;
     setBusy(true);
     setHasError(false);
+    rememberCurrentHelpPath();
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
       options: {
-        shouldCreateUser: true,
+        shouldCreateUser: false,
         emailRedirectTo: window.location.origin,
       },
     });
@@ -186,6 +258,10 @@ function SignInScreen() {
           {sent && !busy && <button type="button" className="button button-secondary" onClick={() => { setSent(false); setMessage(""); }}>Use a different email</button>}
           {message && <p className={`form-message ${hasError ? "form-error" : "form-success"}`}>{message}</p>}
         </form>
+        <div className="sign-in-support" aria-label="Central support contacts">
+          <a href={`tel:${config.centralSupportPhone}`}><Phone size={17} /><span><small>Call central support</small><strong>{config.centralSupportPhoneDisplay}</strong></span></a>
+          <a href={`mailto:${config.centralSupportEmail}`}><Mail size={17} /><span><small>Email central support</small><strong>{config.centralSupportEmail}</strong></span></a>
+        </div>
         <div className="privacy-note"><ShieldCheck size={16} /> CareMetric-managed support. Never include patient information in a support request.</div>
       </section>
       <aside className="sign-in-aside" aria-label="Support Hub capabilities">
@@ -244,7 +320,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
               </div>
             )}
             {!config.demoMode && <button className="button button-secondary" onClick={() => void supabase?.auth.signOut()}>Sign out</button>}
-            <button className="icon-button" aria-label="Help"><CircleHelp size={19} /></button>
+            <NavLink className="icon-button" to="/help" aria-label="Help"><CircleHelp size={19} /></NavLink>
           </div>
         </header>
         <main className="page-wrap">
@@ -261,10 +337,28 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/library" element={<ContentLibraryPage data={data} />} />
             <Route path="/products" element={<ProductsPage data={data} />} />
             <Route path="/integration" element={<IntegrationPage data={data} />} />
+            <Route path="/help" element={<ContextualHelpPage data={data} />} />
             <Route path="*" element={<Navigate to="/overview" replace />} />
           </Routes>
         </main>
       </div>
+    </div>
+  );
+}
+
+function PublicHelpShell({ data }: { data: HubData }) {
+  return (
+    <div className="public-help-shell">
+      <header className="public-help-header">
+        <div className="brand-lockup brand-lockup-large">
+          <span className="brand-icon"><CircleHelp size={21} /></span>
+          <span><strong>CareMetric</strong><small>Support Hub</small></span>
+        </div>
+        <NavLink className="button button-secondary" to="/">Staff and customer sign-in</NavLink>
+      </header>
+      <main className="public-help-wrap">
+        <ContextualHelpPage data={data} />
+      </main>
     </div>
   );
 }
@@ -619,8 +713,31 @@ function ContentLibraryPage({ data }: { data: HubData }) {
         <div className="pipeline-step"><span><MonitorPlay /></span><div><strong>Controlled publish</strong><small>Stable content key</small></div></div>
       </section>
       <div className="content-columns">
-        <section className="panel content-section"><div className="panel-heading"><div><h2>Explainer videos</h2><p>Immutable renders connected to approved revisions</p></div><span className="count-pill">{videos.length}</span></div>{videos.map((item) => <article className="media-row" key={item.id}><div className="media-thumb"><MonitorPlay /><span>2:14</span></div><div className="media-copy"><div><span className="content-key">{item.contentKey}</span><span className={`publication-status ${item.videoStatus}`}>{item.videoStatus}</span></div><h3>{item.title}</h3><p>{item.summary}</p><div className="media-meta"><span><Boxes size={14} /> {item.productIds.length} products</span><span><FileText size={14} /> Rev {item.revision}</span><span><ShieldCheck size={14} /> Captions required</span></div></div><button className="icon-button"><ChevronRight /></button></article>)}</section>
-        <section className="panel content-section"><div className="panel-heading"><div><h2>PennTrain course catalog</h2><p>Searchable metadata; learning records remain in PennTrain</p></div><span className="count-pill">{courses.length}</span></div>{courses.map((item) => <article className="course-row" key={item.id}><span className="course-icon"><GraduationCap /></span><div><span className="content-key">{item.contentKey}</span><h3>{item.title}</h3><p>{item.summary}</p><div className="media-meta"><span><UsersRound size={14} /> {item.audience.join(", ")}</span><span><Boxes size={14} /> {item.productIds.length} products</span></div></div><button className="button button-secondary button-small">Open in PennTrain <ExternalLink size={14} /></button></article>)}</section>
+        <section className="panel content-section">
+          <div className="panel-heading"><div><h2>Explainer videos</h2><p>Immutable renders connected to approved revisions</p></div><span className="count-pill">{videos.length}</span></div>
+          {videos.map((item) => (
+            <article className="media-row" key={item.id}>
+              <div className="media-thumb"><MonitorPlay /><span>Preview</span></div>
+              <div className="media-copy"><div><span className="content-key">{item.contentKey}</span><span className={`publication-status ${item.videoStatus}`}>{item.videoStatus ?? "pending"}</span></div><h3>{item.title}</h3><p>{item.summary}</p><div className="media-meta"><span><Boxes size={14} /> {item.productIds.length} products</span><span><FileText size={14} /> Rev {item.revision}</span><span><ShieldCheck size={14} /> Captions required</span></div></div>
+              <button className="icon-button" disabled aria-label={`Playback unavailable for ${item.title}`} title={item.videoStatus === "ready" ? "Playback will be enabled after a governed media URL is connected" : "Playback is enabled only after rendering and approval"}><ChevronRight /></button>
+            </article>
+          ))}
+        </section>
+        <section className="panel content-section">
+          <div className="panel-heading"><div><h2>PennTrain course catalog</h2><p>Searchable metadata; learning records remain in PennTrain</p></div><span className="count-pill">{courses.length}</span></div>
+          {courses.map((item) => {
+            const launchUrl = courseLaunchUrl(item);
+            return (
+              <article className="course-row" key={item.id}>
+                <span className="course-icon"><GraduationCap /></span>
+                <div><span className="content-key">{item.contentKey}</span><h3>{item.title}</h3><p>{item.summary}</p><div className="media-meta"><span><UsersRound size={14} /> {item.audience.join(", ")}</span><span><Boxes size={14} /> {item.productIds.length} products</span></div></div>
+                {launchUrl
+                  ? <a className="button button-secondary button-small" href={launchUrl} target="_blank" rel="noreferrer">Open in PennTrain <ExternalLink size={14} /></a>
+                  : <button className="button button-secondary button-small" disabled title="PennTrain launch is enabled after its verified production URL is configured">PennTrain not connected <LockKeyhole size={14} /></button>}
+              </article>
+            );
+          })}
+        </section>
       </div>
       <section className="ownership-boundary panel"><div><strong>Content ownership boundary</strong><p>No HeyGen URL is embedded in an app. Products resolve a stable Support Hub content key, while final media is rehosted and can be rolled back independently.</p></div><span><LockKeyhole /> Provider-independent</span></section>
     </>
@@ -635,13 +752,93 @@ function ProductsPage({ data }: { data: HubData }) {
         {data.products.map((product) => {
           const productContent = data.content.filter((item) => item.productIds.includes(product.id));
           const productCases = data.cases.filter((item) => item.productId === product.id && !["resolved", "closed"].includes(item.status));
-          return <article className="product-card" key={product.id}><div className="product-card-header"><span className="product-logo" style={{ background: `${product.color}18`, color: product.color }}>{product.name.charAt(0)}</span><div><h2>{product.name}</h2><span className={`publication-status ${product.status === "active" ? "published" : "review"}`}>{product.status}</span></div></div><p>{product.description}</p><dl><div><dt>Product key</dt><dd>{product.slug}</dd></div><div><dt>Active cases</dt><dd>{productCases.length}</dd></div><div><dt>Published placements</dt><dd>{productContent.length}</dd></div></dl><button className="button button-secondary">Manage routing <ArrowRight size={15} /></button></article>;
+          return <article className="product-card" key={product.id}><div className="product-card-header"><span className="product-logo" style={{ background: `${product.color}18`, color: product.color }}>{product.name.charAt(0)}</span><div><h2>{product.name}</h2><span className={`publication-status ${product.status === "active" ? "published" : "review"}`}>{product.status}</span></div></div><p>{product.description}</p><dl><div><dt>Product key</dt><dd>{product.slug}</dd></div><div><dt>Active cases</dt><dd>{productCases.length}</dd></div><div><dt>Published placements</dt><dd>{productContent.length}</dd></div></dl><NavLink className="button button-secondary" to={`/help?product=${encodeURIComponent(product.slug)}`}>Preview help <ArrowRight size={15} /></NavLink></article>;
         })}
       </div>
       <section className="panel contact-registry">
         <div className="panel-heading"><div><h2>Central support channels</h2><p>Unverified values are never published to applications.</p></div><span className="verified-counter"><ShieldCheck size={16} /> {data.contacts.filter((item) => item.verified).length} of {data.contacts.length} verified</span></div>
-        <div className="contact-table"><div className="contact-table-head"><span>Channel</span><span>Published value</span><span>Availability</span><span>Status</span></div>{data.contacts.map((contact) => { const Icon = contact.channel === "phone" ? Phone : contact.channel === "email" ? Mail : ExternalLink; return <div className="contact-table-row" key={contact.id}><span><Icon size={17} /> {contact.label}</span><strong>{contact.value}</strong><span>{contact.hours ?? "Not set"}</span><span className={contact.verified ? "verified" : "unverified"}>{contact.verified ? <><CheckCircle2 size={15} /> Verified</> : <><Clock3 size={15} /> Needs verification</>}</span></div>; })}</div>
+        <div className="contact-table"><div className="contact-table-head"><span>Channel</span><span>Published value</span><span>Availability</span><span>Status</span></div>{data.contacts.map((contact) => { const Icon = contact.channel === "phone" ? Phone : contact.channel === "email" ? Mail : ExternalLink; return <div className="contact-table-row" key={contact.id}><span><Icon size={17} /> {contact.label}</span><strong>{contact.verified ? <a href={supportContactHref(contact)} target={contact.channel === "web" ? "_blank" : undefined} rel={contact.channel === "web" ? "noreferrer" : undefined}>{supportContactDisplay(contact)}</a> : supportContactDisplay(contact)}</strong><span>{contact.hours ?? "Not set"}</span><span className={contact.verified ? "verified" : "unverified"}>{contact.verified ? <><CheckCircle2 size={15} /> Verified</> : <><Clock3 size={15} /> Needs verification</>}</span></div>; })}</div>
       </section>
+    </>
+  );
+}
+
+function ContextualHelpPage({ data }: { data: HubData }) {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const requestedSlug = (params.get("product") ?? "").trim().toLowerCase();
+  const productSlug = requestedSlug === "pennfit" ? "breathe" : requestedSlug;
+  const product = data.products.find((item) => item.slug === productSlug);
+  const route = (params.get("route") ?? "").split(/[?#]/, 1)[0];
+  const feature = (params.get("feature") ?? "").slice(0, 96);
+  const appVersion = (params.get("app_version") ?? "").slice(0, 48);
+  const environment = (params.get("environment") ?? "").slice(0, 24);
+  const productContent = data.content
+    .filter((item) => item.status === "published" && (!product || placementsFor(item).some((placement) => placement.productId === product.id)))
+    .sort((left, right) => {
+      const matches = (item: ContentItem) => placementsFor(item).some((placement) =>
+        (!product || placement.productId === product.id) &&
+        Boolean(placement.routePattern) &&
+        routeMatches(placement.routePattern, route));
+      return Number(matches(right)) - Number(matches(left));
+    });
+  const relevant = productContent.filter((item) => placementsFor(item).some((placement) =>
+    (!product || placement.productId === product.id) && routeMatches(placement.routePattern, route)));
+  const results = (relevant.length ? relevant : productContent).slice(0, 8);
+  const verifiedContacts = data.contacts.filter((item) => item.verified && item.channel !== "web");
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="Contextual support"
+        title={product ? `Help for ${product.name}` : "CareMetric help"}
+        description={product
+          ? "Guidance shared from the central CareMetric library, filtered for this product and workflow."
+          : requestedSlug
+            ? `We did not recognize “${requestedSlug}”. The shared catalog and central support team are still available below.`
+            : "Search the shared CareMetric library or contact the central support team."}
+        action={<NavLink className="button button-primary" to="/cases"><MessageSquareText size={17} /> Open support</NavLink>}
+      />
+      {(route || feature || appVersion || environment) && (
+        <section className="context-strip" aria-label="Application context">
+          {feature && <span><strong>Feature</strong>{feature}</span>}
+          {route && <span><strong>Page</strong>{route}</span>}
+          {appVersion && <span><strong>Version</strong>{appVersion}</span>}
+          {environment && <span><strong>Environment</strong>{environment}</span>}
+        </section>
+      )}
+      <div className="context-help-grid">
+        <section className="panel contextual-results">
+          <div className="panel-heading"><div><h2>Recommended guidance</h2><p>{results.length ? `${results.length} relevant item${results.length === 1 ? "" : "s"} from the governed library` : "No matching content has been published yet"}</p></div><NavLink to="/knowledge" className="text-link">Search everything <ArrowRight size={15} /></NavLink></div>
+          {results.length ? results.map((item) => {
+            const Icon = item.kind === "article" ? FileText : item.kind === "video" ? MonitorPlay : GraduationCap;
+            const launchUrl = item.kind === "course" ? courseLaunchUrl(item) : null;
+            return (
+              <article className="contextual-result" key={item.id}>
+                <span><Icon size={19} /></span>
+                <div>
+                  <small>{item.kind} · Rev {item.revision}</small><h3>{item.title}</h3><p>{item.summary}</p>
+                  {item.body && <details><summary>Read answer</summary><div>{item.body}</div></details>}
+                  {launchUrl && <a className="text-link contextual-action" href={launchUrl} target="_blank" rel="noreferrer">Open course in PennTrain <ExternalLink size={14} /></a>}
+                  {item.kind === "course" && !launchUrl && <span className="contextual-action action-unavailable"><LockKeyhole size={13} /> Course launch not connected</span>}
+                  {item.kind === "video" && <span className="contextual-action action-unavailable"><Clock3 size={13} /> Video playback available after approval</span>}
+                </div>
+              </article>
+            );
+          }) : <div className="empty-state"><Search /><strong>No exact match yet</strong><p>Contact central support and include the product, page, version, expected behavior, and error wording—never patient information.</p></div>}
+        </section>
+        <aside className="panel central-contact-panel">
+          <span className="eyebrow">One support team</span>
+          <h2>Contact CareMetric</h2>
+          <p>Every CareMetric product uses these verified central routes.</p>
+          {verifiedContacts.map((contact) => {
+            const Icon = contact.channel === "phone" ? Phone : Mail;
+            return <a key={contact.id} href={supportContactHref(contact)} className="central-contact-link" aria-label={`${contact.label}: ${supportContactDisplay(contact)}`}><Icon size={19} /><span><small>{contact.label}</small><strong>{supportContactDisplay(contact)}</strong></span><ArrowRight size={16} /></a>;
+          })}
+          {!verifiedContacts.length && <p className="contact-unavailable">Verified contact routes are temporarily unavailable. Use the support case form and do not include patient information.</p>}
+          <div className="privacy-note"><ShieldCheck size={16} /> Do not send patient names, identifiers, clinical notes, or screenshots containing patient information.</div>
+        </aside>
+      </div>
     </>
   );
 }
@@ -677,6 +874,8 @@ openHelp({
 }
 
 export default function App() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [data, setData] = useState<HubData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -694,26 +893,53 @@ export default function App() {
     } finally { setLoading(false); }
   }, []);
 
+  const loadPublicHelp = useCallback(async () => {
+    setLoading(true); setError("");
+    try {
+      const [products, contacts, content] = await Promise.all([
+        repository.listProducts(), repository.listContacts(), repository.listContent(),
+      ]);
+      setData({ ...emptyData, products, contacts, content });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unknown Support Hub error.");
+    } finally { setLoading(false); }
+  }, []);
+
   useEffect(() => {
     if (config.demoMode) { void Promise.resolve().then(load); return; }
     void supabase?.auth.getSession().then(({ data: sessionData }) => {
       setAuthenticated(Boolean(sessionData.session));
-      if (sessionData.session) void load(); else setLoading(false);
+      if (sessionData.session) {
+        if (window.location.pathname === "/") {
+          const pendingPath = takePendingHelpPath();
+          if (pendingPath) navigate(pendingPath, { replace: true });
+        }
+        void load();
+      } else if (window.location.pathname === "/help") void loadPublicHelp();
+      else setLoading(false);
     });
     const subscription = supabase?.auth.onAuthStateChange((_event, session) => {
       setAuthenticated(Boolean(session));
-      if (session) void load();
+      if (session) {
+        if (window.location.pathname === "/") {
+          const pendingPath = takePendingHelpPath();
+          if (pendingPath) navigate(pendingPath, { replace: true });
+        }
+        void load();
+      } else if (window.location.pathname === "/help") void loadPublicHelp();
     });
     return () => subscription?.data.subscription.unsubscribe();
-  }, [load]);
+  }, [load, loadPublicHelp, navigate, location.pathname]);
 
   const changePersona = async (mode: "staff" | "customer") => {
     demoRepository.setActorRole(mode);
     await load();
   };
 
-  if (!authenticated && !config.demoMode) return <SignInScreen />;
+  const publicHelp = !authenticated && !config.demoMode && location.pathname === "/help";
+  if (!authenticated && !config.demoMode && !publicHelp) return <SignInScreen />;
   if (loading) return <LoadingScreen />;
-  if (error) return <ErrorScreen message={error} onRetry={() => void load()} />;
+  if (error) return <ErrorScreen message={error} onRetry={() => void (publicHelp ? loadPublicHelp() : load())} />;
+  if (publicHelp) return <PublicHelpShell data={data} />;
   return <AppShell data={data} onPersonaChange={(mode) => void changePersona(mode)} />;
 }

@@ -7,7 +7,7 @@ Version `0.1.0` uses RLS-governed reads and narrow atomic RPCs in the `hub` sche
 - `hub.products`: active product registry.
 - `hub.support_contacts`: verified public product/contact routing only.
 - `hub.support_case_queue`: requester/tenant-scoped or staff-permission-scoped safe case rows.
-- `hub.published_content`: authorized published article, video, and course revisions with product placements.
+- `hub.list_published_content()`: sanitized, audience-authorized article, video, and course revisions with exact product placements.
 - `hub.get_support_actor_context()`: current profile, role, and first active tenant context.
 - `hub.get_support_case_thread(case_id)`: customer correspondence plus internal notes only for authorized staff.
 

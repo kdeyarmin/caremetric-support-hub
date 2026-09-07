@@ -51,7 +51,7 @@ const contacts: SupportContact[] = [
     productId: null,
     channel: "web",
     label: "Central support portal",
-    value: "help.caremetric.ai",
+    value: "https://support-hub-web-production.up.railway.app",
     hours: "Available anytime",
     verified: true,
   },

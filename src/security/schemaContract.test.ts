@@ -80,10 +80,16 @@ describe("Support Hub schema contract", () => {
     expect(schema).not.toContain("(814) 471-0627");
   });
 
-  it("grants the bootstrap administrator only after exact-email confirmation", () => {
-    expect(schema).toContain("lower(coalesce(new.email, '')) = 'kdeyarmin@comcast.net'");
-    expect(schema).toContain("new.email_confirmed_at is not null");
-    expect(schema).toContain("values (new.id, null, 'platform.admin', new.id)");
+  it("keeps the completed super-admin bootstrap closed", () => {
+    expect(schema).not.toContain("lower(coalesce(new.email, '')) = 'kdeyarmin@comcast.net'");
+    expect(schema).not.toContain("create trigger on_auth_user_confirmed");
+    expect(schema).not.toContain("values (new.id, null, 'platform.admin', new.id)");
+  });
+
+  it("keeps membership RLS non-recursive", () => {
+    expect(schema).toContain("private.can_read_membership_row(tenant_id, product_id, user_id)");
+    const policy = schema.match(/create policy memberships_self_or_admin_read[\s\S]*?\);/)?.[0] ?? "";
+    expect(policy).not.toContain("from hub.tenant_product_memberships");
   });
 
   it("blocks direct client writes to support and content tables", () => {

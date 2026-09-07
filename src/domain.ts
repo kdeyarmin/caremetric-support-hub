@@ -92,6 +92,11 @@ export interface ContentItem {
   routePattern: string | null;
   videoStatus?: "ready" | "rendering" | "review";
   courseLaunchPath?: string;
+  placements?: Array<{
+    productId: string;
+    audience: string[];
+    routePattern: string | null;
+  }>;
 }
 
 export interface DashboardSummary {

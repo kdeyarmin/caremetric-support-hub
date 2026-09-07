@@ -8,7 +8,7 @@ Install or vendor the framework-neutral package from `packages/help-sdk`.
 import { openHelp } from "@caremetric/help-sdk";
 
 openHelp({
-  baseUrl: "https://help.caremetric.ai",
+  baseUrl: "https://support-hub-web-production.up.railway.app",
   context: {
     product: "pennfit",
     route: window.location.pathname,
