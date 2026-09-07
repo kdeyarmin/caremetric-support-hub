@@ -72,27 +72,27 @@ select is(
   'new activation rows default to disabled'
 );
 
-select like(
-  pg_get_functiondef('private.is_case_intake_enabled(uuid,uuid)'::regprocedure),
-  '%permission.permission in (''case.write'', ''platform.admin'')%',
+select ok(
+  pg_get_functiondef('private.is_case_intake_enabled(uuid,uuid)'::regprocedure)
+    like '%permission.permission in (''case.write'', ''platform.admin'')%',
   'intake requires an active support writer'
 );
 
-select like(
-  pg_get_functiondef('private.is_case_intake_enabled(uuid,uuid)'::regprocedure),
-  '%from auth.mfa_factors factor%',
+select ok(
+  pg_get_functiondef('private.is_case_intake_enabled(uuid,uuid)'::regprocedure)
+    like '%from auth.mfa_factors factor%',
   'intake requires a verified staff authenticator enrollment'
 );
 
-select like(
-  pg_get_functiondef('private.is_case_intake_enabled(uuid,uuid)'::regprocedure),
-  '%staff_user.deleted_at is null%',
+select ok(
+  pg_get_functiondef('private.is_case_intake_enabled(uuid,uuid)'::regprocedure)
+    like '%staff_user.deleted_at is null%',
   'deleted staff accounts do not satisfy intake readiness'
 );
 
-select like(
-  pg_get_functiondef('private.is_case_intake_enabled(uuid,uuid)'::regprocedure),
-  '%staff_user.banned_until is null or staff_user.banned_until <= now()%',
+select ok(
+  pg_get_functiondef('private.is_case_intake_enabled(uuid,uuid)'::regprocedure)
+    like '%staff_user.banned_until is null or staff_user.banned_until <= now()%',
   'banned staff accounts do not satisfy intake readiness'
 );
 
@@ -124,65 +124,61 @@ select has_function(
   'idempotent reply RPC overload exists'
 );
 
-select like(
+select ok(
   pg_get_functiondef(
     'hub.create_support_case(uuid,uuid,text,hub.case_category,hub.case_priority,text,text,text,boolean,uuid)'::regprocedure
-  ),
-  '%private.is_case_intake_enabled(p_tenant_id, p_product_id)%',
+  ) like '%private.is_case_intake_enabled(p_tenant_id, p_product_id)%',
   'case creation is guarded by the activation helper'
 );
 
-select like(
-  lower(pg_get_indexdef('hub.case_messages_client_message_id_idx'::regclass)),
-  '%where (client_message_id is not null)%',
+select ok(
+  lower(pg_get_indexdef('hub.case_messages_client_message_id_idx'::regclass))
+    like '%where (client_message_id is not null)%',
   'message idempotency is enforced only for non-null client keys'
 );
 
-select like(
-  lower(pg_get_indexdef('private.case_notes_client_message_id_idx'::regclass)),
-  '%where (client_message_id is not null)%',
+select ok(
+  lower(pg_get_indexdef('private.case_notes_client_message_id_idx'::regclass))
+    like '%where (client_message_id is not null)%',
   'internal-note idempotency is enforced only for non-null client keys'
 );
 
-select like(
+select ok(
   pg_get_functiondef(
     'hub.create_support_case(uuid,uuid,text,hub.case_category,hub.case_priority,text,text,text,boolean)'::regprocedure
-  ),
-  '%gen_random_uuid()%',
+  ) like '%gen_random_uuid()%',
   'legacy case creation generates a server request key'
 );
 
-select unlike(
+select ok(
   pg_get_functiondef(
     'hub.create_support_case(uuid,uuid,text,hub.case_category,hub.case_priority,text,text,text,boolean)'::regprocedure
-  ),
-  '%null::uuid%',
+  ) not like '%null::uuid%',
   'legacy case creation never forwards a null request key'
 );
 
-select like(
-  pg_get_functiondef('hub.reply_to_support_case(uuid,text,text)'::regprocedure),
-  '%gen_random_uuid()%',
+select ok(
+  pg_get_functiondef('hub.reply_to_support_case(uuid,text,text)'::regprocedure)
+    like '%gen_random_uuid()%',
   'legacy replies generate a server request key'
 );
 
-select unlike(
-  pg_get_functiondef('hub.reply_to_support_case(uuid,text,text)'::regprocedure),
-  '%null::uuid%',
+select ok(
+  pg_get_functiondef('hub.reply_to_support_case(uuid,text,text)'::regprocedure)
+    not like '%null::uuid%',
   'legacy replies never forward a null request key'
 );
 
-select like(
+select ok(
   pg_get_functiondef(
     'hub.create_support_case(uuid,uuid,text,hub.case_category,hub.case_priority,text,text,text,boolean,uuid)'::regprocedure
-  ),
-  '%p_contains_phi is distinct from false%',
+  ) like '%p_contains_phi is distinct from false%',
   'keyed case creation requires an explicit no-PHI acknowledgement'
 );
 
-select like(
-  pg_get_functiondef('hub.reply_to_support_case(uuid,text,text,uuid)'::regprocedure),
-  '%p_visibility is null or p_visibility not in (''customer'', ''internal'')%',
+select ok(
+  pg_get_functiondef('hub.reply_to_support_case(uuid,text,text,uuid)'::regprocedure)
+    like '%p_visibility is null or p_visibility not in (''customer'', ''internal'')%',
   'keyed replies reject null visibility explicitly'
 );
 
