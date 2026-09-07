@@ -161,6 +161,21 @@ Feature claims in the 43 tutorials require live-behavior verification. No
 static, provider-safe PennSync tutorial-video catalog was found, so no PennSync
 video was added to the Hub.
 
+### CareMetric Intel
+
+CareMetric Intel PR #65 generated a deterministic, static inventory of its
+existing `GUIDE_SECTIONS`: 9 sections, 30 topics, and 7,518 authored text
+characters. The sanitized manifest explicitly excludes runtime or entity data,
+including user, tenant, provider, patient, record, query, fragment, token, and
+free-text context. Its canonical content SHA-256 is
+`132548d4528c36bfd5a70cb8099d56c4a23fce5dcebcf409c8f3324dfebd24e1`.
+
+This is a source inventory, not a publication decision. The Intel topics have
+not yet been classified as shared core versus product overlay, fact-checked
+against the current production feature set, or imported into the Hub. The live
+Intel app remains on its preceding release until the Base44 sandbox/bridge can
+publish the merged launcher safely.
+
 ## Excluded material
 
 The inventories deliberately exclude the following source classes. They are
@@ -175,7 +190,7 @@ project is created.
 | Unapproved generated content | Runtime AI guides, generated courses or quizzes, tutorial jobs, draft renders, generated guide PDFs, and tenant-generated tutorials. |
 | Duplicates and derivatives | Generated HTML/PDF/text copies, print-rendering code, assistant/search indexes, navigation-only cards, metadata-only webinar/resource cards, and duplicate legacy repositories. |
 | Non-customer documentation | Engineering runbooks, implementation plans, audit evidence, deployment output, internal video-operator documentation, and explicitly unfinished readiness documents. |
-| Product-specific exclusions | Breathe patient/provider portal and public patient-education content; EMR volatile promotional FAQs and governed policy forms; PennSync dead/redirected tutorial pages and entity-backed video metadata. |
+| Product-specific exclusions | Breathe patient/provider portal and public patient-education content; EMR volatile promotional FAQs and governed policy forms; PennSync dead/redirected tutorial pages and entity-backed video metadata; Intel runtime provider, lead, campaign, import, enrichment, and analytics data. |
 | Images and captures | Screenshots, demo fixtures, and captures that may contain patient, customer, tenant, user, or environment-specific data. |
 
 Support contact blocks are configuration rather than article content. Approved
@@ -241,6 +256,7 @@ governed CareBase launch only—never inline private media.
 | [Breathe manifest](evidence/caremetric-breathe-admin-help-manifest-c92b0b2-2026-09-07.json) | `52f0bbf1ee34e3d392e8f44d80e38ba11a13b8571103f8cb4ea34cbe49da2ef2` | Passed |
 | [EMR manifest](evidence/caremetric_emr_help_manifest_9718b07c_20260907T180626Z.json) | `6f1cbaf8f8c4c2a6220c1ab4a9ac459adb6a2b64f0002f149c837065d15fb3ef` | Passed |
 | [PennSync manifest](evidence/pennsync_help_consolidation_manifest_20260907_11ccc85e.json) | `6094fbee093daedbe50721b3ae6a28a6dccc5e405b108ee3d8fedc0de7418d49` | Passed |
+| [Intel guide inventory](evidence/caremetric-intel-guide-sections-c57776d.json) | `df09d7f01675b3110714375ef378d2501c53fe512e81f223cdbe53458ce549d3` | Passed; inventory only, not approved for publication |
 | [EMR–Breathe dedupe report](evidence/caremetric-emr-breathe-dedup-report-9718b07c-c92b0b2-20260907T183209Z.json) | `dd79977597b44af605cc8f11fed188a85fd32a9b65bf582a5a4335b90fa8468a` | Passed |
 
 These checksums cover the sanitized copies committed under `docs/evidence`.

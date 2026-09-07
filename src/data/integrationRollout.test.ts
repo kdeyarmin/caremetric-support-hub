@@ -12,5 +12,7 @@ describe("application integration rollout registry", () => {
     expect(integrationRolloutBySlug["caremetric-emr"].state).toBe("live");
     expect(integrationRolloutBySlug.pennsync.state).toBe("in_progress");
     expect(integrationRolloutBySlug["caremetric-go"].state).toBe("source_ready");
+    expect(integrationRolloutBySlug["caremetric-intel"].state).toBe("source_ready");
+    expect(integrationRolloutBySlug.carebase.state).toBe("in_progress");
   });
 });

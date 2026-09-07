@@ -10,9 +10,9 @@ export interface IntegrationRollout {
 export const integrationRolloutBySlug: Record<string, IntegrationRollout> = {
   carebase: {
     previousHelp: "CareBase articles, courses, and tickets",
-    integration: "Shared catalog live; in-app launcher rollout",
+    integration: "Shared catalog live; launcher deployed behind rollout flag",
     state: "in_progress",
-    stateLabel: "Deploying",
+    stateLabel: "Deployed dark",
   },
   breathe: {
     previousHelp: "Admin and patient help surfaces",
@@ -40,9 +40,9 @@ export const integrationRolloutBySlug: Record<string, IntegrationRollout> = {
   },
   "caremetric-intel": {
     previousHelp: "In-app searchable product guide",
-    integration: "Central launcher and guide import audit",
-    state: "in_progress",
-    stateLabel: "Auditing",
+    integration: "Central launcher merged; Base44 publish pending",
+    state: "source_ready",
+    stateLabel: "Source ready",
   },
 };
 

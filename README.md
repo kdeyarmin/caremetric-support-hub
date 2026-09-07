@@ -118,7 +118,8 @@ docs/                        API, integration, and rollout guidance
 - CareMetric Go has a merged cross-platform support screen; its native release
   remains gated by a verified EAS project and release workflow.
 - CareMetric Intel is registered as a pilot with the shared course catalog;
-  its in-app guide and deployment are being reconciled before cutover.
+  its privacy-safe launcher and deterministic guide inventory are merged, while
+  Base44 publication remains blocked by the hosted sandbox/bridge.
 - DocStudio remains a content-production source, not an independently verified
   production application or the system of record for published media.
 

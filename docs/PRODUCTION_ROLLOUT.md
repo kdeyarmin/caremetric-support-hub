@@ -9,11 +9,14 @@ checked.
 
 | Capability | Verified state |
 | --- | --- |
-| Support Hub | `kdeyarmin/caremetric-support-hub` is live at `https://support-hub-web-production.up.railway.app` with direct `/help` and `/learn` routes; no localhost redirect is used. |
+| Support Hub | `kdeyarmin/caremetric-support-hub@f13dda0` is live at `https://support-hub-web-production.up.railway.app` with direct `/help` and `/learn` routes; no localhost redirect is used. |
 | Central contacts | The owner-designated values are `+18775212890` (displayed as `(877) 521-2890`) and `support@caremetric.ai`. The web portal is operational; email delivery is not verified because mailbox DNS is absent. |
 | Product registry | CareMetric CareBase, CareMetric Breathe, PennSync, CareMetric EMR, CareMetric Go, and CareMetric Intel. |
 | Shared learning | 80 imported public CareBase courses plus one customer-only onboarding course. Every registered product has all 81 governed placements; anonymous visitors see the same 80 public courses across 22 categories, including searchable metadata for 65 current video lessons. |
 | Shared knowledge | 70 published CareBase articles plus the reviewed Support Hub core guidance. |
+| Case operations | The first-party case/message queue, staff controls, RLS, and atomic RPCs are deployed and tested. Production intentionally has no tenants, entitlements, memberships, or cases yet, so external case intake remains closed until customer provisioning and production email delivery are complete. |
+| Video delivery | Metadata for 65 current lesson videos is searchable in the Hub and shared across all six products. The Hub has no copied media assets or public video bucket; playback continues through the authenticated CareBase course runtime until captions, checksums, and an entitlement-aware asset broker are approved. |
+| Inbound channels | The central phone and email values are registered in one owner-controlled contact registry. Phone-call disposition and inbound-email ingestion are not connected yet; any future transport must write into the Hub rather than become a separate help-desk system of record. |
 | Administration | `kdeyarmin@comcast.net` is the sole active, confirmed platform administrator; bootstrap provisioning is permanently closed. |
 | Customer data boundary | No learner progress, quiz results, certificates, patient data, tenant data, private media URL, HeyGen job credential, or application ticket database was copied into the catalog. |
 
@@ -25,9 +28,9 @@ checked.
 | CareMetric Breathe | `kdeyarmin/PennFit@0e2409c` plus rollout documentation at `c92b0b2` | Live at `https://cmbreathe.com`; admin support opens the Hub with `product=breathe`. Patient/tenant service contacts intentionally remain separate. |
 | PennSite | `kdeyarmin/PennSite@f7aa91f` | Live at `https://penn.up.railway.app`; the site-wide Software Help Center opens the Hub while healthcare-service phone numbers remain distinct. |
 | PennSync | `kdeyarmin/CareMetric-Pennsync@feca891` | Published through Base44 at `https://app.caremetricai.com`; the production bundle and public site contain the contextual launcher, permanent Hub origin, correct phone/email fallback, and exact production app/environment gates. Local Help remains the rollback path. A fresh authenticated Help-button click remains unverified, so this row is not yet marked fully Live. |
-| CareMetric CareBase | Pull request `kdeyarmin/PennTrain#497` | Shared course/help catalog is live in the Hub; CareBase launcher production rollout is in progress. `cmcarebase.com` and `caremetrictrain.com` are the same canonical PennTrain deployment. |
+| CareMetric CareBase | `kdeyarmin/PennTrain@d332ddf` (PR #497), with ledger reconciliation at `dff5227` (PR #499) | The launcher is deployed successfully at the canonical `cmcarebase.com` / `caremetrictrain.com` Railway service and remains dark behind the default-off `support.central_hub` release flag. The shared course/help catalog is live in the Hub. Enroll the sole administrator in TOTP before the approved AAL2-protected flag change; do not bypass that release gate with direct SQL. |
 | CareMetric Go | `kdeyarmin/CM-Go@a30a49c` | Source-ready for provider and patient menus with a central launcher and offline phone/email fallback. Native release is blocked by the placeholder EAS project ID, missing verified release credentials/workflow, and source/store version drift. |
-| CareMetric Intel | `kdeyarmin/intel` | Registered as a pilot product with the governed shared course catalog and core safety guidance. Production deployment and central-launcher audit are in progress; its product-specific guide has not been auto-published without review. |
+| CareMetric Intel | `kdeyarmin/intel@c57776d` (PR #65) | The privacy-safe launcher, exact production/app identity gate, permanent Hub origin, always-available phone/email fallback, and deterministic guide inventory are merged and CI is green. `caremetricintel.com` remains healthy on its preceding release; the new launcher is source-ready but not published because the Base44 sandbox/bridge is returning server-side errors. Its product guide has not been auto-published without content review. |
 | DocStudio | `kdeyarmin/DocStudio@d02d0a2` | A tested, PHI-free, hash-addressed export contract and exact six-product allowlist are merged. It is not part of the current CareMetric EMR deployment; publishing remains blocked until the first-party Hub importer and asset-ingest boundary exist. |
 
 ## Deliberately excluded
@@ -38,7 +41,7 @@ checked.
 | `kdeyarmin/8x8` | Mock 8x8-themed prototype with no verified CareMetric identity, backend, CI, or production deployment; do not register as a Hub product. |
 | App-Studio / KevAI | Product ownership and authoritative production deployment are unverified; do not mislabel it as CareMetric without an owner decision. |
 | `kdeyarmin/pennsync`, `kdeyarmin/pennsync2` | Legacy PennSync repositories superseded by canonical `kdeyarmin/CareMetric-Pennsync`; do not create parallel launchers. |
-| `kdeyarmin/presentations` | CareMetric Demo Studio is an unpublished, login-gated sales-enablement prototype. Keep prospect, deal, lead-scoring, and personalized presentation data out of customer support and learning. |
+| `kdeyarmin/presentations` | CareMetric Demo Studio is a login-gated sales-enablement prototype with no production deployment verified. Keep prospect, deal, lead-scoring, and personalized presentation data out of customer support and learning. |
 | `kdeyarmin/RH-Trader`, `kdeyarmin/hillside` | Unrelated trading and ecommerce applications; outside the CareMetric support boundary. |
 
 ## Owner-controlled production prerequisites
@@ -53,15 +56,20 @@ checked.
    SPF, or DMARC record for `caremetric.ai`; configure the chosen mailbox and
    sending service's exact records before treating `support@caremetric.ai` as
    an operational inbound queue.
-3. Enroll the sole administrator in TOTP MFA before requiring AAL2; enforcing
-   AAL2 first would lock out the only administrator.
+3. Enroll the sole administrator in TOTP MFA, then enforce AAL2 in both the UI
+   and privileged database RPCs; enforcing AAL2 before enrollment would lock
+   out the only administrator.
 4. Provision each customer tenant, product entitlement, and membership before
    expecting that customer to open or view cases. Anonymous case intake stays
    disabled.
-5. Verify the remaining High Compliance controls (including applicable
-   project add-ons, PITR/restore, SSL/network restrictions, retention, and
-   operational access review) before allowing PHI-capable support. The current
-   intake continues to reject PHI.
+5. The owner reports that all BAAs are signed. Separately reconcile the Hub's
+   current Supabase organization plan (`pro`) with
+   [Supabase's project-specific HIPAA/BAA requirements](https://supabase.com/docs/guides/security/hipaa-compliance),
+   and verify the project is marked for HIPAA
+   with MFA, PITR/restore, SSL enforcement, network restrictions, retention,
+   and operational access review complete before allowing PHI-capable support.
+   The portal is designated non-PHI and blocks submission when a requester
+   acknowledges PHI, but it does not yet detect PHI pasted into free text.
 6. Connect inbound email and phone dispositions to first-party Hub cases only
    after the chosen transport accounts, credentials, webhook signatures, and
    retention rules are approved. Email/telephone providers may transport
