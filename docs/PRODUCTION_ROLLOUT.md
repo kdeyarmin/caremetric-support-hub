@@ -9,7 +9,7 @@ checked.
 
 | Capability | Verified state |
 | --- | --- |
-| Support Hub | `kdeyarmin/caremetric-support-hub@f13dda0` is live at `https://support-hub-web-production.up.railway.app` with direct `/help` and `/learn` routes; no localhost redirect is used. |
+| Support Hub | `kdeyarmin/caremetric-support-hub@578e05f` is live at `https://support-hub-web-production.up.railway.app` with direct `/help` and `/learn` routes; no rendered link uses localhost. Production migration `20260907202818_require_aal2_for_authenticated_support` is applied. |
 | Central contacts | The owner-designated values are `+18775212890` (displayed as `(877) 521-2890`) and `support@caremetric.ai`. The web portal is operational; email delivery is not verified because mailbox DNS is absent. |
 | Product registry | CareMetric CareBase, CareMetric Breathe, PennSync, CareMetric EMR, CareMetric Go, and CareMetric Intel. |
 | Shared learning | 80 imported public CareBase courses plus one customer-only onboarding course. Every registered product has all 81 governed placements; anonymous visitors see the same 80 public courses across 22 categories, including searchable metadata for 65 current video lessons. |
@@ -17,7 +17,7 @@ checked.
 | Case operations | The first-party case/message queue, staff controls, RLS, and atomic RPCs are deployed and tested. Production intentionally has no tenants, entitlements, memberships, or cases yet, so external case intake remains closed until customer provisioning and production email delivery are complete. |
 | Video delivery | Metadata for 65 current lesson videos is searchable in the Hub and shared across all six products. The Hub has no copied media assets or public video bucket; playback continues through the authenticated CareBase course runtime until captions, checksums, and an entitlement-aware asset broker are approved. |
 | Inbound channels | The central phone and email values are registered in one owner-controlled contact registry. Phone-call disposition and inbound-email ingestion are not connected yet; any future transport must write into the Hub rather than become a separate help-desk system of record. |
-| Administration | `kdeyarmin@comcast.net` is the sole active, confirmed platform administrator; bootstrap provisioning is permanently closed. |
+| Administration | `kdeyarmin@comcast.net` is the sole active, confirmed platform administrator; bootstrap provisioning is permanently closed. TOTP/AAL2 is enforced in the UI and database. The account currently has no verified factor and will be required to enroll at its next Hub sign-in before privileged data loads. |
 | Customer data boundary | No learner progress, quiz results, certificates, patient data, tenant data, private media URL, HeyGen job credential, or application ticket database was copied into the catalog. |
 
 ## Application rollout
@@ -56,9 +56,10 @@ checked.
    SPF, or DMARC record for `caremetric.ai`; configure the chosen mailbox and
    sending service's exact records before treating `support@caremetric.ai` as
    an operational inbound queue.
-3. Enroll the sole administrator in TOTP MFA, then enforce AAL2 in both the UI
-   and privileged database RPCs; enforcing AAL2 before enrollment would lock
-   out the only administrator.
+3. On the sole administrator's next Hub sign-in, complete the mandatory TOTP
+   enrollment and then add a second verified authenticator from **Security**.
+   AAL2 enforcement is already active in the UI and database; the minimal AAL1
+   actor bootstrap remains available specifically so enrollment is recoverable.
 4. Provision each customer tenant, product entitlement, and membership before
    expecting that customer to open or view cases. Anonymous case intake stays
    disabled.

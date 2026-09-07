@@ -4,7 +4,7 @@
 
 - Use a dedicated hosted Supabase High Compliance project before accepting PHI.
 - Execute the applicable BAA and enable the required HIPAA controls before data entry.
-- Require MFA/AAL2 for privileged CareMetric staff actions.
+- Require MFA/AAL2 for every CareMetric staff principal and every customer who has enrolled a verified TOTP factor.
 - Expose `hub` only; never expose `private`.
 - Use a publishable browser key. Secret/service-role keys belong only in controlled server functions.
 - Authorize from current relational membership and permission rows—not `user_metadata`, email domains, URL parameters, or app-supplied tenant IDs.
@@ -14,7 +14,9 @@
 
 ## Current release restrictions
 
-Version `0.1.0` must not be used for production support or PHI. It intentionally omits attachments, inbound email, telephone recording, AI case processing, search indexing of case bodies, and federated login exchange.
+Version `0.1.0` may serve the public non-PHI Help and Learning pages. It must not accept production customer cases or PHI. It intentionally omits attachments, inbound email, telephone recording, AI case processing, search indexing of case bodies, and federated login exchange.
+
+The production web client now provides explicit TOTP enrollment, multi-factor challenge selection, factor management, and safe sign-out. Migration `20260907202818_require_aal2_for_authenticated_support.sql` enforces AAL2 below the UI for staff and opted-in customers, redacts tenant context during the AAL1 bootstrap, and prevents dual-role staff from falling through customer membership policies. Supabase does not issue MFA recovery codes, so administrators must keep a second verified authenticator and use a controlled Auth-admin recovery process if all authenticators are lost.
 
 ## Required production checks
 

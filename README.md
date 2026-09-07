@@ -17,6 +17,7 @@ Version `0.1.0` now runs as the first production vertical slice:
 - An owner-approved product/contact registry that publishes only approved contact values; mailbox delivery readiness is tracked separately.
 - A framework-neutral `@caremetric/help-sdk` that passes only safe product context.
 - A dedicated `hub`/`private` Supabase schema design, RLS policies, narrow grants, atomic case RPCs, physically separate internal notes, and metadata-only audit records.
+- A live TOTP enrollment/challenge flow with database-enforced AAL2 for every staff principal and for customers who opt into TOTP; the AAL1 bootstrap reveals only the minimum identity and role needed to complete enrollment.
 - A polished implementation preview that works without credentials. Demo mode is never a production data store.
 
 The private GitHub repository, isolated `CareMetric Support Hub` Supabase project (`xgauehtwksmnoqhgqegm`, `us-east-2`), and Railway deployment are provisioned. The live portal is `https://support-hub-web-production.up.railway.app`; direct `/help` and `/learn` links use production routing rather than localhost. Railway also has `help.caremetric.ai` attached; it will remain unavailable until the owner creates the required Name.com CNAME recorded in [docs/PRODUCTION_ROLLOUT.md](docs/PRODUCTION_ROLLOUT.md). The live database has the reviewed migrations in `supabase/migrations`, RLS enabled on every application table, and a Data API restricted to `hub`. Existing application databases remain independent; the CareBase catalog import reads only published platform metadata.
@@ -78,7 +79,7 @@ Do not connect this application to `CM Train`, PennFit, CMbackup, or any other e
 4. Run database/security advisors and the pgTAP tests.
 5. Keep every production change represented by a reviewed, idempotent migration.
 6. Configure `VITE_SUPABASE_URL` and the publishable key. Never put a secret or service-role key in a browser variable.
-7. Provision product entitlements, tenant memberships, and explicit staff permissions.
+7. Enroll every staff account in TOTP (with a second authenticator for recovery), then provision product entitlements, tenant memberships, and explicit staff permissions.
 8. Verify the published central routing remains `(877) 521-2890` and `support@caremetric.ai`.
 9. Set `VITE_DEMO_MODE=false`, build, and deploy.
 

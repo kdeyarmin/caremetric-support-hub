@@ -434,7 +434,16 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users for each row execute function private.handle_new_user();
 drop trigger if exists on_auth_user_confirmed on auth.users;
 
-create or replace function private.has_staff_permission(p_permission private.staff_permission, p_product_id uuid default null)
+create or replace function private.current_session_is_aal2()
+returns boolean
+language sql
+stable
+set search_path = ''
+as $$
+  select coalesce((select auth.jwt() ->> 'aal'), 'aal1') = 'aal2';
+$$;
+
+create or replace function private.is_staff_principal()
 returns boolean
 language sql
 stable
@@ -442,6 +451,44 @@ security definer
 set search_path = ''
 as $$
   select (select auth.uid()) is not null
+    and exists (
+      select 1
+      from private.staff_permissions permission
+      where permission.user_id = (select auth.uid())
+        and permission.revoked_at is null
+    );
+$$;
+
+create or replace function private.current_principal_requires_aal2()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select private.is_staff_principal()
+    or exists (
+      select 1
+      from auth.mfa_factors factor
+      where factor.user_id = (select auth.uid())
+        and factor.factor_type = 'totp'
+        and factor.status = 'verified'
+    );
+$$;
+
+revoke all on function private.current_session_is_aal2() from public, anon, authenticated;
+revoke all on function private.is_staff_principal() from public, anon, authenticated;
+revoke all on function private.current_principal_requires_aal2() from public, anon, authenticated;
+
+create or replace function private.has_staff_permission(p_permission private.staff_permission, p_product_id uuid default null)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select private.current_session_is_aal2()
+    and (select auth.uid()) is not null
     and exists (
       select 1
       from private.staff_permissions sp
@@ -459,7 +506,8 @@ stable
 security definer
 set search_path = ''
 as $$
-  select (select auth.uid()) is not null
+  select private.current_session_is_aal2()
+    and (select auth.uid()) is not null
     and exists (
       select 1
       from private.staff_permissions permission
@@ -477,6 +525,7 @@ security definer
 set search_path = ''
 as $$
   select (select auth.uid()) is not null
+    and (not private.current_principal_requires_aal2() or private.current_session_is_aal2())
     and exists (
       select 1
       from hub.tenant_product_memberships membership
@@ -509,6 +558,7 @@ security definer
 set search_path = ''
 as $$
   select (select auth.uid()) is not null
+    and (not private.current_principal_requires_aal2() or private.current_session_is_aal2())
     and (
       p_target_user_id = (select auth.uid())
       or (
@@ -829,7 +879,7 @@ as $$
   select case
     when exists (select 1 from private.staff_permissions sp where sp.user_id = p_user_id and sp.permission = 'platform.admin' and sp.revoked_at is null) then 'platform_admin'
     when exists (select 1 from private.staff_permissions sp where sp.user_id = p_user_id and sp.permission in ('content.write', 'sla.manage', 'tenant.manage') and sp.revoked_at is null and (p_product_id is null or sp.product_id is null or sp.product_id = p_product_id)) then 'support_manager'
-    when exists (select 1 from private.staff_permissions sp where sp.user_id = p_user_id and sp.permission in ('case.read', 'case.write') and sp.revoked_at is null and (p_product_id is null or sp.product_id is null or sp.product_id = p_product_id)) then 'support_agent'
+    when exists (select 1 from private.staff_permissions sp where sp.user_id = p_user_id and sp.permission in ('case.read', 'case.write', 'content.read', 'audit.read') and sp.revoked_at is null and (p_product_id is null or sp.product_id is null or sp.product_id = p_product_id)) then 'support_agent'
     when exists (select 1 from hub.tenant_product_memberships membership where membership.user_id = p_user_id and membership.product_id = p_product_id and membership.role = 'tenant_admin' and membership.status = 'active' and membership.revoked_at is null) then 'tenant_admin'
     else 'customer'
   end;
@@ -850,22 +900,33 @@ declare
   v_membership hub.tenant_product_memberships%rowtype;
   v_tenant_name text;
   v_role text;
+  v_is_staff boolean;
+  v_requires_aal2 boolean;
 begin
   if v_user_id is null then raise exception 'Authentication required' using errcode = '28000'; end if;
   select * into v_profile from hub.profiles where id = v_user_id;
   if v_profile.id is null then raise exception 'Support profile is not provisioned' using errcode = 'P0001'; end if;
 
-  select * into v_membership
-  from hub.tenant_product_memberships
-  where user_id = v_user_id and status = 'active' and revoked_at is null
-  order by joined_at
-  limit 1;
+  v_is_staff := private.is_staff_principal();
+  v_requires_aal2 := private.current_principal_requires_aal2();
 
-  if v_membership.tenant_id is not null then
-    select name into v_tenant_name from hub.tenants where id = v_membership.tenant_id;
+  if not v_requires_aal2 or private.current_session_is_aal2() then
+    select * into v_membership
+    from hub.tenant_product_memberships
+    where user_id = v_user_id and status = 'active' and revoked_at is null
+    order by joined_at
+    limit 1;
+
+    if v_membership.tenant_id is not null then
+      select name into v_tenant_name from hub.tenants where id = v_membership.tenant_id;
+    end if;
   end if;
 
-  v_role := private.actor_role_label(v_user_id, v_membership.product_id);
+  if v_is_staff then
+    v_role := private.actor_role_label(v_user_id, null);
+  else
+    v_role := private.actor_role_label(v_user_id, v_membership.product_id);
+  end if;
   return jsonb_build_object(
     'id', v_user_id,
     'name', v_profile.display_name,
@@ -1293,6 +1354,7 @@ security definer
 set search_path = ''
 as $$
   select (select auth.uid()) is not null
+    and (not private.current_principal_requires_aal2() or private.current_session_is_aal2())
     and exists (
       select 1
       from hub.tenant_product_memberships membership

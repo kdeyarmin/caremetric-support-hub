@@ -26,6 +26,10 @@ const sharedCourseAlignmentMigration = readFileSync(
   new URL("../../supabase/migrations/20260907182246_align_shared_course_placements.sql", import.meta.url),
   "utf8",
 );
+const staffMfaMigration = readFileSync(
+  new URL("../../supabase/migrations/20260907202818_require_aal2_for_authenticated_support.sql", import.meta.url),
+  "utf8",
+);
 
 const exposedTables = [
   "products",
@@ -109,6 +113,42 @@ describe("Support Hub schema contract", () => {
     expect(schema).not.toContain("lower(coalesce(new.email, '')) = 'kdeyarmin@comcast.net'");
     expect(schema).not.toContain("create trigger on_auth_user_confirmed");
     expect(schema).not.toContain("values (new.id, null, 'platform.admin', new.id)");
+  });
+
+  it("requires AAL2 for staff permissions without locking ordinary customers out", () => {
+    expect(staffMfaMigration).toContain("create or replace function private.current_session_is_aal2()");
+    expect(staffMfaMigration).toContain("auth.jwt() ->> 'aal'");
+    expect(staffMfaMigration).toContain("create or replace function private.is_staff_principal()");
+    expect(staffMfaMigration).toContain("create or replace function private.current_principal_requires_aal2()");
+    expect(staffMfaMigration).toMatch(/from auth\.mfa_factors factor[\s\S]*?factor\.factor_type = 'totp'[\s\S]*?factor\.status = 'verified'/);
+    expect(staffMfaMigration).toMatch(/create or replace function private\.has_staff_permission[\s\S]*?private\.current_session_is_aal2\(\)/);
+    expect(staffMfaMigration).toMatch(/create or replace function private\.is_support_staff[\s\S]*?private\.current_session_is_aal2\(\)/);
+    expect(staffMfaMigration).toContain("not private.current_principal_requires_aal2() or private.current_session_is_aal2()");
+    expect(staffMfaMigration).toContain("revoke all on function private.current_session_is_aal2() from public, anon, authenticated;");
+    expect(staffMfaMigration).toContain("revoke all on function private.is_staff_principal() from public, anon, authenticated;");
+    expect(staffMfaMigration).toContain("revoke all on function private.current_principal_requires_aal2() from public, anon, authenticated;");
+
+    const actorRole = staffMfaMigration.match(/create or replace function private\.actor_role_label[\s\S]*?\$\$;/)?.[0] ?? "";
+    expect(actorRole).not.toContain("current_session_is_aal2");
+    for (const permission of [
+      "case.read",
+      "case.write",
+      "content.read",
+      "content.write",
+      "sla.manage",
+      "tenant.manage",
+      "audit.read",
+      "platform.admin",
+    ]) {
+      expect(actorRole).toContain(`'${permission}'`);
+    }
+
+    const actorContext = staffMfaMigration.match(/create or replace function hub\.get_support_actor_context\(\)[\s\S]*?\$\$;/)?.[0] ?? "";
+    expect(actorContext).toContain("v_is_staff := private.is_staff_principal();");
+    expect(actorContext).toContain("v_requires_aal2 := private.current_principal_requires_aal2();");
+    expect(actorContext).toContain("if not v_requires_aal2 or private.current_session_is_aal2() then");
+    expect(actorContext.indexOf("if not v_requires_aal2")).toBeLessThan(actorContext.indexOf("select * into v_membership"));
+    expect(actorContext).toMatch(/if v_is_staff then\s+v_role := private\.actor_role_label\(v_user_id, null\);/);
   });
 
   it("keeps membership RLS non-recursive", () => {

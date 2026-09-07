@@ -1,0 +1,99 @@
+begin;
+
+select plan(17);
+
+select has_function(
+  'private',
+  'current_session_is_aal2',
+  array[]::text[],
+  'AAL2 session helper exists'
+);
+
+select has_function(
+  'private',
+  'is_staff_principal',
+  array[]::text[],
+  'factor-independent staff principal helper exists'
+);
+
+select has_function(
+  'private',
+  'current_principal_requires_aal2',
+  array[]::text[],
+  'staff-or-enrolled-factor enforcement helper exists'
+);
+
+select ok(
+  not has_function_privilege('anon', 'private.current_session_is_aal2()', 'execute'),
+  'anonymous users cannot invoke the private AAL helper'
+);
+
+select ok(
+  not has_function_privilege('authenticated', 'private.is_staff_principal()', 'execute'),
+  'authenticated users cannot invoke the private staff helper directly'
+);
+
+select ok(
+  not has_function_privilege('authenticated', 'private.current_principal_requires_aal2()', 'execute'),
+  'authenticated users cannot invoke the private factor-enforcement helper directly'
+);
+
+set local request.jwt.claims = '{"role":"authenticated","aal":"aal1"}';
+select is(private.current_session_is_aal2(), false, 'AAL1 fails the assurance check');
+
+set local request.jwt.claims = '{"role":"authenticated"}';
+select is(private.current_session_is_aal2(), false, 'a missing AAL claim fails closed');
+
+set local request.jwt.claims = '{"role":"authenticated","aal":"aal2"}';
+select is(private.current_session_is_aal2(), true, 'AAL2 passes the assurance check');
+
+select like(
+  pg_get_functiondef('private.has_staff_permission(private.staff_permission,uuid)'::regprocedure),
+  '%private.current_session_is_aal2()%',
+  'staff permissions depend on AAL2'
+);
+
+select like(
+  pg_get_functiondef('private.is_active_member(uuid,uuid)'::regprocedure),
+  '%not private.current_principal_requires_aal2() or private.current_session_is_aal2()%',
+  'staff and customers with verified TOTP cannot use membership at AAL1'
+);
+
+select like(
+  pg_get_functiondef('private.current_principal_requires_aal2()'::regprocedure),
+  '%from auth.mfa_factors%',
+  'verified authenticator enrollment is enforced below the UI layer'
+);
+
+select unlike(
+  pg_get_functiondef('private.actor_role_label(uuid,uuid)'::regprocedure),
+  '%current_session_is_aal2%',
+  'actor-role bootstrap remains available before the MFA challenge'
+);
+
+select like(
+  pg_get_functiondef('private.actor_role_label(uuid,uuid)'::regprocedure),
+  '%content.read%',
+  'content readers are classified as staff for the MFA gate'
+);
+
+select like(
+  pg_get_functiondef('private.actor_role_label(uuid,uuid)'::regprocedure),
+  '%audit.read%',
+  'audit readers are classified as staff for the MFA gate'
+);
+
+select like(
+  pg_get_functiondef('hub.get_support_actor_context()'::regprocedure),
+  '%if not v_requires_aal2 or private.current_session_is_aal2() then%',
+  'AAL1 staff and enrolled customers have tenant metadata redacted'
+);
+
+select like(
+  pg_get_functiondef('hub.get_support_actor_context()'::regprocedure),
+  '%v_role := private.actor_role_label(v_user_id, null)%',
+  'dual-role product-scoped staff retain a staff role after AAL2'
+);
+
+select * from finish();
+rollback;
