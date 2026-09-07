@@ -17,11 +17,11 @@ npm ci
 npm run pack:sdk
 ```
 
-This produces `caremetric-help-sdk-0.2.0.tgz`. Place that versioned artifact in
+This produces `caremetric-help-sdk-0.3.0.tgz`. Place that versioned artifact in
 the consuming application's private source tree and install it:
 
 ```bash
-npm install ./vendor/caremetric-help-sdk-0.2.0.tgz
+npm install ./vendor/caremetric-help-sdk-0.3.0.tgz
 ```
 
 Keeping the tarball versioned with each private application makes builds
@@ -74,6 +74,27 @@ buildHelpUrl({
 });
 ```
 
+## Open the shared learning library
+
+Use the same SDK to link every application to the central course, tutorial, and
+video library. Omit `product` to show all shared learning content, or supply one
+of the six registered product slugs to pre-filter the library:
+
+```ts
+import { buildLearningUrl, openLearning } from "@caremetric/help-sdk";
+
+const allCoursesHref = buildLearningUrl();
+const intelCoursesHref = buildLearningUrl({ product: "caremetric-intel" });
+
+trainingButton.addEventListener("click", () => {
+  openLearning({ product: "caremetric-intel" });
+});
+```
+
+`buildLearningUrl` and `openLearning` intentionally accept no route, search
+text, user, tenant, patient, ticket, token, or arbitrary metadata. The generated
+URL is always `/learn` with, at most, one allowlisted `product` parameter.
+
 ## Privacy rules
 
 - Pass a stable route template, never the full browser URL or a record ID.
@@ -84,7 +105,9 @@ buildHelpUrl({
   destinations, and accepts only the six registered CareMetric products.
 - Never add user, tenant, patient, clinical, free-text, token, or diagnostic
   values to a help URL.
+- Learning-library links accept only an optional registered product slug. Do
+  not append route, search, identity, or free-text parameters yourself.
 - Use `buildHelpUrl` during server rendering; call `openHelp` only from a
-  browser interaction.
+  browser interaction. The equivalent learning functions follow the same rule.
 
 Central support: `support@caremetric.ai` · `(877) 521-2890`.

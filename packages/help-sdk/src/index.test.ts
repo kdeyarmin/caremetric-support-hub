@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildHelpUrl, CAREMETRIC_PRODUCT_SLUGS, DEFAULT_HELP_BASE_URL, openHelp } from "./index";
+import {
+  buildHelpUrl,
+  buildLearningUrl,
+  CAREMETRIC_PRODUCT_SLUGS,
+  DEFAULT_HELP_BASE_URL,
+  openHelp,
+  openLearning,
+} from "./index";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -207,5 +214,101 @@ describe("openHelp", () => {
     expect(() => openHelp({ context: { product: "breathe" } })).toThrow(
       "can only be called in a browser",
     );
+  });
+});
+
+describe("buildLearningUrl", () => {
+  it("builds the unfiltered live learning-library URL by default", () => {
+    const url = new URL(buildLearningUrl());
+
+    expect(url.origin).toBe(DEFAULT_HELP_BASE_URL);
+    expect(url.pathname).toBe("/learn");
+    expect([...url.searchParams]).toEqual([]);
+  });
+
+  it("accepts each registered product as the only optional context", () => {
+    for (const product of CAREMETRIC_PRODUCT_SLUGS) {
+      const url = new URL(buildLearningUrl({ product }));
+      expect(Object.fromEntries(url.searchParams)).toEqual({ product });
+    }
+  });
+
+  it("rejects an unregistered product instead of forwarding it", () => {
+    expect(() => buildLearningUrl({
+      product: "unknown" as unknown as (typeof CAREMETRIC_PRODUCT_SLUGS)[number],
+    })).toThrow("product slug");
+  });
+
+  it("does not forward route, free-text, identity, or arbitrary fields", () => {
+    const url = new URL(buildLearningUrl({
+      product: "caremetric-intel",
+      route: "/patients/12345",
+      query: "Jane Doe medication error",
+      userId: "user-123",
+      tenantId: "tenant-456",
+      patientId: "patient-789",
+      accessToken: "secret-token",
+    } as unknown as Parameters<typeof buildLearningUrl>[0]));
+
+    expect(Object.fromEntries(url.searchParams)).toEqual({ product: "caremetric-intel" });
+    expect(url.toString()).not.toMatch(/Jane|patient|tenant|secret|route/i);
+  });
+
+  it("uses only the validated origin from an explicit Hub URL", () => {
+    const url = new URL(buildLearningUrl({
+      baseUrl: "https://support.example.com/not-a-route?unsafe=value#fragment",
+      product: "carebase",
+    }));
+
+    expect(url.toString()).toBe("https://support.example.com/learn?product=carebase");
+  });
+
+  it("rejects credentials, insecure schemes, and local destinations", () => {
+    for (const baseUrl of [
+      "https://user:secret@support.example.com",
+      "http://support.example.com",
+      "https://localhost:4173",
+      "https://preview.localhost",
+      "https://127.0.0.1",
+      "https://[::1]",
+      "https://[::ffff:127.0.0.1]",
+    ]) {
+      expect(() => buildLearningUrl({ baseUrl })).toThrow();
+    }
+  });
+});
+
+describe("openLearning", () => {
+  it("opens a product-filtered learning library in an isolated tab by default", () => {
+    const opened = { opener: {} };
+    const open = vi.fn(() => opened);
+    vi.stubGlobal("window", { open });
+
+    openLearning({ product: "pennsync" });
+
+    expect(open).toHaveBeenCalledOnce();
+    expect(open).toHaveBeenCalledWith(
+      `${DEFAULT_HELP_BASE_URL}/learn?product=pennsync`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+    expect(opened.opener).toBeNull();
+  });
+
+  it("supports same-window navigation without isolated-tab features", () => {
+    const opened = { opener: {} };
+    const open = vi.fn(() => opened);
+    vi.stubGlobal("window", { open });
+
+    openLearning({ target: "_self" });
+
+    expect(open).toHaveBeenCalledWith(`${DEFAULT_HELP_BASE_URL}/learn`, "_self", undefined);
+    expect(opened.opener).toEqual({});
+  });
+
+  it("fails clearly when invoked during server rendering", () => {
+    vi.stubGlobal("window", undefined);
+
+    expect(() => openLearning()).toThrow("can only be called in a browser");
   });
 });

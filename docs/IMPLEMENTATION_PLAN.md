@@ -24,6 +24,12 @@
   provider URLs were copied.
 - A registered CareMetric Intel pilot with the same governed shared-course and
   core-safety boundaries; its existing product guide remains review-gated.
+- Database-enforced TOTP/AAL2 for all staff principals and customers who opt into TOTP.
+- Default-off tenant/product case-intake settings and idempotent keyed case/reply RPC overloads, with no production activations seeded.
+- `@caremetric/help-sdk` 0.3 Help and Learning launchers; Learning accepts only an optional registered product slug.
+- Canonical CareBase course launches pinned to `https://cmcarebase.com/app/courses` and UUID course-detail routes.
+- A deterministic DocStudio publication-import preview boundary that requires the upstream PHI-review attestation, conservatively rejects obvious identifier/unsafe-link patterns, verifies asset hashes, and performs no write, upload, fetch, retirement, or deletion. The scan is not a PHI certification, especially for video pixels.
+- Pull-request CI that starts an isolated Supabase stack and executes the migration chain plus pgTAP contracts.
 
 ## Phase 1 — provision and validate
 
@@ -61,7 +67,7 @@ Exit criteria:
 ## Phase 3 — content migration
 
 1. ✅ Import published, organization-neutral PennTrain help articles and course metadata through an idempotent non-PHI migration.
-2. Import DocStudio articles, media manifests, and source scripts.
+2. ✅ Build the first-party DocStudio validation/hash/dry-run planner. Connect a separate authenticated approval and commit boundary before importing any article, media manifest, or source script.
 3. Reconcile PennFit’s patient and staff help stores.
 4. Reconcile PennSync’s divergent static help pages.
 5. Classify each record as shared core, product overlay, or independent content.
@@ -72,10 +78,12 @@ a reviewed, one-time snapshot):
 
 - Stable `content_key` values are canonical.
 - Revisions are immutable.
-- Identical checksums are no-ops.
+- Re-delivery of the identical source revision and package is a no-op; a newly approved source revision preserves its provenance even when asset bytes happen to match.
 - Older source versions never overwrite newer versions.
 - Deletes retire content rather than erasing published history.
 - Preview and approval are required before commit.
+
+The current preview implementation deliberately stops before transport or commit. It accepts no credentials or tenant/user identity, has no network or persistence path, requires captions and a timed WebVTT plus transcript for video, verifies declared primary/sidecar SHA-256 values, caps input and revision history, binds governance and the catalog-snapshot hash into plan identities, enforces strictly increasing `docstudio-vN` source revisions, and converts removals/replacements only into explicit approval actions.
 
 ## Phase 4 — video and learning
 
@@ -85,12 +93,14 @@ a reviewed, one-time snapshot):
 4. Human-review captions and transcript.
 5. Store the final asset privately and publish a stable Hub pointer.
 6. ✅ Import PennTrain course metadata and trusted relative launch paths only.
+7. ✅ Pin every Hub course launch to the canonical CareBase HTTPS origin and the exact catalog/UUID-detail route shapes.
 
 HeyGen receives synthetic, approved, PHI-free scripts and screenshots only. PennTrain remains the owner of enrollment, completion, quiz, and certificate records.
 
 ## Phase 5 — channels and operations
 
 - ✅ Publish the owner-verified central support routes: `(877) 521-2890` and `support@caremetric.ai`.
+- ✅ Add default-off case-intake activation and request-key idempotency. No production tenant/product is activated yet.
 - Add email ingestion with idempotent provider-message envelopes.
 - Add telephone call disposition and case-linking adapters without making the carrier the case system.
 - Implement versioned SLA calendars and deadlines.

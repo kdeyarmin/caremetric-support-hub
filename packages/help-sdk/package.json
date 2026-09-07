@@ -1,9 +1,9 @@
 {
   "name": "@caremetric/help-sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "First-party contextual help launcher for CareMetric applications.",
+  "description": "First-party help and learning launchers for CareMetric applications.",
   "sideEffects": false,
   "files": [
     "dist",

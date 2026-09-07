@@ -73,6 +73,7 @@ assignment is currently absent for CareBase videos.
 - Search and browse all 65 current lesson titles in the Hub; selecting a course continues through its governed CareBase launch.
 - Launch the canonical `/app/courses/<course-id>` route in CareBase for
   enrollment, playback, quizzes, progress, attestations, and certificates.
+- Reject any course destination that is not exactly the canonical `https://cmcarebase.com` origin, `/app/courses`, or `/app/courses/<uuid>`; alternate origins, ports, credentials, query strings, fragments, traversal, and malformed IDs fail closed.
 - Keep product launchers limited to static route and feature registries.
 - Add inline Hub playback only after a central private bucket, entitlement
   broker, checksum manifest, captions, transcripts, and short-lived signed URL
@@ -81,6 +82,8 @@ assignment is currently absent for CareBase videos.
   record.
 
 ## Next implementation gates
+
+The repository now includes a first-party DocStudio publication preview boundary. It requires the upstream PHI-review attestation and both caption/transcript sidecars for video; conservatively rejects obvious identifier, HTML, and unsafe-link patterns in text; verifies the exact six-product allowlist, declared hashes, MP4 signature, bounded history, approved next source version, catalog-snapshot identity, and retirement-as-preview semantics. This scan cannot certify that video pixels or arbitrary prose contain no PHI, so human review remains mandatory. The boundary has no credentials, network calls, storage/database writes, or delete operation; it is a validation step, not a live media importer.
 
 - Build a server-only, incremental CareBase-to-Hub catalog synchronizer using
   source versions and hashes; retire missing source content rather than delete

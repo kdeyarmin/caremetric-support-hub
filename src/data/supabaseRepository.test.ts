@@ -1,0 +1,99 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  rpc: vi.fn(),
+  schema: vi.fn(),
+}));
+
+vi.mock("../lib/supabase", () => ({
+  supabase: {
+    schema: mocks.schema,
+  },
+}));
+
+import { SupabaseSupportRepository } from "./supabaseRepository";
+
+const caseRow = {
+  id: "10000000-0000-4000-8000-000000000001",
+  case_number: 1001,
+  tenant_id: "20000000-0000-4000-8000-000000000001",
+  tenant_name: "Test tenant",
+  product_id: "30000000-0000-4000-8000-000000000001",
+  requester_id: "40000000-0000-4000-8000-000000000001",
+  requester_name: "Test user",
+  subject: "Cannot open a report",
+  category: "technical_issue",
+  priority: "normal",
+  status: "open",
+  source: "portal",
+  assigned_to: null,
+  assigned_to_name: null,
+  app_version: null,
+  route: "/reports",
+  created_at: "2026-09-07T20:00:00.000Z",
+  updated_at: "2026-09-07T20:00:00.000Z",
+  last_message_at: "2026-09-07T20:00:00.000Z",
+};
+
+describe("SupabaseSupportRepository request keys", () => {
+  beforeEach(() => {
+    mocks.rpc.mockReset();
+    mocks.schema.mockReset();
+    mocks.schema.mockReturnValue({ rpc: mocks.rpc });
+  });
+
+  it("preserves a caller-supplied key for a retried create action", async () => {
+    const requestKey = "50000000-0000-4000-8000-000000000001";
+    mocks.rpc.mockResolvedValue({ data: caseRow, error: null });
+
+    const repository = new SupabaseSupportRepository();
+    await repository.createCase({
+      tenantId: caseRow.tenant_id,
+      productId: caseRow.product_id,
+      subject: caseRow.subject,
+      category: "technical_issue",
+      priority: "normal",
+      message: "The report does not open for me.",
+      route: "/reports",
+      containsPhi: false,
+      requestKey,
+    });
+
+    expect(mocks.rpc).toHaveBeenCalledOnce();
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      "create_support_case",
+      expect.objectContaining({ p_request_key: requestKey }),
+    );
+  });
+
+  it("preserves a caller-supplied key for a retried reply action", async () => {
+    const requestKey = "50000000-0000-4000-8000-000000000002";
+    mocks.rpc.mockResolvedValue({
+      data: {
+        id: "60000000-0000-4000-8000-000000000001",
+        case_id: caseRow.id,
+        author_id: caseRow.requester_id,
+        author_name: caseRow.requester_name,
+        author_role: "customer",
+        visibility: "customer",
+        body: "Here is the additional detail.",
+        created_at: "2026-09-07T20:01:00.000Z",
+      },
+      error: null,
+    });
+
+    const repository = new SupabaseSupportRepository();
+    await repository.replyToCase(
+      caseRow.id,
+      "Here is the additional detail.",
+      "customer",
+      requestKey,
+    );
+
+    expect(mocks.rpc).toHaveBeenCalledOnce();
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      "reply_to_support_case",
+      expect.objectContaining({ p_request_key: requestKey }),
+    );
+  });
+});
