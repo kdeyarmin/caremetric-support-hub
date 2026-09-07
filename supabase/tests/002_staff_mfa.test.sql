@@ -38,13 +38,22 @@ select ok(
   'authenticated users cannot invoke the private factor-enforcement helper directly'
 );
 
-set local request.jwt.claims = '{"role":"authenticated","aal":"aal1"}';
+insert into auth.users (id, email, raw_user_meta_data, created_at, updated_at)
+values (
+  '90000000-0000-4000-8000-000000000001',
+  'mfa-helper@test.invalid',
+  '{"display_name":"MFA Helper Test"}'::jsonb,
+  now(),
+  now()
+);
+
+set local request.jwt.claims = '{"sub":"90000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}';
 select is(private.current_session_is_aal2(), false, 'AAL1 fails the assurance check');
 
-set local request.jwt.claims = '{"role":"authenticated"}';
+set local request.jwt.claims = '{"sub":"90000000-0000-4000-8000-000000000001","role":"authenticated"}';
 select is(private.current_session_is_aal2(), false, 'a missing AAL claim fails closed');
 
-set local request.jwt.claims = '{"role":"authenticated","aal":"aal2"}';
+set local request.jwt.claims = '{"sub":"90000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}';
 select is(private.current_session_is_aal2(), true, 'AAL2 passes the assurance check');
 
 select like(

@@ -204,16 +204,23 @@ export class SupabaseSupportRepository implements HubRepository {
       p_app_version: input.appVersion ?? null,
       p_route: input.route ?? null,
       p_contains_phi: input.containsPhi,
+      p_request_key: input.requestKey,
     });
     if (error) throw error;
     return mapCase(data);
   }
 
-  async replyToCase(caseId: string, body: string, visibility: "customer" | "internal"): Promise<CaseMessage> {
+  async replyToCase(
+    caseId: string,
+    body: string,
+    visibility: "customer" | "internal",
+    requestKey: string,
+  ): Promise<CaseMessage> {
     const { data, error } = await hub().rpc("reply_to_support_case", {
       p_case_id: caseId,
       p_body: body,
       p_visibility: visibility,
+      p_request_key: requestKey,
     });
     if (error) throw error;
     return mapMessage(data);

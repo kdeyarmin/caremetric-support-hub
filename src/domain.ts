@@ -122,6 +122,7 @@ export interface CreateCaseInput {
   appVersion?: string;
   route?: string;
   containsPhi: boolean;
+  requestKey: string;
 }
 
 export interface UpdateCaseInput {
@@ -138,7 +139,12 @@ export interface HubRepository {
   listMessages(caseId: string): Promise<CaseMessage[]>;
   listContent(): Promise<ContentItem[]>;
   createCase(input: CreateCaseInput): Promise<SupportCase>;
-  replyToCase(caseId: string, body: string, visibility: "customer" | "internal"): Promise<CaseMessage>;
+  replyToCase(
+    caseId: string,
+    body: string,
+    visibility: "customer" | "internal",
+    requestKey: string,
+  ): Promise<CaseMessage>;
   updateCase(caseId: string, input: UpdateCaseInput): Promise<SupportCase>;
 }
 

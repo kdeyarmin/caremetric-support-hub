@@ -30,6 +30,10 @@ const staffMfaMigration = readFileSync(
   new URL("../../supabase/migrations/20260907202818_require_aal2_for_authenticated_support.sql", import.meta.url),
   "utf8",
 );
+const caseIntakeSafetyMigration = readFileSync(
+  new URL("../../supabase/migrations/20260907203511_gate_case_intake_and_add_idempotency.sql", import.meta.url),
+  "utf8",
+);
 
 const exposedTables = [
   "products",
@@ -51,6 +55,8 @@ const exposedTables = [
 
 const privateTables = [
   "staff_permissions",
+  "case_intake_settings",
+  "support_request_keys",
   "case_notes",
   "case_sla",
   "audit_events",
@@ -149,6 +155,89 @@ describe("Support Hub schema contract", () => {
     expect(actorContext).toContain("if not v_requires_aal2 or private.current_session_is_aal2() then");
     expect(actorContext.indexOf("if not v_requires_aal2")).toBeLessThan(actorContext.indexOf("select * into v_membership"));
     expect(actorContext).toMatch(/if v_is_staff then\s+v_role := private\.actor_role_label\(v_user_id, null\);/);
+  });
+
+  it("keeps case intake disabled until an MFA-ready support route is explicitly activated", () => {
+    expect(caseIntakeSafetyMigration).toContain("create table private.case_intake_settings");
+    expect(caseIntakeSafetyMigration).toContain("enabled boolean not null default false");
+    expect(caseIntakeSafetyMigration).toContain("create or replace function private.is_case_intake_enabled");
+    expect(caseIntakeSafetyMigration).toMatch(/permission\.permission in \('case\.write', 'platform\.admin'\)[\s\S]*?from auth\.mfa_factors factor[\s\S]*?factor\.status = 'verified'/);
+    expect(caseIntakeSafetyMigration).toContain("staff_user.deleted_at is null");
+    expect(caseIntakeSafetyMigration).toContain("staff_user.banned_until is null or staff_user.banned_until <= now()");
+    expect(caseIntakeSafetyMigration).toContain("not coalesce(staff_user.is_anonymous, false)");
+    expect(caseIntakeSafetyMigration).toContain("from hub.profiles staff_profile");
+    expect(caseIntakeSafetyMigration).toContain("if not private.is_case_intake_enabled(p_tenant_id, p_product_id) then");
+    expect(caseIntakeSafetyMigration).toContain("revoke all on table private.case_intake_settings from public, anon, authenticated;");
+    expect(schema).toContain("alter table private.case_intake_settings enable row level security;");
+    expect(schema).toContain("revoke all on function private.is_case_intake_enabled(uuid, uuid) from public, anon, authenticated;");
+  });
+
+  it("revokes authorization immediately for unusable Auth principals", () => {
+    expect(caseIntakeSafetyMigration).toContain("create or replace function private.current_user_is_usable()");
+    expect(caseIntakeSafetyMigration).toContain("app_user.deleted_at is null");
+    expect(caseIntakeSafetyMigration).toContain("app_user.banned_until is null or app_user.banned_until <= now()");
+    expect(caseIntakeSafetyMigration).toContain("not coalesce(app_user.is_anonymous, false)");
+    expect(caseIntakeSafetyMigration).toMatch(/create or replace function private\.current_session_is_aal2\(\)[\s\S]*?private\.current_user_is_usable\(\)/);
+    expect(caseIntakeSafetyMigration).toMatch(/create or replace function private\.is_staff_principal\(\)[\s\S]*?private\.current_user_is_usable\(\)/);
+    expect(caseIntakeSafetyMigration).toMatch(/create or replace function private\.current_principal_requires_aal2\(\)[\s\S]*?not private\.current_user_is_usable\(\)/);
+    expect(caseIntakeSafetyMigration).toContain("revoke all on function private.current_user_is_usable() from public, anon, authenticated;");
+    expect(caseIntakeSafetyMigration).toMatch(/create or replace function hub\.get_support_actor_context\(\)[\s\S]*?v_user_id is null or not private\.current_user_is_usable\(\)/);
+  });
+
+  it("makes case creation and replies idempotent without removing legacy RPC signatures", () => {
+    expect(caseIntakeSafetyMigration).toContain("create table private.support_request_keys");
+    expect(caseIntakeSafetyMigration).toContain("primary key (actor_id, operation, request_key)");
+    expect(caseIntakeSafetyMigration).toContain("request_hash text not null");
+    const requestLedger = caseIntakeSafetyMigration.match(
+      /create table private\.support_request_keys[\s\S]*?\n\);/,
+    )?.[0] ?? "";
+    expect(requestLedger).not.toMatch(/(subject|body)\s+text/i);
+    expect(caseIntakeSafetyMigration).toContain("create unique index if not exists case_messages_client_message_id_idx");
+    expect(caseIntakeSafetyMigration).toContain("where client_message_id is not null");
+    expect(schema).toContain("p_request_key uuid");
+    expect(schema).toContain("hub.create_support_case(uuid, uuid, text, hub.case_category, hub.case_priority, text, text, text, boolean, uuid)");
+    expect(schema).toContain("hub.create_support_case(uuid, uuid, text, hub.case_category, hub.case_priority, text, text, text, boolean)");
+    expect(schema).toContain("hub.reply_to_support_case(uuid, text, text, uuid)");
+    expect(schema).toContain("hub.reply_to_support_case(uuid, text, text)");
+
+    const createFunctions = [
+      ...caseIntakeSafetyMigration.matchAll(
+        /create or replace function hub\.create_support_case\([\s\S]*?\n\$\$;/g,
+      ),
+    ].map((match) => match[0]);
+    const keyedCreate = createFunctions.find((definition) => definition.includes("p_request_key uuid")) ?? "";
+    const legacyCreate = createFunctions.find((definition) => !definition.includes("p_request_key uuid")) ?? "";
+    expect(keyedCreate).toContain("if p_request_key is null then");
+    expect(keyedCreate).toMatch(/A request key is required\.[\s\S]*?errcode = '22023'/);
+    expect(keyedCreate).toContain("if p_contains_phi is distinct from false then");
+    expect(keyedCreate.indexOf("if v_inserted = 0 then")).toBeLessThan(
+      keyedCreate.indexOf("if not private.is_case_intake_enabled(p_tenant_id, p_product_id) then"),
+    );
+    expect(keyedCreate).toMatch(/select case[\s\S]*?membership\.role = 'tenant_admin'[\s\S]*?else 'customer'/);
+    expect(keyedCreate.indexOf("membership.role = 'tenant_admin'")).toBeLessThan(
+      keyedCreate.indexOf("insert into hub.case_messages"),
+    );
+    expect(legacyCreate).toContain("coalesce(p_contains_phi, false)");
+    expect(legacyCreate).toContain("gen_random_uuid()");
+    expect(legacyCreate).not.toContain("null::uuid");
+
+    const replyFunctions = [
+      ...caseIntakeSafetyMigration.matchAll(
+        /create or replace function hub\.reply_to_support_case\([\s\S]*?\n\$\$;/g,
+      ),
+    ].map((match) => match[0]);
+    const keyedReply = replyFunctions.find((definition) => definition.includes("p_request_key uuid")) ?? "";
+    const legacyReply = replyFunctions.find((definition) => !definition.includes("p_request_key uuid")) ?? "";
+    expect(keyedReply).toContain("if p_request_key is null then");
+    expect(keyedReply).toMatch(/A request key is required\.[\s\S]*?errcode = '22023'/);
+    expect(keyedReply).toContain("if p_visibility is null or p_visibility not in ('customer', 'internal') then");
+    expect(keyedReply).toContain("if p_visibility = 'internal' and not v_is_staff then");
+    expect(keyedReply).toContain("v_can_reply_as_member boolean");
+    expect(keyedReply).toContain("membership.case_scope = 'tenant'");
+    expect(keyedReply).toContain("and not (v_is_staff or v_can_reply_as_member) then");
+    expect(keyedReply).toMatch(/if v_is_staff then\s+v_role := private\.actor_role_label[\s\S]*?else[\s\S]*?membership\.role = 'tenant_admin'[\s\S]*?else 'customer'/);
+    expect(legacyReply).toContain("gen_random_uuid()");
+    expect(legacyReply).not.toContain("null::uuid");
   });
 
   it("keeps membership RLS non-recursive", () => {

@@ -419,7 +419,13 @@ export class DemoSupportRepository implements HubRepository {
     return { ...nextCase };
   }
 
-  async replyToCase(caseId: string, body: string, visibility: "customer" | "internal"): Promise<CaseMessage> {
+  async replyToCase(
+    caseId: string,
+    body: string,
+    visibility: "customer" | "internal",
+    _requestKey: string,
+  ): Promise<CaseMessage> {
+    void _requestKey;
     if (visibility === "internal" && (this.actor.role === "customer" || this.actor.role === "tenant_admin")) {
       throw new Error("Customers cannot create internal notes.");
     }

@@ -11,13 +11,27 @@ Version `0.1.0` uses RLS-governed reads and narrow atomic RPCs in the `hub` sche
 - `hub.get_support_actor_context()`: current profile, role, and first active tenant context.
 - `hub.get_support_case_thread(case_id)`: customer correspondence plus internal notes only for authorized staff.
 
+The actor bootstrap is intentionally callable at AAL1 so a usable staff user can enroll or challenge TOTP. Deleted, banned, and anonymous Auth principals are rejected even if an older JWT remains unexpired. For staff and customers with a verified TOTP factor, tenant context and every protected data path remain unavailable until the current JWT is AAL2.
+
 ## Commands
 
-- `hub.create_support_case(...)`: validates active exact tenant/product membership and creates the case, participant, first message, and audit metadata atomically.
-- `hub.reply_to_support_case(...)`: validates current access, keeps staff notes private, updates case state, and appends metadata-only audit history.
+- `hub.create_support_case(..., p_request_key uuid)`: validates active exact tenant/product membership and a private, explicit intake activation, then creates the case, participant, first message, and audit metadata atomically. A repeated identical key returns the original case; changed data with the same key fails.
+- `hub.reply_to_support_case(..., p_request_key uuid)`: validates `case.write` independently from requester/participant/tenant-scoped membership authority, keeps staff notes private, derives the stored author role from the path that authorized the write, updates case state, and appends metadata-only audit history. A repeated identical key returns the original message or note.
 - `hub.update_support_case(...)`: requires `case.write`, verifies assignee product authorization, and changes only operational fields.
 
+The original nine-argument create and three-argument reply signatures remain as compatibility wrappers. They generate a server-side request key for each call, so only the keyed overloads provide caller-stable retry replay; new clients must use those keyed overloads and supply a non-null UUID. The private idempotency ledger contains a request digest and identifiers only; it has RLS enabled and no browser-role grants. New case intake defaults off per tenant/product and requires an active entitlement plus a currently usable staff route with verified TOTP. Disabling intake does not strand already-created cases or prevent an authorized replay from returning a previously committed create result.
+
 Every command derives the actor from `auth.uid()`. No caller may set requester identity, requester display name, staff role, data classification, or audit actor.
+
+## Client launch contract
+
+`@caremetric/help-sdk` 0.3 provides `buildHelpUrl`/`openHelp` and `buildLearningUrl`/`openLearning`. Learning links use `/learn` and may include only one compile-time registered product slug. Help links may additionally include only caller-allowlisted static route/feature context and format-validated app version, locale, and environment. Both launchers require HTTPS, reject credentials and loopback destinations, and default to the permanent Railway Hub origin.
+
+Course metadata never supplies an arbitrary destination. The web client reconstructs the launch only when the configured origin is exactly `https://cmcarebase.com` and the stored relative path is exactly `/app/courses` or `/app/courses/<uuid>`.
+
+## Publication preview boundary
+
+`previewPublicationImport()` is an in-process, credential-free validation and planning function, not an HTTP endpoint. It accepts the closed DocStudio v1 manifest, caller-supplied bytes, and a bounded catalog snapshot; requires the upstream PHI-review attestation plus usable, in-range timed WebVTT and transcript sidecars for video; rejects obvious identifier, HTML, and unsafe-link patterns in text; verifies asset hashes; rejects same-version mutation, rollback, gaps, and unapproved next versions; and binds governance plus the canonical input catalog-snapshot hash into plan identities. It returns only deterministic `create`, `no_op`, `new_immutable_revision`, `place`, approval-required `replace_placement`, approval-required `retire_preview`, approval-required `retire_content_preview`, or approval-required `reactivate_content_preview` actions. The text scan is not PHI certification and cannot inspect video pixels. The function performs no fetch, upload, database/storage write, retirement, reactivation, or deletion; a future executor must re-check the authoritative snapshot identity and apply approved placement replacements, retirements, and reactivations transactionally against the existing unique product-publication row.
 
 ## Planned service endpoints
 

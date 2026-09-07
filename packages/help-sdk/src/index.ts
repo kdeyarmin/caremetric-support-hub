@@ -123,6 +123,38 @@ export function buildHelpUrl({
   return url.toString();
 }
 
+export interface BuildLearningUrlOptions {
+  /**
+   * Override the Support Hub origin for an explicitly configured staging or
+   * development environment. Production callers should omit this value.
+   */
+  baseUrl?: string;
+  /**
+   * Optionally narrow the shared learning library to one registered product.
+   * No route, identity, free-text, or application context is accepted.
+   */
+  product?: CareMetricProduct;
+}
+
+/**
+ * Builds a privacy-safe link to the shared learning library. The only optional
+ * query parameter is a product slug from the SDK's compile-time registry.
+ */
+export function buildLearningUrl({
+  baseUrl = DEFAULT_HELP_BASE_URL,
+  product,
+}: BuildLearningUrlOptions = {}): string {
+  const url = new URL("/learn", resolveBaseUrl(baseUrl));
+  if (product !== undefined) {
+    const safeProduct = safeValue(product, 64);
+    if (!supportedProducts.has(safeProduct as CareMetricProduct)) {
+      throw new TypeError("Learning context requires a valid product slug.");
+    }
+    url.searchParams.set("product", safeProduct);
+  }
+  return url.toString();
+}
+
 export interface HelpLauncherOptions extends BuildHelpUrlOptions {
   target?: "_self" | "_blank";
 }
@@ -134,6 +166,25 @@ export function openHelp(options: HelpLauncherOptions): void {
   const target = options.target ?? "_blank";
   const opened = window.open(
     buildHelpUrl(options),
+    target,
+    target === "_blank" ? "noopener,noreferrer" : undefined,
+  );
+  if (opened && target === "_blank") opened.opener = null;
+}
+
+export interface LearningLauncherOptions extends BuildLearningUrlOptions {
+  target?: "_self" | "_blank";
+}
+
+export function openLearning(options: LearningLauncherOptions = {}): void {
+  if (typeof window === "undefined") {
+    throw new Error(
+      "openLearning can only be called in a browser. Use buildLearningUrl during server rendering.",
+    );
+  }
+  const target = options.target ?? "_blank";
+  const opened = window.open(
+    buildLearningUrl(options),
     target,
     target === "_blank" ? "noopener,noreferrer" : undefined,
   );

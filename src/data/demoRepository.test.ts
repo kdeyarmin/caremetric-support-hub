@@ -19,6 +19,7 @@ describe("DemoSupportRepository", () => {
         priority: "normal",
         message: "Contains protected information",
         containsPhi: true,
+        requestKey: "50000000-0000-4000-8000-000000000001",
       }),
     ).rejects.toThrow(/Remove patient or clinical information/);
   });
@@ -32,6 +33,7 @@ describe("DemoSupportRepository", () => {
       priority: "high",
       message: "  The invitation opens an expired page.  ",
       containsPhi: false,
+      requestKey: "50000000-0000-4000-8000-000000000002",
     });
 
     const thread = await repository.listMessages(created.id);
@@ -41,7 +43,12 @@ describe("DemoSupportRepository", () => {
   });
 
   it("prevents a customer from creating an internal note", async () => {
-    await expect(repository.replyToCase("case-1042", "Hidden note", "internal")).rejects.toThrow(
+    await expect(repository.replyToCase(
+      "case-1042",
+      "Hidden note",
+      "internal",
+      "50000000-0000-4000-8000-000000000003",
+    )).rejects.toThrow(
       /cannot create internal notes/,
     );
   });

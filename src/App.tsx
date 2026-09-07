@@ -35,7 +35,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { demoRepository, repository } from "./data";
 import { defaultIntegrationRollout, integrationRolloutBySlug } from "./data/integrationRollout";
@@ -56,7 +56,9 @@ import {
 } from "./domain";
 import { config } from "./lib/config";
 import { supabase } from "./lib/supabase";
+import { careBaseCourseLaunchUrl } from "./security/careBaseCourseLaunch";
 import { decideMfaGate, normalizeAuthenticatorLevel, type MfaGate } from "./security/mfaGate";
+import { prepareMutationRequest, type PendingMutationRequest } from "./security/mutationRequestKey";
 
 interface HubData {
   actor: ActorContext;
@@ -110,17 +112,7 @@ function supportContactDisplay(contact: SupportContact): string {
 }
 
 function courseLaunchUrl(item: ContentItem): string | null {
-  const canonicalCoursePath = /^\/app\/courses\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  if (!config.pennTrainBaseUrl || !item.courseLaunchPath || !canonicalCoursePath.test(item.courseLaunchPath)) return null;
-
-  try {
-    const baseUrl = new URL(config.pennTrainBaseUrl);
-    const launchUrl = new URL(item.courseLaunchPath, baseUrl.origin);
-    if (baseUrl.protocol !== "https:" || launchUrl.origin !== baseUrl.origin) return null;
-    return launchUrl.toString();
-  } catch {
-    return null;
-  }
+  return careBaseCourseLaunchUrl(item.courseLaunchPath, config.pennTrainBaseUrl);
 }
 
 function routeMatches(pattern: string | null, route: string): boolean {
@@ -748,7 +740,10 @@ function CasesPage({ data }: CasesPageProps) {
   const params = new URLSearchParams(location.search);
   const requestedProduct = data.products.find((product) => product.slug === params.get("product"));
   const [selectedId, setSelectedId] = useState(data.cases[0]?.id ?? null);
-  const [thread, setThread] = useState<CaseMessage[]>([]);
+  const [thread, setThread] = useState<{ caseId: string | null; messages: CaseMessage[] }>({
+    caseId: null,
+    messages: [],
+  });
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<CaseStatus | "all">("all");
   const [showCreate, setShowCreate] = useState(!staff && (data.cases.length === 0 || params.get("new") === "1"));
@@ -766,7 +761,7 @@ function CasesPage({ data }: CasesPageProps) {
     if (!selectedId) return;
     let active = true;
     void repository.listMessages(selectedId).then((rows) => {
-      if (active) setThread(rows);
+      if (active) setThread({ caseId: selectedId, messages: rows });
     });
     return () => { active = false; };
   }, [selectedId, refresh]);
@@ -819,8 +814,9 @@ function CasesPage({ data }: CasesPageProps) {
         <div className="case-detail-panel">
           {selected ? (
             <CaseDetail
+              key={selected.id}
               supportCase={selected}
-              thread={thread}
+              thread={thread.caseId === selected.id ? thread.messages : []}
               products={data.products}
               actor={data.actor}
               staff={staff}
@@ -847,15 +843,30 @@ function NewCasePanel({ data, preferredProductId, onCancel, onCreated }: { data:
   const [acknowledged, setAcknowledged] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const pendingRequest = useRef<PendingMutationRequest | null>(null);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!data.actor.tenantId || !acknowledged || containsPhi) return;
+    const tenantId = data.actor.tenantId;
+    if (!tenantId || !acknowledged || containsPhi) return;
+    const request = prepareMutationRequest(pendingRequest.current, [
+      "create-support-case",
+      tenantId,
+      productId,
+      subject,
+      category,
+      priority,
+      message,
+      appVersion,
+      route,
+      containsPhi,
+    ]);
+    pendingRequest.current = request;
     setSaving(true);
     setError("");
     try {
       const created = await repository.createCase({
-        tenantId: data.actor.tenantId,
+        tenantId,
         productId,
         subject,
         category,
@@ -864,7 +875,9 @@ function NewCasePanel({ data, preferredProductId, onCancel, onCreated }: { data:
         appVersion,
         route,
         containsPhi,
+        requestKey: request.requestKey,
       });
+      pendingRequest.current = null;
       onCreated(created.id);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The case could not be created.");
@@ -901,14 +914,30 @@ function CaseDetail({ supportCase, thread, products, actor, staff, onChanged }: 
   const [visibility, setVisibility] = useState<"customer" | "internal">("customer");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const pendingReply = useRef<PendingMutationRequest | null>(null);
   const product = productFor(products, supportCase.productId);
 
   const reply = async () => {
-    if (!body.trim()) return;
+    const submittedBody = body;
+    const submittedVisibility = visibility;
+    if (!submittedBody.trim()) return;
+    const request = prepareMutationRequest(pendingReply.current, [
+      "reply-to-support-case",
+      supportCase.id,
+      submittedBody,
+      submittedVisibility,
+    ]);
+    pendingReply.current = request;
     setSaving(true); setError("");
     try {
-      await repository.replyToCase(supportCase.id, body, visibility);
-      setBody("");
+      await repository.replyToCase(
+        supportCase.id,
+        submittedBody,
+        submittedVisibility,
+        request.requestKey,
+      );
+      pendingReply.current = null;
+      setBody((current) => current === submittedBody ? "" : current);
       onChanged();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The reply could not be saved.");
