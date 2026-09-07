@@ -1,11 +1,28 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildHelpUrl, DEFAULT_HELP_BASE_URL, openHelp } from "./index";
+import { buildHelpUrl, CAREMETRIC_PRODUCT_SLUGS, DEFAULT_HELP_BASE_URL, openHelp } from "./index";
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
 describe("buildHelpUrl", () => {
+  it("accepts every registered CareMetric product and no unknown product", () => {
+    expect(CAREMETRIC_PRODUCT_SLUGS).toEqual([
+      "breathe",
+      "carebase",
+      "caremetric-emr",
+      "caremetric-go",
+      "caremetric-intel",
+      "pennsync",
+    ]);
+    for (const product of CAREMETRIC_PRODUCT_SLUGS) {
+      expect(new URL(buildHelpUrl({ context: { product } })).searchParams.get("product")).toBe(product);
+    }
+    expect(() => buildHelpUrl({
+      context: { product: "unknown" } as unknown as Parameters<typeof buildHelpUrl>[0]["context"],
+    })).toThrow("product slug");
+  });
+
   it("adds only approved context fields", () => {
     const url = new URL(
       buildHelpUrl({

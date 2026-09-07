@@ -17,11 +17,11 @@ npm ci
 npm run pack:sdk
 ```
 
-This produces `caremetric-help-sdk-0.1.0.tgz`. Place that versioned artifact in
+This produces `caremetric-help-sdk-0.2.0.tgz`. Place that versioned artifact in
 the consuming application's private source tree and install it:
 
 ```bash
-npm install ./vendor/caremetric-help-sdk-0.1.0.tgz
+npm install ./vendor/caremetric-help-sdk-0.2.0.tgz
 ```
 
 Keeping the tarball versioned with each private application makes builds
@@ -81,7 +81,7 @@ buildHelpUrl({
   omits them unless they exactly match the registry; never pass
   `window.location.pathname` directly.
 - The SDK removes query strings and fragments defensively, rejects loopback
-  destinations, and accepts only the four registered CareMetric products.
+  destinations, and accepts only the six registered CareMetric products.
 - Never add user, tenant, patient, clinical, free-text, token, or diagnostic
   values to a help URL.
 - Use `buildHelpUrl` during server rendering; call `openHelp` only from a

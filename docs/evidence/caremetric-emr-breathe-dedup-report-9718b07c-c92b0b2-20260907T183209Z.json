@@ -1,0 +1,4554 @@
+{
+  "schema_version": "1.0.0",
+  "artifact_kind": "cross-product-help-content-deduplication-report",
+  "generated_at": "2026-09-07T18:32:09Z",
+  "status": "analysis-only-not-published",
+  "inputs": {
+    "caremetric-emr": {
+      "manifest_path": "caremetric_emr_help_manifest_9718b07c_20260907T180626Z.json",
+      "manifest_sha256": "b3f15e954b3453c27a55782d348912a8399317d8614d7e42f73706594f99b6df",
+      "repository": "kdeyarmin/CMbackup",
+      "ref": "main",
+      "commit_sha": "9718b07c37d7b1c092f25771811f5cfc3e60dc41",
+      "manifest_validation_status": "pass"
+    },
+    "caremetric-breathe": {
+      "manifest_path": "caremetric-breathe-admin-help-manifest-c92b0b2-2026-09-07.json",
+      "manifest_sha256": "52f0bbf1ee34e3d392e8f44d80e38ba11a13b8571103f8cb4ea34cbe49da2ef2",
+      "repository": "kdeyarmin/PennFit",
+      "ref": "main",
+      "commit_sha": "c92b0b2bda1c3b46e85e3536b79c7080ace4edc6",
+      "manifest_validation_status": "passed"
+    }
+  },
+  "scope": {
+    "purpose": "Deterministically identify duplicate and overlapping static help content across CareMetric EMR and CareMetric Breathe, then propose governed shared-core boundaries.",
+    "comparison_unit": "EMR grouped collections are expanded into the 218 verified primary authored units; all 135 Breathe manifest records are already compared as manifest entries.",
+    "comparison_fields": "Title tokens drive qualification. Title-plus-summary tokens are a corroborating Jaccard threshold. No embeddings, probabilistic model, runtime data, ticket text, or database content are used.",
+    "excluded": "Tickets, chat/free text, drafts, runtime customer/tenant/user/patient/organization records, secrets or credential values, tokenized URLs, and application query/hash context.",
+    "publication_effect": "None. This report does not publish content or mutate a repository, database, domain, support configuration, or production service."
+  },
+  "methodology": {
+    "atomic_expansion": {
+      "guides": "one unit per manifest guide",
+      "public_faqs": "one unit per verified FAQ question",
+      "in_app_faqs": "one unit per verified FAQ question",
+      "manual_modules_and_sections": "one unit per manifest module/section",
+      "troubleshooting": "one unit per symptom/cause/resolution scenario plus one per quick check",
+      "quickstart": "one unit per verified role track, matching the source inventory count",
+      "chatbot": "one unit per verified intent; sample utterances are excluded from comparison units"
+    },
+    "title_normalization": {
+      "basic": [
+        "Unicode NFKD normalization and diacritic removal",
+        "lowercase",
+        "ampersand becomes and",
+        "apostrophes removed",
+        "non-alphanumeric characters become spaces",
+        "whitespace collapsed"
+      ],
+      "phrase_replacements": {
+        "multi factor authentication": "mfa",
+        "two factor authentication": "mfa",
+        "two step verification": "mfa",
+        "sign in / signing in": "auth",
+        "video visit": "telehealth",
+        "internet/network connection": "connectivity",
+        "set up": "setup",
+        "health record": "ehr"
+      },
+      "stopwords": [
+        "a",
+        "about",
+        "admin",
+        "all",
+        "an",
+        "and",
+        "any",
+        "app",
+        "application",
+        "are",
+        "as",
+        "at",
+        "be",
+        "been",
+        "being",
+        "breathe",
+        "but",
+        "by",
+        "can",
+        "cannot",
+        "cant",
+        "caremetric",
+        "complete",
+        "comprehensive",
+        "console",
+        "could",
+        "did",
+        "do",
+        "does",
+        "doesnt",
+        "dont",
+        "emr",
+        "every",
+        "faq",
+        "first",
+        "for",
+        "from",
+        "guide",
+        "how",
+        "i",
+        "if",
+        "im",
+        "in",
+        "into",
+        "is",
+        "isnt",
+        "it",
+        "its",
+        "manual",
+        "may",
+        "me",
+        "might",
+        "mine",
+        "must",
+        "my",
+        "nobody",
+        "not",
+        "of",
+        "on",
+        "or",
+        "our",
+        "ours",
+        "over",
+        "own",
+        "platform",
+        "please",
+        "quick",
+        "should",
+        "something",
+        "start",
+        "than",
+        "that",
+        "the",
+        "their",
+        "theirs",
+        "them",
+        "then",
+        "these",
+        "they",
+        "this",
+        "those",
+        "to",
+        "under",
+        "understanding",
+        "us",
+        "use",
+        "using",
+        "was",
+        "we",
+        "were",
+        "what",
+        "when",
+        "where",
+        "which",
+        "who",
+        "whom",
+        "whose",
+        "why",
+        "will",
+        "with",
+        "without",
+        "wont",
+        "worth",
+        "would",
+        "you",
+        "your",
+        "yours"
+      ],
+      "singularization": [
+        "words ending in ies become y when length exceeds four",
+        "words ending in sses lose es when length exceeds four",
+        "other words ending in s lose the final s when length exceeds three, except ss/us endings"
+      ],
+      "token_synonyms": {
+        "analytics": "report",
+        "appointment": "schedule",
+        "appointments": "schedule",
+        "assistants": "assistant",
+        "authentication": "auth",
+        "authenticator": "auth",
+        "billed": "bill",
+        "billing": "bill",
+        "configuration": "setup",
+        "configure": "setup",
+        "configured": "setup",
+        "configuring": "setup",
+        "connection": "integration",
+        "connections": "integration",
+        "connector": "integration",
+        "connectors": "integration",
+        "credentials": "credential",
+        "documents": "document",
+        "error": "issue",
+        "errors": "issue",
+        "faxes": "fax",
+        "features": "feature",
+        "help": "support",
+        "integrations": "integration",
+        "issues": "issue",
+        "login": "auth",
+        "logon": "auth",
+        "medication": "prescription",
+        "medications": "prescription",
+        "messages": "message",
+        "messaging": "message",
+        "modules": "module",
+        "patients": "patient",
+        "payments": "payment",
+        "permissions": "permission",
+        "prescriptions": "prescription",
+        "problem": "issue",
+        "problems": "issue",
+        "reporting": "report",
+        "reports": "report",
+        "roles": "role",
+        "scheduled": "schedule",
+        "scheduling": "schedule",
+        "securing": "secure",
+        "security": "secure",
+        "sms": "message",
+        "staff": "user",
+        "submission": "submit",
+        "submitting": "submit",
+        "teammate": "user",
+        "teammates": "user",
+        "templates": "template",
+        "text": "message",
+        "texts": "message",
+        "troubleshoot": "support",
+        "troubleshooting": "support",
+        "users": "user"
+      },
+      "set_rule": "Tokens are unique and lexicographically sorted before comparison."
+    },
+    "metrics": {
+      "jaccard": "|intersection(token sets)| / |union(token sets)|",
+      "title_containment": "|shared title tokens| / min(|EMR title tokens|, |Breathe title tokens|)",
+      "anchor_requirement": [
+        "assistant",
+        "audit",
+        "auth",
+        "automation",
+        "background",
+        "backup",
+        "bill",
+        "browser",
+        "cache",
+        "claim",
+        "clinical",
+        "compliance",
+        "credential",
+        "dashboard",
+        "data",
+        "delivery",
+        "denial",
+        "document",
+        "eligibility",
+        "enrollment",
+        "export",
+        "fax",
+        "feature",
+        "integration",
+        "invite",
+        "issue",
+        "limit",
+        "message",
+        "mfa",
+        "mobile",
+        "module",
+        "navigation",
+        "note",
+        "operation",
+        "outage",
+        "patient",
+        "payment",
+        "permission",
+        "plan",
+        "portal",
+        "prescription",
+        "report",
+        "retention",
+        "role",
+        "schedule",
+        "secure",
+        "session",
+        "sidebar",
+        "support",
+        "telehealth",
+        "template",
+        "trial",
+        "upload",
+        "user",
+        "video"
+      ],
+      "distinctive_single_token_set": [
+        "assistant",
+        "audit",
+        "auth",
+        "automation",
+        "backup",
+        "credential",
+        "eligibility",
+        "fax",
+        "integration",
+        "mfa",
+        "retention",
+        "support",
+        "telehealth"
+      ],
+      "score_rounding": "Four decimal places in output; thresholds are applied to unrounded values."
+    },
+    "match_stages": {
+      "E0": "raw exact: trimmed titles are byte-for-byte equal",
+      "E1": "basic exact: E0 excluded; basic-normalized title strings are equal",
+      "E2": "normalized exact: E0/E1 excluded; ordered unique normalized title-token sets are equal and non-empty",
+      "S1": "likely semantic: not E0/E1/E2; at least two shared title tokens, title Jaccard >= 0.30, title+summary Jaccard >= 0.06, and at least one shared anchor",
+      "S2": "likely semantic: not E0/E1/E2/S1; at least two shared title tokens, title containment >= 0.50, title+summary Jaccard >= 0.10, and at least one shared anchor",
+      "S3": "likely semantic: not E0/E1/E2/S1/S2; at least one shared distinctive title token, title containment >= 0.50, and title+summary Jaccard >= 0.04"
+    },
+    "editorial_layer": "Canonical groups and dispositions are explicit proposals over the deterministic candidate set and source guidance; they are not automatic publication decisions."
+  },
+  "counts": {
+    "emr_manifest_grouped_records": 94,
+    "emr_atomic_units": 218,
+    "emr_atomic_units_by_type": {
+      "faq": 100,
+      "guide": 27,
+      "manual_module": 16,
+      "manual_section": 15,
+      "quickstart_track": 5,
+      "support_intent": 28,
+      "troubleshooting_check": 6,
+      "troubleshooting_scenario": 21
+    },
+    "emr_atomic_units_by_classification": {
+      "caremetric-emr-overlay": 178,
+      "shared-core": 40
+    },
+    "breathe_manifest_records": 135,
+    "breathe_records_by_type": {
+      "faq": 57,
+      "guide": 17,
+      "how-to": 52,
+      "onboarding-pdf-template": 1,
+      "operator-manual-pdf": 2,
+      "role-handbook-pdf-template": 5,
+      "tutorial-pdf": 1
+    },
+    "breathe_records_by_classification": {
+      "breathe-overlay": 120,
+      "shared-core": 15
+    },
+    "cross_product_pairs_evaluated": 29430,
+    "raw_exact_title_matches_E0": 0,
+    "basic_exact_title_matches_E1": 0,
+    "normalized_title_matches_E2": 2,
+    "normalized_title_matches_by_specificity": {
+      "standard": 1,
+      "low_single_token": 1
+    },
+    "likely_semantic_overlaps": 40,
+    "likely_semantic_overlaps_by_rule": {
+      "S1": 22,
+      "S2": 2,
+      "S3": 16
+    },
+    "likely_semantic_overlaps_by_topic": {
+      "account-authentication-and-mfa": 3,
+      "audit-and-documentation": 1,
+      "automation-rules": 2,
+      "billing-and-claims": 8,
+      "fax": 1,
+      "insurance-eligibility": 1,
+      "integration-configuration": 7,
+      "patient-communications": 6,
+      "patient-records": 3,
+      "support-contact-and-escalation": 2,
+      "team-invitations-and-role-access": 3,
+      "telehealth": 3
+    },
+    "proposed_canonical_shared_core_groups": 11,
+    "product_overlay_domains_to_keep_separate": 9,
+    "conflicting_guidance_items_for_human_review": 9,
+    "non_candidate_pairs": 29388
+  },
+  "exact_title_matches": {
+    "raw_E0": [],
+    "basic_normalized_E1": []
+  },
+  "normalized_title_matches_E2": [
+    {
+      "pair_id": "pair-074ec477864ad14f",
+      "match_basis": "same ordered unique normalized title-token set",
+      "normalized_tokens": [
+        "user"
+      ],
+      "specificity": "low-single-token",
+      "recommended_disposition": "low-specificity-container-collision-do-not-merge-wholesale",
+      "scores": {
+        "title_jaccard": 1,
+        "title_and_summary_jaccard": 0.1429
+      },
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.guide.comprehensive-user-guide",
+          "title": "Comprehensive User Guide",
+          "source_path": "public/docs/pdf/COMPREHENSIVE_USER_GUIDE.md",
+          "source_sha": "5cb882241c5003e59e770f4ce9cc28cd02ec3d9c",
+          "route_template": "/docs/pdf/COMPREHENSIVE_USER_GUIDE.md",
+          "audience": [
+            "all_authenticated"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.manual.user",
+          "title": "CareMetric Breathe User Manual",
+          "source_path": "docs/user-manual/build_user_manual.py",
+          "source_selector": "ROLES / SUMMARY / DETAIL / JOB_AIDES / PREREQS / GLOSSARY",
+          "route_template": "/resupply-api/admin/support/manual",
+          "audience": [
+            "All CareMetric Breathe operators"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-20f6b11b38e9d4c3",
+      "match_basis": "same ordered unique normalized title-token set",
+      "normalized_tokens": [
+        "analytic",
+        "report"
+      ],
+      "specificity": "standard",
+      "recommended_disposition": "extract-shared-reporting-introduction-keep-report-catalogs-as-overlays",
+      "scores": {
+        "title_jaccard": 1,
+        "title_and_summary_jaccard": 0.0513
+      },
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.reporting",
+          "title": "Reporting & Analytics",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=reporting]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "biller",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.guide.analytics",
+          "title": "Analytics and reports",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+          "source_selector": "GUIDE_SECTIONS[id=\"analytics\"]",
+          "route_template": "/admin/resources/user-guide#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    }
+  ],
+  "likely_semantic_overlaps": [
+    {
+      "pair_id": "pair-8319397e441a7047",
+      "rule": "S1",
+      "topic": "billing-and-claims",
+      "recommended_disposition": "keep-product-overlays-separate",
+      "scores": {
+        "title_jaccard": 0.3333,
+        "title_containment": 1,
+        "title_and_summary_jaccard": 0.0857
+      },
+      "shared_title_tokens": [
+        "claim",
+        "submit"
+      ],
+      "shared_anchor_tokens": [
+        "bill",
+        "claim"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.chatbot.billing-and-revenue-cycle.submit_claim",
+          "parent_content_key": "caremetric-emr.chatbot.billing-and-revenue-cycle",
+          "title": "submit claim",
+          "source_path": "src/lib/pdf/templates/chatbotTraining.ts",
+          "source_selector": "CHATBOT_TRAINING_INTENTS[category=Billing & Revenue Cycle].intents[intent=submit_claim]",
+          "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+          "route_template": "/admin/content",
+          "audience": [
+            "support_editor",
+            "super_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.missing-paperwork-claim",
+          "title": "A claim is blocked on missing paperwork. Should I submit anyway?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"missing-paperwork-claim\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-049a02be6117ff3f",
+      "rule": "S1",
+      "topic": "billing-and-claims",
+      "recommended_disposition": "keep-product-overlays-separate",
+      "scores": {
+        "title_jaccard": 0.5,
+        "title_containment": 1,
+        "title_and_summary_jaccard": 0.075
+      },
+      "shared_title_tokens": [
+        "claim",
+        "submit"
+      ],
+      "shared_anchor_tokens": [
+        "claim"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.chatbot.billing-and-revenue-cycle.submit_claim",
+          "parent_content_key": "caremetric-emr.chatbot.billing-and-revenue-cycle",
+          "title": "submit claim",
+          "source_path": "src/lib/pdf/templates/chatbotTraining.ts",
+          "source_selector": "CHATBOT_TRAINING_INTENTS[category=Billing & Revenue Cycle].intents[intent=submit_claim]",
+          "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+          "route_template": "/admin/content",
+          "audience": [
+            "support_editor",
+            "super_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.secondary-generate-submits",
+          "title": "Does generating a secondary claim submit it?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"secondary-generate-submits\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-9694b08df6e6fade",
+      "rule": "S1",
+      "topic": "billing-and-claims",
+      "recommended_disposition": "keep-product-overlays-separate",
+      "scores": {
+        "title_jaccard": 0.5,
+        "title_containment": 1,
+        "title_and_summary_jaccard": 0.1282
+      },
+      "shared_title_tokens": [
+        "claim",
+        "submit"
+      ],
+      "shared_anchor_tokens": [
+        "bill",
+        "claim"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.chatbot.billing-and-revenue-cycle.submit_claim",
+          "parent_content_key": "caremetric-emr.chatbot.billing-and-revenue-cycle",
+          "title": "submit claim",
+          "source_path": "src/lib/pdf/templates/chatbotTraining.ts",
+          "source_selector": "CHATBOT_TRAINING_INTENTS[category=Billing & Revenue Cycle].intents[intent=submit_claim]",
+          "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+          "route_template": "/admin/content",
+          "audience": [
+            "support_editor",
+            "super_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.submit-a-claim",
+          "title": "Take a claim from eligibility to submission",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"submit-a-claim\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Biller"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-c37fd186b633f69e",
+      "rule": "S3",
+      "topic": "account-authentication-and-mfa",
+      "recommended_disposition": "human-review-then-extract-shared-core",
+      "scores": {
+        "title_jaccard": 0.3333,
+        "title_containment": 1,
+        "title_and_summary_jaccard": 0.05
+      },
+      "shared_title_tokens": [
+        "auth"
+      ],
+      "shared_anchor_tokens": [
+        "auth",
+        "mfa"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.chatbot.getting-started.how_to_login",
+          "parent_content_key": "caremetric-emr.chatbot.getting-started",
+          "title": "how to login",
+          "source_path": "src/lib/pdf/templates/chatbotTraining.ts",
+          "source_selector": "CHATBOT_TRAINING_INTENTS[category=Getting Started].intents[intent=how_to_login]",
+          "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+          "route_template": "/admin/content",
+          "audience": [
+            "support_editor",
+            "super_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.mfa-enforced",
+          "title": "Is multi-factor authentication required to sign in?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"mfa-enforced\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-0536874df64dbd02",
+      "rule": "S3",
+      "topic": "integration-configuration",
+      "recommended_disposition": "extract-security-and-status-core-keep-vendors-fields-and-routes-as-overlays",
+      "scores": {
+        "title_jaccard": 0.1429,
+        "title_containment": 0.5,
+        "title_and_summary_jaccard": 0.0833
+      },
+      "shared_title_tokens": [
+        "integration"
+      ],
+      "shared_anchor_tokens": [
+        "integration"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.chatbot.system-settings-and-configuration.configure_integrations",
+          "parent_content_key": "caremetric-emr.chatbot.system-settings-and-configuration",
+          "title": "configure integrations",
+          "source_path": "src/lib/pdf/templates/chatbotTraining.ts",
+          "source_selector": "CHATBOT_TRAINING_INTENTS[category=System Settings & Configuration].intents[intent=configure_integrations]",
+          "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+          "route_template": "/admin/content",
+          "audience": [
+            "support_editor",
+            "super_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.connect-an-integration",
+          "title": "Connect a therapy-cloud, clearinghouse, or partner integration",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"connect-an-integration\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Owner"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-7152ca49c7a9080f",
+      "rule": "S3",
+      "topic": "integration-configuration",
+      "recommended_disposition": "extract-security-and-status-core-keep-vendors-fields-and-routes-as-overlays",
+      "scores": {
+        "title_jaccard": 0.1667,
+        "title_containment": 0.5,
+        "title_and_summary_jaccard": 0.0571
+      },
+      "shared_title_tokens": [
+        "integration"
+      ],
+      "shared_anchor_tokens": [
+        "credential",
+        "integration"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.chatbot.system-settings-and-configuration.configure_integrations",
+          "parent_content_key": "caremetric-emr.chatbot.system-settings-and-configuration",
+          "title": "configure integrations",
+          "source_path": "src/lib/pdf/templates/chatbotTraining.ts",
+          "source_selector": "CHATBOT_TRAINING_INTENTS[category=System Settings & Configuration].intents[intent=configure_integrations]",
+          "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+          "route_template": "/admin/content",
+          "audience": [
+            "support_editor",
+            "super_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.integration-unavailable",
+          "title": "An integration shows as unavailable. Which credential is missing?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"integration-unavailable\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-7fe929d1cdea580e",
+      "rule": "S1",
+      "topic": "team-invitations-and-role-access",
+      "recommended_disposition": "extract-shared-core-with-route-and-role-overlays",
+      "scores": {
+        "title_jaccard": 0.4,
+        "title_containment": 0.6667,
+        "title_and_summary_jaccard": 0.1111
+      },
+      "shared_title_tokens": [
+        "role",
+        "user"
+      ],
+      "shared_anchor_tokens": [
+        "role",
+        "user"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.chatbot.system-settings-and-configuration.manage_staff_roles",
+          "parent_content_key": "caremetric-emr.chatbot.system-settings-and-configuration",
+          "title": "manage staff roles",
+          "source_path": "src/lib/pdf/templates/chatbotTraining.ts",
+          "source_selector": "CHATBOT_TRAINING_INTENTS[category=System Settings & Configuration].intents[intent=manage_staff_roles]",
+          "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+          "route_template": "/admin/content",
+          "audience": [
+            "support_editor",
+            "super_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.invite-your-team",
+          "title": "Add a teammate and set their role",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"invite-your-team\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Admin"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-e749ff925c965747",
+      "rule": "S3",
+      "topic": "support-contact-and-escalation",
+      "recommended_disposition": "human-review-then-extract-shared-core",
+      "scores": {
+        "title_jaccard": 0.1667,
+        "title_containment": 0.5,
+        "title_and_summary_jaccard": 0.0667
+      },
+      "shared_title_tokens": [
+        "support"
+      ],
+      "shared_anchor_tokens": [
+        "support"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.chatbot.troubleshooting.contact_support",
+          "parent_content_key": "caremetric-emr.chatbot.troubleshooting",
+          "title": "contact support",
+          "source_path": "src/lib/pdf/templates/chatbotTraining.ts",
+          "source_selector": "CHATBOT_TRAINING_INTENTS[category=Troubleshooting].intents[intent=contact_support]",
+          "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+          "route_template": "/admin/content",
+          "audience": [
+            "support_editor",
+            "super_admin"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.assistant-vs-support",
+          "title": "Should I ask the assistant or file a support ticket?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"assistant-vs-support\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-ba57efa4540c08a4",
+      "rule": "S3",
+      "topic": "support-contact-and-escalation",
+      "recommended_disposition": "human-review-then-extract-shared-core",
+      "scores": {
+        "title_jaccard": 0.1429,
+        "title_containment": 0.5,
+        "title_and_summary_jaccard": 0.0833
+      },
+      "shared_title_tokens": [
+        "support"
+      ],
+      "shared_anchor_tokens": [
+        "issue",
+        "support"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.chatbot.troubleshooting.contact_support",
+          "parent_content_key": "caremetric-emr.chatbot.troubleshooting",
+          "title": "contact support",
+          "source_path": "src/lib/pdf/templates/chatbotTraining.ts",
+          "source_selector": "CHATBOT_TRAINING_INTENTS[category=Troubleshooting].intents[intent=contact_support]",
+          "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+          "route_template": "/admin/content",
+          "audience": [
+            "support_editor",
+            "super_admin"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.how-to.get-help-and-report-a-problem",
+          "title": "Get help, report a problem, or suggest a feature",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"get-help-and-report-a-problem\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Everyone"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-503507c280c82b38",
+      "rule": "S1",
+      "topic": "billing-and-claims",
+      "recommended_disposition": "keep-product-overlays-separate",
+      "scores": {
+        "title_jaccard": 0.3333,
+        "title_containment": 1,
+        "title_and_summary_jaccard": 0.12
+      },
+      "shared_title_tokens": [
+        "claim",
+        "submit"
+      ],
+      "shared_anchor_tokens": [
+        "bill",
+        "claim"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.billing.how-do-i-submit-a-claim",
+          "parent_content_key": "caremetric-emr.faq.in-app.billing",
+          "title": "How do I submit a claim?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=billing][question-slug=how-do-i-submit-a-claim]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "biller",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.missing-paperwork-claim",
+          "title": "A claim is blocked on missing paperwork. Should I submit anyway?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"missing-paperwork-claim\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-d372af653882cba3",
+      "rule": "S1",
+      "topic": "billing-and-claims",
+      "recommended_disposition": "keep-product-overlays-separate",
+      "scores": {
+        "title_jaccard": 0.5,
+        "title_containment": 1,
+        "title_and_summary_jaccard": 0.0645
+      },
+      "shared_title_tokens": [
+        "claim",
+        "submit"
+      ],
+      "shared_anchor_tokens": [
+        "claim"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.billing.how-do-i-submit-a-claim",
+          "parent_content_key": "caremetric-emr.faq.in-app.billing",
+          "title": "How do I submit a claim?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=billing][question-slug=how-do-i-submit-a-claim]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "biller",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.secondary-generate-submits",
+          "title": "Does generating a secondary claim submit it?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"secondary-generate-submits\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-2ad1c04bd51853a9",
+      "rule": "S1",
+      "topic": "billing-and-claims",
+      "recommended_disposition": "keep-product-overlays-separate",
+      "scores": {
+        "title_jaccard": 0.5,
+        "title_containment": 1,
+        "title_and_summary_jaccard": 0.0968
+      },
+      "shared_title_tokens": [
+        "claim",
+        "submit"
+      ],
+      "shared_anchor_tokens": [
+        "bill",
+        "claim"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.billing.how-do-i-submit-a-claim",
+          "parent_content_key": "caremetric-emr.faq.in-app.billing",
+          "title": "How do I submit a claim?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=billing][question-slug=how-do-i-submit-a-claim]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "biller",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.submit-a-claim",
+          "title": "Take a claim from eligibility to submission",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"submit-a-claim\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Biller"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-d3567d9776c8f904",
+      "rule": "S3",
+      "topic": "telehealth",
+      "recommended_disposition": "extract-patient-join-basics-keep-provider-workflow-and-vendor-as-overlays",
+      "scores": {
+        "title_jaccard": 0.25,
+        "title_containment": 0.5,
+        "title_and_summary_jaccard": 0.069
+      },
+      "shared_title_tokens": [
+        "telehealth"
+      ],
+      "shared_anchor_tokens": [
+        "telehealth"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.getting-started.how-do-i-configure-telehealth",
+          "parent_content_key": "caremetric-emr.faq.in-app.getting-started",
+          "title": "How do I configure telehealth?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=getting-started][question-slug=how-do-i-configure-telehealth]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.schedule-a-video-visit",
+          "title": "Run a video visit with a patient",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"schedule-a-video-visit\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Clinician or CSR"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-28e1f0a12fb675fc",
+      "rule": "S2",
+      "topic": "patient-communications",
+      "recommended_disposition": "extract-channel-neutral-core-keep-consent-routing-and-branding-as-overlays",
+      "scores": {
+        "title_jaccard": 0.2857,
+        "title_containment": 0.6667,
+        "title_and_summary_jaccard": 0.1154
+      },
+      "shared_title_tokens": [
+        "message",
+        "patient"
+      ],
+      "shared_anchor_tokens": [
+        "message",
+        "patient"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.patients.how-do-i-send-a-message-to-a-patient",
+          "parent_content_key": "caremetric-emr.faq.in-app.patients",
+          "title": "How do I send a message to a patient?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=patients][question-slug=how-do-i-send-a-message-to-a-patient]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.campaign-vs-alert",
+          "title": "I need to message one patient. Campaign or alert?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"campaign-vs-alert\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-87a714084ace0755",
+      "rule": "S2",
+      "topic": "patient-communications",
+      "recommended_disposition": "extract-channel-neutral-core-keep-consent-routing-and-branding-as-overlays",
+      "scores": {
+        "title_jaccard": 0.2857,
+        "title_containment": 0.6667,
+        "title_and_summary_jaccard": 0.1154
+      },
+      "shared_title_tokens": [
+        "message",
+        "patient"
+      ],
+      "shared_anchor_tokens": [
+        "message",
+        "patient"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.patients.how-do-i-send-a-message-to-a-patient",
+          "parent_content_key": "caremetric-emr.faq.in-app.patients",
+          "title": "How do I send a message to a patient?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=patients][question-slug=how-do-i-send-a-message-to-a-patient]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.did-it-send",
+          "title": "How do I tell whether a message actually reached the patient?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"did-it-send\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-6525af54b642f520",
+      "rule": "S1",
+      "topic": "patient-communications",
+      "recommended_disposition": "extract-channel-neutral-core-keep-consent-routing-and-branding-as-overlays",
+      "scores": {
+        "title_jaccard": 0.4,
+        "title_containment": 0.6667,
+        "title_and_summary_jaccard": 0.0714
+      },
+      "shared_title_tokens": [
+        "message",
+        "patient"
+      ],
+      "shared_anchor_tokens": [
+        "message",
+        "patient"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.patients.how-do-i-send-a-message-to-a-patient",
+          "parent_content_key": "caremetric-emr.faq.in-app.patients",
+          "title": "How do I send a message to a patient?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=patients][question-slug=how-do-i-send-a-message-to-a-patient]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.messages-from-platform",
+          "title": "Why do patient messages come from a name that isn't ours?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"messages-from-platform\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-a97e714cb35e2bdb",
+      "rule": "S1",
+      "topic": "patient-communications",
+      "recommended_disposition": "extract-channel-neutral-core-keep-consent-routing-and-branding-as-overlays",
+      "scores": {
+        "title_jaccard": 0.4,
+        "title_containment": 0.6667,
+        "title_and_summary_jaccard": 0.1429
+      },
+      "shared_title_tokens": [
+        "message",
+        "patient"
+      ],
+      "shared_anchor_tokens": [
+        "message",
+        "patient"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.patients.how-do-i-send-a-message-to-a-patient",
+          "parent_content_key": "caremetric-emr.faq.in-app.patients",
+          "title": "How do I send a message to a patient?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=patients][question-slug=how-do-i-send-a-message-to-a-patient]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.answer-a-patient-message",
+          "title": "Answer an inbound patient message",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"answer-a-patient-message\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "CSR or admin"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-e08a3c569b7fbd46",
+      "rule": "S1",
+      "topic": "patient-communications",
+      "recommended_disposition": "extract-channel-neutral-core-keep-consent-routing-and-branding-as-overlays",
+      "scores": {
+        "title_jaccard": 0.3333,
+        "title_containment": 0.6667,
+        "title_and_summary_jaccard": 0.0968
+      },
+      "shared_title_tokens": [
+        "message",
+        "patient"
+      ],
+      "shared_anchor_tokens": [
+        "message",
+        "patient"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.patients.how-do-i-send-a-message-to-a-patient",
+          "parent_content_key": "caremetric-emr.faq.in-app.patients",
+          "title": "How do I send a message to a patient?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=patients][question-slug=how-do-i-send-a-message-to-a-patient]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.brand-outbound-communications",
+          "title": "Make patient messages come from your brand",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"brand-outbound-communications\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Owner or admin"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-3fb673118eaa9d19",
+      "rule": "S1",
+      "topic": "patient-communications",
+      "recommended_disposition": "extract-channel-neutral-core-keep-consent-routing-and-branding-as-overlays",
+      "scores": {
+        "title_jaccard": 0.3333,
+        "title_containment": 0.6667,
+        "title_and_summary_jaccard": 0.1034
+      },
+      "shared_title_tokens": [
+        "message",
+        "send"
+      ],
+      "shared_anchor_tokens": [
+        "message"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.patients.how-do-i-send-a-message-to-a-patient",
+          "parent_content_key": "caremetric-emr.faq.in-app.patients",
+          "title": "How do I send a message to a patient?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=patients][question-slug=how-do-i-send-a-message-to-a-patient]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.send-a-bulk-campaign",
+          "title": "Send a bulk SMS or email campaign",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"send-a-bulk-campaign\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Admin or marketing"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-da8ec4974c24c212",
+      "rule": "S1",
+      "topic": "patient-records",
+      "recommended_disposition": "keep-product-overlays-separate",
+      "scores": {
+        "title_jaccard": 0.4,
+        "title_containment": 0.6667,
+        "title_and_summary_jaccard": 0.1379
+      },
+      "shared_title_tokens": [
+        "chart",
+        "patient"
+      ],
+      "shared_anchor_tokens": [
+        "data",
+        "document",
+        "patient"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.patients.how-do-i-upload-documents-to-a-patient-chart",
+          "parent_content_key": "caremetric-emr.faq.in-app.patients",
+          "title": "How do I upload documents to a patient chart?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=patients][question-slug=how-do-i-upload-documents-to-a-patient-chart]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.guide.patients",
+          "title": "Patients — the roster and the chart",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+          "source_selector": "GUIDE_SECTIONS[id=\"patients\"]",
+          "route_template": "/admin/resources/user-guide#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-659df13cc2dcec0a",
+      "rule": "S1",
+      "topic": "insurance-eligibility",
+      "recommended_disposition": "extract-definitional-core-keep-payer-benefit-and-navigation-as-overlays",
+      "scores": {
+        "title_jaccard": 0.3333,
+        "title_containment": 0.6667,
+        "title_and_summary_jaccard": 0.2143
+      },
+      "shared_title_tokens": [
+        "insurance",
+        "verify"
+      ],
+      "shared_anchor_tokens": [
+        "eligibility",
+        "patient"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.patients.how-do-i-verify-insurance-eligibility",
+          "parent_content_key": "caremetric-emr.faq.in-app.patients",
+          "title": "How do I verify insurance eligibility?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=patients][question-slug=how-do-i-verify-insurance-eligibility]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.verify-a-patients-insurance",
+          "title": "Verify a patient's insurance right now",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"verify-a-patients-insurance\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "CSR or biller"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-c889d6af7ddd5aa0",
+      "rule": "S1",
+      "topic": "team-invitations-and-role-access",
+      "recommended_disposition": "extract-shared-core-with-route-and-role-overlays",
+      "scores": {
+        "title_jaccard": 0.4,
+        "title_containment": 0.6667,
+        "title_and_summary_jaccard": 0.2083
+      },
+      "shared_title_tokens": [
+        "add",
+        "user"
+      ],
+      "shared_anchor_tokens": [
+        "invite",
+        "role",
+        "user"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.settings.how-do-i-add-staff-members",
+          "parent_content_key": "caremetric-emr.faq.in-app.settings",
+          "title": "How do I add staff members?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=settings][question-slug=how-do-i-add-staff-members]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.invite-your-team",
+          "title": "Add a teammate and set their role",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"invite-your-team\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Admin"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-376963e90959e95e",
+      "rule": "S3",
+      "topic": "fax",
+      "recommended_disposition": "keep-product-overlays-separate",
+      "scores": {
+        "title_jaccard": 0.2,
+        "title_containment": 0.5,
+        "title_and_summary_jaccard": 0.0769
+      },
+      "shared_title_tokens": [
+        "fax"
+      ],
+      "shared_anchor_tokens": [
+        "fax",
+        "patient"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.features.can-i-fax-from-the-system",
+          "parent_content_key": "caremetric-emr.faq.public.features",
+          "title": "Can I fax from the system?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=features][question-slug=can-i-fax-from-the-system]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.triage-inbound-faxes",
+          "title": "Triage the inbound fax queue",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"triage-inbound-faxes\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "CSR or intake specialist"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-ca72039f2428a420",
+      "rule": "S3",
+      "topic": "account-authentication-and-mfa",
+      "recommended_disposition": "human-review-then-extract-shared-core",
+      "scores": {
+        "title_jaccard": 0.25,
+        "title_containment": 0.5,
+        "title_and_summary_jaccard": 0.0612
+      },
+      "shared_title_tokens": [
+        "mfa"
+      ],
+      "shared_anchor_tokens": [
+        "auth",
+        "mfa",
+        "user"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.security.do-you-offer-two-factor-authentication",
+          "parent_content_key": "caremetric-emr.faq.public.security",
+          "title": "Do you offer two-factor authentication?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=security][question-slug=do-you-offer-two-factor-authentication]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.mfa-enforced",
+          "title": "Is multi-factor authentication required to sign in?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"mfa-enforced\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-8e553585334091eb",
+      "rule": "S3",
+      "topic": "account-authentication-and-mfa",
+      "recommended_disposition": "human-review-then-extract-shared-core",
+      "scores": {
+        "title_jaccard": 0.25,
+        "title_containment": 0.5,
+        "title_and_summary_jaccard": 0.1053
+      },
+      "shared_title_tokens": [
+        "mfa"
+      ],
+      "shared_anchor_tokens": [
+        "auth",
+        "mfa"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.security.do-you-offer-two-factor-authentication",
+          "parent_content_key": "caremetric-emr.faq.public.security",
+          "title": "Do you offer two-factor authentication?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=security][question-slug=do-you-offer-two-factor-authentication]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.how-to.secure-your-account",
+          "title": "Secure your own account with multi-factor authentication",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"secure-your-account\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Everyone"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-c71c936c9067d4db",
+      "rule": "S3",
+      "topic": "integration-configuration",
+      "recommended_disposition": "extract-security-and-status-core-keep-vendors-fields-and-routes-as-overlays",
+      "scores": {
+        "title_jaccard": 0.3333,
+        "title_containment": 0.5,
+        "title_and_summary_jaccard": 0.0526
+      },
+      "shared_title_tokens": [
+        "integration"
+      ],
+      "shared_anchor_tokens": [
+        "integration"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.guide.integration-setup",
+          "title": "Integration Setup Guide",
+          "source_path": "public/docs/pdf/INTEGRATION_SETUP_GUIDE.md",
+          "source_sha": "d29e5cf665da3c6762e1543f83465f330cb472d8",
+          "route_template": "/docs/pdf/INTEGRATION_SETUP_GUIDE.md",
+          "audience": [
+            "practice_admin",
+            "super_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.guide.operations",
+          "title": "Operations and integrations",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+          "source_selector": "GUIDE_SECTIONS[id=\"operations\"]",
+          "route_template": "/admin/resources/user-guide#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-de24e3ca990c4b24",
+      "rule": "S3",
+      "topic": "integration-configuration",
+      "recommended_disposition": "extract-security-and-status-core-keep-vendors-fields-and-routes-as-overlays",
+      "scores": {
+        "title_jaccard": 0.1429,
+        "title_containment": 0.5,
+        "title_and_summary_jaccard": 0.087
+      },
+      "shared_title_tokens": [
+        "integration"
+      ],
+      "shared_anchor_tokens": [
+        "integration"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.guide.integration-setup",
+          "title": "Integration Setup Guide",
+          "source_path": "public/docs/pdf/INTEGRATION_SETUP_GUIDE.md",
+          "source_sha": "d29e5cf665da3c6762e1543f83465f330cb472d8",
+          "route_template": "/docs/pdf/INTEGRATION_SETUP_GUIDE.md",
+          "audience": [
+            "practice_admin",
+            "super_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.connect-an-integration",
+          "title": "Connect a therapy-cloud, clearinghouse, or partner integration",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"connect-an-integration\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Owner"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-7de0b28697a0aae3",
+      "rule": "S3",
+      "topic": "integration-configuration",
+      "recommended_disposition": "extract-security-and-status-core-keep-vendors-fields-and-routes-as-overlays",
+      "scores": {
+        "title_jaccard": 0.1667,
+        "title_containment": 0.5,
+        "title_and_summary_jaccard": 0.0455
+      },
+      "shared_title_tokens": [
+        "integration"
+      ],
+      "shared_anchor_tokens": [
+        "integration"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.guide.integration-setup",
+          "title": "Integration Setup Guide",
+          "source_path": "public/docs/pdf/INTEGRATION_SETUP_GUIDE.md",
+          "source_sha": "d29e5cf665da3c6762e1543f83465f330cb472d8",
+          "route_template": "/docs/pdf/INTEGRATION_SETUP_GUIDE.md",
+          "audience": [
+            "practice_admin",
+            "super_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.integration-unavailable",
+          "title": "An integration shows as unavailable. Which credential is missing?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"integration-unavailable\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-471e6f295994213a",
+      "rule": "S3",
+      "topic": "telehealth",
+      "recommended_disposition": "extract-patient-join-basics-keep-provider-workflow-and-vendor-as-overlays",
+      "scores": {
+        "title_jaccard": 0.25,
+        "title_containment": 0.5,
+        "title_and_summary_jaccard": 0.04
+      },
+      "shared_title_tokens": [
+        "telehealth"
+      ],
+      "shared_anchor_tokens": [
+        "telehealth"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.guide.telehealth-setup",
+          "title": "Telehealth Setup Guide",
+          "source_path": "public/docs/pdf/TELEHEALTH_SETUP.md",
+          "source_sha": "2fb6bc093e2253891a5926497587ce85497d0e89",
+          "route_template": "/docs/pdf/TELEHEALTH_SETUP.md",
+          "audience": [
+            "provider",
+            "front_desk",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.schedule-a-video-visit",
+          "title": "Run a video visit with a patient",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"schedule-a-video-visit\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Clinician or CSR"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-c0014885a20e621a",
+      "rule": "S3",
+      "topic": "automation-rules",
+      "recommended_disposition": "extract-conceptual-core-keep-trigger-action-catalogs-as-overlays",
+      "scores": {
+        "title_jaccard": 0.3333,
+        "title_containment": 1,
+        "title_and_summary_jaccard": 0.0465
+      },
+      "shared_title_tokens": [
+        "automation"
+      ],
+      "shared_anchor_tokens": [
+        "automation"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.automation",
+          "title": "Automation Rules Engine",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=automation]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.guide.automation",
+          "title": "Automation",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+          "source_selector": "GUIDE_SECTIONS[id=\"automation\"]",
+          "route_template": "/admin/resources/user-guide#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-01d63c569ae8f480",
+      "rule": "S1",
+      "topic": "automation-rules",
+      "recommended_disposition": "extract-conceptual-core-keep-trigger-action-catalogs-as-overlays",
+      "scores": {
+        "title_jaccard": 0.3333,
+        "title_containment": 0.6667,
+        "title_and_summary_jaccard": 0.0652
+      },
+      "shared_title_tokens": [
+        "automation",
+        "rule"
+      ],
+      "shared_anchor_tokens": [
+        "automation"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.automation",
+          "title": "Automation Rules Engine",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=automation]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.rule-not-firing",
+          "title": "I enabled an automation rule and nothing happens.",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"rule-not-firing\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-fedc5eb58976eff1",
+      "rule": "S1",
+      "topic": "billing-and-claims",
+      "recommended_disposition": "keep-product-overlays-separate",
+      "scores": {
+        "title_jaccard": 0.4,
+        "title_containment": 0.6667,
+        "title_and_summary_jaccard": 0.0652
+      },
+      "shared_title_tokens": [
+        "claim",
+        "submit"
+      ],
+      "shared_anchor_tokens": [
+        "claim"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.billing",
+          "title": "Billing & Claims Submission",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=billing]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "biller",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.secondary-generate-submits",
+          "title": "Does generating a secondary claim submit it?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"secondary-generate-submits\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-385747b01f3a4b70",
+      "rule": "S1",
+      "topic": "billing-and-claims",
+      "recommended_disposition": "keep-product-overlays-separate",
+      "scores": {
+        "title_jaccard": 0.4,
+        "title_containment": 0.6667,
+        "title_and_summary_jaccard": 0.1111
+      },
+      "shared_title_tokens": [
+        "claim",
+        "submit"
+      ],
+      "shared_anchor_tokens": [
+        "bill",
+        "claim"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.billing",
+          "title": "Billing & Claims Submission",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=billing]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "biller",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.submit-a-claim",
+          "title": "Take a claim from eligibility to submission",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"submit-a-claim\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Biller"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-0eccb9101bf53cea",
+      "rule": "S1",
+      "topic": "audit-and-documentation",
+      "recommended_disposition": "keep-product-overlays-separate-until-terminology-review",
+      "scores": {
+        "title_jaccard": 0.3333,
+        "title_containment": 0.6667,
+        "title_and_summary_jaccard": 0.1905
+      },
+      "shared_title_tokens": [
+        "audit",
+        "documentation"
+      ],
+      "shared_anchor_tokens": [
+        "audit"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.ccm.audit",
+          "title": "Audit Readiness & Documentation",
+          "source_path": "src/components/ccm/CCMUserManual.tsx",
+          "source_selector": "sections[id=audit].content",
+          "source_sha": "f1ff2cc7655aa3d71bcbd29bb859249225825c73",
+          "route_template": "/dashboard/ccm",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "biller",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.respond-to-an-adr",
+          "title": "Respond to a payer documentation request or audit",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"respond-to-an-adr\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Biller or admin"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-0d8604f5308eed2c",
+      "rule": "S3",
+      "topic": "integration-configuration",
+      "recommended_disposition": "extract-security-and-status-core-keep-vendors-fields-and-routes-as-overlays",
+      "scores": {
+        "title_jaccard": 0.25,
+        "title_containment": 0.5,
+        "title_and_summary_jaccard": 0.0667
+      },
+      "shared_title_tokens": [
+        "integration"
+      ],
+      "shared_anchor_tokens": [
+        "integration"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.fhir.add-connection",
+          "title": "How to Add a FHIR Connection",
+          "source_path": "src/components/interop/FHIRUserManual.tsx",
+          "source_selector": "section[id=add-connection]",
+          "source_sha": "0b4bb5abeee38819940bceb629ad038ba1758fca",
+          "route_template": "/dashboard/fhir-hub",
+          "audience": [
+            "provider",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.guide.operations",
+          "title": "Operations and integrations",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+          "source_selector": "GUIDE_SECTIONS[id=\"operations\"]",
+          "route_template": "/admin/resources/user-guide#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-7ae5aade1857be60",
+      "rule": "S3",
+      "topic": "integration-configuration",
+      "recommended_disposition": "extract-security-and-status-core-keep-vendors-fields-and-routes-as-overlays",
+      "scores": {
+        "title_jaccard": 0.1667,
+        "title_containment": 0.5,
+        "title_and_summary_jaccard": 0.0526
+      },
+      "shared_title_tokens": [
+        "integration"
+      ],
+      "shared_anchor_tokens": [
+        "integration"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.fhir.connection-fields",
+          "title": "Connection Fields: What Each One Means",
+          "source_path": "src/components/interop/FHIRUserManual.tsx",
+          "source_selector": "section[id=connection-fields]",
+          "source_sha": "0b4bb5abeee38819940bceb629ad038ba1758fca",
+          "route_template": "/dashboard/fhir-hub",
+          "audience": [
+            "provider",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.guide.operations",
+          "title": "Operations and integrations",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+          "source_selector": "GUIDE_SECTIONS[id=\"operations\"]",
+          "route_template": "/admin/resources/user-guide#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-b137d2ae6b991f69",
+      "rule": "S1",
+      "topic": "patient-records",
+      "recommended_disposition": "keep-product-overlays-separate",
+      "scores": {
+        "title_jaccard": 0.6667,
+        "title_containment": 1,
+        "title_and_summary_jaccard": 0.1538
+      },
+      "shared_title_tokens": [
+        "chart",
+        "patient"
+      ],
+      "shared_anchor_tokens": [
+        "data",
+        "document",
+        "patient"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.patient-chart",
+          "title": "Patient Chart",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=patient-chart]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk",
+            "biller",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.guide.patients",
+          "title": "Patients — the roster and the chart",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+          "source_selector": "GUIDE_SECTIONS[id=\"patients\"]",
+          "route_template": "/admin/resources/user-guide#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-1fc66a53a6fb7068",
+      "rule": "S1",
+      "topic": "team-invitations-and-role-access",
+      "recommended_disposition": "extract-shared-core-with-route-and-role-overlays",
+      "scores": {
+        "title_jaccard": 0.4,
+        "title_containment": 0.6667,
+        "title_and_summary_jaccard": 0.0857
+      },
+      "shared_title_tokens": [
+        "role",
+        "user"
+      ],
+      "shared_anchor_tokens": [
+        "role",
+        "user"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.user-management",
+          "title": "User & Role Management",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=user-management]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "practice_admin"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.invite-your-team",
+          "title": "Add a teammate and set their role",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"invite-your-team\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Admin"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-21c086fd3dfea6a3",
+      "rule": "S1",
+      "topic": "patient-records",
+      "recommended_disposition": "keep-product-overlays-separate",
+      "scores": {
+        "title_jaccard": 0.5,
+        "title_containment": 0.6667,
+        "title_and_summary_jaccard": 0.0789
+      },
+      "shared_title_tokens": [
+        "chart",
+        "patient"
+      ],
+      "shared_anchor_tokens": [
+        "data",
+        "patient"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.troubleshooting.patient-chart.patient-chart-will-not-load",
+          "parent_content_key": "caremetric-emr.troubleshooting.patient-chart",
+          "title": "Patient chart will not load",
+          "source_path": "src/components/marketing/TroubleshootingKB.tsx",
+          "source_selector": "MODULES[module=Patient Chart].entries[symptom-slug=patient-chart-will-not-load]",
+          "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+          "route_template": "/admin/content",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.guide.patients",
+          "title": "Patients — the roster and the chart",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+          "source_selector": "GUIDE_SECTIONS[id=\"patients\"]",
+          "route_template": "/admin/resources/user-guide#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "pair_id": "pair-767a2f2b97615c12",
+      "rule": "S1",
+      "topic": "telehealth",
+      "recommended_disposition": "extract-patient-join-basics-keep-provider-workflow-and-vendor-as-overlays",
+      "scores": {
+        "title_jaccard": 0.4,
+        "title_containment": 0.6667,
+        "title_and_summary_jaccard": 0.093
+      },
+      "shared_title_tokens": [
+        "patient",
+        "telehealth"
+      ],
+      "shared_anchor_tokens": [
+        "patient",
+        "telehealth"
+      ],
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.troubleshooting.telehealth.patient-cannot-join-the-telehealth-session",
+          "parent_content_key": "caremetric-emr.troubleshooting.telehealth",
+          "title": "Patient cannot join the telehealth session",
+          "source_path": "src/components/marketing/TroubleshootingKB.tsx",
+          "source_selector": "MODULES[module=Telehealth].entries[symptom-slug=patient-cannot-join-the-telehealth-session]",
+          "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+          "route_template": "/admin/content",
+          "audience": [
+            "provider",
+            "front_desk"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.schedule-a-video-visit",
+          "title": "Run a video visit with a patient",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"schedule-a-video-visit\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Clinician or CSR"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    }
+  ],
+  "proposed_canonical_shared_core_groups": [
+    {
+      "canonical_key": "core.support.contact-and-escalation",
+      "proposed_title": "Get help, report a problem, or suggest a feature",
+      "status": "proposal-only-not-published",
+      "shared_core_boundary": "One product-neutral decision tree for self-service help, person-assisted support, incident escalation, and feature feedback.",
+      "product_overlay_boundary": "Keep each product route, assistant availability, ticket fallback, support entitlement, and any approved response-time promise in product overlays.",
+      "member_count": 6,
+      "members": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.chatbot.troubleshooting.contact_support",
+          "parent_content_key": "caremetric-emr.chatbot.troubleshooting",
+          "title": "contact support",
+          "source_path": "src/lib/pdf/templates/chatbotTraining.ts",
+          "source_selector": "CHATBOT_TRAINING_INTENTS[category=Troubleshooting].intents[intent=contact_support]",
+          "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+          "route_template": "/admin/content",
+          "audience": [
+            "support_editor",
+            "super_admin"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.support.how-do-i-access-the-support-center",
+          "parent_content_key": "caremetric-emr.faq.public.support",
+          "title": "How do I access the Support Center?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=support][question-slug=how-do-i-access-the-support-center]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.support.what-if-i-find-a-bug-or-have-a-feature-request",
+          "parent_content_key": "caremetric-emr.faq.public.support",
+          "title": "What if I find a bug or have a feature request?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=support][question-slug=what-if-i-find-a-bug-or-have-a-feature-request]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.support.what-kind-of-support-do-you-offer",
+          "parent_content_key": "caremetric-emr.faq.public.support",
+          "title": "What kind of support do you offer?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=support][question-slug=what-kind-of-support-do-you-offer]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.how-to.get-help-and-report-a-problem",
+          "title": "Get help, report a problem, or suggest a feature",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"get-help-and-report-a-problem\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Everyone"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.assistant-vs-support",
+          "title": "Should I ask the assistant or file a support ticket?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"assistant-vs-support\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "canonical_key": "core.account.mfa-enrollment-and-recovery",
+      "proposed_title": "Set up, use, and recover multi-factor authentication",
+      "status": "proposal-only-not-published",
+      "shared_core_boundary": "Explain why MFA matters, enrollment, challenge flow, recovery before replacing a device, and the administrator escalation path.",
+      "product_overlay_boundary": "Keep supported factors, enforcement state, exact screens, lockout timing, and reset authority per product/deployment.",
+      "member_count": 6,
+      "members": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.security.do-you-offer-two-factor-authentication",
+          "parent_content_key": "caremetric-emr.faq.public.security",
+          "title": "Do you offer two-factor authentication?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=security][question-slug=do-you-offer-two-factor-authentication]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.user-management",
+          "title": "User & Role Management",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=user-management]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "practice_admin"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.troubleshooting.login-and-authentication.2fa-code-not-received",
+          "parent_content_key": "caremetric-emr.troubleshooting.login-and-authentication",
+          "title": "2FA code not received",
+          "source_path": "src/components/marketing/TroubleshootingKB.tsx",
+          "source_selector": "MODULES[module=Login & Authentication].entries[symptom-slug=2fa-code-not-received]",
+          "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+          "route_template": "/admin/content",
+          "audience": [
+            "all_authenticated",
+            "practice_admin"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.how-to.secure-your-account",
+          "title": "Secure your own account with multi-factor authentication",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"secure-your-account\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Everyone"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.mfa-enforced",
+          "title": "Is multi-factor authentication required to sign in?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"mfa-enforced\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.new-phone-mfa",
+          "title": "I'm getting a new phone. What do I do about my authenticator?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"new-phone-mfa\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "canonical_key": "core.access.roles-and-page-visibility",
+      "proposed_title": "Invite teammates, assign roles, and diagnose missing pages",
+      "status": "proposal-only-not-published",
+      "shared_core_boundary": "Teach least privilege, invitation lifecycle, the distinction between role permission and module visibility, and the first checks when a page is absent.",
+      "product_overlay_boundary": "Keep role names, permission matrices, module switches, invitation channels, and navigation paths per product.",
+      "member_count": 7,
+      "members": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.settings.how-do-i-add-staff-members",
+          "parent_content_key": "caremetric-emr.faq.in-app.settings",
+          "title": "How do I add staff members?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=settings][question-slug=how-do-i-add-staff-members]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.security.can-i-control-what-staff-members-can-see",
+          "parent_content_key": "caremetric-emr.faq.public.security",
+          "title": "Can I control what staff members can see?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=security][question-slug=can-i-control-what-staff-members-can-see]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.user-management",
+          "title": "User & Role Management",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=user-management]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "practice_admin"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.troubleshooting.browser-quick-checks.5",
+          "parent_content_key": "caremetric-emr.troubleshooting.browser-quick-checks",
+          "title": "Verify your role has the required permissions for the action.",
+          "source_path": "src/components/marketing/TroubleshootingKB.tsx",
+          "source_selector": "QUICK_CHECKS[4]",
+          "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+          "route_template": "/admin/content",
+          "audience": [
+            "all_authenticated",
+            "support_editor"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.invite-your-team",
+          "title": "Add a teammate and set their role",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"invite-your-team\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Admin"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.which-role",
+          "title": "Which role should I give a new hire?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"which-role\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.missing-page",
+          "title": "A page I was told about isn't in my sidebar. Is it broken?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"missing-page\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "canonical_key": "core.troubleshooting.page-access-and-browser-basics",
+      "proposed_title": "Fix a missing, blank, or non-loading page",
+      "status": "proposal-only-not-published",
+      "shared_core_boundary": "Use a branch-based triage: hidden page versus loading failure, then role/module access, refresh/cache/session, connectivity, browser compatibility, and outage checks.",
+      "product_overlay_boundary": "Keep keyboard shortcuts, supported-browser matrix, status-page links, route names, and product maintenance behavior in overlays.",
+      "member_count": 9,
+      "members": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.chatbot.troubleshooting.page_not_loading",
+          "parent_content_key": "caremetric-emr.chatbot.troubleshooting",
+          "title": "page not loading",
+          "source_path": "src/lib/pdf/templates/chatbotTraining.ts",
+          "source_selector": "CHATBOT_TRAINING_INTENTS[category=Troubleshooting].intents[intent=page_not_loading]",
+          "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+          "route_template": "/admin/content",
+          "audience": [
+            "support_editor",
+            "super_admin"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.troubleshooting.browser-quick-checks.1",
+          "parent_content_key": "caremetric-emr.troubleshooting.browser-quick-checks",
+          "title": "Confirm you are on a supported browser: Chrome, Edge, or Safari (latest version).",
+          "source_path": "src/components/marketing/TroubleshootingKB.tsx",
+          "source_selector": "QUICK_CHECKS[0]",
+          "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+          "route_template": "/admin/content",
+          "audience": [
+            "all_authenticated",
+            "support_editor"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.troubleshooting.browser-quick-checks.2",
+          "parent_content_key": "caremetric-emr.troubleshooting.browser-quick-checks",
+          "title": "Try a hard refresh: Ctrl+Shift+R (Windows) or Cmd+Shift+R (Mac).",
+          "source_path": "src/components/marketing/TroubleshootingKB.tsx",
+          "source_selector": "QUICK_CHECKS[1]",
+          "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+          "route_template": "/admin/content",
+          "audience": [
+            "all_authenticated",
+            "support_editor"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.troubleshooting.browser-quick-checks.3",
+          "parent_content_key": "caremetric-emr.troubleshooting.browser-quick-checks",
+          "title": "Clear browser cache and cookies if issues persist.",
+          "source_path": "src/components/marketing/TroubleshootingKB.tsx",
+          "source_selector": "QUICK_CHECKS[2]",
+          "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+          "route_template": "/admin/content",
+          "audience": [
+            "all_authenticated",
+            "support_editor"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.troubleshooting.browser-quick-checks.4",
+          "parent_content_key": "caremetric-emr.troubleshooting.browser-quick-checks",
+          "title": "Check your internet connection is stable.",
+          "source_path": "src/components/marketing/TroubleshootingKB.tsx",
+          "source_selector": "QUICK_CHECKS[3]",
+          "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+          "route_template": "/admin/content",
+          "audience": [
+            "all_authenticated",
+            "support_editor"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.troubleshooting.browser-quick-checks.6",
+          "parent_content_key": "caremetric-emr.troubleshooting.browser-quick-checks",
+          "title": "If all users are affected, a system maintenance may be in progress.",
+          "source_path": "src/components/marketing/TroubleshootingKB.tsx",
+          "source_selector": "QUICK_CHECKS[5]",
+          "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+          "route_template": "/admin/content",
+          "audience": [
+            "all_authenticated",
+            "support_editor"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.troubleshooting.dashboard.dashboard-panels-are-blank-or-not-loading",
+          "parent_content_key": "caremetric-emr.troubleshooting.dashboard",
+          "title": "Dashboard panels are blank or not loading",
+          "source_path": "src/components/marketing/TroubleshootingKB.tsx",
+          "source_selector": "MODULES[module=Dashboard].entries[symptom-slug=dashboard-panels-are-blank-or-not-loading]",
+          "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+          "route_template": "/admin/content",
+          "audience": [
+            "all_authenticated",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.missing-page",
+          "title": "A page I was told about isn't in my sidebar. Is it broken?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"missing-page\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.navigate-the-console",
+          "title": "Find your way around the console",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"navigate-the-console\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Everyone"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "canonical_key": "core.audit.find-who-changed-a-record",
+      "proposed_title": "Use the audit trail to investigate a change",
+      "status": "proposal-only-not-published",
+      "shared_core_boundary": "Explain actor, action, timestamp, access control, and a safe investigation sequence without product-specific retention or compliance promises.",
+      "product_overlay_boundary": "Keep log schemas, retention period, export privileges, anomaly analysis, payer audits, and document legal holds separate.",
+      "member_count": 3,
+      "members": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.compliance",
+          "title": "Compliance & Audit Logs",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=compliance]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "biller",
+            "practice_admin"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.security.how-are-audit-logs-maintained",
+          "parent_content_key": "caremetric-emr.faq.public.security",
+          "title": "How are audit logs maintained?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=security][question-slug=how-are-audit-logs-maintained]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.who-changed-this",
+          "title": "Something changed on a record and nobody knows who did it.",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"who-changed-this\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "canonical_key": "core.automation.rule-basics-and-testing",
+      "proposed_title": "Build and troubleshoot an automation rule",
+      "status": "proposal-only-not-published",
+      "shared_core_boundary": "Define triggers, conditions, actions, enablement, test inputs, and dry-run verification as a reusable model.",
+      "product_overlay_boundary": "Keep each product trigger/action catalog, clinical automation, resupply cadence, channel rules, and exact tester route in overlays.",
+      "member_count": 4,
+      "members": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.automation",
+          "title": "Automation Rules Engine",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=automation]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.guide.automation",
+          "title": "Automation",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+          "source_selector": "GUIDE_SECTIONS[id=\"automation\"]",
+          "route_template": "/admin/resources/user-guide#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.build-an-automation-rule",
+          "title": "Set reminder frequency rules and simulate them",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"build-an-automation-rule\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Admin"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.rule-not-firing",
+          "title": "I enabled an automation rule and nothing happens.",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"rule-not-firing\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "canonical_key": "core.integrations.status-credentials-and-testing",
+      "proposed_title": "Connect an integration and diagnose unavailable status",
+      "status": "proposal-only-not-published",
+      "shared_core_boundary": "Cover authorized configuration surfaces, connection status, test-before-save, least disclosure, and escalation without exposing credential values.",
+      "product_overlay_boundary": "Keep vendor names, required fields, owner-only routes, healthcare interoperability rules, manual CSV exchange, and credentials per product.",
+      "member_count": 7,
+      "members": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.chatbot.system-settings-and-configuration.configure_integrations",
+          "parent_content_key": "caremetric-emr.chatbot.system-settings-and-configuration",
+          "title": "configure integrations",
+          "source_path": "src/lib/pdf/templates/chatbotTraining.ts",
+          "source_selector": "CHATBOT_TRAINING_INTENTS[category=System Settings & Configuration].intents[intent=configure_integrations]",
+          "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+          "route_template": "/admin/content",
+          "audience": [
+            "support_editor",
+            "super_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.guide.integration-setup",
+          "title": "Integration Setup Guide",
+          "source_path": "public/docs/pdf/INTEGRATION_SETUP_GUIDE.md",
+          "source_sha": "d29e5cf665da3c6762e1543f83465f330cb472d8",
+          "route_template": "/docs/pdf/INTEGRATION_SETUP_GUIDE.md",
+          "audience": [
+            "practice_admin",
+            "super_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.integrations",
+          "title": "Integrations (Labs, Payers, FHIR)",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=integrations]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "practice_admin",
+            "super_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.fhir.connection-fields",
+          "title": "Connection Fields: What Each One Means",
+          "source_path": "src/components/interop/FHIRUserManual.tsx",
+          "source_selector": "section[id=connection-fields]",
+          "source_sha": "0b4bb5abeee38819940bceb629ad038ba1758fca",
+          "route_template": "/dashboard/fhir-hub",
+          "audience": [
+            "provider",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.connect-an-integration",
+          "title": "Connect a therapy-cloud, clearinghouse, or partner integration",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"connect-an-integration\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Owner"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.integration-unavailable",
+          "title": "An integration shows as unavailable. Which credential is missing?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"integration-unavailable\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.guide.operations",
+          "title": "Operations and integrations",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+          "source_selector": "GUIDE_SECTIONS[id=\"operations\"]",
+          "route_template": "/admin/resources/user-guide#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "canonical_key": "core.communications.send-reply-and-check-delivery",
+      "proposed_title": "Send, answer, and verify a message",
+      "status": "proposal-only-not-published",
+      "shared_core_boundary": "Provide a channel-neutral model for one-to-one send/reply, delivery status, failure triage, and escalation.",
+      "product_overlay_boundary": "Keep consent, STOP handling, quiet hours, clinical urgency, sender branding, bulk campaigns, and product routes in overlays.",
+      "member_count": 7,
+      "members": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.patients.how-do-i-send-a-message-to-a-patient",
+          "parent_content_key": "caremetric-emr.faq.in-app.patients",
+          "title": "How do I send a message to a patient?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=patients][question-slug=how-do-i-send-a-message-to-a-patient]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.chatbot.patient-portal.portal_message_response",
+          "parent_content_key": "caremetric-emr.chatbot.patient-portal",
+          "title": "portal message response",
+          "source_path": "src/lib/pdf/templates/chatbotTraining.ts",
+          "source_selector": "CHATBOT_TRAINING_INTENTS[category=Patient Portal].intents[intent=portal_message_response]",
+          "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+          "route_template": "/admin/content",
+          "audience": [
+            "support_editor",
+            "super_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.messaging",
+          "title": "Messaging, SMS & Tasks",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=messaging]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.troubleshooting.scheduling.sms-appointment-reminders-not-sending",
+          "parent_content_key": "caremetric-emr.troubleshooting.scheduling",
+          "title": "SMS appointment reminders not sending",
+          "source_path": "src/components/marketing/TroubleshootingKB.tsx",
+          "source_selector": "MODULES[module=Scheduling].entries[symptom-slug=sms-appointment-reminders-not-sending]",
+          "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+          "route_template": "/admin/content",
+          "audience": [
+            "provider",
+            "front_desk",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.answer-a-patient-message",
+          "title": "Answer an inbound patient message",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"answer-a-patient-message\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "CSR or admin"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.did-it-send",
+          "title": "How do I tell whether a message actually reached the patient?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"did-it-send\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.how-to.check-operations-health",
+          "title": "Check whether messages and background work are healthy",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"check-operations-health\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Admin"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "canonical_key": "core.reporting.find-and-interpret-reports",
+      "proposed_title": "Find the right report and interpret it safely",
+      "status": "proposal-only-not-published",
+      "shared_core_boundary": "Share report discovery, time-range/filter checks, data-freshness caveats, export basics, and metric-definition links.",
+      "product_overlay_boundary": "Keep report catalogs, clinical predictions, financial metrics, inventory/storefront measures, and role dashboards per product.",
+      "member_count": 3,
+      "members": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.reporting",
+          "title": "Reporting & Analytics",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=reporting]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "biller",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.guide.analytics",
+          "title": "Analytics and reports",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+          "source_selector": "GUIDE_SECTIONS[id=\"analytics\"]",
+          "route_template": "/admin/resources/user-guide#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.find-and-read-a-report",
+          "title": "Find the right report and read it correctly",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"find-and-read-a-report\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Admin or owner"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "canonical_key": "core.telehealth.patient-join-and-media-checks",
+      "proposed_title": "Prepare for and join a video visit",
+      "status": "proposal-only-not-published",
+      "shared_core_boundary": "Share secure-link handling, no-patient-install expectation where verified, supported browser, camera/microphone permission, and connection checks.",
+      "product_overlay_boundary": "Keep scheduling, vendor, provider documentation, billing, ambient-scribe, and route details per product.",
+      "member_count": 5,
+      "members": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.getting-started.how-do-i-configure-telehealth",
+          "parent_content_key": "caremetric-emr.faq.in-app.getting-started",
+          "title": "How do I configure telehealth?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=getting-started][question-slug=how-do-i-configure-telehealth]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.chatbot.scheduling.setup_telehealth_visit",
+          "parent_content_key": "caremetric-emr.chatbot.scheduling",
+          "title": "setup telehealth visit",
+          "source_path": "src/lib/pdf/templates/chatbotTraining.ts",
+          "source_selector": "CHATBOT_TRAINING_INTENTS[category=Scheduling].intents[intent=setup_telehealth_visit]",
+          "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+          "route_template": "/admin/content",
+          "audience": [
+            "support_editor",
+            "super_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.telehealth",
+          "title": "Telehealth (Twilio Video)",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=telehealth]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.troubleshooting.telehealth.patient-cannot-join-the-telehealth-session",
+          "parent_content_key": "caremetric-emr.troubleshooting.telehealth",
+          "title": "Patient cannot join the telehealth session",
+          "source_path": "src/components/marketing/TroubleshootingKB.tsx",
+          "source_selector": "MODULES[module=Telehealth].entries[symptom-slug=patient-cannot-join-the-telehealth-session]",
+          "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+          "route_template": "/admin/content",
+          "audience": [
+            "provider",
+            "front_desk"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.schedule-a-video-visit",
+          "title": "Run a video visit with a patient",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"schedule-a-video-visit\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Clinician or CSR"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "canonical_key": "core.insurance.eligibility-versus-benefit",
+      "proposed_title": "Verify insurance and interpret eligibility correctly",
+      "status": "proposal-only-not-published",
+      "shared_core_boundary": "Share the distinction between active eligibility and item/service coverage, basic demographic verification, and the need to review authoritative payer results.",
+      "product_overlay_boundary": "Keep clearinghouse, payer, DME benefit, copay/deductible, prior authorization, and chart navigation details per product.",
+      "member_count": 4,
+      "members": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.patients.how-do-i-verify-insurance-eligibility",
+          "parent_content_key": "caremetric-emr.faq.in-app.patients",
+          "title": "How do I verify insurance eligibility?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=patients][question-slug=how-do-i-verify-insurance-eligibility]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.verify-a-patients-insurance",
+          "title": "Verify a patient's insurance right now",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"verify-a-patients-insurance\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "CSR or biller"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.eligibility-vs-benefit",
+          "title": "Eligibility came back active. Can I quote the patient a price?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"eligibility-vs-benefit\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.patient-not-found",
+          "title": "The payer says \"patient not found\" on an eligibility check.",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"patient-not-found\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    }
+  ],
+  "product_overlays_that_must_remain_separate": [
+    {
+      "domain": "patient-record-and-workspace",
+      "disposition": "keep-product-overlays-separate",
+      "reason": "EMR describes a longitudinal clinical chart; Breathe describes a DME/CPAP customer record, fitting, order, and service workspace. A shared navigation shell must not merge the underlying clinical or fulfillment workflow.",
+      "representative_sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.patient-chart",
+          "title": "Patient Chart",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=patient-chart]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk",
+            "biller",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.patients.how-do-i-upload-documents-to-a-patient-chart",
+          "parent_content_key": "caremetric-emr.faq.in-app.patients",
+          "title": "How do I upload documents to a patient chart?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=patients][question-slug=how-do-i-upload-documents-to-a-patient-chart]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.guide.patients",
+          "title": "Patients — the roster and the chart",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+          "source_selector": "GUIDE_SECTIONS[id=\"patients\"]",
+          "route_template": "/admin/resources/user-guide#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.find-and-work-a-patient",
+          "title": "Find a patient and work their record",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"find-and-work-a-patient\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Everyone"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "domain": "billing-claims-and-revenue-cycle",
+      "disposition": "keep-product-overlays-separate",
+      "reason": "EMR professional claims use visit coding and its configured clearinghouse; Breathe includes DME eligibility, documentation, HCPCS/modifier, primary/secondary, capped-rental, and fulfillment rules. Similar titles are not interchangeable procedures.",
+      "representative_sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.billing",
+          "title": "Billing & Claims Submission",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=billing]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "biller",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.billing.how-do-i-submit-a-claim",
+          "parent_content_key": "caremetric-emr.faq.in-app.billing",
+          "title": "How do I submit a claim?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=billing][question-slug=how-do-i-submit-a-claim]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "biller",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.submit-a-claim",
+          "title": "Take a claim from eligibility to submission",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"submit-a-claim\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Biller"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.missing-paperwork-claim",
+          "title": "A claim is blocked on missing paperwork. Should I submit anyway?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"missing-paperwork-claim\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.secondary-generate-submits",
+          "title": "Does generating a secondary claim submit it?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"secondary-generate-submits\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "domain": "clinical-ai-and-decision-support",
+      "disposition": "keep-product-overlays-separate",
+      "reason": "EMR clinical documentation and decision-support claims are not equivalent to Breathe fitting recommendations or its explicit no-clinical-advice boundary.",
+      "representative_sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.ai-notes",
+          "title": "AI Note Generation & Ambient Scribe",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=ai-notes]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.features.what-ai-features-are-included",
+          "parent_content_key": "caremetric-emr.faq.public.features",
+          "title": "What AI features are included?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=features][question-slug=what-ai-features-are-included]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.guide.clinical",
+          "title": "Clinical work and the mask fitter",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+          "source_selector": "GUIDE_SECTIONS[id=\"clinical\"]",
+          "route_template": "/admin/resources/user-guide#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.clinical-advice",
+          "title": "Can the app tell me what pressure setting a patient needs?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"clinical-advice\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.assistant-actions",
+          "title": "Can the in-app assistant do things for me — place an order, fix a claim?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"assistant-actions\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "domain": "product-exclusive-clinical-and-dme-modules",
+      "disposition": "keep-product-overlays-separate",
+      "reason": "FHIR, CCM, prescribing, and longitudinal documentation are EMR-only; fitting, adherence, resupply, inventory, rentals, and equipment recalls are Breathe-only.",
+      "representative_sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.fhir.what-is-fhir",
+          "title": "What Is FHIR?",
+          "source_path": "src/components/interop/FHIRUserManual.tsx",
+          "source_selector": "section[id=what-is-fhir]",
+          "source_sha": "0b4bb5abeee38819940bceb629ad038ba1758fca",
+          "route_template": "/dashboard/fhir-hub",
+          "audience": [
+            "provider",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.ccm.overview",
+          "title": "What is CCM and Why It Matters",
+          "source_path": "src/components/ccm/CCMUserManual.tsx",
+          "source_selector": "sections[id=overview].content",
+          "source_sha": "f1ff2cc7655aa3d71bcbd29bb859249225825c73",
+          "route_template": "/dashboard/ccm",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "biller",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.eprescribing",
+          "title": "Prescriptions & Medications",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=eprescribing]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.review-a-fit-session",
+          "title": "Review and approve a mask recommendation",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"review-a-fit-session\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Clinician or trained CSR"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.monitor-therapy-adherence",
+          "title": "Find the patients whose therapy needs attention",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"monitor-therapy-adherence\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Clinician or RT"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.manage-capped-rentals",
+          "title": "Keep capped rentals on track",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"manage-capped-rentals\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Biller"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.run-an-equipment-recall",
+          "title": "Work a manufacturer equipment recall",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"run-an-equipment-recall\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Admin or clinical lead"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "domain": "document-retention-payer-audit-and-system-audit",
+      "disposition": "keep-product-overlays-separate",
+      "reason": "Payer ADR response, document destruction/legal hold, and immutable application audit logs are three different concepts with different access and retention rules.",
+      "representative_sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.security.how-are-audit-logs-maintained",
+          "parent_content_key": "caremetric-emr.faq.public.security",
+          "title": "How are audit logs maintained?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=security][question-slug=how-are-audit-logs-maintained]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.ccm.audit",
+          "title": "Audit Readiness & Documentation",
+          "source_path": "src/components/ccm/CCMUserManual.tsx",
+          "source_selector": "sections[id=audit].content",
+          "source_sha": "f1ff2cc7655aa3d71bcbd29bb859249225825c73",
+          "route_template": "/dashboard/ccm",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "biller",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.respond-to-an-adr",
+          "title": "Respond to a payer documentation request or audit",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"respond-to-an-adr\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Biller or admin"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.manage-document-retention",
+          "title": "Place a legal hold or destroy an expired document",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"manage-document-retention\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Admin or compliance owner"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.who-changed-this",
+          "title": "Something changed on a record and nobody knows who did it.",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"who-changed-this\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "domain": "integration-vendor-and-field-instructions",
+      "disposition": "keep-product-overlays-separate",
+      "reason": "The products configure different vendors and protocols. Shared credential hygiene is reusable, but exact fields, endpoints, test behavior, and manual-versus-live synchronization are not.",
+      "representative_sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.guide.integration-setup",
+          "title": "Integration Setup Guide",
+          "source_path": "public/docs/pdf/INTEGRATION_SETUP_GUIDE.md",
+          "source_sha": "d29e5cf665da3c6762e1543f83465f330cb472d8",
+          "route_template": "/docs/pdf/INTEGRATION_SETUP_GUIDE.md",
+          "audience": [
+            "practice_admin",
+            "super_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.fhir.add-connection",
+          "title": "How to Add a FHIR Connection",
+          "source_path": "src/components/interop/FHIRUserManual.tsx",
+          "source_selector": "section[id=add-connection]",
+          "source_sha": "0b4bb5abeee38819940bceb629ad038ba1758fca",
+          "route_template": "/dashboard/fhir-hub",
+          "audience": [
+            "provider",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.connect-an-integration",
+          "title": "Connect a therapy-cloud, clearinghouse, or partner integration",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"connect-an-integration\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Owner"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.sync-with-pacware",
+          "title": "Exchange data with PacWare",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"sync-with-pacware\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Admin or biller"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.pacware-automatic",
+          "title": "Does PacWare sync automatically?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"pacware-automatic\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "domain": "role-handbooks-and-quick-start-routines",
+      "disposition": "keep-product-overlays-separate",
+      "reason": "The role sets and duties differ: EMR clinical/front-office roles do not map one-to-one to Breathe owner, administrator, CSR, biller, and respiratory therapist roles. Reuse a template, not the operational content.",
+      "representative_sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.quickstart.provider",
+          "title": "Provider quick-start track",
+          "source_path": "src/components/marketing/QuickStartGuide.tsx",
+          "source_selector": "ROLES[key=provider].steps",
+          "source_sha": "d42a46f19b396bdd668b304304a8aab4cfd520cd",
+          "route_template": "/admin/content",
+          "audience": [
+            "provider"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.quickstart.frontdesk",
+          "title": "Front Desk quick-start track",
+          "source_path": "src/components/marketing/QuickStartGuide.tsx",
+          "source_selector": "ROLES[key=frontdesk].steps",
+          "source_sha": "d42a46f19b396bdd668b304304a8aab4cfd520cd",
+          "route_template": "/admin/content",
+          "audience": [
+            "front_desk"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.quickstart.biller",
+          "title": "Biller quick-start track",
+          "source_path": "src/components/marketing/QuickStartGuide.tsx",
+          "source_selector": "ROLES[key=biller].steps",
+          "source_sha": "d42a46f19b396bdd668b304304a8aab4cfd520cd",
+          "route_template": "/admin/content",
+          "audience": [
+            "biller"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.role-handbook.rt",
+          "title": "Respiratory therapist handbook",
+          "source_path": "artifacts/resupply-api/src/lib/help-docs/content.ts",
+          "source_selector": "ROLE_HANDBOOK(staffRoleProfile(\"rt\"), company)",
+          "route_template": null,
+          "audience": [
+            "Respiratory therapists"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.role-handbook.csr",
+          "title": "Customer service representative handbook",
+          "source_path": "artifacts/resupply-api/src/lib/help-docs/content.ts",
+          "source_selector": "ROLE_HANDBOOK(staffRoleProfile(\"csr\"), company)",
+          "route_template": null,
+          "audience": [
+            "Customer service representatives"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.role-handbook.biller",
+          "title": "Biller handbook",
+          "source_path": "artifacts/resupply-api/src/lib/help-docs/content.ts",
+          "source_selector": "ROLE_HANDBOOK(staffRoleProfile(\"biller\"), company)",
+          "route_template": null,
+          "audience": [
+            "Billing staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "domain": "subscriptions-pricing-and-entitlements",
+      "disposition": "keep-product-overlays-separate",
+      "reason": "Plan names, allowances, pricing, cancellation, and feature/support entitlement claims are commercial facts that can drift independently and require per-product approval.",
+      "representative_sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.guide.subscription-features",
+          "title": "Subscription Features Guide",
+          "source_path": "public/docs/pdf/SUBSCRIPTION_FEATURES_GUIDE.md",
+          "source_sha": "bec2bc254e49036692900cc1710911e3d9d6c726",
+          "route_template": "/docs/pdf/SUBSCRIPTION_FEATURES_GUIDE.md",
+          "audience": [
+            "public",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.support.is-support-included-in-the-price",
+          "parent_content_key": "caremetric-emr.faq.public.support",
+          "title": "Is support included in the price?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=support][question-slug=is-support-included-in-the-price]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.plan-limits",
+          "title": "Where do I see our plan and whether we're near a limit?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"plan-limits\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "domain": "slack-setup",
+      "disposition": "keep-product-overlays-separate",
+      "reason": "Only Breathe has a verified Slack tutorial in these inputs. Do not promote it to shared-core until another registered product supports the same governed integration.",
+      "representative_sources": [
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.tutorial.setup-slack",
+          "title": "Set up Slack",
+          "source_path": "artifacts/cpap-fitter/public/guides/setup-slack.pdf",
+          "route_template": "/guides/setup-slack.pdf",
+          "audience": [
+            "Owners and administrators"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    }
+  ],
+  "conflicting_guidance_requiring_human_review": [
+    {
+      "issue_id": "review.mfa-enforcement-state",
+      "severity": "high",
+      "topic": "MFA enforcement",
+      "finding": "Breathe says enrollment is not currently enforced in one how-to and deployment-dependent in its FAQ; EMR says practice administrators can enforce MFA organization-wide and describes SMS plus authenticator options.",
+      "decision_needed": "Approve a per-product/deployment capability matrix. The shared article must use conditional language and must not claim enforcement or a factor type that the active deployment does not verify.",
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.security.do-you-offer-two-factor-authentication",
+          "parent_content_key": "caremetric-emr.faq.public.security",
+          "title": "Do you offer two-factor authentication?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=security][question-slug=do-you-offer-two-factor-authentication]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.user-management",
+          "title": "User & Role Management",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=user-management]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "practice_admin"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.how-to.secure-your-account",
+          "title": "Secure your own account with multi-factor authentication",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"secure-your-account\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Everyone"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.mfa-enforced",
+          "title": "Is multi-factor authentication required to sign in?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"mfa-enforced\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "issue_id": "review.support-channels-routes-and-sla",
+      "severity": "high",
+      "topic": "Support routing and response promises",
+      "finding": "Breathe routes users to its local Support page and asks them to try the assistant first. EMR describes a different in-product path plus chat, email, and phone. EMR sources also conflict internally: critical response is stated as one hour in the public FAQ, four hours in chatbot training, general response as four business hours versus one business day, and critical bug resolution as typically within 24 hours.",
+      "decision_needed": "Approve one central channel matrix and SLA policy. Parameterize the central Hub entry and local fallback by product, and remove every unapproved response or resolution promise before publication.",
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.chatbot.troubleshooting.contact_support",
+          "parent_content_key": "caremetric-emr.chatbot.troubleshooting",
+          "title": "contact support",
+          "source_path": "src/lib/pdf/templates/chatbotTraining.ts",
+          "source_selector": "CHATBOT_TRAINING_INTENTS[category=Troubleshooting].intents[intent=contact_support]",
+          "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+          "route_template": "/admin/content",
+          "audience": [
+            "support_editor",
+            "super_admin"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.support.what-kind-of-support-do-you-offer",
+          "parent_content_key": "caremetric-emr.faq.public.support",
+          "title": "What kind of support do you offer?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=support][question-slug=what-kind-of-support-do-you-offer]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.support.what-if-i-find-a-bug-or-have-a-feature-request",
+          "parent_content_key": "caremetric-emr.faq.public.support",
+          "title": "What if I find a bug or have a feature request?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=support][question-slug=what-if-i-find-a-bug-or-have-a-feature-request]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.support.how-do-i-access-the-support-center",
+          "parent_content_key": "caremetric-emr.faq.public.support",
+          "title": "How do I access the Support Center?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=support][question-slug=how-do-i-access-the-support-center]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.how-to.get-help-and-report-a-problem",
+          "title": "Get help, report a problem, or suggest a feature",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"get-help-and-report-a-problem\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Everyone"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.assistant-vs-support",
+          "title": "Should I ask the assistant or file a support ticket?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"assistant-vs-support\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "issue_id": "review.support-privacy-boundary",
+      "severity": "critical",
+      "topic": "Sensitive information in support and assistant channels",
+      "finding": "Breathe explicitly says not to paste patient identifiers into the assistant or a ticket because those messages leave the application. EMR encourages chat/email bug reports and describes tightly controlled support access to patient data, but the cited support articles do not carry the same no-identifiers warning.",
+      "decision_needed": "Adopt a universal central-Hub rule that no patient, user, tenant, organization, record, URL query/hash, screenshot, or free-text application context is attached automatically. Define a separate approved secure workflow for any support investigation that truly requires protected data.",
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.support.what-if-i-find-a-bug-or-have-a-feature-request",
+          "parent_content_key": "caremetric-emr.faq.public.support",
+          "title": "What if I find a bug or have a feature request?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=support][question-slug=what-if-i-find-a-bug-or-have-a-feature-request]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.security.who-can-access-my-patient-data",
+          "parent_content_key": "caremetric-emr.faq.public.security",
+          "title": "Who can access my patient data?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=security][question-slug=who-can-access-my-patient-data]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.phi-in-chat",
+          "title": "Why can't I paste patient details into the assistant or a ticket?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"phi-in-chat\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.assistant-actions",
+          "title": "Can the in-app assistant do things for me — place an order, fix a claim?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"assistant-actions\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "issue_id": "review.ai-support-versus-clinical-capabilities",
+      "severity": "high",
+      "topic": "Assistant capability boundary",
+      "finding": "Breathe says its in-app assistant explains navigation but does not change records, submit claims, place orders, alter settings, or provide clinical advice. EMR advertises AI-generated documentation, code suggestions, interaction checking, decision-support alerts, and other clinical features under user review. Without labels, users may confuse product AI features with the support assistant.",
+      "decision_needed": "Name each assistant and capability class explicitly. Preserve final human control for EMR suggestions, preserve Breathe no-clinical-advice/no-action limits, and never imply that the central support assistant can perform clinical or record-changing actions.",
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.features.what-ai-features-are-included",
+          "parent_content_key": "caremetric-emr.faq.public.features",
+          "title": "What AI features are included?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=features][question-slug=what-ai-features-are-included]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.ai-notes",
+          "title": "AI Note Generation & Ambient Scribe",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=ai-notes]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.assistant-actions",
+          "title": "Can the in-app assistant do things for me — place an order, fix a claim?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"assistant-actions\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.clinical-advice",
+          "title": "Can the app tell me what pressure setting a patient needs?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"clinical-advice\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "issue_id": "review.integration-secret-disclosure",
+      "severity": "high",
+      "topic": "Integration credential visibility",
+      "finding": "Breathe deliberately hides which credential is missing on a shared status screen. EMR instructions tell authorized administrators where to enter integration API keys and FHIR client credentials. These are compatible only if status and privileged configuration surfaces remain distinct.",
+      "decision_needed": "Approve a shared rule: status views may name the integration but never expose a credential value or unnecessarily identify a missing secret; only an authorized configuration screen may label required fields. Keep vendor fields in product overlays.",
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.chatbot.system-settings-and-configuration.configure_integrations",
+          "parent_content_key": "caremetric-emr.chatbot.system-settings-and-configuration",
+          "title": "configure integrations",
+          "source_path": "src/lib/pdf/templates/chatbotTraining.ts",
+          "source_selector": "CHATBOT_TRAINING_INTENTS[category=System Settings & Configuration].intents[intent=configure_integrations]",
+          "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+          "route_template": "/admin/content",
+          "audience": [
+            "support_editor",
+            "super_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.interoperability.how-do-i-add-a-fhir-connection",
+          "parent_content_key": "caremetric-emr.faq.in-app.interoperability",
+          "title": "How do I add a FHIR connection?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=interoperability][question-slug=how-do-i-add-a-fhir-connection]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.interoperability.where-do-i-get-my-client-id-and-client-secret",
+          "parent_content_key": "caremetric-emr.faq.in-app.interoperability",
+          "title": "Where do I get my Client ID and Client Secret?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=interoperability][question-slug=where-do-i-get-my-client-id-and-client-secret]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.integration-unavailable",
+          "title": "An integration shows as unavailable. Which credential is missing?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"integration-unavailable\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.connect-an-integration",
+          "title": "Connect a therapy-cloud, clearinghouse, or partner integration",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"connect-an-integration\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Owner"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "issue_id": "review.browser-support-matrix",
+      "severity": "medium",
+      "topic": "Supported browsers and versions",
+      "finding": "The EMR quick-check list names current Chrome, Edge, or Safari; the public system-requirements FAQ also includes Firefox and says the latest two major versions. A shared browser article cannot safely choose one of these lists without an authoritative compatibility test matrix.",
+      "decision_needed": "Verify the production browser matrix for each product, then publish a dated shared baseline only where support is genuinely identical.",
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.troubleshooting.browser-quick-checks.1",
+          "parent_content_key": "caremetric-emr.troubleshooting.browser-quick-checks",
+          "title": "Confirm you are on a supported browser: Chrome, Edge, or Safari (latest version).",
+          "source_path": "src/components/marketing/TroubleshootingKB.tsx",
+          "source_selector": "QUICK_CHECKS[0]",
+          "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+          "route_template": "/admin/content",
+          "audience": [
+            "all_authenticated",
+            "support_editor"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.technical.what-are-the-system-requirements",
+          "parent_content_key": "caremetric-emr.faq.public.technical",
+          "title": "What are the system requirements?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=technical][question-slug=what-are-the-system-requirements]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "shared-core"
+        }
+      ]
+    },
+    {
+      "issue_id": "review.telehealth-setup-scope",
+      "severity": "medium",
+      "topic": "Telehealth setup versus patient join",
+      "finding": "EMR says Twilio is built in and requires no additional setup in a short FAQ, while a dedicated setup guide and provider configuration workflow also exist. Breathe says patients need no installation, which is a patient-side claim rather than an administrator-side setup claim.",
+      "decision_needed": "Split the content into administrator configuration, staff scheduling, and patient joining. Validate vendor and no-install wording per product before sharing any sentence.",
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.getting-started.how-do-i-configure-telehealth",
+          "parent_content_key": "caremetric-emr.faq.in-app.getting-started",
+          "title": "How do I configure telehealth?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=getting-started][question-slug=how-do-i-configure-telehealth]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.guide.telehealth-setup",
+          "title": "Telehealth Setup Guide",
+          "source_path": "public/docs/pdf/TELEHEALTH_SETUP.md",
+          "source_sha": "2fb6bc093e2253891a5926497587ce85497d0e89",
+          "route_template": "/docs/pdf/TELEHEALTH_SETUP.md",
+          "audience": [
+            "provider",
+            "front_desk",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.chatbot.scheduling.setup_telehealth_visit",
+          "parent_content_key": "caremetric-emr.chatbot.scheduling",
+          "title": "setup telehealth visit",
+          "source_path": "src/lib/pdf/templates/chatbotTraining.ts",
+          "source_selector": "CHATBOT_TRAINING_INTENTS[category=Scheduling].intents[intent=setup_telehealth_visit]",
+          "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+          "route_template": "/admin/content",
+          "audience": [
+            "support_editor",
+            "super_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.schedule-a-video-visit",
+          "title": "Run a video visit with a patient",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"schedule-a-video-visit\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Clinician or CSR"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "issue_id": "review.audit-retention-terminology",
+      "severity": "high",
+      "topic": "Audit logs, payer audits, and document retention",
+      "finding": "EMR states a minimum seven-year retention period for application audit logs. Breathe uses audit language for record-change history, payer ADR readiness, and document retention/legal holds. Combining those articles could apply one retention or access rule to the wrong record class.",
+      "decision_needed": "Define separate governed content types for application audit logs, clinical/DME documents, legal holds, and payer audit responses. Approve retention values by product and record class.",
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.public.security.how-are-audit-logs-maintained",
+          "parent_content_key": "caremetric-emr.faq.public.security",
+          "title": "How are audit logs maintained?",
+          "source_path": "src/components/FAQPage.tsx",
+          "source_selector": "faqs[category=security][question-slug=how-are-audit-logs-maintained]",
+          "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+          "route_template": "/faq",
+          "audience": [
+            "public"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.manual.compliance",
+          "title": "Compliance & Audit Logs",
+          "source_path": "src/components/support/ComprehensiveUserManual.tsx",
+          "source_selector": "MANUAL_SECTIONS[id=compliance]",
+          "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "biller",
+            "practice_admin"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "core.admin.faq.who-changed-this",
+          "title": "Something changed on a record and nobody knows who did it.",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"who-changed-this\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "shared-core"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.respond-to-an-adr",
+          "title": "Respond to a payer documentation request or audit",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"respond-to-an-adr\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Biller or admin"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.how-to.manage-document-retention",
+          "title": "Place a legal hold or destroy an expired document",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+          "source_selector": "HOW_TO_GUIDES[slug=\"manage-document-retention\"]",
+          "route_template": "/admin/resources/how-to/{slug}",
+          "audience": [
+            "Admin or compliance owner"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    },
+    {
+      "issue_id": "review.messaging-consent-and-opt-out",
+      "severity": "high",
+      "topic": "Patient messaging consent and opt-out",
+      "finding": "Breathe explicitly enforces STOP and quiet-hour behavior. EMR generic send-message and reminder instructions are shorter, while an EMR troubleshooting entry mentions missing SMS consent. A merged how-to could omit mandatory consent or opt-out safeguards.",
+      "decision_needed": "Make consent, opt-out, quiet-hour, and permitted-message-category checks mandatory gates in any shared messaging core; keep implementation and legal review per product.",
+      "sources": [
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.patients.how-do-i-send-a-message-to-a-patient",
+          "parent_content_key": "caremetric-emr.faq.in-app.patients",
+          "title": "How do I send a message to a patient?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=patients][question-slug=how-do-i-send-a-message-to-a-patient]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "nurse_ma",
+            "front_desk"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.faq.in-app.scheduling.how-do-i-set-up-appointment-reminders",
+          "parent_content_key": "caremetric-emr.faq.in-app.scheduling",
+          "title": "How do I set up appointment reminders?",
+          "source_path": "src/components/support/SupportDocLibrary.tsx",
+          "source_selector": "FAQS[category=scheduling][question-slug=how-do-i-set-up-appointment-reminders]",
+          "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+          "route_template": "/dashboard/support",
+          "audience": [
+            "provider",
+            "front_desk",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-emr",
+          "content_key": "caremetric-emr.troubleshooting.scheduling.sms-appointment-reminders-not-sending",
+          "parent_content_key": "caremetric-emr.troubleshooting.scheduling",
+          "title": "SMS appointment reminders not sending",
+          "source_path": "src/components/marketing/TroubleshootingKB.tsx",
+          "source_selector": "MODULES[module=Scheduling].entries[symptom-slug=sms-appointment-reminders-not-sending]",
+          "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+          "route_template": "/admin/content",
+          "audience": [
+            "provider",
+            "front_desk",
+            "practice_admin"
+          ],
+          "current_classification": "caremetric-emr-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.patient-said-stop",
+          "title": "A patient texted STOP. Can I turn their texts back on?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"patient-said-stop\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.quiet-hours",
+          "title": "What are quiet hours and can I override them?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"quiet-hours\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        },
+        {
+          "product": "caremetric-breathe",
+          "content_key": "breathe.admin.faq.closure-blocks-stop",
+          "title": "Does a closure auto-reply interfere with STOP?",
+          "source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+          "source_selector": "FAQ_ENTRIES[id=\"closure-blocks-stop\"]",
+          "route_template": "/admin/resources/faq#{id}",
+          "audience": [
+            "All authenticated CareMetric Breathe staff"
+          ],
+          "current_classification": "breathe-overlay"
+        }
+      ]
+    }
+  ],
+  "recommendations": [
+    "Resolve all critical/high review issues before importing any overlapping article.",
+    "Create shared-core articles only for the bounded reusable concepts above; store literal routes, roles, vendors, entitlements, clinical/billing rules, and regulatory claims in product overlays.",
+    "Use route placeholders and a product capability matrix instead of copying /admin and /dashboard navigation into core articles.",
+    "Keep support launch context limited to product key, static route template, and app version; never attach patient, user, tenant, organization, query/hash, screenshot, or free-text context automatically.",
+    "Import atomically with stable source keys and source commit metadata; do not import grouped EMR category shells as articles when their member questions are available.",
+    "Run the same deterministic matcher after every approved source import and require human approval for low-specificity normalized matches and every clinical, billing, security, SLA, or regulatory overlay."
+  ],
+  "validation": {
+    "status": "passed",
+    "errors": [],
+    "assertions": {
+      "both_input_manifests_passed_their_own_validation": true,
+      "expanded_emr_count_is_218": true,
+      "breathe_count_is_135": true,
+      "evaluated_pair_count_is_29430": true,
+      "input_content_keys_are_unique": true,
+      "match_stages_are_disjoint_and_pair_accounting_reconciles": true,
+      "likely_pair_ids_are_unique": true,
+      "source_paths_and_selectors_are_separate_fields": true,
+      "route_templates_have_only_static_placeholders_and_no_runtime_query_or_hash_values": true,
+      "no_tokenized_urls": true,
+      "no_uuid_like_runtime_identifiers": true,
+      "no_ticket_chat_or_runtime_database_content_was_read": true,
+      "no_customer_tenant_user_patient_or_organization_record_values_were_copied": true,
+      "no_secret_or_credential_values_were_copied": true,
+      "no_repository_database_domain_or_production_mutation_was_performed": true
+    }
+  }
+}

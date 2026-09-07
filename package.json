@@ -20,7 +20,7 @@
     "pack:sdk": "npm pack --workspace @caremetric/help-sdk",
     "test:watch": "vitest",
     "lint": "eslint .",
-    "check": "npm run typecheck && npm run lint && npm run test && npm run build:sdk && npm run build",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run test:sdk && npm run build:sdk && npm run build",
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:test": "supabase test db"

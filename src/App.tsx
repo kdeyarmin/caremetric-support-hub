@@ -38,6 +38,7 @@ import {
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { demoRepository, repository } from "./data";
+import { defaultIntegrationRollout, integrationRolloutBySlug } from "./data/integrationRollout";
 import {
   categoryLabels,
   isSupportStaff,
@@ -73,7 +74,7 @@ const emptyData: HubData = {
 };
 
 const pendingHelpPathKey = "caremetric.pendingHelpPath";
-const registeredProductSlugs = new Set(["breathe", "carebase", "caremetric-emr", "pennsync"]);
+const registeredProductSlugs = new Set(Object.keys(integrationRolloutBySlug));
 
 const navItems = [
   { to: "/overview", label: "Overview", icon: LayoutDashboard },
@@ -814,7 +815,7 @@ function PublicLearningPage({ data }: { data: HubData }) {
         <div><strong>{courses.length}</strong><span>Published courses</span></div>
         <div><strong>{categories.length}</strong><span>Training categories</span></div>
         <div><strong>{videoCount}</strong><span>Included video lessons</span></div>
-        <div><strong>{data.products.length}</strong><span>Connected products</span></div>
+        <div><strong>{data.products.length}</strong><span>Registered products</span></div>
       </section>
       <section className="learning-toolbar panel">
         <label className="search-box large"><Search size={18} /><input aria-label="Search learning library" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search courses, topics, and requirements" /></label>
@@ -870,7 +871,7 @@ function PublicLearningPage({ data }: { data: HubData }) {
 function ProductsPage({ data }: { data: HubData }) {
   return (
     <>
-      <PageHeading eyebrow="Product & contact registry" title="Verified routing from one source." description="Every app reads the same product names, support channels, availability, and fallback rules—eliminating conflicting phone numbers and email addresses." />
+      <PageHeading eyebrow="Product & contact registry" title="Owner-approved routing from one source." description="Every app reads the same product names, support channels, availability, and fallback rules—eliminating conflicting phone numbers and email addresses." />
       <div className="product-grid">
         {data.products.map((product) => {
           const productContent = data.content.filter((item) => item.productIds.includes(product.id));
@@ -879,8 +880,8 @@ function ProductsPage({ data }: { data: HubData }) {
         })}
       </div>
       <section className="panel contact-registry">
-        <div className="panel-heading"><div><h2>Central support channels</h2><p>Unverified values are never published to applications.</p></div><span className="verified-counter"><ShieldCheck size={16} /> {data.contacts.filter((item) => item.verified).length} of {data.contacts.length} verified</span></div>
-        <div className="contact-table"><div className="contact-table-head"><span>Channel</span><span>Published value</span><span>Availability</span><span>Status</span></div>{data.contacts.map((contact) => { const Icon = contact.channel === "phone" ? Phone : contact.channel === "email" ? Mail : ExternalLink; return <div className="contact-table-row" key={contact.id}><span><Icon size={17} /> {contact.label}</span><strong>{contact.verified ? <a href={supportContactHref(contact)} target={contact.channel === "web" ? "_blank" : undefined} rel={contact.channel === "web" ? "noreferrer" : undefined}>{supportContactDisplay(contact)}</a> : supportContactDisplay(contact)}</strong><span>{contact.hours ?? "Not set"}</span><span className={contact.verified ? "verified" : "unverified"}>{contact.verified ? <><CheckCircle2 size={15} /> Verified</> : <><Clock3 size={15} /> Needs verification</>}</span></div>; })}</div>
+        <div className="panel-heading"><div><h2>Central support channels</h2><p>Unapproved values are never published to applications.</p></div><span className="verified-counter"><ShieldCheck size={16} /> {data.contacts.filter((item) => item.verified).length} of {data.contacts.length} owner-approved</span></div>
+        <div className="contact-table"><div className="contact-table-head"><span>Channel</span><span>Published value</span><span>Availability</span><span>Status</span></div>{data.contacts.map((contact) => { const Icon = contact.channel === "phone" ? Phone : contact.channel === "email" ? Mail : ExternalLink; return <div className="contact-table-row" key={contact.id}><span><Icon size={17} /> {contact.label}</span><strong>{contact.verified ? <a href={supportContactHref(contact)} target={contact.channel === "web" ? "_blank" : undefined} rel={contact.channel === "web" ? "noreferrer" : undefined}>{supportContactDisplay(contact)}</a> : supportContactDisplay(contact)}</strong><span>{contact.channel === "email" ? "Mailbox DNS pending" : contact.hours ?? "Not set"}</span><span className={contact.verified ? "verified" : "unverified"}>{contact.verified ? <><CheckCircle2 size={15} /> Owner-approved</> : <><Clock3 size={15} /> Needs approval</>}</span></div>; })}</div>
       </section>
     </>
   );
@@ -957,12 +958,12 @@ function ContextualHelpPage({ data }: { data: HubData }) {
         <aside className="panel central-contact-panel">
           <span className="eyebrow">One support team</span>
           <h2>Contact CareMetric</h2>
-          <p>Every CareMetric product uses these verified central routes.</p>
+          <p>Every CareMetric product uses these owner-approved contact values. The web portal is live; email delivery still requires mailbox DNS.</p>
           {verifiedContacts.map((contact) => {
             const Icon = contact.channel === "phone" ? Phone : Mail;
             return <a key={contact.id} href={supportContactHref(contact)} className="central-contact-link" aria-label={`${contact.label}: ${supportContactDisplay(contact)}`}><Icon size={19} /><span><small>{contact.label}</small><strong>{supportContactDisplay(contact)}</strong></span><ArrowRight size={16} /></a>;
           })}
-          {!verifiedContacts.length && <p className="contact-unavailable">Verified contact routes are temporarily unavailable. Use the support case form and do not include patient information.</p>}
+          {!verifiedContacts.length && <p className="contact-unavailable">Owner-approved contact values are temporarily unavailable. Use the support case form and do not include patient information.</p>}
           <div className="privacy-note"><ShieldCheck size={16} /> Do not send patient names, identifiers, clinical notes, or screenshots containing patient information.</div>
         </aside>
       </div>
@@ -996,9 +997,12 @@ openHelp({
         <section className="panel context-contract"><div className="panel-heading"><div><h2>Approved context contract</h2><p>Deliberately excludes personal and clinical fields.</p></div></div><ul><li><CheckCircle2 /> Product slug</li><li><CheckCircle2 /> App route or feature key</li><li><CheckCircle2 /> App version and environment</li><li><CheckCircle2 /> Locale</li><li className="blocked"><X /> No patient, user, tenant, or free-text data in URLs</li><li className="blocked"><X /> No service-role key in the app</li></ul></section>
       </div>
       <section className="panel rollout-table">
-        <div className="panel-heading"><div><h2>Planned application rollout</h2><p>Start with the strongest reference implementation, then prove cross-stack portability.</p></div></div>
-        <div className="rollout-head"><span>Application</span><span>Current help</span><span>First integration</span><span>State</span></div>
-        {data.products.map((product, index) => <div className="rollout-row" key={product.id}><span><span className="product-dot" style={{ background: product.color }} /> {product.name}</span><span>{index === 0 ? "PennTrain DB articles + tickets" : index === 1 ? "Two embedded help stores" : index === 2 ? "Static help page" : "Local support center"}</span><span>{index === 0 ? "Import content + redirect" : index === 1 ? "SDK pilot + route mapping" : "SDK launcher + legacy fallback"}</span><span className={index < 2 ? "state-progress" : "state-planned"}>{index === 0 ? "Source mapped" : index === 1 ? "Pilot" : "Planned"}</span></div>)}
+        <div className="panel-heading"><div><h2>Application integration status</h2><p>Verified rollout state by stable product key, independent of display order.</p></div></div>
+        <div className="rollout-head"><span>Application</span><span>Previous help</span><span>Central integration</span><span>State</span></div>
+        {data.products.map((product) => {
+          const rollout = integrationRolloutBySlug[product.slug] ?? defaultIntegrationRollout;
+          return <div className="rollout-row" key={product.id}><span><span className="product-dot" style={{ background: product.color }} /> {product.name}</span><span>{rollout.previousHelp}</span><span>{rollout.integration}</span><span className={`state-${rollout.state}`}>{rollout.stateLabel}</span></div>;
+        })}
       </section>
     </>
   );

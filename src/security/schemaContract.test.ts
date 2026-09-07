@@ -10,6 +10,22 @@ const videoLessonCatalogMigration = readFileSync(
   new URL("../../supabase/migrations/20260907164813_expose_video_lesson_titles.sql", import.meta.url),
   "utf8",
 );
+const careMetricGoMigration = readFileSync(
+  new URL("../../supabase/migrations/20260907172720_register_caremetric_go.sql", import.meta.url),
+  "utf8",
+);
+const careMetricGoSharedCoreMigration = readFileSync(
+  new URL("../../supabase/migrations/20260907173139_extend_shared_core_to_caremetric_go.sql", import.meta.url),
+  "utf8",
+);
+const careMetricIntelMigration = readFileSync(
+  new URL("../../supabase/migrations/20260907180410_register_caremetric_intel.sql", import.meta.url),
+  "utf8",
+);
+const sharedCourseAlignmentMigration = readFileSync(
+  new URL("../../supabase/migrations/20260907182246_align_shared_course_placements.sql", import.meta.url),
+  "utf8",
+);
 
 const exposedTables = [
   "products",
@@ -140,6 +156,42 @@ describe("Support Hub schema contract", () => {
     expect(videoLessonCatalogMigration).not.toContain("video_url");
     expect(videoLessonCatalogMigration).not.toContain("storage_key");
     expect(videoLessonCatalogMigration).not.toContain("renderer_job_id");
+  });
+
+  it("registers CareMetric Go and reuses the governed course catalog", () => {
+    expect(careMetricGoMigration).toContain("'caremetric-go'");
+    expect(careMetricGoMigration).toContain("'CareMetric Go'");
+    expect(careMetricGoMigration).toContain("item.kind = 'course'");
+    expect(careMetricGoMigration).toContain("item.source_system = 'penntrain'");
+    expect(careMetricGoMigration).not.toContain("video_url");
+    expect(careMetricGoMigration).not.toContain("patient_id");
+    expect(careMetricGoSharedCoreMigration).toContain("'support.protect-patient-information'");
+    expect(careMetricGoSharedCoreMigration).toContain("'account.invite-user'");
+  });
+
+  it("registers CareMetric Intel without importing its unreviewed product guide", () => {
+    expect(careMetricIntelMigration).toContain("'caremetric-intel'");
+    expect(careMetricIntelMigration).toContain("item.kind = 'course'");
+    expect(careMetricIntelMigration).toContain("'support.protect-patient-information'");
+    expect(careMetricIntelMigration).not.toContain("GUIDE_SECTIONS");
+    expect(careMetricIntelMigration).not.toContain("provider_id");
+  });
+
+  it("aligns the approved onboarding course across every registered product", () => {
+    expect(sharedCourseAlignmentMigration).toContain("'course.team-onboarding'");
+    for (const slug of [
+      "carebase",
+      "breathe",
+      "pennsync",
+      "caremetric-emr",
+      "caremetric-go",
+      "caremetric-intel",
+    ]) {
+      expect(sharedCourseAlignmentMigration).toContain(`'${slug}'`);
+    }
+    expect(sharedCourseAlignmentMigration).not.toContain("learner_id");
+    expect(sharedCourseAlignmentMigration).not.toContain("patient_id");
+    expect(sharedCourseAlignmentMigration).not.toContain("video_url");
   });
 
   it("does not copy full row bodies into the audit trail", () => {

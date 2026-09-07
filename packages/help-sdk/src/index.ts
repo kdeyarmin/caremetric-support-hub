@@ -1,4 +1,13 @@
-export type CareMetricProduct = "breathe" | "carebase" | "caremetric-emr" | "pennsync";
+export const CAREMETRIC_PRODUCT_SLUGS = [
+  "breathe",
+  "carebase",
+  "caremetric-emr",
+  "caremetric-go",
+  "caremetric-intel",
+  "pennsync",
+] as const;
+
+export type CareMetricProduct = (typeof CAREMETRIC_PRODUCT_SLUGS)[number];
 
 export interface HelpContext {
   product: CareMetricProduct;
@@ -33,7 +42,7 @@ export const DEFAULT_HELP_BASE_URL = "https://support-hub-web-production.up.rail
 
 const safeValue = (value: string, maximum: number) => value.trim().slice(0, maximum);
 const supportedEnvironments = new Set(["production", "staging", "development"]);
-const supportedProducts = new Set<CareMetricProduct>(["breathe", "carebase", "caremetric-emr", "pennsync"]);
+const supportedProducts = new Set<CareMetricProduct>(CAREMETRIC_PRODUCT_SLUGS);
 const contextTokenPattern = /^[A-Za-z0-9._:+-]+$/;
 const localePattern = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 const routePattern = /^\/[A-Za-z0-9_/:.*-]*$/;

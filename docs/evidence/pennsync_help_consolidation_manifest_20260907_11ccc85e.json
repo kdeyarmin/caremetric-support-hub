@@ -1,0 +1,1973 @@
+{
+  "schema_version": "caremetric.help-content-inventory.v1",
+  "inventory_id": "pennsync-help-11ccc85e-20260907",
+  "generated_at_utc": "2026-09-07T00:00:00Z",
+  "repository": "kdeyarmin/CareMetric-Pennsync",
+  "snapshot": {
+    "ref": "main",
+    "commit": "11ccc85e88133b94bb1161d34a31fc1736dd4723"
+  },
+  "purpose": "Read-only inventory of source-authored, non-PHI PennSync help, FAQ, and tutorial material proposed for governed consolidation into the first-party CareMetric Support Hub.",
+  "scope": {
+    "included": [
+      "Source-authored manual blocks",
+      "Current static Help-page FAQs",
+      "Static feature how-to cards",
+      "Static user-guide catalog outlines",
+      "Code-defined synthetic training scenarios",
+      "Static administrator onboarding checklist"
+    ],
+    "excluded": [
+      "Support tickets and any user, tenant, patient, visit, record, or progress rows",
+      "Secrets, credentials, provider job identifiers, provider media URLs, and signed URLs",
+      "Drafts, runtime AI outputs, generated course or quiz bodies, and generated guide PDFs",
+      "Generated HTML/PDF/manual assets and duplicate print-rendering code",
+      "Legacy PennSync repositories and dead or redirected tutorial pages"
+    ],
+    "publication_note": "This is an inventory only. No entry is approved for automatic publication; readiness and review flags must be enforced by a first-party importer."
+  },
+  "entries": [
+    {
+      "content_key": "pennsync.manual.user.welcome",
+      "kind": "article",
+      "title": "Welcome to PennSync",
+      "summary": "Overview of PennSync's purpose, intended users, and how to use the manual.",
+      "body_source_path": "scripts/manuals/content-user.mjs#userBlocks:welcome",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/Help",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "product-copy-review",
+        "marketing-claims-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.user.features",
+      "kind": "article",
+      "title": "Feature Overview",
+      "summary": "High-level map of PennSync patient care, documentation, communication, learning, and administration capabilities.",
+      "body_source_path": "scripts/manuals/content-user.mjs#userBlocks:features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/Features",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.user.getting-started",
+      "kind": "article",
+      "title": "Getting Started",
+      "summary": "Sign-in, navigation, profile setup, and first-five-minute workflow.",
+      "body_source_path": "scripts/manuals/content-user.mjs#userBlocks:getting-started",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/Dashboard",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "product-overlay-needed"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.user.dashboard",
+      "kind": "article",
+      "title": "Your Dashboard",
+      "summary": "Daily dashboard widgets, visits, alerts, tasks, and quick actions.",
+      "body_source_path": "scripts/manuals/content-user.mjs#userBlocks:dashboard",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/Dashboard",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.user.patients",
+      "kind": "article",
+      "title": "Patients & the Patient Record",
+      "summary": "Roster search, connected records, care context, and authorized record workflows.",
+      "body_source_path": "scripts/manuals/content-user.mjs#userBlocks:patients",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/Patients",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-workflow-review",
+        "privacy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.user.oasis",
+      "kind": "article",
+      "title": "OASIS Assessments",
+      "summary": "OASIS Center instructions whose AI-guidance claims conflict with the current paused feature status.",
+      "body_source_path": "scripts/manuals/content-user.mjs#userBlocks:oasis",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/OASISCenter",
+      "classification": "pennsync-overlay",
+      "readiness": "hold",
+      "review_flags": [
+        "hold-do-not-publish",
+        "oasis-paused-conflict",
+        "clinical-policy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.user.incidents",
+      "kind": "article",
+      "title": "Incident Reporting",
+      "summary": "How staff create, route, review, and resolve safety incident reports.",
+      "body_source_path": "scripts/manuals/content-user.mjs#userBlocks:incidents",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/Incidents",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-workflow-review",
+        "regulatory-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.user.education",
+      "kind": "article",
+      "title": "Patient Education",
+      "summary": "How staff create, send, and track education and teach-back activities.",
+      "body_source_path": "scripts/manuals/content-user.mjs#userBlocks:education",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/PatientEducationHub",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-content-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.user.documentation",
+      "kind": "article",
+      "title": "Documenting a Visit",
+      "summary": "Clinical Notes, Smart Notes, Visit Scribe, and documentation workflow overview.",
+      "body_source_path": "scripts/manuals/content-user.mjs#userBlocks:documentation",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/ClinicalDocumentation",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-claims-review",
+        "ai-safety-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.user.communication",
+      "kind": "article",
+      "title": "Communication",
+      "summary": "Team messaging and protected communications workflow.",
+      "body_source_path": "scripts/manuals/content-user.mjs#userBlocks:communication",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/Messages",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "privacy-review",
+        "product-overlay-needed"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.user.learning",
+      "kind": "article",
+      "title": "Learning & Resources",
+      "summary": "Training, certification, and trusted-reference navigation.",
+      "body_source_path": "scripts/manuals/content-user.mjs#userBlocks:learning",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/LearningCenter",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "product-overlay-needed"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.user.tools",
+      "kind": "article",
+      "title": "Personal Tools & Settings",
+      "summary": "Profile, notification, time-off, and on-call settings.",
+      "body_source_path": "scripts/manuals/content-user.mjs#userBlocks:tools",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/UserSettings",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "product-overlay-needed"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.user.timesheets",
+      "kind": "article",
+      "title": "Timesheets & Getting Paid",
+      "summary": "Timesheet entry, approval, mileage, paid-time-off, and payroll workflow.",
+      "body_source_path": "scripts/manuals/content-user.mjs#userBlocks:timesheets",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/Timesheets",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "payroll-policy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.user.tips",
+      "kind": "article",
+      "title": "Tips & Best Practices",
+      "summary": "Efficiency tips for patient selection, voice documentation, templates, and compliance review.",
+      "body_source_path": "scripts/manuals/content-user.mjs#userBlocks:tips",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/Help",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-claims-review",
+        "quantified-claims-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.user.faq",
+      "kind": "faq-collection",
+      "title": "Frequently Asked Questions",
+      "summary": "Legacy manual FAQ block; current Help-page FAQs are the preferred source and its OASIS language is stale.",
+      "body_source_path": "scripts/manuals/content-user.mjs#userBlocks:faq",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/Help",
+      "classification": "pennsync-overlay",
+      "readiness": "hold",
+      "review_flags": [
+        "hold-do-not-publish",
+        "superseded-by-current-help-faqs",
+        "oasis-paused-conflict"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.user.glossary",
+      "kind": "article",
+      "title": "Glossary",
+      "summary": "PennSync terminology covering care scope, OASIS, documentation, roles, and workflow concepts.",
+      "body_source_path": "scripts/manuals/content-user.mjs#userBlocks:glossary",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/Help",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "terminology-review",
+        "clinical-policy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.user.support",
+      "kind": "article",
+      "title": "Getting Help & Support",
+      "summary": "In-app help, focused guides, local administrator escalation, and support options.",
+      "body_source_path": "scripts/manuals/content-user.mjs#userBlocks:support",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/Help",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "central-contact-overlay-required"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.admin.admin-features",
+      "kind": "article",
+      "title": "Administrator Feature Overview",
+      "summary": "Map of PennSync facility-administration tools and their responsibilities.",
+      "body_source_path": "scripts/manuals/content-admin.mjs#adminBlocks:admin-features",
+      "audience": [
+        "customer-admin"
+      ],
+      "route_template": "/AdminOperations",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.admin.admin-roles",
+      "kind": "article",
+      "title": "Understanding Roles & Access",
+      "summary": "Role tiers, facility scope, and platform-level access boundaries.",
+      "body_source_path": "scripts/manuals/content-admin.mjs#adminBlocks:admin-roles",
+      "audience": [
+        "customer-admin"
+      ],
+      "route_template": "/UserManagement",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "authorization-model-review",
+        "product-overlay-needed"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.admin.admin-console",
+      "kind": "article",
+      "title": "The Admin Console",
+      "summary": "Administrative launchpad, activity, data-quality, and system-health workflows.",
+      "body_source_path": "scripts/manuals/content-admin.mjs#adminBlocks:admin-console",
+      "audience": [
+        "customer-admin"
+      ],
+      "route_template": "/AdminOperations",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.admin.admin-users",
+      "kind": "article",
+      "title": "Users & Staff",
+      "summary": "Staff invitations, access control, licenses, and credential administration.",
+      "body_source_path": "scripts/manuals/content-admin.mjs#adminBlocks:admin-users",
+      "audience": [
+        "customer-admin"
+      ],
+      "route_template": "/UserManagement",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "authorization-model-review",
+        "product-overlay-needed"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.admin.admin-office",
+      "kind": "article",
+      "title": "Office & Back-Office Workflows",
+      "summary": "Referral intake, triage, admissions, document routing, and office workflows.",
+      "body_source_path": "scripts/manuals/content-admin.mjs#adminBlocks:admin-office",
+      "audience": [
+        "customer-admin"
+      ],
+      "route_template": "/ReferralIntake",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "workflow-verification",
+        "privacy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.admin.admin-timesheets",
+      "kind": "article",
+      "title": "Timesheets, Approvals & Payroll",
+      "summary": "Biweekly review, approvals, payroll export, and compensation configuration.",
+      "body_source_path": "scripts/manuals/content-admin.mjs#adminBlocks:admin-timesheets",
+      "audience": [
+        "customer-admin"
+      ],
+      "route_template": "/Timesheets",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "payroll-policy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.admin.admin-training",
+      "kind": "article",
+      "title": "Training & Education Administration",
+      "summary": "Create, assign, track, and evidence required staff training.",
+      "body_source_path": "scripts/manuals/content-admin.mjs#adminBlocks:admin-training",
+      "audience": [
+        "customer-admin"
+      ],
+      "route_template": "/AdminTraining",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "product-overlay-needed",
+        "compliance-policy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.admin.admin-compliance",
+      "kind": "article",
+      "title": "Compliance & Quality",
+      "summary": "Documentation quality, regulatory alignment, security, and audit-readiness workflows.",
+      "body_source_path": "scripts/manuals/content-admin.mjs#adminBlocks:admin-compliance",
+      "audience": [
+        "customer-admin"
+      ],
+      "route_template": "/ComplianceCenter",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "regulatory-review",
+        "security-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.admin.admin-reports",
+      "kind": "article",
+      "title": "Reports & Analytics",
+      "summary": "Clinical, operational, and financial reporting and analytics.",
+      "body_source_path": "scripts/manuals/content-admin.mjs#adminBlocks:admin-reports",
+      "audience": [
+        "customer-admin"
+      ],
+      "route_template": "/ReportsAnalytics",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "metric-definition-review",
+        "claims-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.admin.admin-data",
+      "kind": "article",
+      "title": "Data Management",
+      "summary": "Import, export, merge, and cleanup workflows for protected operational data.",
+      "body_source_path": "scripts/manuals/content-admin.mjs#adminBlocks:admin-data",
+      "audience": [
+        "customer-admin"
+      ],
+      "route_template": "/PatientDataManagement",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "privacy-review",
+        "authorization-model-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.admin.admin-config",
+      "kind": "article",
+      "title": "System Configuration",
+      "summary": "Agency profile, communications, reimbursement, and clinical protocol settings.",
+      "body_source_path": "scripts/manuals/content-admin.mjs#adminBlocks:admin-config",
+      "audience": [
+        "customer-admin"
+      ],
+      "route_template": "/AgencySettings",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "security-review",
+        "billing-policy-review",
+        "clinical-policy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.admin.admin-superadmin",
+      "kind": "article",
+      "title": "Handled by Your Platform Administrator",
+      "summary": "Platform-only responsibilities and the escalation boundary for facility administrators.",
+      "body_source_path": "scripts/manuals/content-admin.mjs#adminBlocks:admin-superadmin",
+      "audience": [
+        "customer-admin"
+      ],
+      "route_template": "/SuperAdminConfig",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "security-review",
+        "role-boundary-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.admin.admin-checklists",
+      "kind": "article",
+      "title": "Admin Best Practices & Checklists",
+      "summary": "Repeatable onboarding, compliance, staffing, and audit-readiness routines.",
+      "body_source_path": "scripts/manuals/content-admin.mjs#adminBlocks:admin-checklists",
+      "audience": [
+        "customer-admin"
+      ],
+      "route_template": "/AgencySettings",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "product-overlay-needed",
+        "compliance-policy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.manual.admin.admin-faq",
+      "kind": "faq-collection",
+      "title": "Administrator FAQ",
+      "summary": "Common answers for staff setup, access, operations, training, and configuration.",
+      "body_source_path": "scripts/manuals/content-admin.mjs#adminBlocks:admin-faq",
+      "audience": [
+        "customer-admin"
+      ],
+      "route_template": "/Help",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "authorization-model-review",
+        "product-copy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.help.faq.how-do-i-document-a-visit-using-voice",
+      "kind": "faq",
+      "title": "How do I document a visit using voice?",
+      "summary": "Go to Visit Scribe, click 'Start Recording', speak your observations, then stop. AI automatically transcribes and generates a Medicare-compliant note.",
+      "body_source_path": "src/pages/Help.jsx#faqs",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/ClinicalDocumentation",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-claims-review",
+        "ai-safety-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.help.faq.why-should-i-always-select-a-patient-in-smart-notes",
+      "kind": "faq",
+      "title": "Why should I always select a patient in Smart Notes?",
+      "summary": "Selecting a patient allows AI to personalize documentation using their specific diagnoses, medications, and history. The more visits you document for a patient, the better AI recommendations become.",
+      "body_source_path": "src/pages/Help.jsx#faqs",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/SmartNoteAssistant",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-workflow-review",
+        "privacy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.help.faq.how-does-ai-enhance-my-clinical-notes",
+      "kind": "faq",
+      "title": "How does AI enhance my clinical notes?",
+      "summary": "AI expands your observations into skilled nursing language, adds medical necessity justification, includes homebound documentation, and ensures Medicare compliance - all while preserving your clinical intent.",
+      "body_source_path": "src/pages/Help.jsx#faqs",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/SmartNoteAssistant",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-claims-review",
+        "ai-safety-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.help.faq.what-if-ai-generates-incorrect-information",
+      "kind": "faq",
+      "title": "What if AI generates incorrect information?",
+      "summary": "Always review AI-generated content. You can edit directly, regenerate with different parameters, or add your own text. AI learns from your corrections over time.",
+      "body_source_path": "src/pages/Help.jsx#faqs",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/SmartNoteAssistant",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "ai-safety-review",
+        "learning-claim-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.help.faq.how-do-i-send-a-fax-from-my-phone",
+      "kind": "faq",
+      "title": "How do I send a fax from my phone?",
+      "summary": "Use the Camera tab in Send Fax. Capture photos of your documents, add recipient number, and send. AI generates a professional cover page automatically.",
+      "body_source_path": "src/pages/Help.jsx#faqs",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/SendFax",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "communications-workflow-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.help.faq.can-i-create-custom-documentation-templates",
+      "kind": "faq",
+      "title": "Can I create custom documentation templates?",
+      "summary": "Yes! Use Clinical Library to create quick phrases that expand into full documentation. Support both generic and patient-specific templates with variables.",
+      "body_source_path": "src/pages/Help.jsx#faqs",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/ClinicalLibrary",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-workflow-review",
+        "privacy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.help.faq.are-ai-oasis-and-pdgm-suggestions-available",
+      "kind": "faq",
+      "title": "Are AI OASIS and PDGM suggestions available?",
+      "summary": "No. Automated OASIS response guidance, PDGM reimbursement optimization, and M-item financial-impact recommendations are paused pending verified CMS clinical content, tenant-scoped authorization, and required human review. Use the official clinician OASIS workflow and CMS-approved grouper.",
+      "body_source_path": "src/pages/Help.jsx#faqs",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/OASISCenter",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-policy-review",
+        "paused-status-verify"
+      ]
+    },
+    {
+      "content_key": "pennsync.help.faq.what-happens-to-flagged-compliance-issues",
+      "kind": "faq",
+      "title": "What happens to flagged compliance issues?",
+      "summary": "Flagged notes appear in the Compliance Dashboard. Review them, use AI suggestions to fix issues, and re-save. System tracks improvements over time.",
+      "body_source_path": "src/pages/Help.jsx#faqs",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/ComplianceCenter",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "compliance-policy-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.help.faq.how-do-i-use-a-quick-phrase-while-writing-a-note",
+      "kind": "faq",
+      "title": "How do I use a quick phrase while writing a note?",
+      "summary": "Type “/” in the observations box to open the Quick Phrases picker, type a saved “.shortcut” code, or tap the Quick Phrase button. Phrases bound to a specific patient only appear while charting that patient, and inserted text still goes through compliance review before you save.",
+      "body_source_path": "src/pages/Help.jsx#faqs",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/SmartNoteAssistant",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-workflow-review",
+        "privacy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.help.faq.why-is-save-blocked-by-a-facility-documentation-requirement",
+      "kind": "faq",
+      "title": "Why is Save blocked by a facility documentation requirement?",
+      "summary": "Your administrator defined a critical documentation rule that applies to this patient (for example, an SpO₂ reading for a patient on oxygen). Add the missing detail — the checklist clears automatically — or check the acknowledgment box to save without it. Acknowledged overrides are recorded.",
+      "body_source_path": "src/pages/Help.jsx#faqs",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/SmartNoteAssistant",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-policy-review",
+        "audit-behavior-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.help.faq.when-is-my-timesheet-due-and-when-is-payday",
+      "kind": "faq",
+      "title": "When is my timesheet due, and when is payday?",
+      "summary": "Pay periods are biweekly (Sunday through Saturday). Timesheets are due before noon on the Monday after the period ends, and payday is normally the Friday after the period ends — moved to Thursday when that Friday is a bank holiday, and occasionally adjusted for a specific period when payroll confirms it. The timesheet form shows the authoritative due date and payday for the period you pick.",
+      "body_source_path": "src/pages/Help.jsx#faqs",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/Timesheets",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "payroll-policy-review",
+        "date-rule-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.help.faq.what-is-the-ai-content-responsibility-agreement-i-accepted-at-sign-in",
+      "kind": "faq",
+      "title": "What is the AI-content responsibility agreement I accepted at sign-in?",
+      "summary": "A one-time acknowledgment (re-shown only if the wording changes) that AI-generated content may contain errors and that you are responsible for reviewing and approving anything you submit. Your acceptance is recorded with your name, the date, and the agreement version.",
+      "body_source_path": "src/pages/Help.jsx#faqs",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/Help",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "legal-copy-review",
+        "ai-safety-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.document-management.enhanced-pdf-template-manager",
+      "kind": "tutorial",
+      "title": "Enhanced PDF Template Manager",
+      "summary": "Organize templates by category, version control with history, and powerful search/filter capabilities",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/DocumentHub",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "capability-verification",
+        "product-copy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.document-management.quick-document-presets",
+      "kind": "tutorial",
+      "title": "Quick Document Presets",
+      "summary": "One-click document packages for common workflows (Admission, Consent Packet, Discharge)",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/DocumentHub",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "capability-verification",
+        "product-copy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.document-management.custom-pdf-upload",
+      "kind": "tutorial",
+      "title": "Custom PDF Upload",
+      "summary": "Upload your own PDF forms to include in document packages alongside system templates",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/DocumentHub",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "capability-verification",
+        "product-copy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.document-management.visual-pdf-field-editor",
+      "kind": "tutorial",
+      "title": "Visual PDF Field Editor",
+      "summary": "Drag-and-drop field placement on PDFs with real-time positioning and multiple field types",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/DocumentHub",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "capability-verification",
+        "product-copy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.document-management.conditional-field-logic",
+      "kind": "tutorial",
+      "title": "Conditional Field Logic",
+      "summary": "Show/hide fields dynamically based on other field values with visual indicators",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/DocumentHub",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "capability-verification",
+        "product-copy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.document-management.dynamic-tables",
+      "kind": "tutorial",
+      "title": "Dynamic Tables",
+      "summary": "Add configurable tables with custom rows and columns to PDF templates",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/DocumentHub",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "capability-verification",
+        "product-copy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.document-management.rich-text-formatting",
+      "kind": "tutorial",
+      "title": "Rich Text Formatting",
+      "summary": "Advanced text styling with bold, italic, underline, custom colors, and font sizes",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/DocumentHub",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "capability-verification",
+        "product-copy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.smart-note-assistant.unified-ai-suggestions-compliance-quality",
+      "kind": "tutorial",
+      "title": "Unified AI Suggestions (Compliance + Quality)",
+      "summary": "Single AI panel that analyzes notes for BOTH Medicare compliance gaps AND quality improvements with one 'Fix All' button",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff"
+      ],
+      "route_template": "/SmartNoteAssistant",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-claims-review",
+        "ai-safety-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.smart-note-assistant.ai-powered-voice-dictation",
+      "kind": "tutorial",
+      "title": "AI-Powered Voice Dictation",
+      "summary": "Record clinical observations and AI automatically transcribes, formats, and converts to Medicare-compliant narrative",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff"
+      ],
+      "route_template": "/SmartNoteAssistant",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-claims-review",
+        "ai-safety-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.smart-note-assistant.smart-vitals-recognition",
+      "kind": "tutorial",
+      "title": "Smart Vitals Recognition",
+      "summary": "Speak vital signs naturally and AI extracts and populates fields automatically",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff"
+      ],
+      "route_template": "/SmartNoteAssistant",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-claims-review",
+        "ai-safety-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.smart-note-assistant.ai-note-enhancement",
+      "kind": "tutorial",
+      "title": "AI Note Enhancement",
+      "summary": "One-click transformation of rough notes into polished, Medicare-compliant clinical documentation",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff"
+      ],
+      "route_template": "/SmartNoteAssistant",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-claims-review",
+        "ai-safety-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.smart-note-assistant.smart-auto-complete",
+      "kind": "tutorial",
+      "title": "Smart Auto-Complete",
+      "summary": "Type trigger words like 'lungs', 'heart', 'wound' and get instant phrase suggestions specific to diagnosis",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff"
+      ],
+      "route_template": "/SmartNoteAssistant",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-claims-review",
+        "ai-safety-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.smart-note-assistant.clinical-decision-support",
+      "kind": "tutorial",
+      "title": "Clinical Decision Support",
+      "summary": "Real-time clinical analysis with drug interactions, risk detection, and evidence-based recommendations",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff"
+      ],
+      "route_template": "/SmartNoteAssistant",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-claims-review",
+        "ai-safety-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.smart-note-assistant.patient-history-ai-summary",
+      "kind": "tutorial",
+      "title": "Patient History AI Summary",
+      "summary": "AI automatically generates concise summary of patient's medical history, recent visits, and care plan status",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff"
+      ],
+      "route_template": "/SmartNoteAssistant",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-claims-review",
+        "ai-safety-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.smart-note-assistant.automated-task-generation",
+      "kind": "tutorial",
+      "title": "Automated Task Generation",
+      "summary": "AI identifies follow-up tasks from documentation and creates them automatically",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff"
+      ],
+      "route_template": "/SmartNoteAssistant",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-claims-review",
+        "ai-safety-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.smart-note-assistant.medicare-guidelines-integration",
+      "kind": "tutorial",
+      "title": "Medicare Guidelines Integration",
+      "summary": "AI retrieves relevant Medicare guidelines and integrates them into compliance suggestions",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff"
+      ],
+      "route_template": "/SmartNoteAssistant",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-claims-review",
+        "ai-safety-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.oasis-analyzer.pdf-upload-and-data-extraction",
+      "kind": "tutorial",
+      "title": "PDF Upload & Data Extraction",
+      "summary": "Paused: OASIS PDF upload, AI extraction, and patient matching are unavailable pending verified CMS clinical content, tenant-scoped authorization, and required human review",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/OASISCenter",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-policy-review",
+        "paused-status-verify"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.oasis-analyzer.pdgm-revenue-analysis",
+      "kind": "tutorial",
+      "title": "PDGM Revenue Analysis",
+      "summary": "Paused: PDGM grouping, case-mix, payment, and optimization guidance are unavailable pending verified CMS clinical content, tenant-scoped authorization, and required human review",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/OASISCenter",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-policy-review",
+        "paused-status-verify"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.oasis-analyzer.documentation-quality-scoring",
+      "kind": "tutorial",
+      "title": "Documentation Quality Scoring",
+      "summary": "Paused: automated OASIS accuracy, completeness, compliance scoring, and response guidance are unavailable pending verified CMS clinical content, tenant-scoped authorization, and required human review",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/OASISCenter",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-policy-review",
+        "paused-status-verify"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.oasis-analyzer.revenue-optimization-recommendations",
+      "kind": "tutorial",
+      "title": "Revenue Optimization Recommendations",
+      "summary": "Paused: M-item correction, PDGM impact, and reimbursement recommendations are unavailable pending verified CMS clinical content, tenant-scoped authorization, and required human review",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/OASISCenter",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-policy-review",
+        "paused-status-verify"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.oasis-analyzer.clinical-pathway-triggering",
+      "kind": "tutorial",
+      "title": "Clinical Pathway Triggering",
+      "summary": "Paused: OASIS-derived pathway triggering is unavailable pending verified CMS clinical content, tenant-scoped authorization, and required human review",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/OASISCenter",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-policy-review",
+        "paused-status-verify"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.oasis-analyzer.predictive-revenue-forecasting",
+      "kind": "tutorial",
+      "title": "Predictive Revenue Forecasting",
+      "summary": "Paused: AI financial-impact and PDGM reimbursement forecasting are unavailable pending verified CMS clinical content, tenant-scoped authorization, and required human review",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/OASISCenter",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-policy-review",
+        "paused-status-verify"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.clinical-pathways.diagnosis-based-pathway-triggers",
+      "kind": "tutorial",
+      "title": "Diagnosis-Based Pathway Triggers",
+      "summary": "Automatic pathway activation based on diagnosis codes, keywords, and clinical conditions",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/ClinicalPathwayManager",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-policy-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.clinical-pathways.documentation-prompts",
+      "kind": "tutorial",
+      "title": "Documentation Prompts",
+      "summary": "Condition-specific prompts ensure comprehensive documentation of all relevant clinical factors",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/ClinicalPathwayManager",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-policy-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.clinical-pathways.automated-task-creation",
+      "kind": "tutorial",
+      "title": "Automated Task Creation",
+      "summary": "Generate pathway-specific tasks for care coordination, safety, and follow-up",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/ClinicalPathwayManager",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-policy-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.clinical-pathways.pathway-management",
+      "kind": "tutorial",
+      "title": "Pathway Management",
+      "summary": "Admin interface to create, edit, and manage evidence-based clinical pathways",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "customer-admin"
+      ],
+      "route_template": "/ClinicalPathwayManager",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-policy-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.workflow-and-notifications.real-time-notification-center",
+      "kind": "tutorial",
+      "title": "Real-Time Notification Center",
+      "summary": "Centralized notification hub in header showing unread messages, active alerts, and pending tasks",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/Dashboard",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "capability-verification",
+        "product-copy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.workflow-and-notifications.my-workflow-dashboard",
+      "kind": "tutorial",
+      "title": "My Workflow Dashboard",
+      "summary": "Personalized nurse workflow with today's visits, pending tasks, and priority alerts",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/Dashboard",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "capability-verification",
+        "product-copy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.workflow-and-notifications.smart-task-assignment",
+      "kind": "tutorial",
+      "title": "Smart Task Assignment",
+      "summary": "AI automatically generates and assigns tasks based on documentation and patient needs",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/Dashboard",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "capability-verification",
+        "product-copy-review"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.patient-alerts-and-monitoring.proactive-risk-detection",
+      "kind": "tutorial",
+      "title": "Proactive Risk Detection",
+      "summary": "AI monitors patient data for deterioration patterns and generates predictive alerts",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/PatientAlerts",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-claims-review",
+        "ai-safety-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.patient-alerts-and-monitoring.multi-factor-risk-scoring",
+      "kind": "tutorial",
+      "title": "Multi-Factor Risk Scoring",
+      "summary": "Comprehensive risk assessment based on vitals, functional status, medications, and comorbidities",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/PatientAlerts",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-claims-review",
+        "ai-safety-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.patient-alerts-and-monitoring.alert-workflow-management",
+      "kind": "tutorial",
+      "title": "Alert Workflow Management",
+      "summary": "Assign, acknowledge, and track resolution of patient alerts with team coordination",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/PatientAlerts",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-claims-review",
+        "ai-safety-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.training-and-education.ai-personalized-training-engine",
+      "kind": "tutorial",
+      "title": "AI Personalized Training Engine",
+      "summary": "Advanced AI analyzes your documentation patterns and recommends specific training to improve quality and compliance",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/NurseTrainingHub",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "training-workflow-review",
+        "ai-claims-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.training-and-education.personalized-training-plans",
+      "kind": "tutorial",
+      "title": "Personalized Training Plans",
+      "summary": "AI generates custom learning paths based on individual nurse performance and documentation gaps",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/NurseTrainingHub",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "training-workflow-review",
+        "ai-claims-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.training-and-education.interactive-scenarios",
+      "kind": "tutorial",
+      "title": "Interactive Scenarios",
+      "summary": "Practice with realistic patient cases and receive AI feedback on clinical decisions",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/NurseTrainingHub",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "training-workflow-review",
+        "ai-claims-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.training-and-education.documentation-practice",
+      "kind": "tutorial",
+      "title": "Documentation Practice",
+      "summary": "Hands-on practice with documentation scenarios and instant AI quality feedback",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/NurseTrainingHub",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "training-workflow-review",
+        "ai-claims-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.training-and-education.training-recommendations",
+      "kind": "tutorial",
+      "title": "Training Recommendations",
+      "summary": "Auto-assign training based on documentation review and compliance audit findings",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/NurseTrainingHub",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "training-workflow-review",
+        "ai-claims-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.compliance-and-analytics.automated-compliance-auditing",
+      "kind": "tutorial",
+      "title": "Automated Compliance Auditing",
+      "summary": "AI audits all documentation against Medicare CoPs, state regulations, and agency policies",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/ComplianceCenter",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "regulatory-review",
+        "metric-definition-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.compliance-and-analytics.user-activity-tracking",
+      "kind": "tutorial",
+      "title": "User Activity Tracking",
+      "summary": "Comprehensive logging of all user actions for audit trail and performance monitoring",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "customer-admin"
+      ],
+      "route_template": "/UserActivityReport",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "regulatory-review",
+        "metric-definition-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.compliance-and-analytics.regulatory-updates",
+      "kind": "tutorial",
+      "title": "Regulatory Updates",
+      "summary": "AI monitors and alerts on CMS, Medicare, and state regulatory changes",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/ComplianceCenter",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "regulatory-review",
+        "metric-definition-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.compliance-and-analytics.performance-analytics",
+      "kind": "tutorial",
+      "title": "Performance Analytics",
+      "summary": "Comprehensive dashboards for nurse performance, documentation quality, and outcomes",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "customer-admin"
+      ],
+      "route_template": "/ReportsAnalytics",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "regulatory-review",
+        "metric-definition-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.patient-and-care-management.incident-reporting",
+      "kind": "tutorial",
+      "title": "Incident Reporting",
+      "summary": "Guided incident reporting with AI-generated comprehensive reports",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/Incidents",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-workflow-review",
+        "ai-safety-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.feature.patient-and-care-management.patient-history-summarization",
+      "kind": "tutorial",
+      "title": "Patient History Summarization",
+      "summary": "AI generates concise summaries of patient history and recent activity",
+      "body_source_path": "src/pages/Features.jsx#features",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/Patients",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "clinical-workflow-review",
+        "ai-safety-review",
+        "capability-verification"
+      ]
+    },
+    {
+      "content_key": "pennsync.guide-outline.all-features",
+      "kind": "guide-outline",
+      "title": "Complete User Guide - All Features",
+      "summary": "Comprehensive guide covering every feature of the PennSync platform",
+      "body_source_path": "src/pages/UserGuides.jsx#guides",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/Features",
+      "classification": "pennsync-overlay",
+      "readiness": "outline-only",
+      "review_flags": [
+        "generated-body-excluded",
+        "editorial-body-required"
+      ]
+    },
+    {
+      "content_key": "pennsync.guide-outline.document-management",
+      "kind": "guide-outline",
+      "title": "Document Management Guide",
+      "summary": "Master PDF templates, visual field editor, and document package creation",
+      "body_source_path": "src/pages/UserGuides.jsx#guides",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/DocumentHub",
+      "classification": "shared-core",
+      "readiness": "outline-only",
+      "review_flags": [
+        "generated-body-excluded",
+        "editorial-body-required",
+        "no-dedicated-generator-prompt"
+      ]
+    },
+    {
+      "content_key": "pennsync.guide-outline.referral-intake",
+      "kind": "guide-outline",
+      "title": "Referral Intake Guide",
+      "summary": "Step-by-step instructions for uploading and processing referrals with AI assistance",
+      "body_source_path": "src/pages/UserGuides.jsx#guides",
+      "audience": [
+        "customer-admin"
+      ],
+      "route_template": "/ReferralIntake",
+      "classification": "pennsync-overlay",
+      "readiness": "outline-only",
+      "review_flags": [
+        "generated-body-excluded",
+        "editorial-body-required"
+      ]
+    },
+    {
+      "content_key": "pennsync.guide-outline.admission-documentation",
+      "kind": "guide-outline",
+      "title": "Admission Visit Guide",
+      "summary": "Complete guide for nurses documenting admission visits with AI-powered tools",
+      "body_source_path": "src/pages/UserGuides.jsx#guides",
+      "audience": [
+        "clinical-staff"
+      ],
+      "route_template": "/ClinicalDocumentation",
+      "classification": "pennsync-overlay",
+      "readiness": "outline-only",
+      "review_flags": [
+        "generated-body-excluded",
+        "editorial-body-required"
+      ]
+    },
+    {
+      "content_key": "pennsync.guide-outline.smart-notes",
+      "kind": "guide-outline",
+      "title": "Smart Notes & Quick Note Guide",
+      "summary": "Master AI-powered documentation with voice dictation and real-time assistance",
+      "body_source_path": "src/pages/UserGuides.jsx#guides",
+      "audience": [
+        "clinical-staff"
+      ],
+      "route_template": "/SmartNoteAssistant",
+      "classification": "pennsync-overlay",
+      "readiness": "outline-only",
+      "review_flags": [
+        "generated-body-excluded",
+        "editorial-body-required"
+      ]
+    },
+    {
+      "content_key": "pennsync.guide-outline.oasis-assessment",
+      "kind": "guide-outline",
+      "title": "OASIS Assessment Guide",
+      "summary": "Automated OASIS response guidance and PDGM optimization are paused pending verified CMS clinical content, tenant-scoped authorization, and required human review",
+      "body_source_path": "src/pages/UserGuides.jsx#guides",
+      "audience": [
+        "clinical-staff"
+      ],
+      "route_template": "/OASISCenter",
+      "classification": "pennsync-overlay",
+      "readiness": "outline-only",
+      "review_flags": [
+        "generated-body-excluded",
+        "editorial-body-required",
+        "clinical-policy-review",
+        "paused-status-verify"
+      ]
+    },
+    {
+      "content_key": "pennsync.guide-outline.patient-management",
+      "kind": "guide-outline",
+      "title": "Patient Management Guide",
+      "summary": "Comprehensive patient record management and Patient 360 view",
+      "body_source_path": "src/pages/UserGuides.jsx#guides",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/Patients",
+      "classification": "pennsync-overlay",
+      "readiness": "outline-only",
+      "review_flags": [
+        "generated-body-excluded",
+        "editorial-body-required"
+      ]
+    },
+    {
+      "content_key": "pennsync.guide-outline.training-hub",
+      "kind": "guide-outline",
+      "title": "Training Hub Guide",
+      "summary": "Complete training modules and track professional development",
+      "body_source_path": "src/pages/UserGuides.jsx#guides",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/LearningCenter",
+      "classification": "shared-core",
+      "readiness": "outline-only",
+      "review_flags": [
+        "generated-body-excluded",
+        "editorial-body-required"
+      ]
+    },
+    {
+      "content_key": "pennsync.guide-outline.compliance-quality",
+      "kind": "guide-outline",
+      "title": "Compliance & Quality Guide",
+      "summary": "Maintain Medicare compliance and quality standards with AI monitoring",
+      "body_source_path": "src/pages/UserGuides.jsx#guides",
+      "audience": [
+        "clinical-staff",
+        "customer-admin"
+      ],
+      "route_template": "/ComplianceCenter",
+      "classification": "pennsync-overlay",
+      "readiness": "outline-only",
+      "review_flags": [
+        "generated-body-excluded",
+        "editorial-body-required"
+      ]
+    },
+    {
+      "content_key": "pennsync.guide-outline.messages",
+      "kind": "guide-outline",
+      "title": "Messaging & Communication Guide",
+      "summary": "Effective team communication and care coordination",
+      "body_source_path": "src/pages/UserGuides.jsx#guides",
+      "audience": [
+        "all-authenticated-staff"
+      ],
+      "route_template": "/Messages",
+      "classification": "shared-core",
+      "readiness": "outline-only",
+      "review_flags": [
+        "generated-body-excluded",
+        "editorial-body-required"
+      ]
+    },
+    {
+      "content_key": "pennsync.guide-outline.patient-alerts",
+      "kind": "guide-outline",
+      "title": "Patient Alerts & Monitoring Guide",
+      "summary": "Monitor and respond to patient risk alerts and clinical deterioration",
+      "body_source_path": "src/pages/UserGuides.jsx#guides",
+      "audience": [
+        "clinical-staff"
+      ],
+      "route_template": "/PatientAlerts",
+      "classification": "pennsync-overlay",
+      "readiness": "outline-only",
+      "review_flags": [
+        "generated-body-excluded",
+        "editorial-body-required"
+      ]
+    },
+    {
+      "content_key": "pennsync.guide-outline.workflow-notifications",
+      "kind": "guide-outline",
+      "title": "Workflow & Notifications Guide",
+      "summary": "Master your daily workflow with notifications, tasks, and priority management",
+      "body_source_path": "src/pages/UserGuides.jsx#guides",
+      "audience": [
+        "clinical-staff"
+      ],
+      "route_template": "/Dashboard",
+      "classification": "shared-core",
+      "readiness": "outline-only",
+      "review_flags": [
+        "generated-body-excluded",
+        "editorial-body-required",
+        "no-dedicated-generator-prompt"
+      ]
+    },
+    {
+      "content_key": "pennsync.guide-outline.personalized-training",
+      "kind": "guide-outline",
+      "title": "AI Personalized Training Guide",
+      "summary": "Improve documentation quality with AI-driven personalized learning",
+      "body_source_path": "src/pages/UserGuides.jsx#guides",
+      "audience": [
+        "clinical-staff"
+      ],
+      "route_template": "/NurseTrainingHub",
+      "classification": "shared-core",
+      "readiness": "outline-only",
+      "review_flags": [
+        "generated-body-excluded",
+        "editorial-body-required",
+        "no-dedicated-generator-prompt"
+      ]
+    },
+    {
+      "content_key": "pennsync.training.scenario.homebound-justification",
+      "kind": "interactive-tutorial",
+      "title": "Homebound Status Justification",
+      "summary": "Practice documenting why a patient qualifies as homebound",
+      "body_source_path": "src/components/training/InteractiveDocumentationScenarios.jsx#scenarioTemplates",
+      "audience": [
+        "clinical-staff"
+      ],
+      "route_template": "/NurseTrainingHub",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "synthetic-example-only",
+        "clinical-content-review",
+        "ai-feedback-output-excluded"
+      ]
+    },
+    {
+      "content_key": "pennsync.training.scenario.skilled-need",
+      "kind": "interactive-tutorial",
+      "title": "Skilled Nursing Need Documentation",
+      "summary": "Document why skilled nursing is required",
+      "body_source_path": "src/components/training/InteractiveDocumentationScenarios.jsx#scenarioTemplates",
+      "audience": [
+        "clinical-staff"
+      ],
+      "route_template": "/NurseTrainingHub",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "synthetic-example-only",
+        "clinical-content-review",
+        "ai-feedback-output-excluded"
+      ]
+    },
+    {
+      "content_key": "pennsync.training.scenario.vital-signs",
+      "kind": "interactive-tutorial",
+      "title": "Vital Signs Documentation",
+      "summary": "Document vital signs with clinical interpretation",
+      "body_source_path": "src/components/training/InteractiveDocumentationScenarios.jsx#scenarioTemplates",
+      "audience": [
+        "clinical-staff"
+      ],
+      "route_template": "/NurseTrainingHub",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "synthetic-example-only",
+        "clinical-content-review",
+        "ai-feedback-output-excluded"
+      ]
+    },
+    {
+      "content_key": "pennsync.training.scenario.patient-response",
+      "kind": "interactive-tutorial",
+      "title": "Patient Response to Teaching",
+      "summary": "Document patient education and response",
+      "body_source_path": "src/components/training/InteractiveDocumentationScenarios.jsx#scenarioTemplates",
+      "audience": [
+        "clinical-staff"
+      ],
+      "route_template": "/NurseTrainingHub",
+      "classification": "pennsync-overlay",
+      "readiness": "review-required",
+      "review_flags": [
+        "synthetic-example-only",
+        "clinical-content-review",
+        "ai-feedback-output-excluded"
+      ]
+    },
+    {
+      "content_key": "pennsync.admin.onboarding-checklist",
+      "kind": "checklist",
+      "title": "Facility administrator onboarding checklist",
+      "summary": "Static setup checklist covering app configuration, agency profile, staff invitations, templates, and required training.",
+      "body_source_path": "src/components/admin/adminOnboardingChecklist.js#CHECKS",
+      "audience": [
+        "customer-admin"
+      ],
+      "route_template": "/AgencySettings",
+      "classification": "shared-core",
+      "readiness": "review-required",
+      "review_flags": [
+        "product-overlay-needed",
+        "security-review",
+        "dynamic-completion-state-excluded"
+      ]
+    }
+  ],
+  "excluded_sources": [
+    {
+      "source": "public/manuals/*.html and public/manuals/*.pdf",
+      "reason": "Generated derivatives; canonical authored bodies are scripts/manuals/content-user.mjs and scripts/manuals/content-admin.mjs."
+    },
+    {
+      "source": "src/pages/Features.jsx#generateFeaturesPDF and src/pages/Features.jsx#generateUserManual",
+      "reason": "Client-generated print output and a duplicate embedded manual; the static feature array is inventoried instead."
+    },
+    {
+      "source": "base44/functions/generateUserGuidePDF/entry.ts runtime output",
+      "reason": "AI-generated guide bodies are drafts, not governed source content. Only static catalog outlines are inventoried."
+    },
+    {
+      "source": "base44/entities/Training*, base44/entities/EducationMaterial.jsonc, and live entity rows",
+      "reason": "Schemas and tenant/user-scoped assignments, progress, feedback, records, or uploaded content are outside this non-PHI source inventory."
+    },
+    {
+      "source": "src/components/training/AICourseGenerator.jsx, AIComplianceQuizGenerator.jsx, TrainingVideoStudio.jsx, and runtime media components",
+      "reason": "Generated content, provider jobs, media locations, and user progress are excluded."
+    },
+    {
+      "source": "src/pages/NurseEducationVideos.jsx",
+      "reason": "Dead or redirected legacy page; it is not a canonical active content source."
+    },
+    {
+      "source": "src/pages/Help.jsx quick-link cards and quick-start intro/tips",
+      "reason": "Navigation-only or materially duplicated by the canonical manual blocks; current Help FAQs remain separately inventoried because they supersede stale manual FAQ language."
+    },
+    {
+      "source": "src/pages/Help.jsx contact tab",
+      "reason": "Support contact presentation is configuration, not a help-content body, and should be supplied centrally at render time."
+    },
+    {
+      "source": "repository issues, audit evidence, developer documentation, and deployment output",
+      "reason": "Not end-user help/tutorial content and may contain operational or sensitive context."
+    }
+  ],
+  "source_findings": {
+    "current_faq_precedence": "The 12 FAQs in src/pages/Help.jsx are newer than the manual FAQ block and correctly describe OASIS and PDGM guidance as paused.",
+    "stale_manual_warning": "scripts/manuals/content-user.mjs contains OASIS and FAQ claims that conflict with the paused feature status; both blocks are held.",
+    "guide_generator_mismatch": {
+      "catalog_entries_without_dedicated_prompt": [
+        "document_management",
+        "workflow_notifications",
+        "personalized_training"
+      ],
+      "generator_prompt_without_catalog_entry": [
+        "care_plans"
+      ],
+      "action": "Do not generate or import these guide bodies until the catalog and prompt registry are reconciled."
+    },
+    "video_finding": "No static, provider-safe tutorial video catalog exists in source. Live video metadata is entity-backed or provider/runtime data and is excluded.",
+    "duplicate_policy": "Prefer manual source blocks for long-form help, current Help-page FAQs for FAQ answers, and the feature array for granular how-to cards."
+  },
+  "counts": {
+    "total_entries": 104,
+    "by_kind": {
+      "article": 29,
+      "checklist": 1,
+      "faq": 12,
+      "faq-collection": 2,
+      "guide-outline": 13,
+      "interactive-tutorial": 4,
+      "tutorial": 43
+    },
+    "by_classification": {
+      "shared-core": 30,
+      "pennsync-overlay": 74
+    },
+    "by_readiness": {
+      "review-required": 89,
+      "hold": 2,
+      "outline-only": 13
+    },
+    "source_units": {
+      "user_manual_blocks": 17,
+      "admin_manual_blocks": 14,
+      "current_help_faqs": 12,
+      "feature_categories": 9,
+      "feature_tutorials": 43,
+      "guide_catalog_outlines": 13,
+      "synthetic_training_scenarios": 4,
+      "admin_onboarding_checklists": 1
+    }
+  },
+  "validation": {
+    "status": "passed",
+    "content_keys_unique": true,
+    "content_key_format": "lowercase dot/hyphen namespace",
+    "source_paths_exist_at_snapshot": true,
+    "all_route_templates_present_in_src_lib_nav_manifest_js": true,
+    "all_route_templates_static": true,
+    "audiences_allowlisted": true,
+    "classifications_allowlisted": true,
+    "readiness_values_allowlisted": true,
+    "literal_urls_contact_links_and_secret_shaped_values_absent_from_entries": true,
+    "counts_recomputed_from_entries": true
+  },
+  "recommended_import_order": [
+    "Resolve and publish the 12 current Help-page FAQs first, after clinical/legal review.",
+    "Extract shared-core manual blocks into reusable CareMetric articles with PennSync route and terminology overlays.",
+    "Verify feature claims against live behavior before importing the 43 feature tutorials.",
+    "Author governed bodies for guide outlines; never ingest runtime-generated PDFs as canonical content.",
+    "Keep synthetic scenarios in a reviewed clinical-training collection and exclude learner responses and AI feedback.",
+    "Require content-addressed media assets and first-party ingestion before adding any video catalog."
+  ]
+}

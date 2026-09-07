@@ -16,6 +16,14 @@
 - Reconciliation of all 65 current video lessons to completed HeyGen jobs and
   existing private CareBase Storage objects; playback remains in CareBase.
 - An installable, dependency-free `@caremetric/help-sdk` with a production URL default and fail-closed context validation.
+- Live central Help launchers in CareMetric EMR and the CareMetric Breathe admin
+  experience, a published PennSync launcher, plus a live portfolio-level
+  Software Help Center on PennSite.
+- A registered CareMetric Go product with the governed 80-course catalog and
+  two explicitly approved shared-core articles; no private learning data or
+  provider URLs were copied.
+- A registered CareMetric Intel pilot with the same governed shared-course and
+  core-safety boundaries; its existing product guide remains review-gated.
 
 ## Phase 1 — provision and validate
 
@@ -35,12 +43,12 @@ Exit criteria:
 - Staff-only notes are absent from every customer response.
 - Cases, messages, and audits survive export/restore testing.
 
-## Phase 2 — PennFit SDK pilot
+## Phase 2 — application launchers
 
 1. Build and version the installable `@caremetric/help-sdk` tarball; consume it from each application's private source tree until a CareMetric-owned package registry is approved.
-2. Add the launcher to PennFit with product slug, version, environment, and route template only.
+2. ✅ Add the launcher to PennFit/CareMetric Breathe with product slug, version, environment, and route template only.
 3. Build the server-signed context exchange and verified identity mapping.
-4. Add a feature flag and keep PennFit’s local help as a temporary fallback.
+4. ✅ Keep the verified CareMetric EMR, CareMetric Breathe, PennSync, and CareBase launchers behind application-owned rollback controls or local-help fallbacks.
 5. Compare route resolution, no-result searches, and case-context quality.
 
 Exit criteria:
@@ -48,7 +56,7 @@ Exit criteria:
 - No personal or clinical values appear in launcher URLs, logs, or analytics.
 - Tampered or replayed context tokens fail.
 - Disabling membership blocks access immediately.
-- PennFit can switch back to local help without a deployment rollback.
+- ✅ PennFit and CareMetric EMR can switch back to local help without a deployment rollback.
 
 ## Phase 3 — content migration
 

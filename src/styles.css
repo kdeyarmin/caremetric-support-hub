@@ -424,9 +424,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .rollout-head { min-height: 36px; padding: 0 20px; color: #83938f; background: #f7faf9; font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
 .rollout-row { min-height: 57px; padding: 0 20px; border-top: 1px solid #edf2f1; color: #617571; font-size: 9px; }
 .rollout-row > span:first-child { display: flex; align-items: center; gap: 8px; color: var(--ink); font-weight: 700; }
-.state-progress, .state-planned { width: max-content; padding: 4px 7px; border-radius: 999px; font-size: 8px; font-weight: 800; }
-.state-progress { color: #956115; background: #f8ecd5; }
-.state-planned { color: #687b77; background: #edf1f0; }
+.state-live, .state-source_ready, .state-in_progress, .state-blocked { width: max-content; padding: 4px 7px; border-radius: 999px; font-size: 8px; font-weight: 800; }
+.state-live { color: #126858; background: #e2f3ee; }
+.state-source_ready { color: #275f89; background: #e4f0f8; }
+.state-in_progress { color: #956115; background: #f8ecd5; }
+.state-blocked { color: #8e4e49; background: #f8e8e6; }
 
 @media (max-width: 1180px) {
   .metric-grid, .product-grid { grid-template-columns: repeat(2, 1fr); }

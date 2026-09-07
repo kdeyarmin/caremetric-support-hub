@@ -1131,7 +1131,9 @@ values
   ('00000000-0000-4000-8000-000000000001', 'carebase', 'CareMetric CareBase', 'Operations, compliance, workforce, and learning management.', 'active', '#0a7a70'),
   ('00000000-0000-4000-8000-000000000002', 'breathe', 'CareMetric Breathe', 'DME resupply, mask fitting, and patient engagement.', 'active', '#2378c8'),
   ('00000000-0000-4000-8000-000000000003', 'pennsync', 'PennSync', 'Clinical documentation assistance and OASIS workflow support.', 'pilot', '#7654c6'),
-  ('00000000-0000-4000-8000-000000000004', 'caremetric-emr', 'CareMetric EMR', 'Care delivery, scheduling, billing, and practice operations.', 'pilot', '#c46a25')
+  ('00000000-0000-4000-8000-000000000004', 'caremetric-emr', 'CareMetric EMR', 'Care delivery, scheduling, billing, and practice operations.', 'pilot', '#c46a25'),
+  ('00000000-0000-4000-8000-000000000005', 'caremetric-go', 'CareMetric Go', 'Secure companion clinical app and patient portal for CareMetric AI.', 'pilot', '#2563eb'),
+  ('00000000-0000-4000-8000-000000000006', 'caremetric-intel', 'CareMetric Intel', 'Healthcare provider intelligence, CRM, and analytics for post-acute organizations.', 'pilot', '#0891b2')
 on conflict (id) do update set
   slug = excluded.slug,
   name = excluded.name,
@@ -1216,13 +1218,20 @@ from (
     ('20000000-0000-4000-8000-000000000001'::uuid, '30000000-0000-4000-8000-000000000001'::uuid, '00000000-0000-4000-8000-000000000002'::uuid, array['all']::text[], null::text),
     ('20000000-0000-4000-8000-000000000001'::uuid, '30000000-0000-4000-8000-000000000001'::uuid, '00000000-0000-4000-8000-000000000003'::uuid, array['all']::text[], null::text),
     ('20000000-0000-4000-8000-000000000001'::uuid, '30000000-0000-4000-8000-000000000001'::uuid, '00000000-0000-4000-8000-000000000004'::uuid, array['all']::text[], null::text),
+    ('20000000-0000-4000-8000-000000000001'::uuid, '30000000-0000-4000-8000-000000000001'::uuid, '00000000-0000-4000-8000-000000000005'::uuid, array['all']::text[], null::text),
+    ('20000000-0000-4000-8000-000000000001'::uuid, '30000000-0000-4000-8000-000000000001'::uuid, '00000000-0000-4000-8000-000000000006'::uuid, array['all']::text[], null::text),
     ('20000000-0000-4000-8000-000000000002'::uuid, '30000000-0000-4000-8000-000000000002'::uuid, '00000000-0000-4000-8000-000000000001'::uuid, array['customer-admin']::text[], '/team/**'),
     ('20000000-0000-4000-8000-000000000002'::uuid, '30000000-0000-4000-8000-000000000002'::uuid, '00000000-0000-4000-8000-000000000002'::uuid, array['customer-admin']::text[], '/team/**'),
     ('20000000-0000-4000-8000-000000000002'::uuid, '30000000-0000-4000-8000-000000000002'::uuid, '00000000-0000-4000-8000-000000000003'::uuid, array['customer-admin']::text[], '/team/**'),
     ('20000000-0000-4000-8000-000000000002'::uuid, '30000000-0000-4000-8000-000000000002'::uuid, '00000000-0000-4000-8000-000000000004'::uuid, array['customer-admin']::text[], '/team/**'),
+    ('20000000-0000-4000-8000-000000000002'::uuid, '30000000-0000-4000-8000-000000000002'::uuid, '00000000-0000-4000-8000-000000000005'::uuid, array['customer-admin']::text[], '/team/**'),
+    ('20000000-0000-4000-8000-000000000002'::uuid, '30000000-0000-4000-8000-000000000002'::uuid, '00000000-0000-4000-8000-000000000006'::uuid, array['customer-admin']::text[], '/team/**'),
     ('20000000-0000-4000-8000-000000000004'::uuid, '30000000-0000-4000-8000-000000000004'::uuid, '00000000-0000-4000-8000-000000000001'::uuid, array['customer-admin','manager']::text[], null::text),
+    ('20000000-0000-4000-8000-000000000004'::uuid, '30000000-0000-4000-8000-000000000004'::uuid, '00000000-0000-4000-8000-000000000006'::uuid, array['customer-admin','manager']::text[], null::text),
     ('20000000-0000-4000-8000-000000000004'::uuid, '30000000-0000-4000-8000-000000000004'::uuid, '00000000-0000-4000-8000-000000000002'::uuid, array['customer-admin','manager']::text[], null::text),
-    ('20000000-0000-4000-8000-000000000004'::uuid, '30000000-0000-4000-8000-000000000004'::uuid, '00000000-0000-4000-8000-000000000003'::uuid, array['customer-admin','manager']::text[], null::text)
+    ('20000000-0000-4000-8000-000000000004'::uuid, '30000000-0000-4000-8000-000000000004'::uuid, '00000000-0000-4000-8000-000000000003'::uuid, array['customer-admin','manager']::text[], null::text),
+    ('20000000-0000-4000-8000-000000000004'::uuid, '30000000-0000-4000-8000-000000000004'::uuid, '00000000-0000-4000-8000-000000000004'::uuid, array['customer-admin','manager']::text[], null::text),
+    ('20000000-0000-4000-8000-000000000004'::uuid, '30000000-0000-4000-8000-000000000004'::uuid, '00000000-0000-4000-8000-000000000005'::uuid, array['customer-admin','manager']::text[], null::text)
 ) as seed(item_id, revision_id, product_id, audience, route_pattern)
 on conflict (item_id, product_id) do nothing;
 

@@ -1,0 +1,2194 @@
+{
+  "schema_version": "1.0",
+  "artifact_kind": "caremetric-emr-help-content-inventory",
+  "generated_at": "2026-09-07T18:06:26Z",
+  "source": {
+    "repository": "kdeyarmin/CMbackup",
+    "ref": "main",
+    "commit_sha": "9718b07c37d7b1c092f25771811f5cfc3e60dc41",
+    "commit_url": "https://github.com/kdeyarmin/CMbackup/commit/9718b07c37d7b1c092f25771811f5cfc3e60dc41",
+    "tree_complete": true
+  },
+  "scope": {
+    "granularity": "One record per guide, FAQ category, manual section, troubleshooting module, role track, or intent category. source_item_count preserves the atomic authored-unit count.",
+    "included": "Static, complete, non-tenant help/FAQ/manual/troubleshooting content present in the canonical commit.",
+    "excluded": "Tickets, chat/free text, dynamic tenant/user/tutorial records, editable database rows, secrets, tokenized URLs, drafts, derived duplicate exports, and metadata-only resources.",
+    "classification_meaning": {
+      "shared-core": "Candidate for a product-neutral ecosystem article after route/brand/claim normalization.",
+      "caremetric-emr-overlay": "Keep scoped to CareMetric EMR unless an editor explicitly extracts a reusable core."
+    },
+    "route_context_policy": "Only static route templates are present. No query, hash, patient, user, tenant, organization, or free-text context is included."
+  },
+  "counts": {
+    "manifest_records": 94,
+    "records_by_type": {
+      "guide": 27,
+      "faq_collection": 14,
+      "manual_module": 16,
+      "troubleshooting_collection": 8,
+      "troubleshooting_checklist": 1,
+      "quickstart_track": 5,
+      "manual_section": 15,
+      "support_intent_collection": 8
+    },
+    "records_by_classification": {
+      "caremetric-emr-overlay": 85,
+      "shared-core": 9
+    },
+    "underlying_authored_units": {
+      "distinct_markdown_guides": 27,
+      "public_faq_questions": 80,
+      "public_faq_by_category": {
+        "getting-started": 9,
+        "pricing": 9,
+        "features": 18,
+        "security": 9,
+        "support": 6,
+        "technical": 10,
+        "clinical": 10,
+        "interoperability": 9
+      },
+      "in_app_faq_questions": 20,
+      "in_app_faq_by_category": {
+        "getting-started": 3,
+        "scheduling": 3,
+        "patients": 3,
+        "billing": 3,
+        "settings": 3,
+        "interoperability": 5
+      },
+      "comprehensive_manual_modules": 16,
+      "troubleshooting_scenarios": 21,
+      "troubleshooting_quick_checks": 6,
+      "quickstart_role_tracks": 5,
+      "ccm_manual_sections": 7,
+      "fhir_manual_sections": 8,
+      "chatbot_support_intents": 28,
+      "chatbot_sample_utterances": 114,
+      "total_primary_units_excluding_sample_utterances": 218
+    }
+  },
+  "items": [
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.chatbot.billing-and-revenue-cycle",
+      "content_type": "support_intent_collection",
+      "title": "Support intents — Billing & Revenue Cycle",
+      "summary": "Claim submission, denials, ERA posting, and payment questions.",
+      "summary_source_path": "src/lib/pdf/templates/chatbotTraining.ts#CHATBOT_TRAINING_INTENTS[category=Billing & Revenue Cycle].description",
+      "body_source_path": "src/lib/pdf/templates/chatbotTraining.ts#CHATBOT_TRAINING_INTENTS[category=Billing & Revenue Cycle].intents",
+      "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "support_editor",
+        "super_admin"
+      ],
+      "route_template": "/admin/content",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 4,
+      "proposed_member_key_template": "caremetric-emr.chatbot.billing-and-revenue-cycle.{intent-key}",
+      "review_flags": [
+        "validate_responses_before_any_customer_publication"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.chatbot.clinical-documentation",
+      "content_type": "support_intent_collection",
+      "title": "Support intents — Clinical Documentation",
+      "summary": "Note writing, SOAP templates, AI generation, and co-signatures.",
+      "summary_source_path": "src/lib/pdf/templates/chatbotTraining.ts#CHATBOT_TRAINING_INTENTS[category=Clinical Documentation].description",
+      "body_source_path": "src/lib/pdf/templates/chatbotTraining.ts#CHATBOT_TRAINING_INTENTS[category=Clinical Documentation].intents",
+      "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "support_editor",
+        "super_admin"
+      ],
+      "route_template": "/admin/content",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 4,
+      "proposed_member_key_template": "caremetric-emr.chatbot.clinical-documentation.{intent-key}",
+      "review_flags": [
+        "validate_responses_before_any_customer_publication"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.chatbot.getting-started",
+      "content_type": "support_intent_collection",
+      "title": "Support intents — Getting Started",
+      "summary": "Onboarding, first login, and initial setup questions.",
+      "summary_source_path": "src/lib/pdf/templates/chatbotTraining.ts#CHATBOT_TRAINING_INTENTS[category=Getting Started].description",
+      "body_source_path": "src/lib/pdf/templates/chatbotTraining.ts#CHATBOT_TRAINING_INTENTS[category=Getting Started].intents",
+      "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "support_editor",
+        "super_admin"
+      ],
+      "route_template": "/admin/content",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 4,
+      "proposed_member_key_template": "caremetric-emr.chatbot.getting-started.{intent-key}",
+      "review_flags": [
+        "validate_responses_before_any_customer_publication"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.chatbot.patient-portal",
+      "content_type": "support_intent_collection",
+      "title": "Support intents — Patient Portal",
+      "summary": "Portal invitations, messaging, and patient access questions.",
+      "summary_source_path": "src/lib/pdf/templates/chatbotTraining.ts#CHATBOT_TRAINING_INTENTS[category=Patient Portal].description",
+      "body_source_path": "src/lib/pdf/templates/chatbotTraining.ts#CHATBOT_TRAINING_INTENTS[category=Patient Portal].intents",
+      "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "support_editor",
+        "super_admin"
+      ],
+      "route_template": "/admin/content",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 3,
+      "proposed_member_key_template": "caremetric-emr.chatbot.patient-portal.{intent-key}",
+      "review_flags": [
+        "validate_responses_before_any_customer_publication"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.chatbot.prescriptions",
+      "content_type": "support_intent_collection",
+      "title": "Support intents — Prescriptions",
+      "summary": "Prescription sending, refills, controlled substances, and PDMP.",
+      "summary_source_path": "src/lib/pdf/templates/chatbotTraining.ts#CHATBOT_TRAINING_INTENTS[category=Prescriptions].description",
+      "body_source_path": "src/lib/pdf/templates/chatbotTraining.ts#CHATBOT_TRAINING_INTENTS[category=Prescriptions].intents",
+      "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "support_editor",
+        "super_admin"
+      ],
+      "route_template": "/admin/content",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 3,
+      "proposed_member_key_template": "caremetric-emr.chatbot.prescriptions.{intent-key}",
+      "review_flags": [
+        "validate_responses_before_any_customer_publication"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.chatbot.scheduling",
+      "content_type": "support_intent_collection",
+      "title": "Support intents — Scheduling",
+      "summary": "Appointment booking, reminders, and telehealth scheduling questions.",
+      "summary_source_path": "src/lib/pdf/templates/chatbotTraining.ts#CHATBOT_TRAINING_INTENTS[category=Scheduling].description",
+      "body_source_path": "src/lib/pdf/templates/chatbotTraining.ts#CHATBOT_TRAINING_INTENTS[category=Scheduling].intents",
+      "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "support_editor",
+        "super_admin"
+      ],
+      "route_template": "/admin/content",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 4,
+      "proposed_member_key_template": "caremetric-emr.chatbot.scheduling.{intent-key}",
+      "review_flags": [
+        "validate_responses_before_any_customer_publication"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.chatbot.system-settings-and-configuration",
+      "content_type": "support_intent_collection",
+      "title": "Support intents — System Settings & Configuration",
+      "summary": "Organization settings, roles, integrations, and feature configuration.",
+      "summary_source_path": "src/lib/pdf/templates/chatbotTraining.ts#CHATBOT_TRAINING_INTENTS[category=System Settings & Configuration].description",
+      "body_source_path": "src/lib/pdf/templates/chatbotTraining.ts#CHATBOT_TRAINING_INTENTS[category=System Settings & Configuration].intents",
+      "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "support_editor",
+        "super_admin"
+      ],
+      "route_template": "/admin/content",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 3,
+      "proposed_member_key_template": "caremetric-emr.chatbot.system-settings-and-configuration.{intent-key}",
+      "review_flags": [
+        "validate_responses_before_any_customer_publication"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.chatbot.troubleshooting",
+      "content_type": "support_intent_collection",
+      "title": "Support intents — Troubleshooting",
+      "summary": "Common errors and quick fixes.",
+      "summary_source_path": "src/lib/pdf/templates/chatbotTraining.ts#CHATBOT_TRAINING_INTENTS[category=Troubleshooting].description",
+      "body_source_path": "src/lib/pdf/templates/chatbotTraining.ts#CHATBOT_TRAINING_INTENTS[category=Troubleshooting].intents",
+      "source_sha": "0f6780a154a986511866cf64e0b9aff12a830c5c",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "support_editor",
+        "super_admin"
+      ],
+      "route_template": "/admin/content",
+      "classification": "shared-core",
+      "source_item_count": 3,
+      "proposed_member_key_template": "caremetric-emr.chatbot.troubleshooting.{intent-key}",
+      "review_flags": [
+        "validate_responses_before_any_customer_publication"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.faq.in-app.billing",
+      "content_type": "faq_collection",
+      "title": "In-app FAQ — Billing",
+      "summary": "3 concise workflow answers rendered in the authenticated Support Center.",
+      "summary_source_path": "src/components/support/SupportDocLibrary.tsx#FAQ_CATEGORIES[id=billing]",
+      "body_source_path": "src/components/support/SupportDocLibrary.tsx#FAQS[category=billing]",
+      "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "biller",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 3,
+      "proposed_member_key_template": "caremetric-emr.faq.in-app.billing.{question-slug}",
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.faq.in-app.getting-started",
+      "content_type": "faq_collection",
+      "title": "In-app FAQ — Getting Started",
+      "summary": "3 concise workflow answers rendered in the authenticated Support Center.",
+      "summary_source_path": "src/components/support/SupportDocLibrary.tsx#FAQ_CATEGORIES[id=getting-started]",
+      "body_source_path": "src/components/support/SupportDocLibrary.tsx#FAQS[category=getting-started]",
+      "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "provider",
+        "nurse_ma",
+        "front_desk",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 3,
+      "proposed_member_key_template": "caremetric-emr.faq.in-app.getting-started.{question-slug}",
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.faq.in-app.interoperability",
+      "content_type": "faq_collection",
+      "title": "In-app FAQ — FHIR & Interoperability",
+      "summary": "5 concise workflow answers rendered in the authenticated Support Center.",
+      "summary_source_path": "src/components/support/SupportDocLibrary.tsx#FAQ_CATEGORIES[id=interoperability]",
+      "body_source_path": "src/components/support/SupportDocLibrary.tsx#FAQS[category=interoperability]",
+      "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "provider",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 5,
+      "proposed_member_key_template": "caremetric-emr.faq.in-app.interoperability.{question-slug}",
+      "review_flags": [
+        "credential_and_regulatory_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.faq.in-app.patients",
+      "content_type": "faq_collection",
+      "title": "In-app FAQ — Patients",
+      "summary": "3 concise workflow answers rendered in the authenticated Support Center.",
+      "summary_source_path": "src/components/support/SupportDocLibrary.tsx#FAQ_CATEGORIES[id=patients]",
+      "body_source_path": "src/components/support/SupportDocLibrary.tsx#FAQS[category=patients]",
+      "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "provider",
+        "nurse_ma",
+        "front_desk"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 3,
+      "proposed_member_key_template": "caremetric-emr.faq.in-app.patients.{question-slug}",
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.faq.in-app.scheduling",
+      "content_type": "faq_collection",
+      "title": "In-app FAQ — Scheduling",
+      "summary": "3 concise workflow answers rendered in the authenticated Support Center.",
+      "summary_source_path": "src/components/support/SupportDocLibrary.tsx#FAQ_CATEGORIES[id=scheduling]",
+      "body_source_path": "src/components/support/SupportDocLibrary.tsx#FAQS[category=scheduling]",
+      "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "provider",
+        "front_desk",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 3,
+      "proposed_member_key_template": "caremetric-emr.faq.in-app.scheduling.{question-slug}",
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.faq.in-app.settings",
+      "content_type": "faq_collection",
+      "title": "In-app FAQ — Settings",
+      "summary": "3 concise workflow answers rendered in the authenticated Support Center.",
+      "summary_source_path": "src/components/support/SupportDocLibrary.tsx#FAQ_CATEGORIES[id=settings]",
+      "body_source_path": "src/components/support/SupportDocLibrary.tsx#FAQS[category=settings]",
+      "source_sha": "83facf1efb455b0f7f069cba5b70acfb54244171",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "provider",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 3,
+      "proposed_member_key_template": "caremetric-emr.faq.in-app.settings.{question-slug}",
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.faq.public.clinical",
+      "content_type": "faq_collection",
+      "title": "Public FAQ — Clinical Workflows",
+      "summary": "10 published CareMetric AI questions and answers in the Clinical Workflows category.",
+      "summary_source_path": "src/components/FAQPage.tsx#categories[id=clinical]",
+      "body_source_path": "src/components/FAQPage.tsx#faqs[category=clinical]",
+      "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+      "source_visibility": "public_route",
+      "audience": [
+        "public"
+      ],
+      "route_template": "/faq",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 10,
+      "proposed_member_key_template": "caremetric-emr.faq.public.clinical.{question-slug}",
+      "review_flags": [
+        "clinical_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.faq.public.features",
+      "content_type": "faq_collection",
+      "title": "Public FAQ — Features",
+      "summary": "18 published CareMetric AI questions and answers in the Features category.",
+      "summary_source_path": "src/components/FAQPage.tsx#categories[id=features]",
+      "body_source_path": "src/components/FAQPage.tsx#faqs[category=features]",
+      "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+      "source_visibility": "public_route",
+      "audience": [
+        "public"
+      ],
+      "route_template": "/faq",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 18,
+      "proposed_member_key_template": "caremetric-emr.faq.public.features.{question-slug}",
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.faq.public.getting-started",
+      "content_type": "faq_collection",
+      "title": "Public FAQ — Getting Started",
+      "summary": "9 published CareMetric AI questions and answers in the Getting Started category.",
+      "summary_source_path": "src/components/FAQPage.tsx#categories[id=getting-started]",
+      "body_source_path": "src/components/FAQPage.tsx#faqs[category=getting-started]",
+      "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+      "source_visibility": "public_route",
+      "audience": [
+        "public"
+      ],
+      "route_template": "/faq",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 9,
+      "proposed_member_key_template": "caremetric-emr.faq.public.getting-started.{question-slug}",
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.faq.public.interoperability",
+      "content_type": "faq_collection",
+      "title": "Public FAQ — FHIR & Interoperability",
+      "summary": "9 published CareMetric AI questions and answers in the FHIR & Interoperability category.",
+      "summary_source_path": "src/components/FAQPage.tsx#categories[id=interoperability]",
+      "body_source_path": "src/components/FAQPage.tsx#faqs[category=interoperability]",
+      "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+      "source_visibility": "public_route",
+      "audience": [
+        "public"
+      ],
+      "route_template": "/faq",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 9,
+      "proposed_member_key_template": "caremetric-emr.faq.public.interoperability.{question-slug}",
+      "review_flags": [
+        "regulatory_and_interoperability_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.faq.public.pricing",
+      "content_type": "faq_collection",
+      "title": "Public FAQ — Pricing & Billing",
+      "summary": "9 published CareMetric AI questions and answers in the Pricing & Billing category.",
+      "summary_source_path": "src/components/FAQPage.tsx#categories[id=pricing]",
+      "body_source_path": "src/components/FAQPage.tsx#faqs[category=pricing]",
+      "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+      "source_visibility": "public_route",
+      "audience": [
+        "public"
+      ],
+      "route_template": "/faq",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 9,
+      "proposed_member_key_template": "caremetric-emr.faq.public.pricing.{question-slug}",
+      "review_flags": [
+        "pricing_and_packaging_fact_check"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.faq.public.security",
+      "content_type": "faq_collection",
+      "title": "Public FAQ — Security & Compliance",
+      "summary": "9 published CareMetric AI questions and answers in the Security & Compliance category.",
+      "summary_source_path": "src/components/FAQPage.tsx#categories[id=security]",
+      "body_source_path": "src/components/FAQPage.tsx#faqs[category=security]",
+      "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+      "source_visibility": "public_route",
+      "audience": [
+        "public"
+      ],
+      "route_template": "/faq",
+      "classification": "shared-core",
+      "source_item_count": 9,
+      "proposed_member_key_template": "caremetric-emr.faq.public.security.{question-slug}",
+      "review_flags": [
+        "security_compliance_and_retention_claims_fact_check"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.faq.public.support",
+      "content_type": "faq_collection",
+      "title": "Public FAQ — Support",
+      "summary": "6 published CareMetric AI questions and answers in the Support category.",
+      "summary_source_path": "src/components/FAQPage.tsx#categories[id=support]",
+      "body_source_path": "src/components/FAQPage.tsx#faqs[category=support]",
+      "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+      "source_visibility": "public_route",
+      "audience": [
+        "public"
+      ],
+      "route_template": "/faq",
+      "classification": "shared-core",
+      "source_item_count": 6,
+      "proposed_member_key_template": "caremetric-emr.faq.public.support.{question-slug}",
+      "review_flags": [
+        "support_channels_sla_and_training_claims_fact_check"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.faq.public.technical",
+      "content_type": "faq_collection",
+      "title": "Public FAQ — Technical",
+      "summary": "10 published CareMetric AI questions and answers in the Technical category.",
+      "summary_source_path": "src/components/FAQPage.tsx#categories[id=technical]",
+      "body_source_path": "src/components/FAQPage.tsx#faqs[category=technical]",
+      "source_sha": "4d34b0957bcd79b7ab459b2257aab483b92e63a8",
+      "source_visibility": "public_route",
+      "audience": [
+        "public"
+      ],
+      "route_template": "/faq",
+      "classification": "shared-core",
+      "source_item_count": 10,
+      "proposed_member_key_template": "caremetric-emr.faq.public.technical.{question-slug}",
+      "review_flags": [
+        "vendor_uptime_backup_and_maintenance_claims_fact_check"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.automated-billing",
+      "content_type": "guide",
+      "title": "Automated Billing Batch Guide",
+      "summary": "Batch claim processing, automated posting rules, billing queue management, and batch operation workflows",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=automated-billing]",
+      "body_source_path": "public/docs/pdf/AUTOMATED_BILLING_BATCH_GUIDE.md",
+      "source_sha": "0e941bbb1bb119ac6ef18c722ee4f347d485aebc",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "biller",
+        "practice_admin"
+      ],
+      "route_template": "/docs/pdf/AUTOMATED_BILLING_BATCH_GUIDE.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Billing Batch Guide"
+      ],
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.biller-job-aid",
+      "content_type": "guide",
+      "title": "Biller Quick Reference (Job Aid)",
+      "summary": "Concise reference card for billing staff covering claim workflows, ERA posting, denial management, and AR processes",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=biller-job-aid]",
+      "body_source_path": "public/docs/pdf/BILLER_JOB_AID.md",
+      "source_sha": "bde801af649c8d7f0697ddb44be3f8af3dbe5c54",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "biller"
+      ],
+      "route_template": "/docs/pdf/BILLER_JOB_AID.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Biller Job Aid"
+      ],
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.billing-manual",
+      "content_type": "guide",
+      "title": "Billing Manual Complete",
+      "summary": "End-to-end billing guide covering charge capture, claims submission, ERA posting, denial management, and collections",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=billing-manual]",
+      "body_source_path": "public/docs/pdf/BILLING_MANUAL_COMPLETE.md",
+      "source_sha": "9e7e0c29c9f643c89ea33f38d3e835b6a972122e",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "biller",
+        "practice_admin"
+      ],
+      "route_template": "/docs/pdf/BILLING_MANUAL_COMPLETE.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Complete Billing Manual"
+      ],
+      "review_flags": [
+        "clinical_billing_or_regulatory_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.claimmd-eligibility",
+      "content_type": "guide",
+      "title": "ClaimMD Eligibility Verification Guide",
+      "summary": "ClaimMD clearinghouse integration, real-time eligibility checks, batch verification, and SFTP configuration",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=claimmd-eligibility]",
+      "body_source_path": "public/docs/pdf/CLAIMMD_ELIGIBILITY_VERIFICATION_GUIDE.md",
+      "source_sha": "162c809c886a0522e1db6cd68370c355f49b7ab3",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "biller",
+        "front_desk",
+        "practice_admin"
+      ],
+      "route_template": "/docs/pdf/CLAIMMD_ELIGIBILITY_VERIFICATION_GUIDE.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Claim.MD Eligibility Guide"
+      ],
+      "review_flags": [
+        "clinical_billing_or_regulatory_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.clinical-documentation",
+      "content_type": "guide",
+      "title": "Clinical Documentation Complete Guide",
+      "summary": "In-depth guide to clinical note creation, SOAP notes, AI generation, ambient dictation, and compliance requirements",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=clinical-documentation]",
+      "body_source_path": "public/docs/pdf/CLINICAL_DOCUMENTATION_COMPLETE_GUIDE.md",
+      "source_sha": "089de609f50a556e63258d5d1a4be7b396ec887c",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "provider",
+        "nurse_ma"
+      ],
+      "route_template": "/docs/pdf/CLINICAL_DOCUMENTATION_COMPLETE_GUIDE.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Complete Clinical Documentation Guide",
+        "Telehealth Guide"
+      ],
+      "review_flags": [
+        "clinical_billing_or_regulatory_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.comprehensive-faq",
+      "content_type": "guide",
+      "title": "Comprehensive FAQ (200 Questions)",
+      "summary": "200 frequently asked questions organized across 23 categories including clinical, billing, administrative, and technical",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=comprehensive-faq]",
+      "body_source_path": "public/docs/pdf/COMPREHENSIVE_FAQ.md",
+      "source_sha": "b300d1beac9ce0a242b491ff3af7cb45efb42e76",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "public",
+        "all_authenticated"
+      ],
+      "route_template": "/docs/pdf/COMPREHENSIVE_FAQ.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 200,
+      "support_library_aliases": [],
+      "review_flags": [
+        "deduplicate_against_public_and_in_app_faqs"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.comprehensive-user-guide",
+      "content_type": "guide",
+      "title": "Comprehensive User Guide",
+      "summary": "Complete system manual covering all 77 modules, 35 parts, and 1,700+ lines of detailed instructions for every role",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=comprehensive-user-guide]",
+      "body_source_path": "public/docs/pdf/COMPREHENSIVE_USER_GUIDE.md",
+      "source_sha": "5cb882241c5003e59e770f4ce9cc28cd02ec3d9c",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "all_authenticated"
+      ],
+      "route_template": "/docs/pdf/COMPREHENSIVE_USER_GUIDE.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Comprehensive User Guide"
+      ],
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.documentation-index",
+      "content_type": "guide",
+      "title": "Documentation Index",
+      "summary": "Master index of all documentation with quick-start paths by role and topic-based search guide",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=documentation-index]",
+      "body_source_path": "public/docs/pdf/DOCUMENTATION_INDEX.md",
+      "source_sha": "c4fe3c8635c9cdecd21be8a5d810ba3ada6e7be6",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "all_authenticated"
+      ],
+      "route_template": "/docs/pdf/DOCUMENTATION_INDEX.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [],
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.documentation-quality",
+      "content_type": "guide",
+      "title": "Documentation Quality System Guide",
+      "summary": "Quality scoring, compliance thresholds, audit preparation, and documentation improvement workflows",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=documentation-quality]",
+      "body_source_path": "public/docs/pdf/DOCUMENTATION_QUALITY_SYSTEM_GUIDE.md",
+      "source_sha": "60dc833f9ce2282db25b12eb500840f114eb05b8",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "provider",
+        "practice_admin"
+      ],
+      "route_template": "/docs/pdf/DOCUMENTATION_QUALITY_SYSTEM_GUIDE.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Documentation Quality Guide"
+      ],
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.eprescribing",
+      "content_type": "guide",
+      "title": "Prescribing Guide",
+      "summary": "Prescribing setup, drug search, pharmacy lookup, and prescription workflows",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=eprescribing]",
+      "body_source_path": "public/docs/pdf/EPRESCRIBING_GUIDE.md",
+      "source_sha": "bb059ccf4c95d3fb3829c607acee1fb76c638834",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "provider",
+        "practice_admin"
+      ],
+      "route_template": "/docs/pdf/EPRESCRIBING_GUIDE.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [],
+      "review_flags": [
+        "clinical_billing_or_regulatory_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.fax-setup",
+      "content_type": "guide",
+      "title": "Fax Setup Guide",
+      "summary": "Twilio electronic fax configuration, fax-to-email, cover sheet templates, and address book management",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=fax-setup]",
+      "body_source_path": "public/docs/pdf/FAX_SETUP_GUIDE.md",
+      "source_sha": "b29f4af93812a4dce0fe4e8877f62b28def03add",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "front_desk",
+        "practice_admin"
+      ],
+      "route_template": "/docs/pdf/FAX_SETUP_GUIDE.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Fax Setup Guide"
+      ],
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.features-guide",
+      "content_type": "guide",
+      "title": "Complete Features Guide",
+      "summary": "Full catalog of every feature across 27 categories with descriptions, integration points, and cross-reference matrix",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=features-guide]",
+      "body_source_path": "public/docs/pdf/CAREMETRIC_FEATURES_GUIDE.md",
+      "source_sha": "16ab121248866725f2cc1faf151506f897d43bde",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "public",
+        "all_authenticated"
+      ],
+      "route_template": "/docs/pdf/CAREMETRIC_FEATURES_GUIDE.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "CareMetric Features Guide"
+      ],
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.front-desk-job-aid",
+      "content_type": "guide",
+      "title": "Front Desk Quick Reference (Job Aid)",
+      "summary": "Concise reference card for front desk staff covering check-in, scheduling, insurance verification, and patient intake",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=front-desk-job-aid]",
+      "body_source_path": "public/docs/pdf/FRONT_DESK_JOB_AID.md",
+      "source_sha": "0561eb9add8a41f6e04f5b484f5fe7f4f9257114",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "front_desk"
+      ],
+      "route_template": "/docs/pdf/FRONT_DESK_JOB_AID.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Front Desk Job Aid"
+      ],
+      "review_flags": [
+        "synthetic_example_identifiers_require_scrub"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.getting-started-admin",
+      "content_type": "guide",
+      "title": "Getting Started - Administrator Guide",
+      "summary": "Step-by-step setup guide for practice administrators including organization configuration and team management",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=getting-started-admin]",
+      "body_source_path": "public/docs/pdf/GETTING_STARTED_ADMINISTRATOR_GUIDE.md",
+      "source_sha": "35c2a64726a746f64365b46a32b873b3e240b573",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "practice_admin"
+      ],
+      "route_template": "/docs/pdf/GETTING_STARTED_ADMINISTRATOR_GUIDE.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Getting Started Guide"
+      ],
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.implementation-guide",
+      "content_type": "guide",
+      "title": "Implementation Guide",
+      "summary": "Comprehensive implementation roadmap covering deployment phases, data migration, and go-live procedures",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=implementation-guide]",
+      "body_source_path": "public/docs/pdf/IMPLEMENTATION_GUIDE.md",
+      "source_sha": "ae46443146b6b79f2b35d1215a8477dc9c7f5c78",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "practice_admin"
+      ],
+      "route_template": "/docs/pdf/IMPLEMENTATION_GUIDE.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [],
+      "review_flags": [
+        "engineering_detail_and_go_live_fact_check"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.integration-setup",
+      "content_type": "guide",
+      "title": "Integration Setup Guide",
+      "summary": "Third-party integration configuration for ClaimMD, Twilio, Chargebee, and other platform services",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=integration-setup]",
+      "body_source_path": "public/docs/pdf/INTEGRATION_SETUP_GUIDE.md",
+      "source_sha": "d29e5cf665da3c6762e1543f83465f330cb472d8",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "practice_admin",
+        "super_admin"
+      ],
+      "route_template": "/docs/pdf/INTEGRATION_SETUP_GUIDE.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Integration Setup Guide",
+        "FHIR Interoperability Guide"
+      ],
+      "review_flags": [
+        "credential_placeholders_only_no_values"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.office-manager-job-aid",
+      "content_type": "guide",
+      "title": "Office Manager Quick Reference (Job Aid)",
+      "summary": "Concise reference card for office managers covering practice analytics, staff management, and operational oversight",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=office-manager-job-aid]",
+      "body_source_path": "public/docs/pdf/OFFICE_MANAGER_JOB_AID.md",
+      "source_sha": "c5f12ef75bed11074c86389a3bd5f71c2014299b",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "practice_admin"
+      ],
+      "route_template": "/docs/pdf/OFFICE_MANAGER_JOB_AID.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Office Manager Job Aid"
+      ],
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.onboarding-checklist",
+      "content_type": "guide",
+      "title": "Onboarding Checklist",
+      "summary": "Structured checklist for new organization onboarding covering all setup phases and verification steps",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=onboarding-checklist]",
+      "body_source_path": "public/docs/pdf/ONBOARDING_CHECKLIST.md",
+      "source_sha": "494fbcd23702c244d70a3c97e98c3dc0b93577f8",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "all_authenticated"
+      ],
+      "route_template": "/docs/pdf/ONBOARDING_CHECKLIST.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Quick Start Guide"
+      ],
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.patient-portal",
+      "content_type": "guide",
+      "title": "Patient Portal Guide",
+      "summary": "Patient portal configuration, self-scheduling, portal messaging, lab results access, and bill pay setup",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=patient-portal]",
+      "body_source_path": "public/docs/pdf/PATIENT_PORTAL_GUIDE.md",
+      "source_sha": "953d3adf489329d2cc362bec1df94ca670f63caa",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "patient",
+        "front_desk",
+        "practice_admin"
+      ],
+      "route_template": "/docs/pdf/PATIENT_PORTAL_GUIDE.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Patient Portal Guide"
+      ],
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.practice-admin-checklist",
+      "content_type": "guide",
+      "title": "Practice Admin Implementation Checklist",
+      "summary": "Step-by-step implementation checklist for practice administrators covering complete system setup and verification",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=practice-admin-checklist]",
+      "body_source_path": "public/docs/pdf/PRACTICE_ADMIN_IMPLEMENTATION_CHECKLIST.md",
+      "source_sha": "3418194c86afcbc427680b4b2ea51f82f6228dcc",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "practice_admin"
+      ],
+      "route_template": "/docs/pdf/PRACTICE_ADMIN_IMPLEMENTATION_CHECKLIST.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Implementation Checklist"
+      ],
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.preventive-health",
+      "content_type": "guide",
+      "title": "Preventive Health Guide",
+      "summary": "Preventive care tracking, care gap identification, health maintenance schedules, and screening protocols",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=preventive-health]",
+      "body_source_path": "public/docs/pdf/USER_GUIDE_PREVENTIVE_HEALTH.md",
+      "source_sha": "1da28115c0825e2ca65e3d7a639bd1c6d83de7d6",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "provider",
+        "nurse_ma"
+      ],
+      "route_template": "/docs/pdf/USER_GUIDE_PREVENTIVE_HEALTH.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Preventive Health Guide"
+      ],
+      "review_flags": [
+        "clinical_billing_or_regulatory_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.provider-job-aid",
+      "content_type": "guide",
+      "title": "Provider Quick Reference (Job Aid)",
+      "summary": "Concise reference card for providers covering daily workflows, note creation, prescribing, and key shortcuts",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=provider-job-aid]",
+      "body_source_path": "public/docs/pdf/PROVIDER_JOB_AID.md",
+      "source_sha": "0d2708a3a30f7a641e7aa86bcbfa13c14ed38c25",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "provider"
+      ],
+      "route_template": "/docs/pdf/PROVIDER_JOB_AID.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Provider Job Aid"
+      ],
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.signature-system",
+      "content_type": "guide",
+      "title": "Signature System Guide",
+      "summary": "Electronic signature configuration, co-signer workflows, witness requirements, and authentication policies",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=signature-system]",
+      "body_source_path": "public/docs/pdf/SIGNATURE_SYSTEM_GUIDE.md",
+      "source_sha": "b3e41579ba38a6c85ac3d50fb04034d39d950e3a",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "provider",
+        "practice_admin"
+      ],
+      "route_template": "/docs/pdf/SIGNATURE_SYSTEM_GUIDE.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Signature System Guide"
+      ],
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.sms-guide",
+      "content_type": "guide",
+      "title": "SMS Testing Guide",
+      "summary": "SMS messaging setup, appointment reminders, two-way messaging, campaign compliance, and Twilio configuration",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=sms-guide]",
+      "body_source_path": "public/docs/pdf/SMS_TESTING_GUIDE.md",
+      "source_sha": "3eb1a349507b6af4b9ab37f9c082bf4c18533d3d",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "front_desk",
+        "practice_admin"
+      ],
+      "route_template": "/docs/pdf/SMS_TESTING_GUIDE.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "SMS Messaging Guide"
+      ],
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.snippet-system",
+      "content_type": "guide",
+      "title": "Snippet System Guide",
+      "summary": "Smart phrases, text expansion, snippet library management, and specialty-specific snippet collections",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=snippet-system]",
+      "body_source_path": "public/docs/pdf/SNIPPET_SYSTEM_GUIDE.md",
+      "source_sha": "d6e1cd7a803780d001e9c24ce608f7d2a4d02cc0",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "provider"
+      ],
+      "route_template": "/docs/pdf/SNIPPET_SYSTEM_GUIDE.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Snippet System Guide"
+      ],
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.subscription-features",
+      "content_type": "guide",
+      "title": "Subscription Features Guide",
+      "summary": "Tier comparison, add-on pricing, feature matrices, and package details for sales and pricing decisions",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=subscription-features]",
+      "body_source_path": "public/docs/pdf/SUBSCRIPTION_FEATURES_GUIDE.md",
+      "source_sha": "bec2bc254e49036692900cc1710911e3d9d6c726",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "public",
+        "practice_admin"
+      ],
+      "route_template": "/docs/pdf/SUBSCRIPTION_FEATURES_GUIDE.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [],
+      "review_flags": [
+        "pricing_and_packaging_fact_check"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.guide.telehealth-setup",
+      "content_type": "guide",
+      "title": "Telehealth Setup Guide",
+      "summary": "Video visit configuration, virtual waiting room, consent documentation, and telehealth billing optimization",
+      "summary_source_path": "src/components/MarketingMaterials.tsx#documentationGuides[id=telehealth-setup]",
+      "body_source_path": "public/docs/pdf/TELEHEALTH_SETUP.md",
+      "source_sha": "2fb6bc093e2253891a5926497587ce85497d0e89",
+      "source_visibility": "public_static_asset",
+      "audience": [
+        "provider",
+        "front_desk",
+        "practice_admin"
+      ],
+      "route_template": "/docs/pdf/TELEHEALTH_SETUP.md",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "support_library_aliases": [
+        "Twilio Telehealth Setup"
+      ],
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.ai-notes",
+      "content_type": "manual_module",
+      "title": "AI Note Generation & Ambient Scribe",
+      "summary": "CareMetric AI offers three note-creation modes: Traditional (manual SOAP), Guided (structured template with AI suggestions), and Ambient (AI listens to the patient encounter and drafts the note automatically). All modes support AI-assisted coding, MDM calculation, and documentation quality scoring.",
+      "summary_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=ai-notes].overview",
+      "body_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=ai-notes]",
+      "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "provider",
+        "nurse_ma"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.automation",
+      "content_type": "manual_module",
+      "title": "Automation Rules Engine",
+      "summary": "The Rules Engine lets practice administrators create automated workflows triggered by clinical or administrative events — send a follow-up SMS after a visit, trigger a PA request when a medication is prescribed, or route a task to the biller when a note is signed. No coding required.",
+      "summary_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=automation].overview",
+      "body_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=automation]",
+      "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.billing",
+      "content_type": "manual_module",
+      "title": "Billing & Claims Submission",
+      "summary": "The Billing module covers the full revenue cycle: charge capture, claim scrubbing, electronic submission via ClaimMD, ERA/EOB auto-posting, denial management, and patient collections. AI automates claim validation, flags probable denials before submission, and drafts appeal letters.",
+      "summary_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=billing].overview",
+      "body_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=billing]",
+      "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "provider",
+        "biller",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": [
+        "billing_and_regulatory_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.ccm",
+      "content_type": "manual_module",
+      "title": "Chronic Care Management (CCM)",
+      "summary": "The CCM module supports Medicare's Chronic Care Management program, enabling billing of CPT 99490, 99491, 99487, and 99489 for monthly care management time with patients who have two or more chronic conditions. The AI automates time tracking, care plan generation, and billing readiness calculations.",
+      "summary_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=ccm].overview",
+      "body_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=ccm]",
+      "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "provider",
+        "nurse_ma",
+        "biller",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": [
+        "billing_and_regulatory_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.ccm.audit",
+      "content_type": "manual_section",
+      "title": "Audit Readiness & Documentation",
+      "summary": "Documentation and monthly-packet practices for audit readiness.",
+      "summary_source_path": "src/components/ccm/CCMUserManual.tsx#sections[id=audit]",
+      "body_source_path": "src/components/ccm/CCMUserManual.tsx#sections[id=audit].content",
+      "source_sha": "f1ff2cc7655aa3d71bcbd29bb859249225825c73",
+      "source_visibility": "authenticated_role_gated_module",
+      "audience": [
+        "provider",
+        "nurse_ma",
+        "biller",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/ccm",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": [
+        "cms_and_billing_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.ccm.billing",
+      "content_type": "manual_section",
+      "title": "Understanding CCM Billing Codes",
+      "summary": "CCM billing-code and time-threshold reference with conflict warnings.",
+      "summary_source_path": "src/components/ccm/CCMUserManual.tsx#sections[id=billing]",
+      "body_source_path": "src/components/ccm/CCMUserManual.tsx#sections[id=billing].content",
+      "source_sha": "f1ff2cc7655aa3d71bcbd29bb859249225825c73",
+      "source_visibility": "authenticated_role_gated_module",
+      "audience": [
+        "provider",
+        "nurse_ma",
+        "biller",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/ccm",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": [
+        "cms_and_billing_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.ccm.outreach",
+      "content_type": "manual_section",
+      "title": "Automated Outreach: What Patients Experience",
+      "summary": "What patients experience during automated monthly outreach.",
+      "summary_source_path": "src/components/ccm/CCMUserManual.tsx#sections[id=outreach]",
+      "body_source_path": "src/components/ccm/CCMUserManual.tsx#sections[id=outreach].content",
+      "source_sha": "f1ff2cc7655aa3d71bcbd29bb859249225825c73",
+      "source_visibility": "authenticated_role_gated_module",
+      "audience": [
+        "provider",
+        "nurse_ma",
+        "biller",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/ccm",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": [
+        "cms_and_billing_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.ccm.overview",
+      "content_type": "manual_section",
+      "title": "What is CCM and Why It Matters",
+      "summary": "CCM eligibility, purpose, and billing-responsibility guardrails.",
+      "summary_source_path": "src/components/ccm/CCMUserManual.tsx#sections[id=overview]",
+      "body_source_path": "src/components/ccm/CCMUserManual.tsx#sections[id=overview].content",
+      "source_sha": "f1ff2cc7655aa3d71bcbd29bb859249225825c73",
+      "source_visibility": "authenticated_role_gated_module",
+      "audience": [
+        "provider",
+        "nurse_ma",
+        "biller",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/ccm",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": [
+        "cms_and_billing_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.ccm.safety",
+      "content_type": "manual_section",
+      "title": "Patient Safety & Escalation",
+      "summary": "Patient-safety escalation expectations for CCM staff.",
+      "summary_source_path": "src/components/ccm/CCMUserManual.tsx#sections[id=safety]",
+      "body_source_path": "src/components/ccm/CCMUserManual.tsx#sections[id=safety].content",
+      "source_sha": "f1ff2cc7655aa3d71bcbd29bb859249225825c73",
+      "source_visibility": "authenticated_role_gated_module",
+      "audience": [
+        "provider",
+        "nurse_ma",
+        "biller",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/ccm",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": [
+        "cms_and_billing_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.ccm.time",
+      "content_type": "manual_section",
+      "title": "What Time Counts Toward CCM?",
+      "summary": "Which care-management activities count and do not count toward CCM time.",
+      "summary_source_path": "src/components/ccm/CCMUserManual.tsx#sections[id=time]",
+      "body_source_path": "src/components/ccm/CCMUserManual.tsx#sections[id=time].content",
+      "source_sha": "f1ff2cc7655aa3d71bcbd29bb859249225825c73",
+      "source_visibility": "authenticated_role_gated_module",
+      "audience": [
+        "provider",
+        "nurse_ma",
+        "biller",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/ccm",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": [
+        "cms_and_billing_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.ccm.workflow",
+      "content_type": "manual_section",
+      "title": "The CCM Workflow: Step by Step",
+      "summary": "Seven-step CCM workflow from enrollment through biller handoff.",
+      "summary_source_path": "src/components/ccm/CCMUserManual.tsx#sections[id=workflow]",
+      "body_source_path": "src/components/ccm/CCMUserManual.tsx#sections[id=workflow].content",
+      "source_sha": "f1ff2cc7655aa3d71bcbd29bb859249225825c73",
+      "source_visibility": "authenticated_role_gated_module",
+      "audience": [
+        "provider",
+        "nurse_ma",
+        "biller",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/ccm",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": [
+        "cms_and_billing_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.compliance",
+      "content_type": "manual_module",
+      "title": "Compliance & Audit Logs",
+      "summary": "The Compliance module provides comprehensive audit logging of every user action, PHI access event, and system transaction. It supports HIPAA compliance reporting, OIG exclusion checks, documentation audits, and regulatory reporting. AI analyzes audit patterns to detect anomalous access.",
+      "summary_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=compliance].overview",
+      "body_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=compliance]",
+      "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "provider",
+        "biller",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "shared-core",
+      "source_item_count": 1,
+      "review_flags": [
+        "security_and_vendor_claims_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.dashboard",
+      "content_type": "manual_module",
+      "title": "Dashboard",
+      "summary": "The Dashboard is your personalized command center — the first screen after login. It surfaces today's schedule, urgent tasks, unread messages, billing alerts, and AI-driven clinical nudges. Every role sees a tailored view based on their permissions.",
+      "summary_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=dashboard].overview",
+      "body_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=dashboard]",
+      "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "all_authenticated"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "shared-core",
+      "source_item_count": 1,
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.eprescribing",
+      "content_type": "manual_module",
+      "title": "Prescriptions & Medications",
+      "summary": "CareMetric AI includes full prescription management. Providers write and manage prescriptions directly from the patient chart with automatic drug interaction checking, PDMP integration, formulary verification, and refill management.",
+      "summary_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=eprescribing].overview",
+      "body_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=eprescribing]",
+      "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "provider",
+        "nurse_ma"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.fhir.add-connection",
+      "content_type": "manual_section",
+      "title": "How to Add a FHIR Connection",
+      "summary": "Step-by-step FHIR connection setup.",
+      "summary_source_path": "src/components/interop/FHIRUserManual.tsx#SECTIONS[id=add-connection]",
+      "body_source_path": "src/components/interop/FHIRUserManual.tsx#section[id=add-connection]",
+      "source_sha": "0b4bb5abeee38819940bceb629ad038ba1758fca",
+      "source_visibility": "authenticated_role_gated_module",
+      "audience": [
+        "provider",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/fhir-hub",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": [
+        "legal_security_and_interoperability_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.fhir.connection-fields",
+      "content_type": "manual_section",
+      "title": "Connection Fields: What Each One Means",
+      "summary": "Meaning and handling of endpoint and OAuth connection fields.",
+      "summary_source_path": "src/components/interop/FHIRUserManual.tsx#SECTIONS[id=connection-fields]",
+      "body_source_path": "src/components/interop/FHIRUserManual.tsx#section[id=connection-fields]",
+      "source_sha": "0b4bb5abeee38819940bceb629ad038ba1758fca",
+      "source_visibility": "authenticated_role_gated_module",
+      "audience": [
+        "provider",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/fhir-hub",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": [
+        "legal_security_and_interoperability_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.fhir.how-it-works",
+      "content_type": "manual_section",
+      "title": "How FHIR Works in Your Practice",
+      "summary": "CareMetric EMR data-exchange workflow overview.",
+      "summary_source_path": "src/components/interop/FHIRUserManual.tsx#SECTIONS[id=how-it-works]",
+      "body_source_path": "src/components/interop/FHIRUserManual.tsx#section[id=how-it-works]",
+      "source_sha": "0b4bb5abeee38819940bceb629ad038ba1758fca",
+      "source_visibility": "authenticated_role_gated_module",
+      "audience": [
+        "provider",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/fhir-hub",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": [
+        "legal_security_and_interoperability_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.fhir.network-types",
+      "content_type": "manual_section",
+      "title": "FHIR Network Types Explained",
+      "summary": "Payer, hospital, lab, pharmacy, HIE, and other network types.",
+      "summary_source_path": "src/components/interop/FHIRUserManual.tsx#SECTIONS[id=network-types]",
+      "body_source_path": "src/components/interop/FHIRUserManual.tsx#section[id=network-types]",
+      "source_sha": "0b4bb5abeee38819940bceb629ad038ba1758fca",
+      "source_visibility": "authenticated_role_gated_module",
+      "audience": [
+        "provider",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/fhir-hub",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": [
+        "legal_security_and_interoperability_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.fhir.security",
+      "content_type": "manual_section",
+      "title": "Security and Privacy",
+      "summary": "Security and privacy controls for FHIR exchange.",
+      "summary_source_path": "src/components/interop/FHIRUserManual.tsx#SECTIONS[id=security]",
+      "body_source_path": "src/components/interop/FHIRUserManual.tsx#section[id=security]",
+      "source_sha": "0b4bb5abeee38819940bceb629ad038ba1758fca",
+      "source_visibility": "authenticated_role_gated_module",
+      "audience": [
+        "provider",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/fhir-hub",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": [
+        "legal_security_and_interoperability_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.fhir.troubleshooting",
+      "content_type": "manual_section",
+      "title": "Common Questions and Troubleshooting",
+      "summary": "Common FHIR questions and connection troubleshooting.",
+      "summary_source_path": "src/components/interop/FHIRUserManual.tsx#SECTIONS[id=troubleshooting]",
+      "body_source_path": "src/components/interop/FHIRUserManual.tsx#section[id=troubleshooting]",
+      "source_sha": "0b4bb5abeee38819940bceb629ad038ba1758fca",
+      "source_visibility": "authenticated_role_gated_module",
+      "audience": [
+        "provider",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/fhir-hub",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": [
+        "legal_security_and_interoperability_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.fhir.what-is-fhir",
+      "content_type": "manual_section",
+      "title": "What Is FHIR?",
+      "summary": "Plain-language introduction to FHIR and interoperable healthcare data.",
+      "summary_source_path": "src/components/interop/FHIRUserManual.tsx#SECTIONS[id=what-is-fhir]",
+      "body_source_path": "src/components/interop/FHIRUserManual.tsx#section[id=what-is-fhir]",
+      "source_sha": "0b4bb5abeee38819940bceb629ad038ba1758fca",
+      "source_visibility": "authenticated_role_gated_module",
+      "audience": [
+        "provider",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/fhir-hub",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": [
+        "legal_security_and_interoperability_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.fhir.why-it-matters",
+      "content_type": "manual_section",
+      "title": "Why FHIR Matters: The Federal Mandate",
+      "summary": "Federal interoperability and information-blocking context.",
+      "summary_source_path": "src/components/interop/FHIRUserManual.tsx#SECTIONS[id=why-it-matters]",
+      "body_source_path": "src/components/interop/FHIRUserManual.tsx#section[id=why-it-matters]",
+      "source_sha": "0b4bb5abeee38819940bceb629ad038ba1758fca",
+      "source_visibility": "authenticated_role_gated_module",
+      "audience": [
+        "provider",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/fhir-hub",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": [
+        "legal_security_and_interoperability_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.integrations",
+      "content_type": "manual_module",
+      "title": "Integrations (Labs, Payers, FHIR)",
+      "summary": "CareMetric AI integrates with labs, devices, payers, clearinghouses, pharmacies, HIEs, and external EHRs via HL7 v2, FHIR R4, and proprietary APIs. The Integration Hub is the central configuration point for all third-party connections.",
+      "summary_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=integrations].overview",
+      "body_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=integrations]",
+      "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "practice_admin",
+        "super_admin"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": [
+        "security_and_vendor_claims_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.messaging",
+      "content_type": "manual_module",
+      "title": "Messaging, SMS & Tasks",
+      "summary": "The Messaging & Tasks module unifies internal staff messaging, patient portal inbox, two-way SMS, care team group messaging, and structured task management. AI triage automatically prioritizes incoming messages by clinical urgency.",
+      "summary_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=messaging].overview",
+      "body_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=messaging]",
+      "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "provider",
+        "nurse_ma",
+        "front_desk",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.patient-chart",
+      "content_type": "manual_module",
+      "title": "Patient Chart",
+      "summary": "The Patient Chart is the longitudinal clinical record for every patient, organized into tabbed sections: Overview, Vitals, Medications, Problem List, Labs, Documents, Orders, and Billing. The AI continuously analyzes chart data to surface insights, flag drug interactions, and suggest coding improvements.",
+      "summary_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=patient-chart].overview",
+      "body_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=patient-chart]",
+      "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "provider",
+        "nurse_ma",
+        "front_desk",
+        "biller",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.patient-portal",
+      "content_type": "manual_module",
+      "title": "Patient Portal",
+      "summary": "The Patient Portal gives patients secure online access to health records, messaging, appointment requests, bill pay, lab results, and intake forms. Data entered by patients flows directly into the chart. Family proxy access supports caregivers managing dependents.",
+      "summary_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=patient-portal].overview",
+      "body_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=patient-portal]",
+      "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "patient",
+        "provider",
+        "front_desk",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.prior-auth",
+      "content_type": "manual_module",
+      "title": "Prior Authorization",
+      "summary": "The Prior Authorization module streamlines submission, tracking, and appeal of insurance prior authorizations. AI drafts clinical justification letters, extracts relevant chart documentation, and monitors approval status. The FHIR PA Hub supports electronic submission to FHIR-enabled payers.",
+      "summary_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=prior-auth].overview",
+      "body_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=prior-auth]",
+      "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "provider",
+        "nurse_ma",
+        "biller"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": [
+        "billing_and_regulatory_review"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.reporting",
+      "content_type": "manual_module",
+      "title": "Reporting & Analytics",
+      "summary": "Reporting & Analytics provides real-time and historical data across clinical quality, financial performance, staff productivity, and population health. Dashboards are role-specific and configurable. AI-powered predictive analytics forecast revenue, no-show rates, and chronic disease deterioration.",
+      "summary_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=reporting].overview",
+      "body_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=reporting]",
+      "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "provider",
+        "biller",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.scheduling",
+      "content_type": "manual_module",
+      "title": "Scheduling & Calendar",
+      "summary": "The Scheduling module provides a full-featured calendar for booking, rescheduling, and managing appointments across multiple providers and locations. It includes online self-scheduling, automated SMS/email reminders, waitlist management, and integrated telehealth booking.",
+      "summary_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=scheduling].overview",
+      "body_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=scheduling]",
+      "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "provider",
+        "front_desk",
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.telehealth",
+      "content_type": "manual_module",
+      "title": "Telehealth (Twilio Video)",
+      "summary": "CareMetric AI's telehealth module is powered by Twilio Video. It provides browser-based HD video visits that integrate directly with scheduling, note documentation, and billing. No patient app download is required. Ambient scribe works during telehealth visits.",
+      "summary_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=telehealth].overview",
+      "body_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=telehealth]",
+      "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "provider",
+        "nurse_ma",
+        "front_desk"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 1,
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.manual.user-management",
+      "content_type": "manual_module",
+      "title": "User & Role Management",
+      "summary": "User and Role Management controls who accesses what in CareMetric AI. Role-based access control (RBAC) supports predefined roles and custom permission sets. Multi-factor authentication (MFA) can be enforced organization-wide via SMS or authenticator app.",
+      "summary_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=user-management].overview",
+      "body_source_path": "src/components/support/ComprehensiveUserManual.tsx#MANUAL_SECTIONS[id=user-management]",
+      "source_sha": "68719ac6411aeb645e0a357880292c15c523b9c4",
+      "source_visibility": "authenticated_support_center",
+      "audience": [
+        "practice_admin"
+      ],
+      "route_template": "/dashboard/support",
+      "classification": "shared-core",
+      "source_item_count": 1,
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.quickstart.admin",
+      "content_type": "quickstart_track",
+      "title": "Administrator quick-start track",
+      "summary": "Complete organization setup; daily routine: Monitor dashboard metrics, manage staff.",
+      "summary_source_path": "src/components/marketing/QuickStartGuide.tsx#ROLES[key=admin]",
+      "body_source_path": "src/components/marketing/QuickStartGuide.tsx#ROLES[key=admin].steps",
+      "source_sha": "d42a46f19b396bdd668b304304a8aab4cfd520cd",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "practice_admin"
+      ],
+      "route_template": "/admin/content",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 8,
+      "proposed_member_key_template": "caremetric-emr.quickstart.admin.{ordinal}",
+      "review_flags": [
+        "verify_navigation_shortcuts_and_setup_steps"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.quickstart.biller",
+      "content_type": "quickstart_track",
+      "title": "Biller quick-start track",
+      "summary": "Configure payer list and fee schedule; daily routine: Submit claims, work denial queue.",
+      "summary_source_path": "src/components/marketing/QuickStartGuide.tsx#ROLES[key=biller]",
+      "body_source_path": "src/components/marketing/QuickStartGuide.tsx#ROLES[key=biller].steps",
+      "source_sha": "d42a46f19b396bdd668b304304a8aab4cfd520cd",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "biller"
+      ],
+      "route_template": "/admin/content",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 8,
+      "proposed_member_key_template": "caremetric-emr.quickstart.biller.{ordinal}",
+      "review_flags": [
+        "verify_navigation_shortcuts_and_setup_steps"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.quickstart.frontdesk",
+      "content_type": "quickstart_track",
+      "title": "Front Desk quick-start track",
+      "summary": "Learn the Schedule view; daily routine: Check-in patients, manage appointments.",
+      "summary_source_path": "src/components/marketing/QuickStartGuide.tsx#ROLES[key=frontdesk]",
+      "body_source_path": "src/components/marketing/QuickStartGuide.tsx#ROLES[key=frontdesk].steps",
+      "source_sha": "d42a46f19b396bdd668b304304a8aab4cfd520cd",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "front_desk"
+      ],
+      "route_template": "/admin/content",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 7,
+      "proposed_member_key_template": "caremetric-emr.quickstart.frontdesk.{ordinal}",
+      "review_flags": [
+        "verify_navigation_shortcuts_and_setup_steps"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.quickstart.nurse",
+      "content_type": "quickstart_track",
+      "title": "Nurse / MA quick-start track",
+      "summary": "Learn the Patient Chart tabs; daily routine: Enter vitals, prep notes, process refills.",
+      "summary_source_path": "src/components/marketing/QuickStartGuide.tsx#ROLES[key=nurse]",
+      "body_source_path": "src/components/marketing/QuickStartGuide.tsx#ROLES[key=nurse].steps",
+      "source_sha": "d42a46f19b396bdd668b304304a8aab4cfd520cd",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "nurse_ma"
+      ],
+      "route_template": "/admin/content",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 8,
+      "proposed_member_key_template": "caremetric-emr.quickstart.nurse.{ordinal}",
+      "review_flags": [
+        "verify_navigation_shortcuts_and_setup_steps"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.quickstart.provider",
+      "content_type": "quickstart_track",
+      "title": "Provider quick-start track",
+      "summary": "Complete your profile and set availability; daily routine: Dashboard → Notes → Sign.",
+      "summary_source_path": "src/components/marketing/QuickStartGuide.tsx#ROLES[key=provider]",
+      "body_source_path": "src/components/marketing/QuickStartGuide.tsx#ROLES[key=provider].steps",
+      "source_sha": "d42a46f19b396bdd668b304304a8aab4cfd520cd",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "provider"
+      ],
+      "route_template": "/admin/content",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 8,
+      "proposed_member_key_template": "caremetric-emr.quickstart.provider.{ordinal}",
+      "review_flags": [
+        "verify_navigation_shortcuts_and_setup_steps"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.troubleshooting.billing-and-claims",
+      "content_type": "troubleshooting_collection",
+      "title": "Troubleshooting — Billing & Claims",
+      "summary": "3 authored symptom, cause, and resolution workflows for Billing & Claims.",
+      "summary_source_path": "src/components/marketing/TroubleshootingKB.tsx#MODULES[module=Billing & Claims]",
+      "body_source_path": "src/components/marketing/TroubleshootingKB.tsx#MODULES[module=Billing & Claims].entries",
+      "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "biller",
+        "practice_admin"
+      ],
+      "route_template": "/admin/content",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 3,
+      "proposed_member_key_template": "caremetric-emr.troubleshooting.billing-and-claims.{symptom-slug}",
+      "review_flags": [
+        "verify_navigation_and_vendor_steps_before_publication"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.troubleshooting.browser-quick-checks",
+      "content_type": "troubleshooting_checklist",
+      "title": "Browser and session quick checks",
+      "summary": "Generic first-line browser, cache, connection, and permission checks for support triage.",
+      "summary_source_path": "src/components/marketing/TroubleshootingKB.tsx#QUICK_CHECKS",
+      "body_source_path": "src/components/marketing/TroubleshootingKB.tsx#QUICK_CHECKS",
+      "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "all_authenticated",
+        "support_editor"
+      ],
+      "route_template": "/admin/content",
+      "classification": "shared-core",
+      "source_item_count": 6,
+      "proposed_member_key_template": "caremetric-emr.troubleshooting.browser-quick-checks.{ordinal}",
+      "review_flags": []
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.troubleshooting.dashboard",
+      "content_type": "troubleshooting_collection",
+      "title": "Troubleshooting — Dashboard",
+      "summary": "2 authored symptom, cause, and resolution workflows for Dashboard.",
+      "summary_source_path": "src/components/marketing/TroubleshootingKB.tsx#MODULES[module=Dashboard]",
+      "body_source_path": "src/components/marketing/TroubleshootingKB.tsx#MODULES[module=Dashboard].entries",
+      "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "all_authenticated",
+        "practice_admin"
+      ],
+      "route_template": "/admin/content",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 2,
+      "proposed_member_key_template": "caremetric-emr.troubleshooting.dashboard.{symptom-slug}",
+      "review_flags": [
+        "verify_navigation_and_vendor_steps_before_publication"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.troubleshooting.login-and-authentication",
+      "content_type": "troubleshooting_collection",
+      "title": "Troubleshooting — Login & Authentication",
+      "summary": "3 authored symptom, cause, and resolution workflows for Login & Authentication.",
+      "summary_source_path": "src/components/marketing/TroubleshootingKB.tsx#MODULES[module=Login & Authentication]",
+      "body_source_path": "src/components/marketing/TroubleshootingKB.tsx#MODULES[module=Login & Authentication].entries",
+      "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "all_authenticated",
+        "practice_admin"
+      ],
+      "route_template": "/admin/content",
+      "classification": "shared-core",
+      "source_item_count": 3,
+      "proposed_member_key_template": "caremetric-emr.troubleshooting.login-and-authentication.{symptom-slug}",
+      "review_flags": [
+        "verify_navigation_and_vendor_steps_before_publication"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.troubleshooting.note-documentation",
+      "content_type": "troubleshooting_collection",
+      "title": "Troubleshooting — Note Documentation",
+      "summary": "4 authored symptom, cause, and resolution workflows for Note Documentation.",
+      "summary_source_path": "src/components/marketing/TroubleshootingKB.tsx#MODULES[module=Note Documentation]",
+      "body_source_path": "src/components/marketing/TroubleshootingKB.tsx#MODULES[module=Note Documentation].entries",
+      "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "provider",
+        "nurse_ma"
+      ],
+      "route_template": "/admin/content",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 4,
+      "proposed_member_key_template": "caremetric-emr.troubleshooting.note-documentation.{symptom-slug}",
+      "review_flags": [
+        "verify_navigation_and_vendor_steps_before_publication"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.troubleshooting.patient-chart",
+      "content_type": "troubleshooting_collection",
+      "title": "Troubleshooting — Patient Chart",
+      "summary": "3 authored symptom, cause, and resolution workflows for Patient Chart.",
+      "summary_source_path": "src/components/marketing/TroubleshootingKB.tsx#MODULES[module=Patient Chart]",
+      "body_source_path": "src/components/marketing/TroubleshootingKB.tsx#MODULES[module=Patient Chart].entries",
+      "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "provider",
+        "nurse_ma",
+        "front_desk"
+      ],
+      "route_template": "/admin/content",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 3,
+      "proposed_member_key_template": "caremetric-emr.troubleshooting.patient-chart.{symptom-slug}",
+      "review_flags": [
+        "verify_navigation_and_vendor_steps_before_publication"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.troubleshooting.patient-portal",
+      "content_type": "troubleshooting_collection",
+      "title": "Troubleshooting — Patient Portal",
+      "summary": "2 authored symptom, cause, and resolution workflows for Patient Portal.",
+      "summary_source_path": "src/components/marketing/TroubleshootingKB.tsx#MODULES[module=Patient Portal]",
+      "body_source_path": "src/components/marketing/TroubleshootingKB.tsx#MODULES[module=Patient Portal].entries",
+      "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "patient",
+        "front_desk",
+        "practice_admin"
+      ],
+      "route_template": "/admin/content",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 2,
+      "proposed_member_key_template": "caremetric-emr.troubleshooting.patient-portal.{symptom-slug}",
+      "review_flags": [
+        "verify_navigation_and_vendor_steps_before_publication"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.troubleshooting.scheduling",
+      "content_type": "troubleshooting_collection",
+      "title": "Troubleshooting — Scheduling",
+      "summary": "2 authored symptom, cause, and resolution workflows for Scheduling.",
+      "summary_source_path": "src/components/marketing/TroubleshootingKB.tsx#MODULES[module=Scheduling]",
+      "body_source_path": "src/components/marketing/TroubleshootingKB.tsx#MODULES[module=Scheduling].entries",
+      "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "provider",
+        "front_desk",
+        "practice_admin"
+      ],
+      "route_template": "/admin/content",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 2,
+      "proposed_member_key_template": "caremetric-emr.troubleshooting.scheduling.{symptom-slug}",
+      "review_flags": [
+        "verify_navigation_and_vendor_steps_before_publication"
+      ]
+    },
+    {
+      "source_status": "live_static_source",
+      "content_key": "caremetric-emr.troubleshooting.telehealth",
+      "content_type": "troubleshooting_collection",
+      "title": "Troubleshooting — Telehealth",
+      "summary": "2 authored symptom, cause, and resolution workflows for Telehealth.",
+      "summary_source_path": "src/components/marketing/TroubleshootingKB.tsx#MODULES[module=Telehealth]",
+      "body_source_path": "src/components/marketing/TroubleshootingKB.tsx#MODULES[module=Telehealth].entries",
+      "source_sha": "a9793c1a12cfba574886364783c567a83ee26a78",
+      "source_visibility": "super_admin_content_library",
+      "audience": [
+        "provider",
+        "front_desk"
+      ],
+      "route_template": "/admin/content",
+      "classification": "caremetric-emr-overlay",
+      "source_item_count": 2,
+      "proposed_member_key_template": "caremetric-emr.troubleshooting.telehealth.{symptom-slug}",
+      "review_flags": [
+        "verify_navigation_and_vendor_steps_before_publication"
+      ]
+    }
+  ],
+  "excluded_sources": [
+    {
+      "source_path": "src/lib/tutorials.ts; src/components/tutorials/*; tutorial_jobs",
+      "reason": "Tenant-generated jobs include organization_id, user_id, free-text prompt, draft/in-progress state, and signed asset URLs. No rows were queried.",
+      "excluded_count": null
+    },
+    {
+      "source_path": "src/components/super-admin/support/KnowledgeBaseTab.tsx; ai_knowledge_base",
+      "reason": "Mutable database content has no governed publication status in this surface. No rows were queried.",
+      "excluded_count": null
+    },
+    {
+      "source_path": "src/components/support/SupportTicketForm.tsx; SupportMyTickets.tsx; SupportAIChat.tsx; support ticket/chat tables",
+      "reason": "Requests and conversations can contain user, tenant, patient, and free-text data. No records were queried.",
+      "excluded_count": null
+    },
+    {
+      "source_path": "src/components/ResourcesPage.tsx#resources",
+      "reason": "Twenty marketing cards contain title/description only; generated downloads repeat that short metadata and have no authored guide body.",
+      "excluded_count": 20
+    },
+    {
+      "source_path": "src/components/ResourcesPage.tsx#webinars",
+      "reason": "Three historical webinar cards have metadata but no source video or tutorial body.",
+      "excluded_count": 3
+    },
+    {
+      "source_path": "src/components/PricingPage.tsx#promoFaqItems; src/components/SecurityCompliancePage.tsx#FAQ; src/components/solutions/*#FAQ",
+      "reason": "Twenty-three volatile marketing FAQ snippets duplicate canonical FAQ themes and require pricing, security, SLA, and compliance review.",
+      "excluded_count": 23
+    },
+    {
+      "source_path": "public/docs/pdf/*.txt",
+      "reason": "Twelve derived text exports duplicate Markdown sources and would create duplicate search results.",
+      "excluded_count": 12
+    },
+    {
+      "source_path": "public/docs/pdf/*.html",
+      "reason": "Five generated indexes/checklists/comparison pages are derived or metadata-only; production-readiness-checklist.html explicitly says NOT READY.",
+      "excluded_count": 5
+    },
+    {
+      "source_path": "public/docs/pdf/*.pdf",
+      "reason": "Seven binary responsibility, security, consent, and signature policy forms are governed documents rather than Help Center articles.",
+      "excluded_count": 7
+    },
+    {
+      "source_path": "public/docs/pdf/CHECKLISTS_README.md",
+      "reason": "Build/distribution README rather than end-user help content.",
+      "excluded_count": 1
+    },
+    {
+      "source_path": "docs/TUTORIAL_VIDEO_OPERATOR_GUIDE.md; services/tutorial-capture/README.md; services/tutorial-render/README.md",
+      "reason": "Internal tutorial-generation operations and infrastructure documentation, not customer tutorial content.",
+      "excluded_count": 3
+    }
+  ],
+  "validation": {
+    "result": "pass",
+    "errors": [],
+    "checks": {
+      "canonical_commit_resolved": true,
+      "canonical_tree_complete": true,
+      "all_body_source_paths_exist_at_commit": true,
+      "content_keys_unique": true,
+      "content_keys_stable_format": true,
+      "required_fields_present": true,
+      "classifications_binary": true,
+      "audiences_controlled": true,
+      "tokenized_urls_in_manifest": 0,
+      "sensitive_route_context_in_manifest": 0,
+      "copied_contact_or_identity_values_in_titles_or_summaries": 0,
+      "remote_text_asset_scan": {
+        "files_scanned": 45,
+        "scope": "All UTF-8 .md, .txt, and .html files under public/docs/pdf at the canonical commit.",
+        "tokenized_url_matches": 0,
+        "probable_real_secret_matches": 0,
+        "note": "Credential-like matches in INTEGRATION_SETUP_GUIDE.md were type syntax or explicit placeholders; values were not copied."
+      },
+      "draft_handling": {
+        "explicitly_not_ready_sources_excluded": [
+          "public/docs/pdf/production-readiness-checklist.html"
+        ],
+        "semantic_uses_of_draft_not_treated_as_drafts": "Claim status, appeal drafting, and AI note drafting references remain eligible content."
+      },
+      "dynamic_records_accessed": 0
+    }
+  },
+  "recommendations": [
+    "Start the Hub migration with the shared-core records, but first remove CareMetric-specific routes and fact-check security, support-SLA, retention, uptime, vendor, and training claims.",
+    "Use the in-app FAQ, five role quick-start tracks, and sixteen manual modules as the CareMetric EMR pilot overlay; they are the most task-oriented sources.",
+    "Reconcile the 200-question comprehensive FAQ, 80-question public FAQ, 20-question in-app FAQ, and 28 chatbot intents into one canonical question registry with aliases before publishing to avoid duplicate and contradictory answers.",
+    "Require owner, status, version, last-reviewed-at, and next-review-at metadata for every migrated record; route all clinical, billing, regulatory, pricing, and security claims through subject-matter review.",
+    "Normalize contact blocks to support@caremetric.ai and +1 877 521 2890 at render time instead of embedding contact details in article bodies.",
+    "Create a first-party video registry keyed to content_key so one approved HeyGen/video asset can be reused by every product overlay.",
+    "Do not migrate tutorial_jobs. The repository contains a tenant-generated tutorial pipeline, not a reusable static customer tutorial catalog.",
+    "Keep launcher context limited to product, static route template, and sanitized app version; never add referrer, query, hash, patient, user, tenant, organization, or free-text fields."
+  ]
+}

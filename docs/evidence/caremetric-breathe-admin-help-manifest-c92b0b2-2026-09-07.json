@@ -1,0 +1,2856 @@
+{
+  "schema_version": "1.0.0",
+  "manifest_id": "caremetric-breathe-admin-help-c92b0b2-2026-09-07",
+  "generated_at": "2026-09-07",
+  "source": {
+    "repository": "kdeyarmin/PennFit",
+    "canonical_branch": "main",
+    "commit_sha": "c92b0b2bda1c3b46e85e3536b79c7080ace4edc6",
+    "product": "CareMetric Breathe",
+    "repository_codename": "PennFit"
+  },
+  "scope": {
+    "included": "Static, non-PHI administrator/staff help, FAQ, tutorial, onboarding, and operator-manual content.",
+    "excluded": [
+      "patient-facing and provider-facing portal help",
+      "tenant contact values and patient-facing tenant support material",
+      "support tickets and ticket messages",
+      "users, tenants, patients, orders, claims, and other runtime records",
+      "secrets, environment values, integration credentials, and contextual values",
+      "drafts, review documents, implementation plans, and engineering runbooks",
+      "public patient FAQ, learning, and therapy education pages",
+      "screenshots and demo fixture data"
+    ],
+    "classification_definition": {
+      "shared-core": "Existing record can become a cross-product support article after product-neutral route/name parameterization; it does not depend on a CPAP, DME, insurance, patient, or clinical workflow.",
+      "breathe-overlay": "Existing record depends on CareMetric Breathe navigation or CPAP/DME/insurance/patient/clinical operations and should remain scoped to the Breathe product."
+    }
+  },
+  "counts": {
+    "total": 135,
+    "primary_in_app": 126,
+    "supplemental": 9,
+    "by_type": {
+      "faq": 57,
+      "guide": 17,
+      "how-to": 52,
+      "onboarding-pdf-template": 1,
+      "operator-manual-pdf": 2,
+      "role-handbook-pdf-template": 5,
+      "tutorial-pdf": 1
+    },
+    "by_classification": {
+      "breathe-overlay": 120,
+      "shared-core": 15
+    },
+    "by_category_primary": {
+      "analytics": 7,
+      "billing": 29,
+      "getting-started": 10,
+      "orders": 10,
+      "outreach": 13,
+      "patients": 34,
+      "system": 23
+    }
+  },
+  "entries": [
+    {
+      "content_key": "breathe.admin.how-to.finish-workspace-setup",
+      "content_type": "how-to",
+      "source_id": "finish-workspace-setup",
+      "title": "Finish setting up your workspace",
+      "summary": "Work the setup checklist at /admin/setup top to bottom — it shows live status for branding, your domain, phone and fax numbers, your email sender, your billing identity, team, and catalog, and links straight to the page that finishes each row.",
+      "audience": "Owner or admin",
+      "category": "getting-started",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/finish-workspace-setup",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"finish-workspace-setup\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.invite-your-team",
+      "content_type": "how-to",
+      "source_id": "invite-your-team",
+      "title": "Add a teammate and set their role",
+      "summary": "Invite from Team /admin/team, pick the role that matches the work they do, and have them finish setup at Account security /admin/security. Roles decide which pages they can even see.",
+      "audience": "Admin",
+      "category": "getting-started",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/invite-your-team",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"invite-your-team\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.navigate-the-console",
+      "content_type": "how-to",
+      "source_id": "navigate-the-console",
+      "title": "Find your way around the console",
+      "summary": "The sidebar is grouped by the shape of the work — Workspace, Patients & Clinical, Orders & fulfillment, Billing, Analytics & Reports, System. Use the global lookup in the header to jump straight to a patient, and the in-app assistant when you cannot find a page.",
+      "audience": "Everyone",
+      "category": "getting-started",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/navigate-the-console",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"navigate-the-console\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "core.admin.how-to.get-help-and-report-a-problem",
+      "content_type": "how-to",
+      "source_id": "get-help-and-report-a-problem",
+      "title": "Get help, report a problem, or suggest a feature",
+      "summary": "Ask the in-app assistant first for how-to questions, file a ticket at Support /admin/support when you need a person, and let the assistant forward a feature idea to the owners when the app genuinely cannot do something.",
+      "audience": "Everyone",
+      "category": "getting-started",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/get-help-and-report-a-problem",
+      "classification": "shared-core",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"get-help-and-report-a-problem\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.find-and-work-a-patient",
+      "content_type": "how-to",
+      "source_id": "find-and-work-a-patient",
+      "title": "Find a patient and work their record",
+      "summary": "Search from the header lookup or Patients /admin/patients, then use the chart's tabs — timeline, orders, messages, documents, therapy, billing — as the single place you do everything for that person.",
+      "audience": "Everyone",
+      "category": "patients",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/find-and-work-a-patient",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"find-and-work-a-patient\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.answer-a-patient-message",
+      "content_type": "how-to",
+      "source_id": "answer-a-patient-message",
+      "title": "Answer an inbound patient message",
+      "summary": "Work Conversations /admin/conversations as one queue for SMS, MMS, and email. Reply with a canned reply where one fits, and open a Case when the thread needs more than an answer.",
+      "audience": "CSR or admin",
+      "category": "patients",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/answer-a-patient-message",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"answer-a-patient-message\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.send-a-fitting-invite",
+      "content_type": "how-to",
+      "source_id": "send-a-fitting-invite",
+      "title": "Send someone a mask-fitting link",
+      "summary": "Fitter Invites /admin/fitter-invites texts or emails a guided mask-fitting link to anyone — including someone who is not in the system yet. Their scan lands in Fit review /admin/fit-sessions for you to approve.",
+      "audience": "CSR or admin",
+      "category": "patients",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/send-a-fitting-invite",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"send-a-fitting-invite\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.review-a-fit-session",
+      "content_type": "how-to",
+      "source_id": "review-a-fit-session",
+      "title": "Review and approve a mask recommendation",
+      "summary": "Fit review /admin/fit-sessions lists every completed scan with its measurements, reasoning, and confidence. Approve the recommendation, override the mask or size, or request a rescan.",
+      "audience": "Clinician or trained CSR",
+      "category": "patients",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/review-a-fit-session",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"review-a-fit-session\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.manage-the-mask-formulary",
+      "content_type": "how-to",
+      "source_id": "manage-the-mask-formulary",
+      "title": "Set which masks the fitter recommends",
+      "summary": "Mask catalog /admin/fitter/catalog is the shared library of models and their fit data. Formulary /admin/fitter/formulary is the subset you stock — it nudges near-ties toward what you can ship, and never filters a clinically better mask out.",
+      "audience": "Clinician or admin",
+      "category": "patients",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/manage-the-mask-formulary",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"manage-the-mask-formulary\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.send-a-document-for-signature",
+      "content_type": "how-to",
+      "source_id": "send-a-document-for-signature",
+      "title": "Send a document out for signature",
+      "summary": "Draft the document at Documents /admin/documents, send it as a packet from Document packets /admin/patient-packets, then track it through Awaiting signatures /admin/signature-tracking until it comes back signed.",
+      "audience": "CSR or admin",
+      "category": "patients",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/send-a-document-for-signature",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"send-a-document-for-signature\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.work-inbound-referrals",
+      "content_type": "how-to",
+      "source_id": "work-inbound-referrals",
+      "title": "Turn an inbound referral into a patient and an order",
+      "summary": "Referral reviewer /admin/referral-reviews is the queue for inbound referral faxes. Work each one into a patient record and an order, and keep the sending practice attached so attribution stays accurate.",
+      "audience": "CSR or intake specialist",
+      "category": "patients",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/work-inbound-referrals",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"work-inbound-referrals\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.schedule-a-video-visit",
+      "content_type": "how-to",
+      "source_id": "schedule-a-video-visit",
+      "title": "Run a video visit with a patient",
+      "summary": "Create the visit from Video visits /admin/video-visits, the header button, or a patient chart. The patient gets a secure join link by text or email — there is nothing for them to install.",
+      "audience": "Clinician or CSR",
+      "category": "patients",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/schedule-a-video-visit",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"schedule-a-video-visit\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.monitor-therapy-adherence",
+      "content_type": "how-to",
+      "source_id": "monitor-therapy-adherence",
+      "title": "Find the patients whose therapy needs attention",
+      "summary": "The therapy boards turn device-cloud data into worklists: RT Overview /admin/rt-overview for the daily read, Setup Adherence /admin/therapy-compliance for people at risk of failing their compliance window, and Resupply Opportunities /admin/therapy-resupply for who is due.",
+      "audience": "Clinician or RT",
+      "category": "patients",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/monitor-therapy-adherence",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"monitor-therapy-adherence\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.verify-a-patients-insurance",
+      "content_type": "how-to",
+      "source_id": "verify-a-patients-insurance",
+      "title": "Verify a patient's insurance right now",
+      "summary": "Verify insurance /admin/billing/verify runs a live eligibility check for any patient on demand. The same check is on the patient chart under quick actions and the billing tab.",
+      "audience": "CSR or biller",
+      "category": "billing",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/verify-a-patients-insurance",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"verify-a-patients-insurance\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.submit-a-claim",
+      "content_type": "how-to",
+      "source_id": "submit-a-claim",
+      "title": "Take a claim from eligibility to submission",
+      "summary": "Confirm coverage, clear a prior auth if the plan needs one, then submit through Auto-submit /admin/billing/auto-submit or Manual claim /admin/billing/manual-claim and watch for the response in ERA files /admin/billing/era.",
+      "audience": "Biller",
+      "category": "billing",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/submit-a-claim",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"submit-a-claim\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.work-the-denials-worklist",
+      "content_type": "how-to",
+      "source_id": "work-the-denials-worklist",
+      "title": "Work denials so the winnable ones get won",
+      "summary": "Denials worklist /admin/billing/denials-worklist is already ranked by recoverable dollars weighted by win probability — work it top-down, fix the root cause, and check filing deadlines daily.",
+      "audience": "Biller",
+      "category": "billing",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/work-the-denials-worklist",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"work-the-denials-worklist\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.post-an-era",
+      "content_type": "how-to",
+      "source_id": "post-an-era",
+      "title": "Post an ERA and reconcile what the payer paid",
+      "summary": "ERA files /admin/billing/era holds the electronic remittance advice. Post it, reconcile each line against what you expected, and route underpayments and denials to the right worklist.",
+      "audience": "Biller",
+      "category": "billing",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/post-an-era",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"post-an-era\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.collect-a-patient-balance",
+      "content_type": "how-to",
+      "source_id": "collect-a-patient-balance",
+      "title": "Collect a patient balance without losing the patient",
+      "summary": "Collections /admin/billing/collections runs the dunning ladder — statement, reminder, second notice, final notice, agency. Send statements from Statement send /admin/billing/statements and review before any agency hand-off.",
+      "audience": "Biller or admin",
+      "category": "billing",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/collect-a-patient-balance",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"collect-a-patient-balance\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.respond-to-an-adr",
+      "content_type": "how-to",
+      "source_id": "respond-to-an-adr",
+      "title": "Respond to a payer documentation request or audit",
+      "summary": "ADR / audit response /admin/billing/adr tracks Additional Documentation Requests and their response clocks. Assemble the packet, send it before the deadline, and use Audit readiness /admin/billing/audit-readiness to find the gaps first.",
+      "audience": "Biller or admin",
+      "category": "billing",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/respond-to-an-adr",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"respond-to-an-adr\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.send-a-bulk-campaign",
+      "content_type": "how-to",
+      "source_id": "send-a-bulk-campaign",
+      "title": "Send a bulk SMS or email campaign",
+      "summary": "Build the audience with filters in Bulk Campaigns /admin/bulk-campaigns, sanity-check the count before you write anything, then send. Measure it in Outreach Attribution /admin/analytics/outreach-attribution.",
+      "audience": "Admin or marketing",
+      "category": "outreach",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/send-a-bulk-campaign",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"send-a-bulk-campaign\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.set-up-resupply-reminders",
+      "content_type": "how-to",
+      "source_id": "set-up-resupply-reminders",
+      "title": "Run the resupply reminder program",
+      "summary": "Turn on reminder automation in Control Center, set cadence in Frequency rules /admin/rules, add an active prescription per supply line, and read results in Reorder Reminders /admin/reorder-reminders. Escalation timing lives in System Configuration → Resupply reminders.",
+      "audience": "Admin",
+      "category": "outreach",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/set-up-resupply-reminders",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"set-up-resupply-reminders\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.build-an-automation-rule",
+      "content_type": "how-to",
+      "source_id": "build-an-automation-rule",
+      "title": "Set reminder frequency rules and simulate them",
+      "summary": "Frequency rules /admin/rules set the default reminder cadence and channel by therapy type, payer, and customer tenure. A per-patient override always wins. Rule Tester /admin/rule-tester shows which rule would fire for a hypothetical patient, without changing anything.",
+      "audience": "Admin",
+      "category": "outreach",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/build-an-automation-rule",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"build-an-automation-rule\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.find-and-read-a-report",
+      "content_type": "how-to",
+      "source_id": "find-and-read-a-report",
+      "title": "Find the right report and read it correctly",
+      "summary": "Reports /admin/reports is the catalog. Money questions go to the financial analytics, staff-output questions to Team throughput /admin/productivity, and satisfaction to Customer NPS /admin/nps.",
+      "audience": "Admin or owner",
+      "category": "analytics",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/find-and-read-a-report",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"find-and-read-a-report\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.track-team-performance",
+      "content_type": "how-to",
+      "source_id": "track-team-performance",
+      "title": "Track how the team is performing",
+      "summary": "Team throughput /admin/productivity shows output per person, Live staffing /admin/live-staffing shows coverage right now, and Goals & targets /admin/goals is where you set what good looks like.",
+      "audience": "Admin or supervisor",
+      "category": "analytics",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/track-team-performance",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"track-team-performance\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "core.admin.how-to.manage-modules-and-flags",
+      "content_type": "how-to",
+      "source_id": "manage-modules-and-flags",
+      "title": "Turn a feature or a whole section on or off",
+      "summary": "Control Center /admin/control-center holds both the app-module switches that show or hide entire sidebar sections and the individual feature flags. Turning off what you do not use is the cheapest usability win available.",
+      "audience": "Admin",
+      "category": "system",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/manage-modules-and-flags",
+      "classification": "shared-core",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"manage-modules-and-flags\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.brand-outbound-communications",
+      "content_type": "how-to",
+      "source_id": "brand-outbound-communications",
+      "title": "Make patient messages come from your brand",
+      "summary": "Set your own phone number, fax number, and email From address on their three settings pages. Until you do, patients receive messages from the platform's shared sender rather than your practice.",
+      "audience": "Owner or admin",
+      "category": "system",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/brand-outbound-communications",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"brand-outbound-communications\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.connect-an-integration",
+      "content_type": "how-to",
+      "source_id": "connect-an-integration",
+      "title": "Connect a therapy-cloud, clearinghouse, or partner integration",
+      "summary": "Integrations /admin/integrations shows every connector and whether it is available. Your own vendor accounts are entered at Configuration /admin/system/configuration, which is owner-only.",
+      "audience": "Owner",
+      "category": "system",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/connect-an-integration",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"connect-an-integration\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.sync-with-pacware",
+      "content_type": "how-to",
+      "source_id": "sync-with-pacware",
+      "title": "Exchange data with PacWare",
+      "summary": "PacWare /admin/pacware is a CSV exchange, not a live connection. Import is fill-only and never overwrites an existing value; every export has a verify step before you download.",
+      "audience": "Admin or biller",
+      "category": "system",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/sync-with-pacware",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"sync-with-pacware\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "core.admin.how-to.check-operations-health",
+      "content_type": "how-to",
+      "source_id": "check-operations-health",
+      "title": "Check whether messages and background work are healthy",
+      "summary": "Operations /admin/operations is the system overview. Outbound Messages /admin/outbound-messages shows every send with its delivery result, and Delivery Failures /admin/delivery-failures is the queue of what did not land.",
+      "audience": "Admin",
+      "category": "system",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/check-operations-health",
+      "classification": "shared-core",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"check-operations-health\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.open-and-work-a-case",
+      "content_type": "how-to",
+      "source_id": "open-and-work-a-case",
+      "title": "Open a case and drive it to closure",
+      "summary": "When one problem spans a text, a fax, and a refund, open a Case /admin/cases so it has a persistent home. Set status and priority, link the related threads, orders, and follow-ups, and work it until it closes.",
+      "audience": "CSR or admin",
+      "category": "patients",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/open-and-work-a-case",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"open-and-work-a-case\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.merge-duplicate-patients",
+      "content_type": "how-to",
+      "source_id": "merge-duplicate-patients",
+      "title": "Merge two records for the same patient",
+      "summary": "Duplicate review /admin/patients/duplicates groups likely collisions by the key they share. Pick the survivor, fold the duplicate into it, and the merge repoints every reference at once — the duplicate is closed, not deleted.",
+      "audience": "CSR or admin",
+      "category": "patients",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/merge-duplicate-patients",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"merge-duplicate-patients\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.triage-inbound-faxes",
+      "content_type": "how-to",
+      "source_id": "triage-inbound-faxes",
+      "title": "Triage the inbound fax queue",
+      "summary": "Inbound faxes /admin/inbound-faxes lists what arrived with its sender, page count, and status. Open a fax to read the PDF in place, attach it to the right patient, provider, or prescription, then archive it.",
+      "audience": "CSR or intake specialist",
+      "category": "patients",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/triage-inbound-faxes",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"triage-inbound-faxes\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.run-an-equipment-recall",
+      "content_type": "how-to",
+      "source_id": "run-an-equipment-recall",
+      "title": "Work a manufacturer equipment recall",
+      "summary": "Record the recall in Recalls /admin/equipment-recalls with its manufacturer, model, and serial criteria, run the scan to find every affected device you dispensed, then notify those patients and work the remediation to completion.",
+      "audience": "Admin or clinical lead",
+      "category": "patients",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/run-an-equipment-recall",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"run-an-equipment-recall\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.coach-a-struggling-patient",
+      "content_type": "how-to",
+      "source_id": "coach-a-struggling-patient",
+      "title": "Run an adherence coaching plan",
+      "summary": "Adherence coaching /admin/coaching holds an open plan per patient who is struggling. Create the plan, move it along with the inline state chips as you make contact, and close it with a resolution note.",
+      "audience": "Clinician, RT, or trained CSR",
+      "category": "patients",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/coach-a-struggling-patient",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"coach-a-struggling-patient\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.manage-document-retention",
+      "content_type": "how-to",
+      "source_id": "manage-document-retention",
+      "title": "Place a legal hold or destroy an expired document",
+      "summary": "Retention /admin/documents/retention lists documents whose retention clock is up or close. A legal hold needs a reason and blocks destruction; destruction is admin-only, requires the sweep to have marked the row, and makes you type DESTROY.",
+      "audience": "Admin or compliance owner",
+      "category": "patients",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/manage-document-retention",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"manage-document-retention\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.work-insurance-leads",
+      "content_type": "how-to",
+      "source_id": "work-insurance-leads",
+      "title": "Work the insurance-coverage lead queue",
+      "summary": "Insurance Leads /admin/shop/insurance-leads collects everyone who asked whether their plan covers supplies. Work it top-down, run a real eligibility check, and record the outcome with a note so the next person is not starting over.",
+      "audience": "CSR",
+      "category": "orders",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/work-insurance-leads",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"work-insurance-leads\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.recover-rental-equipment",
+      "content_type": "how-to",
+      "source_id": "recover-rental-equipment",
+      "title": "Recover a rental device from a patient who stopped therapy",
+      "summary": "Asset recovery /admin/asset-recovery is the human action queue that moves a device from identified through to received and redeployed, so a machine sitting in a closet becomes one you can refurbish and place again.",
+      "audience": "CSR with case management access",
+      "category": "orders",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/recover-rental-equipment",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"recover-rental-equipment\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.get-a-prior-authorization",
+      "content_type": "how-to",
+      "source_id": "get-a-prior-authorization",
+      "title": "Get a prior authorization before you supply",
+      "summary": "Prior auths /admin/billing/prior-auths is five buckets in the order they need attention — missed SLA, at-risk SLA, awaiting decision, expiring approvals, and drafts. Work them top-down.",
+      "audience": "Biller",
+      "category": "billing",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/get-a-prior-authorization",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"get-a-prior-authorization\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.bill-a-secondary-payer",
+      "content_type": "how-to",
+      "source_id": "bill-a-secondary-payer",
+      "title": "Bill the secondary payer after the primary pays",
+      "summary": "Secondary claims /admin/billing/secondary lists paid primary claims that carry a secondary coverage and a remaining patient balance, ranked by recoverable dollars. Generating one copies the lines and snapshots the primary's adjudication into a draft you review and submit.",
+      "audience": "Biller",
+      "category": "billing",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/bill-a-secondary-payer",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"bill-a-secondary-payer\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.manage-capped-rentals",
+      "content_type": "how-to",
+      "source_id": "manage-capped-rentals",
+      "title": "Keep capped rentals on track",
+      "summary": "Capped rentals /admin/billing/capped-rentals tracks each rental through its 13- and 36-month lifecycle. A daily job advances the cycles on its own; the page is where you see the state, catch an exception, and correct one.",
+      "audience": "Biller",
+      "category": "billing",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/manage-capped-rentals",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"manage-capped-rentals\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.configure-billing-rules",
+      "content_type": "how-to",
+      "source_id": "configure-billing-rules",
+      "title": "Configure the rules that build your claims",
+      "summary": "Config /admin/billing/config is the landing grid for the settings behind the claim scrubber, claim builder, fee-schedule lookups, and denial analyzer. Fixing a rule here stops a recurring denial at its source.",
+      "audience": "Billing manager or admin",
+      "category": "billing",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/configure-billing-rules",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"configure-billing-rules\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.build-your-reply-library",
+      "content_type": "how-to",
+      "source_id": "build-your-reply-library",
+      "title": "Build the reply library your team actually uses",
+      "summary": "Canned Replies /admin/macros holds the one-line answers your team reaches for, Playbooks /admin/playbooks holds multi-touch outreach for a situation, and Automated messages /admin/templates holds the copy the system sends on its own.",
+      "audience": "Admin or team lead",
+      "category": "outreach",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/build-your-reply-library",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"build-your-reply-library\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.act-on-customer-feedback",
+      "content_type": "how-to",
+      "source_id": "act-on-customer-feedback",
+      "title": "Read your NPS and actually act on it",
+      "summary": "Customer NPS /admin/nps shows the headline score, the promoter/passive/detractor split, and — the part that matters — the recent comments. Read the comments in one sitting and route what they surface.",
+      "audience": "Owner, admin, or team lead",
+      "category": "analytics",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/act-on-customer-feedback",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"act-on-customer-feedback\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.set-closures-and-hours",
+      "content_type": "how-to",
+      "source_id": "set-closures-and-hours",
+      "title": "Tell the system when you are closed",
+      "summary": "Closures /admin/closures declares the windows when your office is shut. While a window is active, an inbound text gets your configured auto-reply instead of silence — and recurring windows cover the holidays you close every year.",
+      "audience": "CSR lead or admin",
+      "category": "system",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/set-closures-and-hours",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"set-closures-and-hours\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "core.admin.how-to.secure-your-account",
+      "content_type": "how-to",
+      "source_id": "secure-your-account",
+      "title": "Secure your own account with multi-factor authentication",
+      "summary": "Account security /admin/security is where you enroll an authenticator app, check your status, and disable it if you change devices. Enrollment is not yet enforced at sign-in, so it only protects you if you actually do it.",
+      "audience": "Everyone",
+      "category": "system",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/secure-your-account",
+      "classification": "shared-core",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"secure-your-account\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.appeal-a-denial",
+      "content_type": "how-to",
+      "source_id": "appeal-a-denial",
+      "title": "Write and send a denial appeal",
+      "summary": "The appeal workbench lives in the claim drawer on a patient's claims: generate the letter, fax it to the payer — which moves the claim from denied to appealed — or record an out-of-band delivery, then record the payer's outcome.",
+      "audience": "Biller",
+      "category": "billing",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/appeal-a-denial",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"appeal-a-denial\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.check-capped-rental-modifiers",
+      "content_type": "how-to",
+      "source_id": "check-capped-rental-modifiers",
+      "title": "Check the modifiers on a capped-rental claim",
+      "summary": "Modifier rules /admin/billing/config/modifier-rules is the payer-specific policy the claim builder applies, sorted so the rules that fire first show first. Use it to see which rule fired on a rental claim — the sequence itself comes from your payer's policy, not from the app.",
+      "audience": "Biller",
+      "category": "billing",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/check-capped-rental-modifiers",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"check-capped-rental-modifiers\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.work-the-fit-requests-queue",
+      "content_type": "how-to",
+      "source_id": "work-the-fit-requests-queue",
+      "title": "Work the fit requests queue",
+      "summary": "Fit Requests /admin/fitter-requests is where a finished mask fitting lands. The patient never files their own order — you verify the benefit, place the order, and close the row with what actually happened.",
+      "audience": "CSR or intake coordinator",
+      "category": "patients",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/work-the-fit-requests-queue",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"work-the-fit-requests-queue\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.manage-catalog-and-stock",
+      "content_type": "how-to",
+      "source_id": "manage-catalog-and-stock",
+      "title": "Manage your catalog and stock levels",
+      "summary": "Catalog /admin/catalog is the list of SKUs you dispense and how many are on the shelf. Stock moves as a recorded movement with a reason — never as a typed-in total — so every balance has a history behind it.",
+      "audience": "Inventory or operations lead",
+      "category": "orders",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/manage-catalog-and-stock",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"manage-catalog-and-stock\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.manage-backorders-and-substitutions",
+      "content_type": "how-to",
+      "source_id": "manage-backorders-and-substitutions",
+      "title": "Mark a SKU out of stock and set substitutions",
+      "summary": "Backorders /admin/shop/backorders marks a SKU unavailable and sets what the resupply engine should send instead. The insurance fulfillment path reads this, so an uncleared backorder keeps substituting away from that SKU.",
+      "audience": "Inventory or operations lead",
+      "category": "orders",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/manage-backorders-and-substitutions",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"manage-backorders-and-substitutions\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.read-inventory-turnover",
+      "content_type": "how-to",
+      "source_id": "read-inventory-turnover",
+      "title": "Read the inventory turnover report",
+      "summary": "Inventory turnover /admin/analytics/inventory-turnover shows how fast stock moves (COGS ÷ inventory value) and which SKUs ran out while patients wanted them.",
+      "audience": "Owner or operations lead",
+      "category": "analytics",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/read-inventory-turnover",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"read-inventory-turnover\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.how-to.read-storefront-analytics",
+      "content_type": "how-to",
+      "source_id": "read-storefront-analytics",
+      "title": "Read storefront analytics",
+      "summary": "Storefront Analytics /admin/fitter/analytics shows how people move through your public site and mask fitter — where they arrive, where they drop, and how many finish a fitting.",
+      "audience": "Owner or marketing lead",
+      "category": "analytics",
+      "route_template": "/admin/resources/how-to/{slug}",
+      "source_route": "/admin/resources/how-to/read-storefront-analytics",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/how-tos.ts",
+      "body_source_selector": "HOW_TO_GUIDES[slug=\"read-storefront-analytics\"]",
+      "summary_field": "summary",
+      "body_fields": [
+        "prerequisites",
+        "steps",
+        "troubleshooting",
+        "related",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.guide.overview",
+      "content_type": "guide",
+      "source_id": "overview",
+      "title": "What this platform does",
+      "summary": "One system that runs a CPAP resupply program end to end — from the first fitting through ordering, fulfillment, insurance billing, and the ongoing resupply relationship.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "getting-started",
+      "route_template": "/admin/resources/user-guide#{id}",
+      "source_route": "/admin/resources/user-guide#overview",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+      "body_source_selector": "GUIDE_SECTIONS[id=\"overview\"]",
+      "summary_field": "intro",
+      "body_fields": [
+        "blocks"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.guide.concepts",
+      "content_type": "guide",
+      "source_id": "concepts",
+      "title": "Concepts worth understanding first",
+      "summary": "Five ideas explain most of what is otherwise confusing: modules, roles, your brand identity, the two AI assistants, and how protected health information is handled.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "getting-started",
+      "route_template": "/admin/resources/user-guide#{id}",
+      "source_route": "/admin/resources/user-guide#concepts",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+      "body_source_selector": "GUIDE_SECTIONS[id=\"concepts\"]",
+      "summary_field": "intro",
+      "body_fields": [
+        "blocks"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.guide.workspace",
+      "content_type": "guide",
+      "source_id": "workspace",
+      "title": "Workspace — the day-to-day desk",
+      "summary": "Where staff spend their day: the landing dashboard, the counter, the unified inbox, cases and episodes, the schedule, and every outbound surface.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "patients",
+      "route_template": "/admin/resources/user-guide#{id}",
+      "source_route": "/admin/resources/user-guide#workspace",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+      "body_source_selector": "GUIDE_SECTIONS[id=\"workspace\"]",
+      "summary_field": "intro",
+      "body_fields": [
+        "blocks"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.guide.patients",
+      "content_type": "guide",
+      "source_id": "patients",
+      "title": "Patients — the roster and the chart",
+      "summary": "The patient record is the spine of the system. Everything else — orders, messages, documents, therapy data, claims — hangs off it.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "patients",
+      "route_template": "/admin/resources/user-guide#{id}",
+      "source_route": "/admin/resources/user-guide#patients",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+      "body_source_selector": "GUIDE_SECTIONS[id=\"patients\"]",
+      "summary_field": "intro",
+      "body_fields": [
+        "blocks"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.guide.documents",
+      "content_type": "guide",
+      "source_id": "documents",
+      "title": "Documents, e-signature, and referrals",
+      "summary": "The paperwork pipeline, in the order paper actually moves: draft, send for signature, track, receive, and retain.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "patients",
+      "route_template": "/admin/resources/user-guide#{id}",
+      "source_route": "/admin/resources/user-guide#documents",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+      "body_source_selector": "GUIDE_SECTIONS[id=\"documents\"]",
+      "summary_field": "intro",
+      "body_fields": [
+        "blocks"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.guide.therapy",
+      "content_type": "guide",
+      "source_id": "therapy",
+      "title": "Therapy monitoring",
+      "summary": "Device-cloud usage data turned into worklists — who is struggling, who is at risk of failing a compliance window, and who is genuinely due for supplies.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "patients",
+      "route_template": "/admin/resources/user-guide#{id}",
+      "source_route": "/admin/resources/user-guide#therapy",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+      "body_source_selector": "GUIDE_SECTIONS[id=\"therapy\"]",
+      "summary_field": "intro",
+      "body_fields": [
+        "blocks"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.guide.clinical",
+      "content_type": "guide",
+      "source_id": "clinical",
+      "title": "Clinical work and the mask fitter",
+      "summary": "The mask fitter is the platform's distinctive capability: a guided phone-camera scan that produces measurements and a ranked, explained recommendation your staff approve before anything ships.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "patients",
+      "route_template": "/admin/resources/user-guide#{id}",
+      "source_route": "/admin/resources/user-guide#clinical",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+      "body_source_selector": "GUIDE_SECTIONS[id=\"clinical\"]",
+      "summary_field": "intro",
+      "body_fields": [
+        "blocks"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.guide.providers",
+      "content_type": "guide",
+      "source_id": "providers",
+      "title": "Providers, recalls, and asset recovery",
+      "summary": "The referring and prescribing side of the relationship, plus the two jobs that only matter when something goes wrong.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "patients",
+      "route_template": "/admin/resources/user-guide#{id}",
+      "source_route": "/admin/resources/user-guide#providers",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+      "body_source_selector": "GUIDE_SECTIONS[id=\"providers\"]",
+      "summary_field": "intro",
+      "body_fields": [
+        "blocks"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.guide.orders",
+      "content_type": "guide",
+      "source_id": "orders",
+      "title": "Orders and fulfillment",
+      "summary": "Supplies are dispensed against a patient's insurance, and every parcel leaves through the same fulfillment path.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "orders",
+      "route_template": "/admin/resources/user-guide#{id}",
+      "source_route": "/admin/resources/user-guide#orders",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+      "body_source_selector": "GUIDE_SECTIONS[id=\"orders\"]",
+      "summary_field": "intro",
+      "body_fields": [
+        "blocks"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.guide.billing-overview",
+      "content_type": "guide",
+      "source_id": "billing-overview",
+      "title": "Billing — how the revenue cycle maps to the pages",
+      "summary": "The billing area is organized as the claim lifecycle, front to back. Read the worklist tabs in order and you have read the revenue cycle.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "billing",
+      "route_template": "/admin/resources/user-guide#{id}",
+      "source_route": "/admin/resources/user-guide#billing-overview",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+      "body_source_selector": "GUIDE_SECTIONS[id=\"billing-overview\"]",
+      "summary_field": "intro",
+      "body_fields": [
+        "blocks"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.guide.billing-worklists",
+      "content_type": "guide",
+      "source_id": "billing-worklists",
+      "title": "Billing worklists",
+      "summary": "The queues a biller works, in the order a claim moves through them.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "billing",
+      "route_template": "/admin/resources/user-guide#{id}",
+      "source_route": "/admin/resources/user-guide#billing-worklists",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+      "body_source_selector": "GUIDE_SECTIONS[id=\"billing-worklists\"]",
+      "summary_field": "intro",
+      "body_fields": [
+        "blocks"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.guide.billing-ar",
+      "content_type": "guide",
+      "source_id": "billing-ar",
+      "title": "A/R, collections, and billing tools",
+      "summary": "What is still owed, by whom, and the plumbing that moves money in.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "billing",
+      "route_template": "/admin/resources/user-guide#{id}",
+      "source_route": "/admin/resources/user-guide#billing-ar",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+      "body_source_selector": "GUIDE_SECTIONS[id=\"billing-ar\"]",
+      "summary_field": "intro",
+      "body_fields": [
+        "blocks"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.guide.analytics",
+      "content_type": "guide",
+      "source_id": "analytics",
+      "title": "Analytics and reports",
+      "summary": "Reports is the catalog; the analytics pages are the standing answers to the questions owners ask most.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "analytics",
+      "route_template": "/admin/resources/user-guide#{id}",
+      "source_route": "/admin/resources/user-guide#analytics",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+      "body_source_selector": "GUIDE_SECTIONS[id=\"analytics\"]",
+      "summary_field": "intro",
+      "body_fields": [
+        "blocks"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.guide.automation",
+      "content_type": "guide",
+      "source_id": "automation",
+      "title": "Automation",
+      "summary": "How often the app reaches out about resupply, and on which channel — plus a simulator that shows which rule would fire before you rely on it.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "outreach",
+      "route_template": "/admin/resources/user-guide#{id}",
+      "source_route": "/admin/resources/user-guide#automation",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+      "body_source_selector": "GUIDE_SECTIONS[id=\"automation\"]",
+      "summary_field": "intro",
+      "body_fields": [
+        "blocks"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.guide.operations",
+      "content_type": "guide",
+      "source_id": "operations",
+      "title": "Operations and integrations",
+      "summary": "Where you find out whether the machinery is actually running — and where partner systems plug in.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "system",
+      "route_template": "/admin/resources/user-guide#{id}",
+      "source_route": "/admin/resources/user-guide#operations",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+      "body_source_selector": "GUIDE_SECTIONS[id=\"operations\"]",
+      "summary_field": "intro",
+      "body_fields": [
+        "blocks"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.guide.settings",
+      "content_type": "guide",
+      "source_id": "settings",
+      "title": "Settings and your account",
+      "summary": "Your brand, your sending identities, your team, your modules, and your plan.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "system",
+      "route_template": "/admin/resources/user-guide#{id}",
+      "source_route": "/admin/resources/user-guide#settings",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+      "body_source_selector": "GUIDE_SECTIONS[id=\"settings\"]",
+      "summary_field": "intro",
+      "body_fields": [
+        "blocks"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.guide.security-privacy",
+      "content_type": "guide",
+      "source_id": "security-privacy",
+      "title": "Security and handling patient information",
+      "summary": "A short set of rules that protect patients and your business. They are not optional and they are not complicated.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "system",
+      "route_template": "/admin/resources/user-guide#{id}",
+      "source_route": "/admin/resources/user-guide#security-privacy",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/user-guide.ts",
+      "body_source_selector": "GUIDE_SECTIONS[id=\"security-privacy\"]",
+      "summary_field": "intro",
+      "body_fields": [
+        "blocks"
+      ]
+    },
+    {
+      "content_key": "core.admin.faq.missing-page",
+      "content_type": "faq",
+      "source_id": "missing-page",
+      "title": "A page I was told about isn't in my sidebar. Is it broken?",
+      "summary": "Almost certainly not. Two things hide a page: a permission your role does not hold, and an app module your account switched off.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "getting-started",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#missing-page",
+      "classification": "shared-core",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"missing-page\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.which-role",
+      "content_type": "faq",
+      "source_id": "which-role",
+      "title": "Which role should I give a new hire?",
+      "summary": "The narrowest one that covers their job. A customer-service rep gets conversations, patients, orders, and returns. A biller gets the billing area plus billing context on a chart, and nothing else. A respiratory therapist gets therapy monitoring, fit review, and clinical documentation — no money, no demographics editing. Admin is the full console; owner adds vendor configuration on top.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "getting-started",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#which-role",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"which-role\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.where-to-start",
+      "content_type": "faq",
+      "source_id": "where-to-start",
+      "title": "I just got access. Where do I start?",
+      "summary": "Read the user guide's first two sections in this Help Center — they explain what the platform does and the handful of concepts that make everything else obvious.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "getting-started",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#where-to-start",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"where-to-start\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "core.admin.faq.assistant-vs-support",
+      "content_type": "faq",
+      "source_id": "assistant-vs-support",
+      "title": "Should I ask the assistant or file a support ticket?",
+      "summary": "Ask the assistant for anything that starts with \"how do I\" or \"where is\" — it knows every page and answers instantly with a link.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "getting-started",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#assistant-vs-support",
+      "classification": "shared-core",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"assistant-vs-support\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.did-it-send",
+      "content_type": "faq",
+      "source_id": "did-it-send",
+      "title": "How do I tell whether a message actually reached the patient?",
+      "summary": "Outbound Messages /admin/outbound-messages lists every outbound SMS and email with its delivery result. That is the definitive answer, not the thread view.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "outreach",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#did-it-send",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"did-it-send\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.patient-said-stop",
+      "content_type": "faq",
+      "source_id": "patient-said-stop",
+      "title": "A patient texted STOP. Can I turn their texts back on?",
+      "summary": "No — and that is deliberate. Opt-outs are enforced by the platform and are not overridable from the console, because honoring them is a legal requirement rather than a preference.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "outreach",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#patient-said-stop",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"patient-said-stop\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.fewer-sent-than-audience",
+      "content_type": "faq",
+      "source_id": "fewer-sent-than-audience",
+      "title": "Why did fewer messages go out than my campaign audience count?",
+      "summary": "That gap is expected. Opt-outs, quiet hours, missing or invalid contact details, and hard bounces all remove recipients at send time, after the audience is counted.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "outreach",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#fewer-sent-than-audience",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"fewer-sent-than-audience\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.quiet-hours",
+      "content_type": "faq",
+      "source_id": "quiet-hours",
+      "title": "What are quiet hours and can I override them?",
+      "summary": "Quiet hours stop patient messaging during overnight windows. They are enforced by the platform based on the message category you set — marketing, service, or compliance and recall.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "outreach",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#quiet-hours",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"quiet-hours\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.campaign-vs-alert",
+      "content_type": "faq",
+      "source_id": "campaign-vs-alert",
+      "title": "I need to message one patient. Campaign or alert?",
+      "summary": "Alert Library /admin/alerts. It is built for a one-off to a single person and is far easier to find afterwards.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "outreach",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#campaign-vs-alert",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"campaign-vs-alert\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.preview-message",
+      "content_type": "faq",
+      "source_id": "preview-message",
+      "title": "Can I see what an automated message looks like before it goes out?",
+      "summary": "Yes. Message previews /admin/message-previews renders any automated message with sample data, so you see exactly what a patient receives.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "outreach",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#preview-message",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"preview-message\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.reminder-link-expired",
+      "content_type": "faq",
+      "source_id": "reminder-link-expired",
+      "title": "A patient says their reminder link doesn't work.",
+      "summary": "Those links are short-lived by design — they let a patient confirm or decline in one tap without signing in, so they cannot stay valid indefinitely.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "outreach",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#reminder-link-expired",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"reminder-link-expired\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.cannot-find-patient",
+      "content_type": "faq",
+      "source_id": "cannot-find-patient",
+      "title": "I can't find a patient who says they have an account.",
+      "summary": "Try their phone number and any previous or maiden name, then check Duplicate review /admin/patients/duplicates in case the record was split.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "patients",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#cannot-find-patient",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"cannot-find-patient\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.duplicate-records",
+      "content_type": "faq",
+      "source_id": "duplicate-records",
+      "title": "I found two records for the same person. What now?",
+      "summary": "Merge them from Duplicate review /admin/patients/duplicates, which shows the evidence behind the match.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "patients",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#duplicate-records",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"duplicate-records\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.fitter-privacy",
+      "content_type": "faq",
+      "source_id": "fitter-privacy",
+      "title": "Does the mask fitter store photos of the patient's face?",
+      "summary": "No. The camera images never leave the patient's device — only numeric facial measurements are transmitted, and no imagery is stored anywhere in the system.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "patients",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#fitter-privacy",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"fitter-privacy\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.low-confidence-scan",
+      "content_type": "faq",
+      "source_id": "low-confidence-scan",
+      "title": "A fit session came back with low confidence. What does that mean?",
+      "summary": "It means the measurements are not trustworthy enough to recommend from — usually poor lighting, an odd camera angle, or an incomplete scan.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "patients",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#low-confidence-scan",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"low-confidence-scan\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.override-recommendation",
+      "content_type": "faq",
+      "source_id": "override-recommendation",
+      "title": "Can I override the mask the fitter recommended?",
+      "summary": "Yes. Fit review /admin/fit-sessions lets you override the mask or the size when you know something the scan cannot see — a documented preference, facial hair, or a mask that already failed for this patient.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "patients",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#override-recommendation",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"override-recommendation\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.formulary-not-winning",
+      "content_type": "faq",
+      "source_id": "formulary-not-winning",
+      "title": "Why does the fitter keep recommending a mask we don't stock?",
+      "summary": "The formulary is a bounded preference, not a filter. It re-orders masks that are already close on fit toward what you stock, but it cannot promote a worse-fitting mask over a better-fitting one.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "patients",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#formulary-not-winning",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"formulary-not-winning\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.clinical-advice",
+      "content_type": "faq",
+      "source_id": "clinical-advice",
+      "title": "Can the app tell me what pressure setting a patient needs?",
+      "summary": "No. Nothing in this console gives clinical advice, and neither AI assistant will. Therapy decisions — pressure, interpreting an apnea-hypopnea index, prescriptions — belong to the patient's physician.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "patients",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#clinical-advice",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"clinical-advice\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.eligibility-vs-benefit",
+      "content_type": "faq",
+      "source_id": "eligibility-vs-benefit",
+      "title": "Eligibility came back active. Can I quote the patient a price?",
+      "summary": "Not from the status alone. Active coverage is not the same as a covered benefit for the item you are supplying.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "billing",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#eligibility-vs-benefit",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"eligibility-vs-benefit\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.patient-not-found",
+      "content_type": "faq",
+      "source_id": "patient-not-found",
+      "title": "The payer says \"patient not found\" on an eligibility check.",
+      "summary": "Nearly always a demographic mismatch. Check the date of birth, the member ID including any alphabetic prefix, and whether the policy is held under a spouse rather than the patient.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "billing",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#patient-not-found",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"patient-not-found\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.denial-order",
+      "content_type": "faq",
+      "source_id": "denial-order",
+      "title": "What order should I work denials in?",
+      "summary": "Top-down as the Denials worklist /admin/billing/denials-worklist gives it to you. It is already ranked by recoverable dollars weighted by win probability, so the first row is the best use of your next hour.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "billing",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#denial-order",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"denial-order\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.same-denial-repeatedly",
+      "content_type": "faq",
+      "source_id": "same-denial-repeatedly",
+      "title": "We keep getting the same denial. How do we stop it?",
+      "summary": "Fix the rule, not the claims. Config /admin/billing/config holds the HCPCS maps, payer rules, modifier rules, and claim templates that produced the error.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "billing",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#same-denial-repeatedly",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"same-denial-repeatedly\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.missing-paperwork-claim",
+      "content_type": "faq",
+      "source_id": "missing-paperwork-claim",
+      "title": "A claim is blocked on missing paperwork. Should I submit anyway?",
+      "summary": "No. Put it on Bill hold /admin/billing/bill-hold and release it when the document lands.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "billing",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#missing-paperwork-claim",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"missing-paperwork-claim\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.era-reconcile",
+      "content_type": "faq",
+      "source_id": "era-reconcile",
+      "title": "The remittance total matches. Do I still need to check the lines?",
+      "summary": "Yes. A file that balances overall can still contain an underpaid line offset by an overpaid one, and the underpaid line is real money you are entitled to.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "billing",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#era-reconcile",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"era-reconcile\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.secondary-timing",
+      "content_type": "faq",
+      "source_id": "secondary-timing",
+      "title": "How quickly do secondary claims need to go out?",
+      "summary": "Promptly. The secondary payer's filing clock usually starts at the primary's remittance date rather than at your posting date, so a slow posting run eats the window before you have started.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "billing",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#secondary-timing",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"secondary-timing\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.first-adr",
+      "content_type": "faq",
+      "source_id": "first-adr",
+      "title": "We received our first ADR from a payer. How worried should we be?",
+      "summary": "Respond on time — that is the immediate priority, and ADR /admin/billing/adr tracks the clock. A complete packet sent late scores the same as no packet.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "billing",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#first-adr",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"first-adr\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.collections-agency",
+      "content_type": "faq",
+      "source_id": "collections-agency",
+      "title": "Can I send an account straight to a collections agency?",
+      "summary": "The agency hand-off export is deliberately gated behind a review step, and that review is worth doing properly.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "billing",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#collections-agency",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"collections-agency\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.messages-from-platform",
+      "content_type": "faq",
+      "source_id": "messages-from-platform",
+      "title": "Why do patient messages come from a name that isn't ours?",
+      "summary": "Because your own sending identities are not set yet. Until they are, outbound messages fall back to the platform's shared number and address.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "system",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#messages-from-platform",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"messages-from-platform\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "core.admin.faq.turn-off-module",
+      "content_type": "faq",
+      "source_id": "turn-off-module",
+      "title": "If I turn off a module, do I lose the data?",
+      "summary": "No. Switching a module off in Control Center /admin/control-center hides its pages from the sidebar; nothing is deleted.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "system",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#turn-off-module",
+      "classification": "shared-core",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"turn-off-module\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "core.admin.faq.who-changed-this",
+      "content_type": "faq",
+      "source_id": "who-changed-this",
+      "title": "Something changed on a record and nobody knows who did it.",
+      "summary": "Audit Trail /admin/analytics/audit-trail records who did what and when. It requires audit access, so ask an admin if you cannot open it.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "system",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#who-changed-this",
+      "classification": "shared-core",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"who-changed-this\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "core.admin.faq.integration-unavailable",
+      "content_type": "faq",
+      "source_id": "integration-unavailable",
+      "title": "An integration shows as unavailable. Which credential is missing?",
+      "summary": "The badge deliberately does not say — naming the specific missing credential on a shared screen is an information leak.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "system",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#integration-unavailable",
+      "classification": "shared-core",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"integration-unavailable\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.pacware-overwrite",
+      "content_type": "faq",
+      "source_id": "pacware-overwrite",
+      "title": "Will a PacWare import overwrite what we've edited here?",
+      "summary": "No. Import is fill-only: new patients are inserted and blank fields are filled, but an existing value is never overwritten. That is what makes re-running an import safe.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "system",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#pacware-overwrite",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"pacware-overwrite\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.pacware-automatic",
+      "content_type": "faq",
+      "source_id": "pacware-automatic",
+      "title": "Does PacWare sync automatically?",
+      "summary": "No. PacWare has no API, so the exchange is CSV files you import and export by hand. Nothing is ever pushed automatically.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "system",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#pacware-automatic",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"pacware-automatic\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "core.admin.faq.assistant-actions",
+      "content_type": "faq",
+      "source_id": "assistant-actions",
+      "title": "Can the in-app assistant do things for me — place an order, fix a claim?",
+      "summary": "No. It explains how the app works and walks you to the page and control that does the thing. It does not place orders, edit patients, submit claims, or change settings.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "system",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#assistant-actions",
+      "classification": "shared-core",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"assistant-actions\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.phi-in-chat",
+      "content_type": "faq",
+      "source_id": "phi-in-chat",
+      "title": "Why can't I paste patient details into the assistant or a ticket?",
+      "summary": "Both leave the application — assistant conversations reach an AI vendor, and support tickets reach the platform team. Identifiers should not travel that way.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "system",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#phi-in-chat",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"phi-in-chat\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "core.admin.faq.rule-not-firing",
+      "content_type": "faq",
+      "source_id": "rule-not-firing",
+      "title": "I enabled an automation rule and nothing happens.",
+      "summary": "Dry-run it again in Rule Tester /admin/rule-tester with input you know should match. Almost always the trigger is narrower than intended.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "system",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#rule-not-firing",
+      "classification": "shared-core",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"rule-not-firing\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "core.admin.faq.plan-limits",
+      "content_type": "faq",
+      "source_id": "plan-limits",
+      "title": "Where do I see our plan and whether we're near a limit?",
+      "summary": "Plan & billing /admin/billing/package shows your package, its allowances, and your usage against them. It is the same page as Package & usage under Billing.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "system",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#plan-limits",
+      "classification": "shared-core",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"plan-limits\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.thread-or-case",
+      "content_type": "faq",
+      "source_id": "thread-or-case",
+      "title": "When should a conversation become a case?",
+      "summary": "When it spans more than one channel or will outlive today's shift. One question answered in one reply is a conversation; \"lost order\" that involves a text, a fax, and a refund is a case.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "patients",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#thread-or-case",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"thread-or-case\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.merge-undo",
+      "content_type": "faq",
+      "source_id": "merge-undo",
+      "title": "What happens to the duplicate record after a merge?",
+      "summary": "It is closed, not deleted. The merge repoints every reference — orders, messages, documents, claims — at the surviving record atomically, and leaves the folded record behind as a trail.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "patients",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#merge-undo",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"merge-undo\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.recall-scan-does-what",
+      "content_type": "faq",
+      "source_id": "recall-scan-does-what",
+      "title": "Does running a recall scan mark the affected devices?",
+      "summary": "No — the scan is read-only. It surfaces every affected serial you dispensed so you know the size of the problem, but it changes nothing.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "patients",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#recall-scan-does-what",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"recall-scan-does-what\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.who-can-destroy-documents",
+      "content_type": "faq",
+      "source_id": "who-can-destroy-documents",
+      "title": "Why can't I destroy an expired document?",
+      "summary": "Three gates have to line up: viewing Retention /admin/documents/retention requires audit-export access, destruction is admin-only, and the row must already have been marked eligible by the retention sweep. You also have to type DESTROY to confirm.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "patients",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#who-can-destroy-documents",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"who-can-destroy-documents\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.low-usage-means-recover",
+      "content_type": "faq",
+      "source_id": "low-usage-means-recover",
+      "title": "A patient's usage dropped. Should I start an asset recovery?",
+      "summary": "Not yet. Low usage is a signal, not a verdict — a hospital stay or a patient struggling with a mask both look identical in the data, and both are recoverable with a call.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "orders",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#low-usage-means-recover",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"low-usage-means-recover\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.pa-order-of-work",
+      "content_type": "faq",
+      "source_id": "pa-order-of-work",
+      "title": "Which prior authorizations should I work first?",
+      "summary": "Top-down as the buckets are ordered: missed SLA, then at-risk SLA, then awaiting, then expiring, then drafts. That ordering is the recommendation, not just a layout.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "billing",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#pa-order-of-work",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"pa-order-of-work\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.supply-before-auth",
+      "content_type": "faq",
+      "source_id": "supply-before-auth",
+      "title": "Can we supply before the prior authorization comes back?",
+      "summary": "You can, but the payer is entitled to refuse the claim and usually will. That makes it a business decision to take consciously, not a workflow shortcut.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "billing",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#supply-before-auth",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"supply-before-auth\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.secondary-generate-submits",
+      "content_type": "faq",
+      "source_id": "secondary-generate-submits",
+      "title": "Does generating a secondary claim submit it?",
+      "summary": "No. Generating copies the line items and snapshots the primary's adjudication for the coordination-of-benefits loop, producing a draft. The draft is deliberately yours to review.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "billing",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#secondary-generate-submits",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"secondary-generate-submits\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.capped-rental-manual",
+      "content_type": "faq",
+      "source_id": "capped-rental-manual",
+      "title": "Do I have to advance capped-rental cycles by hand?",
+      "summary": "No — a daily job advances them automatically. The page exists so you can see the state, catch an exception, and override when reality diverges from the schedule.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "billing",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#capped-rental-manual",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"capped-rental-manual\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.billing-config-readonly",
+      "content_type": "faq",
+      "source_id": "billing-config-readonly",
+      "title": "Why can't I edit modifier rules or denial codes?",
+      "summary": "Those surfaces are read-only and maintained centrally. Organization identity, the clearinghouse connection, payer profiles, and fee schedules are the ones you edit yourself from their sub-pages.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "billing",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#billing-config-readonly",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"billing-config-readonly\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.macro-vs-playbook",
+      "content_type": "faq",
+      "source_id": "macro-vs-playbook",
+      "title": "Macro, playbook, or automated message — which do I want?",
+      "summary": "A macro is one saved answer a person inserts into a reply they are writing now (/admin/macros). A playbook is a multi-touch sequence for a situation, with a cadence and a channel per touch (/admin/playbooks). An automated message is copy the system sends with nobody involved (/admin/templates).",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "outreach",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#macro-vs-playbook",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"macro-vs-playbook\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.closure-blocks-stop",
+      "content_type": "faq",
+      "source_id": "closure-blocks-stop",
+      "title": "Does a closure auto-reply interfere with STOP?",
+      "summary": "No. Opt-out and help keywords are handled by the platform and are never replaced by a closure reply, so a patient can still text STOP while you are closed.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "system",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#closure-blocks-stop",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"closure-blocks-stop\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "core.admin.faq.mfa-enforced",
+      "content_type": "faq",
+      "source_id": "mfa-enforced",
+      "title": "Is multi-factor authentication required to sign in?",
+      "summary": "It depends on your deployment. Enforcement is a configurable setting: where it is on, an admin or agent with no verified factor is blocked from the admin API — everything except their own identity and the enrollment endpoints — until they enroll, and enrolled users are challenged at sign-in. Where it is off, you can work unenrolled.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "system",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#mfa-enforced",
+      "classification": "shared-core",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"mfa-enforced\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "core.admin.faq.new-phone-mfa",
+      "content_type": "faq",
+      "source_id": "new-phone-mfa",
+      "title": "I'm getting a new phone. What do I do about my authenticator?",
+      "summary": "Disable and re-enroll from Account security /admin/security while the old device still works. In that order it takes two minutes.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "system",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#new-phone-mfa",
+      "classification": "shared-core",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"new-phone-mfa\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.why-cant-patients-order",
+      "content_type": "faq",
+      "source_id": "why-cant-patients-order",
+      "title": "Why can't patients place their own order any more?",
+      "summary": "Because a claim should not start from a patient's own guess at their member ID. The fitter now ends in a request: the patient sends their details or asks to be contacted, and the row lands on Fit Requests /admin/fitter-requests for someone to verify and place.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "orders",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#why-cant-patients-order",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"why-cant-patients-order\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.duplicate-fit-request",
+      "content_type": "faq",
+      "source_id": "duplicate-fit-request",
+      "title": "A patient submitted twice. Will we work the same request twice?",
+      "summary": "No. An identical re-submit while the first request is still open returns the request already in the queue rather than creating a second row, so a double-click or a back-navigation cannot queue a phantom or email the team twice.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "orders",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#duplicate-fit-request",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"duplicate-fit-request\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.dispense-rate-zero",
+      "content_type": "faq",
+      "source_id": "dispense-rate-zero",
+      "title": "Why does our fitter dispense rate read zero?",
+      "summary": "Because nothing is stamping the fittings as dispensed. Closing a fit request as Fulfilled is what writes it, and Fulfilled specifically means the patient has the mask — not that someone agreed to send one.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "analytics",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#dispense-rate-zero",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"dispense-rate-zero\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.adult-or-child-question",
+      "content_type": "faq",
+      "source_id": "adult-or-child-question",
+      "title": "Why does the fitter ask whether the mask is for a child?",
+      "summary": "Because a child is not a smaller adult. The answer sets which measurements count as plausible and which masks are eligible at all, and there is deliberately no \"not sure\" option — an unanswered gate would have to guess, and the safe guess is the wrong one for a child.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "patients",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#adult-or-child-question",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"adult-or-child-question\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.stock-count-blank",
+      "content_type": "faq",
+      "source_id": "stock-count-blank",
+      "title": "A SKU shows no stock count. Does that mean we're out?",
+      "summary": "No — blank means untracked, which is not the same as zero. An untracked SKU is never treated as out of stock and never triggers a low-stock warning.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "orders",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#stock-count-blank",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"stock-count-blank\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.faq.still-substituting-after-restock",
+      "content_type": "faq",
+      "source_id": "still-substituting-after-restock",
+      "title": "We restocked, but patients are still getting the substitute.",
+      "summary": "The backorder is still set. Backorders /admin/shop/backorders is read by the insurance fulfillment path, so until the flag clears the engine keeps routing around that SKU.",
+      "audience": "All authenticated CareMetric Breathe staff",
+      "category": "orders",
+      "route_template": "/admin/resources/faq#{id}",
+      "source_route": "/admin/resources/faq#still-substituting-after-restock",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/cpap-fitter/src/content/admin-help/faq.ts",
+      "body_source_selector": "FAQ_ENTRIES[id=\"still-substituting-after-restock\"]",
+      "summary_field": "answer[0]",
+      "body_fields": [
+        "answer",
+        "seeAlso",
+        "keywords"
+      ]
+    },
+    {
+      "content_key": "core.admin.tutorial.setup-slack",
+      "content_type": "tutorial-pdf",
+      "source_id": "setup-slack",
+      "title": "Set up Slack",
+      "summary": "Connect Slack for real-time customer-service alerts and in-Slack claim, escalation, and snooze actions, with one-click and manual setup instructions.",
+      "audience": "Owners and administrators",
+      "category": "system",
+      "route_template": "/guides/setup-slack.pdf",
+      "source_route": "/guides/setup-slack.pdf",
+      "classification": "shared-core",
+      "body_source_path": "artifacts/cpap-fitter/public/guides/setup-slack.pdf",
+      "body_source_selector": null,
+      "supporting_source_paths": [
+        "scripts/generate-slack-setup-guide.py"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.onboarding.staff-getting-started",
+      "content_type": "onboarding-pdf-template",
+      "source_id": "staff-getting-started",
+      "title": "Getting started with the admin console",
+      "summary": "Role-neutral staff activation, sign-in, MFA, safe handling of patient information, and where to find role documentation.",
+      "audience": "All invited CareMetric Breathe staff",
+      "category": "getting-started",
+      "route_template": null,
+      "source_route": null,
+      "delivery": "staff invitation attachment",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/resupply-api/src/lib/help-docs/content.ts",
+      "body_source_selector": "STAFF_GETTING_STARTED(company)"
+    },
+    {
+      "content_key": "breathe.admin.role-handbook.owner",
+      "content_type": "role-handbook-pdf-template",
+      "source_id": "staff-handbook-owner",
+      "title": "Owner handbook",
+      "summary": "Role-specific responsibilities, console areas, first-week tasks, access boundaries, and safe handling guidance.",
+      "audience": "CareMetric Breathe owners",
+      "category": "getting-started",
+      "route_template": null,
+      "source_route": null,
+      "delivery": "staff invitation attachment",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/resupply-api/src/lib/help-docs/content.ts",
+      "body_source_selector": "ROLE_HANDBOOK(staffRoleProfile(\"admin\"), company)",
+      "supporting_source_paths": [
+        "artifacts/resupply-api/src/lib/help-docs/roles.ts"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.role-handbook.admin",
+      "content_type": "role-handbook-pdf-template",
+      "source_id": "staff-handbook-admin",
+      "title": "Administrator handbook",
+      "summary": "Role-specific responsibilities, console areas, first-week tasks, access boundaries, and safe handling guidance.",
+      "audience": "CareMetric Breathe administrators",
+      "category": "getting-started",
+      "route_template": null,
+      "source_route": null,
+      "delivery": "staff invitation attachment",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/resupply-api/src/lib/help-docs/content.ts",
+      "body_source_selector": "ROLE_HANDBOOK(staffRoleProfile(\"supervisor\"), company)",
+      "supporting_source_paths": [
+        "artifacts/resupply-api/src/lib/help-docs/roles.ts"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.role-handbook.csr",
+      "content_type": "role-handbook-pdf-template",
+      "source_id": "staff-handbook-csr",
+      "title": "Customer service representative handbook",
+      "summary": "Role-specific responsibilities, console areas, first-week tasks, access boundaries, and safe handling guidance.",
+      "audience": "Customer service representatives",
+      "category": "getting-started",
+      "route_template": null,
+      "source_route": null,
+      "delivery": "staff invitation attachment",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/resupply-api/src/lib/help-docs/content.ts",
+      "body_source_selector": "ROLE_HANDBOOK(staffRoleProfile(\"csr\"), company)",
+      "supporting_source_paths": [
+        "artifacts/resupply-api/src/lib/help-docs/roles.ts"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.role-handbook.biller",
+      "content_type": "role-handbook-pdf-template",
+      "source_id": "staff-handbook-biller",
+      "title": "Biller handbook",
+      "summary": "Role-specific responsibilities, console areas, first-week tasks, access boundaries, and safe handling guidance.",
+      "audience": "Billing staff",
+      "category": "getting-started",
+      "route_template": null,
+      "source_route": null,
+      "delivery": "staff invitation attachment",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/resupply-api/src/lib/help-docs/content.ts",
+      "body_source_selector": "ROLE_HANDBOOK(staffRoleProfile(\"biller\"), company)",
+      "supporting_source_paths": [
+        "artifacts/resupply-api/src/lib/help-docs/roles.ts"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.role-handbook.rt",
+      "content_type": "role-handbook-pdf-template",
+      "source_id": "staff-handbook-rt",
+      "title": "Respiratory therapist handbook",
+      "summary": "Role-specific responsibilities, console areas, first-week tasks, access boundaries, and safe handling guidance.",
+      "audience": "Respiratory therapists",
+      "category": "getting-started",
+      "route_template": null,
+      "source_route": null,
+      "delivery": "staff invitation attachment",
+      "classification": "breathe-overlay",
+      "body_source_path": "artifacts/resupply-api/src/lib/help-docs/content.ts",
+      "body_source_selector": "ROLE_HANDBOOK(staffRoleProfile(\"rt\"), company)",
+      "supporting_source_paths": [
+        "artifacts/resupply-api/src/lib/help-docs/roles.ts"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.manual.user",
+      "content_type": "operator-manual-pdf",
+      "source_id": "caremetric-breathe-user-manual",
+      "title": "CareMetric Breathe User Manual",
+      "summary": "Comprehensive role-organized operator manual covering setup, every feature, job aides, FAQs, permissions, and the platform glossary.",
+      "audience": "All CareMetric Breathe operators",
+      "category": "system",
+      "route_template": "/resupply-api/admin/support/manual",
+      "source_route": "/resupply-api/admin/support/manual",
+      "classification": "breathe-overlay",
+      "body_source_path": "docs/user-manual/build_user_manual.py",
+      "body_source_selector": "ROLES / SUMMARY / DETAIL / JOB_AIDES / PREREQS / GLOSSARY",
+      "supporting_source_paths": [
+        "docs/user-manual/feature-flags.json",
+        "docs/user-manual/README.md"
+      ]
+    },
+    {
+      "content_key": "breathe.admin.manual.customer-service",
+      "content_type": "operator-manual-pdf",
+      "source_id": "caremetric-breathe-customer-service-manual",
+      "title": "CareMetric Breathe Customer Service Manual",
+      "summary": "Shorter customer-service operations manual distributed with applicable staff invitations.",
+      "audience": "Customer service staff and supervisors",
+      "category": "patients",
+      "route_template": null,
+      "source_route": null,
+      "delivery": "applicable staff invitation attachment",
+      "classification": "breathe-overlay",
+      "body_source_path": "docs/user-manual/manual.html",
+      "body_source_selector": "document body",
+      "supporting_source_paths": [
+        "artifacts/resupply-api/src/lib/help-docs/manual.ts"
+      ]
+    }
+  ],
+  "secondary_sources": [
+    {
+      "path": "artifacts/resupply-api/src/lib/admin-assistant/adminAssistantKnowledge.ts",
+      "relationship": "Runtime assistant prompt and synchronized index of all 52 how-to slugs; do not import it as a second copy of the same articles.",
+      "validation_path": "artifacts/cpap-fitter/src/content/admin-help/assistant-index.sync.test.ts"
+    },
+    {
+      "path": "artifacts/cpap-fitter/src/content/admin-help/index.ts",
+      "relationship": "Current flattened search index over the 126 primary in-app records; useful as an adapter contract for Hub ingestion.",
+      "validation_path": "artifacts/cpap-fitter/src/content/admin-help/admin-help.coverage.test.ts"
+    }
+  ],
+  "recommendations": [
+    {
+      "priority": 1,
+      "action": "Import the shared-core records first and parameterize product name, destination routes, and assistant/support destinations at render time."
+    },
+    {
+      "priority": 2,
+      "action": "Import Breathe overlays under product_id=caremetric-breathe; preserve source_id values and maintain redirects if routes later move to the central Hub."
+    },
+    {
+      "priority": 3,
+      "action": "Use the three content-as-data arrays as the source feed; treat the admin-assistant prompt as a derived search/assistant consumer to prevent drift and duplication."
+    },
+    {
+      "priority": 4,
+      "action": "Keep downloadable manuals as versioned assets linked from manifest records. Do not flatten the PDFs into duplicate articles until a deliberate pass maps their chapters to the 126 primary records."
+    },
+    {
+      "priority": 5,
+      "action": "Add Hub ingestion checks for unique keys, allowed source paths, route resolution, product scoping, and absence of email addresses, phone numbers, secrets, patient identifiers, and contextual tenant values."
+    }
+  ],
+  "validation": {
+    "status": "passed",
+    "errors": [],
+    "assertions": {
+      "source_commit_matches_canonical_head": true,
+      "primary_count_is_126": true,
+      "supplemental_count_is_9": true,
+      "all_content_keys_unique": true,
+      "title_summary_audience_have_no_email_addresses": true,
+      "title_summary_audience_have_no_phone_numbers": true,
+      "title_summary_audience_have_no_contextual_template_values": true,
+      "all_body_source_paths_exist": true,
+      "assistant_index_has_all_52_how_to_slug_title_pairs": true,
+      "source_route_helpers_match_manifest_templates": true
+    }
+  }
+}

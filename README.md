@@ -14,12 +14,12 @@ Version `0.1.0` now runs as the first production vertical slice:
 - A public, searchable learning library at `/learn` with 80 governed CareBase courses across 22 categories and 65 cataloged video lessons.
 - All 65 current lesson titles are searchable and browsable in the Hub; playback, quizzes, and completion continue through each course's controlled CareBase launch.
 - A governed import of 70 published CareBase help articles; no learner, employee, resident, organization, assignment, progress, or ticket records were copied.
-- A verified product/contact registry that refuses to publish fake or unverified phone/email values.
+- An owner-approved product/contact registry that publishes only approved contact values; mailbox delivery readiness is tracked separately.
 - A framework-neutral `@caremetric/help-sdk` that passes only safe product context.
 - A dedicated `hub`/`private` Supabase schema design, RLS policies, narrow grants, atomic case RPCs, physically separate internal notes, and metadata-only audit records.
 - A polished implementation preview that works without credentials. Demo mode is never a production data store.
 
-The private GitHub repository, isolated `CareMetric Support Hub` Supabase project (`xgauehtwksmnoqhgqegm`, `us-east-2`), and Railway deployment are provisioned. The live portal is `https://support-hub-web-production.up.railway.app`; direct `/help` and `/learn` links use production routing rather than localhost. The live database has the reviewed migrations in `supabase/migrations`, RLS enabled on every application table, and a Data API restricted to `hub`. Existing application databases remain independent; the CareBase catalog import reads only published platform metadata.
+The private GitHub repository, isolated `CareMetric Support Hub` Supabase project (`xgauehtwksmnoqhgqegm`, `us-east-2`), and Railway deployment are provisioned. The live portal is `https://support-hub-web-production.up.railway.app`; direct `/help` and `/learn` links use production routing rather than localhost. Railway also has `help.caremetric.ai` attached; it will remain unavailable until the owner creates the required Name.com CNAME recorded in [docs/PRODUCTION_ROLLOUT.md](docs/PRODUCTION_ROLLOUT.md). The live database has the reviewed migrations in `supabase/migrations`, RLS enabled on every application table, and a Data API restricted to `hub`. Existing application databases remain independent; the CareBase catalog import reads only published platform metadata.
 
 Owner-verified central routing is `(877) 521-2890` and `support@caremetric.ai`. `kdeyarmin@comcast.net` is the active platform administrator. The owner has confirmed that the applicable BAAs are signed; the remaining High Compliance controls still require operational verification before PHI-capable intake is enabled.
 
@@ -109,12 +109,24 @@ docs/                        API, integration, and rollout guidance
 
 ## Source applications
 
-- PennTrain supplies the strongest existing ticket, knowledge, course, and HeyGen patterns.
-- DocStudio remains the content-production factory.
-- PennFit is the recommended first external SDK pilot.
-- PennSync and CareMetric EMR follow after the pilot validates identity and route context.
+- PennTrain is the canonical CareBase source for help, courses, learning
+  execution, and existing HeyGen render metadata.
+- CareMetric EMR and CareMetric Breathe have live, feature-flagged central Help
+  launchers with application-owned fallbacks.
+- PennSync is the canonical Base44 integration; legacy PennSync repositories are
+  not parallel production sources.
+- CareMetric Go has a merged cross-platform support screen; its native release
+  remains gated by a verified EAS project and release workflow.
+- CareMetric Intel is registered as a pilot with the shared course catalog;
+  its in-app guide and deployment are being reconciled before cutover.
+- DocStudio remains a content-production source, not an independently verified
+  production application or the system of record for published media.
 
 The first CareBase snapshot now includes 80 published courses and 70 published help articles. Content is imported through previewable, idempotent adapters. Legacy source IDs are provenance only; stable Support Hub `content_key` values are canonical.
+
+See [docs/PRODUCTION_ROLLOUT.md](docs/PRODUCTION_ROLLOUT.md) for the verified
+application-by-application deployment record, excluded duplicate/prototype
+repositories, and the exact owner-controlled prerequisites that remain.
 
 See [docs/VIDEO_GOVERNANCE.md](docs/VIDEO_GOVERNANCE.md) for the verified
 HeyGen/Storage inventory and the caption, checksum, and entitlement gates for

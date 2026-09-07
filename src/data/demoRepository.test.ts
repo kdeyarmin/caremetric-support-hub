@@ -45,4 +45,9 @@ describe("DemoSupportRepository", () => {
       /cannot create internal notes/,
     );
   });
+
+  it("keeps the central phone in canonical E.164 form", async () => {
+    const contacts = await repository.listContacts();
+    expect(contacts.find((contact) => contact.channel === "phone")?.value).toBe("+18775212890");
+  });
 });
