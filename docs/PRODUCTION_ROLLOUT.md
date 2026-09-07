@@ -9,12 +9,13 @@ checked.
 
 | Capability | Verified state |
 | --- | --- |
-| Support Hub | `kdeyarmin/caremetric-support-hub@578e05f` is live at `https://support-hub-web-production.up.railway.app` with direct `/help` and `/learn` routes; no rendered link uses localhost. Production migration `20260907202818_require_aal2_for_authenticated_support` is applied. |
+| Support Hub | `kdeyarmin/caremetric-support-hub@3ac0722` is live at `https://support-hub-web-production.up.railway.app` with direct `/help` and `/learn` routes; no rendered link uses localhost. Production migrations through `20260907222641_gate_case_intake_and_add_idempotency` are applied. |
 | Central contacts | The owner-designated values are `+18775212890` (displayed as `(877) 521-2890`) and `support@caremetric.ai`. The web portal is operational; email delivery is not verified because mailbox DNS is absent. |
 | Product registry | CareMetric CareBase, CareMetric Breathe, PennSync, CareMetric EMR, CareMetric Go, and CareMetric Intel. |
 | Shared learning | 80 imported public CareBase courses plus one customer-only onboarding course. Every registered product has all 81 governed placements; anonymous visitors see the same 80 public courses across 22 categories, including searchable metadata for 65 current video lessons. |
 | Shared knowledge | 70 published CareBase articles plus the reviewed Support Hub core guidance. |
-| Case operations | The first-party case/message queue, staff controls, RLS, and atomic RPCs are deployed and tested. Production intentionally has no tenants, entitlements, memberships, or cases yet, so external case intake remains closed until customer provisioning and production email delivery are complete. |
+| Case operations | The first-party case/message queue, staff controls, RLS, atomic RPCs, tenant/product activation gate, and request-key replay protection are deployed and tested. Intake defaults off, and production has zero activation rows, tenants, cases, or retry records. A tenant/product can accept cases only after provisioning and an active, usable, verified-TOTP support writer exist. |
+| Publication preview | The Hub contains a deterministic, credential-free DocStudio publication preview for a closed manifest/assets/snapshot package. It validates six-product targeting, immutable monotonic revisions, SHA-256 assets, captions/transcripts, safe text, placement changes, retirement, and reactivation without fetching, uploading, writing, or deleting anything. A reviewed first-party apply transport remains deliberately absent. |
 | Video delivery | Metadata for 65 current lesson videos is searchable in the Hub and shared across all six products. The Hub has no copied media assets or public video bucket; playback continues through the authenticated CareBase course runtime until captions, checksums, and an entitlement-aware asset broker are approved. |
 | Inbound channels | The central phone and email values are registered in one owner-controlled contact registry. Phone-call disposition and inbound-email ingestion are not connected yet; any future transport must write into the Hub rather than become a separate help-desk system of record. |
 | Administration | `kdeyarmin@comcast.net` is the sole active, confirmed platform administrator; bootstrap provisioning is permanently closed. TOTP/AAL2 is enforced in the UI and database. The account currently has no verified factor and will be required to enroll at its next Hub sign-in before privileged data loads. |
@@ -31,7 +32,7 @@ checked.
 | CareMetric CareBase | `kdeyarmin/PennTrain@d332ddf` (PR #497), with ledger reconciliation at `dff5227` (PR #499) | The launcher is deployed successfully at the canonical `cmcarebase.com` / `caremetrictrain.com` Railway service and remains dark behind the default-off `support.central_hub` release flag. The shared course/help catalog is live in the Hub. Enroll the sole administrator in TOTP before the approved AAL2-protected flag change; do not bypass that release gate with direct SQL. |
 | CareMetric Go | `kdeyarmin/CM-Go@a30a49c` | Source-ready for provider and patient menus with a central launcher and offline phone/email fallback. Native release is blocked by the placeholder EAS project ID, missing verified release credentials/workflow, and source/store version drift. |
 | CareMetric Intel | `kdeyarmin/intel@c57776d` (PR #65) | The privacy-safe launcher, exact production/app identity gate, permanent Hub origin, always-available phone/email fallback, and deterministic guide inventory are merged and CI is green. `caremetricintel.com` remains healthy on its preceding release; the new launcher is source-ready but not published because the Base44 sandbox/bridge is returning server-side errors. Its product guide has not been auto-published without content review. |
-| DocStudio | `kdeyarmin/DocStudio@d02d0a2` | A tested, PHI-free, hash-addressed export contract and exact six-product allowlist are merged. It is not part of the current CareMetric EMR deployment; publishing remains blocked until the first-party Hub importer and asset-ingest boundary exist. |
+| DocStudio | `kdeyarmin/DocStudio@d02d0a2` | A tested, PHI-free, hash-addressed export contract and exact six-product allowlist are merged. The Hub now has a read-only publication preview for that contract. It is not part of the current CareMetric EMR deployment; actual publishing remains blocked until the first-party apply and asset-ingest boundary is implemented and approved. |
 
 ## Deliberately excluded
 
@@ -75,6 +76,30 @@ checked.
    after the chosen transport accounts, credentials, webhook signatures, and
    retention rules are approved. Email/telephone providers may transport
    messages, but must never become the case system of record.
+7. Enable Supabase Auth leaked-password protection before inviting external
+   users. The post-migration security advisor reports this single warning; the
+   RLS-without-policy notices on `private` tables are informational and
+   intentional because client roles have no access to that schema.
+
+## 2026-09-07 release verification
+
+- Pull request `#1` merged as `3ac0722c222c2912d96286b925c53bf769e370c1`
+  only after both GitHub Actions jobs passed.
+- CI run `34166434854` passed 137 Hub tests, 22 Help SDK tests, type checking,
+  linting, both production builds, the full migration chain, and all 104 pgTAP
+  database assertions (`15 + 17 + 72`).
+- Railway deployment `76b04089-4d6c-4195-95b0-2d95dd131166` completed with
+  `SUCCESS` for the exact merge commit.
+- Production migration `20260907222641_gate_case_intake_and_add_idempotency`
+  applied successfully. The keyed create/reply RPCs and qualified thread RPC
+  are present; anonymous thread execution is denied.
+- Production remains safely dark for case intake: zero tenant rows, zero case
+  rows, zero intake-activation rows, and zero request-key rows.
+- A fresh public-browser check confirmed `/help` displays `(877) 521-2890` and
+  `support@caremetric.ai`; `/learn` displays 80 published courses, 22 training
+  categories, 65 included video lessons, and six registered products.
+- All 80 rendered course links use `https://cmcarebase.com/app/courses/...`.
+  The learning page contains no localhost, loopback, or insecure HTTP links.
 
 ## Release verification
 
