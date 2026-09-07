@@ -12,6 +12,7 @@
 - Automated type, lint, unit, security-contract, and production-build checks.
 - Public production `/help` and `/learn` routes at the Railway origin.
 - A non-PHI CareBase snapshot containing 80 published courses, 70 published help articles, 22 categories, and metadata for 65 video lessons.
+- Searchable, browsable titles for all 65 current video lessons without exposing private media locators.
 - Reconciliation of all 65 current video lessons to completed HeyGen jobs and
   existing private CareBase Storage objects; playback remains in CareBase.
 - An installable, dependency-free `@caremetric/help-sdk` with a production URL default and fail-closed context validation.

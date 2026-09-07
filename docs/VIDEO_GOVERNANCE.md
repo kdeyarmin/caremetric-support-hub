@@ -70,6 +70,7 @@ assignment is currently absent for CareBase videos.
 ## Cross-product sharing model
 
 - Use the Support Hub `/learn` catalog in every application.
+- Search and browse all 65 current lesson titles in the Hub; selecting a course continues through its governed CareBase launch.
 - Launch the canonical `/app/courses/<course-id>` route in CareBase for
   enrollment, playback, quizzes, progress, attestations, and certificates.
 - Keep product launchers limited to static route and feature registries.

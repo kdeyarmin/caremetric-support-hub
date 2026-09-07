@@ -1710,7 +1710,8 @@ returns table (
   placements jsonb,
   content_category text,
   course_duration_minutes integer,
-  course_video_count integer
+  course_video_count integer,
+  course_video_titles text[]
 )
 language sql
 stable
@@ -1802,7 +1803,18 @@ as $$
       when coalesce(revision.variables ->> 'video_count', '') ~ '^[0-9]{1,6}$'
       then (revision.variables ->> 'video_count')::integer
       else null
-    end as course_video_count
+    end as course_video_count,
+    case
+      when jsonb_typeof(revision.variables -> 'video_titles') = 'array'
+      then array(
+        select left(video_title.value, 180)
+        from jsonb_array_elements_text(revision.variables -> 'video_titles')
+          with ordinality as video_title(value, position)
+        where video_title.position <= 100
+        order by video_title.position
+      )
+      else array[]::text[]
+    end as course_video_titles
   from grouped_publications grouped
   join hub.content_items item
     on item.id = grouped.item_id

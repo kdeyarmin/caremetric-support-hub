@@ -798,7 +798,7 @@ function PublicLearningPage({ data }: { data: HubData }) {
     const needle = search.trim().toLowerCase();
     return courses.filter((course) =>
       (category === "all" || course.contentCategory === category) &&
-      (!needle || `${course.title} ${course.summary} ${course.contentCategory ?? ""}`.toLowerCase().includes(needle)));
+      (!needle || `${course.title} ${course.summary} ${course.contentCategory ?? ""} ${(course.courseVideoTitles ?? []).join(" ")}`.toLowerCase().includes(needle)));
   }, [category, courses, search]);
   const videoCount = courses.reduce((total, course) => total + (course.courseVideoCount ?? 0), 0);
 
@@ -843,6 +843,12 @@ function PublicLearningPage({ data }: { data: HubData }) {
                   {(course.courseVideoCount ?? 0) > 0 && <span><Video size={14} /> {course.courseVideoCount} video{course.courseVideoCount === 1 ? "" : "s"}</span>}
                   <span><Boxes size={14} /> {course.productIds.length} products</span>
                 </div>
+                {(course.courseVideoTitles?.length ?? 0) > 0 && (
+                  <details className="lesson-list">
+                    <summary>Browse {course.courseVideoTitles?.length} video lessons</summary>
+                    <ol>{course.courseVideoTitles?.map((title) => <li key={title}>{title}</li>)}</ol>
+                  </details>
+                )}
                 {launchUrl
                   ? <a className="button button-primary" href={launchUrl} target="_blank" rel="noreferrer">Open in CareBase <ExternalLink size={15} /></a>
                   : <button className="button button-secondary" disabled>Course unavailable <LockKeyhole size={15} /></button>}

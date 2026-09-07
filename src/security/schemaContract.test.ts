@@ -6,6 +6,10 @@ const pennTrainCatalogMigration = readFileSync(
   new URL("../../supabase/migrations/20260907143500_import_penntrain_catalog.sql", import.meta.url),
   "utf8",
 );
+const videoLessonCatalogMigration = readFileSync(
+  new URL("../../supabase/migrations/20260907164813_expose_video_lesson_titles.sql", import.meta.url),
+  "utf8",
+);
 
 const exposedTables = [
   "products",
@@ -113,6 +117,7 @@ describe("Support Hub schema contract", () => {
     expect(schema).toContain("content_category text");
     expect(schema).toContain("course_duration_minutes integer");
     expect(schema).toContain("course_video_count integer");
+    expect(schema).toContain("course_video_titles text[]");
     expect(schema).not.toContain("course_video_url");
   });
 
@@ -126,6 +131,15 @@ describe("Support Hub schema contract", () => {
     expect(pennTrainCatalogMigration).not.toContain("video_url");
     expect(pennTrainCatalogMigration).not.toContain("course_progress");
     expect(pennTrainCatalogMigration).not.toContain("support_ticket_messages");
+  });
+
+  it("makes current video lessons discoverable without exposing media locators", () => {
+    expect(videoLessonCatalogMigration.match(/'penntrain\.course\.[^']+',\n\s+jsonb_build_array/g)).toHaveLength(7);
+    expect(videoLessonCatalogMigration).toContain("carebase-video-lessons-2026-09-07");
+    expect(videoLessonCatalogMigration).toContain("course_video_titles text[]");
+    expect(videoLessonCatalogMigration).not.toContain("video_url");
+    expect(videoLessonCatalogMigration).not.toContain("storage_key");
+    expect(videoLessonCatalogMigration).not.toContain("renderer_job_id");
   });
 
   it("does not copy full row bodies into the audit trail", () => {

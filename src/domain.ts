@@ -95,6 +95,7 @@ export interface ContentItem {
   contentCategory?: string;
   courseDurationMinutes?: number;
   courseVideoCount?: number;
+  courseVideoTitles?: string[];
   placements?: Array<{
     productId: string;
     audience: string[];

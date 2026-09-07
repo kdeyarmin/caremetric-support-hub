@@ -12,6 +12,7 @@ Version `0.1.0` now runs as the first production vertical slice:
 - Shared CareBase course metadata and course-level HeyGen video counts. The
   current Hub is launch-only; it does not expose or proxy private video files.
 - A public, searchable learning library at `/learn` with 80 governed CareBase courses across 22 categories and 65 cataloged video lessons.
+- All 65 current lesson titles are searchable and browsable in the Hub; playback, quizzes, and completion continue through each course's controlled CareBase launch.
 - A governed import of 70 published CareBase help articles; no learner, employee, resident, organization, assignment, progress, or ticket records were copied.
 - A verified product/contact registry that refuses to publish fake or unverified phone/email values.
 - A framework-neutral `@caremetric/help-sdk` that passes only safe product context.

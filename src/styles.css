@@ -346,6 +346,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .learning-card-meta { margin: auto 0 14px; padding-top: 14px; display: flex; flex-wrap: wrap; gap: 8px 12px; color: #6f837f; font-size: 8px; }
 .learning-card-meta span { display: flex; align-items: center; gap: 5px; }
 .learning-card-meta svg { color: var(--teal); }
+.lesson-list { margin: 0 0 12px; border: 1px solid #e1ebe9; border-radius: 10px; background: #f8fbfa; }
+.lesson-list summary { padding: 9px 11px; color: var(--teal-dark); cursor: pointer; font-size: 9px; font-weight: 800; }
+.lesson-list ol { max-height: 150px; margin: 0; padding: 0 12px 11px 30px; overflow-y: auto; color: #607571; font-size: 8px; line-height: 1.55; }
+.lesson-list li + li { margin-top: 4px; }
 .learning-card .button { width: 100%; }
 .learning-boundary { margin-top: 15px; padding: 17px 19px; display: flex; align-items: flex-start; gap: 12px; box-shadow: none; }
 .learning-boundary > svg { flex: 0 0 auto; color: var(--teal); }

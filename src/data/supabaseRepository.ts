@@ -148,6 +148,7 @@ function mapContent(value: unknown): ContentItem {
     contentCategory: nullableString(row.content_category) ?? undefined,
     courseDurationMinutes: nullableNumber(row.course_duration_minutes) ?? undefined,
     courseVideoCount: nullableNumber(row.course_video_count) ?? undefined,
+    courseVideoTitles: stringArray(row.course_video_titles),
     placements: contentPlacements(row.placements),
   };
 }

@@ -265,6 +265,12 @@ const content: ContentItem[] = [
     sourceSystem: "penntrain",
     routePattern: null,
     courseLaunchPath: "/courses/caremetric-administrator-onboarding",
+    courseVideoCount: 3,
+    courseVideoTitles: [
+      "Welcome to CareMetric",
+      "Invite and organize your team",
+      "Find help across every product",
+    ],
   },
   {
     id: "content-4",
