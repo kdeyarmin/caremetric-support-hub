@@ -1668,3 +1668,16 @@ $$;
 
 revoke all on function hub.list_published_content() from public, anon, authenticated;
 grant execute on function hub.list_published_content() to anon, authenticated;
+
+-- Browsers consume only the sanitized content RPC; raw revision, publication,
+-- course, and media-storage rows are not part of the client contract.
+revoke select
+on table
+  hub.content_items,
+  hub.content_revisions,
+  hub.content_publications,
+  hub.content_relations,
+  hub.media_assets,
+  hub.course_links,
+  hub.published_content
+from anon, authenticated;

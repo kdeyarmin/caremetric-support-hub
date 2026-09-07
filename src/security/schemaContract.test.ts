@@ -63,6 +63,7 @@ describe("Support Hub schema contract", () => {
       "get_support_case_thread",
       "reply_to_support_case",
       "update_support_case",
+      "list_published_content",
     ]) {
       expect(schema).toMatch(new RegExp(`revoke all on function hub\\.${functionName}\\(`));
     }
@@ -95,6 +96,13 @@ describe("Support Hub schema contract", () => {
   it("blocks direct client writes to support and content tables", () => {
     expect(schema).toContain("revoke insert, update, delete on all tables in schema hub from anon, authenticated;");
     expect(schema).not.toMatch(/grant\s+(insert|update|delete)[^;]+to\s+(anon|authenticated)/i);
+  });
+
+  it("serves content through the sanitized RPC instead of raw tables", () => {
+    expect(schema).toContain("create or replace function hub.list_published_content()");
+    expect(schema).toMatch(/revoke select\s+on table[\s\S]*hub\.content_items[\s\S]*hub\.media_assets[\s\S]*hub\.published_content\s+from anon, authenticated;/);
+    expect(schema).toContain("private.can_access_content_publication(item_id, revision_id, product_id)");
+    expect(schema).toContain("private.has_active_content_audience(publication.product_id, publication.audience)");
   });
 
   it("does not copy full row bodies into the audit trail", () => {
