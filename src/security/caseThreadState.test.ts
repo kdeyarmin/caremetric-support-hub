@@ -106,4 +106,23 @@ describe("case thread read state", () => {
     expect(state).toMatchObject({ status: "ready", stale: false });
   });
 
+  it("ignores a late case B result after case A is selected again", () => {
+    const readyA = completeCaseThreadLoad(
+      beginCaseThreadLoad(emptyCaseThread, "case-a"),
+      "case-a",
+      [message],
+    );
+    const loadingB = beginCaseThreadLoad(readyA, "case-b");
+    const rereadingA = beginCaseThreadLoad(loadingB, "case-a");
+    const messageB = { ...message, id: "message-b", caseId: "case-b" };
+
+    expect(completeCaseThreadLoad(rereadingA, "case-b", [messageB])).toBe(rereadingA);
+    expect(rereadingA).toMatchObject({
+      caseId: "case-a",
+      messages: [],
+      status: "loading",
+      stale: false,
+    });
+  });
+
 });
