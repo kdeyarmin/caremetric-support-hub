@@ -76,4 +76,34 @@ describe("case thread read state", () => {
     expect(listMessages).toHaveBeenCalledOnce();
     expect(replyToCase).not.toHaveBeenCalled();
   });
+  it("marks a cached selection loading before its reread settles", async () => {
+    let resolveMessages: ((messages: CaseMessage[]) => void) | undefined;
+    const listMessages = vi.fn(() => new Promise<CaseMessage[]>((resolve) => {
+      resolveMessages = resolve;
+    }));
+    const ready = completeCaseThreadLoad(
+      beginCaseThreadLoad(emptyCaseThread, "case-a"),
+      "case-a",
+      [message],
+    );
+
+    let state = beginCaseThreadLoad(ready, "case-a");
+    const pending = readCaseThread({ listMessages }, "case-a");
+
+    expect(state).toMatchObject({
+      caseId: "case-a",
+      messages: [message],
+      status: "loading",
+      stale: true,
+    });
+    expect(listMessages).toHaveBeenCalledOnce();
+
+    resolveMessages?.([message]);
+    const result = await pending;
+    state = result.messages
+      ? completeCaseThreadLoad(state, result.caseId, result.messages)
+      : failCaseThreadLoad(state, result.caseId, result.error);
+    expect(state).toMatchObject({ status: "ready", stale: false });
+  });
+
 });

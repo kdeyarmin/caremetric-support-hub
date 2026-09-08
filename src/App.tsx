@@ -777,11 +777,12 @@ function CasesPage({ data }: CasesPageProps) {
   useEffect(() => {
     if (!selectedId) return;
     let active = true;
+    setThread((current) => beginCaseThreadLoad(current, selectedId));
     void readCaseThread(repository, selectedId).then((result) => {
       if (!active) return;
       setThread((current) => result.messages
-        ? completeCaseThreadLoad(beginCaseThreadLoad(current, result.caseId), result.caseId, result.messages)
-        : failCaseThreadLoad(beginCaseThreadLoad(current, result.caseId), result.caseId, result.error));
+        ? completeCaseThreadLoad(current, result.caseId, result.messages)
+        : failCaseThreadLoad(current, result.caseId, result.error));
     });
     return () => { active = false; };
   }, [selectedId, refresh]);
