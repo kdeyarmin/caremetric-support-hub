@@ -1010,8 +1010,9 @@ as $$
 declare
   v_user_id uuid := (select auth.uid());
   v_profile hub.profiles%rowtype;
-  v_membership hub.tenant_product_memberships%rowtype;
-  v_tenant_name text;
+  v_memberships jsonb := '[]'::jsonb;
+  v_primary_membership jsonb;
+  v_has_tenant_admin boolean := false;
   v_role text;
   v_is_staff boolean;
   v_requires_aal2 boolean;
@@ -1026,28 +1027,55 @@ begin
   v_requires_aal2 := private.current_principal_requires_aal2();
 
   if not v_requires_aal2 or private.current_session_is_aal2() then
-    select * into v_membership
-    from hub.tenant_product_memberships
-    where user_id = v_user_id and status = 'active' and revoked_at is null
-    order by joined_at
-    limit 1;
-
-    if v_membership.tenant_id is not null then
-      select name into v_tenant_name from hub.tenants where id = v_membership.tenant_id;
-    end if;
+    select
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'tenant_id', membership.tenant_id,
+            'tenant_name', tenant.name,
+            'product_id', membership.product_id,
+            'role', membership.role,
+            'intake_enabled', private.is_case_intake_enabled(
+              membership.tenant_id,
+              membership.product_id
+            )
+          )
+          order by membership.joined_at, membership.tenant_id, membership.product_id
+        ),
+        '[]'::jsonb
+      ),
+      coalesce(bool_or(membership.role = 'tenant_admin'), false)
+    into v_memberships, v_has_tenant_admin
+    from hub.tenant_product_memberships membership
+    join hub.tenant_products entitlement
+      on entitlement.tenant_id = membership.tenant_id
+     and entitlement.product_id = membership.product_id
+    join hub.tenants tenant on tenant.id = membership.tenant_id
+    join hub.products product on product.id = membership.product_id
+    where membership.user_id = v_user_id
+      and membership.status = 'active'
+      and membership.revoked_at is null
+      and entitlement.status = 'active'
+      and tenant.status = 'active'
+      and product.status <> 'retired'
+      and product.support_enabled;
   end if;
 
   if v_is_staff then
     v_role := private.actor_role_label(v_user_id, null);
+  elsif v_has_tenant_admin then
+    v_role := 'tenant_admin';
   else
-    v_role := private.actor_role_label(v_user_id, v_membership.product_id);
+    v_role := 'customer';
   end if;
+  v_primary_membership := v_memberships -> 0;
   return jsonb_build_object(
     'id', v_user_id,
     'name', v_profile.display_name,
     'role', v_role,
-    'tenant_id', v_membership.tenant_id,
-    'tenant_name', v_tenant_name
+    'tenant_id', v_primary_membership ->> 'tenant_id',
+    'tenant_name', v_primary_membership ->> 'tenant_name',
+    'memberships', v_memberships
   );
 end;
 $$;
@@ -1674,11 +1702,17 @@ begin
 
   if p_change_assignment and p_assigned_to is not null then
     if not exists (
-      select 1 from private.staff_permissions permission
+      select 1
+      from private.staff_permissions permission
+      join auth.users assignee on assignee.id = permission.user_id
+      join hub.profiles assignee_profile on assignee_profile.id = permission.user_id
       where permission.user_id = p_assigned_to
         and permission.revoked_at is null
         and permission.permission in ('case.read', 'case.write', 'platform.admin')
         and (permission.product_id is null or permission.product_id = v_case.product_id)
+        and assignee.deleted_at is null
+        and (assignee.banned_until is null or assignee.banned_until <= now())
+        and not coalesce(assignee.is_anonymous, false)
     ) then raise exception 'Assignee is not authorized for this product.' using errcode = '42501'; end if;
     select display_name into v_assignee_name from hub.profiles where id = p_assigned_to;
   end if;

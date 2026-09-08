@@ -69,13 +69,19 @@ npm run dev
 `VITE_DEMO_MODE` must always be set explicitly. When it is `false`, both the
 production build and browser startup fail closed unless both browser-safe
 Supabase values are present; a missing production variable can never silently
-expose the in-memory preview.
+expose the in-memory preview. Production builds also reject demo mode itself.
+CI sets the non-browser `SUPPORT_HUB_ALLOW_DEMO_BUILD=true` escape hatch only
+for its credential-free preview build; never set that variable in Railway.
 
 Run the complete application check:
 
 ```bash
-npm run check
+SUPPORT_HUB_ALLOW_DEMO_BUILD=true VITE_DEMO_MODE=true npm run check
 ```
+
+That escape hatch is for this credential-free local verification only. A
+connected check can instead use `VITE_DEMO_MODE=false` with both Supabase
+browser variables present.
 
 ## Connect the production backend
 

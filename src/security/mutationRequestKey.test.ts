@@ -88,4 +88,14 @@ describe("mutation request keys", () => {
     expect(appSource).toMatch(/<CaseDetail\s+key=\{selected\.id\}\s+supportCase=\{selected\}/);
     expect(appSource).toContain("thread={thread.caseId === selected.id ? thread.messages : []}");
   });
+
+  it("catches case-thread read failures and exposes a read-only retry", () => {
+    expect(appSource).toContain("readCaseThread(repository, selectedId)");
+    expect(appSource).toContain("failCaseThreadLoad(beginCaseThreadLoad(current, result.caseId)");
+    expect(appSource).toContain('role="alert"');
+    expect(appSource).toMatch(/onRetryThread=\{\(\) => \{[\s\S]*?beginCaseThreadLoad[\s\S]*?setRefresh/);
+    expect(appSource).toMatch(/onChanged=\{\(\) => \{[\s\S]*?beginCaseThreadLoad[\s\S]*?reloadCases/);
+    expect(appSource).toContain("requestId !== caseListRequest.current");
+    expect(appSource).toContain("setSelectedId((currentId) => reconcileCaseSelection");
+  });
 });

@@ -1,6 +1,6 @@
 begin;
 
-select plan(17);
+select plan(18);
 
 select has_function(
   'private',
@@ -75,6 +75,7 @@ values (
 );
 
 set local request.jwt.claims = '{"sub":"90000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}';
+select is(private.current_user_is_usable(), true, 'the production-shaped Auth fixture is usable');
 select is(private.current_session_is_aal2(), false, 'AAL1 fails the assurance check');
 
 set local request.jwt.claims = '{"sub":"90000000-0000-4000-8000-000000000001","role":"authenticated"}';

@@ -42,6 +42,19 @@ describe("DemoSupportRepository", () => {
     expect(thread[0]?.body).toBe("The invitation opens an expired page.");
   });
 
+  it("rejects tenant/product pairs that are not an active demo entitlement", async () => {
+    await expect(repository.createCase({
+      tenantId: "tenant-other",
+      productId: "prod-carebase",
+      subject: "Need help",
+      category: "general",
+      priority: "normal",
+      message: "The feature is not working.",
+      containsPhi: false,
+      requestKey: "50000000-0000-4000-8000-000000000004",
+    })).rejects.toThrow(/No active support intake entitlement/);
+  });
+
   it("prevents a customer from creating an internal note", async () => {
     await expect(repository.replyToCase(
       "case-1042",

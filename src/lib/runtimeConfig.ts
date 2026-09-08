@@ -38,3 +38,16 @@ export function resolveRuntimeConfig(
     demoMode,
   };
 }
+
+export function validateBuildRuntimeConfig(
+  environment: SupportHubEnvironment,
+  allowDemoBuild: boolean,
+) {
+  const resolved = resolveRuntimeConfig(environment);
+  if (resolved.demoMode && !allowDemoBuild) {
+    throw new Error(
+      "Production Support Hub builds cannot use demo mode; set VITE_DEMO_MODE=false",
+    );
+  }
+  return resolved;
+}

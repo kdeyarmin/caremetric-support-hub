@@ -57,6 +57,16 @@ import {
 import { config } from "./lib/config";
 import { supabase } from "./lib/supabase";
 import { careBaseCourseLaunchUrl } from "./security/careBaseCourseLaunch";
+import { reconcileCaseSelection } from "./security/caseListState";
+import { caseTargetByKey, eligibleCaseTargets, preferredCaseTarget } from "./security/caseTargets";
+import {
+  beginCaseThreadLoad,
+  completeCaseThreadLoad,
+  emptyCaseThread,
+  failCaseThreadLoad,
+  readCaseThread,
+  type CaseThreadStatus,
+} from "./security/caseThreadState";
 import { decideMfaGate, normalizeAuthenticatorLevel, type MfaGate } from "./security/mfaGate";
 import { prepareMutationRequest, type PendingMutationRequest } from "./security/mutationRequestKey";
 
@@ -69,7 +79,7 @@ interface HubData {
 }
 
 const emptyData: HubData = {
-  actor: { id: "", name: "", role: "customer", tenantId: null, tenantName: null },
+  actor: { id: "", name: "", role: "customer", tenantId: null, tenantName: null, memberships: [] },
   products: [],
   contacts: [],
   cases: [],
@@ -739,29 +749,39 @@ function CasesPage({ data }: CasesPageProps) {
   const staff = isSupportStaff(data.actor.role);
   const params = new URLSearchParams(location.search);
   const requestedProduct = data.products.find((product) => product.slug === params.get("product"));
-  const [selectedId, setSelectedId] = useState(data.cases[0]?.id ?? null);
-  const [thread, setThread] = useState<{ caseId: string | null; messages: CaseMessage[] }>({
-    caseId: null,
-    messages: [],
-  });
+  const [selectedId, setSelectedId] = useState<string | null>(data.cases[0]?.id ?? null);
+  const [thread, setThread] = useState(emptyCaseThread);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<CaseStatus | "all">("all");
   const [showCreate, setShowCreate] = useState(!staff && (data.cases.length === 0 || params.get("new") === "1"));
   const [refresh, setRefresh] = useState(0);
   const [caseRows, setCaseRows] = useState(data.cases);
+  const [caseListError, setCaseListError] = useState("");
+  const caseListRequest = useRef(0);
 
   const reloadCases = async (preferId?: string) => {
-    const rows = await repository.listCases();
-    setCaseRows(rows);
-    setSelectedId(preferId ?? ((current) => current && rows.some((item) => item.id === current) ? current : rows[0]?.id ?? null));
-    setRefresh((value) => value + 1);
+    const requestId = ++caseListRequest.current;
+    setCaseListError("");
+    try {
+      const rows = await repository.listCases();
+      if (requestId !== caseListRequest.current) return;
+      setCaseRows(rows);
+      setSelectedId((currentId) => reconcileCaseSelection(rows, currentId, preferId));
+    } catch (caught) {
+      if (requestId === caseListRequest.current) {
+        setCaseListError(caught instanceof Error ? caught.message : "The case list could not be refreshed.");
+      }
+    }
   };
 
   useEffect(() => {
     if (!selectedId) return;
     let active = true;
-    void repository.listMessages(selectedId).then((rows) => {
-      if (active) setThread({ caseId: selectedId, messages: rows });
+    void readCaseThread(repository, selectedId).then((result) => {
+      if (!active) return;
+      setThread((current) => result.messages
+        ? completeCaseThreadLoad(beginCaseThreadLoad(current, result.caseId), result.caseId, result.messages)
+        : failCaseThreadLoad(beginCaseThreadLoad(current, result.caseId), result.caseId, result.error));
     });
     return () => { active = false; };
   }, [selectedId, refresh]);
@@ -796,6 +816,12 @@ function CasesPage({ data }: CasesPageProps) {
             </select>
           </div>
           <div className="case-count">{visibleCases.length} case{visibleCases.length === 1 ? "" : "s"}</div>
+          {caseListError && (
+            <div className="case-list-error" role="alert">
+              <span>{caseListError}</span>
+              <button type="button" className="button button-small button-secondary" onClick={() => void reloadCases()}>Retry</button>
+            </div>
+          )}
           <div className="case-list">
             {visibleCases.map((supportCase) => {
               const product = productFor(data.products, supportCase.productId);
@@ -817,10 +843,21 @@ function CasesPage({ data }: CasesPageProps) {
               key={selected.id}
               supportCase={selected}
               thread={thread.caseId === selected.id ? thread.messages : []}
+              threadStatus={thread.caseId === selected.id ? thread.status : "loading"}
+              threadError={thread.caseId === selected.id ? thread.error : ""}
+              threadStale={thread.caseId === selected.id && thread.stale}
               products={data.products}
               actor={data.actor}
               staff={staff}
-              onChanged={() => void reloadCases(selected.id)}
+              onChanged={() => {
+                setThread((current) => beginCaseThreadLoad(current, selected.id));
+                setRefresh((value) => value + 1);
+                void reloadCases();
+              }}
+              onRetryThread={() => {
+                setThread((current) => beginCaseThreadLoad(current, selected.id));
+                setRefresh((value) => value + 1);
+              }}
             />
           ) : (
             <div className="empty-state detail-empty"><MessageSquareText /><strong>Select a case</strong><p>Choose a conversation from the queue to see its full history.</p></div>
@@ -832,7 +869,13 @@ function CasesPage({ data }: CasesPageProps) {
 }
 
 function NewCasePanel({ data, preferredProductId, onCancel, onCreated }: { data: HubData; preferredProductId?: string; onCancel: () => void; onCreated: (id: string) => void }) {
-  const [productId, setProductId] = useState(preferredProductId ?? data.products[0]?.id ?? "");
+  const caseTargets = useMemo(
+    () => eligibleCaseTargets(data.actor, data.products),
+    [data.actor, data.products],
+  );
+  const initialTarget = preferredCaseTarget(caseTargets, preferredProductId);
+  const [targetKey, setTargetKey] = useState(initialTarget?.key ?? "");
+  const selectedTarget = caseTargetByKey(caseTargets, targetKey);
   const [subject, setSubject] = useState("");
   const [category, setCategory] = useState<CaseCategory>("general");
   const [priority, setPriority] = useState<CasePriority>("normal");
@@ -847,8 +890,12 @@ function NewCasePanel({ data, preferredProductId, onCancel, onCreated }: { data:
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const tenantId = data.actor.tenantId;
-    if (!tenantId || !acknowledged || containsPhi) return;
+    if (!selectedTarget) {
+      setError("No active organization and product entitlement is available for support intake.");
+      return;
+    }
+    if (!acknowledged || containsPhi) return;
+    const { tenantId, productId } = selectedTarget;
     const request = prepareMutationRequest(pendingRequest.current, [
       "create-support-case",
       tenantId,
@@ -892,7 +939,7 @@ function NewCasePanel({ data, preferredProductId, onCancel, onCreated }: { data:
       <div className="phi-warning"><ShieldCheck size={19} /><div><strong>Do not include protected health information.</strong><p>No patient names, dates of birth, MRNs, diagnoses, clinical notes, or screenshots with patient data.</p></div></div>
       <form className="case-form" onSubmit={submit}>
         <div className="form-grid">
-          <label><span>Product</span><select value={productId} onChange={(event) => setProductId(event.target.value)} required>{data.products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></label>
+          <label><span>Organization and product</span><select value={targetKey} onChange={(event) => setTargetKey(event.target.value)} required disabled={caseTargets.length === 0}><option value="" disabled>{caseTargets.length === 0 ? "No active support intake" : "Choose an organization and product"}</option>{caseTargets.map((target) => <option key={target.key} value={target.key}>{target.product.name} · {target.tenantName}</option>)}</select></label>
           <label><span>Category</span><select value={category} onChange={(event) => setCategory(event.target.value as CaseCategory)}>{Object.entries(categoryLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <label><span>Priority</span><select value={priority} onChange={(event) => setPriority(event.target.value as CasePriority)}>{Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <label><span>App version <small>optional</small></span><input value={appVersion} onChange={(event) => setAppVersion(event.target.value)} maxLength={48} placeholder="e.g. 3.8.2" /></label>
@@ -903,13 +950,13 @@ function NewCasePanel({ data, preferredProductId, onCancel, onCreated }: { data:
         <label className={`check-row ${containsPhi ? "danger-check" : ""}`}><input type="checkbox" checked={containsPhi} onChange={(event) => setContainsPhi(event.target.checked)} /><span><strong>This request contains patient or clinical information.</strong><small>If checked, online submission is blocked. Remove the information before continuing.</small></span></label>
         <label className="check-row"><input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} /><span><strong>I confirm this request contains no patient information.</strong><small>The support team can request a compliant escalation if one is genuinely required.</small></span></label>
         {error && <p className="form-message form-error"><AlertCircle size={16} /> {error}</p>}
-        <div className="form-actions"><button type="button" className="button button-secondary" onClick={onCancel}>Cancel</button><button className="button button-primary" disabled={saving || !acknowledged || containsPhi || !subject.trim() || message.trim().length < 10}>{saving ? <LoaderCircle className="spin" size={17} /> : <Send size={17} />} Submit case</button></div>
+        <div className="form-actions"><button type="button" className="button button-secondary" onClick={onCancel}>Cancel</button><button className="button button-primary" disabled={saving || !selectedTarget || !acknowledged || containsPhi || !subject.trim() || message.trim().length < 10}>{saving ? <LoaderCircle className="spin" size={17} /> : <Send size={17} />} Submit case</button></div>
       </form>
     </section>
   );
 }
 
-function CaseDetail({ supportCase, thread, products, actor, staff, onChanged }: { supportCase: SupportCase; thread: CaseMessage[]; products: Product[]; actor: ActorContext; staff: boolean; onChanged: () => void }) {
+function CaseDetail({ supportCase, thread, threadStatus, threadError, threadStale, products, actor, staff, onChanged, onRetryThread }: { supportCase: SupportCase; thread: CaseMessage[]; threadStatus: CaseThreadStatus; threadError: string; threadStale: boolean; products: Product[]; actor: ActorContext; staff: boolean; onChanged: () => void; onRetryThread: () => void }) {
   const [body, setBody] = useState("");
   const [visibility, setVisibility] = useState<"customer" | "internal">("customer");
   const [saving, setSaving] = useState(false);
@@ -972,6 +1019,16 @@ function CaseDetail({ supportCase, thread, products, actor, staff, onChanged }: 
         <div><span>Page</span><strong>{supportCase.route ?? "Not supplied"}</strong></div>
       </div>
       <div className="thread" aria-label="Case conversation">
+        {threadStatus === "loading" && (
+          <div className="thread-load-state"><LoaderCircle className="spin" size={18} /><span>{threadStale ? "Refreshing conversation; the messages below may be stale." : "Loading conversation…"}</span></div>
+        )}
+        {threadStatus === "error" && (
+          <div className="thread-load-state thread-load-error" role="alert">
+            <AlertCircle size={18} />
+            <span>{threadStale ? "Conversation refresh failed; the messages below may be stale." : threadError || "The conversation could not be loaded."}</span>
+            <button type="button" className="button button-small button-secondary" onClick={onRetryThread}>Retry</button>
+          </div>
+        )}
         {thread.map((message) => {
           const fromStaff = isSupportStaff(message.authorRole);
           return (
@@ -984,8 +1041,8 @@ function CaseDetail({ supportCase, thread, products, actor, staff, onChanged }: 
       </div>
       <div className="reply-box">
         {staff && <div className="reply-tabs"><button className={visibility === "customer" ? "active" : ""} onClick={() => setVisibility("customer")}><MessageSquareText size={14} /> Reply to customer</button><button className={visibility === "internal" ? "active" : ""} onClick={() => setVisibility("internal")}><LockKeyhole size={14} /> Internal note</button></div>}
-        <textarea rows={4} value={body} onChange={(event) => setBody(event.target.value)} maxLength={5000} placeholder={visibility === "internal" ? "Add a note visible only to support staff…" : "Write a reply…"} />
-        <div className="reply-footer"><span><ShieldCheck size={14} /> Do not request or repeat patient information.</span><button className="button button-primary" onClick={() => void reply()} disabled={saving || !body.trim()}>{saving ? <LoaderCircle className="spin" size={16} /> : <Send size={16} />} {visibility === "internal" ? "Add note" : "Send reply"}</button></div>
+        <textarea rows={4} value={body} onChange={(event) => setBody(event.target.value)} maxLength={5000} disabled={threadStatus !== "ready"} placeholder={visibility === "internal" ? "Add a note visible only to support staff…" : "Write a reply…"} />
+        <div className="reply-footer"><span><ShieldCheck size={14} /> Do not request or repeat patient information.</span><button className="button button-primary" onClick={() => void reply()} disabled={saving || threadStatus !== "ready" || !body.trim()}>{saving ? <LoaderCircle className="spin" size={16} /> : <Send size={16} />} {visibility === "internal" ? "Add note" : "Send reply"}</button></div>
         {error && <p className="form-message form-error"><AlertCircle size={15} /> {error}</p>}
       </div>
     </div>

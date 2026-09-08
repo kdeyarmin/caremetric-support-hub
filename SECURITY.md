@@ -20,7 +20,13 @@ Version `0.1.0` may serve the public non-PHI Help and Learning pages. It must no
 
 The production web client now provides explicit TOTP enrollment, multi-factor challenge selection, factor management, and safe sign-out. Migration `20260907202818_require_aal2_for_authenticated_support.sql` enforces AAL2 below the UI for staff and opted-in customers, redacts tenant context during the AAL1 bootstrap, and prevents dual-role staff from falling through customer membership policies. Supabase does not issue MFA recovery codes, so administrators must keep a second verified authenticator and use a controlled Auth-admin recovery process if all authenticators are lost.
 
-Migration `20260907203511_gate_case_intake_and_add_idempotency.sql` adds a private, default-off activation gate for each tenant/product and keyed RPC overloads for safe retries. Activation also fails closed if the entitlement, tenant, or product is inactive, or if no unrevoked `case.write`/`platform.admin` principal on a usable non-anonymous account has both a Support Hub profile and verified TOTP factor. Runtime authorization rechecks current deleted/banned/anonymous Auth state. Staff and membership grants cannot be composed to exceed either grant, and persisted message roles come from the path that actually authorized the write. Existing cases remain replyable by currently authorized principals when new intake is disabled. The request-key ledger is private, RLS-protected, and stores a SHA-256 request digest plus identifiers; the digest is still sensitive derived data and follows the case-retention boundary.
+Migration `20260907222641_gate_case_intake_and_add_idempotency.sql` adds a private, default-off activation gate for each tenant/product and keyed RPC overloads for safe retries. Activation also fails closed if the entitlement, tenant, or product is inactive, or if no unrevoked `case.write`/`platform.admin` principal on a usable non-anonymous account has both a Support Hub profile and verified TOTP factor. Runtime authorization rechecks current deleted/banned/anonymous Auth state. Staff and membership grants cannot be composed to exceed either grant, and persisted message roles come from the path that actually authorized the write. Existing cases remain replyable by currently authorized principals when new intake is disabled. The request-key ledger is private, RLS-protected, and stores a SHA-256 request digest plus identifiers; the digest is still sensitive derived data and follows the case-retention boundary.
+
+Migration `20260908004000_return_all_actor_memberships.sql` returns active
+tenant/product memberships as indivisible pairs so the client cannot combine a
+tenant from one entitlement with a product from another. Migration
+`20260908004500_restrict_case_assignees_to_usable_staff.sql` prevents assignment
+to deleted, banned, anonymous, or unprofiled staff principals.
 
 ## Required production checks
 
