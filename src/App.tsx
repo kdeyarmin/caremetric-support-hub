@@ -777,15 +777,20 @@ function CasesPage({ data }: CasesPageProps) {
   useEffect(() => {
     if (!selectedId) return;
     let active = true;
-    setThread((current) => beginCaseThreadLoad(current, selectedId));
     void readCaseThread(repository, selectedId).then((result) => {
       if (!active) return;
       setThread((current) => result.messages
-        ? completeCaseThreadLoad(current, result.caseId, result.messages)
-        : failCaseThreadLoad(current, result.caseId, result.error));
+        ? completeCaseThreadLoad(beginCaseThreadLoad(current, result.caseId), result.caseId, result.messages)
+        : failCaseThreadLoad(beginCaseThreadLoad(current, result.caseId), result.caseId, result.error));
     });
     return () => { active = false; };
   }, [selectedId, refresh]);
+
+  const selectCase = (caseId: string) => {
+    if (caseId === selectedId) return;
+    setThread((current) => beginCaseThreadLoad(current, caseId));
+    setSelectedId(caseId);
+  };
 
   const visibleCases = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -827,7 +832,7 @@ function CasesPage({ data }: CasesPageProps) {
             {visibleCases.map((supportCase) => {
               const product = productFor(data.products, supportCase.productId);
               return (
-                <button key={supportCase.id} className={`case-list-row ${selectedId === supportCase.id ? "selected" : ""}`} onClick={() => setSelectedId(supportCase.id)}>
+                <button key={supportCase.id} className={`case-list-row ${selectedId === supportCase.id ? "selected" : ""}`} onClick={() => selectCase(supportCase.id)}>
                   <div className="case-list-top"><span>{caseCode(supportCase.caseNumber)}</span><time>{formatDate(supportCase.lastMessageAt)}</time></div>
                   <strong>{supportCase.subject}</strong>
                   <p>{supportCase.tenantName} · {product?.name}</p>
