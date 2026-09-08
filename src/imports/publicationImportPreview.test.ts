@@ -387,7 +387,9 @@ describe("publication import preview", () => {
       0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70,
       0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x02, 0x00,
     ]);
-    const captions = encoder.encode("WEBVTT\n\n00:00.000 --> 00:01.000\nWelcome\n");
+    const captions = encoder.encode(
+      "WEBVTT\n\nNOTE reviewed caption track\n\nintro\n00:00.000 --> 00:01.000\nWelcome\n",
+    );
     const transcript = encoder.encode("Welcome to the Team page.\n");
     const input = await articleInput();
     input.manifest.content.kind = "video";
@@ -455,6 +457,36 @@ describe("publication import preview", () => {
       input.assets = { primary, captions, transcript };
 
       await expect(previewPublicationImport(input)).rejects.toThrow(/timed WebVTT cue/);
+    }
+  });
+
+  it("rejects malformed WebVTT blocks even when another cue is valid", async () => {
+    const primary = new Uint8Array([
+      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70,
+      0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x02, 0x00,
+    ]);
+    const transcript = encoder.encode("Welcome to the Team page.\n");
+    for (const captionText of [
+      "WEBVTT\n\n00:00.000 --> 00:00.500\nWelcome\n\nOrphan caption text\n",
+      "WEBVTT\n00:00.000 --> 00:00.500\nDropped first cue\n\n00:00.500 --> 00:01.000\nSecond cue\n",
+      "WEBVTT\n\ncue-id\nunexpected line\n00:00.000 --> 00:01.000\nLate timing\n",
+      "WEBVTT\n\n00:00.000 --> 00:00.500 --> 00:01.000\nAmbiguous timing\n",
+      "WEBVTT\n\n00:00.000 --> 00:01.001\nPast the media duration\n",
+    ]) {
+      const captions = encoder.encode(captionText);
+      const input = await articleInput();
+      input.manifest.content.kind = "video";
+      input.manifest.artifact = {
+        sha256: await digest(primary),
+        media_type: "video/mp4",
+        byte_length: primary.byteLength,
+        duration_ms: 1000,
+        captions_sha256: await digest(captions),
+        transcript_sha256: await digest(transcript),
+      };
+      input.assets = { primary, captions, transcript };
+
+      await expect(previewPublicationImport(input)).rejects.toThrow(/WEBVTT|timed WebVTT cue/);
     }
   });
 

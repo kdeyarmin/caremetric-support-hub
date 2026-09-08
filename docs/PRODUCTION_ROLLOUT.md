@@ -9,7 +9,7 @@ checked.
 
 | Capability | Verified state |
 | --- | --- |
-| Support Hub | `kdeyarmin/caremetric-support-hub@3ac0722` is live at `https://support-hub-web-production.up.railway.app` with direct `/help` and `/learn` routes; no rendered link uses localhost. Production migrations through `20260907222641_gate_case_intake_and_add_idempotency` are applied. |
+| Support Hub | `kdeyarmin/caremetric-support-hub@3ac0722` is live at `https://support-hub-web-production.up.railway.app` with direct `/help` and `/learn` routes; no rendered link uses localhost. Production migrations include the repository's `20260907203511_gate_case_intake_and_add_idempotency.sql`, recorded by Supabase at apply time as `20260907222641_gate_case_intake_and_add_idempotency`. |
 | Central contacts | The owner-designated values are `+18775212890` (displayed as `(877) 521-2890`) and `support@caremetric.ai`. The web portal is operational; email delivery is not verified because mailbox DNS is absent. |
 | Product registry | CareMetric CareBase, CareMetric Breathe, PennSync, CareMetric EMR, CareMetric Go, and CareMetric Intel. |
 | Shared learning | 80 imported public CareBase courses plus one customer-only onboarding course. Every registered product has all 81 governed placements; anonymous visitors see the same 80 public courses across 22 categories, including searchable metadata for 65 current video lessons. |
@@ -90,9 +90,14 @@ checked.
   database assertions (`15 + 17 + 72`).
 - Railway deployment `76b04089-4d6c-4195-95b0-2d95dd131166` completed with
   `SUCCESS` for the exact merge commit.
-- Production migration `20260907222641_gate_case_intake_and_add_idempotency`
-  applied successfully. The keyed create/reply RPCs and qualified thread RPC
-  are present; anonymous thread execution is denied.
+- Repository migration `20260907203511_gate_case_intake_and_add_idempotency.sql`
+  applied successfully and is recorded in Supabase production history under
+  the apply-time version `20260907222641_gate_case_intake_and_add_idempotency`.
+  The production statement and repository file are byte-identical: 27,272
+  bytes with SHA-256
+  `a05602a56317c0b549d65eb39d26f455eb121aee86104bfa040be3ae024a3511`.
+  The keyed create/reply RPCs and qualified thread RPC are present; anonymous
+  thread execution is denied.
 - Production remains safely dark for case intake: zero tenant rows, zero case
   rows, zero intake-activation rows, and zero request-key rows.
 - A fresh public-browser check confirmed `/help` displays `(877) 521-2890` and

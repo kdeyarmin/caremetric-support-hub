@@ -717,19 +717,36 @@ function parseWebVttTimestamp(value: string): number | null {
 }
 
 function assertWebVtt(value: string, durationMs: number, path: string): void {
-  if (!value.startsWith("WEBVTT\n") && !value.startsWith("WEBVTT\r\n")) {
+  const normalized = value.replaceAll("\r\n", "\n");
+  if (!normalized.startsWith("WEBVTT\n")) {
     fail(path, "must begin with a WEBVTT header");
   }
 
-  const blocks = value.replaceAll("\r\n", "\n").split(/\n{2,}/).slice(1);
+  const headerSeparatorIndex = normalized.indexOf("\n\n");
+  if (headerSeparatorIndex !== "WEBVTT".length) {
+    fail(path, "must separate the WEBVTT header from cues with a blank line");
+  }
+
+  const blocks = normalized
+    .slice(headerSeparatorIndex + 2)
+    .split(/\n{2,}/)
+    .filter((block) => block.trim().length > 0);
   let cueCount = 0;
   for (const block of blocks) {
     const lines = block.split("\n");
     if (/^(?:NOTE|STYLE|REGION)(?:\s|$)/.test(lines[0] ?? "")) continue;
     const timingIndex = lines.findIndex((line) => line.includes("-->"));
-    if (timingIndex < 0 || timingIndex > 1) continue;
-    const timing = /^([^\s]+)\s+-->\s+([^\s]+)(?:\s+.*)?$/.exec(lines[timingIndex] ?? "");
-    if (!timing) {
+    if (
+      timingIndex < 0 ||
+      timingIndex > 1 ||
+      (timingIndex === 1 && (lines[0] ?? "").trim().length === 0)
+    ) {
+      fail(path, "must contain only usable timed WebVTT cues within the media duration");
+    }
+    const timingLine = lines[timingIndex] ?? "";
+    const arrowCount = timingLine.split("-->").length - 1;
+    const timing = /^([^\s]+)\s+-->\s+([^\s]+)(?:\s+.*)?$/.exec(timingLine);
+    if (!timing || arrowCount !== 1) {
       fail(path, "must contain only usable timed WebVTT cues within the media duration");
     }
     const start = parseWebVttTimestamp(timing[1] ?? "");
@@ -740,7 +757,7 @@ function assertWebVtt(value: string, durationMs: number, path: string): void {
       end === null ||
       end <= start ||
       start >= durationMs ||
-      end > durationMs + 1000 ||
+      end > durationMs ||
       !hasPayload
     ) {
       fail(path, "must contain only usable timed WebVTT cues within the media duration");

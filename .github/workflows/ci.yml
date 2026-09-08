@@ -12,6 +12,8 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      VITE_DEMO_MODE: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,6 +21,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Verify connected builds fail closed without backend configuration
+        run: |
+          if env -u VITE_SUPABASE_URL -u VITE_SUPABASE_PUBLISHABLE_KEY VITE_DEMO_MODE=false npm run build; then
+            echo "Connected build unexpectedly succeeded without Supabase configuration"
+            exit 1
+          fi
       - run: npm run check
 
   database:

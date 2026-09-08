@@ -66,6 +66,11 @@ npm run dev
 
 `VITE_DEMO_MODE=true` starts the in-memory implementation preview. Use the Staff/Customer switch to verify both experiences. The preview rejects a case marked as containing patient or clinical information.
 
+`VITE_DEMO_MODE` must always be set explicitly. When it is `false`, both the
+production build and browser startup fail closed unless both browser-safe
+Supabase values are present; a missing production variable can never silently
+expose the in-memory preview.
+
 Run the complete application check:
 
 ```bash
