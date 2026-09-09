@@ -328,6 +328,7 @@ const staffActor: ActorContext = {
   role: "support_manager",
   tenantId: null,
   tenantName: null,
+  memberships: [],
 };
 
 const customerActor: ActorContext = {
@@ -336,6 +337,13 @@ const customerActor: ActorContext = {
   role: "tenant_admin",
   tenantId: "tenant-penn",
   tenantName: "Penn Healthcare",
+  memberships: products.map((product) => ({
+    tenantId: "tenant-penn",
+    tenantName: "Penn Healthcare",
+    productId: product.id,
+    role: "tenant_admin" as const,
+    intakeEnabled: true,
+  })),
 };
 
 export class DemoSupportRepository implements HubRepository {
@@ -346,7 +354,10 @@ export class DemoSupportRepository implements HubRepository {
   }
 
   async getActorContext(): Promise<ActorContext> {
-    return { ...this.actor };
+    return {
+      ...this.actor,
+      memberships: this.actor.memberships.map((membership) => ({ ...membership })),
+    };
   }
 
   async listProducts(): Promise<Product[]> {
@@ -358,8 +369,9 @@ export class DemoSupportRepository implements HubRepository {
   }
 
   async listCases(): Promise<SupportCase[]> {
-    const visible = this.actor.role === "tenant_admin"
-      ? cases.filter((item) => item.tenantId === this.actor.tenantId)
+    const visible = this.actor.role === "tenant_admin" || this.actor.role === "customer"
+      ? cases.filter((item) => this.actor.memberships.some((membership) =>
+          membership.tenantId === item.tenantId && membership.productId === item.productId))
       : cases;
     return visible.map((item) => ({ ...item }));
   }
@@ -379,13 +391,20 @@ export class DemoSupportRepository implements HubRepository {
     if (input.containsPhi) {
       throw new Error("Remove patient or clinical information before creating this support case.");
     }
+    const membership = this.actor.memberships.find((candidate) =>
+      candidate.tenantId === input.tenantId &&
+      candidate.productId === input.productId &&
+      candidate.intakeEnabled);
+    if (!membership) {
+      throw new Error("No active support intake entitlement exists for this organization and product.");
+    }
     const now = new Date().toISOString();
     const nextNumber = Math.max(...cases.map((item) => item.caseNumber)) + 1;
     const nextCase: SupportCase = {
       id: crypto.randomUUID(),
       caseNumber: nextNumber,
       tenantId: input.tenantId,
-      tenantName: this.actor.tenantName ?? "Customer organization",
+      tenantName: membership.tenantName,
       productId: input.productId,
       requesterId: this.actor.id,
       requesterName: this.actor.name,

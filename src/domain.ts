@@ -15,12 +15,21 @@ export type CaseCategory =
   | "account_access"
   | "feature_request";
 
+export interface ActorMembership {
+  tenantId: string;
+  tenantName: string;
+  productId: string;
+  role: "customer" | "tenant_admin";
+  intakeEnabled: boolean;
+}
+
 export interface ActorContext {
   id: string;
   name: string;
   role: ActorRole;
   tenantId: string | null;
   tenantName: string | null;
+  memberships: ActorMembership[];
 }
 
 export interface Product {

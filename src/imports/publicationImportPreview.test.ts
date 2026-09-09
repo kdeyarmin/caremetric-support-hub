@@ -9,6 +9,14 @@ import {
 
 const encoder = new TextEncoder();
 
+function validMp4Bytes(): Uint8Array {
+  return new Uint8Array([
+    0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70,
+    0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x02, 0x00,
+    0x69, 0x73, 0x6f, 0x6d, 0x6d, 0x70, 0x34, 0x32,
+  ]);
+}
+
 async function digest(bytes: Uint8Array): Promise<string> {
   const result = await globalThis.crypto.subtle.digest("SHA-256", Uint8Array.from(bytes));
   return Array.from(new Uint8Array(result), (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -50,6 +58,26 @@ async function articleInput(): Promise<PublicationImportPreviewInput> {
     ],
   };
   return { manifest, assets: { primary }, existing: null };
+}
+
+async function videoInput(
+  captionText: string,
+  primary = validMp4Bytes(),
+): Promise<PublicationImportPreviewInput> {
+  const captions = encoder.encode(captionText);
+  const transcript = encoder.encode("Welcome to the Team page.\n");
+  const input = await articleInput();
+  input.manifest.content.kind = "video";
+  input.manifest.artifact = {
+    sha256: await digest(primary),
+    media_type: "video/mp4",
+    byte_length: primary.byteLength,
+    duration_ms: 1000,
+    captions_sha256: await digest(captions),
+    transcript_sha256: await digest(transcript),
+  };
+  input.assets = { primary, captions, transcript };
+  return input;
 }
 
 function matchingSnapshot(
@@ -383,11 +411,10 @@ describe("publication import preview", () => {
   });
 
   it("verifies MP4 identity plus declared caption and transcript sidecars", async () => {
-    const primary = new Uint8Array([
-      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70,
-      0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x02, 0x00,
-    ]);
-    const captions = encoder.encode("WEBVTT\n\n00:00.000 --> 00:01.000\nWelcome\n");
+    const primary = validMp4Bytes();
+    const captions = encoder.encode(
+      "WEBVTT\n\nNOTE reviewed caption track\n\nintro\n00:00.000 --> 00:01.000\nWelcome\n",
+    );
     const transcript = encoder.encode("Welcome to the Team page.\n");
     const input = await articleInput();
     input.manifest.content.kind = "video";
@@ -411,10 +438,7 @@ describe("publication import preview", () => {
   });
 
   it("requires both caption and transcript sidecars for every video preview", async () => {
-    const primary = new Uint8Array([
-      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70,
-      0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x02, 0x00,
-    ]);
+    const primary = validMp4Bytes();
     const input = await articleInput();
     input.manifest.content.kind = "video";
     input.manifest.artifact = {
@@ -429,10 +453,7 @@ describe("publication import preview", () => {
   });
 
   it("requires captions to contain a forward, non-note WebVTT cue with payload", async () => {
-    const primary = new Uint8Array([
-      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70,
-      0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x02, 0x00,
-    ]);
+    const primary = validMp4Bytes();
     const transcript = encoder.encode("Welcome to the Team page.\n");
     for (const captionText of [
       "WEBVTT\n\nWelcome without timing\n",
@@ -454,7 +475,130 @@ describe("publication import preview", () => {
       };
       input.assets = { primary, captions, transcript };
 
-      await expect(previewPublicationImport(input)).rejects.toThrow(/timed WebVTT cue/);
+      await expect(previewPublicationImport(input)).rejects.toThrow(/WEBVTT|timed WebVTT cue/);
+    }
+  });
+
+  it("rejects malformed WebVTT blocks even when another cue is valid", async () => {
+    const primary = validMp4Bytes();
+    const transcript = encoder.encode("Welcome to the Team page.\n");
+    for (const captionText of [
+      "WEBVTT\n\n00:00.000 --> 00:00.500\nWelcome\n\nOrphan caption text\n",
+      "WEBVTT\n00:00.000 --> 00:00.500\nDropped first cue\n\n00:00.500 --> 00:01.000\nSecond cue\n",
+      "WEBVTT\n\ncue-id\nunexpected line\n00:00.000 --> 00:01.000\nLate timing\n",
+      "WEBVTT\n\n00:00.000 --> 00:00.500 --> 00:01.000\nAmbiguous timing\n",
+      "WEBVTT\n\n00:00.000 --> 00:01.001\nPast the media duration\n",
+      "WEBVTT\nX-TIMESTAMP-MAP=LOCAL:invalid,MPEGTS:900000\n\n00:00.000 --> 00:01.000\nWelcome\n",
+      "WEBVTT\nX-TIMESTAMP-MAP=LOCAL:00:00.000,MPEGTS:900000\nX-TIMESTAMP-MAP=LOCAL:00:00.000,MPEGTS:900001\n\n00:00.000 --> 00:01.000\nWelcome\n",
+    ]) {
+      const captions = encoder.encode(captionText);
+      const input = await articleInput();
+      input.manifest.content.kind = "video";
+      input.manifest.artifact = {
+        sha256: await digest(primary),
+        media_type: "video/mp4",
+        byte_length: primary.byteLength,
+        duration_ms: 1000,
+        captions_sha256: await digest(captions),
+        transcript_sha256: await digest(transcript),
+      };
+      input.assets = { primary, captions, transcript };
+
+      await expect(previewPublicationImport(input)).rejects.toThrow(/WEBVTT|timed WebVTT cue/);
+    }
+  });
+
+  it("accepts a BOM, WEBVTT header metadata, lone-CR lines, and pre-cue metadata blocks", async () => {
+    const input = await videoInput(
+      "\uFEFFWEBVTT transcript\r" +
+        "X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:900000\r\r" +
+        "NOTE reviewed caption track\r\r" +
+        "STYLE \t\r::cue { color: lime }\r\r" +
+        "REGION  \rid:top width:50% lines:3\r\r" +
+        "intro\r00:00.000 --> 00:01.000 region:top align:center\rWelcome\r",
+    );
+
+    await expect(previewPublicationImport(input)).resolves.toMatchObject({
+      mode: "preview",
+      writesPerformed: false,
+    });
+  });
+
+  it("rejects malformed, late, or arrow-bearing WebVTT metadata and cue payloads", async () => {
+    const invalidCaptions = [
+      "WEBVTT\n\nNOTE\nreview --> later\n\n00:00.000 --> 00:01.000\nWelcome\n",
+      "WEBVTT\n\nSTYLE anything\n::cue { color: lime }\n\n00:00.000 --> 00:01.000\nWelcome\n",
+      "WEBVTT\n\nREGION\nwidth:50%\n\n00:00.000 --> 00:01.000\nWelcome\n",
+      "WEBVTT\n\nREGION\nid:top\n\nREGION\nid:top\n\n00:00.000 --> 00:01.000\nWelcome\n",
+      "WEBVTT\n\n00:00.000 --> 00:01.000\nWelcome\n\nSTYLE\n::cue { color: lime }\n",
+      "WEBVTT\n\n00:00.000 --> 00:01.000\nWelcome\n\nREGION\nid:top\n",
+      "WEBVTT\n\n00:00.000 --> 00:01.000\nWelcome --> again\n",
+      "WEBVTT\n\ncue-a\n00:00.000 --> 00:00.500\nWelcome\n\ncue-a\n00:00.500 --> 00:01.000\nAgain\n",
+      "WEBVTT\n\n00:00.500 --> 00:01.000\nLater\n\n00:00.000 --> 00:00.500\nEarlier\n",
+      "WEBVTT\n\n00:00.000 --> 00:01.000 align:center align:start\nWelcome\n",
+      "WEBVTT\n\n00:00.000 --> 00:01.000 region:missing\nWelcome\n",
+    ];
+
+    for (const captionText of invalidCaptions) {
+      await expect(previewPublicationImport(await videoInput(captionText))).rejects.toThrow(
+        /WEBVTT|timed WebVTT cue/,
+      );
+    }
+  });
+
+  it("rejects external-resource CSS in WebVTT STYLE blocks", async () => {
+    for (const style of [
+      "::cue { background-image: url(/tracking-pixel) }",
+      '@import "relative-theme.css";',
+      "::cue { background-image: \\75rl(/tracking-pixel) }",
+      '@\\69mport "relative-theme.css";',
+      "::cue { background-image: image-set(\"relative.png\" 1x) }",
+    ]) {
+      const input = await videoInput(
+        `WEBVTT\n\nSTYLE\n${style}\n\n00:00.000 --> 00:01.000\nWelcome\n`,
+      );
+      await expect(previewPublicationImport(input)).rejects.toThrow(/CSS/);
+    }
+  });
+
+  it("rejects truncated, malformed, oversized, or embedded-only MP4 ftyp boxes", async () => {
+    const malformedPrimaryAssets = [
+      new Uint8Array([
+        0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70,
+        0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x02, 0x00,
+      ]),
+      new Uint8Array([
+        0x00, 0x00, 0x00, 0x0c, 0x66, 0x74, 0x79, 0x70,
+        0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x02, 0x00,
+      ]),
+      new Uint8Array([
+        0x00, 0x00, 0x00, 0x1c, 0x66, 0x74, 0x79, 0x70,
+        0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x02, 0x00,
+        0x69, 0x73, 0x6f, 0x6d, 0x6d, 0x70, 0x34, 0x32,
+      ]),
+      new Uint8Array([
+        0x00, 0x00, 0x00, 0x18, 0x6a, 0x75, 0x6e, 0x6b,
+        0x66, 0x74, 0x79, 0x70, 0x00, 0x00, 0x02, 0x00,
+        0x69, 0x73, 0x6f, 0x6d, 0x6d, 0x70, 0x34, 0x32,
+      ]),
+      new Uint8Array([
+        0x00, 0x00, 0x00, 0x12, 0x66, 0x74, 0x79, 0x70,
+        0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x02, 0x00,
+        0x69, 0x73,
+      ]),
+      new Uint8Array([
+        0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70,
+        0x68, 0x65, 0x69, 0x63, 0x00, 0x00, 0x00, 0x00,
+        0x6d, 0x69, 0x66, 0x31, 0x68, 0x65, 0x69, 0x63,
+      ]),
+    ];
+
+    for (const primary of malformedPrimaryAssets) {
+      const input = await videoInput(
+        "WEBVTT\n\n00:00.000 --> 00:01.000\nWelcome\n",
+        primary,
+      );
+      await expect(previewPublicationImport(input)).rejects.toThrow(/ISO BMFF\/MP4 ftyp/);
     }
   });
 

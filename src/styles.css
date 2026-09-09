@@ -228,6 +228,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .search-box input { min-height: auto; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; font-size: 11px; }
 .search-box input:focus { box-shadow: none; }
 .case-count { padding: 10px 15px 5px; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.case-list-error { margin: 6px 8px; padding: 9px 10px; display: flex; align-items: center; gap: 8px; border: 1px solid #efd0cc; border-radius: 9px; color: #87433e; background: #fff7f6; font-size: 9px; }
+.case-list-error span { min-width: 0; overflow-wrap: anywhere; }
+.case-list-error .button { margin-left: auto; flex: 0 0 auto; }
 .case-list { padding: 4px 8px 12px; display: grid; gap: 4px; }
 .case-list-row { width: 100%; padding: 12px; border: 1px solid transparent; border-radius: 11px; background: transparent; text-align: left; cursor: pointer; }
 .case-list-row:hover { background: #f3f8f6; }
@@ -255,6 +258,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .context-grid span { display: block; margin-bottom: 3px; color: #8a9a97; font-size: 8px; text-transform: uppercase; letter-spacing: .05em; }
 .context-grid strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; }
 .thread { flex: 1; padding: 22px; display: grid; align-content: start; gap: 16px; background: #f9fbfa; }
+.thread-load-state { min-height: 48px; padding: 10px 12px; display: flex; align-items: center; gap: 9px; border: 1px solid #dbe8e5; border-radius: 10px; color: #5d7470; background: white; font-size: 10px; }
+.thread-load-state svg { flex: 0 0 auto; color: var(--teal); }
+.thread-load-state .button { margin-left: auto; }
+.thread-load-error { border-color: #efd0cc; color: #87433e; background: #fff7f6; }
+.thread-load-error > svg { color: var(--red); }
 .message { max-width: 78%; display: grid; grid-template-columns: 32px minmax(0,1fr); gap: 9px; }
 .message-staff { margin-left: auto; grid-template-columns: minmax(0,1fr) 32px; }
 .message-staff .message-avatar { grid-column: 2; grid-row: 1; color: white; background: var(--teal); }

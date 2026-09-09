@@ -203,6 +203,8 @@ const SENSITIVE_TEXT_PATTERNS = [
     pattern: /\b(?:file|ftp|mailto|tel|blob|filesystem|about|chrome|wss?|ssh|smb|nfs|cid)\s*:/i,
     reason: "external or local URI schemes are not permitted",
   },
+  { pattern: /\burl\s*\(/i, reason: "CSS URL functions are not permitted" },
+  { pattern: /@import\b/i, reason: "CSS imports are not permitted" },
   { pattern: /<[^>]+>/, reason: "HTML is not permitted" },
   { pattern: /heygen/i, reason: "renderer/provider details are not permitted" },
   {
@@ -716,36 +718,196 @@ function parseWebVttTimestamp(value: string): number | null {
   return (((hours * 60) + minutes) * 60 + seconds) * 1000 + milliseconds;
 }
 
+function isWebVttPercentage(value: string): boolean {
+  return /^\d+(?:\.\d+)?%$/.test(value) && Number(value.slice(0, -1)) <= 100;
+}
+
+function isWebVttAnchor(value: string): boolean {
+  const parts = value.split(",");
+  return parts.length === 2 && parts.every(isWebVttPercentage);
+}
+
+function assertWebVttRegion(
+  lines: readonly string[],
+  regionIds: Set<string>,
+  path: string,
+): void {
+  const settings = lines.slice(1).flatMap((line) => line.split(/[ \t]+/)).filter(Boolean);
+  const names = new Set<string>();
+  let regionId: string | null = null;
+
+  for (const setting of settings) {
+    const separator = setting.indexOf(":");
+    const name = separator < 0 ? "" : setting.slice(0, separator);
+    const value = separator < 0 ? "" : setting.slice(separator + 1);
+    if (!name || !value || names.has(name)) {
+      fail(path, "WEBVTT REGION settings must be unique and well formed");
+    }
+    names.add(name);
+
+    const valid =
+      (name === "id" && !/[\t\n\f\r ]/.test(value)) ||
+      (name === "width" && isWebVttPercentage(value)) ||
+      (name === "lines" && /^\d+$/.test(value)) ||
+      ((name === "regionanchor" || name === "viewportanchor") && isWebVttAnchor(value)) ||
+      (name === "scroll" && value === "up");
+    if (!valid) fail(path, "WEBVTT REGION settings must be unique and well formed");
+    if (name === "id") regionId = value;
+  }
+
+  if (!regionId || regionIds.has(regionId)) {
+    fail(path, "WEBVTT REGION blocks require a unique non-empty id");
+  }
+  regionIds.add(regionId);
+}
+
+function assertWebVttCueSettings(value: string, regionIds: ReadonlySet<string>, path: string): void {
+  if (!value) return;
+  const names = new Set<string>();
+  for (const setting of value.split(/[ \t]+/).filter(Boolean)) {
+    const separator = setting.indexOf(":");
+    const name = separator < 0 ? "" : setting.slice(0, separator);
+    const settingValue = separator < 0 ? "" : setting.slice(separator + 1);
+    if (!name || !settingValue || names.has(name)) {
+      fail(path, "WEBVTT cue settings must be unique and well formed");
+    }
+    names.add(name);
+
+    const lineParts = settingValue.split(",");
+    const validLine =
+      (isWebVttPercentage(lineParts[0] ?? "") || /^-?\d+$/.test(lineParts[0] ?? "")) &&
+      (lineParts.length === 1 ||
+        (lineParts.length === 2 && ["start", "center", "end"].includes(lineParts[1] ?? "")));
+    const positionParts = settingValue.split(",");
+    const validPosition =
+      isWebVttPercentage(positionParts[0] ?? "") &&
+      (positionParts.length === 1 ||
+        (positionParts.length === 2 &&
+          ["line-left", "center", "line-right"].includes(positionParts[1] ?? "")));
+    const valid =
+      (name === "vertical" && ["rl", "lr"].includes(settingValue)) ||
+      (name === "line" && validLine) ||
+      (name === "position" && validPosition) ||
+      (name === "size" && isWebVttPercentage(settingValue)) ||
+      (name === "align" && ["start", "center", "end", "left", "right"].includes(settingValue)) ||
+      (name === "region" && regionIds.has(settingValue));
+    if (!valid) fail(path, "WEBVTT cue settings must be unique and well formed");
+  }
+}
+
+function assertWebVttStyle(lines: readonly string[], path: string): void {
+  const css = lines.slice(1).join("\n");
+  const hasForbiddenControl = Array.from(css).some((character) => {
+    const code = character.charCodeAt(0);
+    return code <= 0x08 || code === 0x0b || code === 0x0c || (code >= 0x0e && code <= 0x1f) || code === 0x7f;
+  });
+  if (
+    /[\\@]/.test(css) ||
+    /\/\*|\*\//.test(css) ||
+    hasForbiddenControl ||
+    /\b(?:image|image-set|cross-fade)\s*\(/i.test(css)
+  ) {
+    fail(path, "WEBVTT STYLE blocks cannot contain escaped or external-resource CSS");
+  }
+}
+
 function assertWebVtt(value: string, durationMs: number, path: string): void {
-  if (!value.startsWith("WEBVTT\n") && !value.startsWith("WEBVTT\r\n")) {
+  const normalized = value
+    .replace(/^\uFEFF/, "")
+    .replaceAll("\r\n", "\n")
+    .replaceAll("\r", "\n");
+  const headerEnd = normalized.indexOf("\n\n");
+  if (headerEnd < 0) {
+    fail(path, "must separate the WEBVTT header from cues with a blank line");
+  }
+  const headerLines = normalized.slice(0, headerEnd).split("\n");
+  const header = headerLines[0] ?? "";
+  if (!/^WEBVTT(?:[ \t][^\n]*)?$/.test(header) || header.includes("-->")) {
     fail(path, "must begin with a WEBVTT header");
   }
 
-  const blocks = value.replaceAll("\r\n", "\n").split(/\n{2,}/).slice(1);
+  const metadataNames = new Set<string>();
+  for (const line of headerLines.slice(1)) {
+    const timestampMap = /^X-TIMESTAMP-MAP=LOCAL:([^,]+),MPEGTS:(\d+)$/.exec(line);
+    const mpegTimestamp = Number(timestampMap?.[2]);
+    if (
+      !timestampMap ||
+      metadataNames.has("X-TIMESTAMP-MAP") ||
+      parseWebVttTimestamp(timestampMap[1] ?? "") === null ||
+      !Number.isSafeInteger(mpegTimestamp) ||
+      mpegTimestamp < 0 ||
+      mpegTimestamp > 0x1ffffffff
+    ) {
+      fail(path, "contains unsupported or malformed WEBVTT header metadata");
+    }
+    metadataNames.add("X-TIMESTAMP-MAP");
+  }
+
+  const blocks = normalized
+    .slice(headerEnd + 2)
+    .split(/\n{2,}/)
+    .filter((block) => block.trim().length > 0);
   let cueCount = 0;
+  let seenCue = false;
+  let previousStart = -1;
+  const cueIds = new Set<string>();
+  const regionIds = new Set<string>();
   for (const block of blocks) {
     const lines = block.split("\n");
-    if (/^(?:NOTE|STYLE|REGION)(?:\s|$)/.test(lines[0] ?? "")) continue;
+    const firstLine = lines[0] ?? "";
+    const specialBlock = /^(NOTE|STYLE|REGION)(?:[ \t]|$)/.exec(firstLine);
+    if (specialBlock) {
+      const kind = specialBlock[1];
+      if (lines.some((line) => line.includes("-->"))) {
+        fail(path, "WEBVTT metadata blocks cannot contain cue timing arrows");
+      }
+      if (kind === "NOTE") continue;
+      if (!new RegExp(`^${kind}[ \\t]*$`).test(firstLine) || seenCue) {
+        fail(path, `WEBVTT ${kind} blocks must be well formed and precede every cue`);
+      }
+      if (kind === "REGION") assertWebVttRegion(lines, regionIds, path);
+      if (kind === "STYLE") assertWebVttStyle(lines, path);
+      continue;
+    }
     const timingIndex = lines.findIndex((line) => line.includes("-->"));
-    if (timingIndex < 0 || timingIndex > 1) continue;
-    const timing = /^([^\s]+)\s+-->\s+([^\s]+)(?:\s+.*)?$/.exec(lines[timingIndex] ?? "");
-    if (!timing) {
+    if (
+      timingIndex < 0 ||
+      timingIndex > 1 ||
+      (timingIndex === 1 && (lines[0] ?? "").length === 0)
+    ) {
+      fail(path, "must contain only usable timed WebVTT cues within the media duration");
+    }
+    const timingLine = lines[timingIndex] ?? "";
+    const arrowCount = timingLine.split("-->").length - 1;
+    const timing = /^(\S+)[ \t]+-->[ \t]+(\S+)(?:[ \t]+(.*))?$/.exec(timingLine);
+    if (!timing || arrowCount !== 1) {
       fail(path, "must contain only usable timed WebVTT cues within the media duration");
     }
     const start = parseWebVttTimestamp(timing[1] ?? "");
     const end = parseWebVttTimestamp(timing[2] ?? "");
-    const hasPayload = lines.slice(timingIndex + 1).some((line) => line.trim().length > 0);
+    const cueId = timingIndex === 1 ? lines[0]! : null;
+    if (cueId && cueIds.has(cueId)) {
+      fail(path, "WEBVTT cue identifiers must be unique");
+    }
+    if (cueId) cueIds.add(cueId);
+    assertWebVttCueSettings(timing[3] ?? "", regionIds, path);
+    const payload = lines.slice(timingIndex + 1);
+    const hasPayload = payload.some((line) => line.trim().length > 0);
     if (
       start === null ||
       end === null ||
       end <= start ||
+      start < previousStart ||
       start >= durationMs ||
-      end > durationMs + 1000 ||
+      end > durationMs ||
+      payload.some((line) => line.includes("-->")) ||
       !hasPayload
     ) {
       fail(path, "must contain only usable timed WebVTT cues within the media duration");
     }
     cueCount += 1;
+    seenCue = true;
+    previousStart = start;
   }
   if (cueCount === 0) {
     fail(path, "must contain at least one usable timed WebVTT cue within the media duration");
@@ -753,18 +915,41 @@ function assertWebVtt(value: string, durationMs: number, path: string): void {
 }
 
 function looksLikeMp4(bytes: Uint8Array): boolean {
-  const limit = Math.min(bytes.byteLength - 3, 32);
-  for (let index = 4; index < limit; index += 1) {
-    if (
-      bytes[index] === 0x66 &&
-      bytes[index + 1] === 0x74 &&
-      bytes[index + 2] === 0x79 &&
-      bytes[index + 3] === 0x70
-    ) {
-      return true;
-    }
+  if (bytes.byteLength < 16) return false;
+  const boxSize = (
+    (bytes[0]! * 0x1000000) +
+    (bytes[1]! << 16) +
+    (bytes[2]! << 8) +
+    bytes[3]!
+  );
+  if (
+    boxSize < 16 ||
+    boxSize > bytes.byteLength ||
+    (boxSize - 16) % 4 !== 0 ||
+    bytes[4] !== 0x66 ||
+    bytes[5] !== 0x74 ||
+    bytes[6] !== 0x79 ||
+    bytes[7] !== 0x70
+  ) {
+    return false;
   }
-  return false;
+  const brandAt = (offset: number): string | null => {
+    const brandBytes = Array.from(bytes.slice(offset, offset + 4));
+    if (brandBytes.length !== 4 || brandBytes.some((byte) => byte < 0x20 || byte > 0x7e)) {
+      return null;
+    }
+    return String.fromCharCode(...brandBytes);
+  };
+  const supportedMajorBrands = new Set([
+    "isom", "iso2", "iso3", "iso4", "iso5", "iso6",
+    "mp41", "mp42", "avc1", "M4V ", "MSNV", "dash", "cmfc", "cmfv",
+  ]);
+  const majorBrand = brandAt(8);
+  if (!majorBrand || !supportedMajorBrands.has(majorBrand)) return false;
+  for (let offset = 16; offset < boxSize; offset += 4) {
+    if (!brandAt(offset)) return false;
+  }
+  return true;
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {

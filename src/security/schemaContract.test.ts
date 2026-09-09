@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const schema = readFileSync(new URL("../../supabase/schema.sql", import.meta.url), "utf8");
@@ -31,9 +32,22 @@ const staffMfaMigration = readFileSync(
   "utf8",
 );
 const caseIntakeSafetyMigration = readFileSync(
-  new URL("../../supabase/migrations/20260907203511_gate_case_intake_and_add_idempotency.sql", import.meta.url),
+  new URL("../../supabase/migrations/20260907222641_gate_case_intake_and_add_idempotency.sql", import.meta.url),
   "utf8",
 );
+const actorMembershipsMigration = readFileSync(
+  new URL("../../supabase/migrations/20260908004000_return_all_actor_memberships.sql", import.meta.url),
+  "utf8",
+);
+const safeAssigneesMigration = readFileSync(
+  new URL("../../supabase/migrations/20260908004500_restrict_case_assignees_to_usable_staff.sql", import.meta.url),
+  "utf8",
+);
+const productionRollout = readFileSync(
+  new URL("../../docs/PRODUCTION_ROLLOUT.md", import.meta.url),
+  "utf8",
+);
+const migrationFilenames = readdirSync(new URL("../../supabase/migrations", import.meta.url));
 
 const exposedTables = [
   "products",
@@ -170,6 +184,42 @@ describe("Support Hub schema contract", () => {
     expect(caseIntakeSafetyMigration).toContain("revoke all on table private.case_intake_settings from public, anon, authenticated;");
     expect(schema).toContain("alter table private.case_intake_settings enable row level security;");
     expect(schema).toContain("revoke all on function private.is_case_intake_enabled(uuid, uuid) from public, anon, authenticated;");
+  });
+
+  it("keeps the applied case-intake migration version aligned with production history", () => {
+    expect(migrationFilenames.filter((name) => name.endsWith("gate_case_intake_and_add_idempotency.sql")))
+      .toEqual(["20260907222641_gate_case_intake_and_add_idempotency.sql"]);
+    expect(productionRollout).toContain("20260907222641_gate_case_intake_and_add_idempotency.sql");
+    expect(productionRollout).not.toContain("20260907203511_gate_case_intake_and_add_idempotency.sql");
+    expect(Buffer.byteLength(caseIntakeSafetyMigration)).toBe(27_272);
+    expect(createHash("sha256").update(caseIntakeSafetyMigration).digest("hex"))
+      .toBe("a05602a56317c0b549d65eb39d26f455eb121aee86104bfa040be3ae024a3511");
+  });
+
+  it("returns every active actor membership as an exact tenant/product pair", () => {
+    for (const source of [actorMembershipsMigration, schema]) {
+      const actorContext = source.match(
+        /create or replace function hub\.get_support_actor_context\(\)[\s\S]*?\$\$;/,
+      )?.[0] ?? "";
+      expect(actorContext).toContain("jsonb_agg(");
+      expect(actorContext).toContain("'memberships', v_memberships");
+      expect(actorContext).toContain("entitlement.product_id = membership.product_id");
+      expect(actorContext).toContain("entitlement.status = 'active'");
+      expect(actorContext).not.toContain("limit 1");
+    }
+  });
+
+  it("allows assignment only to usable, provisioned staff principals", () => {
+    for (const source of [safeAssigneesMigration, schema]) {
+      const updateCase = source.match(
+        /create or replace function hub\.update_support_case\([\s\S]*?\$\$;/,
+      )?.[0] ?? "";
+      expect(updateCase).toContain("join auth.users assignee");
+      expect(updateCase).toContain("join hub.profiles assignee_profile");
+      expect(updateCase).toContain("assignee.deleted_at is null");
+      expect(updateCase).toContain("assignee.banned_until is null or assignee.banned_until <= now()");
+      expect(updateCase).toContain("not coalesce(assignee.is_anonymous, false)");
+    }
   });
 
   it("revokes authorization immediately for unusable Auth principals", () => {

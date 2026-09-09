@@ -64,8 +64,38 @@ describe("mutation request keys", () => {
     expect(new Set([first.requestKey, typedChange.requestKey, whitespaceChange.requestKey]).size).toBe(3);
   });
 
+  it("distinguishes negative zero from zero", () => {
+    const createRequestKey = vi.fn()
+      .mockReturnValueOnce("10000000-0000-4000-8000-000000000001")
+      .mockReturnValueOnce("10000000-0000-4000-8000-000000000002");
+    const negativeZero = prepareMutationRequest(null, ["numeric", -0], createRequestKey);
+    const zero = prepareMutationRequest(negativeZero, ["numeric", 0], createRequestKey);
+
+    expect(zero).not.toBe(negativeZero);
+    expect(zero.requestKey).not.toBe(negativeZero.requestKey);
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    "rejects non-finite numeric payload part %s",
+    (value) => {
+      expect(() => prepareMutationRequest(null, ["numeric", value])).toThrow(
+        /numbers must be finite/,
+      );
+    },
+  );
+
   it("remounts the reply form when the selected case changes", () => {
     expect(appSource).toMatch(/<CaseDetail\s+key=\{selected\.id\}\s+supportCase=\{selected\}/);
     expect(appSource).toContain("thread={thread.caseId === selected.id ? thread.messages : []}");
+  });
+
+  it("catches case-thread read failures and exposes a read-only retry", () => {
+    expect(appSource).toContain("readCaseThread(repository, selectedId)");
+    expect(appSource).toContain("failCaseThreadLoad(beginCaseThreadLoad(current, result.caseId)");
+    expect(appSource).toContain('role="alert"');
+    expect(appSource).toMatch(/onRetryThread=\{\(\) => \{[\s\S]*?beginCaseThreadLoad[\s\S]*?setRefresh/);
+    expect(appSource).toMatch(/onChanged=\{\(\) => \{[\s\S]*?beginCaseThreadLoad[\s\S]*?reloadCases/);
+    expect(appSource).toContain("requestId !== caseListRequest.current");
+    expect(appSource).toContain("setSelectedId((currentId) => reconcileCaseSelection");
   });
 });

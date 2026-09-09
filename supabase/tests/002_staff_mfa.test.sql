@@ -1,6 +1,6 @@
 begin;
 
-select plan(17);
+select plan(18);
 
 select has_function(
   'private',
@@ -38,16 +38,44 @@ select ok(
   'authenticated users cannot invoke the private factor-enforcement helper directly'
 );
 
-insert into auth.users (id, email, raw_user_meta_data, created_at, updated_at)
+insert into auth.users (
+  instance_id,
+  id,
+  aud,
+  role,
+  email,
+  encrypted_password,
+  email_confirmed_at,
+  raw_app_meta_data,
+  raw_user_meta_data,
+  created_at,
+  updated_at,
+  confirmation_token,
+  recovery_token,
+  email_change_token_new,
+  email_change,
+  email_change_token_current,
+  reauthentication_token,
+  is_sso_user,
+  is_anonymous
+)
 values (
+  '00000000-0000-0000-0000-000000000000',
   '90000000-0000-4000-8000-000000000001',
+  'authenticated',
+  'authenticated',
   'mfa-helper@test.invalid',
+  extensions.crypt('test-only', extensions.gen_salt('bf')),
+  now(),
+  '{"provider":"email","providers":["email"]}'::jsonb,
   '{"display_name":"MFA Helper Test"}'::jsonb,
   now(),
-  now()
+  now(),
+  '', '', '', '', '', '', false, false
 );
 
 set local request.jwt.claims = '{"sub":"90000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}';
+select is(private.current_user_is_usable(), true, 'the production-shaped Auth fixture is usable');
 select is(private.current_session_is_aal2(), false, 'AAL1 fails the assurance check');
 
 set local request.jwt.claims = '{"sub":"90000000-0000-4000-8000-000000000001","role":"authenticated"}';

@@ -12,6 +12,9 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      SUPPORT_HUB_ALLOW_DEMO_BUILD: "true"
+      VITE_DEMO_MODE: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,6 +22,18 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Verify connected builds fail closed without backend configuration
+        run: |
+          if env -u VITE_SUPABASE_URL -u VITE_SUPABASE_PUBLISHABLE_KEY VITE_DEMO_MODE=false npm run build; then
+            echo "Connected build unexpectedly succeeded without Supabase configuration"
+            exit 1
+          fi
+      - name: Verify production builds reject demo mode
+        run: |
+          if env -u SUPPORT_HUB_ALLOW_DEMO_BUILD VITE_DEMO_MODE=true npm run build; then
+            echo "Production build unexpectedly accepted demo mode"
+            exit 1
+          fi
       - run: npm run check
 
   database:

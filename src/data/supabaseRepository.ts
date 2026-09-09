@@ -1,5 +1,6 @@
 import type {
   ActorContext,
+  ActorMembership,
   CaseMessage,
   ContentItem,
   CreateCaseInput,
@@ -22,6 +23,10 @@ const asObject = (value: unknown): JsonObject => {
 
 const asString = (value: unknown, field: string): string => {
   if (typeof value !== "string") throw new Error(`Missing ${field} in Support Hub response.`);
+  return value;
+};
+const asBoolean = (value: unknown, field: string): boolean => {
+  if (typeof value !== "boolean") throw new Error(`Missing ${field} in Support Hub response.`);
   return value;
 };
 
@@ -51,14 +56,33 @@ const client = () => {
 
 const hub = () => client().schema("hub");
 
+function mapActorMembership(value: unknown): ActorMembership {
+  const row = asObject(value);
+  const role = asString(row.role, "membership role");
+  if (role !== "customer" && role !== "tenant_admin") {
+    throw new Error("Invalid membership role in Support Hub response.");
+  }
+  return {
+    tenantId: asString(row.tenant_id, "membership tenant id"),
+    tenantName: asString(row.tenant_name, "membership tenant name"),
+    productId: asString(row.product_id, "membership product id"),
+    role,
+    intakeEnabled: asBoolean(row.intake_enabled, "membership intake state"),
+  };
+}
+
 function mapActor(value: unknown): ActorContext {
   const row = asObject(value);
+  if (!Array.isArray(row.memberships)) {
+    throw new Error("Missing actor memberships in Support Hub response.");
+  }
   return {
     id: asString(row.id, "actor id"),
     name: asString(row.name, "actor name"),
     role: asString(row.role, "actor role") as ActorContext["role"],
     tenantId: nullableString(row.tenant_id),
     tenantName: nullableString(row.tenant_name),
+    memberships: row.memberships.map(mapActorMembership),
   };
 }
 
