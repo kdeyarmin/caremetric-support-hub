@@ -58,7 +58,7 @@ import { LearningCatalog } from "./learning/Catalog";
 import { safeLearningPath } from "./learning/model";
 import { config } from "./lib/config";
 import { supabase } from "./lib/supabase";
-import { careBaseCourseLaunchUrl } from "./security/careBaseCourseLaunch";
+import { courseLaunchUrl } from "./security/courseLaunch";
 import { reconcileCaseSelection } from "./security/caseListState";
 import { caseTargetByKey, eligibleCaseTargets, preferredCaseTarget } from "./security/caseTargets";
 import {
@@ -123,9 +123,6 @@ function supportContactDisplay(contact: SupportContact): string {
   return contact.value.replace(/^https?:\/\//, "").replace(/\/$/, "");
 }
 
-function courseLaunchUrl(item: ContentItem): string | null {
-  return careBaseCourseLaunchUrl(item.courseLaunchPath, config.pennTrainBaseUrl);
-}
 
 function routeMatches(pattern: string | null, route: string): boolean {
   if (!pattern || !route) return !pattern;
@@ -1174,14 +1171,16 @@ function ContextualHelpPage({ data }: { data: HubData }) {
           <div className="panel-heading"><div><h2>Recommended guidance</h2><p>{results.length ? `${results.length} relevant item${results.length === 1 ? "" : "s"} from the governed library` : "No matching content has been published yet"}</p></div><NavLink to="/knowledge" className="text-link">Search everything <ArrowRight size={15} /></NavLink></div>
           {results.length ? results.map((item) => {
             const Icon = item.kind === "article" ? FileText : item.kind === "video" ? MonitorPlay : GraduationCap;
-            const launchUrl = item.kind === "course" ? courseLaunchUrl(item) : null;
+            const launchUrl = courseLaunchUrl(item, config.pennTrainBaseUrl);
             return (
               <article className="contextual-result" key={item.id}>
                 <span><Icon size={19} /></span>
                 <div>
                   <small>{item.kind} · Rev {item.revision}</small><h3>{item.title}</h3><p>{item.summary}</p>
                   {item.body && <details><summary>Read answer</summary><div>{item.body}</div></details>}
-                  {launchUrl && <a className="text-link contextual-action" href={launchUrl} target="_blank" rel="noreferrer">Open course in PennTrain <ExternalLink size={14} /></a>}
+                  {launchUrl && (item.sourceSystem === "support_hub"
+                    ? <NavLink className="text-link contextual-action" to={launchUrl}>Open course <ArrowRight size={14} /></NavLink>
+                    : <a className="text-link contextual-action" href={launchUrl} target="_blank" rel="noreferrer">Open existing course <ExternalLink size={14} /></a>)}
                   {item.kind === "course" && !launchUrl && <span className="contextual-action action-unavailable"><LockKeyhole size={13} /> Course launch not connected</span>}
                   {item.kind === "video" && <span className="contextual-action action-unavailable"><Clock3 size={13} /> Video playback available after approval</span>}
                 </div>
