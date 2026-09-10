@@ -2,13 +2,17 @@ import react from "@vitejs/plugin-react";
 import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
 import { validateBuildRuntimeConfig } from "./src/lib/runtimeConfig.ts";
+import { verifyBackendContract } from "./src/lib/backendContract.ts";
 
-export default defineConfig(({ command, mode }) => {
+export default defineConfig(async ({ command, mode }) => {
   if (command === "build") {
-    validateBuildRuntimeConfig(
+    const config = validateBuildRuntimeConfig(
       loadEnv(mode, process.cwd(), "VITE_"),
       process.env.SUPPORT_HUB_ALLOW_DEMO_BUILD === "true",
     );
+    if (!config.demoMode) {
+      await verifyBackendContract(config.supabaseUrl, config.supabasePublishableKey);
+    }
   }
 
   return {

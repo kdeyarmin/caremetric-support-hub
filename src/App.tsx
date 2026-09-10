@@ -1097,7 +1097,7 @@ function ContentLibraryPage({ data }: { data: HubData }) {
   const courses = data.content.filter((item) => item.kind === "course");
   return (
     <>
-      <PageHeading eyebrow="Shared learning library" title="Create once. Publish everywhere." description="HeyGen renders the approved script; the Support Hub owns the catalog and published asset; PennTrain continues to own assignments, tests, and certificates." action={<button className="button button-primary" disabled title="Enabled after media credentials are connected"><Plus size={17} /> New content</button>} />
+      <PageHeading eyebrow="Shared learning library" title="One catalog. Shared across CareMetric." description="Browse approved courses here. Course creation, lessons, quizzes, and certificates are managed in CareBase. Its administrator console currently requires a separate sign-in." action={data.actor.role === "platform_admin" ? <a className="button button-primary" href="https://cmcarebase.com/admin/courses" target="_blank" rel="noreferrer">Manage courses in CareBase <ExternalLink size={17} /></a> : undefined} />
       <section className="pipeline panel">
         <div className="pipeline-step complete"><span><Check /></span><div><strong>Approved source</strong><small>Support Hub revision</small></div></div><ChevronRight />
         <div className="pipeline-step active"><span><Video /></span><div><strong>HeyGen render</strong><small>Server-side job</small></div></div><ChevronRight />
@@ -1116,7 +1116,7 @@ function ContentLibraryPage({ data }: { data: HubData }) {
           ))}
         </section>
         <section className="panel content-section">
-          <div className="panel-heading"><div><h2>PennTrain course catalog</h2><p>Searchable metadata; learning records remain in PennTrain</p></div><span className="count-pill">{courses.length}</span></div>
+          <div className="panel-heading"><div><h2>CareBase course catalog</h2><p>Searchable metadata; learning records remain in CareBase</p></div><span className="count-pill">{courses.length}</span></div>
           {courses.map((item) => {
             const launchUrl = courseLaunchUrl(item);
             return (
@@ -1124,14 +1124,14 @@ function ContentLibraryPage({ data }: { data: HubData }) {
                 <span className="course-icon"><GraduationCap /></span>
                 <div><span className="content-key">{item.contentKey}</span><h3>{item.title}</h3><p>{item.summary}</p><div className="media-meta"><span><UsersRound size={14} /> {item.audience.join(", ")}</span><span><Boxes size={14} /> {item.productIds.length} products</span></div></div>
                 {launchUrl
-                  ? <a className="button button-secondary button-small" href={launchUrl} target="_blank" rel="noreferrer">Open in PennTrain <ExternalLink size={14} /></a>
-                  : <button className="button button-secondary button-small" disabled title="PennTrain launch is enabled after its verified production URL is configured">PennTrain not connected <LockKeyhole size={14} /></button>}
+                  ? <a className="button button-secondary button-small" href={launchUrl} target="_blank" rel="noreferrer">Open in CareBase <ExternalLink size={14} /></a>
+                  : <button className="button button-secondary button-small" disabled title="This course has no verified CareBase launch path">Course launch unavailable <LockKeyhole size={14} /></button>}
               </article>
             );
           })}
         </section>
       </div>
-      <section className="ownership-boundary panel"><div><strong>Content ownership boundary</strong><p>No HeyGen URL is embedded in an app. Products resolve a stable Support Hub content key, while final media is rehosted and can be rolled back independently.</p></div><span><LockKeyhole /> Provider-independent</span></section>
+      <section className="ownership-boundary panel"><div><strong>Content ownership boundary</strong><p>The Hub shares approved catalog metadata. Private videos play through CareBase; media ingestion and publishing from this Hub are not connected yet.</p></div><span><LockKeyhole /> Controlled access</span></section>
     </>
   );
 }
@@ -1311,7 +1311,7 @@ function ContextualHelpPage({ data }: { data: HubData }) {
                 <div>
                   <small>{item.kind} · Rev {item.revision}</small><h3>{item.title}</h3><p>{item.summary}</p>
                   {item.body && <details><summary>Read answer</summary><div>{item.body}</div></details>}
-                  {launchUrl && <a className="text-link contextual-action" href={launchUrl} target="_blank" rel="noreferrer">Open course in PennTrain <ExternalLink size={14} /></a>}
+                  {launchUrl && <a className="text-link contextual-action" href={launchUrl} target="_blank" rel="noreferrer">Open course in CareBase <ExternalLink size={14} /></a>}
                   {item.kind === "course" && !launchUrl && <span className="contextual-action action-unavailable"><LockKeyhole size={13} /> Course launch not connected</span>}
                   {item.kind === "video" && <span className="contextual-action action-unavailable"><Clock3 size={13} /> Video playback available after approval</span>}
                 </div>
