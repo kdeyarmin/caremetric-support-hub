@@ -17,11 +17,11 @@ npm ci
 npm run pack:sdk
 ```
 
-This produces `caremetric-help-sdk-0.3.0.tgz`. Place that versioned artifact in
+This produces `caremetric-help-sdk-0.4.0.tgz`. Place that versioned artifact in
 the consuming application's private source tree and install it:
 
 ```bash
-npm install ./vendor/caremetric-help-sdk-0.3.0.tgz
+npm install ./vendor/caremetric-help-sdk-0.4.0.tgz
 ```
 
 Keeping the tarball versioned with each private application makes builds
@@ -75,6 +75,10 @@ buildHelpUrl({
 ```
 
 ## Open the shared learning library
+
+Version 0.4 also exposes `buildCourseEditorUrl()` for `/library/courses/new`
+and `buildMyLearningUrl()` for `/learn/my`. These links carry no identity or
+source application records. The Hub authenticates and authorizes each user.
 
 Use the same SDK to link every application to the central course, tutorial, and
 video library. Omit `product` to show all shared learning content, or supply one
