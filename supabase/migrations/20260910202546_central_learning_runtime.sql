@@ -246,27 +246,36 @@ $$;
 
 create function hub.save_learning_draft(p_item_id uuid, p_document jsonb, p_expected_version integer)
 returns jsonb language plpgsql security definer set search_path = '' as $$
-declare editor uuid; item_id uuid; course private.learning_courses%rowtype;
+declare editor uuid; v_item_id uuid; course private.learning_courses%rowtype;
 begin
   editor := private.require_learning_editor();
   perform private.validate_learning_document(p_document);
-  if p_item_id is null then
+  if p_item_id is null or p_expected_version = 0 then
     if p_expected_version is distinct from 0 then raise exception 'Invalid new-draft version.' using errcode = '22023'; end if;
-    item_id := gen_random_uuid();
+    v_item_id := coalesce(p_item_id,gen_random_uuid());
     insert into hub.content_items(id,content_key,kind,access_level,created_by)
-      values(item_id,'hub.course.' || item_id::text,'course',(p_document->>'accessLevel')::hub.access_level,editor);
-    insert into private.learning_courses(item_id,draft,updated_by) values(item_id,p_document,editor);
+      values(v_item_id,'hub.course.' || v_item_id::text,'course',(p_document->>'accessLevel')::hub.access_level,editor)
+      on conflict(id) do nothing;
+    if not exists(select 1 from hub.content_items i where i.id=v_item_id and i.created_by=editor and i.kind='course') then
+      raise exception 'Course creation key is unavailable.' using errcode='40001';
+    end if;
+    insert into private.learning_courses(item_id,draft,updated_by) values(v_item_id,p_document,editor)
+      on conflict on constraint learning_courses_pkey do nothing;
+    if not exists(select 1 from private.learning_courses c where c.item_id=v_item_id
+      and c.draft_version=1 and c.draft=p_document) then
+      raise exception 'This course was already saved. Reload it before editing.' using errcode='40001';
+    end if;
   else
     select * into course from private.learning_courses c where c.item_id = p_item_id for update;
     if not found then raise exception 'Course draft unavailable.' using errcode = 'P0002'; end if;
     if course.draft_version is distinct from p_expected_version then
       raise exception 'This draft changed. Reload it before saving.' using errcode = '40001';
     end if;
-    item_id := p_item_id;
+    v_item_id := p_item_id;
     update private.learning_courses c set draft = p_document, draft_version = c.draft_version + 1,
       updated_by = editor, updated_at = now() where c.item_id = p_item_id;
   end if;
-  return hub.get_learning_draft(item_id);
+  return hub.get_learning_draft(v_item_id);
 end;
 $$;
 

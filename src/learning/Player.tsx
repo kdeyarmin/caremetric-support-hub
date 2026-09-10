@@ -54,9 +54,9 @@ function Lesson({ course, unit, onRefresh, onNext }: { course: Course; unit: Lea
     if (pending.current?.serialized !== serialized) pending.current = { serialized, key: crypto.randomUUID() };
     try {
       const result = await learningApi.submit(course.enrollmentId!, unit.id, answers, attested, pending.current.key);
-      pending.current = null;
       setMessage(result.score === null ? "Lesson completed." : `${result.score}% — ${result.passed ? "passed" : "not passed"}.`);
       await onRefresh();
+      pending.current = null;
     } catch (caught) { setError(errorMessage(caught)); }
     finally { setBusy(false); }
   }

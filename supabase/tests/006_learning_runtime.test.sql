@@ -20,7 +20,8 @@ set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000001","rol
 select throws_ok($$select hub.save_learning_draft(null,(select doc from learning_fixture),0)$$,'42501','Sign in with the required verification to continue.','authoring requires MFA');
 set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}';
 update learning_fixture set item_id=(hub.save_learning_draft(null,doc,0)->>'itemId')::uuid;
-select throws_ok($$select hub.save_learning_draft(item_id,doc,0) from learning_fixture$$,'40001','This draft changed. Reload it before saving.','stale saves do not overwrite revisions');
+select is((hub.save_learning_draft((select item_id from learning_fixture),(select doc from learning_fixture),0)->>'itemId')::uuid,(select item_id from learning_fixture),'a retry with the same creation id returns the existing draft');
+select throws_ok($$select hub.save_learning_draft(item_id,doc,-1) from learning_fixture$$,'40001','This draft changed. Reload it before saving.','stale saves do not overwrite revisions');
 select throws_ok($$select hub.publish_learning_course(item_id,1,false) from learning_fixture$$,'22023','Review the course for accuracy and confirm it contains no private data before publishing.','publication requires review');
 select lives_ok($$select hub.publish_learning_course(item_id,1,true) from learning_fixture$$,'reviewed course publishes');
 select lives_ok($$select hub.publish_learning_course(item_id,1,true) from learning_fixture$$,'publishing retries are idempotent');

@@ -23,6 +23,7 @@ export function CourseEditor({ products }: { products: Product[] }) {
   const { itemId = "new" } = useParams();
   const navigate = useNavigate();
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [creationId] = useState(() => crypto.randomUUID());
   const [document, setDocument] = useState<DraftDocument>(() => newDocument(products.filter(p => p.status !== "retired").map(p => p.id)));
   const [allowed, setAllowed] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -51,7 +52,7 @@ export function CourseEditor({ products }: { products: Product[] }) {
     try {
       const parsed = draftDocumentSchema.safeParse(document);
       if (!parsed.success) throw new Error(parsed.error.issues.map(issue => `${issue.path.join(" → ")}: ${issue.message}`).join("; "));
-      const saved = await learningApi.save(draft?.itemId ?? null, parsed.data, draft?.draftVersion ?? 0);
+      const saved = await learningApi.save(draft?.itemId ?? creationId, parsed.data, draft?.draftVersion ?? 0);
       setDraft(saved); setDocument(saved.document); setDirty(false); setReviewed(false); setStatus("Draft saved.");
       if (itemId === "new") navigate(`/library/courses/${saved.itemId}`, { replace: true });
     } catch (caught) { setError(message(caught)); }
