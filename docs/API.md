@@ -29,9 +29,18 @@ Every command derives the actor from `auth.uid()`. No caller may set requester i
 
 ## Client launch contract
 
-`@caremetric/help-sdk` 0.3 provides `buildHelpUrl`/`openHelp` and `buildLearningUrl`/`openLearning`. Learning links use `/learn` and may include only one compile-time registered product slug. Help links may additionally include only caller-allowlisted static route/feature context and format-validated app version, locale, and environment. Both launchers require HTTPS, reject credentials and loopback destinations, and default to the permanent Railway Hub origin.
+`@caremetric/help-sdk` 0.4 provides `buildHelpUrl`/`openHelp`, `buildLearningUrl`/`openLearning`, `buildCourseEditorUrl`, and `buildMyLearningUrl`. Learning links use `/learn` and may include only one compile-time registered product slug. Authoring uses `/library/courses/new`; personal learning uses `/learn/my`. Help links may additionally include only caller-allowlisted static route/feature context and format-validated app version, locale, and environment. Launchers require HTTPS, reject credentials and loopback destinations, and default to the permanent Railway Hub origin.
 
-Course metadata never supplies an arbitrary destination. The web client reconstructs the launch only when the configured origin is exactly `https://cmcarebase.com` and the stored relative path is exactly `/app/courses` or `/app/courses/<uuid>`.
+Course metadata never supplies an arbitrary destination. Published Hub-owned courses open at `/learn/courses/<uuid>`, including contextual-help links and courses retaining legacy provenance. Courses awaiting migration launch only when the configured origin is exactly `https://cmcarebase.com` and the stored relative path is exactly `/app/courses` or `/app/courses/<uuid>`.
+
+## Central learning RPCs
+
+The staged [central learning runtime](CENTRAL_LEARNING.md) adds editor, import,
+publication, enrollment, grading, progress, certificate, and media RPCs in `hub`.
+Answer keys and learner state remain in private tables without browser table
+grants. Publication creates an immutable version; enrollment pins that version.
+Every mutation derives identity from the current usable Auth principal and
+checks the required permissions and MFA. Deploy the migration before the UI.
 
 ## Publication preview boundary
 

@@ -73,7 +73,17 @@ Every product integration must have:
 - An observable failure state.
 - A rollback that does not require changing the Support Hub database.
 
-## Public learning catalog
+## Central learning
+
+SDK 0.4.0 adds `buildCourseEditorUrl()` and `buildMyLearningUrl()` alongside
+`buildLearningUrl({ product })`. Course creation and delivery belong in the Hub.
+Publishing a migrated course switches catalog and contextual-help links to its
+Hub runtime without changing its catalog ID. The implementation and transfer
+requirements are in [CENTRAL_LEARNING.md](CENTRAL_LEARNING.md). Consuming apps
+must preserve historical access until identities, content, and records have
+been reconciled. No app should provision a new HeyGen key for this runtime.
+
+### Production catalog before central runtime deployment
 
 The production Hub publishes non-PHI course metadata at
 `https://support-hub-web-production.up.railway.app/learn`. Applications may

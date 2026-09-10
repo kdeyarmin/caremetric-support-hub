@@ -1,6 +1,17 @@
 # CareMetric Support Hub
 
-CareMetric Support Hub is the first-party support, knowledge, media, course-catalog, and product-contact platform for the CareMetric software portfolio. It is designed to replace duplicated help pages and disconnected ticket tables without introducing an outside help-desk vendor.
+CareMetric Support Hub is the first-party support, knowledge, media, learning, and product-contact platform for the CareMetric software portfolio. It is designed to replace duplicated help pages and disconnected ticket tables without introducing an outside help-desk vendor.
+
+## Central learning implementation
+
+Course creation and delivery now belong in the Hub for every CareMetric product.
+This branch implements authoring, publication, private video playback, quizzes,
+learner progress, and completion records with no HeyGen runtime dependency.
+SDK 0.4.0 includes catalog, course-editor, and My Learning links. See
+[the central learning contract and migration steps](docs/CENTRAL_LEARNING.md).
+This implementation is staged: the production inventory below predates the new
+learning migration. Media, identities, and legacy learning history still require
+verified transfer before consuming apps can complete cutover.
 
 ## Current implementation status
 
@@ -23,7 +34,7 @@ Version `0.1.0` now runs as the first production vertical slice:
 - Pull-request CI for both the application and a clean local Supabase migration/pgTAP stack.
 - A polished implementation preview that works without credentials. Demo mode is never a production data store.
 
-The private GitHub repository, isolated `CareMetric Support Hub` Supabase project (`xgauehtwksmnoqhgqegm`, `us-east-2`), and Railway deployment are provisioned. The live portal is `https://support-hub-web-production.up.railway.app`; direct `/help` and `/learn` links use production routing rather than localhost. Railway also has `help.caremetric.ai` attached; it will remain unavailable until the owner creates the required Name.com CNAME recorded in [docs/PRODUCTION_ROLLOUT.md](docs/PRODUCTION_ROLLOUT.md). The live database has the reviewed migrations in `supabase/migrations`, RLS enabled on every application table, and a Data API restricted to `hub`. Existing application databases remain independent; the CareBase catalog import reads only published platform metadata.
+The private GitHub repository, isolated `CareMetric Support Hub` Supabase project (`xgauehtwksmnoqhgqegm`, `us-east-2`), and Railway deployment are provisioned. The live portal is `https://support-hub-web-production.up.railway.app`; direct `/help` and `/learn` links use production routing rather than localhost. Railway also has `help.caremetric.ai` attached; it will remain unavailable until the owner creates the required Name.com CNAME recorded in [docs/PRODUCTION_ROLLOUT.md](docs/PRODUCTION_ROLLOUT.md). The previously deployed database migrations have RLS enabled on every application table and a Data API restricted to `hub`; the new central-learning migration has not been applied to production. Existing application databases remain independent; the deployed CareBase catalog import reads only published platform metadata.
 
 Owner-verified central routing is `(877) 521-2890` and `support@caremetric.ai`. `kdeyarmin@comcast.net` is the active platform administrator. The owner has confirmed that the applicable BAAs are signed; the remaining High Compliance controls still require operational verification before PHI-capable intake is enabled.
 
@@ -34,8 +45,8 @@ CareMetric owns the application, schema, workflows, case history, content revisi
 Infrastructure is replaceable:
 
 - Supabase supplies hosted Postgres, Auth, and private Storage.
-- HeyGen renders approved videos but is not the source of truth and never receives PHI.
-- CareBase executes courses, tests, assignments, and certificates; the Hub owns the cross-product searchable course catalog and permits launches only to the canonical `https://cmcarebase.com/app/courses` routes.
+- The Hub accepts reviewed videos with captions and transcripts; no video vendor is required for course delivery.
+- The Hub owns shared authoring and delivery. CareBase retains existing learning records during migration. A course published in the Hub opens at `/learn/courses/<uuid>`; courses awaiting transfer retain their validated CareBase launch.
 - Email and telephone providers deliver messages/calls but do not own case history.
 
 ## Architecture
@@ -48,8 +59,11 @@ flowchart TD
   SDK --> Hub
   Hub --> DB["Dedicated Supabase project"]
   Hub --> Content["Knowledge + media catalog"]
-  Content --> HeyGen["HeyGen render adapter"]
-  Content --> PennTrain["CareBase course catalog"]
+  Hub --> Learning["Course authoring + delivery"]
+  Learning --> DB
+  Learning --> Media["Private reviewed media"]
+  PennTrain["Legacy CareBase courses"] --> Import["Reviewed draft import"]
+  Import --> Learning
 ```
 
 The first deployment is a modular monolith. Services can be extracted only when scale, risk, or operational ownership justifies the additional failure modes.
