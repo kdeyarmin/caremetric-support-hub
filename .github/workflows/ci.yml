@@ -52,6 +52,8 @@ jobs:
         run: npm run supabase:start
       - name: Run pgTAP security contracts
         run: npm run supabase:test
+      - name: Check database security and performance advisors
+        run: npx supabase db advisors --local --type all --level warn --fail-on error
       - name: Stop isolated Supabase stack
         if: always()
         run: npm run supabase:stop -- --no-backup

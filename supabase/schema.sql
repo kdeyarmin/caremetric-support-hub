@@ -2541,8 +2541,10 @@ create table private.learning_enrollments (
   started_at timestamptz not null default now(),
   completed_at timestamptz,
   certificate_id uuid unique,
+  certificate_name text,
   unique (user_id, version_id),
-  check ((completed_at is null) = (certificate_id is null))
+  check ((completed_at is null) = (certificate_id is null)),
+  check ((completed_at is null) = (certificate_name is null))
 );
 create table private.learning_unit_progress (
   enrollment_id uuid not null references private.learning_enrollments(id),
@@ -2948,7 +2950,8 @@ begin
     where not exists(select 1 from private.learning_unit_progress p where p.enrollment_id=p_enrollment_id
       and p.unit_id=(u->>'id')::uuid and p.completed_at is not null);
   if pending=0 then
-    update private.learning_enrollments set completed_at=now(),certificate_id=gen_random_uuid()
+    update private.learning_enrollments set completed_at=now(),certificate_id=gen_random_uuid(),
+      certificate_name=(select display_name from hub.profiles where id=learner)
       where id=p_enrollment_id returning * into enrollment;
     insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata)
       values(learner,'learning.course.completed','learning_enrollment',p_enrollment_id,
@@ -2983,10 +2986,9 @@ declare learner uuid; result jsonb;
 begin
   learner := private.require_learning_user();
   select jsonb_build_object('certificateId',e.certificate_id,'enrollmentId',e.id,
-    'learnerName',p.display_name,'courseTitle',v.document->>'title','completedAt',e.completed_at,
+    'learnerName',e.certificate_name,'courseTitle',v.document->>'title','completedAt',e.completed_at,
     'durationMinutes',v.document->'durationMinutes','versionId',v.id)
     into result from private.learning_enrollments e join private.learning_versions v on v.id=e.version_id
-    join hub.profiles p on p.id=e.user_id
     where e.id=p_enrollment_id and e.user_id=learner and e.completed_at is not null;
   if result is null then raise exception 'Certificate unavailable.' using errcode='42501'; end if;
   return result;

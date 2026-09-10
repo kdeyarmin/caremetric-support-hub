@@ -46,6 +46,8 @@ select is(hub.list_my_learning(),'[]'::jsonb,'another learner cannot list privat
 set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}';
 select lives_ok($$select hub.submit_learning_unit(enrollment_id,'98100000-0000-4000-8000-000000000001','{}',true,gen_random_uuid()) from learning_fixture$$,'last lesson completes enrollment');
 select is(hub.get_learning_certificate((select enrollment_id from learning_fixture))->>'learnerName','Learner One','certificate uses authenticated learner identity');
+update hub.profiles set display_name='Renamed learner' where id='98000000-0000-4000-8000-000000000002';
+select is(hub.get_learning_certificate((select enrollment_id from learning_fixture))->>'learnerName','Learner One','later profile edits cannot rewrite certificate identity');
 set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}';
 select lives_ok($$select hub.save_learning_draft(item_id,jsonb_set(doc,'{title}','"Revision two"'),1) from learning_fixture$$,'author can revise course');
 select lives_ok($$select hub.publish_learning_course(item_id,2,true) from learning_fixture$$,'new publication is immutable');
