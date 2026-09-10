@@ -30,8 +30,6 @@ import {
   ShieldCheck,
   Sparkles,
   UserRound,
-  UsersRound,
-  Video,
   X,
   Zap,
 } from "lucide-react";
@@ -54,6 +52,10 @@ import {
   type SupportCase,
   type SupportContact,
 } from "./domain";
+import { CourseLibrary, CourseEditor } from "./learning/Editor";
+import { CoursePlayer, MyLearning, LearningCertificate } from "./learning/Player";
+import { LearningCatalog } from "./learning/Catalog";
+import { safeLearningPath } from "./learning/model";
 import { config } from "./lib/config";
 import { supabase } from "./lib/supabase";
 import { careBaseCourseLaunchUrl } from "./security/careBaseCourseLaunch";
@@ -148,7 +150,9 @@ function rememberPendingPortalPath(value = `${window.location.pathname}${window.
   if (value.length > 2048) return;
   try {
     const parsed = new URL(value, window.location.origin);
-    if (parsed.origin !== window.location.origin || !["/help", "/cases"].includes(parsed.pathname)) return;
+    if (parsed.origin !== window.location.origin) return;
+    if (safeLearningPath(parsed.pathname)) { window.localStorage.setItem(pendingHelpPathKey, parsed.pathname); return; }
+    if (!["/help", "/cases"].includes(parsed.pathname)) return;
     if (parsed.pathname === "/cases") {
       const product = (parsed.searchParams.get("product") ?? "").toLowerCase();
       const safe = new URLSearchParams();
@@ -169,7 +173,9 @@ function takePendingHelpPath(): string | null {
     window.localStorage.removeItem(pendingHelpPathKey);
     if (!value || value.length > 2048) return null;
     const parsed = new URL(value, window.location.origin);
-    if (parsed.origin !== window.location.origin || !["/help", "/cases"].includes(parsed.pathname)) return null;
+    if (parsed.origin !== window.location.origin) return null;
+    if (safeLearningPath(parsed.pathname)) return parsed.pathname;
+    if (!["/help", "/cases"].includes(parsed.pathname)) return null;
     if (parsed.pathname === "/help") return "/help";
     const product = (parsed.searchParams.get("product") ?? "").toLowerCase();
     const safe = new URLSearchParams();
@@ -623,12 +629,16 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/overview" element={<OverviewPage data={data} />} />
             <Route path="/cases" element={<CasesPage key={`${data.actor.id}:${data.actor.role}`} data={data} />} />
             <Route path="/knowledge" element={<KnowledgePage data={data} />} />
-            <Route path="/library" element={<ContentLibraryPage data={data} />} />
+            <Route path="/library/courses/:itemId" element={<CourseEditor key={window.location.pathname} products={data.products} />} />
+            <Route path="/learn/courses/:itemId" element={<CoursePlayer key={window.location.pathname} />} />
+            <Route path="/learn/my" element={<MyLearning />} />
+            <Route path="/learn/certificates/:enrollmentId" element={<LearningCertificate />} />
+            <Route path="/library" element={<CourseLibrary products={data.products} />} />
             <Route path="/products" element={<ProductsPage data={data} />} />
             <Route path="/integration" element={<IntegrationPage data={data} />} />
             <Route path="/security" element={<SecurityPage actor={data.actor} />} />
             <Route path="/help" element={<ContextualHelpPage data={data} />} />
-            <Route path="/learn" element={<PublicLearningPage data={data} />} />
+            <Route path="/learn" element={<LearningCatalog products={data.products} legacyContent={data.content} />} />
             <Route path="*" element={<Navigate to="/overview" replace />} />
           </Routes>
         </main>
@@ -654,7 +664,7 @@ function PublicHelpShell({ data }: { data: HubData }) {
       <main className="public-help-wrap">
         <Routes>
           <Route path="/help" element={<ContextualHelpPage data={data} />} />
-          <Route path="/learn" element={<PublicLearningPage data={data} />} />
+          <Route path="/learn" element={<LearningCatalog products={data.products} legacyContent={data.content} />} />
           <Route path="*" element={<Navigate to="/help" replace />} />
         </Routes>
       </main>
@@ -1088,146 +1098,6 @@ function KnowledgePage({ data }: { data: HubData }) {
           {selected ? <><button className="icon-button preview-close" onClick={() => setSelectedId(null)}><X size={18} /></button><span className="eyebrow">{selected.contentKey}</span><h2>{selected.title}</h2><p className="preview-summary">{selected.summary}</p><div className="preview-body">{selected.body}</div><div className="preview-meta"><div><span>Source</span><strong>{selected.sourceSystem}</strong></div><div><span>Access</span><strong>{selected.accessLevel}</strong></div><div><span>Revision</span><strong>{selected.revision}</strong></div><div><span>Route</span><strong>{selected.routePattern ?? "Search only"}</strong></div></div></> : <div className="empty-state"><FileText /><strong>Choose an article</strong><p>Preview its canonical copy, placements, and governance details.</p></div>}
         </aside>
       </div>
-    </>
-  );
-}
-
-function ContentLibraryPage({ data }: { data: HubData }) {
-  const videos = data.content.filter((item) => item.kind === "video");
-  const courses = data.content.filter((item) => item.kind === "course");
-  return (
-    <>
-      <PageHeading eyebrow="Shared learning library" title="Create once. Publish everywhere." description="HeyGen renders the approved script; the Support Hub owns the catalog and published asset; PennTrain continues to own assignments, tests, and certificates." action={<button className="button button-primary" disabled title="Enabled after media credentials are connected"><Plus size={17} /> New content</button>} />
-      <section className="pipeline panel">
-        <div className="pipeline-step complete"><span><Check /></span><div><strong>Approved source</strong><small>Support Hub revision</small></div></div><ChevronRight />
-        <div className="pipeline-step active"><span><Video /></span><div><strong>HeyGen render</strong><small>Server-side job</small></div></div><ChevronRight />
-        <div className="pipeline-step"><span><ShieldCheck /></span><div><strong>Review & captions</strong><small>Human approval</small></div></div><ChevronRight />
-        <div className="pipeline-step"><span><MonitorPlay /></span><div><strong>Controlled publish</strong><small>Stable content key</small></div></div>
-      </section>
-      <div className="content-columns">
-        <section className="panel content-section">
-          <div className="panel-heading"><div><h2>Explainer videos</h2><p>Immutable renders connected to approved revisions</p></div><span className="count-pill">{videos.length}</span></div>
-          {videos.map((item) => (
-            <article className="media-row" key={item.id}>
-              <div className="media-thumb"><MonitorPlay /><span>Preview</span></div>
-              <div className="media-copy"><div><span className="content-key">{item.contentKey}</span><span className={`publication-status ${item.videoStatus}`}>{item.videoStatus ?? "pending"}</span></div><h3>{item.title}</h3><p>{item.summary}</p><div className="media-meta"><span><Boxes size={14} /> {item.productIds.length} products</span><span><FileText size={14} /> Rev {item.revision}</span><span><ShieldCheck size={14} /> Captions required</span></div></div>
-              <button className="icon-button" disabled aria-label={`Playback unavailable for ${item.title}`} title={item.videoStatus === "ready" ? "Playback will be enabled after a governed media URL is connected" : "Playback is enabled only after rendering and approval"}><ChevronRight /></button>
-            </article>
-          ))}
-        </section>
-        <section className="panel content-section">
-          <div className="panel-heading"><div><h2>PennTrain course catalog</h2><p>Searchable metadata; learning records remain in PennTrain</p></div><span className="count-pill">{courses.length}</span></div>
-          {courses.map((item) => {
-            const launchUrl = courseLaunchUrl(item);
-            return (
-              <article className="course-row" key={item.id}>
-                <span className="course-icon"><GraduationCap /></span>
-                <div><span className="content-key">{item.contentKey}</span><h3>{item.title}</h3><p>{item.summary}</p><div className="media-meta"><span><UsersRound size={14} /> {item.audience.join(", ")}</span><span><Boxes size={14} /> {item.productIds.length} products</span></div></div>
-                {launchUrl
-                  ? <a className="button button-secondary button-small" href={launchUrl} target="_blank" rel="noreferrer">Open in PennTrain <ExternalLink size={14} /></a>
-                  : <button className="button button-secondary button-small" disabled title="PennTrain launch is enabled after its verified production URL is configured">PennTrain not connected <LockKeyhole size={14} /></button>}
-              </article>
-            );
-          })}
-        </section>
-      </div>
-      <section className="ownership-boundary panel"><div><strong>Content ownership boundary</strong><p>No HeyGen URL is embedded in an app. Products resolve a stable Support Hub content key, while final media is rehosted and can be rolled back independently.</p></div><span><LockKeyhole /> Provider-independent</span></section>
-    </>
-  );
-}
-
-function formatCourseDuration(minutes?: number): string | null {
-  if (minutes === undefined) return null;
-  if (minutes < 60) return `${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  const remainder = minutes % 60;
-  return remainder ? `${hours} hr ${remainder} min` : `${hours} hr`;
-}
-
-function PublicLearningPage({ data }: { data: HubData }) {
-  const location = useLocation();
-  const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("all");
-  const requestedSlug = (new URLSearchParams(location.search).get("product") ?? "").trim().toLowerCase();
-  const normalizedSlug = requestedSlug === "pennfit" ? "breathe" : requestedSlug;
-  const requestedProduct = data.products.find((product) => product.slug === normalizedSlug);
-  const courses = useMemo(() => data.content
-    .filter((item) => item.kind === "course" && item.status === "published")
-    .filter((item) => !requestedProduct || item.productIds.includes(requestedProduct.id))
-    .sort((left, right) => left.title.localeCompare(right.title)), [data.content, requestedProduct]);
-  const categories = useMemo(() => Array.from(new Set(courses
-    .map((item) => item.contentCategory)
-    .filter((value): value is string => Boolean(value))))
-    .sort((left, right) => left.localeCompare(right)), [courses]);
-  const filtered = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    return courses.filter((course) =>
-      (category === "all" || course.contentCategory === category) &&
-      (!needle || `${course.title} ${course.summary} ${course.contentCategory ?? ""} ${(course.courseVideoTitles ?? []).join(" ")}`.toLowerCase().includes(needle)));
-  }, [category, courses, search]);
-  const videoCount = courses.reduce((total, course) => total + (course.courseVideoCount ?? 0), 0);
-
-  return (
-    <>
-      <PageHeading
-        eyebrow="CareMetric learning library"
-        title={requestedProduct ? `Training for ${requestedProduct.name}` : "One governed course catalog for every CareMetric product."}
-        description="Browse shared CareMetric training here, then open CareBase to enroll, complete quizzes, and manage certificates. Course content is maintained once and reused across the software ecosystem."
-        action={<NavLink className="button button-secondary" to={`/help${requestedProduct ? `?product=${encodeURIComponent(requestedProduct.slug)}` : ""}`}><CircleHelp size={17} /> Get support</NavLink>}
-      />
-      <section className="learning-metrics" aria-label="Learning catalog summary">
-        <div><strong>{courses.length}</strong><span>Published courses</span></div>
-        <div><strong>{categories.length}</strong><span>Training categories</span></div>
-        <div><strong>{videoCount}</strong><span>Included video lessons</span></div>
-        <div><strong>{data.products.length}</strong><span>Registered products</span></div>
-      </section>
-      <section className="learning-toolbar panel">
-        <label className="search-box large"><Search size={18} /><input aria-label="Search learning library" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search courses, topics, and requirements" /></label>
-        <select aria-label="Filter courses by category" value={category} onChange={(event) => setCategory(event.target.value)}>
-          <option value="all">All categories</option>
-          {categories.map((value) => <option key={value} value={value}>{value}</option>)}
-        </select>
-        <span className="learning-result-count">{filtered.length} result{filtered.length === 1 ? "" : "s"}</span>
-      </section>
-      {filtered.length ? (
-        <section className="learning-grid" aria-label="Published CareMetric courses">
-          {filtered.map((course) => {
-            const launchUrl = courseLaunchUrl(course);
-            const duration = formatCourseDuration(course.courseDurationMinutes);
-            return (
-              <article className="learning-card" key={course.id}>
-                <div className="learning-card-top">
-                  <span className="course-icon"><GraduationCap /></span>
-                  <span className="publication-status published">Published</span>
-                </div>
-                <span className="learning-category">{course.contentCategory ?? "CareMetric training"}</span>
-                <h2>{course.title}</h2>
-                <p>{course.summary}</p>
-                <div className="learning-card-meta">
-                  {duration && <span><Clock3 size={14} /> {duration}</span>}
-                  {(course.courseVideoCount ?? 0) > 0 && <span><Video size={14} /> {course.courseVideoCount} video{course.courseVideoCount === 1 ? "" : "s"}</span>}
-                  <span><Boxes size={14} /> {course.productIds.length} products</span>
-                </div>
-                {(course.courseVideoTitles?.length ?? 0) > 0 && (
-                  <details className="lesson-list">
-                    <summary>Browse {course.courseVideoTitles?.length} video lessons</summary>
-                    <ol>{course.courseVideoTitles?.map((title) => <li key={title}>{title}</li>)}</ol>
-                  </details>
-                )}
-                {launchUrl
-                  ? <a className="button button-primary" href={launchUrl} target="_blank" rel="noreferrer">Open in CareBase <ExternalLink size={15} /></a>
-                  : <button className="button button-secondary" disabled>Course unavailable <LockKeyhole size={15} /></button>}
-              </article>
-            );
-          })}
-        </section>
-      ) : (
-        <section className="panel empty-state learning-empty"><Search /><strong>No courses match</strong><p>Try a broader search or a different category.</p></section>
-      )}
-      <section className="learning-boundary panel">
-        <ShieldCheck size={21} />
-        <div><strong>Catalog here. Learning records in CareBase.</strong><p>The Support Hub shares approved course metadata across products. Enrollments, progress, quiz scores, attestations, and certificates remain protected inside CareMetric CareBase.</p></div>
-      </section>
     </>
   );
 }

@@ -107,6 +107,7 @@ begin
   if coalesce(char_length(btrim(p_doc->>'title')), 0) not between 2 and 180
     or coalesce(char_length(p_doc->>'summary'), 0) > 500
     or coalesce(char_length(p_doc->>'category'), 0) > 100
+    or coalesce(char_length(p_doc->>'overview'),0)>60000
     or coalesce(p_doc->>'accessLevel', '') not in ('public', 'customer', 'staff')
     or coalesce(p_doc->>'durationMinutes', '') !~ '^[0-9]{1,4}$'
     or (p_doc->>'durationMinutes')::integer not between 1 and 1440 then
@@ -196,11 +197,11 @@ create function private.learning_public_document(p_doc jsonb) returns jsonb
 language sql immutable set search_path = '' as $$
   select jsonb_build_object(
     'title', p_doc->>'title', 'summary', p_doc->>'summary', 'category', p_doc->>'category',
-    'durationMinutes', p_doc->'durationMinutes', 'accessLevel', p_doc->>'accessLevel',
+    'overview', coalesce(p_doc->>'overview',''), 'durationMinutes', p_doc->'durationMinutes', 'accessLevel', p_doc->>'accessLevel',
     'productIds', p_doc->'productIds',
     'units', (select jsonb_agg(jsonb_build_object(
       'id', u.value->>'id', 'type', u.value->>'type', 'title', u.value->>'title',
-      'body', case when u.value->>'type' <> 'quiz' then u.value->>'body' else null end,
+      'body', coalesce(u.value->>'body',''),
       'mediaAssetId', case when u.value->>'type' = 'video' then u.value->>'mediaAssetId' else null end,
       'passingScore', u.value->'passingScore', 'maxAttempts', u.value->'maxAttempts',
       'questions', case when u.value->>'type' = 'quiz' then (
@@ -568,3 +569,48 @@ $$;
 revoke all on function hub.register_learning_media(uuid,text,text,boolean),hub.list_learning_media(),hub.get_learning_media_paths(uuid,uuid) from public,anon,authenticated;
 grant execute on function hub.register_learning_media(uuid,text,text,boolean),hub.list_learning_media(),hub.get_learning_media_paths(uuid,uuid) to authenticated;
 
+
+create table private.learning_imports (
+  source_course_id uuid primary key,
+  source_version_id uuid not null,
+  document_sha256 text not null,
+  item_id uuid not null unique references private.learning_courses(item_id),
+  imported_at timestamptz not null default now()
+);
+alter table private.learning_imports enable row level security;
+revoke all on private.learning_imports from public,anon,authenticated;
+
+-- Import existing catalog items as drafts without changing live catalog links.
+-- Repeated snapshots cannot overwrite either reviewed work or another source revision.
+create function hub.import_learning_draft(p_source_course_id uuid,p_source_version_id uuid,p_document jsonb) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare editor uuid; v_item_id uuid; v_hash text; prior private.learning_imports%rowtype;
+begin
+  editor:=private.require_learning_editor();
+  if p_source_course_id is null or p_source_version_id is null then
+    raise exception 'Source course and revision are required.' using errcode='22023';
+  end if;
+  perform private.validate_learning_document(p_document);
+  select l.content_item_id into v_item_id from hub.course_links l
+    join hub.content_items i on i.id=l.content_item_id
+    where l.penntrain_course_id=p_source_course_id::text and i.kind='course'
+    for update of i;
+  if not found then raise exception 'Source course is not registered in the central catalog.' using errcode='22023'; end if;
+  v_hash:=encode(extensions.digest(p_document::text,'sha256'),'hex');
+  select * into prior from private.learning_imports where source_course_id=p_source_course_id;
+  if found then
+    if prior.source_version_id<>p_source_version_id or prior.document_sha256<>v_hash then
+      raise exception 'This course was already imported. Review revisions in the course editor.' using errcode='40001';
+    end if;
+    return hub.get_learning_draft(prior.item_id);
+  end if;
+  insert into private.learning_courses(item_id,draft,updated_by) values(v_item_id,p_document,editor);
+  insert into private.learning_imports(source_course_id,source_version_id,document_sha256,item_id)
+    values(p_source_course_id,p_source_version_id,v_hash,v_item_id);
+  insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata)
+    values(editor,'learning.course.imported','content_item',v_item_id,jsonb_build_object('source_version_id',p_source_version_id));
+  return hub.get_learning_draft(v_item_id);
+end;
+$$;
+revoke all on function hub.import_learning_draft(uuid,uuid,jsonb) from public,anon,authenticated;
+grant execute on function hub.import_learning_draft(uuid,uuid,jsonb) to authenticated;
