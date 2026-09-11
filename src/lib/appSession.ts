@@ -21,6 +21,11 @@ export const appSession = {
     await appRequest('auth/sms/verify',{ challengeId,code });
     window.dispatchEvent(new Event(authEvent));
   },
+  startInvitation: (input:{claimCode:string;phone:string;consent:true})=>appRequest<{challengeId:string;retryAfter:number}>('auth/invitation/start',input),
+  async verifyInvitation(challengeId:string,code:string){
+    await appRequest('auth/invitation/verify',{challengeId,code});
+    window.dispatchEvent(new Event(authEvent));
+  },
   async signOut() {
     await appRequest('auth/logout',{});
     window.dispatchEvent(new Event(authEvent));

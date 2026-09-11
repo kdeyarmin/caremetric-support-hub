@@ -16,7 +16,7 @@ const userId=randomUUID(),accountId=randomUUID(),tenants=new Set();
 let nativeRevision='a'.repeat(64),nativeAllowed=true,nativeCalls=0,bridge;
 const fetchImpl=async(url,options)=>{
   const product=Object.entries(adminRegistry).find(([,entry])=>entry.endpoint===url)?.[0];
-  assert.ok(['breathe','caremetric-emr','caremetric-go','pennsync','intel'].includes(product));
+  assert.ok(['carebase','breathe','caremetric-emr','caremetric-go','pennsync','intel'].includes(product));
   assert.equal(options.redirect,'error');assert.equal(options.method,'POST');
   const headers=new Headers(options.headers);const auth=headers.get(adminRegistry[product].authorizationHeader??'Authorization');
   const actor=await bridge.consume(auth.slice(7),product);const op=JSON.parse(options.body);
@@ -41,7 +41,7 @@ try {
     await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) select $1,$2,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$3",[id,digest(token),user]);
   }
   await assert.rejects(preview({},null));await assert.rejects(preview({},customerToken));
-  await assert.rejects(preview({product:'carebase'}));
+  await assert.rejects(preview({product:'unsupported'}));
   await assert.rejects(withSession(pool,ownerToken,db=>db.query('select hub.prepare_support_onboarding($1,$2,$3,$4,$5)',[owner,ownerSession,'{}',customer,'Denied browser'])));
   await assert.rejects(preview({hubUserId:randomUUID()}));
   const staged=await preview();assert.equal(staged.intakeEnabled,false);assert.equal(staged.access,'customer');assert.equal(staged.caseScope,'own');
@@ -72,9 +72,15 @@ try {
   const intel=await preview({product:'intel',sourceUserId:'a'.repeat(24),sourceAccountId:'a'.repeat(24)});assert.equal((await apply(intel)).product,'intel');
   const breathe=await preview({product:'breathe',sourceUserId:'CasePreserved_Legacy'});assert.equal((await apply(breathe)).product,'breathe');
   const penn=await preview({product:'pennsync',sourceUserId:'b'.repeat(24),sourceAccountId:'c'.repeat(24)});assert.equal((await apply(penn)).product,'pennsync');
+  const carebase=await preview({product:'carebase'});await apply(carebase);
+  const canonical=(await admin.query("select f.issuer,f.verification_method,t.hub_tenant_id,p.hub_user_id from private.federation_issuers f join private.federated_tenants t on t.issuer_id=f.id join private.federated_principals p on p.issuer_id=f.id where f.issuer='https://xsqobvvreaovwibxwyvv.supabase.co/auth/v1' and t.external_tenant_hash=private.carebase_external_identity_hash($1) and p.external_subject_hash=private.carebase_external_identity_hash($2)",[accountId,userId])).rows;
+  assert.deepEqual(canonical,[{issuer:'https://xsqobvvreaovwibxwyvv.supabase.co/auth/v1',verification_method:'oidc',hub_tenant_id:carebase.hubTenantId,hub_user_id:customer}]);
+  assert.equal((await admin.query('select count(*) from private.learning_employee_bindings where native_profile_id=$1',[userId])).rows[0].count,'0','support creates no employee or learning identity');
+  const reuse=await preview({product:'carebase',sourceUserId:randomUUID(),hubUserId:other});assert.equal(reuse.hubTenantId,carebase.hubTenantId);await apply(reuse);
+  const carebaseRepoint=await preview({product:'carebase',hubUserId:other});await assert.rejects(apply(carebaseRepoint));
   const demoted=await preview();await admin.query('update private.staff_permissions set revoked_at=now() where user_id=$1',[owner]);await assert.rejects(apply(demoted));await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
   await admin.query('update private.sms_sessions set revoked_at=now() where id=$1',[ownerSession]);await assert.rejects(apply(staged,request));
-  assert.ok(nativeCalls>10);console.log('Customer onboarding: real SMS authority, one-use native proof, reviewed pairing, fresh recheck, CAS, durable retries, revocation and all five products passed.');
+  assert.ok(nativeCalls>10);console.log('Customer onboarding: real SMS authority, one-use native proof, reviewed pairing, fresh recheck, CAS, durable retries, revocation and all six products with canonical CareBase identities passed.');
 } catch(error) { console.error('Customer onboarding fixture failed:',error); throw error;
 } finally {
   await admin.query('delete from private.audit_events where actor_id=$1',[owner]);
