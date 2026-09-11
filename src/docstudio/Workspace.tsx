@@ -41,7 +41,8 @@ export function DocStudioWorkspace() {
   if(!project || !project.jobs.some(job=>job.status==='queued'||job.status==='running'))return;
   const controller=new AbortController(),current=project.id;
   const timer=setInterval(()=>{void appRequest<Project>(`docstudio/projects/${current}`,undefined,controller.signal).then(value=>{
-    setProject(previous=>{if(previous?.id!==current)return previous;if(previous.revision!==value.revision){setConflict(true);return previous;}return {...previous,jobs:value.jobs};});
+    if(value.revision!==project.revision){setConflict(true);return;}
+    setProject(previous=>previous?.id===current?{...previous,jobs:value.jobs}:previous);
   }).catch(()=>{});},5000);
   return()=>{clearInterval(timer);controller.abort();};
  },[project]);
@@ -109,6 +110,7 @@ export function DocStudioWorkspace() {
       {draft.kind==='article'?<label>Article (Markdown)<textarea className="studio-markdown" value={draft.markdown} maxLength={120000} onChange={event=>setDraft({...draft,markdown:event.target.value})}/></label>:<>
        {project?<label>Add a private image or recorded narration<input type="file" accept="image/png,image/jpeg,audio/mpeg,audio/wav,.wav" onChange={event=>void upload(event.target.files?.[0])}/></label>:<p>Save the draft before attaching images or audio.</p>}
        {project&&<label>Recorded narration<select value={draft.narrationAssetId??''} onChange={event=>{const next={...draft};if(event.target.value)next.narrationAssetId=event.target.value;else delete next.narrationAssetId;setDraft(assetsFor(next));}}><option value="">No audio narration</option>{project.assets.filter(asset=>asset.mediaType.startsWith('audio/')).map((asset,index)=><option key={asset.id} value={asset.id}>Recording {index+1}</option>)}</select></label>}
+       {project&&draft.narrationAssetId&&<audio controls preload="metadata" aria-label="Review recorded narration" src={`/api/docstudio/projects/${project.id}/assets/${draft.narrationAssetId}`}/>}
        {draft.scenes.map((scene,index)=><section className="studio-scene" key={index}><h3>Scene {index+1}</h3><label>Scene title<input value={scene.title} maxLength={180} onChange={event=>editScene(index,{title:event.target.value})}/></label><div className="studio-row"><label>Scene type<select value={scene.type} onChange={event=>editScene(index,{type:event.target.value as typeof scene.type})}><option value="intro">Introduction</option><option value="step">Instruction</option><option value="outro">Closing</option></select></label><label>Duration (seconds)<input type="number" min={3} max={120} value={scene.durationSeconds} onChange={event=>editScene(index,{durationSeconds:Number(event.target.value)})}/></label></div>
         <label>Narration / transcript<textarea value={scene.narration} maxLength={4000} onChange={event=>editScene(index,{narration:event.target.value})}/></label><label>On-screen captions<textarea value={scene.captionText} maxLength={2000} onChange={event=>editScene(index,{captionText:event.target.value})}/></label>
         {project&&<label>Scene image<select value={scene.screenshotAssetId??''} onChange={event=>{const scenes=draft.scenes.map((value,i)=>{if(i!==index)return value;const next={...value};if(event.target.value)next.screenshotAssetId=event.target.value;else delete next.screenshotAssetId;return next;});setDraft(assetsFor({...draft,scenes}));}}><option value="">Text scene</option>{project.assets.filter(asset=>asset.mediaType.startsWith('image/')).map((asset,i)=><option key={asset.id} value={asset.id}>Image {i+1}</option>)}</select></label>}

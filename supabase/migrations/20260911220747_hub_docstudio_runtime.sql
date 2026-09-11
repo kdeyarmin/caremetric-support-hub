@@ -266,7 +266,7 @@ declare j private.docstudio_jobs; o private.docstudio_outputs; maximum integer;
 begin
  j:=private.docstudio_lease(p_job,p_lease);
  maximum:=case when p_part='primary' then least(268435456,(select max_video_bytes from private.publication_import_settings where singleton)) else 1048576 end;
- if p_bytes not between 1 and maximum or p_type is distinct from case p_part when 'primary' then 'video/mp4' when 'captions' then 'text/vtt' when 'transcript' then 'text/plain' end or p_sha !~ '^[0-9a-f]{64}$' then raise exception 'Invalid output declaration' using errcode='22023'; end if;
+ if p_bytes not between 1 and maximum or p_type is distinct from (case p_part when 'primary' then 'video/mp4' when 'captions' then 'text/vtt' when 'transcript' then 'text/plain' end) or p_sha !~ '^[0-9a-f]{64}$' then raise exception 'Invalid output declaration' using errcode='22023'; end if;
  select * into o from private.docstudio_outputs where job_id=p_job and attempt=j.attempts and part=p_part;
  if o.job_id is not null then
   if o.sha256<>p_sha or o.byte_length<>p_bytes or o.media_type<>p_type then raise exception 'Immutable output conflict' using errcode='P4090'; end if;
@@ -370,7 +370,8 @@ create function private.docstudio_publication_guard() returns trigger
 language plpgsql security definer set search_path='' as $$
 declare p private.docstudio_projects; context jsonb;
 begin
- select * into p from private.docstudio_projects where content_key=new.content_key;
+ -- Serialize a pending publication against edits to the same saved draft.
+ select * into p from private.docstudio_projects where content_key=new.content_key for update;
  if p.id is null then return new; end if;
  if tg_op='INSERT' or (old.receipt is null and (new.plan is not null or new.receipt is not null)) then
   context:=private.docstudio_export_context(p.id);
@@ -425,7 +426,7 @@ begin
 end $$;
 create function private.docstudio_worker(p_operation text,p_worker uuid,p_source text,p_body jsonb) returns jsonb
 language plpgsql security definer set search_path='' as $$
-declare j private.docstudio_jobs; candidate record; a jsonb; matches integer;
+declare j private.docstudio_jobs; candidate record; matches integer;
 begin
  if session_user<>'hub_app_server' or p_source !~ '^[0-9a-f]{40}$' or p_worker is null or p_operation not in ('heartbeat','claim','renew','fail','complete') then raise exception 'Invalid worker operation' using errcode='42501'; end if;
  insert into private.docstudio_workers(id,source_revision) values(p_worker,p_source) on conflict(id) do update set seen_at=now(),source_revision=excluded.source_revision;
