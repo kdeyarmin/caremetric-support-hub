@@ -4563,3 +4563,1048 @@ revoke all on function private.require_publication_scope(jsonb,text),private.pub
 grant execute on function private.publication_import_access(),private.stage_publication_import(uuid,jsonb),private.get_publication_import(uuid),private.get_publication_import_context(uuid),
   private.verify_publication_asset(uuid,text,text,integer,text),private.store_publication_preview(uuid,jsonb),private.commit_publication_import(uuid,jsonb),private.publication_object(uuid,text,text),private.publication_media_info(uuid),
   private.issue_publication_cleanup(text),private.consume_publication_cleanup(text),private.finish_publication_cleanup(uuid) to hub_app_server;
+
+-- 20260911181026_hub_go_admin_audience.sql
+-- Go shares EMR's native data authority but must never consume its capability.
+-- Preserve existing readers, command, learning and media audiences.
+alter table private.app_delegations drop constraint app_delegations_audience_check;
+alter table private.app_delegations add constraint app_delegations_audience_check
+  check(audience in ('carebase','breathe','caremetric-emr','pennsync','caremetric-go',
+    'carebase.command','carebase.learning','publication','media'));
+
+-- 20260911181309_learning_authoring_intents.sql
+-- The Hub pins reviewed source evidence; CareBase remains the only native
+-- version/publication writer. No learner, credit or certificate rows are copied.
+create table private.learning_authoring_intents (
+  command_id uuid primary key,
+  actor_id uuid not null references hub.profiles(id),
+  session_id uuid not null references private.sms_sessions(id),
+  snapshot_id uuid not null references private.learning_source_snapshots(id),
+  preview_digest text not null check(preview_digest ~ '^[0-9a-f]{64}$'),
+  preview jsonb not null check(octet_length(preview::text)<=32000),
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  result jsonb check(octet_length(result::text)<=8000),
+  completed_at timestamptz,
+  check((result is null)=(completed_at is null))
+);
+create index learning_authoring_intents_actor_idx on private.learning_authoring_intents(actor_id);
+create index learning_authoring_intents_session_idx on private.learning_authoring_intents(session_id);
+create index learning_authoring_intents_snapshot_idx on private.learning_authoring_intents(snapshot_id);
+alter table private.learning_authoring_intents enable row level security;
+revoke all on private.learning_authoring_intents from public,anon,authenticated;
+
+create function hub.remember_learning_authoring_preview(p_snapshot_id uuid,p_preview jsonb) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare actor jsonb; source private.learning_source_snapshots%rowtype; prior private.learning_authoring_intents%rowtype;
+  v_command_id uuid; expires timestamptz; head_id uuid;
+begin
+  actor:=hub.authorize_app_command();
+  perform private.require_learning_editor();
+  if p_preview is null or jsonb_typeof(p_preview)<>'object' or octet_length(p_preview::text)>32000
+    or not(p_preview ?& array['commandId','courseId','action','reason','previewDigest','expiresAt','before','after'])
+    or p_preview-array['commandId','courseId','action','reason','previewDigest','expiresAt','before','after']<>'{}'::jsonb
+    or coalesce(p_preview->>'action','') not in ('learning.cloneVersion','learning.publishVersion')
+    or coalesce(p_preview->>'previewDigest','') !~ '^[0-9a-f]{64}$'
+    or jsonb_typeof(p_preview->'before')<>'object' or jsonb_typeof(p_preview->'after')<>'object'
+    or coalesce(length(p_preview->>'reason'),0) not between 10 and 500 then
+    raise exception 'Invalid course preview.' using errcode='22023';
+  end if;
+  begin v_command_id:=(p_preview->>'commandId')::uuid; expires:=(p_preview->>'expiresAt')::timestamptz;
+  exception when others then raise exception 'Invalid course preview identity.' using errcode='22023'; end;
+  if v_command_id is null or expires is null or not isfinite(expires) or expires>clock_timestamp()+interval '5 minutes 5 seconds' then
+    raise exception 'Invalid course preview lifetime.' using errcode='22023';
+  end if;
+  select * into source from private.learning_source_snapshots where id=p_snapshot_id;
+  if not found or (p_preview->>'courseId')::uuid is distinct from source.source_course_id
+    or (p_preview->'before'->>'courseId')::uuid is distinct from source.source_course_id
+    or (p_preview->'before'->>'versionId')::uuid is distinct from source.source_version_id
+    or p_preview->'before'->>'sourceRevision' is distinct from source.source_revision then
+    raise exception 'The preview does not match the reviewed source.' using errcode='40001';
+  end if;
+  -- Serialize against source staging. A first preview must pin the current head.
+  perform 1 from hub.content_items where id=source.item_id for update;
+  select id into head_id from private.learning_source_snapshots where source_course_id=source.source_course_id order by sequence desc limit 1;
+  select * into prior from private.learning_authoring_intents where learning_authoring_intents.command_id=v_command_id;
+  if found then
+    if prior.actor_id is distinct from (actor->>'user_id')::uuid or prior.session_id is distinct from (actor->>'session_id')::uuid
+      or prior.snapshot_id is distinct from p_snapshot_id or prior.preview is distinct from p_preview then
+      raise exception 'This command belongs to a different preview.' using errcode='40001';
+    end if;
+    return prior.preview;
+  end if;
+  if head_id is distinct from p_snapshot_id or expires<=clock_timestamp() then
+    raise exception 'The preview or reviewed source changed. Refresh it.' using errcode='40001';
+  end if;
+  insert into private.learning_authoring_intents(command_id,actor_id,session_id,snapshot_id,preview_digest,preview,expires_at)
+    values(v_command_id,(actor->>'user_id')::uuid,(actor->>'session_id')::uuid,p_snapshot_id,p_preview->>'previewDigest',p_preview,expires);
+  insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata)
+    values((actor->>'user_id')::uuid,'learning.authoring.preview','content_item',source.item_id,
+      jsonb_build_object('command_id',v_command_id,'snapshot_id',source.id,'source_revision',source.source_revision));
+  return p_preview;
+end;
+$$;
+
+create function hub.get_learning_authoring_intent(p_command_id uuid,p_expected_digest text) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare actor jsonb; intent private.learning_authoring_intents%rowtype;
+begin
+  actor:=hub.authorize_app_command();
+  perform private.require_learning_editor();
+  select * into intent from private.learning_authoring_intents where command_id=p_command_id;
+  if not found or intent.actor_id is distinct from (actor->>'user_id')::uuid or intent.session_id is distinct from (actor->>'session_id')::uuid then
+    raise exception 'This course preview is unavailable.' using errcode='42501';
+  end if;
+  if p_expected_digest is distinct from intent.preview_digest then
+    raise exception 'The course preview changed.' using errcode='40001';
+  end if;
+  -- Immutable source snapshots cannot be overwritten. Native CAS checks the
+  -- current source before the first write; native replay checks current authority.
+  return jsonb_build_object('preview',intent.preview,'result',intent.result);
+end;
+$$;
+
+create function hub.record_learning_authoring_result(p_command_id uuid,p_expected_digest text,p_result jsonb) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare intent private.learning_authoring_intents%rowtype; actor jsonb; source_item uuid;
+begin
+  actor:=hub.authorize_app_command();
+  perform hub.get_learning_authoring_intent(p_command_id,p_expected_digest);
+  select * into intent from private.learning_authoring_intents where command_id=p_command_id for update;
+  if p_result is null or jsonb_typeof(p_result)<>'object' or octet_length(p_result::text)>8000
+    or not(p_result ?& array['commandId','courseId','action','versionId','versionNumber','status','appliedAt','replayed'])
+    or p_result-array['commandId','courseId','action','versionId','versionNumber','status','appliedAt','replayed']<>'{}'::jsonb
+    or p_result->>'commandId' is distinct from intent.preview->>'commandId'
+    or p_result->>'courseId' is distinct from intent.preview->>'courseId'
+    or p_result->>'action' is distinct from intent.preview->>'action'
+    or p_result->>'status' is distinct from intent.preview->'after'->>'status'
+    or p_result->'versionNumber' is distinct from intent.preview->'after'->'versionNumber'
+    or coalesce(p_result->>'versionId','') !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    or jsonb_typeof(p_result->'replayed') is distinct from 'boolean'
+    or (p_result->>'action'='learning.publishVersion' and p_result->>'versionId' is distinct from intent.preview->'before'->>'versionId') then
+    raise exception 'The native outcome does not match the preview.' using errcode='22023';
+  end if;
+  if intent.result is not null then
+    if intent.result-'replayed' is distinct from p_result-'replayed' then
+      raise exception 'The native result changed.' using errcode='40001';
+    end if;
+    return intent.result||jsonb_build_object('replayed',true);
+  end if;
+  update private.learning_authoring_intents set result=p_result,completed_at=now() where command_id=p_command_id;
+  select item_id into source_item from private.learning_source_snapshots where id=intent.snapshot_id;
+  insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata)
+    values((actor->>'user_id')::uuid,'learning.authoring.applied','content_item',source_item,
+      jsonb_build_object('command_id',p_command_id,'action',p_result->>'action','version_id',p_result->>'versionId'));
+  return p_result;
+end;
+$$;
+revoke all on function hub.remember_learning_authoring_preview(uuid,jsonb),hub.get_learning_authoring_intent(uuid,text),hub.record_learning_authoring_result(uuid,text,jsonb) from public,anon,authenticated;
+grant execute on function hub.remember_learning_authoring_preview(uuid,jsonb),hub.get_learning_authoring_intent(uuid,text),hub.record_learning_authoring_result(uuid,text,jsonb) to authenticated;
+
+-- 20260911182857_support_intake_readiness.sql
+-- Readiness is measured from current access, not static rollout labels.
+-- This migration grants no memberships and enables no customer intake.
+create function private.support_usable_member_count(p_tenant uuid,p_product uuid) returns bigint
+language sql stable security definer set search_path='' as $$
+  select count(*) from hub.tenant_product_memberships m
+  join hub.profiles profile on profile.id=m.user_id
+  join auth.users u on u.id=m.user_id
+  join private.sms_identities sms on sms.user_id=m.user_id
+  where m.tenant_id=p_tenant and m.product_id=p_product
+    and m.status='active' and m.revoked_at is null
+    and u.deleted_at is null and not coalesce(u.is_anonymous,false)
+    and (u.banned_until is null or u.banned_until<=now())
+    and sms.verified_at is not null and sms.revoked_at is null;
+$$;
+revoke all on function private.support_usable_member_count(uuid,uuid) from public,anon,authenticated;
+
+create function hub.get_support_readiness() returns jsonb
+language plpgsql stable security definer set search_path='' as $$
+declare result jsonb;
+begin
+  perform hub.authorize_app_admin();
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id',p.id,'slug',p.slug,'name',p.name,'status',p.status,'supportEnabled',p.support_enabled,
+    'activeTenantCount',(select count(*) from hub.tenant_products tp join hub.tenants t on t.id=tp.tenant_id
+      where tp.product_id=p.id and tp.status='active' and t.status='active'),
+    'usableMemberCount',(select coalesce(sum(private.support_usable_member_count(tp.tenant_id,p.id)),0)
+      from hub.tenant_products tp join hub.tenants t on t.id=tp.tenant_id
+      where tp.product_id=p.id and tp.status='active' and t.status='active'),
+    'readyTenantCount',(select count(*) from hub.tenant_products tp where tp.product_id=p.id
+      and private.is_case_intake_enabled(tp.tenant_id,p.id)
+      and private.support_usable_member_count(tp.tenant_id,p.id)>0),
+    'publishedItemCount',(select count(distinct publication.item_id) from hub.content_publications publication
+      join hub.content_items item on item.id=publication.item_id
+      join hub.content_revisions revision on revision.id=publication.revision_id
+      where publication.product_id=p.id and item.status='published' and revision.review_state='approved'
+        and publication.published_at<=now() and (publication.expires_at is null or publication.expires_at>now()))
+  ) order by p.name),'[]'::jsonb) into result
+  from hub.products p where p.slug in ('carebase','breathe','caremetric-emr','pennsync','caremetric-intel','caremetric-go');
+  return jsonb_build_object('products',result,'loadedAt',now());
+end;
+$$;
+
+create function hub.list_support_intake_tenants(p_product_id uuid,p_offset integer default 0,p_limit integer default 20) returns jsonb
+language plpgsql stable security definer set search_path='' as $$
+declare result jsonb; total bigint;
+begin
+  perform hub.authorize_app_admin();
+  if p_offset is null or p_offset<0 or p_offset>100000 or p_limit is null or p_limit<1 or p_limit>50 then
+    raise exception 'Invalid page.';
+  end if;
+  if not exists(select 1 from hub.products where id=p_product_id and slug in ('carebase','breathe','caremetric-emr','pennsync','caremetric-intel','caremetric-go')) then
+    raise exception 'Unknown eligible product.';
+  end if;
+  select count(*) into total from hub.tenant_products where product_id=p_product_id;
+  select coalesce(jsonb_agg(to_jsonb(row_data) order by row_data.name,row_data."tenantId"),'[]'::jsonb) into result from (
+    select t.id as "tenantId",t.name,t.status as "tenantStatus",tp.status as "accessStatus",
+      coalesce(setting.enabled,false) as enabled,setting.updated_at as "updatedAt",
+      private.support_usable_member_count(t.id,p_product_id) as "usableMemberCount",
+      private.is_case_intake_enabled(t.id,p_product_id) and private.support_usable_member_count(t.id,p_product_id)>0 as ready
+    from hub.tenant_products tp join hub.tenants t on t.id=tp.tenant_id
+    left join private.case_intake_settings setting on setting.tenant_id=t.id and setting.product_id=p_product_id
+    where tp.product_id=p_product_id order by t.name,t.id offset p_offset limit p_limit
+  ) row_data;
+  return jsonb_build_object('rows',result,'total',total,'offset',p_offset,'limit',p_limit);
+end;
+$$;
+
+create function hub.set_support_intake(p_tenant_id uuid,p_product_id uuid,p_enabled boolean,p_reviewed boolean,p_expected_updated_at timestamptz default null) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare actor jsonb; setting private.case_intake_settings%rowtype; active boolean; revision timestamptz;
+begin
+  actor:=hub.authorize_app_command();
+  if p_enabled is null or p_reviewed is distinct from true then raise exception 'Review the existing customer access first.'; end if;
+  -- Serialize absent settings as well as existing ones, without creating access.
+  select tp.status='active' and t.status='active' and p.status<>'retired' and p.support_enabled into active
+  from hub.tenant_products tp join hub.tenants t on t.id=tp.tenant_id join hub.products p on p.id=tp.product_id
+  where tp.tenant_id=p_tenant_id and tp.product_id=p_product_id
+    and p.slug in ('carebase','breathe','caremetric-emr','pennsync','caremetric-intel','caremetric-go')
+  for update of tp,t,p;
+  if not found then raise exception 'Existing customer access required.'; end if;
+  select * into setting from private.case_intake_settings where tenant_id=p_tenant_id and product_id=p_product_id for update;
+  if setting.updated_at is distinct from p_expected_updated_at then raise exception 'Customer access changed. Refresh and review again.'; end if;
+  if p_enabled and (not active or private.support_usable_member_count(p_tenant_id,p_product_id)=0) then
+    raise exception 'Active access and a verified SMS customer account are required.';
+  end if;
+  insert into private.case_intake_settings(tenant_id,product_id,enabled,activated_at,activated_by)
+    values(p_tenant_id,p_product_id,p_enabled,case when p_enabled then now() end,case when p_enabled then (actor->>'user_id')::uuid end)
+  on conflict(tenant_id,product_id) do update set enabled=excluded.enabled,
+    activated_at=case when excluded.enabled then now() else private.case_intake_settings.activated_at end,
+    activated_by=case when excluded.enabled then excluded.activated_by else private.case_intake_settings.activated_by end
+  returning updated_at into revision;
+  -- Reuse the same support-owner check that actually gates case creation.
+  if p_enabled and not private.is_case_intake_enabled(p_tenant_id,p_product_id) then
+    raise exception 'An active verified support owner is required.';
+  end if;
+  insert into private.audit_events(actor_id,action,entity_type,entity_id,tenant_id,product_id,changed_columns,metadata)
+    values((actor->>'user_id')::uuid,'support.intake.set','tenant_product',p_tenant_id,p_tenant_id,p_product_id,array['enabled'],
+      jsonb_build_object('enabled',p_enabled,'previousEnabled',coalesce(setting.enabled,false),'reviewed',true));
+  return jsonb_build_object('enabled',p_enabled,'updatedAt',revision);
+end;
+$$;
+revoke all on function hub.get_support_readiness() from public,anon;
+revoke all on function hub.list_support_intake_tenants(uuid,integer,integer) from public,anon;
+revoke all on function hub.set_support_intake(uuid,uuid,boolean,boolean,timestamptz) from public,anon;
+grant execute on function hub.get_support_readiness() to authenticated;
+grant execute on function hub.list_support_intake_tenants(uuid,integer,integer) to authenticated;
+grant execute on function hub.set_support_intake(uuid,uuid,boolean,boolean,timestamptz) to authenticated;
+
+-- 20260911183517_governed_source_credential_keys.sql
+-- Preserve the deployed validator and its ACL; tighten recognized credential
+-- field spellings in authored JSON without rewriting source evidence.
+create or replace function private.validate_governed_learning_source(p_payload text, p_revision text) returns jsonb
+language plpgsql set search_path='' as $$
+declare document jsonb;
+begin
+  if p_payload is null or octet_length(p_payload)>2000000 or p_revision is null
+    or p_revision !~ '^[0-9a-f]{64}$'
+    or encode(extensions.digest(p_payload,'sha256'),'hex')<>p_revision then
+    raise exception 'Source revision checksum or size is invalid.' using errcode='22023';
+  end if;
+  begin document:=p_payload::jsonb;
+  exception when invalid_text_representation then
+    raise exception 'Source payload is not valid JSON.' using errcode='22023';
+  end;
+  if not extensions.jsonb_matches_schema(private.governed_learning_schema(),document) then
+    raise exception 'Source snapshot does not match carebase.course.v1.' using errcode='22023';
+  end if;
+  if document::text ~* '([?&](token|access_token|signature|sig|key|policy|jwt|auth|h|hdnts|hdnea|key-pair-id|api_key|apikey|x-amz-[a-z-]+|x-goog-[a-z-]+)=|"(access_?token|refresh_?token|service_?role_?key|authorization|password|client_?secret|storage_?(path|bucket)|video_?url|playback_?(url|token)|signed_?url|api_?key|token|secret|secret_?key|signing_?secret)"[[:space:]]*:)' then
+    raise exception 'Remove playback credentials from the source export before staging.' using errcode='22023';
+  end if;
+  if exists(select 1 from jsonb_array_elements(document->'blocks') b
+    where ((b->>'type'='quiz') is distinct from (b->'quiz'<>'null'::jsonb))
+      or ((b->'quiz'->>'revealsAnswersAfterAttempt')::boolean and b->'quiz'->>'kind'<>'knowledge_check')) then
+    raise exception 'Source quiz configuration is invalid.' using errcode='22023';
+  end if;
+  if exists(
+    with blocks as(select value b from jsonb_array_elements(document->'blocks')),
+    questions as(select q from blocks cross join lateral jsonb_array_elements(coalesce(nullif(b->'quiz'->'questions','null'::jsonb),'[]'::jsonb)) q),
+    ids as (
+      select 'block' kind, lower(b->>'id') id from blocks
+      union all select 'quiz',lower(b->'quiz'->>'id') from blocks where b->'quiz'<>'null'::jsonb
+      union all select 'question',lower(q->>'id') from questions
+      union all select 'answer',lower(a->>'id') from questions cross join lateral jsonb_array_elements(q->'options') a
+      union all select 'credit',lower(c->>'id') from jsonb_array_elements(document->'credits') c
+      union all select 'package',lower(p->>'id') from jsonb_array_elements(document->'packages') p
+    ) select 1 from ids group by kind,id having count(*)>1
+  ) then raise exception 'The source snapshot repeats a content identifier.' using errcode='22023'; end if;
+  return document;
+end;
+$$;
+
+-- 20260911184616_hub_intel_admin_audience.sql
+-- Intel's verified live Base44 runtime consumes only its own one-use SMS audience.
+-- Preserve Go and all governed content/learning/command capabilities.
+alter table private.app_delegations drop constraint app_delegations_audience_check;
+alter table private.app_delegations add constraint app_delegations_audience_check
+  check(audience in ('carebase','breathe','caremetric-emr','pennsync','caremetric-go','intel',
+    'carebase.command','carebase.learning','publication','media'));
+
+-- 20260911190122_learning_draft_editing_intents.sql
+-- Extend reviewed native intentions to draft edits and explicit human approval.
+-- Existing source pinning, current session authority and immutable replay are preserved.
+create function private.learning_authoring_actions() returns text[]
+language sql immutable security invoker set search_path='' as $$
+  select array['learning.cloneVersion','learning.publishVersion','learning.patchDraft','learning.reviewDraft']::text[];
+$$;
+revoke all on function private.learning_authoring_actions() from public,anon,authenticated,hub_app_server;
+
+create or replace function hub.remember_learning_authoring_preview(p_snapshot_id uuid,p_preview jsonb) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare actor jsonb; source private.learning_source_snapshots%rowtype; prior private.learning_authoring_intents%rowtype;
+  v_command_id uuid; expires timestamptz; head_id uuid;
+begin
+  actor:=hub.authorize_app_command();
+  perform private.require_learning_editor();
+  if p_preview is null or jsonb_typeof(p_preview)<>'object' or octet_length(p_preview::text)>32000
+    or not(p_preview ?& array['commandId','courseId','action','reason','previewDigest','expiresAt','before','after'])
+    or p_preview-array['commandId','courseId','action','reason','previewDigest','expiresAt','before','after']<>'{}'::jsonb
+    or not(coalesce(p_preview->>'action','')=any(private.learning_authoring_actions()))
+    or coalesce(p_preview->>'previewDigest','') !~ '^[0-9a-f]{64}$'
+    or jsonb_typeof(p_preview->'before')<>'object' or jsonb_typeof(p_preview->'after')<>'object'
+    or coalesce(length(p_preview->>'reason'),0) not between 10 and 500 then
+    raise exception 'Invalid course preview.' using errcode='22023';
+  end if;
+  begin v_command_id:=(p_preview->>'commandId')::uuid; expires:=(p_preview->>'expiresAt')::timestamptz;
+  exception when others then raise exception 'Invalid course preview identity.' using errcode='22023'; end;
+  if v_command_id is null or expires is null or not isfinite(expires) or expires>clock_timestamp()+interval '5 minutes 5 seconds' then
+    raise exception 'Invalid course preview lifetime.' using errcode='22023';
+  end if;
+  select * into source from private.learning_source_snapshots where id=p_snapshot_id;
+  if not found or (p_preview->>'courseId')::uuid is distinct from source.source_course_id
+    or (p_preview->'before'->>'courseId')::uuid is distinct from source.source_course_id
+    or (p_preview->'before'->>'versionId')::uuid is distinct from source.source_version_id
+    or p_preview->'before'->>'sourceRevision' is distinct from source.source_revision then
+    raise exception 'The preview does not match the reviewed source.' using errcode='40001';
+  end if;
+  -- Serialize against source staging. A first preview must pin the current head.
+  perform 1 from hub.content_items where id=source.item_id for update;
+  select id into head_id from private.learning_source_snapshots where source_course_id=source.source_course_id order by sequence desc limit 1;
+  select * into prior from private.learning_authoring_intents where learning_authoring_intents.command_id=v_command_id;
+  if found then
+    if prior.actor_id is distinct from (actor->>'user_id')::uuid or prior.session_id is distinct from (actor->>'session_id')::uuid
+      or prior.snapshot_id is distinct from p_snapshot_id or prior.preview is distinct from p_preview then
+      raise exception 'This command belongs to a different preview.' using errcode='40001';
+    end if;
+    return prior.preview;
+  end if;
+  if head_id is distinct from p_snapshot_id or expires<=clock_timestamp() then
+    raise exception 'The preview or reviewed source changed. Refresh it.' using errcode='40001';
+  end if;
+  insert into private.learning_authoring_intents(command_id,actor_id,session_id,snapshot_id,preview_digest,preview,expires_at)
+    values(v_command_id,(actor->>'user_id')::uuid,(actor->>'session_id')::uuid,p_snapshot_id,p_preview->>'previewDigest',p_preview,expires);
+  insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata)
+    values((actor->>'user_id')::uuid,'learning.authoring.preview','content_item',source.item_id,
+      jsonb_build_object('command_id',v_command_id,'snapshot_id',source.id,'source_revision',source.source_revision));
+  return p_preview;
+end;
+$$;
+
+create or replace function hub.get_learning_authoring_intent(p_command_id uuid,p_expected_digest text) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare actor jsonb; intent private.learning_authoring_intents%rowtype;
+begin
+  actor:=hub.authorize_app_command();
+  perform private.require_learning_editor();
+  select * into intent from private.learning_authoring_intents where command_id=p_command_id;
+  if not found or intent.actor_id is distinct from (actor->>'user_id')::uuid or intent.session_id is distinct from (actor->>'session_id')::uuid then
+    raise exception 'This course preview is unavailable.' using errcode='42501';
+  end if;
+  if p_expected_digest is distinct from intent.preview_digest then
+    raise exception 'The course preview changed.' using errcode='40001';
+  end if;
+  -- Immutable source snapshots cannot be overwritten. Native CAS checks the
+  -- current source before the first write; native replay checks current authority.
+  return jsonb_build_object('preview',intent.preview,'result',intent.result);
+end;
+$$;
+
+create or replace function hub.record_learning_authoring_result(p_command_id uuid,p_expected_digest text,p_result jsonb) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare intent private.learning_authoring_intents%rowtype; actor jsonb; source_item uuid;
+begin
+  actor:=hub.authorize_app_command();
+  perform hub.get_learning_authoring_intent(p_command_id,p_expected_digest);
+  select * into intent from private.learning_authoring_intents where command_id=p_command_id for update;
+  if p_result is null or jsonb_typeof(p_result)<>'object' or octet_length(p_result::text)>8000
+    or not(p_result ?& array['commandId','courseId','action','versionId','versionNumber','status','appliedAt','replayed'])
+    or p_result-array['commandId','courseId','action','versionId','versionNumber','status','appliedAt','replayed','sourceRevision']<>'{}'::jsonb
+    or ((p_result->>'action' in ('learning.patchDraft','learning.reviewDraft')) is distinct from (p_result ? 'sourceRevision'))
+    or (p_result ? 'sourceRevision' and coalesce(p_result->>'sourceRevision','') !~ '^[0-9a-f]{64}$')
+    or p_result->>'commandId' is distinct from intent.preview->>'commandId'
+    or p_result->>'courseId' is distinct from intent.preview->>'courseId'
+    or p_result->>'action' is distinct from intent.preview->>'action'
+    or p_result->>'status' is distinct from intent.preview->'after'->>'status'
+    or p_result->'versionNumber' is distinct from intent.preview->'after'->'versionNumber'
+    or coalesce(p_result->>'versionId','') !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    or jsonb_typeof(p_result->'replayed') is distinct from 'boolean'
+    or (p_result->>'action'<>'learning.cloneVersion' and p_result->>'versionId' is distinct from intent.preview->'before'->>'versionId')
+    or (p_result->>'action'='learning.cloneVersion' and p_result->>'versionId' is not distinct from intent.preview->'before'->>'versionId') then
+    raise exception 'The native outcome does not match the preview.' using errcode='22023';
+  end if;
+  if intent.result is not null then
+    if intent.result-'replayed' is distinct from p_result-'replayed' then
+      raise exception 'The native result changed.' using errcode='40001';
+    end if;
+    return intent.result||jsonb_build_object('replayed',true);
+  end if;
+  update private.learning_authoring_intents set result=p_result,completed_at=now() where command_id=p_command_id;
+  select item_id into source_item from private.learning_source_snapshots where id=intent.snapshot_id;
+  insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata)
+    values((actor->>'user_id')::uuid,'learning.authoring.applied','content_item',source_item,
+      jsonb_build_object('command_id',p_command_id,'action',p_result->>'action','version_id',p_result->>'versionId'));
+  return p_result;
+end;
+$$;
+revoke all on function hub.remember_learning_authoring_preview(uuid,jsonb),hub.get_learning_authoring_intent(uuid,text),hub.record_learning_authoring_result(uuid,text,jsonb) from public,anon,authenticated;
+grant execute on function hub.remember_learning_authoring_preview(uuid,jsonb),hub.get_learning_authoring_intent(uuid,text),hub.record_learning_authoring_result(uuid,text,jsonb) to authenticated;
+
+-- 20260911190819_combined_authoring_publication_support_contract.sql
+-- Declare only reviewed, additive capabilities after their SQL boundaries exist.
+-- This metadata grants no actor authority and does not attest native deployment.
+do $$
+declare signature text; relation_name text;
+begin
+  if to_regprocedure('hub.get_backend_contract()') is null then
+    raise exception 'Apply the reviewed API 4 foundation first' using errcode='55000';
+  end if;
+  if (hub.get_backend_contract() @> '{"api_version":4,"features":["learning.runtime.v1","platform.admin.read.v1","app.sms.v1","learning.sources.v1","platform.admin.command.v1","learning.receipts.v1"]}'::jsonb) is not true then
+    raise exception 'Apply the reviewed API 4 foundation and receipt features first' using errcode='55000';
+  end if;
+  foreach signature in array array[
+    'hub.authorize_app_admin()',
+    'hub.authorize_app_command()',
+    'private.current_app_session_verified()',
+    'hub.get_learning_editor_access()',
+    'hub.remember_learning_authoring_preview(uuid,jsonb)',
+    'hub.get_learning_authoring_intent(uuid,text)',
+    'hub.record_learning_authoring_result(uuid,text,jsonb)',
+    'private.publication_import_access()',
+    'private.stage_publication_import(uuid,jsonb)',
+    'private.get_publication_import(uuid)',
+    'private.get_publication_import_context(uuid)',
+    'private.verify_publication_asset(uuid,text,text,integer,text)',
+    'private.store_publication_preview(uuid,jsonb)',
+    'private.commit_publication_import(uuid,jsonb)',
+    'private.publication_object(uuid,text,text)',
+    'private.publication_media_info(uuid)',
+    'private.publication_public_object(uuid,text)',
+    'private.publication_public_media_info(uuid)',
+    'private.issue_publication_public_download(text,uuid,text,text)',
+    'private.consume_publication_public_download(text)',
+    'private.issue_publication_cleanup(text)',
+    'private.consume_publication_cleanup(text)',
+    'private.finish_publication_cleanup(uuid)',
+    'private.support_usable_member_count(uuid,uuid)',
+    'hub.get_support_readiness()',
+    'hub.list_support_intake_tenants(uuid,integer,integer)',
+    'hub.set_support_intake(uuid,uuid,boolean,boolean,timestamp with time zone)'
+  ] loop
+    if to_regprocedure(signature) is null then
+      raise exception 'Apply reviewed feature migrations first; missing function %',signature using errcode='55000';
+    end if;
+  end loop;
+  foreach relation_name in array array[
+    'private.learning_authoring_intents',
+    'private.publication_import_settings',
+    'private.publication_imports',
+    'private.publication_import_assets',
+    'private.publication_revision_provenance',
+    'private.publication_public_downloads',
+    'private.publication_cleanup_tokens',
+    'private.case_intake_settings',
+    'private.app_delegations'
+  ] loop
+    if to_regclass(relation_name) is null then
+      raise exception 'Apply reviewed feature migrations first; missing table %',relation_name using errcode='55000';
+    end if;
+  end loop;
+  -- Intel uses the existing live administrator procedure and its own closed
+  -- delegation audience. No browser/native role is inferred from this feature.
+  if not exists(select 1 from pg_catalog.pg_constraint c
+    where c.conrelid='private.app_delegations'::regclass
+      and c.conname='app_delegations_audience_check' and c.contype='c' and c.convalidated
+      and position('''intel''::text' in pg_catalog.pg_get_expr(c.conbin,c.conrelid))>0) then
+    raise exception 'Apply the reviewed Intel delegation audience first' using errcode='55000';
+  end if;
+end;
+$$;
+
+create or replace function hub.get_backend_contract() returns jsonb
+language sql stable security invoker set search_path='' as $$
+  select jsonb_build_object('api_version',4,'features',jsonb_build_array(
+    'learning.runtime.v1','platform.admin.read.v1','app.sms.v1','learning.sources.v1',
+    'platform.admin.command.v1','learning.receipts.v1','learning.authoring.v1',
+    'knowledge.publications.v1','support.readiness.v1','platform.admin.intel.v1'));
+$$;
+revoke all on function hub.get_backend_contract() from public;
+grant execute on function hub.get_backend_contract() to anon,authenticated;
+
+-- 20260911192238_learning_draft_editing_contract.sql
+-- The editing interface must not start against clone/publication-only intent SQL.
+do $$
+begin
+  if to_regprocedure('private.learning_authoring_actions()') is null
+    or to_regprocedure('hub.remember_learning_authoring_preview(uuid,jsonb)') is null
+    or to_regprocedure('hub.record_learning_authoring_result(uuid,text,jsonb)') is null then
+    raise exception 'Apply the reviewed draft editing intent migration first' using errcode='55000';
+  end if;
+  if (private.learning_authoring_actions() @> array['learning.patchDraft','learning.reviewDraft']::text[]) is not true
+    or (hub.get_backend_contract() @> '{"api_version":4,"features":["learning.runtime.v1","platform.admin.read.v1","app.sms.v1","learning.sources.v1","platform.admin.command.v1","learning.receipts.v1","learning.authoring.v1","knowledge.publications.v1","support.readiness.v1","platform.admin.intel.v1"]}'::jsonb) is not true then
+    raise exception 'Apply the reviewed draft editing and combined platform contract first' using errcode='55000';
+  end if;
+end;
+$$;
+create or replace function hub.get_backend_contract() returns jsonb
+language sql stable security invoker set search_path='' as $$
+  select jsonb_build_object('api_version',4,'features',jsonb_build_array(
+    'learning.runtime.v1','platform.admin.read.v1','app.sms.v1','learning.sources.v1',
+    'platform.admin.command.v1','learning.receipts.v1','learning.authoring.v1',
+    'knowledge.publications.v1','support.readiness.v1','platform.admin.intel.v1','learning.draft-editing.v1'));
+$$;
+revoke all on function hub.get_backend_contract() from public;
+grant execute on function hub.get_backend_contract() to anon,authenticated;
+
+-- 20260911192604_billing_portal_intents.sql
+-- Hub preserves review ownership only. CareBase owns the Stripe reservation,
+-- idempotency key and session URL. Provider URLs never enter this database.
+create type private.billing_portal_action as enum ('billing.portal.create');
+create table private.billing_portal_intents (
+  request_id uuid primary key,
+  actor_id uuid not null references hub.profiles(id),
+  session_id uuid not null references private.sms_sessions(id),
+  organization_id uuid not null,
+  action private.billing_portal_action not null default 'billing.portal.create',
+  request jsonb not null check(octet_length(request::text)<=4096),
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  preview_dispatched_at timestamptz,
+  command_id uuid unique,
+  preview jsonb check(octet_length(preview::text)<=8192),
+  preview_expires_at timestamptz,
+  dispatched_at timestamptz,
+  result jsonb check(octet_length(result::text)<=4096),
+  retry_at timestamptz,
+  discarded_at timestamptz,
+  check((preview is null)=(command_id is null)),
+  check((preview is null)=(preview_expires_at is null)),
+  check(result is null or dispatched_at is not null),
+  check(discarded_at is null or preview_dispatched_at is null)
+);
+create index billing_portal_intents_actor_idx on private.billing_portal_intents(actor_id,created_at);
+create index billing_portal_intents_session_idx on private.billing_portal_intents(session_id,organization_id,created_at);
+create index billing_portal_intents_created_idx on private.billing_portal_intents(created_at);
+create index billing_portal_intents_expiry_idx on private.billing_portal_intents(expires_at);
+alter table private.billing_portal_intents enable row level security;
+revoke all on private.billing_portal_intents from public,anon,authenticated,service_role,hub_app_server;
+
+create function private.billing_portal_actor() returns jsonb
+language plpgsql stable security definer set search_path='' as $$
+begin
+  if session_user<>'hub_app_server' then raise exception 'Application server required.' using errcode='42501'; end if;
+  return hub.authorize_app_command();
+end;
+$$;
+create function private.billing_portal_intent_view(p_intent private.billing_portal_intents) returns jsonb
+language sql stable set search_path='' as $$
+  select jsonb_build_object('request',p_intent.request,'preview',p_intent.preview,'result',p_intent.result,
+    'createdAt',p_intent.created_at,'expiresAt',p_intent.expires_at,'previewDispatchedAt',p_intent.preview_dispatched_at,
+    'dispatchedAt',p_intent.dispatched_at,'retryAt',p_intent.retry_at);
+$$;
+create function private.require_billing_portal_intent(p_request_id uuid) returns private.billing_portal_intents
+language plpgsql security definer set search_path='' as $$
+declare actor jsonb; intent private.billing_portal_intents%rowtype;
+begin
+  actor:=private.billing_portal_actor();
+  select * into intent from private.billing_portal_intents where request_id=p_request_id for update;
+  if not found or intent.actor_id is distinct from (actor->>'user_id')::uuid
+    or intent.session_id is distinct from (actor->>'session_id')::uuid or intent.expires_at<=now() or intent.discarded_at is not null then
+    raise exception 'This billing review is unavailable.' using errcode='42501';
+  end if;
+  return intent;
+end;
+$$;
+create function private.resume_billing_portal(p_organization_id uuid) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare actor jsonb; intent private.billing_portal_intents%rowtype;
+begin
+  actor:=private.billing_portal_actor();
+  select * into intent from private.billing_portal_intents where organization_id=p_organization_id
+    and actor_id=(actor->>'user_id')::uuid and session_id=(actor->>'session_id')::uuid
+    and expires_at>now() and discarded_at is null order by created_at desc,request_id desc limit 1;
+  if not found then return null; end if;
+  return private.billing_portal_intent_view(intent);
+end;
+$$;
+create function private.reserve_billing_portal(p_request jsonb) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare actor jsonb; intent private.billing_portal_intents%rowtype; v_request_id uuid; v_organization_id uuid;
+begin
+  actor:=private.billing_portal_actor();
+  if p_request is null or jsonb_typeof(p_request)<>'object' or octet_length(p_request::text)>4096
+    or not(p_request ?& array['operation','requestId','action','targetId','parameters','reason'])
+    or p_request-array['operation','requestId','action','targetId','parameters','reason']<>'{}'::jsonb
+    or p_request->>'operation' is distinct from 'preview' or p_request->>'action' is distinct from 'billing.portal.create'
+    or p_request->'parameters' is distinct from '{}'::jsonb or jsonb_typeof(p_request->'reason') is distinct from 'string'
+    or coalesce(length(p_request->>'reason'),0) not between 10 and 500 or p_request->>'reason'<>btrim(p_request->>'reason')
+    or p_request->>'reason' ~ '[[:cntrl:]]' then
+    raise exception 'Invalid billing review.' using errcode='22023';
+  end if;
+  begin v_request_id:=(p_request->>'requestId')::uuid; v_organization_id:=(p_request->>'targetId')::uuid;
+  exception when others then raise exception 'Invalid billing identity.' using errcode='22023'; end;
+  if v_request_id is null or v_organization_id is null then raise exception 'Invalid billing identity.' using errcode='22023'; end if;
+  perform pg_advisory_xact_lock(hashtextextended('billing.portal.reserve',0));
+  -- Private request metadata expires; native financial/session audit remains native.
+  delete from private.billing_portal_intents where expires_at<now()-interval '30 days';
+  select * into intent from private.billing_portal_intents i where i.request_id=v_request_id;
+  if found then
+    intent:=private.require_billing_portal_intent(v_request_id);
+    if intent.request is distinct from p_request then raise exception 'This request key has a different review.' using errcode='40001'; end if;
+    return private.billing_portal_intent_view(intent);
+  end if;
+  if exists(select 1 from private.billing_portal_intents i where i.organization_id=v_organization_id
+    and actor_id=(actor->>'user_id')::uuid and session_id=(actor->>'session_id')::uuid and expires_at>now() and discarded_at is null
+    and (result is null or result->>'outcome'='pending')
+    and (dispatched_at is not null or preview_expires_at>now() or (preview is null and created_at>now()-interval '6 minutes'))) then
+    raise exception 'Resume the existing billing review before starting another.' using errcode='40001';
+  end if;
+  if (select count(*) from private.billing_portal_intents where created_at>now()-interval '1 hour')>=200
+    or (select count(*) from private.billing_portal_intents where actor_id=(actor->>'user_id')::uuid and created_at>now()-interval '1 hour')>=20 then
+    raise exception 'Billing review limit reached.' using errcode='54000';
+  end if;
+  insert into private.billing_portal_intents(request_id,actor_id,session_id,organization_id,request,expires_at)
+    values(v_request_id,(actor->>'user_id')::uuid,(actor->>'session_id')::uuid,v_organization_id,p_request,(actor->>'assurance_expires_at')::timestamptz)
+    returning * into intent;
+  return private.billing_portal_intent_view(intent);
+end;
+$$;
+create function private.dispatch_billing_portal_preview(p_request_id uuid) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare intent private.billing_portal_intents%rowtype;
+begin
+  intent:=private.require_billing_portal_intent(p_request_id);
+  update private.billing_portal_intents set preview_dispatched_at=coalesce(preview_dispatched_at,now()) where request_id=p_request_id returning * into intent;
+  return private.billing_portal_intent_view(intent);
+end;
+$$;
+create function private.remember_billing_portal_preview(p_request_id uuid,p_preview jsonb) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare intent private.billing_portal_intents%rowtype; v_command_id uuid; expires timestamptz;
+begin
+  intent:=private.require_billing_portal_intent(p_request_id);
+  if intent.preview_dispatched_at is null or p_preview is null or jsonb_typeof(p_preview)<>'object'
+    or octet_length(p_preview::text)>8192 or not(p_preview ?& array['commandId','action','targetId','reason','expiresAt','previewDigest','summary'])
+    or p_preview-array['commandId','action','targetId','reason','expiresAt','previewDigest','summary']<>'{}'::jsonb
+    or p_preview->>'action' is distinct from 'billing.portal.create' or p_preview->>'targetId' is distinct from intent.request->>'targetId'
+    or p_preview->>'reason' is distinct from intent.request->>'reason' or coalesce(p_preview->>'previewDigest','') !~ '^[0-9a-f]{64}$'
+    or jsonb_typeof(p_preview->'summary') is distinct from 'object'
+    or not(p_preview->'summary' ?& array['kind','organizationName','providerCustomerId','providerConfigurationId','returnPath'])
+    or (p_preview->'summary')-array['kind','organizationName','providerCustomerId','providerConfigurationId','returnPath']<>'{}'::jsonb
+    or p_preview->'summary'->>'kind' is distinct from 'portal' or p_preview->'summary'->>'returnPath' is distinct from '/admin/enterprise'
+    or coalesce(p_preview->'summary'->>'providerCustomerId','') !~ '^cus_[A-Za-z0-9]+$'
+    or coalesce(p_preview->'summary'->>'providerConfigurationId','') !~ '^bpc_[A-Za-z0-9]+$'
+    or jsonb_typeof(p_preview->'summary'->'organizationName') is distinct from 'string'
+    or length(p_preview->'summary'->>'organizationName')>500 then
+    raise exception 'Invalid native billing preview.' using errcode='22023';
+  end if;
+  begin v_command_id:=(p_preview->>'commandId')::uuid; expires:=(p_preview->>'expiresAt')::timestamptz;
+  exception when others then raise exception 'Invalid billing preview identity.' using errcode='22023'; end;
+  if v_command_id is null or expires is null or not isfinite(expires) or expires>clock_timestamp()+interval '5 minutes 1 second' then
+    raise exception 'Invalid billing preview lifetime.' using errcode='22023';
+  end if;
+  if intent.preview is not null then
+    if intent.preview is distinct from p_preview then raise exception 'The billing preview changed.' using errcode='40001'; end if;
+    return private.billing_portal_intent_view(intent);
+  end if;
+  if expires<=clock_timestamp() then raise exception 'The billing preview expired.' using errcode='40001'; end if;
+  update private.billing_portal_intents set command_id=v_command_id,preview=p_preview,preview_expires_at=expires
+    where request_id=p_request_id returning * into intent;
+  insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata)
+    values(intent.actor_id,'billing.portal.preview','native_organization',intent.organization_id,jsonb_build_object('command_id',v_command_id));
+  return private.billing_portal_intent_view(intent);
+end;
+$$;
+create function private.claim_billing_portal(p_command_id uuid,p_expected_digest text) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare intent private.billing_portal_intents%rowtype; request_id uuid;
+begin
+  perform private.billing_portal_actor();
+  select i.request_id into request_id from private.billing_portal_intents i where i.command_id=p_command_id;
+  intent:=private.require_billing_portal_intent(request_id);
+  if p_expected_digest is distinct from intent.preview->>'previewDigest' then raise exception 'Billing review changed.' using errcode='40001'; end if;
+  if intent.dispatched_at is null and intent.preview_expires_at<=clock_timestamp() then raise exception 'Billing review expired.' using errcode='40001'; end if;
+  update private.billing_portal_intents set dispatched_at=coalesce(dispatched_at,now()) where billing_portal_intents.request_id=intent.request_id returning * into intent;
+  return private.billing_portal_intent_view(intent);
+end;
+$$;
+create function private.record_billing_portal_result(p_command_id uuid,p_result jsonb) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare intent private.billing_portal_intents%rowtype; request_id uuid; outcome text;
+begin
+  perform private.billing_portal_actor();
+  select i.request_id into request_id from private.billing_portal_intents i where i.command_id=p_command_id;
+  intent:=private.require_billing_portal_intent(request_id);
+  outcome:=p_result->>'outcome';
+  if intent.dispatched_at is null or p_result is null or jsonb_typeof(p_result)<>'object' or octet_length(p_result::text)>4096
+    or not(p_result ?& array['commandId','action','targetId','outcome','replayed','completedAt','retryAfterSeconds','session'])
+    or p_result-array['commandId','action','targetId','outcome','replayed','completedAt','retryAfterSeconds','session']<>'{}'::jsonb
+    or p_result->>'commandId' is distinct from p_command_id::text or p_result->>'targetId' is distinct from intent.organization_id::text
+    or p_result->>'action' is distinct from 'billing.portal.create' or coalesce(outcome,'') not in ('created','pending','failed')
+    or jsonb_typeof(p_result->'replayed') is distinct from 'boolean'
+    or (outcome='pending' and (p_result->'completedAt' is distinct from 'null'::jsonb or p_result->'retryAfterSeconds' is distinct from '30'::jsonb))
+    or (outcome<>'pending' and (jsonb_typeof(p_result->'completedAt') is distinct from 'string' or p_result->'retryAfterSeconds' is distinct from 'null'::jsonb))
+    or (outcome<>'created' and p_result->'session' is distinct from 'null'::jsonb)
+    or (outcome='created' and (jsonb_typeof(p_result->'session') is distinct from 'object'
+      or not(p_result->'session' ?& array['kind','id','expiresAt','livemode'])
+      or (p_result->'session')-array['kind','id','expiresAt','livemode']<>'{}'::jsonb
+      or p_result->'session'->>'kind' is distinct from 'portal' or coalesce(p_result->'session'->>'id','') !~ '^bps_[A-Za-z0-9]+$'
+      or p_result->'session'->'expiresAt' is distinct from 'null'::jsonb or jsonb_typeof(p_result->'session'->'livemode') is distinct from 'boolean')) then
+    raise exception 'Invalid redacted billing result.' using errcode='22023';
+  end if;
+  if intent.result is not null and intent.result->>'outcome'<>'pending' then
+    -- A slower concurrent pending observation cannot regress a terminal receipt.
+    if outcome='pending' then return private.billing_portal_intent_view(intent); end if;
+    if intent.result-'replayed' is distinct from p_result-'replayed' then raise exception 'The native billing outcome changed.' using errcode='40001'; end if;
+    return private.billing_portal_intent_view(intent);
+  end if;
+  update private.billing_portal_intents set result=p_result,retry_at=case when outcome='pending' then now()+interval '30 seconds' end
+    where billing_portal_intents.request_id=intent.request_id returning * into intent;
+  insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata)
+    values(intent.actor_id,'billing.portal.result','native_organization',intent.organization_id,jsonb_build_object('command_id',p_command_id,'outcome',outcome));
+  return private.billing_portal_intent_view(intent);
+end;
+$$;
+create function private.discard_billing_portal(p_request_id uuid) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare intent private.billing_portal_intents%rowtype;
+begin
+  intent:=private.require_billing_portal_intent(p_request_id);
+  if intent.preview_dispatched_at is not null or intent.dispatched_at is not null then raise exception 'A dispatched review must retain its request identity.' using errcode='40001'; end if;
+  update private.billing_portal_intents set discarded_at=now() where request_id=p_request_id;
+  return jsonb_build_object('discarded',true);
+end;
+$$;
+
+revoke all on function private.billing_portal_actor(),private.billing_portal_intent_view(private.billing_portal_intents),private.require_billing_portal_intent(uuid),
+  private.resume_billing_portal(uuid),private.reserve_billing_portal(jsonb),private.dispatch_billing_portal_preview(uuid),private.remember_billing_portal_preview(uuid,jsonb),
+  private.claim_billing_portal(uuid,text),private.record_billing_portal_result(uuid,jsonb),private.discard_billing_portal(uuid) from public,anon,authenticated,service_role,hub_app_server;
+grant execute on function private.resume_billing_portal(uuid),private.reserve_billing_portal(jsonb),private.dispatch_billing_portal_preview(uuid),private.remember_billing_portal_preview(uuid,jsonb),
+  private.claim_billing_portal(uuid,text),private.record_billing_portal_result(uuid,jsonb),private.discard_billing_portal(uuid) to hub_app_server;
+
+-- 20260911195910_billing_portal_backend_contract.sql
+-- Additive compatibility only: Stripe/native configuration remains runtime state.
+do $$
+declare signature text;
+begin
+  if to_regprocedure('hub.get_backend_contract()') is null then
+    raise exception 'Apply the reviewed billing portal foundation first' using errcode='55000';
+  end if;
+  if (hub.get_backend_contract() @> '{"api_version":4,"features":["learning.runtime.v1","platform.admin.read.v1","app.sms.v1","learning.sources.v1","platform.admin.command.v1","learning.receipts.v1","learning.authoring.v1","knowledge.publications.v1","support.readiness.v1","platform.admin.intel.v1","learning.draft-editing.v1"]}'::jsonb) is not true then
+    raise exception 'Apply the reviewed combined editing contract before billing portal declaration' using errcode='55000';
+  end if;
+  if to_regclass('private.billing_portal_intents') is null
+    or to_regtype('private.billing_portal_action') is null then
+    raise exception 'Apply the reviewed billing portal intent table and action enum first' using errcode='55000';
+  end if;
+  foreach signature in array array[
+    'hub.authorize_app_command()',
+    'private.current_app_session_verified()',
+    'private.billing_portal_actor()',
+    'private.billing_portal_intent_view(private.billing_portal_intents)',
+    'private.require_billing_portal_intent(uuid)',
+    'private.resume_billing_portal(uuid)',
+    'private.reserve_billing_portal(jsonb)',
+    'private.dispatch_billing_portal_preview(uuid)',
+    'private.remember_billing_portal_preview(uuid,jsonb)',
+    'private.claim_billing_portal(uuid,text)',
+    'private.record_billing_portal_result(uuid,jsonb)',
+    'private.discard_billing_portal(uuid)'
+  ] loop
+    if to_regprocedure(signature) is null then
+      raise exception 'Apply reviewed billing portal migration first; missing function %',signature using errcode='55000';
+    end if;
+  end loop;
+  if enum_range(null::private.billing_portal_action)::text[] is distinct from array['billing.portal.create']::text[]
+    or not exists(select 1 from pg_catalog.pg_attribute a
+      where a.attrelid='private.billing_portal_intents'::regclass and a.attname='action'
+        and not a.attisdropped and a.attnotnull and a.atttypid='private.billing_portal_action'::regtype)
+    or position('''billing.portal.create''' in pg_catalog.pg_get_functiondef('private.reserve_billing_portal(jsonb)'::regprocedure))=0 then
+    raise exception 'Apply the reviewed closed billing portal action contract first' using errcode='55000';
+  end if;
+end;
+$$;
+create or replace function hub.get_backend_contract() returns jsonb
+language sql stable security invoker set search_path='' as $$
+  select jsonb_build_object('api_version',4,'features',jsonb_build_array(
+    'learning.runtime.v1','platform.admin.read.v1','app.sms.v1','learning.sources.v1',
+    'platform.admin.command.v1','learning.receipts.v1','learning.authoring.v1',
+    'knowledge.publications.v1','support.readiness.v1','platform.admin.intel.v1',
+    'learning.draft-editing.v1','billing.portal.v1'));
+$$;
+revoke all on function hub.get_backend_contract() from public;
+grant execute on function hub.get_backend_contract() to anon,authenticated;
+
+-- Operator-reviewed native account proof. This migration provisions no users,
+-- memberships, mappings or case intake. The HTTP coordinator alone supplies
+-- freshly resolved native facts; browsers cannot call these SQL functions.
+alter table private.federation_issuers add column verification_method text not null default 'oidc';
+alter table private.federation_issuers alter column jwks_url drop not null;
+alter table private.federation_issuers add constraint federation_verification_method_check check
+  ((verification_method='oidc' and jwks_url is not null) or
+   (verification_method='operator_review' and jwks_url is null and not enabled));
+
+create table private.support_onboarding_intents (
+  id uuid primary key default gen_random_uuid(), actor_id uuid not null references auth.users(id),
+  session_id uuid not null references private.sms_sessions(id), product_id uuid not null references hub.products(id),
+  identity jsonb not null, hub_user_id uuid not null references auth.users(id), hub_tenant_id uuid not null,
+  tenant_name text not null, hub_display_name text not null, state_digest text not null, proof_digest text not null,
+  created_at timestamptz not null default now(), expires_at timestamptz not null default now()+interval '60 seconds',
+  applied_at timestamptz, request_id uuid unique, result jsonb,
+  check ((applied_at is null and request_id is null and result is null) or (applied_at is not null and request_id is not null and result is not null))
+);
+create index support_onboarding_session_idx on private.support_onboarding_intents(session_id,created_at);
+alter table private.support_onboarding_intents enable row level security;
+revoke all on private.support_onboarding_intents from public,anon,authenticated,service_role,hub_app_server;
+
+create function private.require_support_onboarding_actor(p_actor_id uuid,p_session_id uuid) returns void
+language plpgsql stable security definer set search_path='' as $$
+declare actor jsonb;
+begin
+  actor:=hub.authorize_app_command();
+  if actor->>'method'<>'sms' or actor->>'user_id' is distinct from p_actor_id::text
+    or actor->>'session_id' is distinct from p_session_id::text then
+    raise exception 'Current administrator SMS session required.' using errcode='28000'; end if;
+end; $$;
+
+create function private.support_identity_hash(p_value text) returns text
+language sql immutable strict set search_path='' as $$ select encode(extensions.digest(p_value,'sha256'),'hex'); $$;
+
+create function private.validate_support_identity(p_identity jsonb) returns text
+language plpgsql immutable set search_path='' as $$
+declare product text:=p_identity->>'product'; uid text:=p_identity->>'sourceUserId'; aid text:=p_identity->>'sourceAccountId';
+  kind text; relation text; pattern text;
+begin
+  if p_identity is null or jsonb_typeof(p_identity)<>'object' or
+    (select array_agg(key order by key) from jsonb_object_keys(p_identity) key)
+      is distinct from array['accountKind','product','relationship','revision','sourceAccountId','sourceUserId']::text[]
+    or product not in ('breathe','caremetric-emr','caremetric-go','pennsync','intel') or product is null
+    or p_identity->>'revision' is null or (p_identity->>'revision') !~ '^[0-9a-f]{64}$' then
+    raise exception 'Verified native identity required.' using errcode='22023'; end if;
+  kind:=case product when 'intel' then 'individual' when 'pennsync' then 'agency' else 'organization' end;
+  relation:=case product when 'intel' then 'individual_owner' when 'pennsync' then 'agency_member' else 'organization_member' end;
+  pattern:=case when product in ('intel','pennsync') then '^[0-9a-f]{24}$' else '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' end;
+  if p_identity->>'accountKind' is distinct from kind or p_identity->>'relationship' is distinct from relation
+    or aid is null or aid !~ pattern or uid is null
+    or (product='breathe' and uid !~ '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$')
+    or (product<>'breathe' and uid !~ pattern) or (product='intel' and uid<>aid) then
+    raise exception 'Verified native account relationship required.' using errcode='22023'; end if;
+  return product;
+end; $$;
+
+create function private.support_onboarding_user(p_user uuid) returns text
+language plpgsql stable security definer set search_path='' as $$
+declare display_name text;
+begin
+  select p.display_name into display_name from auth.users u join hub.profiles p on p.id=u.id
+    join private.sms_identities i on i.user_id=u.id where u.id=p_user and u.deleted_at is null
+    and not coalesce(u.is_anonymous,false) and (u.banned_until is null or u.banned_until<=now())
+    and i.revoked_at is null and i.verified_at is not null;
+  if display_name is null then raise exception 'Existing verified Hub SMS user required.' using errcode='42501'; end if;
+  return display_name;
+end; $$;
+
+-- Snapshot all access rows that a reviewed pairing could otherwise overwrite.
+create function private.support_onboarding_state(p_identity jsonb,p_hub_user uuid,p_hub_tenant uuid) returns text
+language sql stable security definer set search_path='' as $$
+  select private.support_identity_hash(jsonb_build_object(
+    'hubIdentity',(select jsonb_build_object('version',i.identity_version,'verifiedAt',i.verified_at,'revokedAt',i.revoked_at) from private.sms_identities i where i.user_id=p_hub_user),
+    'hubProfile',(select to_jsonb(p) from hub.profiles p where p.id=p_hub_user),
+    'issuer',(select to_jsonb(f) from private.federation_issuers f where f.issuer='urn:caremetric:support:'||(p_identity->>'product')),
+    'principal',(select to_jsonb(p) from private.federated_principals p join private.federation_issuers f on f.id=p.issuer_id
+      where f.issuer='urn:caremetric:support:'||(p_identity->>'product') and p.external_subject_hash=private.support_identity_hash(p_identity->>'sourceUserId')),
+    'binding',(select to_jsonb(t) from private.federated_tenants t join private.federation_issuers f on f.id=t.issuer_id
+      where f.issuer='urn:caremetric:support:'||(p_identity->>'product') and t.external_tenant_hash=private.support_identity_hash(p_identity->>'sourceAccountId')),
+    'tenant',(select to_jsonb(t) from hub.tenants t where t.id=p_hub_tenant),
+    'product',(select to_jsonb(p) from hub.products p where p.slug=case p_identity->>'product' when 'intel' then 'caremetric-intel' else p_identity->>'product' end),
+    'access',(select to_jsonb(t) from hub.tenant_products t join hub.products p on p.id=t.product_id where t.tenant_id=p_hub_tenant and p.slug=case p_identity->>'product' when 'intel' then 'caremetric-intel' else p_identity->>'product' end),
+    'member',(select to_jsonb(m) from hub.tenant_product_memberships m join hub.products p on p.id=m.product_id where m.tenant_id=p_hub_tenant and m.user_id=p_hub_user and p.slug=case p_identity->>'product' when 'intel' then 'caremetric-intel' else p_identity->>'product' end),
+    'intake',(select to_jsonb(s) from private.case_intake_settings s join hub.products p on p.id=s.product_id where s.tenant_id=p_hub_tenant and p.slug=case p_identity->>'product' when 'intel' then 'caremetric-intel' else p_identity->>'product' end)
+  )::text);
+$$;
+
+create function private.support_onboarding_view(p_intent private.support_onboarding_intents) returns jsonb
+language sql stable set search_path='' as $$
+  select jsonb_build_object('intentId',p_intent.id,'proofDigest',p_intent.proof_digest,'expiresAt',p_intent.expires_at,
+    'identity',p_intent.identity,'hubUserId',p_intent.hub_user_id,'hubDisplayName',p_intent.hub_display_name,
+    'hubTenantId',p_intent.hub_tenant_id,'tenantName',p_intent.tenant_name,'access','customer','caseScope','own','intakeEnabled',false);
+$$;
+
+create function hub.prepare_support_onboarding(p_actor_id uuid,p_session_id uuid,p_identity jsonb,p_hub_user_id uuid,p_tenant_name text) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare product text; pid uuid; tenant uuid; display_name text; intent private.support_onboarding_intents%rowtype;
+begin
+  perform private.require_support_onboarding_actor(p_actor_id,p_session_id);
+  product:=private.validate_support_identity(p_identity);
+  display_name:=private.support_onboarding_user(p_hub_user_id);
+  if p_tenant_name is null or char_length(btrim(p_tenant_name)) not between 2 and 180 then
+    raise exception 'Review the customer account name.' using errcode='22023'; end if;
+  select id into pid from hub.products where slug=case product when 'intel' then 'caremetric-intel' else product end and status<>'retired' and support_enabled;
+  if pid is null then raise exception 'Eligible support product required.' using errcode='42501'; end if;
+  perform pg_advisory_xact_lock(hashtextextended('support-preview:'||p_session_id::text,0));
+  if (select count(*) from private.support_onboarding_intents where session_id=p_session_id and created_at>now()-interval '15 minutes')>=30 then
+    raise exception 'Too many account previews. Try later.' using errcode='42501'; end if;
+  select t.hub_tenant_id into tenant from private.federated_tenants t join private.federation_issuers f on f.id=t.issuer_id
+    where f.issuer='urn:caremetric:support:'||product and t.external_tenant_hash=private.support_identity_hash(p_identity->>'sourceAccountId');
+  tenant:=coalesce(tenant,gen_random_uuid());
+  if exists(select 1 from private.case_intake_settings where tenant_id=tenant and product_id=pid and enabled) then
+    raise exception 'Disable and review existing intake before linking another customer.' using errcode='42501'; end if;
+  -- Display the canonical name for an existing account; never rename it implicitly.
+  select coalesce((select name from hub.tenants where id=tenant),btrim(p_tenant_name)) into p_tenant_name;
+  insert into private.support_onboarding_intents(actor_id,session_id,product_id,identity,hub_user_id,hub_tenant_id,tenant_name,hub_display_name,state_digest,proof_digest)
+    values(p_actor_id,p_session_id,pid,p_identity,p_hub_user_id,tenant,p_tenant_name,display_name,
+      private.support_onboarding_state(p_identity,p_hub_user_id,tenant),private.support_identity_hash(gen_random_uuid()::text)) returning * into intent;
+  return private.support_onboarding_view(intent);
+end; $$;
+
+create function hub.inspect_support_onboarding(p_actor_id uuid,p_session_id uuid,p_intent_id uuid,p_proof_digest text,p_request_id uuid) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare intent private.support_onboarding_intents%rowtype;
+begin
+  perform private.require_support_onboarding_actor(p_actor_id,p_session_id);
+  select * into intent from private.support_onboarding_intents where id=p_intent_id and actor_id=p_actor_id and session_id=p_session_id;
+  if not found or p_request_id is null or intent.proof_digest is distinct from p_proof_digest
+    or (intent.applied_at is null and intent.expires_at<=now()) or (intent.applied_at is not null and intent.request_id<>p_request_id) then
+    raise exception 'Preview changed or expired.' using errcode='40001'; end if;
+  perform private.support_onboarding_user(intent.hub_user_id);
+  return private.support_onboarding_view(intent);
+end; $$;
+
+create function hub.apply_support_onboarding(p_actor_id uuid,p_session_id uuid,p_intent_id uuid,p_proof_digest text,p_request_id uuid,p_identity jsonb,p_reviewed boolean) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare intent private.support_onboarding_intents%rowtype; product text; fid uuid; principal private.federated_principals%rowtype;
+  prior_tenant uuid; member hub.tenant_product_memberships%rowtype; v_result jsonb;
+begin
+  perform hub.inspect_support_onboarding(p_actor_id,p_session_id,p_intent_id,p_proof_digest,p_request_id);
+  if p_reviewed is distinct from true then raise exception 'Review the exact account pairing.' using errcode='22023'; end if;
+  product:=private.validate_support_identity(p_identity);
+  select * into intent from private.support_onboarding_intents where id=p_intent_id for update;
+  if intent.identity is distinct from p_identity then raise exception 'Native account relationship changed.' using errcode='40001'; end if;
+  -- Serialize both mappings, including concurrent previews by different admins.
+  perform pg_advisory_xact_lock(hashtextextended('support-issuer:'||product,0));
+  perform pg_advisory_xact_lock(hashtextextended('support-request:'||p_request_id::text,0));
+  if exists(select 1 from private.support_onboarding_intents where request_id=p_request_id and id<>p_intent_id)
+    or (intent.request_id is not null and intent.request_id<>p_request_id)
+    or (intent.applied_at is null and intent.expires_at<=now()) then raise exception 'Preview changed or expired.' using errcode='40001'; end if;
+  -- Lock existing mutable rows as well as serializing this provisioning path.
+  perform 1 from auth.users where id=intent.hub_user_id for share;
+  perform 1 from hub.profiles where id=intent.hub_user_id for share;
+  perform 1 from private.sms_identities where user_id=intent.hub_user_id for share;
+  perform 1 from hub.products where id=intent.product_id and status<>'retired' and support_enabled for update;
+  if not found then raise exception 'Eligible support product required.' using errcode='42501'; end if;
+  perform 1 from hub.tenants where id=intent.hub_tenant_id for update;
+  perform 1 from hub.tenant_products where tenant_id=intent.hub_tenant_id and product_id=intent.product_id for update;
+  perform 1 from hub.tenant_product_memberships where tenant_id=intent.hub_tenant_id and product_id=intent.product_id and user_id=intent.hub_user_id for update;
+  perform 1 from private.case_intake_settings where tenant_id=intent.hub_tenant_id and product_id=intent.product_id for update;
+  if intent.applied_at is null and intent.state_digest<>private.support_onboarding_state(p_identity,intent.hub_user_id,intent.hub_tenant_id) then
+    raise exception 'Customer access changed. Preview again.' using errcode='40001'; end if;
+  if exists(select 1 from private.case_intake_settings where tenant_id=intent.hub_tenant_id and product_id=intent.product_id and enabled) then
+    raise exception 'Existing intake requires separate review.' using errcode='42501'; end if;
+  if intent.applied_at is null then
+    insert into private.federation_issuers(product_id,issuer,audience,jwks_url,enabled,verification_method)
+      values(intent.product_id,'urn:caremetric:support:'||product,'support.operator_review',null,false,'operator_review') on conflict(issuer) do nothing;
+  end if;
+  select id into fid from private.federation_issuers where issuer='urn:caremetric:support:'||product and product_id=intent.product_id
+    and audience='support.operator_review' and verification_method='operator_review' and not enabled and jwks_url is null for update;
+  if fid is null then raise exception 'Review the existing source configuration.' using errcode='40001'; end if;
+  select * into principal from private.federated_principals where issuer_id=fid and external_subject_hash=private.support_identity_hash(p_identity->>'sourceUserId') for update;
+  if found and (principal.hub_user_id<>intent.hub_user_id or principal.revoked_at is not null) then
+    raise exception 'Existing principal cannot be repointed or restored.' using errcode='40001'; end if;
+  select hub_tenant_id into prior_tenant from private.federated_tenants where issuer_id=fid and external_tenant_hash=private.support_identity_hash(p_identity->>'sourceAccountId') for update;
+  if prior_tenant is not null and prior_tenant<>intent.hub_tenant_id then raise exception 'Existing account cannot be repointed.' using errcode='40001'; end if;
+  if intent.applied_at is not null and (principal.hub_user_id is null or prior_tenant is null) then
+    raise exception 'Existing identity binding requires review.' using errcode='40001'; end if;
+  if intent.applied_at is null then
+    if prior_tenant is null then
+      insert into hub.tenants(id,slug,name) values(intent.hub_tenant_id,'support-'||intent.hub_tenant_id::text,intent.tenant_name);
+      insert into private.federated_tenants(issuer_id,external_tenant_hash,hub_tenant_id) values(fid,private.support_identity_hash(p_identity->>'sourceAccountId'),intent.hub_tenant_id);
+      insert into hub.tenant_products(tenant_id,product_id) values(intent.hub_tenant_id,intent.product_id);
+    end if;
+    insert into private.federated_principals(issuer_id,external_subject_hash,hub_user_id) values(fid,private.support_identity_hash(p_identity->>'sourceUserId'),intent.hub_user_id) on conflict do nothing;
+    insert into hub.tenant_product_memberships(tenant_id,product_id,user_id,role,case_scope,can_manage_members)
+      values(intent.hub_tenant_id,intent.product_id,intent.hub_user_id,'customer','own',false) on conflict do nothing;
+    insert into private.case_intake_settings(tenant_id,product_id,enabled) values(intent.hub_tenant_id,intent.product_id,false) on conflict do nothing;
+  end if;
+  select * into member from hub.tenant_product_memberships where tenant_id=intent.hub_tenant_id and product_id=intent.product_id and user_id=intent.hub_user_id;
+  if member.user_id is null or member.status<>'active' or member.revoked_at is not null or member.role<>'customer' or member.case_scope<>'own' or member.can_manage_members
+    or not exists(select 1 from hub.tenants t join hub.tenant_products p on p.tenant_id=t.id where t.id=intent.hub_tenant_id and p.product_id=intent.product_id and t.status='active' and p.status='active') then
+    raise exception 'Existing access requires separate review.' using errcode='42501'; end if;
+  perform private.support_onboarding_user(intent.hub_user_id);
+  perform private.require_support_onboarding_actor(p_actor_id,p_session_id);
+  if intent.applied_at is not null then return intent.result||jsonb_build_object('replayed',true); end if;
+  v_result:=jsonb_build_object('intentId',intent.id,'hubTenantId',intent.hub_tenant_id,'hubUserId',intent.hub_user_id,'product',product,
+    'replayed',false,'access','customer','caseScope','own','intakeEnabled',false);
+  update private.support_onboarding_intents set applied_at=now(),request_id=p_request_id,result=v_result where id=intent.id;
+  insert into private.audit_events(actor_id,action,entity_type,entity_id,tenant_id,product_id,metadata)
+    values(p_actor_id,'support.customer.link','tenant',intent.hub_tenant_id,intent.hub_tenant_id,intent.product_id,
+      jsonb_build_object('intentId',intent.id,'requestId',p_request_id,'hubUserId',intent.hub_user_id,'reviewed',true,'intakeEnabled',false));
+  return v_result;
+end; $$;
+
+revoke all on function private.require_support_onboarding_actor(uuid,uuid),private.support_identity_hash(text),private.validate_support_identity(jsonb),
+  private.support_onboarding_user(uuid),private.support_onboarding_state(jsonb,uuid,uuid),private.support_onboarding_view(private.support_onboarding_intents) from public,anon,authenticated,service_role,hub_app_server;
+revoke all on function hub.prepare_support_onboarding(uuid,uuid,jsonb,uuid,text),hub.inspect_support_onboarding(uuid,uuid,uuid,text,uuid),
+  hub.apply_support_onboarding(uuid,uuid,uuid,text,uuid,jsonb,boolean) from public,anon,authenticated,service_role;
+grant execute on function hub.prepare_support_onboarding(uuid,uuid,jsonb,uuid,text),hub.inspect_support_onboarding(uuid,uuid,uuid,text,uuid),
+  hub.apply_support_onboarding(uuid,uuid,uuid,text,uuid,jsonb,boolean) to hub_app_server;
+
+-- Keep the deployed feature union, including any independently reviewed feature.
+do $migration$
+declare signature text; contract jsonb;
+begin
+  if to_regprocedure('hub.get_backend_contract()') is null then
+    raise exception 'Apply the combined Hub contract first' using errcode='55000';
+  end if;
+  contract:=hub.get_backend_contract();
+  if (contract @> '{"api_version":4,"features":["learning.runtime.v1","platform.admin.read.v1","app.sms.v1","learning.sources.v1","platform.admin.command.v1","learning.receipts.v1","learning.authoring.v1","knowledge.publications.v1","support.readiness.v1","platform.admin.intel.v1","learning.draft-editing.v1","billing.portal.v1"]}'::jsonb) is not true
+    or to_regclass('private.support_onboarding_intents') is null then
+    raise exception 'Apply reviewed onboarding and the combined Hub foundation first' using errcode='55000';
+  end if;
+  foreach signature in array array[
+    'private.require_support_onboarding_actor(uuid,uuid)', 'private.validate_support_identity(jsonb)',
+    'private.support_onboarding_user(uuid)', 'private.support_onboarding_state(jsonb,uuid,uuid)',
+    'hub.prepare_support_onboarding(uuid,uuid,jsonb,uuid,text)',
+    'hub.inspect_support_onboarding(uuid,uuid,uuid,text,uuid)',
+    'hub.apply_support_onboarding(uuid,uuid,uuid,text,uuid,jsonb,boolean)'
+  ] loop
+    if to_regprocedure(signature) is null then raise exception 'Missing reviewed onboarding function %',signature using errcode='55000'; end if;
+  end loop;
+  if not (contract->'features' @> '["support.customer-onboarding.v1"]'::jsonb) then
+    contract:=jsonb_set(contract,'{features}',(contract->'features')||'["support.customer-onboarding.v1"]'::jsonb);
+  end if;
+  execute format('create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='''' as %L',
+    'select '||quote_literal(contract::text)||'::jsonb');
+end;
+$migration$;
+revoke all on function hub.get_backend_contract() from public;
+grant execute on function hub.get_backend_contract() to anon,authenticated;

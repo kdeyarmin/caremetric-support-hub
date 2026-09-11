@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { verifyBackendContract, REQUIRED_BACKEND_FEATURES } from "./backendContract";
+import { assertBackendContract, verifyBackendContract, REQUIRED_BACKEND_FEATURES } from "./backendContract";
 
 const origin = "https://project.supabase.co";
 const key = "sb_publishable_test";
@@ -26,6 +26,14 @@ describe("deployed backend compatibility", () => {
   it("accepts a later additive feature without weakening required capabilities", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ api_version: 4, features: [...REQUIRED_BACKEND_FEATURES, "future.feature.v1"] }));
     await expect(verifyBackendContract(origin, key, fetcher)).resolves.toBeUndefined();
+  });
+
+  it("rejects the earlier six-feature API 4 release at the shared server startup boundary", () => {
+    expect(() => assertBackendContract({ api_version: 4, features: [
+      "learning.runtime.v1", "platform.admin.read.v1", "app.sms.v1", "learning.sources.v1",
+      "platform.admin.command.v1", "learning.receipts.v1",
+    ] })).toThrow(/incompatible/);
+    expect(() => assertBackendContract({ api_version: 4, features: REQUIRED_BACKEND_FEATURES })).not.toThrow();
   });
 
   it.each([404, 401, 500, 503])("blocks deployment on HTTP %s", async (status) => {
