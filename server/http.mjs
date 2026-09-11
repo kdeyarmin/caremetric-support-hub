@@ -5,6 +5,7 @@ import { resolve,extname } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { cookie,readCookie,sessionCookie,challengeCookie,HttpError } from './sms-auth.mjs';
+import { parsePackageUploadHeader } from './learning-packages.mjs';
 
 export const securityHeaders = {
   'X-Content-Type-Options':'nosniff','X-Frame-Options':'SAMEORIGIN',
@@ -137,6 +138,17 @@ export function appServer({auth,gateway,delegations,publications,origins,dist=re
         }
         if(path.startsWith('/api/rpc/') && req.method==='POST') return json(await gateway.rpc(path.slice(9),await jsonBody(req),session));
         if(path.startsWith('/api/rows/') && req.method==='GET') return json(await gateway.rows(path.slice(10),session));
+        if(path==='/api/admin/packages' && req.method==='POST') {
+          if(url.search)throw new HttpError(400,'Package query parameters are not supported.');
+          if(req.headers['content-encoding']&&req.headers['content-encoding']!=='identity')throw new HttpError(415,'Package content encoding is unsupported.');
+          const upload=req.headers['content-type']==='application/zip';
+          if(!upload&&req.headers['x-caremetric-package-request'])throw new HttpError(400,'Unexpected package metadata.');
+          const input=upload?parsePackageUploadHeader(req.headers['x-caremetric-package-request']):await jsonBody(req,8192);
+          const controller=new AbortController();const abort=()=>{if(!res.writableEnded)controller.abort();};
+          req.once('aborted',abort);res.once('close',abort);
+          try{return json(await delegations.package(session,input,{...(upload?{body:req,contentLength:req.headers['content-length']}:{}),signal:controller.signal}));}
+          finally{req.removeListener('aborted',abort);res.removeListener('close',abort);}
+        }
         if(path==='/api/admin/read' && req.method==='POST') return json(await delegations.admin(session,await jsonBody(req,2048)));
         if(path==='/api/admin/command' && req.method==='POST') return json(await delegations.command(session,await jsonBody(req,4096)));
         if(path==='/api/admin/registration' && req.method==='POST') {
