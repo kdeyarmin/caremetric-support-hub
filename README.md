@@ -140,8 +140,12 @@ connected check can instead use `VITE_DEMO_MODE=false` with both Supabase
 browser variables present.
 
 Connected builds also call the public, data-free `hub.get_backend_contract()`
-RPC and require API version `2`. Apply migrations through
-`20260911142604_platform_admin_session_authorization.sql` before building this frontend.
+RPC and require API version `4` plus every feature in
+`src/lib/backendContract.ts`. The Node server uses the same assertion at startup.
+Apply the reviewed migration chain through
+`20260911190819_combined_authoring_publication_support_contract.sql` before deploying
+this release. The [combined release contract](docs/BACKEND_RELEASE_CONTRACT.md)
+lists the guarded SQL dependencies and the separate hosted verification steps.
 Missing/incompatible contracts or connection failures stop deployment. Use a
 modern `sb_publishable_` key; the build probe rejects secret and legacy keys.
 Preview builds keep their explicitly enabled, credential-free CI path.
