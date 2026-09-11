@@ -10,7 +10,7 @@ export const securityHeaders = {
   'X-Content-Type-Options':'nosniff','X-Frame-Options':'SAMEORIGIN',
   'Strict-Transport-Security':'max-age=31536000; includeSubDomains','Referrer-Policy':'no-referrer',
   'Permissions-Policy':'camera=(), microphone=(), geolocation=(), payment=()',
-  'Content-Security-Policy':"default-src 'self'; connect-src 'self'; img-src 'self' data:; media-src 'self' https://xgauehtwksmnoqhgqegm.supabase.co; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'",
+  'Content-Security-Policy':"default-src 'self'; connect-src 'self'; img-src 'self' data:; media-src 'self' blob: https://xgauehtwksmnoqhgqegm.supabase.co; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'",
 };
 async function jsonBody(req,limit=2000000) {
   if (req.headers['content-type']?.split(';')[0] !== 'application/json') throw new HttpError(415,'Use a JSON request.');
@@ -25,7 +25,7 @@ export function sameOrigin(req,origins) {
   return origins.includes(req.headers.origin) && (!req.headers['sec-fetch-site'] || req.headers['sec-fetch-site']==='same-origin');
 }
 const mime={'.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.webp':'image/webp','.woff2':'font/woff2','.html':'text/html'};
-export function appServer({auth,gateway,delegations,origins,dist=resolve('dist')}) {
+export function appServer({auth,gateway,delegations,publications,origins,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -40,8 +40,23 @@ export function appServer({auth,gateway,delegations,origins,dist=resolve('dist')
       if (path.startsWith('/api/')) {
         res.setHeader('Cache-Control','no-store');
         if (path.startsWith('/api/internal/')) {
-          if(req.method!=='POST' || req.headers.origin) throw new HttpError(403,'Forbidden.');
+          if(req.method!=='POST' || req.headers.origin || req.headers.cookie) throw new HttpError(403,'Forbidden.');
+          if(path==='/api/internal/publications/public/authorize' && publications) {
+            const authorization=req.headers.authorization;
+            if(typeof authorization!=='string' || !authorization.startsWith('Bearer ')) throw new HttpError(401,'Authorization required.');
+            const input=await jsonBody(req,2048);
+            if(Object.keys(input).length) throw new HttpError(400,'Invalid public download request.');
+            return json(await publications.consumePublicDownload(authorization.slice(7)));
+          }
+          if(path==='/api/internal/publications/cleanup/authorize' && publications) {
+            const authorization=req.headers.authorization;
+            if(typeof authorization!=='string' || !authorization.startsWith('Bearer ')) throw new HttpError(401,'Authorization required.');
+            const input=await jsonBody(req,2048);
+            if(Object.keys(input).length) throw new HttpError(400,'Invalid cleanup request.');
+            return json(await publications.consumeCleanup(authorization.slice(7)));
+          }
           const audience={
+            '/api/internal/publications/authorize':'publication',
             '/api/internal/media/authorize':'media', '/api/internal/admin/authorize':'carebase',
             '/api/internal/admin/breathe/authorize':'breathe', '/api/internal/admin/emr/authorize':'caremetric-emr',
             '/api/internal/admin/pennsync/authorize':'pennsync', '/api/internal/command/carebase/authorize':'carebase.command',
@@ -55,8 +70,44 @@ export function appServer({auth,gateway,delegations,origins,dist=resolve('dist')
           await jsonBody(req,2048);
           return json(await delegations.consume(authorization.slice(7),audience));
         }
-        if (!['GET','POST'].includes(req.method)) throw new HttpError(405,'Method not allowed.');
+        if (!['GET','POST','HEAD'].includes(req.method)) throw new HttpError(405,'Method not allowed.');
         if(req.method==='POST' && !sameOrigin(req,origins)) throw new HttpError(403,'Open this action in CareMetric.');
+        if(path.startsWith('/api/publications/') && publications) {
+          if(url.search) throw new HttpError(400,'Publication query parameters are not supported.');
+          if(path==='/api/publications/access' && req.method==='GET') return json(await publications.access(session));
+          if(path==='/api/publications/imports/stage' && req.method==='POST') return json(await publications.stage(session,await jsonBody(req,70000)));
+          const asset=/^\/api\/publications\/imports\/([0-9a-f-]{36})\/assets\/(primary|captions|transcript)$/.exec(path);
+          if(asset && req.method==='POST') return json(await publications.upload(session,asset[1],asset[2],req,req.headers['content-type']));
+          const intent=/^\/api\/publications\/imports\/([0-9a-f-]{36})(?:\/(preview|commit))?$/.exec(path);
+          if(intent) {
+            if(!intent[2] && req.method==='GET') return json(await publications.get(session,intent[1]));
+            if(intent[2]==='preview' && req.method==='POST') {
+              const input=await jsonBody(req,2048); if(Object.keys(input).length) throw new HttpError(400,'Invalid preview request.');
+              return json(await publications.preview(session,intent[1]));
+            }
+            if(intent[2]==='commit' && req.method==='POST') return json(await publications.commit(session,intent[1],await jsonBody(req,4096)));
+          }
+          const mediaInfo=/^\/api\/publications\/media\/([0-9a-f-]{36})$/.exec(path);
+          if(mediaInfo && req.method==='GET') return json(await publications.mediaInfo(session,mediaInfo[1]));
+          const media=/^\/api\/publications\/media\/([0-9a-f-]{36})\/(primary|captions|transcript)$/.exec(path);
+          if(media && ['GET','HEAD'].includes(req.method)) {
+            const {asset,range,response}=await publications.media(session,media[1],media[2],req.headers.range,req.method==='HEAD');
+            const length=range?.length ?? asset.byteLength;
+            res.statusCode=range?206:200;
+            res.setHeader('Content-Type',asset.contentType); res.setHeader('Content-Length',String(length)); res.setHeader('Accept-Ranges','bytes');
+            if(range) res.setHeader('Content-Range',`bytes ${range.start}-${range.end}/${asset.byteLength}`);
+            if(req.method==='HEAD') return res.end();
+            let received=0;
+            async function* boundedMedia() {
+              for await(const chunk of Readable.fromWeb(response.body)) {
+                received+=chunk.length; if(received>length) throw new Error('Invalid publication media length.'); yield chunk;
+              }
+              if(received!==length) throw new Error('Incomplete publication media.');
+            }
+            await pipeline(Readable.from(boundedMedia()),res); return;
+          }
+          throw new HttpError(404,'Publication resource unavailable.');
+        }
         if(path==='/api/auth/session' && req.method==='GET') return json(await gateway.session(session));
         if(path==='/api/auth/sms/start' && req.method==='POST') {
           const {phone}=await jsonBody(req,2048);
