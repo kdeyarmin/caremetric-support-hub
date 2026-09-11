@@ -25,7 +25,7 @@ await admin.query(`insert into auth.users(id,email,raw_user_meta_data,is_anonymo
 const products=(await admin.query("select id,slug from hub.products where slug in ('carebase','breathe')")).rows;
 const carebase=products.find(p=>p.slug==='carebase').id;
 await admin.query("insert into private.staff_permissions(user_id,permission,product_id) values($1,'platform.admin',null),($2,'content.write',$3)",[owner,scoped,carebase]);
-await admin.query("insert into private.sms_identities(user_id,phone_e164) values($1,'+12025550301'),($2,'+12025550302'),($3,'+12025550303')",[owner,scoped,learner]);
+await admin.query("insert into private.sms_identities(user_id,phone_e164) values($1,'+12025550181'),($2,'+12025550182'),($3,'+12025550183')",[owner,scoped,learner]);
 const provider={send:async()=>randomUUID(),verify:async(_id,_phone,code)=>code==='123456'};
 const auth=smsAuth({pool,provider}), api=gateway(pool), objects=new Map();
 let baseUrl,storageWrites=0,lastCapability;
@@ -100,7 +100,7 @@ async function expireUncommitted() {
 }
 try {
   assert.equal((await call('publications/access')).status,401);
-  const ownerJar=await login('+12025550301');
+  const ownerJar=await login('+12025550181');
   assert.deepEqual((await call('publications/access')).body,{canImport:true,maxVideoBytes:26214400});
   const manifest=await fixtureManifest(); manifest.source.content_key='integration-guide';
   assert.equal((await call('publications/imports/stage',{manifest,sourceReviewConfirmed:true},{Origin:'https://evil.test'})).status,403);
@@ -154,9 +154,9 @@ try {
   }
   const head=await fetch(mediaPath,{method:'HEAD',headers:mediaHeaders}); assert.equal(head.status,200); assert.equal(head.headers.get('Content-Length'),'24');
   assert.equal((await fetch(mediaPath,{headers:{...mediaHeaders,Range:'bytes=0-1,4-5'}})).status,416);
-  jar=await login('+12025550302');
+  jar=await login('+12025550182');
   assert.equal((await call('publications/imports/stage',{manifest:third,sourceReviewConfirmed:true})).status,403,'product editor cannot retire another product placement');
-  jar=await login('+12025550303');
+  jar=await login('+12025550183');
   const learnerJar={...jar};
   assert.equal((await call('publications/access')).status,403);
   assert.equal((await fetch(mediaPath,{headers:{Cookie:`${sessionCookie}=${jar[sessionCookie]}`,Range:'bytes=0-1'}})).status,403,'staff video is private to authorized viewers');

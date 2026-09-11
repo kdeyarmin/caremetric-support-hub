@@ -4074,7 +4074,7 @@ create table private.publication_import_assets (
   check(expected_bytes is null or byte_length is null or expected_bytes=byte_length),
   check(body_text is null or (part='primary' and content_type='text/markdown'))
 );
-create index publication_import_asset_revision_idx on private.publication_import_assets(revision_id) where revision_id is not null;
+create unique index publication_import_asset_revision_idx on private.publication_import_assets(revision_id,part) where revision_id is not null;
 create table private.publication_revision_provenance (
   revision_id uuid primary key references hub.content_revisions(id) on delete restrict,
   item_id uuid not null references hub.content_items(id) on delete restrict,
@@ -4386,7 +4386,9 @@ declare intent uuid;
 begin
   if session_user<>'hub_app_server' then raise exception 'Server maintenance required.' using errcode='42501'; end if;
   delete from private.publication_cleanup_tokens where expires_at<=now();
-  select i.id into intent from private.publication_imports i where i.expires_at<now()
+  -- No transfer can outlive the fixed 120s Node/110s Edge deadline. The grace
+  -- prevents deleting a key while a pre-expiry authorized upload is finishing.
+  select i.id into intent from private.publication_imports i where i.expires_at<now()-interval '5 minutes'
     and not exists(select 1 from private.publication_import_assets a where a.import_id=i.id and a.revision_id is not null)
     and not exists(select 1 from private.publication_cleanup_tokens t where t.import_id=i.id and t.expires_at>now())
     and exists(select 1 from private.publication_import_assets a where a.import_id=i.id)
@@ -4402,7 +4404,7 @@ declare intent uuid; paths jsonb;
 begin
   if session_user<>'hub_app_server' then raise exception 'Server maintenance required.' using errcode='42501'; end if;
   update private.publication_cleanup_tokens t set consumed_at=now() where t.token_hash=p_hash and t.expires_at>now() and t.consumed_at is null
-    and exists(select 1 from private.publication_imports i where i.id=t.import_id and i.expires_at<now())
+    and exists(select 1 from private.publication_imports i where i.id=t.import_id and i.expires_at<now()-interval '5 minutes')
     and not exists(select 1 from private.publication_import_assets a where a.import_id=t.import_id and a.revision_id is not null)
     returning import_id into intent;
   if intent is null then raise exception 'Cleanup ticket unavailable.' using errcode='28000'; end if;

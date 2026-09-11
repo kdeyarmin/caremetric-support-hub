@@ -27,7 +27,7 @@ The initial application video limit is **25 MiB** and is read from `private.publ
 
 Published video and sidecars use `/api/publications/media/<revision UUID>/<part>`. The browser receives no Storage path, service credential, signed URL, or provider locator. Metadata, GET, HEAD, and single ranges each require a current SMS session and the actual per-revision publication policy. Even a public catalog item requires SMS for this media transport. Suffix/open-ended ranges normalize to a single bounded range; multiple or malformed ranges fail. Retirement or permission revocation blocks the next request.
 
-Cleanup runs on server startup and every 15 minutes, at most 20 intents per run. A separate one-use maintenance ticket can name only an expired intent whose objects are not attached to a revision. The Edge function consumes that ticket and deletes at most the three fixed object keys. Published objects and durable commit receipts remain preserved. Failed or incomplete transfers stay private and are retried by cleanup after expiry; they never become readable catalog content.
+Cleanup runs on server startup and every 15 minutes, at most 20 intents per run. A separate one-use maintenance ticket can name only an intent expired for at least five minutes whose objects are not attached to a revision. The grace exceeds the fixed 120-second Node and 110-second Edge transfer deadlines, so a pre-expiry upload cannot finish after its key is cleaned. The Edge function consumes that ticket and deletes at most the three fixed object keys. Published objects and durable commit receipts remain preserved. Failed or incomplete transfers stay private and are retried by cleanup after expiry; they never become readable catalog content.
 
 ## Reviewed deployment requirements
 
