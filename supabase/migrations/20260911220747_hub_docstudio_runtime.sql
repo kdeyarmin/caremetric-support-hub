@@ -374,7 +374,7 @@ begin
  manifest:=jsonb_build_object('schema_version','caremetric.support-hub.publication.v1','source_system','docstudio',
   'source',jsonb_build_object('content_key',p->>'contentKey','version','docstudio-v'||(p->>'revision')),
   'content',jsonb_build_object('kind',body->>'kind','title',body->>'title','summary',body->>'summary','locale',body->>'locale','access_level',body->>'accessLevel'),
-  'artifact',artifact,'governance',jsonb_build_object('review_state','approved','phi_review','passed','approved_at',approved,'policy_version','docstudio-phi-free-v1'),
+  'artifact',artifact,'governance',jsonb_build_object('review_state','approved','phi_review','passed','approved_at',to_char(approved at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),'policy_version','docstudio-phi-free-v1'),
   'placements',(select jsonb_agg(jsonb_build_object('product_slug',value,'audience',jsonb_build_array('all'),'route_pattern',null)) from jsonb_array_elements_text(body->'products')));
  return jsonb_build_object('projectId',p_id,'revision',p->'revision','manifest',manifest,'jobId',job.id,'markdown',case when body->>'kind'='article' then body->>'markdown' else null end);
 end $$;

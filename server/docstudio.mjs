@@ -6,6 +6,7 @@ import {id,sha,commandSchema,applySchema,assetSchema} from '../src/docstudio/pro
 import {parseRenderManifest,renderSidecars,RENDER_PROTOCOL} from './docstudio-render-contract.mjs';
 import {spoolDocStudioAsset} from './docstudio-assets.mjs';
 import {publicationParts,publicationPartRules} from '../src/imports/publicationProtocol.ts';
+import {validatePublicationManifest} from '../src/imports/publicationImportPreview.ts';
 const storageOrigin='https://xgauehtwksmnoqhgqegm.supabase.co';
 const opaque=z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 const part=z.enum(['primary','captions','transcript']);
@@ -115,6 +116,8 @@ export function docstudio({pool,publications,workerToken,fetchImpl=fetch,onDatab
     },
     async export(session,input) {
       const request=parse(z.object({projectId:id,expectedRevision:z.number().int().min(1).max(100),requestId:id,reviewConfirmed:z.literal(true)}).strict(),input);
+      const preview=await dbCall(session,'docstudio_export_context',[request.projectId]);
+      try {validatePublicationManifest(preview.manifest);}catch{throw new HttpError(422,'Review the saved title, summary, and publication metadata for unsupported links or private information before export.');}
       const context=await dbCall(session,'docstudio_stage_export',[request.projectId,request.expectedRevision,request.requestId]);
       let stage=await publications.get(session,context.importId);
       for(const part of publicationParts(stage.manifest)) {
