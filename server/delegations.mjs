@@ -9,6 +9,8 @@ import { nativeLearningOperationSchema } from '../src/learning/receiptProtocol.t
 import { learningReceipts } from './learning-receipts.mjs';
 import { nativeAuthoringOperationSchema } from '../src/learning/authoringProtocol.ts';
 import { learningAuthoring } from './learning-authoring.mjs';
+import { nativeCreationOperationSchema } from '../src/learning/creationProtocol.ts';
+import { learningCreation } from './learning-creation.mjs';
 import { supportIdentityOperation } from '../src/support/onboardingProtocol.ts';
 import { supportOnboarding } from './support-onboarding.mjs';
 import { nativeBillingCommandSchema } from '../supabase/functions/_shared/billingCommandProtocol.ts';
@@ -45,7 +47,7 @@ async function authorize(db,audience,payload) {
     return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
   }
   if (audience==='carebase.learning') {
-    nativeLearningOperationSchema.or(nativeAuthoringOperationSchema).parse(payload);
+    nativeLearningOperationSchema.or(nativeAuthoringOperationSchema).or(nativeCreationOperationSchema).parse(payload);
     return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
   }
   if (audience!=='media') throw new HttpError(403,'Unsupported authorization audience.');
@@ -68,6 +70,7 @@ export function delegations({pool,storageUrl,fetchImpl=fetch}) {
   return {
     learning: learningReceipts({pool,issue,fetchImpl}),
     authoring: learningAuthoring({pool,issue,fetchImpl}),
+    creation: learningCreation({pool,issue,fetchImpl}),
     onboarding: supportOnboarding({pool,issue,fetchImpl}),
     billingCommand: billingCommands({pool,issue,fetchImpl}),
     async consume(capability,audience) {
