@@ -7,7 +7,8 @@ upload approved MP4 videos with captions and transcripts.
 
 Implementation is in migration `20260911142602_central_learning_runtime.sql`.
 This document supersedes the earlier launch-only ownership model for new Hub
-courses. Existing production rollout records describe the previous deployment.
+courses. See the [September 11 production record](PRODUCTION_ROLLOUT.md#september-11-central-administration-and-learning-release)
+for the deployed release and remaining authenticated verification gates.
 
 ## User workflow
 
@@ -16,8 +17,9 @@ courses. Existing production rollout records describe the previous deployment.
 - `/library/courses/new` and `/library/courses/:itemId`: edit text, video, quiz,
   and attestation lessons; choose product placements; save with revision conflict
   detection; review and publish. Changes do not alter existing enrollments.
-- `/learn`: public metadata. Courses published in the Hub open here. Existing
-  source catalog links remain until the corresponding Hub course is published.
+- `/learn`: public metadata. New courses published in the Hub open here. Existing
+  CareBase courses retain source launches; their imported drafts cannot publish
+  until the source runtime and reporting bridge is verified.
 - `/learn/courses/:itemId`: authenticated enrollment and delivery. Quiz answers
   are graded server-side. Completion requires every lesson to be acknowledged
   and every quiz to pass; it is not proof of elapsed viewing time.

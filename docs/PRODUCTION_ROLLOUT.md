@@ -7,6 +7,58 @@ checked.
 
 ## Central platform
 
+### September 11 central administration and learning release
+
+Hub PR [#6](https://github.com/kdeyarmin/caremetric-support-hub/pull/6) merged as
+`c529172a7e334bda88971b6a54e460246fc4f4a3`. Railway deployment
+`9846bf8e-2d2a-499f-bc76-a484bc15d92e` reached `SUCCESS` for that merge. Production
+has 28 migrations through
+`20260911142604_platform_admin_session_authorization.sql`, backend API contract
+`2`, and the deployed `platform-admin` Edge Function at version `1`.
+
+The release adds `/admin`, the 97-surface application inventory, the read-only
+CareBase adapter client, and native authoring/delivery for new Hub courses.
+Existing CareBase courses retain native launches. Their imported drafts cannot
+publish until quiz behavior, credits, and completion reporting are connected.
+No legacy course history or private source video was migrated by this release.
+
+Verification recorded for this release:
+
+- [CI run 34612510888](https://github.com/kdeyarmin/caremetric-support-hub/actions/runs/34612510888)
+  passed on reviewed head `94279ff988024b5e2a19e09268669f33424b8d29`: 241 Hub
+  tests, 24 SDK tests, 211 database assertions, type checking, lint, builds,
+  Edge Function checking, and database advisors.
+- The [main-branch Support Hub CI run 34612947945](https://github.com/kdeyarmin/caremetric-support-hub/actions/runs/34612947945)
+  also passed for deployed merge `c529172`.
+- Eleven additional composed Hub-proxy-to-CareBase checks passed locally.
+- Production browser checks displayed the 80-course library; a course search
+  returned one matching result. Search covers course titles, summaries, and
+  categories; this release does not expose lesson-title search on `/learn`.
+- `/admin` presents sign-in to an unauthenticated visitor. Anonymous learning
+  editor and administrator authorization RPC requests returned HTTP `401`.
+
+CareBase PR [#517](https://github.com/kdeyarmin/PennTrain/pull/517) merged as
+`4e7e1a6dc586f3dfe7a2c5c0f60b1cf535eb8124`. Its Railway deployment
+`616e7e4b-8b69-4a33-b3c5-7ec5f5c418a1` reached `SUCCESS`; its healthcheck passed
+at 15:06 UTC. Live `/health` returned `200` with the existing Supabase provider
+runtime, and the public frontend and script asset returned `200`. An anonymous
+POST to `/api/platform-admin/read` returned JSON `401 unauthenticated`; a POST
+with a browser Origin returned JSON `403 forbidden`. Both used `no-store` and
+exposed no CORS allowance. The [post-CI backend deployment](https://github.com/kdeyarmin/PennTrain/actions/runs/34613550719)
+also succeeded. These probes establish deployed behavior, not a successful
+privileged Hub-to-CareBase session.
+The [CareBase main-branch CI run 34612563342](https://github.com/kdeyarmin/PennTrain/actions/runs/34612563342)
+passed for that merge; CI success alone does not establish production readiness.
+The owner must complete Hub TOTP enrollment and verify the authorized connection
+before live counts, course metadata, and privileged learning workflows can be
+certified end to end. Case intake remains subject to its existing activation
+gate. Customer SSO, consolidated billing, remaining app adapters, and CareBase
+course cutover remain pending.
+
+This September 11 entry supersedes the Hub deployment and current UI status in
+the historical September 10 and September 7 records below. Those records are
+retained as evidence of their respective releases.
+
 ### September 10 reconciliation
 
 The audit verified Hub Railway deployment `8bcf9edd-f03e-49fc-b5a9-7f914119259d`
