@@ -8,6 +8,8 @@ import type { AdminDirectoryUser, AdminOrganization, AdminPage, AdminSubscriptio
 import { AdminInventory } from "./AdminInventory";
 import { adminInventory } from "./inventory";
 import { CourseCatalog } from "./CareBaseCourses";
+import { AccessCommand } from "./AccessCommand";
+import type { AccessTarget } from "./AccessCommand";
 import { Loading, ReadFailure } from "./AdminReads";
 import { timeLabel } from "./readState";
 import { useAdminRead } from "./useAdminRead";
@@ -47,6 +49,7 @@ function ApplicationWorkspace({ product, client, portfolio }: { product: Portfol
   const app = adminRegistry[product];
   const capabilities = state.status === "ready" ? state.data : null;
   const supports = (candidate: Exclude<View, "inventory">) => viewOperations[candidate].every(operation => capabilities?.operations.includes(operation));
+  const allowCommands = product === "carebase" && capabilities?.operations.includes("commands.preview") === true && capabilities.operations.includes("commands.apply");
   return <>
     <div className="admin-section-title"><div><h2>{app.name}</h2><p>{app.userScope}</p></div><span className={`admin-status ${state.status === "ready" ? "admin-status-connected" : "admin-status-muted"}`}>{state.status === "ready" ? "Connection verified" : state.status === "loading" ? "Checking connection" : "Unavailable"}</span></div>
     <nav className="admin-view-nav" aria-label="Administration workspace views">{views.filter(item => supports(item.id)).map(({ id, name, icon: Icon }) => <button key={id} type="button" className={view === id ? "active" : ""} aria-pressed={view === id} onClick={() => setView(id)}><Icon size={16} aria-hidden="true" />{name}</button>)}<button type="button" className={view === "inventory" ? "active" : ""} aria-pressed={view === "inventory"} onClick={() => setView("inventory")}><Layers3 size={16} aria-hidden="true" />All app functions <span>{adminInventory.length}</span></button></nav>
@@ -56,9 +59,9 @@ function ApplicationWorkspace({ product, client, portfolio }: { product: Portfol
       {capabilities && !supports(view) && <p className="admin-explanation">This connection does not currently provide this operation.</p>}
       {capabilities && supports(view) && <div key={`${view}:${refresh}`}>
         {view === "overview" && <Overview product={product} portfolio={portfolio} capabilities={capabilities} retry={retry} />}
-        {view === "organizations" && <Directory product={product} portfolio={portfolio} kind="organizations" />}
-        {view === "users" && <Directory product={product} portfolio={portfolio} kind="users" />}
-        {view === "billing" && <Billing product={product} portfolio={portfolio} retry={retry} />}
+        {view === "organizations" && <Directory product={product} portfolio={portfolio} kind="organizations" allowCommands={allowCommands} />}
+        {view === "users" && <Directory product={product} portfolio={portfolio} kind="users" allowCommands={allowCommands} />}
+        {view === "billing" && <Billing product={product} portfolio={portfolio} retry={retry} allowCommands={allowCommands} />}
         {view === "courses" && product === "carebase" && <CourseCatalog client={client} />}
       </div>}
     </>}
@@ -80,22 +83,28 @@ function Overview({ product, portfolio, capabilities, retry }: { product: Portfo
   return <section><div className="metric-grid admin-metric-grid">{metrics.map(metric => <div className="metric-card metric-teal" key={metric.label}><div><p>{metric.label}</p><strong>{formatNumber.format(metric.value)}</strong><small>{app.name}</small></div></div>)}</div><p className="admin-read-time">Last loaded {timeLabel(state.receivedAt)}. These totals include only {app.name}.</p><details className="portfolio-connection-details"><summary>Connection details</summary><p>Supported reads: {capabilities.operations.join(", ")}</p><p>Deployed source: {capabilities.sourceRevision ?? "Not reported"}</p></details></section>;
 }
 
-function Directory({ product, portfolio, kind }: { product: PortfolioProduct; portfolio: PortfolioClient; kind: "organizations" | "users" }) {
+function Directory({ product, portfolio, kind, allowCommands }: { product: PortfolioProduct; portfolio: PortfolioClient; kind: "organizations" | "users"; allowCommands: boolean }) {
+  const [selected, setSelected] = useState<AccessTarget | null>(null);
+  const [revision, setRevision] = useState(0);
   const columns = kind === "organizations" ? ["Organization", "Slug", product === "carebase" ? "Subscription status" : "Status", "Created"] : ["Name", "Email", "Role", product === "carebase" ? "Profile status" : "Account status", "Created"];
+  if (allowCommands) columns.push("Access");
   const read = useCallback((search: string, offset: number, signal: AbortSignal) => kind === "organizations"
     ? portfolio.organizations({ product, search: search || undefined, offset, limit: 20, signal })
     : portfolio.users({ product, search: search || undefined, offset, limit: 20, signal }), [kind, portfolio, product]);
-  return <PagedRecords<AdminOrganization | AdminDirectoryUser> app={adminRegistry[product].name} title={kind === "organizations" ? "Organizations" : product === "breathe" ? "Staff accounts" : "Application user profiles"} searchLabel={kind === "organizations" ? "Search organization names" : "Search account emails"} columns={columns} read={read} render={row => "name" in row
+  return <>{selected && <AccessCommand key={`${selected.action}:${selected.id}`} target={selected} onClose={() => setSelected(null)} onApplied={() => setRevision(value => value + 1)} />}<PagedRecords<AdminOrganization | AdminDirectoryUser> key={revision} app={adminRegistry[product].name} title={kind === "organizations" ? "Organizations" : product === "breathe" ? "Staff accounts" : "Application user profiles"} searchLabel={kind === "organizations" ? "Search organization names" : "Search account emails"} columns={columns} read={read} render={row => <>{"name" in row
     ? <><td>{row.name ?? row.slug ?? row.id}</td><td>{row.slug ?? "—"}</td><td>{row.status}</td><td>{timeLabel(row.createdAt)}</td></>
-    : <><td>{row.displayName ?? "Not recorded"}</td><td>{row.email ?? "Not recorded"}</td><td>{row.role}</td><td>{row.status}</td><td>{timeLabel(row.createdAt)}</td></>} />;
+    : <><td>{row.displayName ?? "Not recorded"}</td><td>{row.email ?? "Not recorded"}</td><td>{row.role}</td><td>{row.status}</td><td>{timeLabel(row.createdAt)}</td></>}{allowCommands && <td>{!("name" in row) && row.role === "platform_admin" ? "Protected administrator" : <button type="button" className="button button-secondary button-small" onClick={() => setSelected({ id: row.id, label: "name" in row ? row.name ?? row.slug ?? row.id : row.displayName ?? row.email ?? row.id, action: "name" in row ? "organizations.setSuspension" : "users.setActive" })}>Change access</button>}</td>}</>} /></>;
 }
 
-function Billing({ product, portfolio, retry }: { product: PortfolioProduct; portfolio: PortfolioClient; retry: () => void }) {
-  const reader = useCallback((signal: AbortSignal) => portfolio.billing({ product, signal }), [portfolio, product]);
+function Billing({ product, portfolio, retry, allowCommands }: { product: PortfolioProduct; portfolio: PortfolioClient; retry: () => void; allowCommands: boolean }) {
+  const [selected, setSelected] = useState<AccessTarget | null>(null);
+  const [revision, setRevision] = useState(0);
+  const reader = useCallback((signal: AbortSignal) => { void revision; return portfolio.billing({ product, signal }); }, [portfolio, product, revision]);
   const state = useAdminRead(reader);
   const read = useCallback((search: string, offset: number, signal: AbortSignal) => portfolio.subscriptions({ product, search: search || undefined, offset, limit: 20, signal }), [portfolio, product]);
   return <section><div className="panel portfolio-billing-summary"><h2>Subscription administration</h2><p>These are subscription records stored by {adminRegistry[product].name}, including historical records. Provider status reflects the app’s latest recorded synchronization. It is not a new query to the payment provider.</p>{state.status === "loading" && <Loading label="Loading subscription states" app={adminRegistry[product].name} />}{state.status === "error" && <ReadFailure error={state.error} retry={retry} />}{state.status === "ready" && <><p><strong>{formatNumber.format(state.data.subscriptionCount)}</strong> recorded subscriptions · loaded {timeLabel(state.receivedAt)}</p><div className="portfolio-status-counts">{state.data.statusCounts.map(item => <span key={item.status}>{item.status}: <strong>{formatNumber.format(item.count)}</strong></span>)}</div></>}</div>
-    <PagedRecords<AdminSubscription> app={adminRegistry[product].name} title="Subscription records" searchLabel="Search provider subscription IDs" columns={["Organization", "Plan", "Application state", "Provider state", "Provider IDs", "Period end", "Updated"]} read={read} render={row => <><td>{row.organizationName ?? row.organizationId}</td><td>{row.planName ?? row.planCode ?? "Not recorded"}</td><td>{row.status}</td><td>{row.providerStatus ?? "Not recorded"}</td><td><div>{row.providerSubscriptionId ?? "No subscription ID"}</div><small>{row.providerCustomerId ?? "No customer ID"}</small></td><td>{timeLabel(row.currentPeriodEnd)}</td><td>{timeLabel(row.updatedAt)}</td></>} />
+    {selected && <AccessCommand key={`${selected.action}:${selected.id}`} target={selected} onClose={() => setSelected(null)} onApplied={() => setRevision(value => value + 1)} />}
+    <PagedRecords<AdminSubscription> key={revision} app={adminRegistry[product].name} title="Subscription records" searchLabel="Search provider subscription IDs" columns={["Organization", "Plan", "Application state", "Provider state", "Provider IDs", "Period end", "Updated", ...(allowCommands ? ["Access"] : [])]} read={read} render={row => <><td>{row.organizationName ?? row.organizationId}</td><td>{row.planName ?? row.planCode ?? "Not recorded"}</td><td>{row.status}</td><td>{row.providerStatus ?? "Not recorded"}</td><td><div>{row.providerSubscriptionId ?? "No subscription ID"}</div><small>{row.providerCustomerId ?? "No customer ID"}</small></td><td>{timeLabel(row.currentPeriodEnd)}</td><td>{timeLabel(row.updatedAt)}</td>{allowCommands && <td><button type="button" className="button button-secondary button-small" onClick={() => setSelected({ id: row.organizationId, label: row.organizationName ?? row.organizationId, action: "billing.setAccessOverride" })}>Change access</button></td>}</>} />
   </section>;
 }
 
