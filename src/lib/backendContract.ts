@@ -1,4 +1,17 @@
 export const REQUIRED_BACKEND_CONTRACT = 4;
+export const REQUIRED_BACKEND_FEATURES = ["learning.runtime.v1", "platform.admin.read.v1", "app.sms.v1", "learning.sources.v1", "platform.admin.command.v1"] as const;
+
+/** Additive features share the API version; the integer alone never proves readiness. */
+export function assertBackendContract(contract: unknown): void {
+  const features = contract && typeof contract === "object" && "features" in contract ? contract.features : undefined;
+  if (!contract || typeof contract !== "object" || !("api_version" in contract) || contract.api_version !== REQUIRED_BACKEND_CONTRACT
+    || !Array.isArray(features) || features.length > 100
+    || features.some(feature => typeof feature !== "string")
+    || new Set(features).size !== features.length
+    || REQUIRED_BACKEND_FEATURES.some(feature => !features.includes(feature))) {
+    throw new Error("The Support Hub backend API is incompatible. Apply the reviewed migrations before deploying this frontend.");
+  }
+}
 
 /** Public release metadata only. Never send an administrator session or secret key. */
 export async function verifyBackendContract(
@@ -29,7 +42,5 @@ export async function verifyBackendContract(
     throw new Error(`Support Hub backend compatibility check failed (${response.status}). Apply the reviewed migrations before deploying this frontend.`);
   }
   const contract: unknown = await response.json();
-  if (!contract || typeof contract !== "object" || !("api_version" in contract) || contract.api_version !== REQUIRED_BACKEND_CONTRACT) {
-    throw new Error("The Support Hub backend API is incompatible. Apply the reviewed migrations before deploying this frontend.");
-  }
+  assertBackendContract(contract);
 }

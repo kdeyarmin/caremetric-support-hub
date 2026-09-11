@@ -16,7 +16,7 @@ export interface GatewayExecution {
   fetchJson(endpoint: string, init: RequestInit): Promise<unknown>;
 }
 type GatewayContract<T> = GatewayBase<T> & (
-  { target(input: T): { endpoint: string | null; body: unknown }; execute?: never } |
+  { target(input: T): { endpoint: string | null; body: unknown; authorizationHeader?: "Authorization" | "X-CareMetric-Hub-Authorization" }; execute?: never } |
   { target?: never; execute(input: T, context: GatewayExecution): Promise<unknown> }
 );
 type SafeError = "unauthenticated" | "forbidden" | "unconfigured" | "notfound" | "upstream" | "conflict" | "expired" | "invalid_request";
@@ -123,7 +123,7 @@ export function createAdminGateway<T>({ publishableKey, fetcher = fetch }: Admin
       else {
         const target = contract.target(parsed);
         if (!target.endpoint) throw new GatewayError("unconfigured");
-        result = await fetchJson(target.endpoint, { method: "POST", headers: { Authorization: authorization, "Content-Type": "application/json" }, body: boundedJson(target.body) });
+        result = await fetchJson(target.endpoint, { method: "POST", headers: { [target.authorizationHeader ?? "Authorization"]: authorization, "Content-Type": "application/json" }, body: boundedJson(target.body) });
       }
       boundedJson(result);
       const data = contract.project(result, parsed);

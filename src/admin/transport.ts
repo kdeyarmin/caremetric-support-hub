@@ -1,4 +1,3 @@
-import { supabase } from "../lib/supabase";
 import { config } from "../lib/config";
 
 export class AdminApiError extends Error {
@@ -6,11 +5,10 @@ export class AdminApiError extends Error {
   constructor(code: string) { super("Administrator request could not be completed."); this.code = code; }
 }
 export async function requestAdmin(functionName: "platform-admin" | "platform-command" | "learning-receipts", body: unknown, signal: AbortSignal): Promise<unknown> {
-  if (!supabase) throw new AdminApiError("unconfigured");
-  const { data, error } = await supabase.auth.getSession();
-  if (error || !data.session) throw new AdminApiError("401");
-  const response = await fetch(`${config.supabaseUrl}/functions/v1/${functionName}`, {
-    method: "POST", headers: { "Content-Type": "application/json", apikey: config.supabasePublishableKey, Authorization: `Bearer ${data.session.access_token}` },
+  if (config.demoMode) throw new AdminApiError("unconfigured");
+  const route = functionName === "learning-receipts" ? "learning" : functionName === "platform-command" ? "command" : "read";
+  const response = await fetch(`/api/admin/${route}`, {
+    method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body), signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]), redirect: "error", cache: "no-store",
   });
   if (!response.ok) {
