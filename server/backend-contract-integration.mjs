@@ -86,5 +86,16 @@ try {
     try { await client.query(sql);await assert.rejects(()=>client.query(structureMigration),error=>error.code==='55000' && /structure|draft reader/.test(error.message)); }
     finally { await client.query('rollback'); }
   }
-  console.log('Backend declarations rejected twelve incomplete SQL boundaries and accepted the complete combined structure contract.');
+  await client.query('begin');
+  try {
+    const before=await readContract();
+    const withLaterFeature={...before,features:[...before.features,'synthetic.reviewed-next.v1']};
+    // Literal JSON is from this fixed synthetic fixture, not caller input.
+    const literal=JSON.stringify(withLaterFeature).replaceAll("'","''");
+    await client.query(`create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='' as $$ select '${literal}'::jsonb $$`);
+    await client.query(structureMigration);
+    assert.deepEqual(await readContract(),withLaterFeature,'An additive declaration preserves independently reviewed features');
+    assertBackendContract(await readContract());
+  } finally {await client.query('rollback');}
+  console.log('Backend declarations rejected twelve incomplete SQL boundaries, preserved an independently declared feature and accepted the combined structure contract.');
 } finally { await client.end(); }

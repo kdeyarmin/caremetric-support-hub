@@ -5477,13 +5477,22 @@ begin
   end if;
 end;
 $$;
-create or replace function hub.get_backend_contract() returns jsonb
-language sql stable security invoker set search_path='' as $$
-  select jsonb_build_object('api_version',4,'features',jsonb_build_array(
-    'learning.runtime.v1','platform.admin.read.v1','app.sms.v1','learning.sources.v1',
-    'platform.admin.command.v1','learning.receipts.v1','learning.authoring.v1',
-    'knowledge.publications.v1','support.readiness.v1','platform.admin.intel.v1',
-    'learning.draft-editing.v1','billing.portal.v1','learning.structure.v1'));
-$$;
+-- Preserve independently reviewed features declared by earlier migrations.
+-- Capture a literal; the public metadata function never reads private tables.
+do $declaration$
+declare contract jsonb:=hub.get_backend_contract(); features jsonb;
+begin
+  features:=contract->'features';
+  if jsonb_typeof(features) is distinct from 'array' or jsonb_array_length(features)>99
+    or exists(select 1 from jsonb_array_elements(features) value where jsonb_typeof(value)<>'string')
+    or (select count(*)<>count(distinct value) from jsonb_array_elements(features) value) then
+    raise exception 'Invalid prior structure feature declaration' using errcode='55000';
+  end if;
+  if not(features ? 'learning.structure.v1') then features:=features||'["learning.structure.v1"]'::jsonb; end if;
+  contract:=jsonb_build_object('api_version',4,'features',features);
+  execute format('create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='''' as %L',
+    format('select %L::jsonb',contract::text));
+end;
+$declaration$;
 revoke all on function hub.get_backend_contract() from public;
 grant execute on function hub.get_backend_contract() to anon,authenticated;
