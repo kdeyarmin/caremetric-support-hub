@@ -5,13 +5,10 @@ import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
 import { appServer } from './http.mjs';
 import { assertBackendContract } from '../src/lib/backendContract.ts';
+import { databaseConfig } from './database-config.mjs';
 
-const databaseUrl=process.env.HUB_DATABASE_URL;
-if(!databaseUrl) throw new Error('HUB_DATABASE_URL is required.');
-const parsed=new URL(databaseUrl);
-if(!parsed.username.startsWith('hub_app_server') || !parsed.password) throw new Error('Use the dedicated Hub application database role.');
 const storageUrl='https://xgauehtwksmnoqhgqegm.supabase.co';
-const pool=new pg.Pool({connectionString:databaseUrl,max:8,connectionTimeoutMillis:10000,idleTimeoutMillis:30000,ssl:{rejectUnauthorized:true}});
+const pool=new pg.Pool(databaseConfig());
 const provider=smsProvider({apiKey:process.env.HUB_TELNYX_API_KEY,profileId:process.env.HUB_TELNYX_VERIFY_PROFILE_ID});
 const api=gateway(pool);
 const contract=await api.rpc('get_backend_contract',{});
