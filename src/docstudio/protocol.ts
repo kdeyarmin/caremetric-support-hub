@@ -33,6 +33,6 @@ export const applySchema=z.object({intentId:id,requestId:id,reviewConfirmed:z.li
 export interface ProjectSummary {id:string;title:string;kind:'article'|'video';revision:number;status:'draft'|'in_review'|'approved';updatedAt:string}
 export interface Job {id:string;revision:number;status:'queued'|'running'|'completed'|'failed'|'cancelled';progress:number;attempts:number;createdAt:string;outputCount:number}
 export interface Project extends ProjectSummary {contentKey:string;draft:Draft;approvedAt:string|null;jobs:Job[];assets:z.infer<typeof assetSchema>[]}
-export interface Readiness {products:{slug:typeof PUBLICATION_PRODUCT_SLUGS[number];name:string}[];projects:ProjectSummary[];workerReady:boolean;maxVideoBytes:number}
+export interface Readiness {products:{slug:typeof PUBLICATION_PRODUCT_SLUGS[number];name:string}[];projects:ProjectSummary[];nextCursor:{updatedAt:string;id:string}|null;workerReady:boolean;maxVideoBytes:number}
 export interface Intent {id:string;requestId:string;operation:Command['operation'];projectId:string;expectedRevision:number;title:string;products:string[];expiresAt:string}
 export interface Receipt {intentId:string;requestId:string;projectId:string;revision:number;operation:Command['operation'];jobId:string|null;appliedAt:string}

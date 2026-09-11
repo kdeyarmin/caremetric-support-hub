@@ -8,6 +8,7 @@ create table private.docstudio_projects (
  created_at timestamptz not null default now(), updated_at timestamptz not null default now()
 );
 create index docstudio_projects_creator_idx on private.docstudio_projects(created_by);
+create index docstudio_projects_page_idx on private.docstudio_projects(updated_at desc,id desc);
 create table private.docstudio_revisions (
  project_id uuid not null references private.docstudio_projects(id), revision integer not null,
  body jsonb not null check(jsonb_typeof(body)='object' and octet_length(body::text)<=1000000),
@@ -31,9 +32,10 @@ create table private.docstudio_assets (
  id uuid primary key, project_id uuid not null references private.docstudio_projects(id),
  sha256 text not null check(sha256 ~ '^[0-9a-f]{64}$'), byte_length integer not null check(byte_length between 1 and 33554432),
  media_type text not null check(media_type in ('image/png','image/jpeg','audio/mpeg','audio/wav')),
- created_at timestamptz not null default now(), verified_at timestamptz
+ created_at timestamptz not null default now(), verified_at timestamptz, cleanup_at timestamptz
 );
 create index docstudio_assets_project_idx on private.docstudio_assets(project_id);
+create index docstudio_assets_cleanup_idx on private.docstudio_assets(created_at) where cleanup_at is null;
 create table private.docstudio_workers (
  id uuid primary key, source_revision text not null check(source_revision ~ '^[0-9a-f]{40}$'), seen_at timestamptz not null default now()
 );
@@ -51,25 +53,31 @@ create index docstudio_jobs_project_idx on private.docstudio_jobs(project_id,cre
 create index docstudio_jobs_actor_idx on private.docstudio_jobs(actor_id);
 create index docstudio_jobs_session_idx on private.docstudio_jobs(session_id);
 create index docstudio_jobs_worker_idx on private.docstudio_jobs(worker_id);
+create index docstudio_jobs_queue_idx on private.docstudio_jobs(created_at,id);
 create unique index docstudio_jobs_active_idx on private.docstudio_jobs(project_id) where status in ('queued','running');
 create table private.docstudio_outputs (
  job_id uuid not null references private.docstudio_jobs(id), attempt integer not null check(attempt between 1 and 3),
  part text not null check(part in ('primary','captions','transcript')),
  sha256 text not null check(sha256 ~ '^[0-9a-f]{64}$'), byte_length integer not null check(byte_length between 1 and 268435456),
- media_type text not null check(media_type in ('video/mp4','text/vtt','text/plain')), verified_at timestamptz,
+ media_type text not null check(media_type in ('video/mp4','text/vtt','text/plain')), verified_at timestamptz, cleanup_at timestamptz,
  primary key(job_id,attempt,part)
+);
+create table private.docstudio_cleanup_queue (
+ id uuid primary key, resource jsonb not null, path text not null unique,
+ created_at timestamptz not null default now(), completed_at timestamptz
 );
 create table private.docstudio_media_tokens (
  token_hash text primary key check(token_hash ~ '^[0-9a-f]{64}$'),
  session_id uuid references private.sms_sessions(id), job_id uuid references private.docstudio_jobs(id),
- lease_hash text, descriptor jsonb not null, expires_at timestamptz not null default now()+interval '30 seconds'
+ lease_hash text, cleanup_id uuid references private.docstudio_cleanup_queue(id), descriptor jsonb not null, expires_at timestamptz not null default now()+interval '30 seconds'
 );
 create index docstudio_media_session_idx on private.docstudio_media_tokens(session_id);
 create index docstudio_media_job_idx on private.docstudio_media_tokens(job_id);
 create index docstudio_media_expiry_idx on private.docstudio_media_tokens(expires_at);
+create index docstudio_media_cleanup_idx on private.docstudio_media_tokens(cleanup_id);
 
 do $$ declare t text; begin
- foreach t in array array['projects','revisions','approvals','intents','assets','workers','jobs','outputs','media_tokens'] loop
+ foreach t in array array['projects','revisions','approvals','intents','assets','workers','jobs','outputs','media_tokens','cleanup_queue'] loop
   execute format('alter table private.%I enable row level security','docstudio_'||t);
   execute format('revoke all on private.%I from public,anon,authenticated,service_role,hub_app_server','docstudio_'||t);
  end loop;
@@ -138,17 +146,24 @@ begin
   'jobs',coalesce((select jsonb_agg(x.body order by x.created_at desc) from (select j.created_at,jsonb_build_object('id',j.id,'revision',j.revision,'status',j.status,'progress',j.progress,'attempts',j.attempts,'createdAt',j.created_at,'outputCount',(select count(*) from private.docstudio_outputs o where o.job_id=j.id and o.attempt=j.attempts and verified_at is not null)) body from private.docstudio_jobs j where j.project_id=p_id order by j.created_at desc limit 30) x),'[]'::jsonb),
   'assets',coalesce((select jsonb_agg(jsonb_build_object('id',id,'sha256',sha256,'byteLength',byte_length,'mediaType',media_type) order by created_at) from private.docstudio_assets where project_id=p_id and verified_at is not null),'[]'::jsonb));
 end $$;
-create function private.docstudio_read() returns jsonb
+create function private.docstudio_can_read(p_body jsonb,p_key text) returns boolean
 language plpgsql stable security definer set search_path='' as $$
-declare p record; list jsonb:='[]';
+begin perform private.docstudio_scope(p_body,p_key);return true;
+exception when insufficient_privilege then return false;end $$;
+create function private.docstudio_read(p_cursor jsonb default null) returns jsonb
+language plpgsql stable security definer set search_path='' as $$
+declare p record; list jsonb:='[]'; last_id uuid; last_time timestamptz; more boolean:=false;
 begin
  perform private.publication_import_access();
- for p in select p.id from private.docstudio_projects p order by p.updated_at desc limit 500 loop
-  begin list:=list||jsonb_build_array(private.docstudio_project(p.id)-'draft'-'assets'-'jobs'-'approvedAt'-'contentKey');
-  exception when insufficient_privilege then null; end;
-  exit when jsonb_array_length(list)>=100;
+ for p in select p.id,p.updated_at from private.docstudio_projects p join private.docstudio_revisions r on r.project_id=p.id and r.revision=p.revision
+  where private.docstudio_can_read(r.body,p.content_key)
+   and (p_cursor is null or (p.updated_at,p.id)<((p_cursor->>'updatedAt')::timestamptz,(p_cursor->>'id')::uuid))
+  order by p.updated_at desc,p.id desc limit 101 loop
+  if jsonb_array_length(list)=100 then more:=true;exit;end if;
+  list:=list||jsonb_build_array(private.docstudio_project(p.id)-'draft'-'assets'-'jobs'-'approvedAt'-'contentKey');
+  last_id:=p.id;last_time:=p.updated_at;
  end loop;
- return jsonb_build_object('projects',list,'products',coalesce((select jsonb_agg(jsonb_build_object('slug',slug,'name',name) order by name) from hub.products where status<>'retired' and support_enabled and private.has_staff_permission('content.write',id)),'[]'::jsonb),
+ return jsonb_build_object('projects',list,'nextCursor',case when more then jsonb_build_object('updatedAt',last_time,'id',last_id) else null end,'products',coalesce((select jsonb_agg(jsonb_build_object('slug',slug,'name',name) order by name) from hub.products where status<>'retired' and support_enabled and private.has_staff_permission('content.write',id)),'[]'::jsonb),
   'workerReady',exists(select 1 from private.docstudio_workers where seen_at>now()-interval '30 seconds'),
   'maxVideoBytes',least(268435456,(select max_video_bytes from private.publication_import_settings where singleton)));
 end $$;
@@ -214,7 +229,7 @@ begin
    if rev>=100 or next_body->>'kind'<>body->>'kind' then raise exception 'Draft revision or kind conflict' using errcode='P4090'; end if;
    rev:=rev+1;
   end if;
-  if exists(select 1 from jsonb_array_elements(next_body->'assets') a where not exists(select 1 from private.docstudio_assets x where x.id=(a->>'id')::uuid and x.project_id=project and x.verified_at is not null and x.sha256=a->>'sha256' and x.byte_length=(a->>'byteLength')::integer and x.media_type=a->>'mediaType')) then raise exception 'Asset bytes not verified' using errcode='P4090'; end if;
+  if exists(select 1 from jsonb_array_elements(next_body->'assets') a where not exists(select 1 from private.docstudio_assets x where x.id=(a->>'id')::uuid and x.project_id=project and x.verified_at is not null and x.cleanup_at is null and x.sha256=a->>'sha256' and x.byte_length=(a->>'byteLength')::integer and x.media_type=a->>'mediaType')) then raise exception 'Asset bytes not verified' using errcode='P4090'; end if;
   insert into private.docstudio_revisions(project_id,revision,body,body_hash,author_id) values(project,rev,next_body,encode(extensions.digest(next_body::text,'sha256'),'hex'),actor);
   update private.docstudio_projects set revision=rev,status='draft',updated_at=now() where id=project;
   update private.docstudio_jobs set status='cancelled',finished_at=now(),lease_hash=null where project_id=project and status in ('queued','running');
@@ -252,7 +267,7 @@ begin
  perform pg_advisory_xact_lock(hashtextextended('docstudio-assets:'||p_project::text,0));
  select * into a from private.docstudio_assets where id=(p_asset->>'id')::uuid;
  if a.id is not null then
-  if a.project_id<>p_project or a.sha256<>p_asset->>'sha256' or a.byte_length<>(p_asset->>'byteLength')::integer or a.media_type<>p_asset->>'mediaType' then raise exception 'Asset identity already used' using errcode='P4090'; end if;
+  if a.cleanup_at is not null or a.project_id<>p_project or a.sha256<>p_asset->>'sha256' or a.byte_length<>(p_asset->>'byteLength')::integer or a.media_type<>p_asset->>'mediaType' then raise exception 'Asset identity already used' using errcode='P4090'; end if;
  else
   if (select count(*) from private.docstudio_assets where project_id=p_project)>=100 or coalesce((select sum(byte_length) from private.docstudio_assets where project_id=p_project),0)+(p_asset->>'byteLength')::integer>134217728 then raise exception 'Draft asset capacity reached' using errcode='P4290'; end if;
   insert into private.docstudio_assets(id,project_id,sha256,byte_length,media_type) values((p_asset->>'id')::uuid,p_project,p_asset->>'sha256',(p_asset->>'byteLength')::integer,p_asset->>'mediaType');
@@ -290,12 +305,12 @@ begin
  end if;
  if p_resource ? 'assetId' then
   select * into a from private.docstudio_assets where id=(p_resource->>'assetId')::uuid;
-  if a.id is null or a.project_id<>coalesce(j.project_id,(p->>'id')::uuid) or (p_operation='download' and a.verified_at is null) then raise exception 'Asset unavailable' using errcode='P4040'; end if;
+  if a.id is null or a.cleanup_at is not null or a.project_id<>coalesce(j.project_id,(p->>'id')::uuid) or (p_operation='download' and a.verified_at is null) then raise exception 'Asset unavailable' using errcode='P4040'; end if;
   if j.id is not null and (p_operation<>'download' or not exists(select 1 from jsonb_array_elements(j.manifest->'assets') x where x->>'id'=a.id::text and x->>'sha256'=a.sha256 and (x->>'byteLength')::integer=a.byte_length and x->>'mediaType'=a.media_type)) then raise exception 'Asset is not in the leased revision' using errcode='42501'; end if;
   path:='assets/'||a.project_id::text||'/'||a.id::text; media:=a.media_type; sha:=a.sha256; bytes:=a.byte_length;
  else
   select * into o from private.docstudio_outputs where job_id=j.id and attempt=j.attempts and part=p_resource->>'part';
-  if o.job_id is null or (p_operation='download' and o.verified_at is null) then raise exception 'Output unavailable' using errcode='P4040'; end if;
+  if o.job_id is null or o.cleanup_at is not null or (p_operation='download' and o.verified_at is null) then raise exception 'Output unavailable' using errcode='P4040'; end if;
   path:='renders/'||j.id::text||'/'||j.attempts::text||'/'||o.part; media:=o.media_type; sha:=o.sha256; bytes:=o.byte_length;
  end if;
  return jsonb_build_object('path',path,'operation',p_operation,'contentType',media,'sha256',sha,'byteLength',bytes,'maxBytes',bytes,'range',null);
@@ -312,10 +327,15 @@ begin
 end $$;
 create function private.docstudio_consume_media(p_hash text) returns jsonb
 language plpgsql security definer set search_path='' as $$
-declare t private.docstudio_media_tokens; actor uuid;
+declare t private.docstudio_media_tokens; actor uuid; q private.docstudio_cleanup_queue;
 begin
  delete from private.docstudio_media_tokens where token_hash=p_hash and expires_at>now() returning * into t;
  if t.token_hash is null then raise exception 'Media authorization expired' using errcode='28000'; end if;
+ if t.cleanup_id is not null then
+  select * into q from private.docstudio_cleanup_queue where id=t.cleanup_id and completed_at is null;
+  if q.id is null then raise exception 'Cleanup already completed' using errcode='P4090'; end if;
+  return jsonb_build_object('operation','cleanup','paths',jsonb_build_array(q.path));
+ end if;
  if t.session_id is not null then
   select user_id into actor from private.sms_sessions where id=t.session_id;
   perform set_config('request.jwt.claims',jsonb_build_object('sub',actor,'role','authenticated','sms_session_id',t.session_id)::text,true);
@@ -470,6 +490,46 @@ begin
 end $$;
 
 -- New private object namespace; immutable writes go through one-use server
+create function private.docstudio_issue_cleanup(p_hash text) returns uuid
+language plpgsql security definer set search_path='' as $$
+declare q private.docstudio_cleanup_queue; a private.docstudio_assets; output_row private.docstudio_outputs; resource jsonb; path text;
+begin
+ perform pg_advisory_xact_lock(hashtextextended('docstudio-cleanup',0));
+ select * into q from private.docstudio_cleanup_queue where completed_at is null order by created_at limit 1;
+ if q.id is null then
+  select * into a from private.docstudio_assets x where x.created_at<now()-interval '1 day' and x.cleanup_at is null
+   and not exists(select 1 from private.docstudio_revisions r where r.project_id=x.project_id and r.body->'assets' @> jsonb_build_array(jsonb_build_object('id',x.id))) order by x.created_at limit 1;
+  if a.id is not null then
+   -- Use the same project lock as draft writes. Once marked, an upload or edit
+   -- cannot attach these bytes while external Storage deletion is in flight.
+   if not pg_try_advisory_xact_lock(hashtextextended('docstudio-project:'||a.project_id::text,0)) then return null;end if;
+   if exists(select 1 from private.docstudio_revisions r where r.project_id=a.project_id and r.body->'assets' @> jsonb_build_array(jsonb_build_object('id',a.id))) then return null;end if;
+   update private.docstudio_assets set cleanup_at=now() where id=a.id;
+   resource:=jsonb_build_object('assetId',a.id,'projectId',a.project_id);path:='assets/'||a.project_id::text||'/'||a.id::text;
+  else
+   select o.* into output_row from private.docstudio_outputs o join private.docstudio_jobs j on j.id=o.job_id where j.created_at<now()-interval '7 days' and o.cleanup_at is null
+    and (j.status in ('failed','cancelled') or o.attempt<j.attempts) order by j.created_at,o.job_id,o.attempt,o.part limit 1;
+   if output_row.job_id is null then return null;end if;
+   update private.docstudio_outputs set cleanup_at=now() where job_id=output_row.job_id and attempt=output_row.attempt and part=output_row.part;
+   resource:=jsonb_build_object('jobId',output_row.job_id,'attempt',output_row.attempt,'part',output_row.part);path:='renders/'||output_row.job_id::text||'/'||output_row.attempt::text||'/'||output_row.part;
+  end if;
+  insert into private.docstudio_cleanup_queue(id,resource,path) values(gen_random_uuid(),resource,path) returning * into q;
+ end if;
+ delete from private.docstudio_media_tokens where expires_at<=now();
+ insert into private.docstudio_media_tokens(token_hash,cleanup_id,descriptor) values(p_hash,q.id,'{}'::jsonb);
+ return q.id;
+end $$;
+create function private.docstudio_finish_cleanup(p_id uuid) returns void
+language plpgsql security definer set search_path='' as $$
+declare q private.docstudio_cleanup_queue;
+begin
+ select * into q from private.docstudio_cleanup_queue where id=p_id and completed_at is null for update;
+ if q.id is null then return;end if;
+ if q.resource ? 'assetId' then delete from private.docstudio_assets where id=(q.resource->>'assetId')::uuid and cleanup_at is not null;
+ else delete from private.docstudio_outputs where job_id=(q.resource->>'jobId')::uuid and attempt=(q.resource->>'attempt')::integer and part=q.resource->>'part' and cleanup_at is not null;end if;
+ update private.docstudio_cleanup_queue set completed_at=now() where id=q.id;
+end $$;
+-- New private object namespace; immutable writes go through one-use server
 create function private.docstudio_worker_manifest(p_id uuid,p_lease text) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare j private.docstudio_jobs;
@@ -482,9 +542,10 @@ do $$ declare fn record; begin
   execute format('revoke all on function %s from public,anon,authenticated,service_role,hub_app_server',fn.signature);
  end loop;
 end $$;
-grant execute on function private.docstudio_read(),private.docstudio_project(uuid),private.docstudio_preview(uuid,jsonb),private.docstudio_apply(uuid,uuid,boolean,boolean),
+grant execute on function private.docstudio_read(jsonb),private.docstudio_project(uuid),private.docstudio_preview(uuid,jsonb),private.docstudio_apply(uuid,uuid,boolean,boolean),
  private.docstudio_worker(text,uuid,text,jsonb),private.docstudio_stage_asset(uuid,jsonb),private.docstudio_prepare_output(uuid,text,text,text,integer,text),
  private.docstudio_issue_media(text,jsonb,text),private.docstudio_consume_media(text),private.docstudio_verify_media(jsonb),private.docstudio_export_context(uuid),private.docstudio_stage_export(uuid,integer,uuid),private.docstudio_worker_manifest(uuid,text) to hub_app_server;
+grant execute on function private.docstudio_issue_cleanup(text),private.docstudio_finish_cleanup(uuid) to hub_app_server;
 do $$ declare contract jsonb:=hub.get_backend_contract(); begin
  if not (contract->'features' @> '["knowledge.publications.v1","app.sms.v1"]'::jsonb) then raise exception 'Apply the reviewed publication and SMS foundation first'; end if;
  contract:=jsonb_set(contract,'{features}',(contract->'features')||'["knowledge.docstudio.v1"]'::jsonb);

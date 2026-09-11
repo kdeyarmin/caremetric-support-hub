@@ -63,7 +63,7 @@ export function createImmutableMediaHandler({profile,serviceKey,fetchImpl=fetch}
       const authorization=request.headers.get("Authorization");
       if(!authorization || !/^Bearer cmh_[A-Za-z0-9_-]{43}$/.test(authorization)) return json({error:"Unauthorized"},401);
       const mode=request.headers.get("X-CareMetric-Publication-Mode");
-      if(studio && mode!==null) return json({error:"Invalid operation"},400);
+      if(studio && mode!==null && mode!=='cleanup') return json({error:"Invalid operation"},400);
       if(mode!==null && mode!=="cleanup" && mode!=="public") return json({error:"Invalid operation"},400);
       const gate=await fetchImpl(`${hubOrigin}/api/internal/${studio?'docstudio/media':`publications/${mode?mode+"/":""}`}${studio?'/':''}authorize`,{
         method:"POST",headers:{Authorization:authorization,"Content-Type":"application/json"},body:"{}",redirect:"error",signal:AbortSignal.timeout(10000),
@@ -77,7 +77,7 @@ export function createImmutableMediaHandler({profile,serviceKey,fetchImpl=fetch}
           || capability.paths.length<1 || capability.paths.length>3 || new Set(capability.paths).size!==capability.paths.length
           || capability.paths.some(path=>typeof path!=="string" || !objectPath.test(path))
           || new Set(capability.paths.map(path=>(path as string).split("/")[1])).size!==1) return json({error:"Invalid cleanup capability"},403);
-        const removed=await fetchImpl(`${storageOrigin}/storage/v1/object/hub-publications`,{
+        const removed=await fetchImpl(`${storageOrigin}/storage/v1/object/${bucket}`,{
           method:"DELETE",headers:{...serviceHeaders,"Content-Type":"application/json"},body:JSON.stringify({prefixes:capability.paths}),redirect:"error",signal:AbortSignal.timeout(25000),
         });
         return removed.ok?json({cleaned:true}):json({error:"Cleanup unavailable"},503);

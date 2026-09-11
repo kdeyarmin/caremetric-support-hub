@@ -111,7 +111,9 @@ jobs:
         env:
           HUB_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           HUB_RUN_STORAGE_RECOVERY_DRILL: disposable-object-loss
-        run: node server/storage-recovery-integration.mjs
+        run: |
+          node server/storage-recovery-integration.mjs
+          node server/docstudio-storage-recovery.mjs
       - name: Check database security and performance advisors
         run: npx supabase db advisors --local --type all --level warn --fail-on error
       - name: Stop isolated Supabase stack

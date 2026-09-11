@@ -23,7 +23,7 @@ let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;
   cleanupRunning=true;
-  try { await publicationService.cleanupExpired(); } catch { console.warn('Publication cleanup could not complete; it will retry.'); }
+  try { await publicationService.cleanupExpired(); await studio.cleanupExpired(); } catch { console.warn('Private media cleanup could not complete; it will retry.'); }
   finally { cleanupRunning=false; }
 };
 const cleanupTimer=setInterval(()=>void cleanup(),15*60*1000); cleanupTimer.unref();

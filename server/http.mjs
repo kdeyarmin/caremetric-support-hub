@@ -98,6 +98,7 @@ export function appServer({auth,gateway,delegations,publications,docstudio,origi
         if(path.startsWith('/api/docstudio') && docstudio) {
           if(url.search)throw new HttpError(400,'DocStudio query parameters are not supported.');
           if(path==='/api/docstudio' && req.method==='GET') return json(await docstudio.read(session));
+          if(path==='/api/docstudio/page' && req.method==='POST') return json(await docstudio.read(session,await jsonBody(req,2048)));
           if(path==='/api/docstudio/preview' && req.method==='POST') return json(await docstudio.preview(session,await jsonBody(req,1048576)));
           if(path==='/api/docstudio/apply' && req.method==='POST') return json(await docstudio.apply(session,await jsonBody(req,2048)));
           if(path==='/api/docstudio/export' && req.method==='POST') return json(await docstudio.export(session,await jsonBody(req,2048)));

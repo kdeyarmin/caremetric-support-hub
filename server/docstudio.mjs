@@ -61,7 +61,7 @@ export function docstudio({pool,publications,workerToken,fetchImpl=fetch}) {
   }
   return {
     get,
-    async read(session) {const result=await dbCall(session,'docstudio_read');return {...result,workerReady:!!workerToken && result.workerReady};},
+    async read(session,input={cursor:null}) {const request=parse(z.object({cursor:z.object({updatedAt:z.iso.datetime({offset:true}),id}).strict().nullable()}).strict(),input);const result=await dbCall(session,'docstudio_read',[request.cursor?JSON.stringify(request.cursor):null]);return {...result,workerReady:!!workerToken && result.workerReady};},
     preview:(session,input)=>dbCall(session,'docstudio_preview',[randomUUID(),JSON.stringify(parse(commandSchema,input))]),
     apply(session,input) {const request=parse(applySchema,input);return dbCall(session,'docstudio_apply',[request.intentId,request.requestId,request.reviewConfirmed,request.phiConfirmed]);},
     async stageAsset(session,project,input) {return dbCall(session,'docstudio_stage_asset',[parse(id,project),JSON.stringify(parse(assetSchema,input))]);},
@@ -76,6 +76,15 @@ export function docstudio({pool,publications,workerToken,fetchImpl=fetch}) {
     async consumeMedia(capability) {
       if(typeof capability!=='string' || !/^cmh_[A-Za-z0-9_-]{43}$/.test(capability)) throw new HttpError(401,'Media authorization required.');
       return dbCall(null,'docstudio_consume_media',[digest(capability)],true);
+    },
+    async cleanupExpired() {
+      for(let count=0;count<20;count++) {
+        const capability='cmh_'+token();const id=await dbCall(null,'docstudio_issue_cleanup',[digest(capability)],true);
+        if(!id)break;
+        const response=await fetchImpl(`${storageOrigin}/functions/v1/docstudio-media`,{method:'POST',headers:{Authorization:`Bearer ${capability}`,'X-CareMetric-Publication-Mode':'cleanup','Content-Type':'application/json'},body:'{}',redirect:'error',signal:AbortSignal.timeout(30000)});
+        if(!response.ok)break;const result=await response.json();if(result?.cleaned!==true || Object.keys(result).length!==1)break;
+        await dbCall(null,'docstudio_finish_cleanup',[id],true);
+      }
     },
     async worker(authorization,input) {
       authorizeWorker(authorization);const request=parse(workerRequest,input);

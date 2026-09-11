@@ -28,6 +28,7 @@ const storageFetch=async(url,options)=>{
  if(url.startsWith('https://support-hub-web-production.up.railway.app/api/internal/'))return fetch(baseUrl+new URL(url).pathname,options);
  const prefix='https://xgauehtwksmnoqhgqegm.supabase.co/storage/v1/object/';assert.ok(url.startsWith(prefix));
  const headers=new Headers(options.headers);assert.equal(headers.get('Authorization'),'Bearer synthetic-storage-only');assert.equal(options.redirect,'error');
+ if(options.method==='DELETE') {assert.equal(url,prefix+'hub-docstudio');for(const path of JSON.parse(options.body).prefixes)objects.delete('hub-docstudio/'+path);return Response.json([]);}
  if(options.method==='POST') {
   const key=url.slice(prefix.length);assert.equal(headers.get('x-upsert'),'false');
   if(objects.has(key))return new Response('{}',{status:409});
@@ -100,11 +101,48 @@ try {
  jar=await login('+12025550211');assert.equal((await call(`docstudio/projects/${aid}`)).status,403,'scope covers every product');
  const scopedId=randomUUID();await command('create',scopedId,0,{...article,products:['carebase']});
  assert.equal((await call('docstudio/preview',{operation:'edit',requestId:randomUUID(),projectId:scopedId,expectedRevision:1,draft:article})).status,403);
+ // Newer unauthorized drafts must not hide older authorized drafts. Page the
+ // authorized cohort itself and prove all >100 older permitted rows reachable.
+ for(const [count,products,age] of [[501,['breathe'],'0 days'],[105,['carebase'],'2 days']]) {
+  const body={...article,products};
+  await admin.query(`with inserted as (insert into private.docstudio_projects(id,content_key,revision,status,created_by,updated_at)
+   select gen_random_uuid(),'pagination.'||replace(gen_random_uuid()::text,'-',''),1,'draft',$1,now()-$4::interval from generate_series(1,$2::integer) returning id)
+   insert into private.docstudio_revisions(project_id,revision,body,body_hash,author_id) select id,1,$3::jsonb,encode(extensions.digest(($3::jsonb)::text,'sha256'),'hex'),$1 from inserted`,[owner,count,JSON.stringify(body),age]);
+ }
+ let page=(await call('docstudio')).body;const visible=[...page.projects];assert.equal(page.projects.length,100);assert.ok(page.nextCursor);
+ while(page.nextCursor){page=(await call('docstudio/page',{cursor:page.nextCursor})).body;visible.push(...page.projects);}
+ assert.equal(visible.length,106);assert.equal(new Set(visible.map(item=>item.id)).size,106);assert.ok(visible.some(item=>item.id===scopedId));
  jar=await login('+12025550212');assert.equal((await call('docstudio')).status,403);
  jar=ownerJar;
  assert.equal((await worker('heartbeat',{protocol:'caremetric.docstudio.render.v1'},{Origin:'https://hub.test'})).status,403);
  assert.equal((await worker('heartbeat',{protocol:'caremetric.docstudio.render.v1'},{Authorization:`Bearer ${token()}`})).status,401);
  assert.equal((await worker('heartbeat',{protocol:'caremetric.docstudio.render.v1'})).status,200);
+ const assetsId=randomUUID();await command('create',assetsId,0,video);
+ // A small synthetic PNG signature is enough for this transport/authorization
+ // fixture; decoding and rendering real images are the renderer image tests.
+ const imageBytes=Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0]);
+ const imageAsset={id:randomUUID(),sha256:digest(imageBytes),byteLength:imageBytes.length,mediaType:'image/png'};
+ assert.equal((await call(`docstudio/projects/${assetsId}/assets`,imageAsset)).status,200);
+ assert.equal((await call(`docstudio/projects/${assetsId}/assets`,{...imageAsset,sha256:'a'.repeat(64)})).status,409);
+ const sourcePath=`${baseUrl}/api/docstudio/projects/${assetsId}/assets/${imageAsset.id}`;
+ assert.equal((await fetch(sourcePath)).status,401);
+ const imageUploaded=await fetch(sourcePath,{method:'POST',headers:{Origin:'https://hub.test',Cookie:`${sessionCookie}=${jar[sessionCookie]}`,'Content-Type':'image/png'},body:imageBytes});assert.equal(imageUploaded.status,200,await imageUploaded.text());
+ const sourceRead=await fetch(sourcePath,{headers:{Cookie:`${sessionCookie}=${jar[sessionCookie]}`}});assert.equal(sourceRead.status,200);assert.deepEqual(Buffer.from(await sourceRead.arrayBuffer()),imageBytes);
+ const withImage={...video,assets:[imageAsset],scenes:[{...video.scenes[0],screenshotAssetId:imageAsset.id}]};
+ await command('edit',assetsId,1,withImage);await command('submit',assetsId,2);await command('approve',assetsId,2);await command('render',assetsId,2);
+ const imageJob=(await worker('claim')).body.job;assert.ok(imageJob);
+ const workerSource=`${baseUrl}/api/internal/docstudio/worker/jobs/${imageJob.manifest.jobId}/sources/`;
+ const sourceHeaders={Authorization:`Bearer ${workerToken}`,'X-CareMetric-Job-Lease':imageJob.leaseToken};
+ const source=await fetch(workerSource+imageAsset.id,{headers:sourceHeaders});assert.equal(source.status,200);assert.deepEqual(Buffer.from(await source.arrayBuffer()),imageBytes);
+ assert.equal((await fetch(workerSource+randomUUID(),{headers:sourceHeaders})).status,404);
+ await command('cancel',assetsId,2);
+ assert.equal((await fetch(workerSource+imageAsset.id,{headers:sourceHeaders})).status,409);
+ const unused={...imageAsset,id:randomUUID()};assert.equal((await call(`docstudio/projects/${assetsId}/assets`,unused)).status,200);
+ const unusedUpload=await fetch(`${baseUrl}/api/docstudio/projects/${assetsId}/assets/${unused.id}`,{method:'POST',headers:{Origin:'https://hub.test',Cookie:`${sessionCookie}=${jar[sessionCookie]}`,'Content-Type':'image/png'},body:imageBytes});assert.equal(unusedUpload.status,200);
+ await admin.query("update private.docstudio_assets set created_at=now()-interval '2 days' where project_id=$1",[assetsId]);
+ await studio.cleanupExpired();
+ assert.equal(objects.has(`hub-docstudio/assets/${assetsId}/${unused.id}`),false,'unused staged bytes are cleaned');
+ assert.equal(objects.has(`hub-docstudio/assets/${assetsId}/${imageAsset.id}`),true,'every immutable revision keeps its source bytes');
  const vid=randomUUID();await command('create',vid,0,video);await command('submit',vid,1);await command('approve',vid,1);
  const render=await command('render',vid,1);
  const claims=await Promise.all([worker('claim'),worker('claim')]);assert.ok(claims.every(result=>result.status===200));assert.equal(claims.filter(result=>result.body.job).length,1,'one durable lease per job');

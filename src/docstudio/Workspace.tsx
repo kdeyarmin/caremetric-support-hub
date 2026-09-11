@@ -99,6 +99,7 @@ export function DocStudioWorkspace() {
     <p>{ready.workerReady?'Video renderer is ready.':'Video renderer is currently unavailable.'} Video export limit: {ready.maxVideoBytes/1024/1024} MiB.</p>
     {ready.projects.length===0&&<p>No saved drafts yet.</p>}
     <ul>{ready.projects.map(item=><li key={item.id}><button disabled={locked} aria-current={project?.id===item.id?'page':undefined} onClick={()=>void run('Opening draft…',()=>reload(item.id))}><strong>{item.title}</strong><span>{item.kind} · revision {item.revision} · {item.status.replace('_',' ')}</span></button></li>)}</ul>
+    {ready.nextCursor&&<button className="button button-secondary" disabled={locked} onClick={()=>void run('Loading older drafts…',async()=>{const next=await appRequest<Readiness>('docstudio/page',{cursor:ready.nextCursor});if(alive.current)setReady(previous=>previous?{...next,projects:[...previous.projects,...next.projects.filter(item=>!previous.projects.some(existing=>existing.id===item.id))]}:next);})}>Load older drafts</button>}
    </aside>
    <main className="studio-editor">
    {!draft?<section className="panel"><h2>Create shared help content</h2><p>Start an article or a video with scenes, captions, images, and optional recorded narration. Saved content requires an explicit review before publication.</p></section>:<>
