@@ -2,7 +2,7 @@
 do $$
 declare signature text;
 begin
-  if (hub.get_backend_contract() @> '{"api_version":4,"features":["learning.runtime.v1","platform.admin.read.v1","app.sms.v1","learning.sources.v1","platform.admin.command.v1","learning.receipts.v1","learning.authoring.v1","knowledge.publications.v1","support.readiness.v1","platform.admin.intel.v1","learning.draft-editing.v1","billing.portal.v1","learning.structure.v1"]}'::jsonb) is not true then
+  if (hub.get_backend_contract() @> '{"api_version":4,"features":["learning.runtime.v1","platform.admin.read.v1","app.sms.v1","learning.sources.v1","platform.admin.command.v1","learning.receipts.v1","learning.authoring.v1","knowledge.publications.v1","support.readiness.v1","platform.admin.intel.v1","learning.draft-editing.v1","billing.portal.v1","support.customer-onboarding.v1","learning.structure.v1"]}'::jsonb) is not true then
     raise exception 'Apply the complete structure and portal foundation before checkout declaration' using errcode='55000';
   end if;
   if to_regclass('private.billing_checkout_intents') is null or to_regtype('private.billing_checkout_action') is null then
@@ -13,18 +13,22 @@ begin
     'private.billing_checkout_intent_view(private.billing_checkout_intents)', 'private.require_billing_checkout_intent(uuid)',
     'private.resume_billing_checkout(uuid)', 'private.reserve_billing_checkout(jsonb)', 'private.dispatch_billing_checkout_preview(uuid)',
     'private.remember_billing_checkout_preview(uuid,jsonb)', 'private.claim_billing_checkout(uuid,text,boolean)',
-    'private.record_billing_checkout_result(uuid,uuid,jsonb)', 'private.discard_billing_checkout(uuid)'
+    'private.record_billing_checkout_result(uuid,uuid,jsonb)', 'private.claim_billing_checkout_recovery(uuid)', 'private.remember_billing_checkout_recovery(uuid,uuid,jsonb)', 'private.discard_billing_checkout(uuid)'
   ] loop
     if to_regprocedure(signature) is null then
       raise exception 'Missing reviewed checkout function %',signature using errcode='55000';
     end if;
   end loop;
-  if enum_range(null::private.billing_checkout_action)::text[] is distinct from array['billing.checkout.create']::text[]
+  if enum_range(null::private.billing_checkout_action)::text[] is distinct from array['billing.checkout.create','billing.checkout.recover']::text[]
     or not exists(select 1 from pg_catalog.pg_attribute a where a.attrelid='private.billing_checkout_intents'::regclass
       and a.attname='action' and not a.attisdropped and a.attnotnull and a.atttypid='private.billing_checkout_action'::regtype)
     or position('''billing.checkout.create''' in pg_catalog.pg_get_functiondef('private.reserve_billing_checkout(jsonb)'::regprocedure))=0
     or position('''packageId''' in pg_catalog.pg_get_functiondef('private.reserve_billing_checkout(jsonb)'::regprocedure))=0 then
     raise exception 'Apply the closed checkout action and native plan contract first' using errcode='55000';
+  end if;
+  if position('Recovery cannot create checkout.' in pg_catalog.pg_get_functiondef('private.claim_billing_checkout(uuid,text,boolean)'::regprocedure))=0
+    or position('p_check_only is not true' in pg_catalog.pg_get_functiondef('private.claim_billing_checkout(uuid,text,boolean)'::regprocedure))=0 then
+    raise exception 'Apply the GET-only recovery boundary first' using errcode='55000';
   end if;
   if not exists(select 1 from pg_catalog.pg_attribute a where a.attrelid='private.billing_checkout_intents'::regclass
       and a.attname='observation_id' and not a.attisdropped and a.atttypid='uuid'::regtype)

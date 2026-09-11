@@ -1,7 +1,7 @@
 import { withSession, HttpError } from './sms-auth.mjs';
 import { callNativeAdmin } from './admin-transport.mjs';
 import { isUuid } from '../supabase/functions/_shared/adminProtocol.ts';
-import { checkoutCommandSchema, checkoutIntentSchema, checkoutResultMetadata, projectCheckoutCommand, verifyCheckoutOutcome } from '../supabase/functions/_shared/checkoutCommandProtocol.ts';
+import { checkoutCommandSchema, checkoutIntentSchema, checkoutResultMetadata, checkoutRecoveryMetadata, projectCheckoutCommand, verifyCheckoutOutcome } from '../supabase/functions/_shared/checkoutCommandProtocol.ts';
 
 export function checkoutCommands({pool,issue,fetchImpl=fetch}) {
   return async(sessionToken,input,requestSignal)=>{
@@ -30,6 +30,17 @@ export function checkoutCommands({pool,issue,fetchImpl=fetch}) {
         return value===null?null:checkoutIntentSchema.parse(value);
       });
       if(operation.operation==='discard') return await local(async db=>(await db.query('select private.discard_billing_checkout($1) as value',[operation.requestId])).rows[0].value);
+      if(operation.operation==='recover') {
+        await local(db=>read(db,'select private.reserve_billing_checkout($1::jsonb) as value',[JSON.stringify(operation)]));
+        const observationId=await local(async db=>{
+          const value=(await db.query('select private.claim_billing_checkout_recovery($1) as value',[operation.requestId])).rows[0].value;
+          if(!value || Object.keys(value).length!==2 || !isUuid(value.observationId)) throw new Error('Invalid recovery observation');
+          checkoutIntentSchema.parse(value.intent);return value.observationId;
+        });
+        const recovery=await native(operation);
+        return await local(db=>read(db,'select private.remember_billing_checkout_recovery($1,$2,$3::jsonb) as value',
+          [operation.requestId,observationId,JSON.stringify(checkoutRecoveryMetadata(recovery))]));
+      }
       if(operation.operation==='preview') {
         await local(db=>read(db,'select private.reserve_billing_checkout($1::jsonb) as value',[JSON.stringify(operation)]));
         await local(db=>read(db,'select private.dispatch_billing_checkout_preview($1) as value',[operation.requestId]));

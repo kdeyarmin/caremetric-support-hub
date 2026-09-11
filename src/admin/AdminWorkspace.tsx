@@ -44,7 +44,7 @@ export function AdminWorkspace({ client, portfolio = portfolioClient }: { client
   </div>;
 }
 
-const supportsCheckout = (product: PortfolioProduct, capabilities?: PortfolioCapabilities | null) => product === "carebase" && (["billing.packages.list", "billing.checkout.preview", "billing.checkout.apply", "billing.checkout.check"] as const).every(operation => capabilities?.operations.includes(operation));
+const supportsCheckout = (product: PortfolioProduct, capabilities?: PortfolioCapabilities | null) => product === "carebase" && (["billing.packages.list", "billing.checkout.preview", "billing.checkout.apply", "billing.checkout.check", "billing.checkout.recover"] as const).every(operation => capabilities?.operations.includes(operation));
 
 function ApplicationWorkspace({ product, client, portfolio }: { product: PortfolioProduct; client: AdminClient; portfolio: PortfolioClient }) {
   const [view, setView] = useState<View>("overview");

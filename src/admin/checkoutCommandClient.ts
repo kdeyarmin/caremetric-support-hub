@@ -1,5 +1,5 @@
-import { checkoutApplyRequestSchema, checkoutCheckRequestSchema, checkoutCommandSchema, checkoutIntentSchema, checkoutPreviewRequestSchema, verifyCheckoutOutcome } from "../../supabase/functions/_shared/checkoutCommandProtocol";
-import type { CheckoutApplyRequest, CheckoutCheckRequest, CheckoutIntent, CheckoutPreview, CheckoutPreviewRequest, CheckoutResult } from "../../supabase/functions/_shared/checkoutCommandProtocol";
+import { checkoutApplyRequestSchema, checkoutCheckRequestSchema, checkoutCommandSchema, checkoutIntentSchema, checkoutPreviewRequestSchema, checkoutRecoverRequestSchema, verifyCheckoutOutcome } from "../../supabase/functions/_shared/checkoutCommandProtocol";
+import type { CheckoutApplyRequest, CheckoutCheckRequest, CheckoutIntent, CheckoutPreview, CheckoutPreviewRequest, CheckoutRecoverRequest, CheckoutResult } from "../../supabase/functions/_shared/checkoutCommandProtocol";
 import { parseCheckoutCatalog } from "../../supabase/functions/_shared/checkoutCatalogProtocol";
 import type { BillingPackagePage } from "../../supabase/functions/_shared/checkoutCatalogProtocol";
 import { readPortfolio } from "./portfolioClient";
@@ -9,6 +9,7 @@ export interface CheckoutCommandClient {
   packages(search: string, offset: number, signal: AbortSignal): Promise<BillingPackagePage>;
   resume(targetId: string, signal: AbortSignal): Promise<CheckoutIntent | null>;
   preview(request: CheckoutPreviewRequest, signal: AbortSignal): Promise<CheckoutIntent>;
+  recover(request: CheckoutRecoverRequest, signal: AbortSignal): Promise<CheckoutIntent>;
   apply(request: CheckoutApplyRequest, preview: CheckoutPreview, signal: AbortSignal): Promise<CheckoutResult>;
   check(request: CheckoutCheckRequest, preview: CheckoutPreview, signal: AbortSignal): Promise<CheckoutResult>;
   discard(requestId: string, signal: AbortSignal): Promise<void>;
@@ -32,6 +33,12 @@ export const checkoutCommandClient: CheckoutCommandClient = {
     return intent;
   },
   apply: async(request, preview, signal)=>verifyCheckoutOutcome(await requestAdmin("checkout-command", checkoutApplyRequestSchema.parse(request), signal), preview),
+  recover: async(request, signal)=>{
+    const parsed = checkoutRecoverRequestSchema.parse(request);
+    const intent = checkoutIntentSchema.parse(await requestAdmin("checkout-command", parsed, signal));
+    if (JSON.stringify(intent.request) !== JSON.stringify(parsed)) throw new Error("Unbound organization recovery");
+    return intent;
+  },
   check: async(request, preview, signal)=>verifyCheckoutOutcome(await requestAdmin("checkout-command", checkoutCheckRequestSchema.parse(request), signal), preview),
   discard: async(requestId, signal)=>{
     const result = await requestAdmin("checkout-command", checkoutCommandSchema.parse({ operation: "discard", requestId }), signal);

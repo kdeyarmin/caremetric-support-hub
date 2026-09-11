@@ -1,7 +1,7 @@
 begin;
 select plan(13);
 select has_table('private','billing_checkout_intents','Checkout reviews have private durable ownership');
-select is(enum_range(null::private.billing_checkout_action)::text[],array['billing.checkout.create'],'Only the reviewed checkout action is supported');
+select is(enum_range(null::private.billing_checkout_action)::text[],array['billing.checkout.create','billing.checkout.recover'],'Only reviewed creation and GET-only recovery actions are supported');
 select ok((select relrowsecurity from pg_class where oid='private.billing_checkout_intents'::regclass),'Checkout intent table has RLS');
 select ok(not has_table_privilege('anon','private.billing_checkout_intents','SELECT'),'Anonymous callers cannot read saved checkout reviews');
 select ok(not has_table_privilege('authenticated','private.billing_checkout_intents','SELECT'),'Browser sessions cannot read checkout rows directly');

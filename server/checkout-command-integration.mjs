@@ -27,6 +27,7 @@ await admin.query('insert into private.sms_identities(user_id,phone_e164) values
 const records=new Map(),sessionId='cs_test_SyntheticOriginal',checkoutUrl=`https://checkout.stripe.com/c/pay/${sessionId}#synthetic%2Ffixture`;
 let nativeRevoked=false,dropPreview=true,dropOpen=false,pending=true,tamper=false,revokeAfterNative=false,calls=0,providerWrites=0;
 let terminal=null,released=false,stopBeforeProvider=false,recoverExpired=false,holdObservation=null;
+let dropRecovery=false,noReservation=false;
 const provider={send:async()=>randomUUID(),verify:async(_id,_phone,code)=>code==='123456'};
 const auth=smsAuth({pool,provider});
 const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(url,options)=>{
@@ -35,7 +36,7 @@ const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(u
   assert.deepEqual(Object.keys(options.headers).sort(),['Authorization','Content-Type']);
   const command=nativeCheckoutCommandSchema.parse(JSON.parse(options.body)),ticket=options.headers.Authorization.slice(7);
   const actor=await caps.consume(ticket,'carebase.command');
-  assert.equal(actor.user_id,owner);assert.equal(actor.method,'sms');assert.deepEqual(actor.operation,command);
+  assert.ok([owner,other].includes(actor.user_id));assert.equal(actor.method,'sms');assert.deepEqual(actor.operation,command);
   assert.ok(Date.parse(actor.assurance_expires_at)>Date.now());await assert.rejects(caps.consume(ticket,'carebase.command'));
   if(nativeRevoked)return Response.json({error:{code:'forbidden'}},{status:403});
   let data;
@@ -49,11 +50,29 @@ const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(u
       records.set(command.requestId,record);
     }
     if(dropPreview){dropPreview=false;throw new Error('Simulated lost preview response');}data=record.preview;
+  } else if(command.operation==='recover') {
+    if(noReservation) data={targetId:command.targetId,preview:null,result:null,canStartNewCheckout:released};
+    else {
+      let record=records.get(command.requestId);
+      if(!record) {
+        const original=records.get(request.requestId);
+        record={preview:{...original.preview,commandId:randomUUID(),action:command.action,reason:command.reason,
+          expiresAt:new Date(Date.now()+240000).toISOString(),previewDigest:digest(JSON.stringify(command))},
+          session:original.session,readonly:true};records.set(command.requestId,record);
+      }
+      const result={commandId:record.preview.commandId,action:command.action,targetId:command.targetId,replayed:true,
+        outcome:pending?'pending':'open',checkedAt:pending?null:new Date().toISOString(),providerStatus:pending?null:'open',
+        availability:pending?'unavailable':'available',canStartNewCheckout:false,retryAfterSeconds:pending?30:null,session:pending?null:record.session};
+      data={targetId:command.targetId,preview:record.preview,result,canStartNewCheckout:false};
+      if(dropRecovery){dropRecovery=false;throw new Error('Simulated lost recovery response');}
+    }
+    if(holdObservation) {const held=holdObservation;holdObservation=null;held.started();await held.release;}
   } else {
     const record=[...records.values()].find(value=>value.preview.commandId===command.commandId);
     assert.ok(record);assert.equal(command.expectedDigest,record.preview.previewDigest);
     if(stopBeforeProvider){stopBeforeProvider=false;throw new Error('Dispatch stopped before native provider work');}
-    const base={commandId:command.commandId,action:'billing.checkout.create',targetId:record.preview.targetId,replayed:true};
+    if(record.readonly)assert.equal(command.operation,'check');
+    const base={commandId:command.commandId,action:command.action,targetId:record.preview.targetId,replayed:true};
     if(!record.session && command.operation==='apply') {
       providerWrites++;record.session={kind:'checkout',id:sessionId,url:checkoutUrl,expiresAt:new Date(Date.now()+3600000).toISOString(),livemode:false};
     }
@@ -94,7 +113,7 @@ async function login(cookies,number) {
 const checkout=(body,cookies=jar,headers={})=>call('admin/checkout-command',body,cookies,headers);
 const resume=()=>checkout({operation:'resume',targetId:organization});
 const request={operation:'preview',requestId:randomUUID(),action:'billing.checkout.create',targetId:organization,parameters:{packageId,billingInterval:'month'},reason:'Review synthetic organization subscription checkout'};
-const identity=(preview,operation='apply')=>({operation,action:'billing.checkout.create',commandId:preview.commandId,expectedDigest:preview.previewDigest});
+const identity=(preview,operation='apply')=>({operation,action:preview.action,commandId:preview.commandId,expectedDigest:preview.previewDigest});
 try {
   assert.equal((await resume()).status,401);await login(jar,phone);await login(otherJar,otherPhone);
   assert.equal((await checkout(request,jar,{Origin:'https://untrusted.test'})).status,403);
@@ -148,6 +167,39 @@ try {
   await admin.query("update private.sms_challenges set created_at=now()-interval '2 minutes' where user_id=$1",[owner]);await login(newSessionJar,phone);
   assert.equal((await checkout(check,newSessionJar)).status,403);
   assert.equal((await checkout({operation:'resume',targetId:organization},newSessionJar)).body,null);
+  // A fresh real SMS session recovers the organization reservation without a
+  // new native price lookup or any inheritance of the old creation capability.
+  await admin.query('update private.sms_sessions set revoked_at=now() where token_hash=$1',[digest(jar[sessionCookie])]);
+  pending=false;terminal=null;released=false;
+  const recovery={operation:'recover',action:'billing.checkout.recover',requestId:randomUUID(),targetId:organization,reason:'Inspect prior session original checkout terms'};
+  dropRecovery=true;assert.equal((await checkout(recovery,newSessionJar)).status,503);
+  const uncertain=await checkout({operation:'resume',targetId:organization},newSessionJar);
+  assert.equal(uncertain.body.request.action,'billing.checkout.recover');assert.equal(uncertain.body.preview,null);assert.ok(uncertain.body.dispatchedAt);
+  const originalRecovery=await checkout(recovery,newSessionJar);assert.equal(originalRecovery.status,200,JSON.stringify(databaseFailure));
+  assert.deepEqual(originalRecovery.body.preview.summary,preview.body.preview.summary);assert.notEqual(originalRecovery.body.preview.commandId,apply.commandId);
+  assert.equal(originalRecovery.body.result.session.url,undefined);assert.equal(providerWrites,1);
+  const recoveredCheck=identity(originalRecovery.body.preview,'check');
+  assert.equal((await checkout(identity(originalRecovery.body.preview),newSessionJar)).status,400,'HTTP recovery apply is outside the closed union');
+  assert.equal((await checkout({...identity(originalRecovery.body.preview),action:'billing.checkout.create'},newSessionJar)).status,403,'Relabelling a recovery command cannot obtain creation authority');
+  await assert.rejects(withSession(pool,newSessionJar[sessionCookie],async db=>{await db.query('reset role');return db.query('select private.claim_billing_checkout($1,$2,false)',[recoveredCheck.commandId,recoveredCheck.expectedDigest]);}),error=>error.code==='42501');
+  await admin.query("update private.billing_checkout_intents set preview_expires_at=clock_timestamp()-interval '1 minute' where request_id=$1",[recovery.requestId]);
+  const current=await checkout(recoveredCheck,newSessionJar);assert.equal(current.status,200,JSON.stringify(databaseFailure));assert.equal(current.body.session.url,checkoutUrl);assert.equal(providerWrites,1);
+  let releaseRecovery,startedRecovery;const recoveryStarted=new Promise(resolve=>{startedRecovery=resolve;});
+  holdObservation={started:startedRecovery,release:new Promise(resolve=>{releaseRecovery=resolve;})};
+  const oldRecovery=checkout(recovery,newSessionJar);await recoveryStarted;pending=true;
+  assert.equal((await checkout(recoveredCheck,newSessionJar)).body.outcome,'pending');
+  releaseRecovery();const supersededRecovery=await oldRecovery;assert.equal(supersededRecovery.status,409);
+  assert.equal(JSON.stringify(supersededRecovery.body).includes(checkoutUrl),false);pending=false;
+  assert.equal((await checkout({operation:'resume',targetId:organization},newSessionJar)).body.result.outcome,'pending');
+  assert.equal((await checkout(recoveredCheck,otherJar)).status,403);
+  const otherRecovery=await checkout({...recovery,requestId:randomUUID()},otherJar);assert.equal(otherRecovery.status,200,JSON.stringify(databaseFailure));
+  assert.equal((await admin.query("select count(*)::int as count from private.audit_events where actor_id=$1 and action='billing.checkout.result'",[other])).rows[0].count,1,'Recovery observation belongs to current inspecting actor');
+  noReservation=true;released=false;
+  const noneRequest={...recovery,requestId:randomUUID()},none=await checkout(noneRequest,newSessionJar);assert.equal(none.status,200,JSON.stringify(databaseFailure));
+  assert.equal(none.body.preview,null);assert.equal(none.body.result,null);assert.equal(none.body.recovery.canStartNewCheckout,false);
+  assert.equal((await checkout({...request,requestId:randomUUID()},newSessionJar)).status,409);
+  released=true;assert.equal((await checkout(noneRequest,newSessionJar)).body.recovery.canStartNewCheckout,true);assert.equal(providerWrites,1);
+  assert.equal((await checkout({...request,requestId:randomUUID()},newSessionJar)).status,200,'Latest native recovery release supersedes an older cached hold');
   assert.equal(JSON.stringify(checkoutResultMetadata(result.body)).includes(checkoutUrl),false);
   console.log('Checkout PostgreSQL/HTTP integration passed: exact durable request, GET-only recovery, observation race, immutable session identity, release evidence, current Hub/native authority and URL-free metadata.');
 } finally {

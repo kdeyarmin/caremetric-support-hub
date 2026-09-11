@@ -4,14 +4,17 @@ import { checkoutMetrics } from "./checkoutCatalogProtocol.ts";
 
 const id = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i).transform(value => value.toLowerCase());
 const date = z.iso.datetime({ offset: true }).max(40);
-const action = z.literal("billing.checkout.create");
+const createAction = z.literal("billing.checkout.create");
+const action = z.enum(["billing.checkout.create", "billing.checkout.recover"]);
 const interval = z.enum(["month", "year"]);
 export const checkoutPreviewRequestSchema = billingPreviewRequestSchema.extend({
-  action, parameters: z.object({ packageId: id, billingInterval: interval }).strict(),
+  action: createAction, parameters: z.object({ packageId: id, billingInterval: interval }).strict(),
 });
-export const checkoutApplyRequestSchema = billingApplyRequestSchema.extend({ action });
-export const checkoutCheckRequestSchema = checkoutApplyRequestSchema.extend({ operation: z.literal("check") });
-export const nativeCheckoutCommandSchema = z.union([checkoutPreviewRequestSchema, checkoutApplyRequestSchema, checkoutCheckRequestSchema]);
+export const checkoutApplyRequestSchema = billingApplyRequestSchema.extend({ action: createAction });
+export const checkoutCheckRequestSchema = checkoutApplyRequestSchema.extend({ operation: z.literal("check"), action });
+export const checkoutRecoverRequestSchema = z.object({ operation: z.literal("recover"), action: z.literal("billing.checkout.recover"), requestId: id, targetId: id, reason: checkoutPreviewRequestSchema.shape.reason }).strict();
+export const checkoutRequestSchema = z.union([checkoutPreviewRequestSchema, checkoutRecoverRequestSchema]);
+export const nativeCheckoutCommandSchema = z.union([checkoutPreviewRequestSchema, checkoutApplyRequestSchema, checkoutCheckRequestSchema, checkoutRecoverRequestSchema]);
 export const checkoutCommandSchema = z.union([nativeCheckoutCommandSchema,
   z.object({ operation: z.literal("resume"), targetId: id }).strict(),
   z.object({ operation: z.literal("discard"), requestId: id }).strict(),
@@ -59,11 +62,17 @@ function validResult(value: z.infer<typeof metadataShape>): boolean {
 export const checkoutResultSchema = shape.refine(validResult);
 export const checkoutResultMetadataSchema = metadataShape.refine(validResult);
 export const checkoutIntentSchema = z.object({
-  request: checkoutPreviewRequestSchema, preview: checkoutPreviewSchema.nullable(), result: checkoutResultMetadataSchema.nullable(),
+  request: checkoutRequestSchema, preview: checkoutPreviewSchema.nullable(), result: checkoutResultMetadataSchema.nullable(),
+  recovery: z.object({ checkedAt: date, canStartNewCheckout: z.boolean() }).strict().nullable(),
   createdAt: date, expiresAt: date, previewDispatchedAt: date.nullable(), dispatchedAt: date.nullable(), retryAt: date.nullable(),
 }).strict().refine(value => !value.preview || value.preview.targetId === value.request.targetId && value.preview.reason === value.request.reason
-  && value.preview.summary.packageId === value.request.parameters.packageId && value.preview.summary.billingInterval === value.request.parameters.billingInterval)
-  .refine(value => !value.result || !!value.preview && value.result.commandId === value.preview.commandId && value.result.targetId === value.preview.targetId);
+  && value.preview.action === value.request.action
+  && (value.request.operation === "recover" || value.preview.summary.packageId === value.request.parameters.packageId && value.preview.summary.billingInterval === value.request.parameters.billingInterval))
+  .refine(value => !value.result || !!value.preview && value.result.commandId === value.preview.commandId && value.result.targetId === value.preview.targetId && value.result.action === value.preview.action)
+  .refine(value => value.request.operation === "recover" ? !value.recovery || !!value.dispatchedAt && (!value.result || value.result.canStartNewCheckout === value.recovery.canStartNewCheckout) : value.recovery === null)
+  .refine(value => value.request.operation !== "recover" || !value.preview || !!value.dispatchedAt && !!value.recovery && !!value.result);
+export type CheckoutRequest = z.infer<typeof checkoutRequestSchema>;
+export type CheckoutRecoverRequest = z.infer<typeof checkoutRecoverRequestSchema>;
 export type CheckoutPreviewRequest = z.infer<typeof checkoutPreviewRequestSchema>;
 export type CheckoutApplyRequest = z.infer<typeof checkoutApplyRequestSchema>;
 export type CheckoutCheckRequest = z.infer<typeof checkoutCheckRequestSchema>;
@@ -80,20 +89,37 @@ export function checkoutResultMetadata(input: CheckoutResult): CheckoutResultMet
 }
 export function verifyCheckoutOutcome(input: unknown, preview: CheckoutPreview): CheckoutResult {
   const value = checkoutResultSchema.parse(input);
-  if (value.commandId !== preview.commandId || value.targetId !== preview.targetId) throw new Error("Unbound checkout result");
+  if (value.commandId !== preview.commandId || value.targetId !== preview.targetId || value.action !== preview.action) throw new Error("Unbound checkout result");
   return value;
 }
-export function projectCheckoutCommand(input: unknown, command: NativeCheckoutCommand): CheckoutPreview | CheckoutResult {
+export const checkoutRecoverySchema = z.object({ targetId: id, preview: checkoutPreviewSchema.nullable(), result: checkoutResultSchema.nullable(), canStartNewCheckout: z.boolean() }).strict().refine(value => {
+  if (value.preview === null || value.result === null) return value.preview === null && value.result === null;
+  return value.preview.action === "billing.checkout.recover" && value.result.action === "billing.checkout.recover"
+    && value.preview.targetId === value.targetId && value.result.targetId === value.targetId
+    && value.preview.commandId === value.result.commandId && value.canStartNewCheckout === value.result.canStartNewCheckout;
+});
+export type CheckoutRecovery = z.infer<typeof checkoutRecoverySchema>;
+export function checkoutRecoveryMetadata(input: CheckoutRecovery) {
+  return { ...input, result: input.result ? checkoutResultMetadata(input.result) : null };
+}
+export function projectCheckoutCommand(input: unknown, command: NativeCheckoutCommand): CheckoutPreview | CheckoutResult | CheckoutRecovery {
   const envelope = z.object({ contractVersion: z.literal(1), product: z.literal("carebase"),
-    operation: z.enum(["preview", "apply", "check"]), generatedAt: date, data: z.unknown() }).strict().parse(input);
+    operation: z.enum(["preview", "apply", "check", "recover"]), generatedAt: date, data: z.unknown() }).strict().parse(input);
   if (envelope.operation !== command.operation) throw new Error("Mismatched checkout operation");
+  if (command.operation === "recover") {
+    const value = checkoutRecoverySchema.parse(envelope.data);
+    if (value.targetId !== command.targetId || value.preview && (value.preview.reason !== command.reason
+      || Date.parse(value.preview.expiresAt) > Date.parse(envelope.generatedAt) + 301000)
+      || value.result?.session && Date.parse(value.result.session.expiresAt) <= Date.parse(envelope.generatedAt)) throw new Error("Unbound checkout recovery");
+    return value;
+  }
   if (command.operation === "preview") {
     const preview = checkoutPreviewSchema.parse(envelope.data), lifetime = Date.parse(preview.expiresAt) - Date.parse(envelope.generatedAt);
-    if (preview.targetId !== command.targetId || preview.reason !== command.reason || preview.summary.packageId !== command.parameters.packageId
+    if (preview.action !== command.action || preview.targetId !== command.targetId || preview.reason !== command.reason || preview.summary.packageId !== command.parameters.packageId
       || preview.summary.billingInterval !== command.parameters.billingInterval || lifetime <= 0 || lifetime > 301000) throw new Error("Unbound checkout preview");
     return preview;
   }
   const result = checkoutResultSchema.parse(envelope.data);
-  if (result.commandId !== command.commandId || result.session && Date.parse(result.session.expiresAt) <= Date.parse(envelope.generatedAt)) throw new Error("Invalid current checkout result");
+  if (result.action !== command.action || result.commandId !== command.commandId || result.session && Date.parse(result.session.expiresAt) <= Date.parse(envelope.generatedAt)) throw new Error("Invalid current checkout result");
   return result;
 }

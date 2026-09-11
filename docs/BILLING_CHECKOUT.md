@@ -8,8 +8,8 @@ No deployment or test creates a production provider session or payment.
 ## Workflow and current evidence
 
 Existing CareBase organization and subscription rows expose checkout only when
-current native capabilities include `billing.packages.list` and all three
-`billing.checkout.preview`, `.apply`, `.check` capabilities. Native administrator,
+current native capabilities include `billing.packages.list` and all four
+`billing.checkout.preview`, `.apply`, `.check`, and `.recover` capabilities. Native administrator,
 command, billing and checkout flags plus a configured provider key control these
 capabilities. Availability can change after discovery, so every request still
 checks current native authority and configuration.
@@ -45,10 +45,33 @@ locked proof of expiry and absence of another blocker. An unexpired preview is
 not released. A Hub preview that expired before any Hub apply dispatch may be
 replaced, with the native reservation still enforcing organization-wide safety.
 
+## Recovery across administrator sessions
+
+**Recover organization checkout** requires an administrative reason but no current
+plan selection. The native owner reads the organization reservation and its
+original immutable terms, then binds a separate recovery command to the current
+administrator and SMS session. It does not change the original intent or grant its
+creation capability. Retired or changed catalog records cannot silently substitute
+new provider parameters. A retired provider price may prevent an open link while
+completed/expired provider evidence can still be reconciled.
+
+Recovery has its own exact request identity and may only use GET-only checks.
+Both HTTP and SQL reject applying a recovery command. Its inspection preview may
+expire while checks remain valid for the current SMS session. Unknown provider
+work remains pending and never becomes a new provider POST. The native audit
+attributes the observation to the current inspecting administrator.
+
+No-reservation results include explicit native release evidence; absence alone
+does not grant checkout eligibility. A new manual organization inspection creates
+only another read-only inspection. The latest native release can supersede an
+older cached Hub hold; the native organization-wide reservation remains the final
+creation boundary. Opening a recovered checkout always performs another current
+check. URLs remain absent from durable inspection metadata.
+
 ## Session and transport boundary
 
 The same-origin POST `/api/admin/checkout-command` accepts closed preview, apply,
-check, resume and undispatched discard operations. It uses the existing HttpOnly
+check, organization recovery, local resume and undispatched discard operations. It uses the existing HttpOnly
 SMS session and the existing `carebase.command` single-use capability, bound to
 the exact parsed operation. Only the fixed native
 `https://cmcarebase.com/api/platform-admin/billing/command` endpoint is called with
@@ -58,7 +81,7 @@ every attempt; no browser service key, caller destination or actor claim is used
 Private intents bind exact request JSON to current actor, SMS session and native
 organization. Native preview dispatch is durably recorded before capability
 issuance. Resuming after uncertainty restores the original key and parameters;
-a distinct SMS session cannot inherit the saved intent. A failed request can
+a distinct SMS session cannot inherit the saved creation intent. A failed request can
 explicitly recover authoritative saved state, including an apply that failed
 before Hub acceptance. Only reviews without any dispatch can be discarded.
 
@@ -94,7 +117,7 @@ does not claim native or Stripe readiness.
 Verification covers strict DTOs, exact int64 money, documented and adversarial
 URLs, React confirmation/recovery/check-only navigation, pgTAP privileges, actual
 SMS/HTTP/PostgreSQL transactions with reversed concurrent observations and role
-revocation after a native response, plus ten omitted-boundary release failures.
+revocation after a native response, plus thirteen omitted-boundary release failures.
 A separate composition runs the actual native handler through the actual Hub
 transport/parser with synthetic SQL/provider fixtures. Native tests own the
 shared legacy/Hub reservation and provider retry semantics. Production checkout

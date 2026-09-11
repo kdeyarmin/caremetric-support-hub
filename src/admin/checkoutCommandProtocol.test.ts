@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { nativeCheckoutCommandSchema, checkoutResultSchema, checkoutResultMetadata, checkoutResultMetadataSchema, projectCheckoutCommand, parseCheckoutUrl, verifyCheckoutOutcome } from "../../supabase/functions/_shared/checkoutCommandProtocol";
+import { nativeCheckoutCommandSchema, checkoutResultSchema, checkoutResultMetadata, checkoutResultMetadataSchema, checkoutRecoveryMetadata, projectCheckoutCommand, parseCheckoutUrl, verifyCheckoutOutcome } from "../../supabase/functions/_shared/checkoutCommandProtocol";
 import { parseCheckoutCatalog } from "../../supabase/functions/_shared/checkoutCatalogProtocol";
 import { parsePortfolioEnvelope, parsePortfolioRequest } from "../../supabase/functions/_shared/portfolioProtocol";
-import { checkoutApply, checkoutCatalog, checkoutClosed, checkoutOpen, checkoutPending, checkoutPreview, checkoutRequest, checkoutSessionId, checkoutUrl } from "./fixtures/checkout";
+import { checkoutApply, checkoutCatalog, checkoutClosed, checkoutOpen, checkoutPending, checkoutPreview, checkoutRequest, checkoutSessionId, checkoutUrl, checkoutRecover } from "./fixtures/checkout";
 const envelope = (operation: string, data: unknown) => ({ contractVersion: 1, product: "carebase", operation, generatedAt: new Date().toISOString(), data });
 describe("closed subscription checkout protocol", () => {
   it("requires the exact native package, cadence and separate apply/check action", () => {
@@ -81,5 +81,25 @@ describe("closed subscription checkout protocol", () => {
     expect(() => parsePortfolioRequest({ product: "breathe", ...operation })).toThrow();
     expect(() => parsePortfolioRequest({ product: "carebase", ...operation, limit: 51 })).toThrow();
     expect(() => parsePortfolioRequest({ product: "carebase", operation: "billing.checkout.apply" })).toThrow();
+  });
+  it("binds current-session recovery to original terms without creating an apply capability", () => {
+    expect(nativeCheckoutCommandSchema.parse(checkoutRecover)).toEqual(checkoutRecover);
+    expect(nativeCheckoutCommandSchema.safeParse({ ...checkoutApply, action: "billing.checkout.recover" }).success).toBe(false);
+    expect(nativeCheckoutCommandSchema.safeParse({ ...checkoutRecover, parameters: checkoutRequest.parameters }).success).toBe(false);
+    const preview = { ...checkoutPreview(), action: "billing.checkout.recover" as const, reason: checkoutRecover.reason, expiresAt: new Date(Date.now() - 600000).toISOString() };
+    const result = { ...checkoutOpen(), action: "billing.checkout.recover" as const };
+    const pair = { targetId: checkoutRecover.targetId, preview, result, canStartNewCheckout: false };
+    expect(projectCheckoutCommand(envelope("recover", pair), checkoutRecover)).toEqual(pair);
+    expect(JSON.stringify(checkoutRecoveryMetadata(pair))).not.toContain(checkoutUrl);
+    for (const forged of [{ ...pair, canStartNewCheckout: true }, { ...pair, result: null },
+      { ...pair, preview: { ...preview, reason: "A different unreviewed reason" } },
+      { ...pair, result: { ...result, action: "billing.checkout.create" } },
+      { ...pair, targetId: checkoutRequest.requestId }, { ...pair, providerParameters: {} }]) {
+      expect(() => projectCheckoutCommand(envelope("recover", forged), checkoutRecover)).toThrow();
+    }
+    for (const canStartNewCheckout of [false, true]) {
+      const none = { targetId: checkoutRecover.targetId, preview: null, result: null, canStartNewCheckout };
+      expect(projectCheckoutCommand(envelope("recover", none), checkoutRecover)).toEqual(none);
+    }
   });
 });

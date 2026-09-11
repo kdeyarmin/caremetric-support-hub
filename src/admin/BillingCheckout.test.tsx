@@ -5,13 +5,14 @@ import { checkoutResultMetadata } from "../../supabase/functions/_shared/checkou
 import type { CheckoutIntent, CheckoutResult } from "../../supabase/functions/_shared/checkoutCommandProtocol";
 import { BillingCheckout } from "./BillingCheckout";
 import type { CheckoutCommandClient } from "./checkoutCommandClient";
-import { checkoutApply, checkoutCatalog, checkoutCheck, checkoutChoice, checkoutClosed, checkoutIntent, checkoutOpen, checkoutOrganization, checkoutPending, checkoutRequest, checkoutUrl } from "./fixtures/checkout";
+import { checkoutApply, checkoutCatalog, checkoutCheck, checkoutChoice, checkoutClosed, checkoutIntent, checkoutOpen, checkoutOrganization, checkoutPending, checkoutRequest, checkoutUrl, checkoutRecover, recoveryIntent } from "./fixtures/checkout";
 vi.hoisted(() => { vi.stubEnv("VITE_DEMO_MODE", "true"); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 const target = { id: checkoutOrganization, label: "Example organization" };
 function client(overrides: Partial<CheckoutCommandClient> = {}): CheckoutCommandClient {
   return { packages: vi.fn(async () => checkoutCatalog()), resume: vi.fn(async () => null),
     preview: vi.fn(async request => ({ ...checkoutIntent(), request, preview: { ...checkoutIntent().preview!, reason: request.reason } })),
+    recover: vi.fn(async request => ({ ...recoveryIntent(), request, preview: { ...recoveryIntent().preview!, reason: request.reason } })),
     apply: vi.fn(async () => checkoutOpen()), check: vi.fn(async () => checkoutOpen()), discard: vi.fn(async () => {}), ...overrides };
 }
 const click = async (name: string | RegExp) => { await act(async () => { fireEvent.click(screen.getByRole("button", { name })); }); };
@@ -113,5 +114,31 @@ describe("reviewed subscription checkout", () => {
     expect(screen.getByRole("button", { name: "Create reviewed checkout" })).toBeTruthy();
     expect((screen.getByRole("button", { name: "Create reviewed checkout" }) as HTMLButtonElement).disabled).toBe(true);
     expect(api.check).not.toHaveBeenCalled(); expect(api.apply).toHaveBeenCalledTimes(1);
+  });
+  it("recovers original organization terms without selecting a current plan or exposing apply", async () => {
+    const api = client(), navigate = vi.fn(); await mount(api, navigate);
+    fireEvent.change(screen.getByLabelText("Administrative reason"), { target: { value: checkoutRecover.reason } });
+    await click("Recover organization checkout");
+    expect(api.recover).toHaveBeenCalledWith(expect.objectContaining({ operation: "recover", action: "billing.checkout.recover", reason: checkoutRecover.reason }), expect.any(AbortSignal));
+    expect(api.preview).not.toHaveBeenCalled(); expect(api.apply).not.toHaveBeenCalled();
+    expect(screen.getByText(/Recovered original checkout terms/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Create reviewed checkout" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Retry original creation" })).toBeNull();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+  it("uses only recovery check after the recovery preview expires, and never offers POST for uncertainty", async () => {
+    const saved = recoveryIntent(); saved.preview!.expiresAt = new Date(Date.now() - 1000).toISOString();
+    const api = client({ resume: vi.fn(async () => saved), check: vi.fn(async () => ({ ...checkoutPending(), action: "billing.checkout.recover" as const })) });
+    await mount(api); await click("Open Stripe checkout");
+    expect(api.check).toHaveBeenCalledWith({ ...checkoutCheck, action: "billing.checkout.recover" }, saved.preview, expect.any(AbortSignal));
+    expect(api.apply).not.toHaveBeenCalled(); expect(screen.queryByRole("button", { name: "Retry original creation" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Review another checkout" })).toBeNull();
+  });
+  it("uses native release evidence even when no unresolved reservation is found", async () => {
+    await mount(client({ resume: vi.fn(async () => recoveryIntent(false, false)) }));
+    expect(screen.queryByRole("button", { name: "Review another checkout" })).toBeNull();
+    expect(screen.getByText(/No unresolved checkout reservation was found/)).toBeTruthy();
+    cleanup(); await mount(client({ resume: vi.fn(async () => recoveryIntent(false, true)) }));
+    await click("Review another checkout"); expect(screen.getByLabelText("Administrative reason")).toBeTruthy();
   });
 });

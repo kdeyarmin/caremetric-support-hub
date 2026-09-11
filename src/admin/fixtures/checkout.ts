@@ -1,4 +1,5 @@
-import type { CheckoutIntent, CheckoutPreview, CheckoutPreviewRequest, CheckoutResult } from "../../../supabase/functions/_shared/checkoutCommandProtocol";
+import { checkoutResultMetadata } from "../../../supabase/functions/_shared/checkoutCommandProtocol";
+import type { CheckoutIntent, CheckoutPreview, CheckoutPreviewRequest, CheckoutRecoverRequest, CheckoutResult } from "../../../supabase/functions/_shared/checkoutCommandProtocol";
 import type { BillingPackageChoice, BillingPackagePage } from "../../../supabase/functions/_shared/checkoutCatalogProtocol";
 
 export const checkoutOrganization = "11111111-1111-4111-8111-111111111111";
@@ -13,6 +14,7 @@ export const checkoutRequest: CheckoutPreviewRequest = {
 };
 export const checkoutApply = { operation: "apply" as const, action: "billing.checkout.create" as const, commandId: checkoutCommandId, expectedDigest: "a".repeat(64) };
 export const checkoutCheck = { ...checkoutApply, operation: "check" as const };
+export const checkoutRecover: CheckoutRecoverRequest = { operation: "recover", action: "billing.checkout.recover", requestId: "66666666-6666-4666-8666-666666666666", targetId: checkoutOrganization, reason: "Inspect the original organization checkout" };
 export const checkoutChoice: BillingPackageChoice = {
   id: "55555555-5555-4555-8555-555555555555", packageId: checkoutPackageId, name: "Example plan",
   description: "Recorded native plan", status: "active", availability: "mapped", providerPriceId: "price_Example",
@@ -43,6 +45,12 @@ export function checkoutClosed(outcome: "complete" | "expired" | "failed", canSt
     canStartNewCheckout, retryAfterSeconds: null, session: null };
 }
 export function checkoutIntent(): CheckoutIntent {
-  return { request: checkoutRequest, preview: checkoutPreview(), result: null, createdAt: new Date().toISOString(),
+  return { request: checkoutRequest, preview: checkoutPreview(), result: null, recovery: null, createdAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 28800000).toISOString(), previewDispatchedAt: new Date().toISOString(), dispatchedAt: null, retryAt: null };
+}
+export function recoveryIntent(found = true, canStartNewCheckout = false): CheckoutIntent {
+  return { ...checkoutIntent(), request: checkoutRecover,
+    preview: found ? { ...checkoutPreview(), action: "billing.checkout.recover", reason: checkoutRecover.reason } : null,
+    result: found ? checkoutResultMetadata({ ...checkoutOpen(), action: "billing.checkout.recover" }) : null,
+    recovery: { checkedAt: new Date().toISOString(), canStartNewCheckout }, dispatchedAt: new Date().toISOString() };
 }
