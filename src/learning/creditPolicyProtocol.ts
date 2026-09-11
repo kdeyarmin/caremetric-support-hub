@@ -18,7 +18,9 @@ export const creditPolicyChangesSchema = z.strictObject({
   credits: z.array(creditEntrySchema).max(100), removedCreditIds: z.array(id).max(100),
 }).refine(value => {
   const retained = value.credits.map(row => row.creditId.toLowerCase()), removed = value.removedCreditIds.map(row => row.toLowerCase());
-  return new Set(retained).size === retained.length && new Set(removed).size === removed.length && !removed.some(row => retained.includes(row));
+  const trainingTypes = value.credits.flatMap(row => "preserve" in row ? [] : [row.trainingTypeId.toLowerCase()]);
+  return new Set(retained).size === retained.length && new Set(removed).size === removed.length &&
+    new Set(trainingTypes).size === trainingTypes.length && !removed.some(row => retained.includes(row));
 });
 export const creditPolicyParametersSchema = creditPolicyChangesSchema.safeExtend({ versionId: id, sourceRevision: z.string().regex(/^[0-9a-f]{64}$/) })
   .refine(value => new TextEncoder().encode(JSON.stringify(value)).byteLength <= 24_576 && !containsGovernedCredentials(JSON.stringify(value)));

@@ -42,6 +42,7 @@ it("closes policy, credit and removal fields, Unicode controls and UTF8 payload 
     { policy: { creditedDurationRationale: "a".repeat(40) + "\u0000" } },
     { credits: [{ creditId: material.credits[0]!.id, preserve: true, creditHours: "1.00" }] },
     { credits: [valid.credits[0], valid.credits[0]] }, { removedCreditIds: [material.credits[0]!.id] },
+    { credits: [valid.credits[0], { ...valid.credits[1], trainingTypeId: valid.credits[0]!.trainingTypeId.toUpperCase() }] },
     { removedCreditIds: [crypto.randomUUID(), "invalid"] },
     { credits: [{ ...valid.credits[0], topicCode: "not-upper" }] },
     { credits: [{ ...valid.credits[0], creditHours: 1 }] }, { credits: [{ ...valid.credits[0], creditHours: "1.0" }] },
@@ -49,6 +50,11 @@ it("closes policy, credit and removal fields, Unicode controls and UTF8 payload 
     { credits: [{ ...valid.credits[0], citationNote: "😀".repeat(6000) }, { ...valid.credits[1], citationNote: "😀".repeat(6000) }] },
     { policy: { creditedDurationRationale: "Private playback credential https://private.invalid?token=do-not-export" } },
   ]) expect(creditPolicyParametersSchema.safeParse({ ...valid, ...patch }).success).toBe(false);
+});
+it("rejects a new full rule that duplicates a preserved training association", () => {
+  const form = initialCreditPolicy(material);
+  form.credits.push({ ...editableCredit(material.credits[0]!), creditId: crypto.randomUUID() });
+  expect(() => creditPolicyChanges(material, form)).toThrow(/one credit rule per training type/);
 });
 it("binds credit policy preview to the exact draft identity and requires the resulting digest", async () => {
   const op = { operation: "preview" as const, action: "learning.editCreditPolicy" as const, requestId: crypto.randomUUID(), courseId: material.sourceCourseId,

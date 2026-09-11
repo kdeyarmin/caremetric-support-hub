@@ -13,6 +13,7 @@ export function CreditPolicyEditor({ material, busy, reasonReady, onChange, onPr
   const controller = useRef<AbortController | null>(null);
   useEffect(() => () => { controller.current?.abort(); }, []);
   const source = new Map(material.credits.map(row => [row.id.toLowerCase(), row]));
+  const usedTrainingTypes = new Set(form.credits.map(row => ("preserve" in row ? source.get(row.creditId.toLowerCase())?.trainingTypeId : row.trainingTypeId)?.toLowerCase()));
   const label = (id: string) => options.find(row => row.id.toLowerCase() === id.toLowerCase())?.label;
   const update = (next: typeof form) => { setForm(next); setError(""); onChange(); };
   const changeCredit = (next: CreditDefinition) => update({ ...form, credits: form.credits.map(row => row.creditId === next.creditId ? next : row) });
@@ -33,7 +34,7 @@ export function CreditPolicyEditor({ material, busy, reasonReady, onChange, onPr
   }
   let changes: CreditPolicyChanges | null = null, invalid = "";
   try { changes = creditPolicyChanges(material, form); }
-  catch { invalid = "Check the edited fields: credit hours need at most two decimal places, topic codes use uppercase letters, numbers, dots, underscores or hyphens, and each edited credit needs a citation. A supplied duration rationale needs at least 40 characters."; }
+  catch { invalid = "Check the edited fields: use one rule per training type, credit hours with at most two decimal places, uppercase topic codes and a citation for each edited credit. A supplied duration rationale needs at least 40 characters."; }
   const removed = material.credits.filter(row => !form.credits.some(value => value.creditId.toLowerCase() === row.id.toLowerCase()));
   return <section aria-label="Edit training credit policy"><h4>Training credit policy</h4>
     <p>Unchanged rules are retained exactly. Each edited or new rule must use a currently active global training type. CareBase validates the final policy before saving.</p>
@@ -59,7 +60,8 @@ export function CreditPolicyEditor({ material, busy, reasonReady, onChange, onPr
           </> : !("preserve" in entry) && <>
             <label>Training type{original ? <input readOnly value={label(entry.trainingTypeId) ?? entry.trainingTypeId} /> :
               <select value={entry.trainingTypeId} onChange={event => changeCredit({ ...entry, trainingTypeId: event.target.value })}>
-                <option value="">Select a training type</option>{options.map(row => <option key={row.id} value={row.id}>{row.label}</option>)}
+                <option value="">Select a training type</option>{options.map(row => <option key={row.id} value={row.id}
+                  disabled={row.id.toLowerCase() !== entry.trainingTypeId.toLowerCase() && usedTrainingTypes.has(row.id.toLowerCase())}>{row.label}</option>)}
               </select>}</label>
             {original && <p>Changing this association requires removing this rule and adding a new rule.</p>}
             <label>Credit topic code<input maxLength={128} value={entry.topicCode} onChange={event => changeCredit({ ...entry, topicCode: event.target.value })} /></label>
@@ -73,7 +75,7 @@ export function CreditPolicyEditor({ material, busy, reasonReady, onChange, onPr
           <button type="button" onClick={() => remove(entry.creditId)}>Remove credit rule {index + 1}</button>
         </fieldset>;
       })}
-      <button type="button" disabled={!options.length || form.credits.length >= 100} onClick={() => update({ ...form, credits: [...form.credits,
+      <button type="button" disabled={!options.some(row => !usedTrainingTypes.has(row.id.toLowerCase())) || form.credits.length >= 100} onClick={() => update({ ...form, credits: [...form.credits,
         { creditId: crypto.randomUUID(), trainingTypeId: "", topicCode: "", creditHours: "", creditMode: "automatic", citationNote: "", isActive: true }] })}>Add credit rule</button>
       {removed.length > 0 && <><p>These rules will be explicitly removed after review:</p><ul>{removed.map(row => <li key={row.id}>{row.topicCode} · {row.creditHours} hours</li>)}</ul></>}
       {invalid && <p>{invalid}</p>}

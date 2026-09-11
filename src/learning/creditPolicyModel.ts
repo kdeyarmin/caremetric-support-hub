@@ -40,6 +40,8 @@ export function creditPolicyChanges(material: GovernedCourse, form: CreditPolicy
   });
   const retained = new Set(credits.map(row => key(row.creditId)));
   const removedCreditIds = material.credits.filter(row => !retained.has(key(row.id))).map(row => row.id);
+  const trainingTypes = credits.map(row => "preserve" in row ? key(prior.get(key(row.creditId))!.trainingTypeId) : key(row.trainingTypeId));
+  if (new Set(trainingTypes).size !== trainingTypes.length) throw new Error("Keep only one credit rule per training type.");
   const result = creditPolicyChangesSchema.parse({ policy, credits, removedCreditIds });
   if (!Object.keys(policy).length && !removedCreditIds.length && credits.every(row => "preserve" in row)) return null;
   return result;
