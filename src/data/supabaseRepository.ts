@@ -10,7 +10,7 @@ import type {
   SupportContact,
   UpdateCaseInput,
 } from "../domain";
-import { supabase } from "../lib/supabase";
+import { appRequest, hubClient } from "../lib/appSession";
 
 type JsonObject = Record<string, unknown>;
 
@@ -49,12 +49,7 @@ const contentPlacements = (value: unknown): NonNullable<ContentItem["placements"
       })
     : [];
 
-const client = () => {
-  if (!supabase) throw new Error("Supabase is not configured. Enable demo mode or provide environment variables.");
-  return supabase;
-};
-
-const hub = () => client().schema("hub");
+const hub = () => hubClient;
 
 function mapActorMembership(value: unknown): ActorMembership {
   const row = asObject(value);
@@ -185,36 +180,32 @@ export class SupabaseSupportRepository implements HubRepository {
   }
 
   async listProducts(): Promise<Product[]> {
-    const { data, error } = await hub().from("products").select("*").order("name");
-    if (error) throw error;
+    const data = await appRequest<unknown[]>("rows/products");
     return (data ?? []).map(mapProduct);
   }
 
   async listContacts(): Promise<SupportContact[]> {
-    const { data, error } = await hub().from("support_contacts").select("*").order("priority_order");
-    if (error) throw error;
+    const data = await appRequest<unknown[]>("rows/support_contacts");
     return (data ?? []).map(mapContact);
   }
 
   async listCases(): Promise<SupportCase[]> {
-    const { data, error } = await hub()
-      .from("support_case_queue")
-      .select("*")
-      .order("last_message_at", { ascending: false });
-    if (error) throw error;
+    const data = await appRequest<unknown[]>("rows/support_case_queue");
     return (data ?? []).map(mapCase);
   }
 
   async listMessages(caseId: string): Promise<CaseMessage[]> {
     const { data, error } = await hub().rpc("get_support_case_thread", { p_case_id: caseId });
     if (error) throw error;
-    return (data ?? []).map(mapMessage);
+    if (!Array.isArray(data)) throw new Error("Invalid case thread response.");
+    return data.map(mapMessage);
   }
 
   async listContent(): Promise<ContentItem[]> {
     const { data, error } = await hub().rpc("list_published_content");
     if (error) throw error;
-    return (data ?? []).map(mapContent);
+    if (!Array.isArray(data)) throw new Error("Invalid content response.");
+    return data.map(mapContent);
   }
 
   async createCase(input: CreateCaseInput): Promise<SupportCase> {

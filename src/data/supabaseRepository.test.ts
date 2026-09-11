@@ -5,11 +5,7 @@ const mocks = vi.hoisted(() => ({
   schema: vi.fn(),
 }));
 
-vi.mock("../lib/supabase", () => ({
-  supabase: {
-    schema: mocks.schema,
-  },
-}));
+vi.mock("../lib/appSession", () => ({ hubClient: { rpc: mocks.rpc }, appRequest: vi.fn() }));
 
 import { SupabaseSupportRepository } from "./supabaseRepository";
 

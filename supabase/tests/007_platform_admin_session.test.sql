@@ -42,6 +42,6 @@ set local request.jwt.claims='{"sub":"99000000-0000-4000-8000-000000000001","rol
 select throws_ok('select hub.authorize_platform_admin()','28000','Current administrator session required.','malformed session identifier is denied');
 set local request.jwt.claims='{"sub":"99000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2","session_id":"99000000-0000-4000-8000-000000000004"}';
 select throws_ok('select hub.authorize_platform_admin()','28000','Current administrator session required.','deleted or absent session is denied');
-select is(hub.get_backend_contract(),'{"api_version":2}'::jsonb,'release2 requires learning and delegated authorization');
+select is(hub.get_backend_contract(),'{"api_version":3}'::jsonb,'release3 includes application SMS sessions');
 select * from finish();
 rollback;

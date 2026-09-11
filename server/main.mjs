@@ -1,0 +1,21 @@
+import pg from 'pg';
+import { smsProvider } from './sms-provider.mjs';
+import { smsAuth } from './sms-auth.mjs';
+import { gateway } from './gateway.mjs';
+import { delegations } from './delegations.mjs';
+import { appServer } from './http.mjs';
+
+const databaseUrl=process.env.HUB_DATABASE_URL;
+if(!databaseUrl) throw new Error('HUB_DATABASE_URL is required.');
+const parsed=new URL(databaseUrl);
+if(!parsed.username.startsWith('hub_app_server') || !parsed.password) throw new Error('Use the dedicated Hub application database role.');
+const storageUrl='https://xgauehtwksmnoqhgqegm.supabase.co';
+const pool=new pg.Pool({connectionString:databaseUrl,max:8,connectionTimeoutMillis:10000,idleTimeoutMillis:30000,ssl:{rejectUnauthorized:true}});
+const provider=smsProvider({apiKey:process.env.HUB_TELNYX_API_KEY,profileId:process.env.HUB_TELNYX_VERIFY_PROFILE_ID});
+const api=gateway(pool);
+const contract=await api.rpc('get_backend_contract',{});
+if(contract?.api_version!==3) throw new Error('Apply the app-session database migration before starting this server.');
+const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:delegations({pool,storageUrl}),origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
+server.requestTimeout=130000; server.headersTimeout=15000;
+server.listen(Number(process.env.PORT || 8080),'0.0.0.0');
+for(const signal of ['SIGTERM','SIGINT']) process.on(signal,() => server.close(() => { void pool.end(); }));

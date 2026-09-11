@@ -1,5 +1,3 @@
-import { supabase } from "../lib/supabase";
-import { config } from "../lib/config";
 import { parseAdminEnvelope, parseAdminOperation, type AdminOperation } from "../../supabase/functions/_shared/adminProtocol";
 import type { AdminClient, CareBaseCourseDetail, CareBaseCoursePage, CareBaseOverview } from "./types";
 
@@ -11,11 +9,8 @@ export class AdminApiError extends Error {
 async function read(operation: AdminOperation, signal: AbortSignal) {
   let normalized;
   try { normalized = parseAdminOperation(operation); } catch { throw new AdminApiError("invalid_request"); }
-  if (!supabase) throw new AdminApiError("unconfigured");
-  const { data, error } = await supabase.auth.getSession();
-  if (error || !data.session) throw new AdminApiError("401");
-  const response = await fetch(`${config.supabaseUrl}/functions/v1/platform-admin`, {
-    method: "POST", headers: { "Content-Type": "application/json", apikey: config.supabasePublishableKey, Authorization: `Bearer ${data.session.access_token}` },
+  const response = await fetch("/api/admin/read", {
+    method: "POST", headers: { "Content-Type": "application/json" }, credentials:"same-origin",
     body: JSON.stringify(normalized), signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]), redirect: "error", cache: "no-store",
   });
   if (!response.ok) {

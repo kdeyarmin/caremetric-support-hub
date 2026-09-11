@@ -86,13 +86,13 @@ select is(private.current_session_is_aal2(), true, 'AAL2 passes the assurance ch
 
 select ok(
   pg_get_functiondef('private.has_staff_permission(private.staff_permission,uuid)'::regprocedure)
-    like '%private.current_session_is_aal2()%',
-  'staff permissions depend on AAL2'
+    like '%private.current_session_is_verified()%',
+  'staff permissions depend on a verified session'
 );
 
 select ok(
   pg_get_functiondef('private.is_active_member(uuid,uuid)'::regprocedure)
-    like '%not private.current_principal_requires_aal2() or private.current_session_is_aal2()%',
+    like '%not private.current_principal_requires_aal2() or private.current_session_is_verified()%',
   'staff and customers with verified TOTP cannot use membership at AAL1'
 );
 
@@ -122,7 +122,7 @@ select ok(
 
 select ok(
   pg_get_functiondef('hub.get_support_actor_context()'::regprocedure)
-    like '%if not v_requires_aal2 or private.current_session_is_aal2() then%',
+    like '%if not v_requires_aal2 or private.current_session_is_verified() then%',
   'AAL1 staff and enrolled customers have tenant metadata redacted'
 );
 

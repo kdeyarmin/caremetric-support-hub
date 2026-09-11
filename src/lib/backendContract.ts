@@ -1,4 +1,4 @@
-export const REQUIRED_BACKEND_CONTRACT = 2;
+export const REQUIRED_BACKEND_CONTRACT = 3;
 
 /** Public release metadata only. Never send an administrator session or secret key. */
 export async function verifyBackendContract(

@@ -6,7 +6,7 @@ const key = "sb_publishable_test";
 
 describe("deployed backend compatibility", () => {
   it("checks the hub schema using only public configuration", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ api_version: 2 }));
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ api_version: 3 }));
     await verifyBackendContract(origin, key, fetcher);
     expect(fetcher).toHaveBeenCalledOnce();
     const [url, options] = fetcher.mock.calls[0];
@@ -23,7 +23,7 @@ describe("deployed backend compatibility", () => {
     await expect(verifyBackendContract(origin, key, fetcher)).rejects.toThrow(/Apply the reviewed migrations/);
   });
 
-  it.each([null, {}, { api_version: "2" }, { api_version: 0 }, { api_version: 1 }, { api_version: 3 }])("rejects incompatible responses: %j", async (contract) => {
+  it.each([null, {}, { api_version: "3" }, { api_version: 0 }, { api_version: 1 }, { api_version: 2 }])("rejects incompatible responses: %j", async (contract) => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(contract));
     await expect(verifyBackendContract(origin, key, fetcher)).rejects.toThrow(/incompatible/);
   });
