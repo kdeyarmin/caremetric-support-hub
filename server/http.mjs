@@ -41,6 +41,13 @@ export function appServer({auth,gateway,delegations,publications,origins,dist=re
         res.setHeader('Cache-Control','no-store');
         if (path.startsWith('/api/internal/')) {
           if(req.method!=='POST' || req.headers.origin || req.headers.cookie) throw new HttpError(403,'Forbidden.');
+          if(path==='/api/internal/publications/public/authorize' && publications) {
+            const authorization=req.headers.authorization;
+            if(typeof authorization!=='string' || !authorization.startsWith('Bearer ')) throw new HttpError(401,'Authorization required.');
+            const input=await jsonBody(req,2048);
+            if(Object.keys(input).length) throw new HttpError(400,'Invalid public download request.');
+            return json(await publications.consumePublicDownload(authorization.slice(7)));
+          }
           if(path==='/api/internal/publications/cleanup/authorize' && publications) {
             const authorization=req.headers.authorization;
             if(typeof authorization!=='string' || !authorization.startsWith('Bearer ')) throw new HttpError(401,'Authorization required.');

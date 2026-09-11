@@ -46,6 +46,64 @@ describe('publication Edge transport',()=>{
       expect((await handler(request())).status).toBe(503);
     }
   });
+  it.each([409,'legacy','code'])('reconciles a duplicate using exact immutable stored bytes (%s)',async duplicate=>{
+    const calls=[];
+    const handler=createPublicationMediaHandler({serviceKey:'synthetic-only',fetchImpl:async(url,options)=>{
+      calls.push(url);
+      if(calls.length===1) return Response.json(base);
+      if(calls.length===2) return duplicate===409?new Response('{}',{status:409}):Response.json(duplicate==='legacy'
+        ?{statusCode:'409',error:'Duplicate',message:'The resource already exists'}:{code:'ResourceAlreadyExists',message:'exists'},{status:400});
+      expect(url).toBe(`https://xgauehtwksmnoqhgqegm.supabase.co/storage/v1/object/authenticated/hub-publications/${base.path}`);
+      expect(options.method).toBeUndefined(); expect(options.headers.Authorization).toBe('Bearer synthetic-only');
+      expect(options.signal).toBeInstanceOf(AbortSignal); expect(options.redirect).toBe('error');
+      return new Response(bytes,{headers:{'Content-Type':'text/markdown','Content-Length':String(bytes.length)}});
+    }});
+    const response=await handler(request()); expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({uploaded:true,sha256:base.sha256,byteLength:bytes.length}); expect(calls).toHaveLength(3);
+  });
+  it.each(['digest','length','oversized','truncated','type','missing','error','overflow'])('never accepts conflicting existing bytes (%s)',async fault=>{
+    let calls=0;
+    const handler=createPublicationMediaHandler({serviceKey:'synthetic-only',fetchImpl:async()=>{
+      if(++calls===1) return Response.json(base);
+      if(calls===2) return new Response('{}',{status:409});
+      const stored=fault==='digest'?new Uint8Array(bytes.length):fault==='truncated'?bytes.slice(1):fault==='overflow'?new Uint8Array(bytes.length+1):bytes;
+      const headers={'Content-Type':fault==='type'?'text/html':'text/markdown'};
+      if(fault!=='missing') headers['Content-Length']=String(fault==='length'?bytes.length+1:fault==='oversized'?2097153:bytes.length);
+      return new Response(stored,{status:fault==='error'?404:200,headers});
+    }});
+    expect((await handler(request())).status).toBe(503);
+  });
+  it.each([400,401,403,413,500])('does not reconcile unrelated storage errors (%s)',async status=>{
+    let calls=0;
+    const handler=createPublicationMediaHandler({serviceKey:'synthetic-only',fetchImpl:async()=>{
+      if(++calls===1) return Response.json(base);
+      return Response.json({code:'AccessDenied',message:'Asset Already Exists'},{status});
+    }});
+    expect((await handler(request())).status).toBe(503); expect(calls).toBe(2);
+  });
+  it('rejects an oversized compatibility error body before attempting a reconciliation read',async()=>{
+    let calls=0;
+    const handler=createPublicationMediaHandler({serviceKey:'synthetic-only',fetchImpl:async()=>{
+      if(++calls===1) return Response.json(base);
+      return Response.json({code:'ResourceAlreadyExists',message:'x'.repeat(9000)},{status:400});
+    }});
+    expect((await handler(request())).status).toBe(503); expect(calls).toBe(2);
+  });
+  it('public tickets use only their fixed audience and can never become uploads',async()=>{
+    for(const operation of ['upload','download']) {
+      let calls=0;
+      const handler=createPublicationMediaHandler({serviceKey:'synthetic-only',fetchImpl:async(url)=>{
+        if(++calls===1) {
+          expect(url).toBe('https://support-hub-web-production.up.railway.app/api/internal/publications/public/authorize');
+          return Response.json({...base,operation});
+        }
+        expect(url).toContain('/object/authenticated/hub-publications/');
+        return new Response(bytes,{headers:{'Content-Type':'text/markdown','Content-Length':String(bytes.length)}});
+      }});
+      const response=await handler(request({'X-CareMetric-Publication-Mode':'public'}));
+      expect(response.status).toBe(operation==='upload'?403:200); expect(calls).toBe(operation==='upload'?1:2);
+    }
+  });
   it('requires the upstream range and length to exactly match the authorized range',async()=>{
     for(const malformed of [false,true]) {
       let calls=0;

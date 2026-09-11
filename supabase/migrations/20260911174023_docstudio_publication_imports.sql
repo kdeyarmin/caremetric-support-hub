@@ -59,12 +59,21 @@ create table private.publication_cleanup_tokens (
   consumed_at timestamptz
 );
 create index publication_cleanup_import_idx on private.publication_cleanup_tokens(import_id);
+create table private.publication_public_downloads (
+  token_hash text primary key check(token_hash ~ '^[0-9a-f]{64}$'),
+  revision_id uuid not null references hub.content_revisions(id) on delete cascade,
+  part text not null check(part in ('primary','captions','transcript')),
+  byte_range text check(byte_range is null or byte_range ~ '^bytes=[0-9]{1,9}-[0-9]{1,9}$'),
+  expires_at timestamptz not null default now()+interval '30 seconds'
+);
+create index publication_public_download_expiry_idx on private.publication_public_downloads(expires_at);
 alter table private.publication_import_settings enable row level security;
 alter table private.publication_imports enable row level security;
 alter table private.publication_import_assets enable row level security;
 alter table private.publication_revision_provenance enable row level security;
 alter table private.publication_cleanup_tokens enable row level security;
-revoke all on private.publication_import_settings,private.publication_imports,private.publication_import_assets,private.publication_revision_provenance,private.publication_cleanup_tokens from public,anon,authenticated,service_role,hub_app_server;
+alter table private.publication_public_downloads enable row level security;
+revoke all on private.publication_import_settings,private.publication_imports,private.publication_import_assets,private.publication_revision_provenance,private.publication_cleanup_tokens,private.publication_public_downloads from public,anon,authenticated,service_role,hub_app_server;
 
 create function private.require_publication_scope(p_manifest jsonb,p_key text) returns uuid
 language plpgsql stable security definer set search_path='' as $$
@@ -343,6 +352,69 @@ begin
 end;
 $$;
 
+-- Public Help uses a separate actor-free download authority. Even when invoked
+-- on a connection carrying staff claims, evaluate the current policy as anon.
+create function private.publication_public_object(p_revision uuid,p_part text) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare asset private.publication_import_assets; previous_claims text;
+begin
+  if session_user<>'hub_app_server' then raise exception 'Application server required.' using errcode='42501'; end if;
+  previous_claims:=current_setting('request.jwt.claims',true);
+  perform set_config('request.jwt.claims','{"role":"anon"}',true);
+  select a.* into asset from private.publication_import_assets a
+    where a.revision_id=p_revision and a.part=p_part and a.verified_at is not null;
+  if asset.import_id is null then raise exception 'Publication asset unavailable.' using errcode='P4040'; end if;
+  if not exists(select 1 from hub.content_publications p join hub.content_items i on i.id=p.item_id
+    where p.revision_id=p_revision and i.access_level='public'
+      and private.can_access_content_publication(p.item_id,p.revision_id,p.product_id)) then
+    raise exception 'Public publication access denied.' using errcode='42501';
+  end if;
+  perform set_config('request.jwt.claims',coalesce(previous_claims,''),true);
+  return jsonb_build_object('path','publications/'||asset.import_id||'/'||asset.part,'operation','download','contentType',asset.content_type,
+    'sha256',asset.expected_sha256,'byteLength',asset.byte_length,'maxBytes',asset.max_bytes);
+end;
+$$;
+create function private.publication_public_media_info(p_revision uuid) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare asset jsonb;
+begin
+  asset:=private.publication_public_object(p_revision,'primary');
+  return jsonb_build_object('contentType',asset->>'contentType',
+    'hasCaptions',exists(select 1 from private.publication_import_assets where revision_id=p_revision and part='captions'),
+    'hasTranscript',exists(select 1 from private.publication_import_assets where revision_id=p_revision and part='transcript'));
+end;
+$$;
+create function private.issue_publication_public_download(p_hash text,p_revision uuid,p_part text,p_range text) returns void
+language plpgsql security definer set search_path='' as $$
+declare asset jsonb; bounds text[];
+begin
+  asset:=private.publication_public_object(p_revision,p_part);
+  if p_range is not null then
+    bounds:=regexp_match(p_range,'^bytes=([0-9]{1,9})-([0-9]{1,9})$');
+    if bounds is null or bounds[1]::integer>bounds[2]::integer or bounds[2]::integer>=(asset->>'byteLength')::integer then
+      raise exception 'Invalid public download range.' using errcode='22023';
+    end if;
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('publication_public_downloads',0));
+  delete from private.publication_public_downloads where expires_at<=now();
+  if (select count(*) from private.publication_public_downloads)>=2000 then raise exception 'Public download capacity reached.' using errcode='P4290'; end if;
+  insert into private.publication_public_downloads(token_hash,revision_id,part,byte_range) values(p_hash,p_revision,p_part,p_range);
+end;
+$$;
+create function private.consume_publication_public_download(p_hash text) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare ticket private.publication_public_downloads; asset jsonb;
+begin
+  if session_user<>'hub_app_server' then raise exception 'Application server required.' using errcode='42501'; end if;
+  delete from private.publication_public_downloads where token_hash=p_hash and expires_at>now() returning * into ticket;
+  if ticket.token_hash is null then raise exception 'Public download ticket unavailable.' using errcode='28000'; end if;
+  asset:=private.publication_public_object(ticket.revision_id,ticket.part);
+  return asset||jsonb_build_object('range',ticket.byte_range);
+end;
+$$;
+revoke all on function private.publication_public_object(uuid,text),private.publication_public_media_info(uuid),private.issue_publication_public_download(text,uuid,text,text),private.consume_publication_public_download(text) from public,anon,authenticated,service_role;
+grant execute on function private.publication_public_object(uuid,text),private.publication_public_media_info(uuid),private.issue_publication_public_download(text,uuid,text,text),private.consume_publication_public_download(text) to hub_app_server;
+
 -- Cleanup authority comes only from a short-lived one-use server maintenance
 -- ticket naming an expired intent whose objects are not attached to a revision.
 create function private.issue_publication_cleanup(p_hash text) returns uuid
@@ -444,7 +516,7 @@ insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
 create policy publication_objects_private on storage.objects as restrictive for all to anon,authenticated
   using(bucket_id<>'hub-publications') with check(bucket_id<>'hub-publications');
 alter table private.app_delegations drop constraint app_delegations_audience_check;
-alter table private.app_delegations add constraint app_delegations_audience_check check(audience in ('carebase','media','breathe','caremetric-emr','pennsync','carebase.command','carebase.learning','publication'));
+alter table private.app_delegations add constraint app_delegations_audience_check check(audience in ('carebase','media','breathe','caremetric-emr','caremetric-go','pennsync','carebase.command','carebase.learning','publication'));
 
 -- Helpers are not generic RPCs. The connection role invokes them only after
 -- installing the current app session's claims; each function rechecks authority.

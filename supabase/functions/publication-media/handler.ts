@@ -19,6 +19,39 @@ async function boundedJson(response: Response): Promise<unknown> {
   } finally { await reader.cancel().catch(()=>{}); }
 }
 
+async function duplicateUpload(response: Response): Promise<boolean> {
+  if(response.status===409) { await response.body?.cancel(); return true; }
+  if(response.status!==400) { await response.body?.cancel(); return false; }
+  // Storage's documented compatibility response uses HTTP 400 with Duplicate.
+  // Never turn an arbitrary authorization, size or request error into a read.
+  const value=await boundedJson(response);
+  if(!value || typeof value!=="object" || Array.isArray(value)) return false;
+  const error=value as Record<string,unknown>;
+  return ["ResourceAlreadyExists","KeyAlreadyExists","already_exists"].includes(String(error.code))
+    || (error.error==="Duplicate" && error.message==="The resource already exists"
+      && [400,409,"400","409"].includes(error.statusCode as string|number));
+}
+
+async function verifiedExisting(response: Response, capability: Record<string,unknown>): Promise<number> {
+  const declared=response.headers.get("Content-Length");
+  const length=declared && /^[1-9][0-9]{0,8}$/.test(declared)?Number(declared):0;
+  if(response.status!==200 || !response.body || !length || length>Number(capability.maxBytes)
+    || (capability.byteLength!==null && length!==capability.byteLength)
+    || response.headers.has("Content-Range") || response.headers.get("Content-Type")?.split(";")[0]!==capability.contentType) {
+    await response.body?.cancel(); throw new Error("Stored object metadata mismatch");
+  }
+  const reader=response.body.getReader(); const hash=createHash("sha256"); let bytes=0;
+  try {
+    while(true) {
+      const next=await reader.read(); if(next.done) break;
+      bytes+=next.value.byteLength; if(bytes>length) throw new Error("Stored object exceeds limit");
+      hash.update(next.value);
+    }
+    if(bytes!==length || hash.digest("hex")!==capability.sha256) throw new Error("Stored object content mismatch");
+    return bytes;
+  } finally { await reader.cancel().catch(()=>{}); }
+}
+
 export function createPublicationMediaHandler({serviceKey,fetchImpl=fetch}:{serviceKey:string;fetchImpl?:typeof fetch}) {
   return async (request: Request): Promise<Response> => {
     try {
@@ -26,8 +59,8 @@ export function createPublicationMediaHandler({serviceKey,fetchImpl=fetch}:{serv
       const authorization=request.headers.get("Authorization");
       if(!authorization || !/^Bearer cmh_[A-Za-z0-9_-]{43}$/.test(authorization)) return json({error:"Unauthorized"},401);
       const mode=request.headers.get("X-CareMetric-Publication-Mode");
-      if(mode!==null && mode!=="cleanup") return json({error:"Invalid operation"},400);
-      const gate=await fetchImpl(`${hubOrigin}/api/internal/publications/${mode==="cleanup"?"cleanup/":""}authorize`,{
+      if(mode!==null && mode!=="cleanup" && mode!=="public") return json({error:"Invalid operation"},400);
+      const gate=await fetchImpl(`${hubOrigin}/api/internal/publications/${mode?mode+"/":""}authorize`,{
         method:"POST",headers:{Authorization:authorization,"Content-Type":"application/json"},body:"{}",redirect:"error",signal:AbortSignal.timeout(10000),
       });
       if(!gate.ok) return json({error:"Unauthorized"},gate.status===403?403:401);
@@ -50,6 +83,7 @@ export function createPublicationMediaHandler({serviceKey,fetchImpl=fetch}:{serv
         || typeof capability.sha256!=="string" || !/^[0-9a-f]{64}$/.test(capability.sha256)
         || !Number.isSafeInteger(capability.maxBytes) || Number(capability.maxBytes)<1 || Number(capability.maxBytes)>536870912
         || (capability.byteLength!==null && (!Number.isSafeInteger(capability.byteLength) || Number(capability.byteLength)<1 || Number(capability.byteLength)>Number(capability.maxBytes)))) return json({error:"Invalid capability"},403);
+      if(mode==="public" && capability.operation!=="download") return json({error:"Invalid public capability"},403);
       const part=capability.path.split("/")[2];
       if((part==="captions" && capability.contentType!=="text/vtt") || (part==="transcript" && capability.contentType!=="text/plain")
         || (part==="primary" && !["text/markdown","video/mp4"].includes(String(capability.contentType)))
@@ -69,12 +103,26 @@ export function createPublicationMediaHandler({serviceKey,fetchImpl=fetch}:{serv
             verified=true;
           },
         }));
+        const deadline=AbortSignal.timeout(110000);
         const result=await fetchImpl(`${storageOrigin}/storage/v1/object/hub-publications/${encoded}`,{
-          method:"POST",headers:{...serviceHeaders,"Content-Type":String(capability.contentType),"x-upsert":"false"},body:stream,redirect:"error",signal:AbortSignal.timeout(110000),
+          method:"POST",headers:{...serviceHeaders,"Content-Type":String(capability.contentType),"x-upsert":"false"},body:stream,redirect:"error",signal:deadline,
           // Node integration tests require this flag; Deno accepts it as a fetch extension.
           ...{duplex:"half"},
         });
-        if(!result.ok || !verified) return json({error:"Immutable upload failed"},result.status===409?409:503);
+        if(!result.ok) {
+          await stream.cancel().catch(()=>{});
+          if(!await duplicateUpload(result)) return json({error:"Immutable upload failed"},503);
+          // A prior attempt may have stored exact bytes before its response or
+          // SQL verification was lost. Reconcile only this authorized fixed key;
+          // never replace or delete the immutable object to repair a retry.
+          const existing=await fetchImpl(`${storageOrigin}/storage/v1/object/authenticated/hub-publications/${encoded}`,{
+            headers:serviceHeaders,redirect:"error",signal:deadline,
+          });
+          const storedBytes=await verifiedExisting(existing,capability);
+          return json({uploaded:true,sha256:capability.sha256,byteLength:storedBytes});
+        }
+        await result.body?.cancel();
+        if(!verified) return json({error:"Immutable upload failed"},503);
         return json({uploaded:true,sha256:capability.sha256,byteLength:bytes});
       }
       if(!Number.isSafeInteger(capability.byteLength)) return json({error:"Invalid media length"},403);

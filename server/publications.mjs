@@ -9,16 +9,36 @@ import { spoolPublicationAsset, publicationRange } from './publication-assets.mj
 
 const codes={P4040:404,P4090:409,P4130:413,P4290:429,'22023':400,'23505':409,'28000':401,'42501':403};
 export function publications({pool,delegations,storageUrl,fetchImpl=fetch}) {
-  async function dbCall(session,name,args=[]) {
+  async function dbCall(session,name,args=[],required=true) {
     // Names are constants in this module, never caller-selected RPC names.
     try {
       return await withSession(pool,session,async db=>{
         await db.query('reset role');
         const values=args.map((_,i)=>`$${i+1}`).join(',');
         return (await db.query(`select private.${name}(${values}) as result`,args)).rows[0].result;
-      });
+      },required);
     } catch(error) {
       if(codes[error.code]) throw new HttpError(codes[error.code],'The publication operation could not complete.');
+      throw error;
+    }
+  }
+  async function mediaRead(session,kind,args) {
+    const statements=kind==='info'
+      ? ['select private.publication_media_info($1) as result','select private.publication_public_media_info($1) as result']
+      : ["select private.publication_object($1,$2,'download') as result",'select private.publication_public_object($1,$2) as result'];
+    try {
+      return await withSession(pool,session,async(db,current)=>{
+        await db.query('reset role');
+        let data;
+        try { data=(await db.query(statements[current?0:1],args)).rows[0].result; }
+        catch(error) {
+          if(session && !current && error.code==='42501') throw new HttpError(401,'Sign in to access this publication.');
+          throw error;
+        }
+        return {data,isPublic:!current};
+      },false);
+    } catch(error) {
+      if(codes[error.code]) throw new HttpError(codes[error.code],'Publication access is unavailable.');
       throw error;
     }
   }
@@ -33,7 +53,7 @@ export function publications({pool,delegations,storageUrl,fetchImpl=fetch}) {
       return get(session,id);
     },
     get,
-    mediaInfo: (session,id)=>dbCall(session,'publication_media_info',[publicationId.parse(id)]),
+    mediaInfo: (session,id)=>mediaRead(session,'info',[publicationId.parse(id)]).then(result=>result.data),
     async upload(session,id,part,source,contentType) {
       try { publicationPart.parse(part); publicationId.parse(id); } catch { throw new HttpError(400,'Invalid publication asset.'); }
       const stage=await get(session,id);
@@ -46,7 +66,12 @@ export function publications({pool,delegations,storageUrl,fetchImpl=fetch}) {
       uploads++;
       try {
         return await spoolPublicationAsset(stage.manifest,part,source,async asset=>{
-          const response=await delegations.publication(session,id,part,'upload',asset.stream(),asset.contentType);
+          let response;
+          try { response=await delegations.publication(session,id,part,'upload',asset.stream(),asset.contentType); }
+          catch(error) {
+            if(error instanceof HttpError) throw error;
+            throw new HttpError(503,'Publication transfer confirmation was unavailable. Retry the same file.');
+          }
           if(!response.ok) throw new HttpError(response.status===409?409:503,'Publication storage did not accept the asset.');
           const stored=await response.json();
           if(!stored || Object.keys(stored).sort().join(',')!=='byteLength,sha256,uploaded' || stored.uploaded!==true || stored.sha256!==asset.sha256 || stored.byteLength!==asset.byteLength) throw new HttpError(503,'Publication storage verification failed.');
@@ -82,10 +107,18 @@ export function publications({pool,delegations,storageUrl,fetchImpl=fetch}) {
     },
     async media(session,id,part,rangeHeader,head=false) {
       try { publicationId.parse(id); publicationPart.parse(part); } catch { throw new HttpError(404,'Publication unavailable.'); }
-      const asset=await dbCall(session,'publication_object',[id,part,'download']);
+      const {data:asset,isPublic}=await mediaRead(session,'object',[id,part]);
       const range=publicationRange(rangeHeader,asset.byteLength);
       if(head) return {asset,range,response:null};
-      const response=await delegations.publication(session,id,part,'download',undefined,undefined,range?.header ?? null);
+      let response;
+      if(isPublic) {
+        const capability='cmh_'+token();
+        await dbCall(null,'issue_publication_public_download',[digest(capability),id,part,range?.header ?? null],false);
+        response=await fetchImpl(`${storageUrl}/functions/v1/publication-media`,{
+          method:'POST',headers:{Authorization:`Bearer ${capability}`,'X-CareMetric-Publication-Mode':'public','Content-Type':'application/json'},
+          body:'{}',redirect:'error',signal:AbortSignal.timeout(120000),
+        });
+      } else response=await delegations.publication(session,id,part,'download',undefined,undefined,range?.header ?? null);
       if(!response.ok || response.status!==(range?206:200)) throw new HttpError(503,'Publication media is unavailable.');
       const length=range?.length ?? asset.byteLength;
       if(response.headers.get('content-type')?.split(';')[0]!==asset.contentType || response.headers.get('content-length')!==String(length)
@@ -93,6 +126,10 @@ export function publications({pool,delegations,storageUrl,fetchImpl=fetch}) {
         await response.body?.cancel(); throw new HttpError(503,'Publication media response is invalid.');
       }
       return {asset,range,response};
+    },
+    async consumePublicDownload(capability) {
+      if(typeof capability!=='string' || !/^cmh_[A-Za-z0-9_-]{43}$/.test(capability)) throw new HttpError(401,'Invalid public download authorization.');
+      return dbCall(null,'consume_publication_public_download',[digest(capability)],false);
     },
     async consumeCleanup(capability) {
       if(typeof capability!=='string' || !/^cmh_[A-Za-z0-9_-]{43}$/.test(capability)) throw new HttpError(401,'Invalid cleanup authorization.');

@@ -21,7 +21,7 @@ export function PublicationVideo({ revisionId, title, locale }: { revisionId: st
     }
     void load(); return () => abort.abort();
   }, [revisionId]);
-  if (unavailable) return <p role="status">Video unavailable. A current SMS session and access to this publication are required.</p>;
+  if (unavailable) return <p role="status">Video unavailable. It may have been retired, or your account may not have access.</p>;
   if (!info) return <p role="status">Checking video access…</p>;
   return <div><video className="publication-video" controls preload="metadata" aria-label={title} src={`/api/publications/media/${revisionId}/primary`} onError={() => setUnavailable(true)}>
     {info.hasCaptions && <track kind="captions" src={`/api/publications/media/${revisionId}/captions`} srcLang={locale.split("-")[0]} label={locale} default />}

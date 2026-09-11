@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import pg from 'pg';
-import {smsAuth,sessionCookie,digest} from './sms-auth.mjs';
+import {smsAuth,sessionCookie,digest,token,withSession} from './sms-auth.mjs';
 import {gateway} from './gateway.mjs';
 import {delegations} from './delegations.mjs';
 import {publications} from './publications.mjs';
@@ -28,7 +28,7 @@ await admin.query("insert into private.staff_permissions(user_id,permission,prod
 await admin.query("insert into private.sms_identities(user_id,phone_e164) values($1,'+12025550181'),($2,'+12025550182'),($3,'+12025550183')",[owner,scoped,learner]);
 const provider={send:async()=>randomUUID(),verify:async(_id,_phone,code)=>code==='123456'};
 const auth=smsAuth({pool,provider}), api=gateway(pool), objects=new Map();
-let baseUrl,storageWrites=0,lastCapability;
+let baseUrl,storageWrites=0,lastCapability,loseUploadResponse=false;
 const edge=createPublicationMediaHandler({serviceKey:'synthetic-storage-only',fetchImpl:async(url,options)=>{
   if(url.startsWith('https://support-hub-web-production.up.railway.app/api/internal/publications/')) {
     return fetch(baseUrl+new URL(url).pathname,options);
@@ -62,7 +62,9 @@ const edge=createPublicationMediaHandler({serviceKey:'synthetic-storage-only',fe
 const nativeFetch=async(url,options)=>{
   assert.equal(url,'https://xgauehtwksmnoqhgqegm.supabase.co/functions/v1/publication-media');
   lastCapability=options.headers.Authorization;
-  return edge(new Request(url,{...options,duplex:'half'}));
+  const response=await edge(new Request(url,{...options,duplex:'half'}));
+  if(loseUploadResponse && response.ok) { loseUploadResponse=false; throw new Error('Synthetic lost upload response'); }
+  return response;
 };
 const caps=delegations({pool,storageUrl:'https://xgauehtwksmnoqhgqegm.supabase.co',fetchImpl:nativeFetch});
 const service=publications({pool,delegations:caps,storageUrl:'https://xgauehtwksmnoqhgqegm.supabase.co',fetchImpl:nativeFetch});
@@ -109,7 +111,12 @@ try {
   await assert.rejects(pool.query('select * from private.publication_import_assets'),/permission denied/);
   const first=await stage(manifest);
   assert.equal((await upload(first,new Uint8Array(articleBytes.length))).status,422); assert.equal(storageWrites,0);
+  loseUploadResponse=true;
+  assert.equal((await upload(first,articleBytes)).status,503,'a lost transfer response does not attest SQL verification');
+  assert.equal((await admin.query("select verified_at from private.publication_import_assets where import_id=$1 and part='primary'",[first.id])).rows[0].verified_at,null);
+  assert.ok(objects.has(`publications/${first.id}/primary`),'the immutable object survived the lost response');
   assert.equal((await upload(first,articleBytes)).status,200);
+  assert.equal(storageWrites,1,'retry hashes the original immutable object without a replacement write');
   assert.equal((await caps.consume(lastCapability.slice(7),'publication').then(()=>200,()=>401)),401,'consumed upload capability cannot be reused');
   assert.equal((await admin.query('select count(*) from hub.content_items where content_key=$1',[manifest.source.content_key])).rows[0].count,'0','staging never publishes');
   assert.equal((await call(`publications/media/${first.id}`)).status,404,'a staged import ID cannot read media');
@@ -160,7 +167,51 @@ try {
   const learnerJar={...jar};
   assert.equal((await call('publications/access')).status,403);
   assert.equal((await fetch(mediaPath,{headers:{Cookie:`${sessionCookie}=${jar[sessionCookie]}`,Range:'bytes=0-1'}})).status,403,'staff video is private to authorized viewers');
+  assert.equal((await fetch(mediaPath)).status,403,'anonymous caller cannot read a staff video');
+  assert.equal((await fetch(`${baseUrl}/api/publications/media/${videoStage.id}/primary`)).status,404,'public download cannot use a staging identifier');
   jar=ownerJar;
+  const publicVideo=structuredClone(video); publicVideo.source.content_key='integration-public-video'; publicVideo.content.access_level='public';
+  const publicStage=await prepared(publicVideo,videoBytes); const publicResult=await call(`publications/imports/${publicStage.id}/commit`,request(publicStage));
+  assert.equal(publicResult.status,200,JSON.stringify(publicResult.body));
+  const publicId=publicResult.body.revisionId;
+  const publicPath=`${baseUrl}/api/publications/media/${publicId}`;
+  const publicInfo=await fetch(publicPath); assert.equal(publicInfo.status,200);
+  assert.deepEqual(await publicInfo.json(),{contentType:'video/mp4',hasCaptions:true,hasTranscript:true});
+  for(const [part,expected] of [['primary',videoBytes],['captions',captionBytes],['transcript',transcriptBytes]]) {
+    const result=await fetch(`${publicPath}/${part}`); assert.equal(result.status,200); assert.deepEqual(new Uint8Array(await result.arrayBuffer()),expected);
+  }
+  for(const range of ['bytes=1-3','bytes=-3','bytes=21-']) {
+    const result=await fetch(`${publicPath}/primary`,{headers:{Range:range}}); assert.equal(result.status,206); assert.equal((await result.arrayBuffer()).byteLength,3);
+  }
+  assert.equal((await fetch(`${publicPath}/primary`,{method:'HEAD'})).status,200);
+  assert.equal((await fetch(`${publicPath}/primary`,{headers:{Range:'bytes=0-1,4-5'}})).status,416);
+  const publicTicket=async(id=publicId)=>{
+    const value='cmh_'+token();
+    await pool.query('select private.issue_publication_public_download($1,$2,$3,$4)',[digest(value),id,'primary','bytes=0-1']);
+    return value;
+  };
+  const consumePublic=value=>fetch(`${baseUrl}/api/internal/publications/public/authorize`,{method:'POST',headers:{Authorization:`Bearer ${value}`,'Content-Type':'application/json'},body:'{}'});
+  const singleUse=await publicTicket(); assert.equal((await consumePublic(singleUse)).status,200); assert.equal((await consumePublic(singleUse)).status,401);
+  const expired=await publicTicket(); await admin.query("update private.publication_public_downloads set expires_at=now()-interval '1 second' where token_hash=$1",[digest(expired)]);
+  assert.equal((await consumePublic(expired)).status,401);
+  await assert.rejects(publicTicket(videoId),/Public publication access denied/,'the public issuer cannot grant staff media');
+  await assert.rejects(withSession(pool,ownerJar[sessionCookie],async db=>{
+    await db.query('reset role');
+    await db.query('select private.publication_public_object($1,$2)',[videoId,'primary']);
+  }),/Public publication access denied/,'public policy strips even real staff authority');
+  const retirement=await publicTicket();
+  await admin.query("update hub.content_publications set expires_at=now()-interval '1 second' where revision_id=$1",[publicId]);
+  assert.equal((await consumePublic(retirement)).status,403,'public policy rechecks a retirement after issue');
+  assert.equal((await fetch(`${publicPath}/primary`,{method:'HEAD'})).status,403);
+  await admin.query('update hub.content_publications set expires_at=null where revision_id=$1',[publicId]);
+  const restriction=await publicTicket();
+  await admin.query("update hub.content_items set access_level='customer' where id=$1",[publicResult.body.itemId]);
+  assert.equal((await consumePublic(restriction)).status,403,'public policy rechecks an access restriction after issue');
+  assert.equal((await fetch(publicPath)).status,403);
+  await admin.query("update hub.content_items set access_level='public' where id=$1",[publicResult.body.itemId]);
+  await admin.query("update hub.products set support_enabled=false where id=$1",[carebase]);
+  assert.equal((await fetch(`${publicPath}/primary`,{method:'HEAD'})).status,403,'public media obeys current product support status');
+  await admin.query('update hub.products set support_enabled=true where id=$1',[carebase]);
   const bomBytes=new Uint8Array(articleBytes.length+3); bomBytes.set([239,187,191]); bomBytes.set(articleBytes,3);
   const bomManifest=await fixtureManifest(); bomManifest.source.content_key='integration-bom'; bomManifest.artifact.byte_length=bomBytes.length; bomManifest.artifact.sha256=digest(bomBytes);
   const bomStage=await prepared(bomManifest,bomBytes); const bomResult=await call(`publications/imports/${bomStage.id}/commit`,request(bomStage));
@@ -174,6 +225,7 @@ try {
   await admin.query('insert into hub.tenant_products(tenant_id,product_id) values($1,$2)',[tenant,carebase]);
   await admin.query('insert into hub.tenant_product_memberships(tenant_id,product_id,user_id) values($1,$2,$3)',[tenant,carebase,learner]);
   const customerPath=`${baseUrl}/api/publications/media/${customerResult.body.revisionId}/primary`;
+  assert.equal((await fetch(customerPath)).status,403,'public transport cannot read customer media');
   const learnerHeaders={Cookie:`${sessionCookie}=${learnerJar[sessionCookie]}`,Range:'bytes=0-1'};
   const allowedCustomer=await fetch(customerPath,{headers:learnerHeaders}); assert.equal(allowedCustomer.status,206); await allowedCustomer.arrayBuffer();
   await admin.query("update hub.tenant_products set status='suspended' where tenant_id=$1 and product_id=$2",[tenant,carebase]);
@@ -183,5 +235,5 @@ try {
   assert.ok(objects.has(`publications/${videoStage.id}/primary`),'cleanup preserves published bytes');
   await admin.query('update private.sms_sessions set revoked_at=now() where token_hash=$1',[digest(jar[sessionCookie])]);
   assert.equal((await fetch(mediaPath,{method:'HEAD',headers:mediaHeaders})).status,401,'HEAD requires the current unrevoked session');
-  console.log('Publication HTTP/PostgreSQL/Edge integration passed: actual SMS, immutable upload and revision, concurrent/replayed commit, explicit placement retirement, stale preview, current product permission, private range/HEAD, bounded cleanup, and session revocation.');
+  console.log('Publication HTTP/PostgreSQL/Edge integration passed: actual SMS, immutable upload recovery and revision, concurrent/replayed commit, explicit placement retirement, stale preview, current product permission, public and private range/HEAD, actor-free public ticket replay/expiry/revocation, bounded cleanup, and session revocation.');
 } finally { await new Promise(resolve=>server.close(resolve)); await pool.end(); await admin.end(); }
