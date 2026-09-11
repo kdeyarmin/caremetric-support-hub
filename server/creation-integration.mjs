@@ -12,7 +12,7 @@ const local=new URL(process.env.HUB_TEST_DATABASE_URL);assert.equal(local.hostna
 const admin=new pg.Pool({connectionString:local.href});
 await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
 local.username='hub_app_server';local.password='ephemeral-test-only';const pool=new pg.Pool({connectionString:local.href});
-const owner=randomUUID(),phone='+12025550601',commands=new Map(),sources=new Map();
+const owner=randomUUID(),phone='+12025550701',commands=new Map(),sources=new Map();
 let bridge,nativeAllowed=true,loseApply=false,sourceUnavailable=false,revokeAtSource=false,writes=0;
 const auth=smsAuth({pool,provider:{send:async()=>randomUUID(),verify:async(_id,_phone,code)=>code==='123456'}});
 const fetchImpl=async(url,options)=>{
@@ -118,7 +118,7 @@ try {
   const other=randomUUID(),otherToken=token();
   await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'creation-other-admin@test.invalid',false)",[other]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')",[other]);
-  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550602',now())",[other]);
+  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550702',now())",[other]);
   await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) select $1,$2,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$3",[randomUUID(),digest(otherToken),other]);
   const otherHeaders={Cookie:`${sessionCookie}=${otherToken}`};
   assert.deepEqual(ok(await create({operation:'resume'},otherHeaders)),{rows:[],nextOffset:null});
