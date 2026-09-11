@@ -4,9 +4,9 @@ export class AdminApiError extends Error {
   readonly code: string;
   constructor(code: string) { super("Administrator request could not be completed."); this.code = code; }
 }
-export async function requestAdmin(functionName: "platform-admin" | "platform-command" | "learning-receipts" | "learning-authoring" | "billing-command", body: unknown, signal: AbortSignal): Promise<unknown> {
+export async function requestAdmin(functionName: "platform-admin" | "platform-command" | "learning-receipts" | "learning-authoring" | "billing-command" | "checkout-command", body: unknown, signal: AbortSignal): Promise<unknown> {
   if (config.demoMode) throw new AdminApiError("unconfigured");
-  const route = functionName === "billing-command" ? "billing-command" : functionName === "learning-authoring" ? "authoring" : functionName === "learning-receipts" ? "learning" : functionName === "platform-command" ? "command" : "read";
+  const route = functionName === "checkout-command" ? "checkout-command" : functionName === "billing-command" ? "billing-command" : functionName === "learning-authoring" ? "authoring" : functionName === "learning-receipts" ? "learning" : functionName === "platform-command" ? "command" : "read";
   const response = await fetch(`/api/admin/${route}`, {
     method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body), signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]), redirect: "error", cache: "no-store",
