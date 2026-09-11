@@ -25,6 +25,7 @@ RUN npm ci --omit=dev --ignore-scripts
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/server ./server
 COPY --from=build /app/src/lib/backendContract.ts ./src/lib/backendContract.ts
+COPY --from=build /app/src/docstudio/protocol.ts ./src/docstudio/protocol.ts
 COPY --from=build /app/src/support/onboardingProtocol.ts /app/src/support/registrationProtocol.ts ./src/support/
 COPY --from=build /app/supabase/functions/_shared ./supabase/functions/_shared
 COPY --from=build /app/src/learning/receiptProtocol.ts /app/src/learning/receiptCoordinator.ts /app/src/learning/authoringProtocol.ts /app/src/learning/structureProtocol.ts /app/src/learning/creationProtocol.ts /app/src/learning/creditPolicyProtocol.ts ./src/learning/
