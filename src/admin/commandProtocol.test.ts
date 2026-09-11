@@ -28,7 +28,7 @@ describe("administrator command contracts", () => {
   it("distinguishes native suspension from a billing access override", () => {
     expect(parsePortfolioCommand({ ...draft, action: "organizations.setSuspension", parameters: { suspended: true } }).command).toMatchObject({ parameters: { suspended: true } });
     expect(parsePortfolioCommand({ ...draft, action: "billing.setAccessOverride", parameters: { state: "provider", expiresAt: null } }).command).toMatchObject({ parameters: { state: "provider", expiresAt: null } });
-    for (const parameters of [{ state: "canceled", expiresAt: null }, { state: "provider", expiresAt: now }, { state: "comped" }, { state: "comped", expiresAt: "bad" }]) expect(() => parsePortfolioCommand({ ...draft, action: "billing.setAccessOverride", parameters })).toThrow();
+    for (const parameters of [{ state: "canceled", expiresAt: null }, { state: "provider", expiresAt: now }, { state: "comped" }, { state: "comped", expiresAt: "bad" }, { state: "comped", expiresAt: "2026-09-11" }]) expect(() => parsePortfolioCommand({ ...draft, action: "billing.setAccessOverride", parameters })).toThrow();
   });
   it.each([{ action: "organizations.setSuspension" }, { targetId: id }, { reason: "different reason" }, { previewDigest: "invalid" }, { expiresAt: now }, { expiresAt: "2026-09-11T16:06:00Z" }, { changes: [{ field: "email", before: null, after: "private" }] }, { changes: [...changes, ...changes] }])("rejects a mismatched or unsafe preview %j", changes => expect(() => parseCommandEnvelope(envelope({ ...preview, ...changes }), request)).toThrow());
   it("accepts only the referenced immutable apply command and preserves replay outcome", () => {

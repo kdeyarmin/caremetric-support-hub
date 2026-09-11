@@ -36,8 +36,9 @@ export function parsePortfolioCommand(input: unknown): PortfolioCommandRequest {
   if (command.operation !== "preview") throw new Error("Unsupported command operation");
   closed(command, ["operation", "requestId", "action", "targetId", "parameters", "reason"]);
   const commandAction = action(command.action);
-  const reason = text(command.reason);
-  if (reason.trim().length < 10 || Array.from(reason).some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) throw new Error("Provide a concise reason between 10 and 500 characters");
+  const rawReason = text(command.reason);
+  const reason = rawReason.trim();
+  if (reason.length < 10 || Array.from(rawReason).some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) throw new Error("Provide a concise reason between 10 and 500 characters");
   const parameters = object(command.parameters);
   let parsedParameters: CommandParameters;
   if (commandAction === "users.setActive") { closed(parameters, ["active"]); parsedParameters = { active: boolean(parameters.active) }; }
@@ -46,6 +47,7 @@ export function parsePortfolioCommand(input: unknown): PortfolioCommandRequest {
     closed(parameters, ["state", "expiresAt"]);
     if (parameters.state !== "comped" && parameters.state !== "provider") throw new Error("Unsupported access override");
     const expiresAt = parameters.expiresAt === null ? null : timestamp(parameters.expiresAt);
+    if (expiresAt !== null && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(expiresAt)) throw new Error("Expiration requires an explicit timezone");
     if (parameters.state === "provider" && expiresAt !== null) throw new Error("Provider access cannot have an override expiration");
     parsedParameters = { state: parameters.state, expiresAt };
   }

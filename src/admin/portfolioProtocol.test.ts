@@ -65,9 +65,23 @@ describe("portfolio contracts", () => {
     expect(() => parse("billing.overview", { ...data, statusCounts: [{ status: "active", count: 2 }, { status: "active", count: 1 }] })).toThrow();
     expect(() => parse("billing.overview", { ...data, statusCounts: [{ status: "active", count: -1 }] })).toThrow();
   });
+  it("keeps registered EMR profiles distinct from unavailable account activity", () => {
+    const data = { organizationCount: 2, activeUserCount: null, registeredUserCount: 8, subscriptionCount: 3 };
+    expect(parse("overview", data, "caremetric-emr").data).toEqual(data);
+    expect(() => parse("overview", { ...data, activeUserCount: 0 }, "caremetric-emr")).toThrow();
+    expect(() => parse("overview", { ...data, registeredUserCount: undefined }, "caremetric-emr")).toThrow();
+  });
 });
 
 describe("portfolio proxy routing", () => {
+  it("routes EMR to the verified native Supabase function and retains explicit unavailable activity", async () => {
+    const data = { organizationCount: 2, activeUserCount: null, registeredUserCount: 8, subscriptionCount: 3 };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(actor)).mockResolvedValueOnce(Response.json(envelope("overview", data, "caremetric-emr")));
+    const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product: "caremetric-emr", operation: "overview" }));
+    expect(response.status).toBe(200);
+    expect(fetcher.mock.calls[1][0]).toBe("https://ubbtgcaosuebrlwcvihw.supabase.co/functions/v1/central-admin-read");
+    expect(await response.json()).toEqual(envelope("overview", data, "caremetric-emr"));
+  });
   it("forwards an authorized staff read only to Breathe's fixed native route", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(actor)).mockResolvedValueOnce(Response.json(envelope("users.list", { ...page, items: [staff] })));
     const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product: "breathe", operation: "users.list" }));
@@ -76,7 +90,7 @@ describe("portfolio proxy routing", () => {
     expect(fetcher.mock.calls[1][1]?.headers).not.toHaveProperty("apikey");
     expect(await response.json()).toEqual(envelope("users.list", { ...page, items: [staff] }));
   });
-  it.each(["caremetric-emr", "pennsync", "intel", "caremetric-go"])("never sends the user token to an unconfigured %s connection", async product => {
+  it.each(["pennsync", "intel", "caremetric-go"])("never sends the user token to an unconfigured %s connection", async product => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(actor));
     const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product, operation: "capabilities" }));
     expect(response.status).toBe(503);

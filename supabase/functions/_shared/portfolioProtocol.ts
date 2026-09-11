@@ -8,7 +8,7 @@ export type DirectoryOperation = { operation: "organizations.list" | "users.list
 export type PortfolioOperation = AdminOperation | DirectoryOperation | { operation: "capabilities" | "billing.overview" };
 export interface PortfolioRequest { product: PortfolioProduct; operation: PortfolioOperation; }
 export interface PortfolioCapabilities { apiVersion: 1; operations: PortfolioOperationName[]; sourceRevision: string | null; }
-export interface PortfolioOverview { organizationCount: number; activeUserCount: number; globalCourseCount?: number; subscriptionCount?: number; }
+export interface PortfolioOverview { organizationCount: number; activeUserCount: number | null; registeredUserCount?: number; globalCourseCount?: number; subscriptionCount?: number; }
 export interface AdminOrganization { id: string; name: string | null; slug: string | null; status: string; createdAt: string | null; }
 export interface AdminDirectoryUser { id: string; displayName: string | null; email: string | null; role: string; status: string; createdAt: string | null; }
 export interface AdminSubscription {
@@ -104,6 +104,9 @@ export function parsePortfolioEnvelope(input: unknown, request: PortfolioRequest
     data = { apiVersion: 1, operations: [...new Set(row.operations.filter(value => portfolioOperations.includes(value as PortfolioOperationName)))] as PortfolioOperationName[], sourceRevision: revision };
   } else if (operation.operation === "overview" && product === "breathe") {
     data = { organizationCount: count(row.organizationCount), activeUserCount: count(row.activeUserCount), subscriptionCount: count(row.subscriptionCount) };
+  } else if (operation.operation === "overview" && product === "caremetric-emr") {
+    if (row.activeUserCount !== null) throw new Error("Unverified account activity count");
+    data = { organizationCount: count(row.organizationCount), activeUserCount: null, registeredUserCount: count(row.registeredUserCount), subscriptionCount: count(row.subscriptionCount) };
   } else if (operation.operation === "organizations.list") data = page(row, operation, organization);
   else if (operation.operation === "users.list") data = page(row, operation, value => user(value, product));
   else if (operation.operation === "billing.subscriptions.list") {
