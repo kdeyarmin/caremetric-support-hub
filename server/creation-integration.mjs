@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import pg from 'pg';
-import { smsAuth,sessionCookie,digest,withSession } from './sms-auth.mjs';
+import { smsAuth,sessionCookie,digest,token,withSession } from './sms-auth.mjs';
 import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
 import { appServer } from './http.mjs';
@@ -83,7 +83,7 @@ try {
   assert.equal((await create({...original,reason:'Changed original request reason'})).status,409);
   loseApply=true;assert.equal((await create(apply(intent))).status,503);assert.equal(writes,1);
   assert.equal((await create({operation:'discard',requestId:original.requestId})).status,409);
-  const originalToken=jar[sessionCookie],nextSession=randomUUID(),nextToken='creation-new-session-'+randomUUID();
+  const originalToken=jar[sessionCookie],nextSession=randomUUID(),nextToken=token();
   // A newly verified fixture session has a different identity, but the same owner.
   await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) select $1,$2,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$3",[nextSession,digest(nextToken),owner]);
   jar[sessionCookie]=nextToken;
@@ -115,7 +115,7 @@ try {
   const absent=request(),unused=ok(await create(absent));assert.equal(ok(await create({operation:'recover',requestId:absent.requestId})).status,'absent');
   ok(await create({operation:'discard',requestId:absent.requestId}));assert.equal((await create(apply(unused))).status,403);
   assert.ok(ok(await create({operation:'resume'})).rows.length>=4);
-  const other=randomUUID(),otherToken='creation-other-'+randomUUID();
+  const other=randomUUID(),otherToken=token();
   await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'creation-other-admin@test.invalid',false)",[other]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')",[other]);
   await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550602',now())",[other]);
@@ -138,7 +138,7 @@ try {
   const expired=request(),expiredIntent=ok(await create(expired));const expiry=new Date(Date.now()-10000).toISOString();
   commands.get(expired.requestId).preview.expiresAt=expiry;
   await admin.query("update private.course_creation_intents set preview=jsonb_set(preview,'{expiresAt}',to_jsonb($2::text)) where request_id=$1",[expired.requestId,expiry]);
-  const thirdSession=randomUUID(),thirdToken='creation-third-'+randomUUID();
+  const thirdSession=randomUUID(),thirdToken=token();
   await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) select $1,$2,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$3",[thirdSession,digest(thirdToken),owner]);
   jar[sessionCookie]=thirdToken;assert.equal((await create(apply(expiredIntent))).status,403);
   assert.equal(ok(await create({operation:'recover',requestId:expired.requestId})).status,'absent');
