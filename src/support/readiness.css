@@ -1,0 +1,12 @@
+.support-readiness { margin: 1.5rem 0; }
+.support-readiness-note { max-width: 80ch; }
+.support-readiness-table { width: 100%; overflow-x: auto; margin: 1rem 0; }
+.support-readiness table { width: 100%; border-collapse: collapse; text-align: left; }
+.support-readiness th, .support-readiness td { padding: .8rem; border-bottom: 1px solid var(--border, #dde4ef); vertical-align: top; }
+.support-readiness thead th { color: var(--text-secondary, #52627a); font-size: .8rem; }
+.support-readiness td small, .support-readiness th small { display: block; font-size: .75rem; font-weight: 400; max-width: 28ch; overflow-wrap: anywhere; }
+.support-intake-detail { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border, #dde4ef); }
+.support-intake-pagination { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .8rem; }
+.support-intake-review { margin-top: 1rem; padding: 1rem; background: #f0f5ff; border: 1px solid #bfcee8; border-radius: 12px; }
+.support-intake-review label { display: flex; align-items: start; gap: .65rem; margin: 1rem 0; }
+.support-intake-review > div { display: flex; gap: .7rem; flex-wrap: wrap; }

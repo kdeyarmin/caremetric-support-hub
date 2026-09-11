@@ -56,6 +56,7 @@ import { CourseLibrary, CourseEditor } from "./learning/Editor";
 import { CoursePlayer, MyLearning, LearningCertificate } from "./learning/Player";
 import { LearningCatalog } from "./learning/Catalog";
 import { AdminWorkspace } from "./admin/AdminWorkspace";
+import { SupportReadiness } from "./support/SupportReadiness";
 import { adminClient } from "./admin/client";
 import { safeLearningPath } from "./learning/model";
 import { config } from "./lib/config";
@@ -902,6 +903,7 @@ openHelp({
           return <div className="rollout-row" key={product.id}><span><span className="product-dot" style={{ background: product.color }} /> {product.name}</span><span>{rollout.previousHelp}</span><span>{rollout.integration}</span><span className={`state-${rollout.state}`}>{rollout.stateLabel}</span></div>;
         })}
       </section>
+      {data.actor.role === "platform_admin" && <SupportReadiness />}
     </>
   );
 }
