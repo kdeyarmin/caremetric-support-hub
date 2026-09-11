@@ -21,7 +21,8 @@ type GatewayContract<T> = GatewayBase<T> & (
 );
 type SafeError = "unauthenticated" | "forbidden" | "unconfigured" | "notfound" | "upstream" | "conflict" | "expired" | "invalid_request";
 export class GatewayError extends Error {
-  constructor(public readonly code: SafeError) { super(code); }
+  readonly code: SafeError;
+  constructor(code: SafeError) { super(code); this.code = code; }
 }
 export interface AdminProxyOptions { publishableKey: string; fetcher?: typeof fetch; }
 

@@ -32,6 +32,15 @@ export const learningReceiptOperationSchema = z.discriminatedUnion("operation", 
   z.strictObject({ operation: z.literal("retract"), assignmentId: receiptUuid, expectedSequence: z.number().int().min(1).max(2147483647) }),
 ]);
 export type LearningReceiptOperation = z.infer<typeof learningReceiptOperationSchema>;
+export const nativeLearningOperationSchema = z.discriminatedUnion("operation", [
+  z.strictObject({ operation: z.literal("resolve_identity"), organizationId: receiptUuid, employeeId: receiptUuid }),
+  z.strictObject({ operation: z.literal("provision"), mappingId: receiptUuid, organizationId: receiptUuid, employeeId: receiptUuid,
+    hubTenantId: receiptUuid, hubUserId: receiptUuid, courseId: receiptUuid, versionId: receiptUuid, sourceRevision: digest }),
+  z.strictObject({ operation: z.literal("revoke"), mappingId: receiptUuid }),
+  z.strictObject({ operation: z.literal("list"), limit: z.number().int().min(1).max(10) }),
+  z.strictObject({ operation: z.literal("acknowledge"), eventId: receiptUuid, sourceDigest: digest }),
+  z.strictObject({ operation: z.literal("retract"), assignmentId: receiptUuid, expectedSequence: z.number().int().min(1).max(2147483647) }),
+]);
 
 // Response projection deliberately drops unapproved upstream fields at every level.
 export const receiptStatusSchema = z.object({
