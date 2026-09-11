@@ -1,4 +1,4 @@
-import { type PublicationManifest } from "./publicationImportPreview";
+import type { PublicationManifest } from "./publicationImportPreview.ts";
 export const articleBytes = new TextEncoder().encode("# Workspace guide\n\nOpen the workspace and choose a product.\n");
 export const videoBytes = new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109, 0, 0, 2, 0, 105, 115, 111, 109, 109, 112, 52, 50]);
 export const captionBytes = new TextEncoder().encode("WEBVTT\n\n00:00.000 --> 00:00.900\nOpen the workspace.\n");

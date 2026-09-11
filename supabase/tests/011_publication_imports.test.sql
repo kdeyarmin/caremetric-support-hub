@@ -12,6 +12,7 @@ select ok(has_function_privilege('hub_app_server','private.commit_publication_im
 select ok(not has_function_privilege('authenticated','private.verify_publication_asset(uuid,text,text,integer,text)','execute'),'browser cannot fake checked asset bytes');
 select ok(not has_function_privilege('authenticated','private.consume_publication_cleanup(text)','execute'),'browser cannot consume maintenance capabilities');
 select is((select public from storage.buckets where id='hub-publications'),false,'publication bucket remains private');
+select is((select permissive from pg_policies where schemaname='storage' and tablename='objects' and policyname='publication_objects_private'),'RESTRICTIVE','a broad unrelated Storage policy cannot expose staging files');
 select is((select max_video_bytes from private.publication_import_settings where singleton),26214400,'deployment initially advertises conservative 25MiB limit');
 select throws_ok('select private.publication_import_access()','28000','Current application session required.','postgres caller cannot fabricate an app-owned SMS session');
 select throws_ok($$select private.consume_publication_cleanup(repeat('a',64))$$,'42501','Server maintenance required.','cleanup cannot run under a substituted native role');

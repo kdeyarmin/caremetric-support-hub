@@ -64,7 +64,7 @@ alter table private.publication_imports enable row level security;
 alter table private.publication_import_assets enable row level security;
 alter table private.publication_revision_provenance enable row level security;
 alter table private.publication_cleanup_tokens enable row level security;
-revoke all on private.publication_import_settings,private.publication_imports,private.publication_import_assets,private.publication_revision_provenance,private.publication_cleanup_tokens from public,anon,authenticated,hub_app_server;
+revoke all on private.publication_import_settings,private.publication_imports,private.publication_import_assets,private.publication_revision_provenance,private.publication_cleanup_tokens from public,anon,authenticated,service_role,hub_app_server;
 
 create function private.require_publication_scope(p_manifest jsonb,p_key text) returns uuid
 language plpgsql stable security definer set search_path='' as $$
@@ -438,6 +438,9 @@ create trigger publication_change_lock before insert or update or delete on hub.
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
   values('hub-publications','hub-publications',false,536870912,array['text/markdown','video/mp4','text/vtt','text/plain'])
   on conflict(id) do nothing;
+-- A future broad permissive Storage policy must not expose staging objects.
+create policy publication_objects_private on storage.objects as restrictive for all to anon,authenticated
+  using(bucket_id<>'hub-publications') with check(bucket_id<>'hub-publications');
 alter table private.app_delegations drop constraint app_delegations_audience_check;
 alter table private.app_delegations add constraint app_delegations_audience_check check(audience in ('carebase','media','breathe','caremetric-emr','pennsync','carebase.command','carebase.learning','publication'));
 
@@ -446,7 +449,7 @@ alter table private.app_delegations add constraint app_delegations_audience_chec
 revoke all on function private.require_publication_scope(jsonb,text),private.publication_snapshot(text,text),private.publication_import_access(),private.stage_publication_import(uuid,jsonb),
   private.require_publication_import(uuid,boolean),private.get_publication_import(uuid),private.get_publication_import_context(uuid),private.verify_publication_asset(uuid,text,text,integer,text),
   private.store_publication_preview(uuid,jsonb),private.commit_publication_import(uuid,jsonb),private.publication_object(uuid,text,text),private.publication_media_info(uuid),private.issue_publication_cleanup(text),
-  private.consume_publication_cleanup(text),private.finish_publication_cleanup(uuid),private.protect_publication_revision(),private.protect_publication_asset(),private.lock_publication_change(),private.publication_catalog_fingerprint(text) from public,anon,authenticated;
+  private.consume_publication_cleanup(text),private.finish_publication_cleanup(uuid),private.protect_publication_revision(),private.protect_publication_asset(),private.lock_publication_change(),private.publication_catalog_fingerprint(text) from public,anon,authenticated,service_role;
 grant execute on function private.publication_import_access(),private.stage_publication_import(uuid,jsonb),private.get_publication_import(uuid),private.get_publication_import_context(uuid),
   private.verify_publication_asset(uuid,text,text,integer,text),private.store_publication_preview(uuid,jsonb),private.commit_publication_import(uuid,jsonb),private.publication_object(uuid,text,text),private.publication_media_info(uuid),
   private.issue_publication_cleanup(text),private.consume_publication_cleanup(text),private.finish_publication_cleanup(uuid) to hub_app_server;
