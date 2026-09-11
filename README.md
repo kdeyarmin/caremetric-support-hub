@@ -1,5 +1,24 @@
 # CareMetric Support Hub
 
+CareBase course details include exact governed source review and native version
+controls. An administrator loads a version, reviews its material and policy,
+preserves that immutable source in the Hub, and previews a clone or publication.
+The confirmation applies the same native command identity, including after a
+connection failure. Every attempt rechecks current Hub and mapped CareBase
+authority; CareBase remains the version, publication and completion writer.
+
+The source view includes lesson bodies, assessment configuration and answer keys,
+credit rules, provider evidence and package metadata. Private media paths are
+excluded. Cloning preserves the published source and creates a draft that needs
+its own AI review and accepted package replacements when applicable. These
+controls do not yet edit draft content, record AI review or transfer media.
+
+Deployment requires the native governed-authoring migration and adapter plus
+`CAREMETRIC_LEARNING_AUTHORING_ENABLED=true` in CareBase, alongside its existing
+administrator/command configuration. The Hub intent migration is
+`20260911181309_learning_authoring_intents.sql`. Its private records pin source
+evidence and native outcomes; they introduce no second course-content writer.
+
 CareMetric Support Hub is the first-party support, knowledge, media, learning, and product-contact platform for the CareMetric software portfolio. It is designed to replace duplicated help pages and disconnected ticket tables without introducing an outside help-desk vendor.
 
 ## Central learning release

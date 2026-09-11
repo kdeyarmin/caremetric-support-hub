@@ -6,6 +6,7 @@ import { Loading, ReadFailure } from "./AdminReads";
 import { timeLabel } from "./readState";
 import { useAdminRead } from "./useAdminRead";
 import type { AdminClient, CareBaseCourseSummary } from "./types";
+import { AuthoringPanel } from "../learning/AuthoringPanel";
 
 const PAGE_SIZE = 20;
 const number = new Intl.NumberFormat();
@@ -30,7 +31,7 @@ export function CourseCatalog({ client }: { client: AdminClient }) {
   }
 
   return <section className="panel admin-course-panel" aria-labelledby="admin-course-heading">
-    <div className="panel-heading"><div><h2 id="admin-course-heading">Shared courses in CareBase</h2><p>Current global course metadata · all publication states · read only</p></div><Link className="text-link" to="/library">Hub content library <ChevronRight size={14} aria-hidden="true" /></Link></div>
+    <div className="panel-heading"><div><h2 id="admin-course-heading">Shared courses in CareBase</h2><p>Global courses · all publication states · governed version controls</p></div><Link className="text-link" to="/library">Hub content library <ChevronRight size={14} aria-hidden="true" /></Link></div>
     <div className="admin-section-body">
       <form className="admin-course-search" onSubmit={submitSearch}><label className="admin-search"><span className="admin-field-label">Search course titles</span><span className="admin-search-input"><Search size={16} aria-hidden="true" /><input type="search" maxLength={100} value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Search the CareBase catalog…" /></span></label><button type="submit" className="button button-primary">Search</button></form>
       <div className={`admin-catalog-layout${selectedId ? " has-selection" : ""}`}>
@@ -65,6 +66,7 @@ function CourseDetail({ client, courseId, close, retry }: { client: AdminClient;
     {state.status === "loading" && <Loading label="Loading course details" />}
     {state.status === "error" && <ReadFailure error={state.error} retry={retry} />}
     {state.status === "ready" && <div className="admin-detail-body"><CourseMetadata course={state.data.course} /><h3 className="admin-outline-heading">Lesson outline <span>{state.data.lessons.length}{state.data.lessonsTruncated ? "+" : ""}</span></h3>{state.data.lessons.length > 0 ? <ol className="admin-lesson-list">{state.data.lessons.map((lesson) => <li key={lesson.id}><strong>{lesson.title || "Untitled lesson"}</strong><span>{lesson.type.replaceAll("_", " ")}</span></li>)}</ol> : <p className="admin-explanation">No lesson outline was returned for this course’s current version.</p>}{state.data.lessonsTruncated && <p className="admin-explanation">Showing the first {state.data.lessons.length} lessons. The remaining outline is available in CareBase.</p>}<p className="admin-private-note">This view contains metadata and lesson titles. Course bodies, assessments, and private media are not included.</p></div>}
+    {state.status === "ready" && <AuthoringPanel key={courseId} courseId={courseId} />}
   </aside>;
 }
 
