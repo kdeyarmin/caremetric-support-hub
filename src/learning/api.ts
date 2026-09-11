@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { supabase } from "../lib/supabase";
 import { catalogSchema, certificateSchema, courseSchema, draftListSchema, draftSchema, myLearningSchema, submissionSchema, type DraftDocument } from "./model";
+import { governedStageResultSchema } from "../imports/governedLearningImport";
 
 async function rpc<T>(name: string, schema: z.ZodType<T>, args?: Record<string, unknown>): Promise<T> {
   if (!supabase) throw new Error("Course editing and learning require a connected Support Hub account.");
@@ -9,6 +10,9 @@ async function rpc<T>(name: string, schema: z.ZodType<T>, args?: Record<string, 
   return schema.parse(data);
 }
 export const learningApi = {
+  sourceHeads: () => rpc("list_learning_source_heads", z.array(z.object({ sourceCourseId: z.string(), sourceRevision: z.string() }))),
+  stageSource: (payload: string, sourceRevision: string, expectedRevision: string | null) => rpc("stage_learning_source", governedStageResultSchema,
+    { p_payload: payload, p_source_revision: sourceRevision, p_expected_revision: expectedRevision }),
   importDraft: (sourceCourseId: string, sourceVersionId: string, document: DraftDocument) => rpc("import_learning_draft", draftSchema, { p_source_course_id: sourceCourseId, p_source_version_id: sourceVersionId, p_document: document }),
   mediaList: () => rpc("list_learning_media", z.array(z.object({ id: z.uuid(), title: z.string() }))),
   async uploadMedia(title: string, video: File, captions: File, transcript: File, reviewed: boolean) {
