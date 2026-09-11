@@ -96,6 +96,11 @@ jobs:
           node server/backend-contract-integration.mjs
           node server/billing-command-integration.mjs
           node server/billing-contract-integration.mjs
+      - name: Export, lose and restore disposable Hub data
+        env:
+          HUB_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          HUB_RUN_RECOVERY_DRILL: disposable-data-loss
+        run: node server/recovery-integration.mjs
       - name: Check database security and performance advisors
         run: npx supabase db advisors --local --type all --level warn --fail-on error
       - name: Stop isolated Supabase stack

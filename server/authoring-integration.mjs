@@ -41,9 +41,9 @@ const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(u
   if(op.operation==='preview') {
     if(op.parameters.sourceRevision!==revision())return Response.json({error:{code:'conflict'}},{status:409});
     let row=commands.get(op.requestId);
-    if(!row && ['learning.patchDraft','learning.reviewDraft'].includes(op.action)) {
+    if(!row && ['learning.patchDraft','learning.reviewDraft','learning.editStructure'].includes(op.action)) {
       const before={courseId:course,versionId:version,currentVersionId:version,sourceRevision:revision(),status:'draft',versionNumber:2,title:source.version.title};
-      const after={...before,title:op.parameters.patch?.version?.title??before.title,aiReviewRequired:op.action==='learning.patchDraft'};delete after.sourceRevision;
+      const after={...before,title:op.parameters.patch?.version?.title??before.title,aiReviewRequired:op.action!=='learning.reviewDraft'};delete after.sourceRevision;
       row={commandId:randomUUID(),courseId:course,action:op.action,reason:op.reason,previewDigest:digest(JSON.stringify(op)),expiresAt:new Date(Date.now()+240000).toISOString(),before,after};
       Object.defineProperty(row,'parameters',{value:op.parameters,enumerable:false});commands.set(op.requestId,row);
     }
@@ -56,7 +56,7 @@ const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(u
   if(!preview||preview.previewDigest!==op.expectedDigest)return Response.json({error:{code:'conflict'}},{status:409});
   if(preview.result)return Response.json({...preview.result,replayed:true});
   if(preview.before.sourceRevision!==revision())return Response.json({error:{code:'conflict'}},{status:409});
-  if(['learning.patchDraft','learning.reviewDraft'].includes(preview.action)) {
+  if(['learning.patchDraft','learning.reviewDraft','learning.editStructure'].includes(preview.action)) {
     if(preview.action==='learning.patchDraft') {
       const patch=preview.parameters.patch;
       Object.assign(source.version,patch.version??{});source.version.aiReviewedAt=null;
@@ -65,6 +65,28 @@ const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(u
         if(Object.hasOwn(edit,'title'))block.title=edit.title;
         for(const key of ['content','transcript','estimatedMinutes'])if(Object.hasOwn(edit,key))block.body[key==='estimatedMinutes'?'estimated_minutes':key]=edit[key];
       }
+    } else if(preview.action==='learning.editStructure') {
+      // Deterministic native fixture for the compound creation/read path. Native
+      // PostgreSQL separately proves actual CAS, rollback and history guards.
+      for(const change of preview.parameters.changes) {
+        if(change.operation==='addLesson') {
+          assert.equal(change.blockType,'quiz');assert.deepEqual(change.body,{});
+          source.blocks.push({id:change.blockId,type:'quiz',sortOrder:source.blocks.length,title:change.title,body:{},documentId:null,videoLocatorSha256:null,quiz:null});
+        } else if(change.operation==='configureQuiz') {
+          const block=source.blocks.find(value=>value.id===change.blockId);assert.ok(block);assert.equal(block.quiz,null);
+          const {operation,blockId,quizId,...settings}=change;assert.equal(operation,'configureQuiz');assert.equal(blockId,block.id);
+          block.quiz={id:quizId,...settings,questions:[]};
+        } else if(change.operation==='saveQuestion') {
+          const quiz=source.blocks.find(value=>value.quiz?.id===change.quizId)?.quiz;assert.ok(quiz);
+          const {operation,quizId,questionId,answers,removedAnswerIds,...fields}=change;
+          assert.equal(operation,'saveQuestion');assert.equal(quizId,quiz.id);assert.deepEqual(removedAnswerIds,[]);
+          quiz.questions.push({id:questionId,sortOrder:quiz.questions.length,...fields,options:answers.map((answer,index)=>({id:answer.answerId,sortOrder:index,text:answer.text,correct:answer.correct}))});
+        } else if(change.operation==='reorderLessons') {
+          assert.deepEqual([...change.blockIds].sort(),source.blocks.map(block=>block.id).sort());
+          source.blocks=change.blockIds.map((id,index)=>({...source.blocks.find(block=>block.id===id),sortOrder:index}));
+        } else assert.fail('Unexpected synthetic structure operation');
+      }
+      source.version.aiReviewedAt=null;
     } else source.version.aiReviewedAt=new Date().toISOString();
     payload=JSON.stringify(source);
     const result={commandId:preview.commandId,courseId:course,action:preview.action,versionId:version,versionNumber:2,status:'draft',appliedAt:new Date().toISOString(),replayed:false,sourceRevision:revision()};
@@ -139,9 +161,40 @@ try {
   assert.equal((await author(reviewApply)).body.replayed,true);assert.equal(writes,3);
   await assert.rejects(withSession(pool,jar[sessionCookie],db=>db.query('select hub.record_learning_authoring_result($1,$2,$3::jsonb)',[reviewApply.commandId,reviewApply.expectedDigest,JSON.stringify({...reviewedResult.body,sourceRevision:'f'.repeat(64)})])),/result changed/);
   nativeRevoked=true;assert.equal((await author(reviewApply)).status,403);nativeRevoked=false;
+  // Read and preserve a newly added, unconfigured draft assessment. Published
+  // snapshots must still fail at BOTH the JS and PostgreSQL source boundaries.
+  const incompleteId=randomUUID(),newQuizId=randomUUID(),newQuestionId=randomUUID();
+  async function preserveLatest() {
+    const loaded=await author(sourceOp);assert.equal(loaded.status,200,JSON.stringify(loaded.body));
+    assert.equal((await author({...preserve,sourceRevision:revision(),expectedHeadRevision:loaded.body.headRevision})).status,200);
+  }
+  await preserveLatest();
+  const incompleteOp={operation:'preview',requestId:randomUUID(),courseId:course,action:'learning.editStructure',parameters:{versionId:version,sourceRevision:revision(),
+    changes:[{operation:'addLesson',blockId:incompleteId,blockType:'quiz',title:'New draft assessment',body:{}}]},reason:'Add an assessment draft before configuring its questions'};
+  const incompletePreview=await author(incompleteOp);assert.equal(incompletePreview.status,200,JSON.stringify(incompletePreview.body));
+  const incompleteApply={operation:'apply',commandId:incompletePreview.body.commandId,expectedDigest:incompletePreview.body.previewDigest};
+  assert.equal((await author(incompleteApply)).status,200);assert.equal(writes,4);
+  await preserveLatest();
+  const published=JSON.stringify({...source,sourceVersionState:'published'});
+  await assert.rejects(admin.query('select private.validate_governed_learning_source($1,$2)',[published,digest(published)]),/Source quiz configuration/);
+  const compoundOp={operation:'preview',requestId:randomUUID(),courseId:course,action:'learning.editStructure',parameters:{versionId:version,sourceRevision:revision(),changes:[
+    {operation:'configureQuiz',blockId:incompleteId,quizId:newQuizId,title:'Reviewed knowledge check',kind:'knowledge_check',passingScore:80,maxAttempts:null,shuffleQuestions:false,shuffleAnswers:true,revealsAnswersAfterAttempt:true},
+    {operation:'saveQuestion',quizId:newQuizId,questionId:newQuestionId,prompt:'Synthetic reviewed question '.repeat(190),type:'multiple_choice',points:101,topicCode:null,topicLabel:null,explanation:'Each correct choice matches the reviewed practice.',
+      answers:[{answerId:randomUUID(),text:'The first correct answer',correct:true},{answerId:randomUUID(),text:'The second correct answer',correct:true}],removedAnswerIds:[]},
+    {operation:'reorderLessons',blockIds:[incompleteId,...source.blocks.filter(block=>block.id!==incompleteId).map(block=>block.id)]},
+  ]},reason:'Save the exact assessment, explanations and complete answer set together'};
+  assert.ok(Buffer.byteLength(JSON.stringify(compoundOp))>4096);
+  const compoundPreview=await author(compoundOp);assert.equal(compoundPreview.status,200,JSON.stringify(compoundPreview.body));
+  assert.equal(compoundPreview.body.after.aiReviewRequired,true);
+  const compoundApply={operation:'apply',commandId:compoundPreview.body.commandId,expectedDigest:compoundPreview.body.previewDigest};
+  const compound=await author(compoundApply);assert.equal(compound.status,200,JSON.stringify(compound.body));assert.equal(compound.body.sourceRevision,revision());assert.equal(writes,5);
+  assert.equal((await author(compoundApply)).body.replayed,true);assert.equal(writes,5);
+  assert.equal(source.blocks[0].id,incompleteId);assert.equal(source.blocks[0].quiz.questions[0].points,101);assert.equal(source.version.aiReviewedAt,null);
+  await preserveLatest();
+  nativeRevoked=true;assert.equal((await author(compoundApply)).status,403);nativeRevoked=false;
   await admin.query('update private.staff_permissions set revoked_at=now() where user_id=$1',[owner]);assert.equal((await author(apply)).status,401);
   await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
   await admin.query('update private.sms_identities set revoked_at=now() where user_id=$1',[owner]);assert.equal((await author(apply)).status,401);
-  assert.equal(Number((await admin.query("select count(*) from private.audit_events where actor_id=$1 and action='learning.authoring.applied'",[owner])).rows[0].count),3);
-  console.log('Authoring PostgreSQL/HTTP integration passed: source preservation, clone/edit/review, exact digest receipts, large bounded edits, preview recovery, native/Hub revocation and immutable replay.');
+  assert.equal(Number((await admin.query("select count(*) from private.audit_events where actor_id=$1 and action='learning.authoring.applied'",[owner])).rows[0].count),5);
+  console.log('Authoring PostgreSQL/HTTP integration passed: source preservation, clone/edit/review/structure, incomplete draft assessments, complete weighted answers, exact digest receipts, large bounded edits, native/Hub revocation and immutable replay.');
 } finally {await new Promise(resolve=>server.close(resolve));await pool.end();await admin.end();}
