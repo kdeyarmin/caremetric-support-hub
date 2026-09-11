@@ -143,11 +143,11 @@ export function appServer({auth,gateway,delegations,publications,origins,dist=re
           if(url.search)throw new HttpError(400,'Invitation query parameters are not supported.');
           return json(await delegations.registration.admin(session,await jsonBody(req,4096)));
         }
-        if(['/api/admin/learning','/api/admin/authoring','/api/admin/course-creation','/api/admin/billing-command','/api/admin/checkout-command','/api/admin/onboarding'].includes(path) && req.method==='POST') {
-          const body=await jsonBody(req,path.endsWith('/authoring')||path.endsWith('/course-creation')?32768:4096);const controller=new AbortController();
+        if(['/api/admin/learning','/api/admin/authoring','/api/admin/provider','/api/admin/course-creation','/api/admin/billing-command','/api/admin/checkout-command','/api/admin/onboarding'].includes(path) && req.method==='POST') {
+          const body=await jsonBody(req,path.endsWith('/authoring')||path.endsWith('/provider')||path.endsWith('/course-creation')?32768:4096);const controller=new AbortController();
           const abort=()=>{if(!res.writableEnded)controller.abort();};
           req.once('aborted',abort);res.once('close',abort);
-          try {return json(await delegations[path.endsWith('/course-creation')?'creation':path.endsWith('/onboarding')?'onboarding':path.endsWith('/checkout-command')?'checkoutCommand':path.endsWith('/billing-command')?'billingCommand':path.endsWith('/authoring')?'authoring':'learning'](session,body,controller.signal));}
+          try {return json(await delegations[path.endsWith('/provider')?'provider':path.endsWith('/course-creation')?'creation':path.endsWith('/onboarding')?'onboarding':path.endsWith('/checkout-command')?'checkoutCommand':path.endsWith('/billing-command')?'billingCommand':path.endsWith('/authoring')?'authoring':'learning'](session,body,controller.signal));}
           finally {req.removeListener('aborted',abort);res.removeListener('close',abort);}
         }
         if(path==='/api/media/sign' && req.method==='POST') {
