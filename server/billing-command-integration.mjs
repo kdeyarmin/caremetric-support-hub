@@ -127,8 +127,10 @@ try {
   nativeRevoked=true;assert.equal((await billing(apply)).status,403);nativeRevoked=false;
   customerDrift=true;assert.equal((await billing(apply)).status,409);customerDrift=false;
   tamper=true;assert.equal((await billing(apply)).status,409);tamper=false;
-  revokeAfterNative=true;const revokedResponse=await billing(apply);assert.equal(revokedResponse.status,403);assert.equal(JSON.stringify(revokedResponse.body).includes(portalUrl),false);
-  const afterRevocation=calls;assert.equal((await resume()).status,403);assert.equal((await billing(apply)).status,403);assert.equal(calls,afterRevocation);
+  // Removing the fixture's only Hub staff permission makes the actor context
+  // unavailable (401), matching the existing authoring/session boundary.
+  revokeAfterNative=true;const revokedResponse=await billing(apply);assert.equal(revokedResponse.status,401);assert.equal(JSON.stringify(revokedResponse.body).includes(portalUrl),false);
+  const afterRevocation=calls;assert.equal((await resume()).status,401);assert.equal((await billing(apply)).status,401);assert.equal(calls,afterRevocation);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')",[owner]);
   assert.equal((await billing(apply)).status,200);assert.equal(providerWrites,1);
   const expiringRequest={...request,requestId:randomUUID()};const expiring=await billing(expiringRequest);assert.equal(expiring.status,200);
