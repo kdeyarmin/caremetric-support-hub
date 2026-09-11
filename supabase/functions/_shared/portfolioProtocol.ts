@@ -5,7 +5,7 @@ import { parseCheckoutCatalog, type BillingCatalogOperation, type BillingPackage
 
 export const portfolioProducts = ["carebase", "breathe", "caremetric-emr", "pennsync", "intel", "caremetric-go"] as const;
 export type PortfolioProduct = typeof portfolioProducts[number];
-export const portfolioOperations = ["capabilities", "overview", "courses.list", "courses.get", "organizations.list", "users.list", "billing.overview", "billing.subscriptions.list", ...billingReadOperations, "billing.packages.list", "commands.preview", "commands.apply", "billing.commands.preview", "billing.commands.apply", "billing.checkout.preview", "billing.checkout.apply", "billing.checkout.check"] as const;
+export const portfolioOperations = ["capabilities", "overview", "courses.list", "courses.get", "organizations.list", "users.list", "billing.overview", "billing.subscriptions.list", ...billingReadOperations, "billing.packages.list", "commands.preview", "commands.apply", "billing.commands.preview", "billing.commands.apply", "billing.checkout.preview", "billing.checkout.apply", "billing.checkout.check", "support.identity.resolve"] as const;
 export type PortfolioOperationName = typeof portfolioOperations[number];
 export type DirectoryOperation = { operation: "organizations.list" | "users.list" | "billing.subscriptions.list"; search?: string; limit: number; offset: number };
 export type PortfolioOperation = AdminOperation | DirectoryOperation | BillingReadOperation | BillingCatalogOperation | { operation: "capabilities" | "billing.overview" };

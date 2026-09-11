@@ -9,6 +9,8 @@ import { nativeLearningOperationSchema } from '../src/learning/receiptProtocol.t
 import { learningReceipts } from './learning-receipts.mjs';
 import { nativeAuthoringOperationSchema } from '../src/learning/authoringProtocol.ts';
 import { learningAuthoring } from './learning-authoring.mjs';
+import { supportIdentityOperation } from '../src/support/onboardingProtocol.ts';
+import { supportOnboarding } from './support-onboarding.mjs';
 import { nativeBillingCommandSchema } from '../supabase/functions/_shared/billingCommandProtocol.ts';
 import { billingCommands } from './billing-commands.mjs';
 import { nativeCheckoutCommandSchema } from '../supabase/functions/_shared/checkoutCommandProtocol.ts';
@@ -32,6 +34,11 @@ async function authorize(db,audience,payload) {
     return {...asset,range:range?.header ?? null};
   }
   if (['carebase','breathe','caremetric-emr','pennsync','caremetric-go','intel'].includes(audience)) {
+    if(audience!=='carebase' && payload?.operation==='support.identity.resolve') {
+      supportIdentityOperation.parse(payload);
+      await db.query('select hub.authorize_app_command()');
+      return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
+    }
     parsePortfolioRequest({product:audience,...payload});
     return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
   }
@@ -63,6 +70,7 @@ export function delegations({pool,storageUrl,fetchImpl=fetch}) {
   return {
     learning: learningReceipts({pool,issue,fetchImpl}),
     authoring: learningAuthoring({pool,issue,fetchImpl}),
+    onboarding: supportOnboarding({pool,issue,fetchImpl}),
     billingCommand: billingCommands({pool,issue,fetchImpl}),
     checkoutCommand: checkoutCommands({pool,issue,fetchImpl}),
     async consume(capability,audience) {
