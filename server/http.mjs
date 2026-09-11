@@ -61,6 +61,7 @@ export function appServer({auth,gateway,delegations,publications,origins,dist=re
             '/api/internal/admin/breathe/authorize':'breathe', '/api/internal/admin/emr/authorize':'caremetric-emr',
             '/api/internal/admin/pennsync/authorize':'pennsync', '/api/internal/command/carebase/authorize':'carebase.command',
             '/api/internal/admin/go/authorize':'caremetric-go',
+            '/api/internal/admin/intel/authorize':'intel',
             '/api/internal/learning/carebase/authorize':'carebase.learning',
           }[path];
           if(!audience) throw new HttpError(404,'Unavailable.');
@@ -127,11 +128,11 @@ export function appServer({auth,gateway,delegations,publications,origins,dist=re
         if(path.startsWith('/api/rows/') && req.method==='GET') return json(await gateway.rows(path.slice(10),session));
         if(path==='/api/admin/read' && req.method==='POST') return json(await delegations.admin(session,await jsonBody(req,2048)));
         if(path==='/api/admin/command' && req.method==='POST') return json(await delegations.command(session,await jsonBody(req,4096)));
-        if(path==='/api/admin/learning' && req.method==='POST') {
+        if(['/api/admin/learning','/api/admin/authoring'].includes(path) && req.method==='POST') {
           const body=await jsonBody(req,4096);const controller=new AbortController();
           const abort=()=>{if(!res.writableEnded)controller.abort();};
           req.once('aborted',abort);res.once('close',abort);
-          try {return json(await delegations.learning(session,body,controller.signal));}
+          try {return json(await delegations[path.endsWith('/authoring')?'authoring':'learning'](session,body,controller.signal));}
           finally {req.removeListener('aborted',abort);res.removeListener('close',abort);}
         }
         if(path==='/api/media/sign' && req.method==='POST') {

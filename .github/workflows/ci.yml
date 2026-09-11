@@ -90,6 +90,8 @@ jobs:
         run: |
           node server/integration.mjs
           node server/learning-integration.mjs
+          node server/support-integration.mjs
+          node server/authoring-integration.mjs
           node server/publication-integration.mjs
       - name: Check database security and performance advisors
         run: npx supabase db advisors --local --type all --level warn --fail-on error

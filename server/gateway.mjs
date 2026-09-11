@@ -3,6 +3,9 @@ import { HttpError, withSession } from './sms-auth.mjs';
 // This is a closed application API, never a general SQL or PostgREST proxy.
 export const rpcArguments = Object.freeze({
   get_support_actor_context: [], list_published_content: [], get_backend_contract: [],
+  get_support_readiness: [],
+  list_support_intake_tenants: ['p_product_id','p_offset','p_limit'],
+  set_support_intake: ['p_tenant_id','p_product_id','p_enabled','p_reviewed','p_expected_updated_at'],
   get_support_case_thread: ['p_case_id'],
   create_support_case: ['p_tenant_id','p_product_id','p_subject','p_category','p_priority','p_body','p_app_version','p_route','p_contains_phi','p_request_key'],
   reply_to_support_case: ['p_case_id','p_body','p_visibility','p_request_key'],

@@ -21,8 +21,21 @@ const sent=[];
 const provider={send:async phone=>{sent.push(phone);return randomUUID();},verify:async(_id,_phone,code)=>code==='123456'};
 const auth=smsAuth({pool,provider}), api=gateway(pool);
 const nativeCalls=[];
+const intelCalls=[];
 const nativeCommandId=randomUUID();
 const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(url,options)=>{
+  if(url==='https://caremetricintel.com/functions/centralAdminRead') {
+    const operation=JSON.parse(options.body);
+    assert.equal(options.redirect,'error');
+    assert.equal(Object.keys(options.headers).length,2);
+    assert.equal(options.headers.Authorization,undefined);
+    const ticket=options.headers['X-CareMetric-Hub-Authorization'].slice(7);
+    const authority=await caps.consume(ticket,'intel');
+    assert.equal(authority.user_id,editor);assert.equal(authority.method,'sms');
+    assert.deepEqual(authority.operation,operation);await assert.rejects(caps.consume(ticket,'intel'));
+    intelCalls.push(operation);
+    return Response.json({contractVersion:1,product:'intel',operation:operation.operation,generatedAt:new Date().toISOString(),data:{organizationCount:null,activeUserCount:null,registeredUserCount:2}});
+  }
   assert.equal(url,'https://cmcarebase.com/api/platform-admin/command','only the fixed native command adapter is called');
   assert.equal(Object.keys(options.headers).length,2,'no browser cookies or provider credentials are forwarded');
   assert.equal(options.redirect,'error');
@@ -96,6 +109,13 @@ try {
   await assert.rejects(caps.consume(emrCapability,'caremetric-go'));
   assert.deepEqual(await caps.consume(emrCapability,'caremetric-emr'),{user_id:editor,role:'platform_admin',method:'sms',operation:{operation:'capabilities'}});
   const commandOperation={operation:'preview',requestId:randomUUID(),action:'users.setActive',targetId:learner,parameters:{active:false},reason:'Synthetic session integration'};
+  const intelCapability='cmh_'+'i'.repeat(43);
+  await admin.query("insert into private.app_delegations(token_hash,session_id,audience,payload,expires_at) values($1,$2,'intel','{\"operation\":\"overview\"}',now()+interval '30 seconds')",[digest(intelCapability),session]);
+  for(const audience of ['pennsync','caremetric-go','carebase','media'])await assert.rejects(caps.consume(intelCapability,audience));
+  assert.deepEqual(await caps.consume(intelCapability,'intel'),{user_id:editor,role:'platform_admin',method:'sms',operation:{operation:'overview'}});
+  await assert.rejects(caps.consume(intelCapability,'intel'));
+  const intelOverview=await caps.admin(editorToken,{product:'intel',operation:'overview'});
+  assert.deepEqual(intelOverview.data,{organizationCount:null,activeUserCount:null,registeredUserCount:2});assert.equal(intelCalls.length,1);
   assert.equal((await call('admin/command',{product:'carebase',...commandOperation},{Origin:'https://evil.test'})).status,403);
   assert.equal(nativeCalls.length,0);
   const httpPreview=await call('admin/command',{product:'carebase',...commandOperation});

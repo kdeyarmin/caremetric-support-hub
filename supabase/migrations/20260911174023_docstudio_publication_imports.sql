@@ -517,7 +517,7 @@ insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
 create policy publication_objects_private on storage.objects as restrictive for all to anon,authenticated
   using(bucket_id<>'hub-publications') with check(bucket_id<>'hub-publications');
 alter table private.app_delegations drop constraint app_delegations_audience_check;
-alter table private.app_delegations add constraint app_delegations_audience_check check(audience in ('carebase','media','breathe','caremetric-emr','caremetric-go','pennsync','carebase.command','carebase.learning','publication'));
+alter table private.app_delegations add constraint app_delegations_audience_check check(audience in ('carebase','media','breathe','caremetric-emr','caremetric-go','pennsync','intel','carebase.command','carebase.learning','publication'));
 
 -- Helpers are not generic RPCs. The connection role invokes them only after
 -- installing the current app session's claims; each function rechecks authority.

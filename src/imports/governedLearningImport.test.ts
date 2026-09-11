@@ -55,6 +55,11 @@ describe("governed CareBase source contract", () => {
     expect(() => validateGovernedCourse({ ...fixture, employeeId: "private" })).toThrow();
     expect(() => validateGovernedCourse({ ...fixture, course: { ...fixture.course, unknownFuturePolicy: true } })).toThrow();
   });
+  it.each(["playbackToken", "signedUrl", "token", "api_key", "clientSecret", "secretKey", "signing_secret"])("rejects credential key %s in otherwise arbitrary authored JSON", key => {
+    const value = structuredClone(fixture);
+    value.blocks[0].body = { [key]: "synthetic-only" };
+    expect(() => validateGovernedCourse(value)).toThrow("credentials");
+  });
   it.each(["https://video.invalid/play?token=private", "https://video.invalid/play?X-Amz-Signature=private", "https://video.invalid/play?access_token=private"])("rejects credential-bearing authored content: %s", url => {
     const value = validateGovernedCourse(structuredClone(fixture));
     value.blocks[0].body = { content: url };
