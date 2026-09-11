@@ -3,6 +3,7 @@ import { packageClient, hashPackage, type PackageClient } from "./packageClient"
 import { packageOperationSchema, verifyPackageReceipt, type PackageContextView, type PackageIntent, type PackageOperation, type PackageResult } from "./packageProtocol";
 import { packageError } from "./packagePresentation";
 import type { GovernedCourse } from "../imports/governedLearningImport";
+import "./package.css";
 
 type StageOperation = Extract<PackageOperation, { operation: "upload" | "accept" }>;
 export function PackagePanel({ material, sourceRevision, reason, disabled, onEditing, onBusy, onChanged, client = packageClient }: {
@@ -57,7 +58,7 @@ export function PackagePanel({ material, sourceRevision, reason, disabled, onEdi
     const value = verifyPackageReceipt(await client.finish({ operation: "finish", courseId, versionId, requestId: saved.requestId, operationId: saved.operationId }, signal), saved);
     if (!signal.aborted) onChanged(value);
   }
-  return <section className="learning-notice" aria-label="Course packages">
+  return <section className="package-panel" aria-label="Course packages">
     <h4>Course packages</h4>
     <p>Retain an original SCORM or xAPI ZIP, then review it before accepting a separate runtime artifact. Package changes clear prior content approval. They do not publish the course or issue completion credit.</p>
     <button type="button" className="button button-secondary" disabled={locked} onClick={() => void action(refresh)}>Refresh package operations</button>
@@ -92,7 +93,7 @@ export function PackagePanel({ material, sourceRevision, reason, disabled, onEdi
           if (operation.operation === "accept") { onEditing(); setIntent(operation); }
         })}>Review package acceptance</button>
       </fieldset>
-      {intent && <div className="learning-notice" aria-label="Reviewed package request">
+      {intent && <div className="package-card" aria-label="Reviewed package request">
         <h5>{intent.operation === "upload" ? "Review original archive retention" : "Review runtime artifact acceptance"}</h5>
         <p>{intent.reason}</p><p>Preserved source SHA: {intent.sourceRevision}</p>
         {intent.operation === "upload" ? <><p>{file?.name} · {intent.sourceBytes} bytes · {intent.standard}</p><p>Original SHA-256: {intent.sourceSha256}</p></>
@@ -116,9 +117,9 @@ export function PackagePanel({ material, sourceRevision, reason, disabled, onEdi
         <button type="button" disabled={locked} onClick={() => { setIntent(null); setReviewed(false); }}>Clear local review</button>
         <p>Retry uses this same request. Clearing the local review does not cancel a saved native operation.</p>
       </div>}
-      {context && <div><h5>Saved package operations</h5>
+      {context && <div className="package-saved"><h5>Saved package operations</h5>
         {context.intents.items.length === 0 && <p>No saved package operations for this administrator and version.</p>}
-        {context.intents.items.map(saved => <div className="learning-notice" key={saved.operationId}>
+        {context.intents.items.map(saved => <div className="package-card" key={saved.operationId}>
           <p><strong>{saved.operation === "upload" ? "Original upload" : "Runtime acceptance"} · {saved.state}</strong></p>
           <p>Request {saved.requestId}</p><p>Original SHA-256: {saved.sourceSha256}</p>
           {saved.runtimeSha256 && <p>Runtime SHA-256: {saved.runtimeSha256}</p>}
