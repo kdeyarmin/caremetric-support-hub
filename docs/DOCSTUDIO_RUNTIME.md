@@ -67,6 +67,15 @@ exports also obey the existing publication upload ceiling, initially 25 MiB.
 Source files total at most 32 MiB per video. A project may retain at most 100
 source assets / 128 MiB, with no automatic deletion of revision evidence.
 
+The library pages the authorized cohort by update time and ID, so other apps'
+newer drafts cannot hide an editor's older material. Automatic cleanup removes
+only unused source assets older than one day and failed/cancelled or superseded
+render-attempt outputs older than seven days. It retains every source referenced
+by any immutable revision and every completed render's final outputs. Marking an
+unused source for cleanup is serialized with draft edits; that source cannot be
+attached while deletion is in flight. Each pass handles at most 20 exact keys,
+and lost cleanup responses can retry without deleting another object.
+
 Include this bucket's exact object bytes in the production backup plan. The
 logical Hub recovery drill automatically includes its private database tables,
 but database backups alone do not back up Storage object bytes. Revoke restored
@@ -76,8 +85,9 @@ SMS sessions, media tokens and worker leases before reopening a restored service
 
 1. Require green Hub CI, including the actual PostgreSQL/SMS/HTTP integration,
    private media handler tests, complete runtime image and recovery drills.
-2. Apply the exact reviewed `20260911220747_hub_docstudio_runtime.sql` migration
-   and align its immutable checksum with migration history. It adds
+2. Apply the exact reviewed `20260911220747_hub_docstudio_runtime.sql` and
+   `20260911223938_docstudio_backend_contract.sql` migrations and align their
+   immutable checksums with migration history. The declaration adds
    `knowledge.docstudio.v1` without removing independently released features.
 3. Deploy `docstudio-media` with its exact shared handler source. Configure the
    paired token and deploy the reviewed Hub commit.

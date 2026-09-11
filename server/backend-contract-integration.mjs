@@ -75,7 +75,7 @@ try {
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='support.customer-registration.v1')}),/incompatible/);
     await client.query(registrationMigration);
     assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['billing.checkout.v1','knowledge.docstudio.v1'].includes(feature))});
-    assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>!['billing.checkout.v1','knowledge.docstudio.v1'].includes(feature))}),/incompatible/);
+    assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='billing.checkout.v1')}),/incompatible/);
     await client.query(checkoutMigration);
     assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>feature!=='knowledge.docstudio.v1')});
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='knowledge.docstudio.v1')}),/incompatible/);

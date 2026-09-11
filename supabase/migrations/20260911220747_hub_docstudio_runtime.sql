@@ -152,16 +152,16 @@ begin perform private.docstudio_scope(p_body,p_key);return true;
 exception when insufficient_privilege then return false;end $$;
 create function private.docstudio_read(p_cursor jsonb default null) returns jsonb
 language plpgsql stable security definer set search_path='' as $$
-declare p record; list jsonb:='[]'; last_id uuid; last_time timestamptz; more boolean:=false;
+declare v_project record; list jsonb:='[]'; last_id uuid; last_time timestamptz; more boolean:=false;
 begin
  perform private.publication_import_access();
- for p in select p.id,p.updated_at from private.docstudio_projects p join private.docstudio_revisions r on r.project_id=p.id and r.revision=p.revision
+ for v_project in select p.id,p.updated_at from private.docstudio_projects p join private.docstudio_revisions r on r.project_id=p.id and r.revision=p.revision
   where private.docstudio_can_read(r.body,p.content_key)
    and (p_cursor is null or (p.updated_at,p.id)<((p_cursor->>'updatedAt')::timestamptz,(p_cursor->>'id')::uuid))
   order by p.updated_at desc,p.id desc limit 101 loop
   if jsonb_array_length(list)=100 then more:=true;exit;end if;
-  list:=list||jsonb_build_array(private.docstudio_project(p.id)-'draft'-'assets'-'jobs'-'approvedAt'-'contentKey');
-  last_id:=p.id;last_time:=p.updated_at;
+  list:=list||jsonb_build_array(private.docstudio_project(v_project.id)-'draft'-'assets'-'jobs'-'approvedAt'-'contentKey');
+  last_id:=v_project.id;last_time:=v_project.updated_at;
  end loop;
  return jsonb_build_object('projects',list,'nextCursor',case when more then jsonb_build_object('updatedAt',last_time,'id',last_id) else null end,'products',coalesce((select jsonb_agg(jsonb_build_object('slug',slug,'name',name) order by name) from hub.products where status<>'retired' and support_enabled and private.has_staff_permission('content.write',id)),'[]'::jsonb),
   'workerReady',exists(select 1 from private.docstudio_workers where seen_at>now()-interval '30 seconds'),
