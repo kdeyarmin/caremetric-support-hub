@@ -1,5 +1,7 @@
 # Initial backend contract
 
+The original API inventory below predates the current app-owned SMS gateway. The implemented DocStudio import endpoints, permissions, exact-file requirements, and deployment gates are documented in [Publication imports](PUBLICATION_IMPORTS.md). Its executor is separate from the pure preview function described here.
+
 Version `0.1.0` uses RLS-governed reads and narrow atomic RPCs in the `hub` schema.
 
 ## Reads

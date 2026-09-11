@@ -62,6 +62,8 @@ import { safeLearningPath } from "./learning/model";
 import { config } from "./lib/config";
 import { appSession } from "./lib/appSession";
 import { SmsSignIn } from "./auth/SmsSignIn";
+import { PublicationImport } from "./imports/PublicationImport";
+import { PublicationVideo } from "./imports/PublicationVideo";
 import { courseLaunchUrl } from "./security/courseLaunch";
 import { reconcileCaseSelection } from "./security/caseListState";
 import { caseTargetByKey, eligibleCaseTargets, preferredCaseTarget } from "./security/caseTargets";
@@ -99,6 +101,7 @@ const navItems = [
   { to: "/overview", label: "Overview", icon: LayoutDashboard },
   { to: "/cases", label: "Support cases", icon: Inbox },
   { to: "/knowledge", label: "Knowledge", icon: BookOpen },
+  { to: "/imports/docstudio", label: "DocStudio import", icon: FileText },
   { to: "/library", label: "Videos & courses", icon: Library },
   { to: "/products", label: "Products & contacts", icon: Boxes },
   { to: "/integration", label: "App integration", icon: Link2 },
@@ -244,7 +247,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
         </div>
         <nav className="primary-nav" aria-label="Main navigation">
           <p className="nav-label">Workspace</p>
-          {navItems.filter(item => item.to !== "/admin" || data.actor.role === "platform_admin").map(({ to, label, icon: Icon }) => (
+          {navItems.filter(item => (item.to !== "/admin" || data.actor.role === "platform_admin") && (item.to !== "/imports/docstudio" || staff)).map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} onClick={() => setMobileOpen(false)}>
               <Icon size={18} /> <span>{label}</span>
             </NavLink>
@@ -292,6 +295,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/overview" element={<OverviewPage data={data} />} />
             <Route path="/cases" element={<CasesPage key={`${data.actor.id}:${data.actor.role}`} data={data} />} />
             <Route path="/knowledge" element={<KnowledgePage data={data} />} />
+            <Route path="/imports/docstudio" element={staff ? <PublicationImport key={data.actor.id} /> : <Navigate to="/knowledge" replace />} />
             <Route path="/library/courses/:itemId" element={<CourseEditor key={window.location.pathname} products={data.products} />} />
             <Route path="/learn/courses/:itemId" element={<CoursePlayer key={window.location.pathname} />} />
             <Route path="/learn/my" element={<MyLearning />} />
@@ -848,7 +852,9 @@ function ContextualHelpPage({ data }: { data: HubData }) {
                     ? <NavLink className="text-link contextual-action" to={launchUrl}>Open course <ArrowRight size={14} /></NavLink>
                     : <a className="text-link contextual-action" href={launchUrl} target="_blank" rel="noreferrer">Open existing course <ExternalLink size={14} /></a>)}
                   {item.kind === "course" && !launchUrl && <span className="contextual-action action-unavailable"><LockKeyhole size={13} /> Course launch not connected</span>}
-                  {item.kind === "video" && <span className="contextual-action action-unavailable"><Clock3 size={13} /> Video playback available after approval</span>}
+                  {item.kind === "video" && (item.sourceSystem === "docstudio" && item.videoStatus === "ready"
+                    ? <PublicationVideo key={item.id} revisionId={item.id} title={item.title} locale={item.locale} />
+                    : <span className="contextual-action action-unavailable"><Clock3 size={13} /> Video playback available after approval</span>)}
                 </div>
               </article>
             );

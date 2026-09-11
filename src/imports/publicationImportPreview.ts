@@ -421,7 +421,7 @@ function validatePlacement(
   };
 }
 
-function validateManifest(value: unknown): PublicationManifest {
+export function validatePublicationManifest(value: unknown): PublicationManifest {
   assertExactKeys(
     value,
     ["schema_version", "source_system", "source", "content", "artifact", "governance", "placements"],
@@ -1076,10 +1076,24 @@ function collectCatalogPlacements(snapshot: PublicationCatalogSnapshot): Array<{
  */
 export async function previewPublicationImport(input: unknown): Promise<PublicationImportPlan> {
   assertExactKeys(input, ["manifest", "assets", "existing"], "input");
-  const manifest = validateManifest(input.manifest);
+  const manifest = validatePublicationManifest(input.manifest);
   const assets = validateAssetBundle(input.assets);
+  return previewPublicationImportWithVerifier({ manifest, existing: input.existing }, async () => verifyAssets(manifest, assets));
+}
+
+/**
+ * Server planning entry point for bounded streaming asset verification. The
+ * verifier must inspect the exact uploaded bytes; evidence from an HTTP body
+ * is never a verifier. This still only plans, and grants no publication rights.
+ */
+export async function previewPublicationImportWithVerifier(
+  input: unknown,
+  verify: (manifest: PublicationManifest) => Promise<void>,
+): Promise<PublicationImportPlan> {
+  assertExactKeys(input, ["manifest", "existing"], "input");
+  const manifest = validatePublicationManifest(input.manifest);
   const existing = validateSnapshot(input.existing, manifest.source.content_key);
-  await verifyAssets(manifest, assets);
+  await verify(manifest);
   if (existing === null && manifest.placements.length === 0) {
     fail("manifest.placements", "new content requires at least one product placement");
   }
@@ -1248,4 +1262,16 @@ export async function previewPublicationImport(input: unknown): Promise<Publicat
   };
   const planIdentity = `sha256:${await sha256Hex(new TextEncoder().encode(canonicalJson(planCore)))}`;
   return deepFreeze({ ...planCore, planIdentity });
+}
+
+/** Shared text/container checks used by both byte-array and streaming importers. */
+export function validatePublicationText(bytes: Uint8Array, kind: "article" | "captions" | "transcript", durationMs?: number): string {
+  const value = decodeTextAsset(bytes, `assets.${kind}`);
+  assertSafeArtifactText(value, `assets.${kind}`);
+  if (kind === "captions") assertWebVtt(value, durationMs!, "assets.captions");
+  return value;
+}
+
+export function validatePublicationMp4Header(bytes: Uint8Array): void {
+  if (!looksLikeMp4(bytes)) fail("assets.primary", "does not have a bounded ISO BMFF/MP4 ftyp signature");
 }
