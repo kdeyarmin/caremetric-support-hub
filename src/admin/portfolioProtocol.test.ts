@@ -90,7 +90,7 @@ describe("portfolio proxy routing", () => {
     expect(fetcher.mock.calls[1][1]?.headers).not.toHaveProperty("apikey");
     expect(await response.json()).toEqual(envelope("users.list", { ...page, items: [staff] }));
   });
-  it.each(["intel"])("never sends the user token to an unconfigured %s connection", async product => {
+  it.each(["intel"])("never sends a legacy JWT to the SMS-only %s connection", async product => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(actor));
     const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product, operation: "capabilities" }));
     expect(response.status).toBe(503);
@@ -134,6 +134,23 @@ describe("portfolio proxy routing", () => {
     expect(fetcher.mock.calls[1][1]?.headers).not.toHaveProperty("Authorization");
     expect(fetcher.mock.calls[1][1]?.headers).not.toHaveProperty("apikey");
     expect((await response.json()).data).toEqual(data);
+  });
+});
+
+describe("Intel registered-user boundaries", () => {
+  it("does not invent organization, active-account or subscription totals", () => {
+    const data={organizationCount:null,activeUserCount:null,registeredUserCount:2};
+    expect(parse("overview",data,"intel").data).toEqual(data);
+    expect(()=>parse("overview",{...data,organizationCount:0},"intel")).toThrow();
+    expect(()=>parse("overview",{...data,activeUserCount:2},"intel")).toThrow();
+    expect(()=>parse("overview",{...data,subscriptionCount:0},"intel")).toThrow();
+  });
+  it("preserves Intel's native IDs and strips fields outside the directory contract", () => {
+    const row={...staff,id:"6993c62145573ca8a97ad4aa",status:"registered"};
+    expect(parse("users.list",{...page,items:[{...row,password:"private"}]},"intel").data).toEqual({...page,items:[row]});
+    expect(()=>parse("users.list",{...page,items:[{...row,id:uuid}]},"intel")).toThrow();
+    expect(()=>parse("users.list",{...page,items:[{...row,status:"active"}]},"intel")).toThrow();
+    expect(()=>parsePortfolioEnvelope(envelope("users.list",{...page,items:[row]},"pennsync"),parsePortfolioRequest({product:"intel",operation:"users.list"}))).toThrow();
   });
 });
 
