@@ -1,8 +1,8 @@
 import { HttpError } from './sms-auth.mjs';
 
 /** Fixed registry destinations only; callers never supply a URL or header name. */
-export async function callNativeAdmin(fetcher, target, authorizationHeader, capability, operation, project, command = false) {
-  const signal = AbortSignal.timeout(12000);
+export async function callNativeAdmin(fetcher, target, authorizationHeader, capability, operation, project, command = false, parentSignal) {
+  const signal = AbortSignal.any([...(parentSignal ? [parentSignal] : []), AbortSignal.timeout(12000)]);
   try {
     const response = await fetcher(target, {
       method:'POST', headers:{[authorizationHeader]:`Bearer ${capability}`,'Content-Type':'application/json'},
