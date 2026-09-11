@@ -30,22 +30,23 @@ export async function coordinateLearningReceipt(op: LearningReceiptOperation, ct
         await ctx.native(op);
       } else {
         const batch = sourceReceiptBatchSchema.parse(await ctx.native({ operation: "list", limit: op.limit }));
-        const counts = { accepted: 0, quarantined: 0, failed: 0 };
+        if (batch.length > op.limit) throw new GatewayError("upstream");
+        const counts = { accepted: 0, quarantined: 0, failed: 0, quarantineDetails: [] as Array<{eventId:string;reason:string}>, retryEvents: [] as string[] };
         for (const entry of batch) {
           ctx.signal.throwIfAborted();
-          if (entry.state === "quarantined") { counts.quarantined++; continue; }
+          if (entry.state === "quarantined") { counts.quarantined++; counts.quarantineDetails.push({eventId:entry.eventId,reason:entry.reason ?? "needs_review"}); continue; }
           try {
             const receipt = learningReceiptSchema.parse(JSON.parse(entry.payload));
             const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(entry.payload))), b => b.toString(16).padStart(2, "0")).join("");
-            if (receipt.eventId !== entry.eventId || hash !== entry.sourceDigest) throw new GatewayError("upstream");
+            if (receipt.eventId.toLowerCase() !== entry.eventId.toLowerCase() || hash !== entry.sourceDigest) throw new GatewayError("upstream");
             const accepted = z.object({ eventId: receiptUuid, accepted: z.literal(true), replayed: z.boolean() }).parse(await ctx.hub("ingest_learning_receipt", { p_payload: entry.payload, p_source_digest: entry.sourceDigest }));
-            if (accepted.eventId !== entry.eventId) throw new GatewayError("upstream");
+            if (accepted.eventId.toLowerCase() !== entry.eventId.toLowerCase()) throw new GatewayError("upstream");
             await ctx.native({ operation: "acknowledge", eventId: entry.eventId, sourceDigest: entry.sourceDigest });
             counts.accepted++;
           } catch (error) {
             ctx.signal.throwIfAborted();
             if (error instanceof GatewayError && ["unauthenticated", "forbidden", "expired"].includes(error.code)) throw error;
-            counts.failed++;
+            counts.failed++; counts.retryEvents.push(entry.eventId);
           }
         }
         return counts;

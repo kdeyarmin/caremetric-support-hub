@@ -73,11 +73,15 @@ describe("receipt coordinator",()=>{
   it("acknowledges only after exact evidence has been stored",async()=>{
     const payload=JSON.stringify(receipt()); const hash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(payload))),b=>b.toString(16).padStart(2,"0")).join("");
     const f=fixture((name,body)=>name==="receipt"&&body.operation==="list"?json([{eventId:id(3),payload,sourceDigest:hash,state:"pending",reason:null}]):name==="ingest_learning_receipt"?json({eventId:id(3),accepted:true,replayed:true}):json({success:true}));
-    expect(await (await f.handler(request({operation:"reconcile",limit:10}))).json()).toEqual({accepted:1,quarantined:0,failed:0});
+    expect(await (await f.handler(request({operation:"reconcile",limit:10}))).json()).toEqual({accepted:1,quarantined:0,failed:0,quarantineDetails:[],retryEvents:[]});
     expect(f.calls.map(c=>c.name)).toEqual(["authorize_platform_command","receipt","ingest_learning_receipt","receipt"]);expect(f.calls.at(-1)?.body.operation).toBe("acknowledge");
   });
   it("does not ACK tampered or quarantined payloads",async()=>{
     const f=fixture(()=>json([{eventId:id(3),payload:JSON.stringify(receipt()),sourceDigest:sha,state:"pending",reason:null},{eventId:id(15),payload:"private invalid payload",sourceDigest:sha,state:"quarantined",reason:"policy_drift"}]));
-    expect(await (await f.handler(request({operation:"reconcile",limit:10}))).json()).toEqual({accepted:0,quarantined:1,failed:1});expect(f.calls).toHaveLength(2);
+    expect(await (await f.handler(request({operation:"reconcile",limit:10}))).json()).toEqual({accepted:0,quarantined:1,failed:1,quarantineDetails:[{eventId:id(15),reason:"policy_drift"}],retryEvents:[id(3)]});expect(f.calls).toHaveLength(2);
+  });
+  it("rejects a native batch larger than the requested limit before any write",async()=>{
+    const f=fixture(()=>json([3,4].map(n=>({eventId:id(n),payload:JSON.stringify(receipt()),sourceDigest:sha,state:"pending",reason:null}))));
+    expect((await f.handler(request({operation:"reconcile",limit:1}))).status).toBe(503);expect(f.calls).toHaveLength(2);
   });
 });

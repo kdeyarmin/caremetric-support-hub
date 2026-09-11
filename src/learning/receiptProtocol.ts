@@ -56,7 +56,9 @@ export const receiptStatusSchema = z.object({
 export const receiptAccessResultSchema = z.object({ hubTenantId: receiptUuid, hubUserId: receiptUuid,
   nativeOrganizationId: receiptUuid, nativeEmployeeId: receiptUuid, nativeProfileId: receiptUuid });
 export const receiptReconciliationSchema = z.object({ accepted: z.number().int().min(0).max(10),
-  quarantined: z.number().int().min(0).max(10), failed: z.number().int().min(0).max(10) });
+  quarantined: z.number().int().min(0).max(10), failed: z.number().int().min(0).max(10),
+  quarantineDetails: z.array(z.object({ eventId: receiptUuid, reason: z.enum(["mapping_disabled","policy_drift","missing_renewal_evidence","binding_identity_drift","receipt_retracted","needs_review"]) })).max(10),
+  retryEvents: z.array(receiptUuid).max(10) });
 export function projectReceiptResult(value: unknown, operation: LearningReceiptOperation): unknown {
   if (operation.operation === "status") return receiptStatusSchema.parse(value);
   if (operation.operation === "provision_access") return receiptAccessResultSchema.parse(value);
