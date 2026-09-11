@@ -27,8 +27,8 @@ async function duplicateUpload(response: Response): Promise<boolean> {
   const value=await boundedJson(response);
   if(!value || typeof value!=="object" || Array.isArray(value)) return false;
   const error=value as Record<string,unknown>;
-  return ["ResourceAlreadyExists","KeyAlreadyExists","already_exists"].includes(String(error.code))
-    || (error.error==="Duplicate" && error.message==="The resource already exists"
+  return (typeof error.code==="string" && ["ResourceAlreadyExists","KeyAlreadyExists","already_exists"].includes(error.code))
+    || (error.code===undefined && error.error==="Duplicate" && error.message==="The resource already exists"
       && [400,409,"400","409"].includes(error.statusCode as string|number));
 }
 

@@ -191,7 +191,9 @@ try {
     return value;
   };
   const consumePublic=value=>fetch(`${baseUrl}/api/internal/publications/public/authorize`,{method:'POST',headers:{Authorization:`Bearer ${value}`,'Content-Type':'application/json'},body:'{}'});
-  const singleUse=await publicTicket(); assert.equal((await consumePublic(singleUse)).status,200); assert.equal((await consumePublic(singleUse)).status,401);
+  const singleUse=await publicTicket();
+  await assert.rejects(caps.consume(singleUse,'publication'),/Invalid authorization/,'public tickets cannot enter the session-bound upload audience');
+  assert.equal((await consumePublic(singleUse)).status,200); assert.equal((await consumePublic(singleUse)).status,401);
   const expired=await publicTicket(); await admin.query("update private.publication_public_downloads set expires_at=now()-interval '1 second' where token_hash=$1",[digest(expired)]);
   assert.equal((await consumePublic(expired)).status,401);
   await assert.rejects(publicTicket(videoId),/Public publication access denied/,'the public issuer cannot grant staff media');

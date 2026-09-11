@@ -89,6 +89,14 @@ describe('publication Edge transport',()=>{
     }});
     expect((await handler(request())).status).toBe(503); expect(calls).toBe(2);
   });
+  it.each([{code:['ResourceAlreadyExists']},{code:'AccessDenied',error:'Duplicate',message:'The resource already exists',statusCode:409}])('does not coerce or override conflicting duplicate error codes (%o)',async error=>{
+    let calls=0;
+    const handler=createPublicationMediaHandler({serviceKey:'synthetic-only',fetchImpl:async()=>{
+      if(++calls===1) return Response.json(base);
+      return Response.json(error,{status:400});
+    }});
+    expect((await handler(request())).status).toBe(503); expect(calls).toBe(2);
+  });
   it('public tickets use only their fixed audience and can never become uploads',async()=>{
     for(const operation of ['upload','download']) {
       let calls=0;
