@@ -9,6 +9,8 @@ import { nativeLearningOperationSchema } from '../src/learning/receiptProtocol.t
 import { learningReceipts } from './learning-receipts.mjs';
 import { nativeAuthoringOperationSchema } from '../src/learning/authoringProtocol.ts';
 import { learningAuthoring } from './learning-authoring.mjs';
+import { supportIdentityOperation } from '../src/support/onboardingProtocol.ts';
+import { supportOnboarding } from './support-onboarding.mjs';
 
 const prefix = 'cmh_';
 export const validDelegation = value => typeof value==='string' && /^cmh_[A-Za-z0-9_-]{43}$/.test(value);
@@ -28,6 +30,11 @@ async function authorize(db,audience,payload) {
     return {...asset,range:range?.header ?? null};
   }
   if (['carebase','breathe','caremetric-emr','pennsync','caremetric-go','intel'].includes(audience)) {
+    if(audience!=='carebase' && payload?.operation==='support.identity.resolve') {
+      supportIdentityOperation.parse(payload);
+      await db.query('select hub.authorize_app_command()');
+      return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
+    }
     parsePortfolioRequest({product:audience,...payload});
     return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
   }
@@ -59,6 +66,7 @@ export function delegations({pool,storageUrl,fetchImpl=fetch}) {
   return {
     learning: learningReceipts({pool,issue,fetchImpl}),
     authoring: learningAuthoring({pool,issue,fetchImpl}),
+    onboarding: supportOnboarding({pool,issue,fetchImpl}),
     async consume(capability,audience) {
       if (!validDelegation(capability)) throw new HttpError(401,'Invalid authorization.');
       return transaction(pool,async db => {
