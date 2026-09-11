@@ -60,6 +60,7 @@ describe("DocStudio import review", () => {
     expect((commit as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByLabelText("Retire the breathe placement")); fireEvent.click(commit);
     await waitFor(() => expect(value.client.commit).toHaveBeenCalledOnce());
+    expect(await screen.findByText("The publication result could not be confirmed. Retry the same publication to retrieve its result.")).toBeTruthy();
     const retry = await screen.findByRole("button", { name: "Retry the same publication" });
     await waitFor(() => expect((retry as HTMLButtonElement).disabled).toBe(false));
     expect((screen.getByLabelText("Retire the breathe placement") as HTMLInputElement).disabled).toBe(true);

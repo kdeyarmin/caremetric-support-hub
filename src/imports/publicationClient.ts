@@ -28,13 +28,18 @@ const messages: Record<number, string> = {
 export function createPublicationClient(fetcher: typeof fetch = fetch): PublicationClient {
   async function call(path: string, options: RequestInit) {
     const response = await fetcher(`/api/publications/${path}`, { ...options, credentials: "same-origin", redirect: "error", cache: "no-store" });
-    if (!response.ok) throw new PublicationError(response.status, messages[response.status] ?? "Publication storage is temporarily unavailable. The catalog has not been changed.");
+    if (!response.ok) throw new PublicationError(response.status, messages[response.status] ?? "The publication service is temporarily unavailable. If you submitted a commit, retry the same publication to retrieve its result.");
     return response.json() as Promise<unknown>;
   }
   const post = (path: string, body: unknown, signal?: AbortSignal) => call(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
   return {
     async access(signal) {
-      const result = await call("access", { method: "GET", signal });
+      let result: unknown;
+      try { result = await call("access", { method: "GET", signal }); }
+      catch (cause) {
+        if (cause instanceof PublicationError && [401, 403].includes(cause.status)) throw cause;
+        throw new PublicationError(503, "Publication import is not available in this environment. Its backend must be connected first.");
+      }
       if (!result || typeof result !== "object" || Object.keys(result).sort().join(",") !== "canImport,maxVideoBytes" || !("canImport" in result) || result.canImport !== true
         || !("maxVideoBytes" in result) || typeof result.maxVideoBytes !== "number" || !Number.isSafeInteger(result.maxVideoBytes) || result.maxVideoBytes < 1048576 || result.maxVideoBytes > 536870912) throw new Error("Invalid publication access response.");
       return { maxVideoBytes: result.maxVideoBytes };

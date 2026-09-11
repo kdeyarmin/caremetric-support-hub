@@ -101,7 +101,9 @@ export function PublicationImport({ client = publicationClient }: { client?: Pub
     try {
       const result = await client.commit(stage.id, { planIdentity: stage.plan.planIdentity, idempotencyKey: commitKey.current, confirmedActions: required, reviewConfirmed: true }, controller.signal);
       if (run === sequence.current) setReceipt(result);
-    } catch (cause) { if (run === sequence.current) setError(errorMessage(cause)); }
+    } catch (cause) {
+      if (run === sequence.current) setError(cause instanceof PublicationError && cause.status < 500 ? cause.message : "The publication result could not be confirmed. Retry the same publication to retrieve its result.");
+    }
     finally { if (run === sequence.current) setBusy(""); }
   }
   const required = stage?.plan ? publicationConfirmationIds(stage.plan) : [];
