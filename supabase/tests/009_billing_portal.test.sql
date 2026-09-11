@@ -1,0 +1,14 @@
+begin;
+select plan(10);
+select has_table('private','billing_portal_intents','Billing review ownership is private');
+select is(enum_range(null::private.billing_portal_action)::text[],array['billing.portal.create'],'Only the reviewed portal action is supported');
+select ok((select relrowsecurity from pg_class where oid='private.billing_portal_intents'::regclass),'Billing intent table has RLS');
+select ok(not has_table_privilege('anon','private.billing_portal_intents','SELECT'),'Anonymous callers cannot read saved reviews');
+select ok(not has_table_privilege('authenticated','private.billing_portal_intents','SELECT'),'Browser sessions cannot read intent rows directly');
+select ok(not has_table_privilege('hub_app_server','private.billing_portal_intents','UPDATE'),'App connection cannot bypass guarded state transitions');
+select ok(not has_function_privilege('authenticated','private.reserve_billing_portal(jsonb)','EXECUTE'),'Browser roles cannot manufacture a native preview');
+select ok(not has_function_privilege('authenticated','private.record_billing_portal_result(uuid,jsonb)','EXECUTE'),'Browser roles cannot manufacture billing outcomes');
+select ok(not has_function_privilege('service_role','private.record_billing_portal_result(uuid,jsonb)','EXECUTE'),'Generic service role has no portal outcome writer');
+select ok(has_function_privilege('hub_app_server','private.claim_billing_portal(uuid,text)','EXECUTE'),'Dedicated app server can use the current-session guarded claim');
+select * from finish();
+rollback;

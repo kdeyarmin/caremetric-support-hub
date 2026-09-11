@@ -110,4 +110,15 @@ describe("billing read interactions", () => {
       expect(portfolio.verifySubscription).toHaveBeenCalledWith(expect.objectContaining({ id: subscriptionFixture.id }));
     } else expect(portfolio.invoices).not.toHaveBeenCalled();
   });
+  it.each([false, true])("shows the portal review only when both native billing command capabilities exist: %s", async enabled => {
+    const portfolio = client({
+      capabilities: async () => ({ apiVersion: 1, sourceRevision: null, operations: ["overview", "billing.overview", "billing.subscriptions.list", "billing.commands.preview", ...(enabled ? ["billing.commands.apply"] as const : [])] }),
+      overview: async () => ({ organizationCount: 1, activeUserCount: 1 }), billing: async () => ({ source: "application_database", subscriptionCount: 1, statusCounts: [{ status: "active", count: 1 }] }),
+      subscriptions: async () => ({ source: "application_database", items: [subscriptionFixture], total: 1, limit: 20, offset: 0 }),
+    });
+    render(<MemoryRouter><AdminWorkspace client={courseClient} portfolio={portfolio} /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: "Billing" }));
+    await screen.findByText("Fixture plan");
+    expect(Boolean(screen.queryByRole("button", { name: "Review billing portal" }))).toBe(enabled);
+  });
 });
