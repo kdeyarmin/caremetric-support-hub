@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { CircleHelp, LoaderCircle, Mail, Phone, ShieldCheck } from 'lucide-react';
 import { appSession } from '../lib/appSession';
 import { config } from '../lib/config';
+import { Link } from 'react-router-dom';
 
 export function SmsSignIn({ rememberPath }: { rememberPath:() => void }) {
   const [phone,setPhone] = useState('');
@@ -43,6 +44,7 @@ export function SmsSignIn({ rememberPath }: { rememberPath:() => void }) {
       {challengeId && <><button type="button" className="button button-secondary" disabled={busy || remaining>0} onClick={() => void send()}>{remaining>0 ? `Resend in ${remaining}s` : 'Send a new code'}</button><button type="button" className="text-link" disabled={busy} onClick={() => { setChallengeId(''); setCode(''); setMessage(''); }}>Use a different number</button></>}
       {message && <p className="form-message" role="status">{message}</p>}
     </form>
+    <Link className="text-link" to="/join">Have an invitation? Set up your Hub account</Link>
     <div className="sign-in-support" aria-label="Central support contacts"><a href={`tel:${config.centralSupportPhone}`}><Phone size={17} /><span><small>Call central support</small><strong>{config.centralSupportPhoneDisplay}</strong></span></a><a href={`mailto:${config.centralSupportEmail}`}><Mail size={17} /><span><small>Email central support</small><strong>{config.centralSupportEmail}</strong></span></a></div>
     <div className="privacy-note"><ShieldCheck size={16} /> Your code signs you in to CareMetric. Never share it with anyone.</div>
   </section><aside className="sign-in-aside" aria-label="CareMetric learning"><div className="aside-orbit orbit-one" /><div className="aside-orbit orbit-two" /><div className="capability-card card-one"><ShieldCheck /><span>Secure access in your app</span></div></aside></main>;

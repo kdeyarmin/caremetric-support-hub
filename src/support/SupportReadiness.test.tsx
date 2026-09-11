@@ -3,6 +3,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SupportReadiness } from './SupportReadiness';
 import type { IntakeTenant, ReadinessClient } from './readiness';
+// Registration has its own request and full HTTP/UI tests. Keep this fixture's
+// network boundary explicit while exercising actual intake review behavior.
+vi.mock('../lib/appSession',()=>({appRequest:vi.fn(async(path:string,body:{operation:string})=>{
+  if(path==='admin/registration'&&body.operation==='list')return {rows:[],offset:0,total:0};
+  throw new Error('Unexpected test request');
+})}));
 afterEach(cleanup);
 const product={id:'00000000-0000-4000-8000-000000000001',slug:'caremetric-go',name:'CareMetric Go',status:'pilot' as const,supportEnabled:true,activeTenantCount:1,usableMemberCount:1,readyTenantCount:0,publishedItemCount:8};
 const tenant:IntakeTenant={tenantId:'00000000-0000-4000-8000-000000000002',name:'Example customer',tenantStatus:'active',accessStatus:'active',enabled:false,updatedAt:null,usableMemberCount:1,ready:false};

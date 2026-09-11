@@ -109,6 +109,17 @@ export function appServer({auth,gateway,delegations,publications,origins,dist=re
           throw new HttpError(404,'Publication resource unavailable.');
         }
         if(path==='/api/auth/session' && req.method==='GET') return json(await gateway.session(session));
+        if(path==='/api/auth/invitation/start' && req.method==='POST') {
+          if(url.search)throw new HttpError(400,'Invitation query parameters are not supported.');
+          const result=await delegations.registration.start(await jsonBody(req,2048),req.socket.remoteAddress);
+          if(result.unavailable)throw new HttpError(503,'SMS is temporarily unavailable. Please try again later.');
+          return json({challengeId:result.id,retryAfter:60},200,[cookie(challengeCookie,result.browserToken,300)]);
+        }
+        if(path==='/api/auth/invitation/verify' && req.method==='POST') {
+          if(url.search)throw new HttpError(400,'Invitation query parameters are not supported.');
+          const value=await delegations.registration.verify(await jsonBody(req,2048),readCookie(req.headers.cookie,challengeCookie),session);
+          return json({authenticated:true},200,[cookie(sessionCookie,value,28800),cookie(challengeCookie,'',0)]);
+        }
         if(path==='/api/auth/sms/start' && req.method==='POST') {
           const {phone}=await jsonBody(req,2048);
           const result=await auth.start(phone,req.socket.remoteAddress);
@@ -128,6 +139,10 @@ export function appServer({auth,gateway,delegations,publications,origins,dist=re
         if(path.startsWith('/api/rows/') && req.method==='GET') return json(await gateway.rows(path.slice(10),session));
         if(path==='/api/admin/read' && req.method==='POST') return json(await delegations.admin(session,await jsonBody(req,2048)));
         if(path==='/api/admin/command' && req.method==='POST') return json(await delegations.command(session,await jsonBody(req,4096)));
+        if(path==='/api/admin/registration' && req.method==='POST') {
+          if(url.search)throw new HttpError(400,'Invitation query parameters are not supported.');
+          return json(await delegations.registration.admin(session,await jsonBody(req,4096)));
+        }
         if(['/api/admin/learning','/api/admin/authoring','/api/admin/billing-command','/api/admin/onboarding'].includes(path) && req.method==='POST') {
           const body=await jsonBody(req,path.endsWith('/authoring')?32768:4096);const controller=new AbortController();
           const abort=()=>{if(!res.writableEnded)controller.abort();};

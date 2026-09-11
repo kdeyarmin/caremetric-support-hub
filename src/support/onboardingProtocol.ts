@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const onboardingProducts = ["breathe", "caremetric-emr", "caremetric-go", "pennsync", "intel"] as const;
+export const onboardingProducts = ["carebase", "breathe", "caremetric-emr", "caremetric-go", "pennsync", "intel"] as const;
 export const onboardingProduct = z.enum(onboardingProducts);
 const uuid = z.uuid().transform(value => value.toLowerCase());
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
