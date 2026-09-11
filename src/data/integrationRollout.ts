@@ -10,9 +10,9 @@ export interface IntegrationRollout {
 export const integrationRolloutBySlug: Record<string, IntegrationRollout> = {
   carebase: {
     previousHelp: "CareBase articles, courses, and tickets",
-    integration: "Shared catalog live; launcher deployed behind rollout flag",
+    integration: "Shared catalog and central Help launcher enabled",
     state: "in_progress",
-    stateLabel: "Deployed dark",
+    stateLabel: "Enabled; click pending",
   },
   breathe: {
     previousHelp: "Admin and patient help surfaces",
