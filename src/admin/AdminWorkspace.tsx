@@ -1,10 +1,9 @@
 import { useCallback, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ArrowRight, BookOpen, Building2, CreditCard, Layers3, RefreshCw, Search, Users } from "lucide-react";
+import { BookOpen, Building2, CreditCard, Layers3, RefreshCw, Users } from "lucide-react";
 import { adminRegistry } from "../../supabase/functions/_shared/adminRegistry";
 import { portfolioProducts } from "../../supabase/functions/_shared/portfolioProtocol";
-import type { AdminDirectoryUser, AdminOrganization, AdminPage, AdminSubscription, PortfolioCapabilities, PortfolioOperationName, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
+import type { AdminDirectoryUser, AdminOrganization, AdminSubscription, PortfolioCapabilities, PortfolioOperationName, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
 import { AdminInventory } from "./AdminInventory";
 import { adminInventory } from "./inventory";
 import { CourseCatalog } from "./CareBaseCourses";
@@ -16,6 +15,8 @@ import { useAdminRead } from "./useAdminRead";
 import { portfolioClient } from "./portfolioClient";
 import type { PortfolioClient } from "./portfolioClient";
 import type { AdminClient } from "./types";
+import { PagedRecords } from "./PagedRecords";
+import { InvoiceRecords, SubscriptionVerification } from "./BillingRecords";
 import "./admin.css";
 
 type View = "overview" | "organizations" | "users" | "billing" | "courses" | "inventory";
@@ -61,7 +62,7 @@ function ApplicationWorkspace({ product, client, portfolio }: { product: Portfol
         {view === "overview" && <Overview product={product} portfolio={portfolio} capabilities={capabilities} retry={retry} />}
         {view === "organizations" && <Directory product={product} portfolio={portfolio} kind="organizations" allowCommands={allowCommands} />}
         {view === "users" && <Directory product={product} portfolio={portfolio} kind="users" allowCommands={allowCommands} />}
-        {view === "billing" && <Billing product={product} portfolio={portfolio} retry={retry} allowCommands={allowCommands} />}
+        {view === "billing" && <Billing product={product} portfolio={portfolio} retry={retry} allowCommands={allowCommands} capabilities={capabilities} />}
         {view === "courses" && product === "carebase" && <CourseCatalog client={client} />}
       </div>}
     </>}
@@ -97,30 +98,19 @@ function Directory({ product, portfolio, kind, allowCommands }: { product: Portf
     : <><td>{row.displayName ?? "Not recorded"}</td><td>{row.email ?? "Not recorded"}</td><td>{row.role}</td><td>{row.status}</td><td>{timeLabel(row.createdAt)}</td></>}{allowCommands && <td>{!("name" in row) && row.role === "platform_admin" ? "Protected administrator" : <button type="button" className="button button-secondary button-small" onClick={() => setSelected({ id: row.id, label: "name" in row ? row.name ?? row.slug ?? row.id : row.displayName ?? row.email ?? row.id, action: "name" in row ? "organizations.setSuspension" : "users.setActive" })}>Change access</button>}</td>}</>} /></>;
 }
 
-function Billing({ product, portfolio, retry, allowCommands }: { product: PortfolioProduct; portfolio: PortfolioClient; retry: () => void; allowCommands: boolean }) {
+function Billing({ product, portfolio, retry, allowCommands, capabilities }: { product: PortfolioProduct; portfolio: PortfolioClient; retry: () => void; allowCommands: boolean; capabilities: PortfolioCapabilities }) {
   const [selected, setSelected] = useState<AccessTarget | null>(null);
+  const [verifiedId, setVerifiedId] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
+  const allowInvoices = product === "carebase" && capabilities.operations.includes("billing.invoices.list");
+  const allowVerify = product === "carebase" && capabilities.operations.includes("billing.subscriptions.verify");
   const reader = useCallback((signal: AbortSignal) => { void revision; return portfolio.billing({ product, signal }); }, [portfolio, product, revision]);
   const state = useAdminRead(reader);
   const read = useCallback((search: string, offset: number, signal: AbortSignal) => portfolio.subscriptions({ product, search: search || undefined, offset, limit: 20, signal }), [portfolio, product]);
-  return <section><div className="panel portfolio-billing-summary"><h2>Subscription administration</h2><p>These are subscription records stored by {adminRegistry[product].name}, including historical records. Provider status reflects the app’s latest recorded synchronization. It is not a new query to the payment provider.</p>{product === "caremetric-emr" && <p>EMR records shown here are application entitlements. Chargebee subscription records are excluded until their organization mappings are verified.</p>}{product === "pennsync" && <p>PennSync subscriptions belong to individual accounts. An organization is shown only when an explicit native relationship exists.</p>}{state.status === "loading" && <Loading label="Loading subscription states" app={adminRegistry[product].name} />}{state.status === "error" && <ReadFailure error={state.error} retry={retry} />}{state.status === "ready" && <><p><strong>{formatNumber.format(state.data.subscriptionCount)}</strong> recorded subscriptions · loaded {timeLabel(state.receivedAt)}</p><div className="portfolio-status-counts">{state.data.statusCounts.map(item => <span key={item.status}>{item.status}: <strong>{formatNumber.format(item.count)}</strong></span>)}</div></>}</div>
+  return <section><div className="panel portfolio-billing-summary"><h2>Subscription administration</h2><p>These are subscription records stored by {adminRegistry[product].name}, including historical records. Provider status in the table reflects the app’s latest recorded synchronization.{allowVerify && " Choose Verify with Stripe to request a current provider comparison."}</p>{product === "caremetric-emr" && <p>EMR records shown here are application entitlements. Chargebee subscription records are excluded until their organization mappings are verified.</p>}{product === "pennsync" && <p>PennSync subscriptions belong to individual accounts. An organization is shown only when an explicit native relationship exists.</p>}{state.status === "loading" && <Loading label="Loading subscription states" app={adminRegistry[product].name} />}{state.status === "error" && <ReadFailure error={state.error} retry={retry} />}{state.status === "ready" && <><p><strong>{formatNumber.format(state.data.subscriptionCount)}</strong> recorded subscriptions · loaded {timeLabel(state.receivedAt)}</p><div className="portfolio-status-counts">{state.data.statusCounts.map(item => <span key={item.status}>{item.status}: <strong>{formatNumber.format(item.count)}</strong></span>)}</div></>}</div>
     {selected && <AccessCommand key={`${selected.action}:${selected.id}`} target={selected} onClose={() => setSelected(null)} onApplied={() => setRevision(value => value + 1)} />}
-    <PagedRecords<AdminSubscription> key={revision} app={adminRegistry[product].name} title="Subscription records" searchLabel="Search provider subscription IDs" columns={["Organization", "Plan", "Application state", "Provider state", "Provider IDs", "Period end", "Updated", ...(allowCommands ? ["Access"] : [])]} read={read} render={row => <><td>{row.organizationName ?? row.organizationId ?? "Individual account"}</td><td>{row.planName ?? row.planCode ?? "Not recorded"}</td><td>{row.status}</td><td>{row.providerStatus ?? "Not recorded"}</td><td><div>{row.providerSubscriptionId ?? "No subscription ID"}</div><small>{row.providerCustomerId ?? "No customer ID"}</small></td><td>{timeLabel(row.currentPeriodEnd)}</td><td>{timeLabel(row.updatedAt)}</td>{allowCommands && <td><button type="button" className="button button-secondary button-small" disabled={!row.organizationId} onClick={() => { if (row.organizationId) setSelected({ id: row.organizationId, label: row.organizationName ?? row.organizationId, action: "billing.setAccessOverride" }); }}>Change access</button></td>}</>} />
+    {verifiedId && <SubscriptionVerification key={`${verifiedId}:${revision}`} id={verifiedId} portfolio={portfolio} onClose={() => setVerifiedId(null)} />}
+    <PagedRecords<AdminSubscription> key={revision} app={adminRegistry[product].name} title="Subscription records" searchLabel="Search provider subscription IDs" columns={["Organization", "Plan", "Application state", "Provider state", "Provider IDs", "Period end", "Updated", ...(allowVerify ? ["Verification"] : []), ...(allowCommands ? ["Access"] : [])]} read={read} render={row => <><td>{row.organizationName ?? row.organizationId ?? "Individual account"}</td><td>{row.planName ?? row.planCode ?? "Not recorded"}</td><td>{row.status}</td><td>{row.providerStatus ?? "Not recorded"}</td><td><div>{row.providerSubscriptionId ?? "No subscription ID"}</div><small>{row.providerCustomerId ?? "No customer ID"}</small></td><td>{timeLabel(row.currentPeriodEnd)}</td><td>{timeLabel(row.updatedAt)}</td>{allowVerify && <td><button type="button" className="button button-secondary button-small" onClick={() => setVerifiedId(row.id)} aria-label={`Verify subscription ${row.providerSubscriptionId ?? row.id}`}>Verify with Stripe</button></td>}{allowCommands && <td><button type="button" className="button button-secondary button-small" disabled={!row.organizationId} onClick={() => { if (row.organizationId) setSelected({ id: row.organizationId, label: row.organizationName ?? row.organizationId, action: "billing.setAccessOverride" }); }}>Change access</button></td>}</>} />
+    {allowInvoices && <InvoiceRecords portfolio={portfolio} canGet={capabilities.operations.includes("billing.invoices.get")} />}
   </section>;
-}
-
-function PagedRecords<T extends { id: string }>({ app, title, searchLabel, columns, read, render }: { app: string; title: string; searchLabel: string; columns: string[]; read: (search: string, offset: number, signal: AbortSignal) => Promise<AdminPage<T>>; render: (item: T) => ReactNode }) {
-  const [input, setInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [offset, setOffset] = useState(0);
-  const [refresh, setRefresh] = useState(0);
-  const retry = () => setRefresh(value => value + 1);
-  const reader = useCallback((signal: AbortSignal) => { void refresh; return read(search, offset, signal); }, [read, search, offset, refresh]);
-  const state = useAdminRead(reader);
-  function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setSearch(input.trim()); setOffset(0); retry(); }
-  return <section className="panel portfolio-records"><div className="panel-heading"><h2>{title}</h2></div><div className="admin-section-body"><form className="admin-course-search" onSubmit={submit}><label className="admin-search"><span className="admin-field-label">{searchLabel}</span><span className="admin-search-input"><Search size={16} aria-hidden="true" /><input type="search" maxLength={100} value={input} onChange={event => setInput(event.target.value)} /></span></label><button className="button button-primary" type="submit">Search</button></form>
-    {state.status === "loading" && <Loading label={`Loading ${title.toLowerCase()}`} app={app} />}
-    {state.status === "error" && <ReadFailure error={state.error} retry={retry} />}
-    {state.status === "ready" && <><p role="status">{formatNumber.format(state.data.total)} matching records · loaded {timeLabel(state.receivedAt)}</p><div className="portfolio-table-wrap"><table><thead><tr>{columns.map(column => <th key={column} scope="col">{column}</th>)}</tr></thead><tbody>{state.data.items.map(row => <tr key={row.id}>{render(row)}</tr>)}</tbody></table></div>{state.data.items.length === 0 && <p>No records on this page. Adjust your search or return to the previous page.</p>}<div className="admin-pagination"><span>{state.data.items.length} shown</span><div><button className="button button-secondary button-small" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 20))}><ArrowLeft size={13} aria-hidden="true" />Previous</button><button className="button button-secondary button-small" disabled={offset + 20 >= state.data.total || offset + 20 > 10000} onClick={() => setOffset(offset + 20)}>Next<ArrowRight size={13} aria-hidden="true" /></button></div></div>{offset + 20 > 10000 && offset + 20 < state.data.total && <p>Refine your search to browse more records.</p>}</>}
-    </div></section>;
 }
