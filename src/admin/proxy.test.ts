@@ -59,6 +59,13 @@ describe("central administrator boundary", () => {
     expect((await createAdminProxy({ publishableKey: "public", fetcher })(request({ operation: "overview", body: "x".repeat(10000) }))).status).toBe(400);
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
+  it("rejects control characters and wildcards while preserving literal Unicode title searches", () => {
+    for (const code of [...Array.from({ length: 32 }, (_, index) => index), 127, 42]) {
+      expect(() => parseAdminOperation({ operation: "courses.list", search: `course${String.fromCharCode(code)}title` })).toThrow();
+    }
+    const search = "Care 100%_ — santé 🩺";
+    expect(parseAdminOperation({ operation: "courses.list", search })).toEqual({ operation: "courses.list", search, limit: 20, offset: 0 });
+  });
   it("never turns an upstream failure or incomplete counts into zeroes", async () => {
     for (const upstream of [new Response("private failure", { status: 500 }), Response.json({ ...overview, data: { organizationCount: 1 } }), new Response("<html>app fallback</html>")]) {
       const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(actor)).mockResolvedValueOnce(upstream);

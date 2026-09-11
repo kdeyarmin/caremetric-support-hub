@@ -34,7 +34,10 @@ export function parseAdminOperation(input: unknown): AdminOperation {
     output = { operation: "courses.list", limit, offset: integer(row.offset ?? 0, 10000) };
     if (row.search !== undefined) {
       output.search = text(row.search, 100);
-      if (/[\u0000-\u001f\u007f*]/.test(output.search)) throw new Error("Invalid contract");
+      if (Array.from(output.search).some(character => {
+        const code = character.charCodeAt(0);
+        return code < 32 || code === 127 || character === "*";
+      })) throw new Error("Invalid contract");
     }
   } else throw new Error("Invalid contract");
   if (Object.keys(row).some(key => !fields.includes(key))) throw new Error("Invalid contract");
