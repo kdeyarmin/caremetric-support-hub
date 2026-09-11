@@ -15,7 +15,20 @@ assert.equal(local.hostname,'127.0.0.1');assert.equal(local.port,'54322');
 const admin=new pg.Pool({connectionString:databaseUrl});
 await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
 const appUrl=new URL(databaseUrl);appUrl.username='hub_app_server';appUrl.password='ephemeral-test-only';
-const pool=new pg.Pool({connectionString:appUrl.href});
+// Report only SQL code/message for synthetic fixtures, never query parameters.
+// This preserves the real driver and transactions while making a pre-dispatch
+// failure distinguishable from the deliberately lost native response.
+let databaseFailure=null;
+class FixtureClient extends pg.Client {
+  query(...args) {
+    const result=super.query(...args);
+    return result?.catch ? result.catch(error=>{
+      databaseFailure={code:error.code,message:error.message};
+      throw error;
+    }) : result;
+  }
+}
+const pool=new pg.Pool({connectionString:appUrl.href,Client:FixtureClient});
 const owner=randomUUID(),other=randomUUID(),organization=randomUUID(),phone='+12025550601',otherPhone='+12025550602';
 await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'billing-owner@test.invalid',false),($2,'billing-other@test.invalid',false)",[owner,other]);
 await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin'),($2,'platform.admin')",[owner,other]);
@@ -84,6 +97,7 @@ try {
   assert.equal((await billing({...request,parameters:{returnUrl:'https://untrusted.test'}})).status,400);
   assert.equal(calls,0);
   assert.equal((await billing(request)).status,503);
+  assert.equal(calls,1,JSON.stringify(databaseFailure));
   let saved=await resume();assert.equal(saved.status,200);assert.equal(saved.body.preview,null);assert.ok(saved.body.previewDispatchedAt);
   assert.deepEqual(saved.body.request,request);
   assert.equal((await billing({operation:'discard',requestId:request.requestId})).status,409);
