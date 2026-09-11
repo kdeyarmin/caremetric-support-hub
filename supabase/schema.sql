@@ -3903,7 +3903,8 @@ begin
     activated_at=case when p_state='active' then coalesce(m.activated_at,now()) else m.activated_at end,
     revoked_at=case when p_state='revoked' then coalesce(m.revoked_at,now()) else null end
     where m.id=p_mapping_id and (p_state='revoked' or m.state<>'revoked')
-      and (p_state='revoked' or private.receipt_membership_is_active(m.hub_tenant_id,m.hub_user_id,m.product_id));
+      and (p_state='revoked' or (private.receipt_membership_is_active(m.hub_tenant_id,m.hub_user_id,m.product_id)
+        and private.learning_receipt_identity_active(m.native_organization_id,m.native_employee_id,m.hub_tenant_id,m.hub_user_id)));
   if not found then raise exception 'Mapping unavailable or revoked.' using errcode='40001'; end if;
   insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata)
     values(p_actor_id,'learning.receipt.mapping.'||p_state,'learning_mapping',p_mapping_id,'{}'::jsonb);

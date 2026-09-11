@@ -29,6 +29,11 @@ values(pg_temp.rid(15),pg_temp.rid(14),pg_temp.rid(16),pg_temp.rid(17),repeat('a
 create function pg_temp.prepare() returns jsonb language sql as $$ select hub.prepare_learning_receipt_mapping(pg_temp.rid(1),pg_temp.rid(5),pg_temp.rid(18),pg_temp.rid(15),pg_temp.rid(11),pg_temp.rid(12),pg_temp.rid(10),pg_temp.rid(2)); $$;
 select lives_ok('select pg_temp.prepare()','reviewed snapshot and explicit access can prepare mapping');
 select is((select state from private.learning_receipt_mappings where id=pg_temp.rid(18)),'pending','mapping remains pending before native agreement');
+update private.federated_principals set revoked_at=now() where hub_user_id=pg_temp.rid(2);
+select throws_ok($$select hub.set_learning_receipt_mapping_state(pg_temp.rid(1),pg_temp.rid(5),pg_temp.rid(18),'active')$$,
+  '40001','Mapping unavailable or revoked.','principal revocation between prepare and native response prevents activation');
+select is((select state from private.learning_receipt_mappings where id=pg_temp.rid(18)),'pending','failed activation leaves the pending mapping unchanged');
+update private.federated_principals set revoked_at=null where hub_user_id=pg_temp.rid(2);
 select hub.set_learning_receipt_mapping_state(pg_temp.rid(1),pg_temp.rid(5),pg_temp.rid(18),'active');
 create temporary table receipt_fixture(document jsonb);
 insert into receipt_fixture values(jsonb_build_object('contract','caremetric.learning-receipt.v1','source','carebase','eventId',pg_temp.rid(20),'kind','completed','sequence',1,'mappingId',pg_temp.rid(18),

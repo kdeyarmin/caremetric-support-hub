@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { z } from "zod";
 import { requestAdmin } from "../admin/transport";
 import { learningReceiptOperationSchema, projectReceiptResult, receiptAccessResultSchema, receiptReconciliationSchema, receiptStatusSchema, type LearningReceiptOperation } from "./receiptProtocol";
+import { receiptSetupId } from "./receiptSetupIntent";
 
 async function run(operation: LearningReceiptOperation) {
   const parsed = learningReceiptOperationSchema.parse(operation);
@@ -12,7 +13,7 @@ export function ReceiptPanel() {
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState(""); const [error, setError] = useState("");
   const [organization, setOrganization] = useState(""); const [employee, setEmployee] = useState("");
   const [user, setUser] = useState(""); const [name, setName] = useState(""); const [snapshot, setSnapshot] = useState("");
-  const [tenantId] = useState(() => crypto.randomUUID()); const [mappingId, setMappingId] = useState(() => crypto.randomUUID());
+  const setupIds = useRef(new Map<string, string>());
   const [reviewed, setReviewed] = useState(false);
   const [access, setAccess] = useState<z.infer<typeof receiptAccessResultSchema> | null>(null);
   const [reconciliation, setReconciliation] = useState<z.infer<typeof receiptReconciliationSchema> | null>(null);
@@ -30,9 +31,9 @@ export function ReceiptPanel() {
     {data && <>
       <p>Showing up to 100 recent mappings, receipt records, accounts, and source snapshots. Total: {data.mappingTotal} mappings and {data.receiptTotal} receipt records.</p>
       <form onSubmit={e => { e.preventDefault(); void action(async () => {
-        const existing = data.tenants.find(t => t.nativeOrganizationId.toLowerCase() === organization.toLowerCase());
-        const result = receiptAccessResultSchema.parse(await run({ operation: "provision_access", nativeOrganizationId: organization,
-          nativeEmployeeId: employee, hubTenantId: existing?.hubTenantId ?? tenantId, tenantName: existing?.name ?? name, hubUserId: user }));
+        const existing = data.tenants.find(t => t.nativeOrganizationId.toLowerCase() === organization.trim().toLowerCase());
+        const intent = { operation: "provision_access" as const, nativeOrganizationId: organization.trim(), nativeEmployeeId: employee.trim(), tenantName: existing?.name ?? name.trim(), hubUserId: user };
+        const result = receiptAccessResultSchema.parse(await run({ ...intent, hubTenantId: existing?.hubTenantId ?? receiptSetupId(setupIds.current, intent) }));
         setAccess(result); setMessage("Explicit tenant and principal access is ready. Case intake remains disabled for new tenants.");
       }); }}>
         <h3>1. Review tenant and learner access</h3>
@@ -46,9 +47,10 @@ export function ReceiptPanel() {
         <button disabled={busy || !reviewed}>Provision reviewed access</button>
       </form>
       <form onSubmit={e => { e.preventDefault(); if (access) void action(async () => {
-        await run({ operation: "provision", mappingId, sourceSnapshotId: snapshot, nativeOrganizationId: access.nativeOrganizationId,
-          nativeEmployeeId: access.nativeEmployeeId, hubTenantId: access.hubTenantId, hubUserId: access.hubUserId });
-        setMappingId(crypto.randomUUID()); setMessage("Future assignments to this exact course version will capture receipts. Existing assignments remain native only.");
+        const intent = { operation: "provision" as const, sourceSnapshotId: snapshot, nativeOrganizationId: access.nativeOrganizationId,
+          nativeEmployeeId: access.nativeEmployeeId, hubTenantId: access.hubTenantId, hubUserId: access.hubUserId };
+        await run({ ...intent, mappingId: receiptSetupId(setupIds.current, intent) });
+        setMessage("Future assignments to this exact course version will capture receipts. Existing assignments remain native only.");
       }); }}>
         <h3>2. Bind an exact reviewed course version</h3>
         <label>Preserved published source snapshot<select required value={snapshot} onChange={e => setSnapshot(e.target.value)}><option value="">Select source snapshot</option>{data.snapshots.map(s => <option value={s.id} key={s.id}>{s.title} · {s.sourceVersionId} · {s.sourceRevision.slice(0, 12)}</option>)}</select></label>
