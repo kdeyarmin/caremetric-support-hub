@@ -1,5 +1,5 @@
 export const REQUIRED_BACKEND_CONTRACT = 4;
-export const REQUIRED_BACKEND_FEATURES = ["learning.runtime.v1", "platform.admin.read.v1", "app.sms.v1", "learning.sources.v1", "platform.admin.command.v1"] as const;
+export const REQUIRED_BACKEND_FEATURES = ["learning.runtime.v1", "platform.admin.read.v1", "app.sms.v1", "learning.sources.v1", "platform.admin.command.v1", "learning.receipts.v1"] as const;
 
 /** Additive features share the API version; the integer alone never proves readiness. */
 export function assertBackendContract(contract: unknown): void {

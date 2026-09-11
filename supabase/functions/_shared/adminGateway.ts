@@ -2,15 +2,46 @@ import { isUuid } from "./adminProtocol.ts";
 
 const hubOrigin = "https://xgauehtwksmnoqhgqegm.supabase.co";
 const allowedOrigins = new Set(["https://support-hub-web-production.up.railway.app", "https://help.caremetric.ai"]);
-interface GatewayContract<T> {
+interface GatewayBase<T> {
   authorizationRpc: "authorize_platform_admin" | "authorize_platform_command";
   parse(input: unknown): T;
-  target(input: T): { endpoint: string | null; body: unknown; authorizationHeader?: "Authorization" | "X-CareMetric-Hub-Authorization" };
   project(response: unknown, input: T): unknown;
   validateAuthority?(actor: Record<string, unknown>): boolean;
   commandErrors?: boolean;
 }
+export interface GatewayExecution {
+  actor: Record<string, unknown>;
+  authorization: string;
+  signal: AbortSignal;
+  fetchJson(endpoint: string, init: RequestInit): Promise<unknown>;
+}
+type GatewayContract<T> = GatewayBase<T> & (
+  { target(input: T): { endpoint: string | null; body: unknown; authorizationHeader?: "Authorization" | "X-CareMetric-Hub-Authorization" }; execute?: never } |
+  { target?: never; execute(input: T, context: GatewayExecution): Promise<unknown> }
+);
+type SafeError = "unauthenticated" | "forbidden" | "unconfigured" | "notfound" | "upstream" | "conflict" | "expired" | "invalid_request";
+export class GatewayError extends Error {
+  readonly code: SafeError;
+  constructor(code: SafeError) { super(code); this.code = code; }
+}
 export interface AdminProxyOptions { publishableKey: string; fetcher?: typeof fetch; }
+
+function boundedJson(value: unknown): string {
+  if (value instanceof Response) throw new Error("Response objects are not gateway results");
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined || new TextEncoder().encode(serialized).byteLength > 1048576) throw new Error("Response too large");
+  return serialized;
+}
+async function withinSignal<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) throw new Error("Request timed out");
+  let cancel: () => void = () => {};
+  try {
+    return await Promise.race([operation, new Promise<never>((_, reject) => {
+      cancel = () => reject(new Error("Request timed out"));
+      signal.addEventListener("abort", cancel, { once: true });
+    })]);
+  } finally { signal.removeEventListener("abort", cancel); }
+}
 
 async function readJson(source: Request | Response, max: number, signal: AbortSignal): Promise<unknown> {
   if (!source.body) throw new Error("Missing JSON");
@@ -37,6 +68,7 @@ async function readJson(source: Request | Response, max: number, signal: AbortSi
 }
 
 export function createAdminGateway<T>({ publishableKey, fetcher = fetch }: AdminProxyOptions, contract: GatewayContract<T>) {
+  if ((typeof contract.target === "function") === (typeof contract.execute === "function")) throw new Error("Exactly one gateway execution path required");
   const safeErrors = new Set(["unauthenticated", "forbidden", "unconfigured", "notfound", "upstream", ...(contract.commandErrors ? ["conflict", "expired", "invalid_request"] : [])]);
   return async (request: Request): Promise<Response> => {
     const origin = request.headers.get("origin");
@@ -69,22 +101,37 @@ export function createAdminGateway<T>({ publishableKey, fetcher = fetch }: Admin
       let parsed: T;
       try { parsed = contract.parse(await readJson(request, 4096, signal)); }
       catch { return reply(400, "invalid_request"); }
-      const target = contract.target(parsed);
-      const appUrl = target.endpoint;
-      if (!appUrl) return reply(503, "unconfigured");
-      const response = await fetcher(appUrl, { method: "POST", headers: { [target.authorizationHeader ?? "Authorization"]: authorization, "Content-Type": "application/json" }, body: JSON.stringify(target.body), redirect: "error", signal });
-      if (!response.ok) {
+      const fetchJson = async (endpoint: string, init: RequestInit): Promise<unknown> => {
+        const response = await withinSignal(fetcher(endpoint, { ...init, redirect: "error", signal }), signal);
+        if (!response.ok) {
         let code = response.status === 401 ? "unauthenticated" : response.status === 403 ? "forbidden" : response.status === 404 ? "unconfigured" : "upstream";
         try {
-          const error = await readJson(response, 4096, signal) as { error?: { code?: string } };
+          const error = await readJson(response, 4096, signal) as { code?: string; error?: { code?: string } };
           if (error.error?.code && safeErrors.has(error.error.code)) code = error.error.code;
+          if (contract.commandErrors && error.code) {
+            const sqlErrors: Record<string, string> = { "42501": "forbidden", "40001": "conflict", "22023": "invalid_request", "P0002": "notfound" };
+            code = sqlErrors[error.code] ?? code;
+          }
         } catch { /* Never expose upstream pages, exception text, or credentials. */ }
-        const status = code === "unauthenticated" ? 401 : code === "forbidden" ? 403 : code === "notfound" ? 404 : code === "conflict" || code === "expired" ? 409 : code === "invalid_request" ? 400 : 503;
-        return reply(status, code);
+          throw new GatewayError(code as SafeError);
+        }
+        if (!response.headers.get("content-type")?.includes("application/json")) throw new GatewayError("upstream");
+        return readJson(response, 1048576, signal);
+      };
+      let result: unknown;
+      if (contract.execute) result = await withinSignal(contract.execute(parsed, { actor, authorization, signal, fetchJson }), signal);
+      else {
+        const target = contract.target(parsed);
+        if (!target.endpoint) throw new GatewayError("unconfigured");
+        result = await fetchJson(target.endpoint, { method: "POST", headers: { [target.authorizationHeader ?? "Authorization"]: authorization, "Content-Type": "application/json" }, body: boundedJson(target.body) });
       }
-      if (!response.headers.get("content-type")?.includes("application/json")) return reply(502, "upstream");
-      const data = contract.project(await readJson(response, 1048576, signal), parsed);
-      return new Response(JSON.stringify(data), { status: 200, headers });
-    } catch { return reply(503, "upstream"); }
+      boundedJson(result);
+      const data = contract.project(result, parsed);
+      return new Response(boundedJson(data), { status: 200, headers });
+    } catch (error) {
+      const code = error instanceof GatewayError && safeErrors.has(error.code) ? error.code : "upstream";
+      const status = code === "unauthenticated" ? 401 : code === "forbidden" ? 403 : code === "notfound" ? 404 : code === "conflict" || code === "expired" ? 409 : code === "invalid_request" ? 400 : 503;
+      return reply(status, code);
+    }
   };
 }

@@ -24,7 +24,7 @@ describe("deployed backend compatibility", () => {
   });
 
   it("accepts a later additive feature without weakening required capabilities", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ api_version: 4, features: [...REQUIRED_BACKEND_FEATURES, "learning.receipts.v1"] }));
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ api_version: 4, features: [...REQUIRED_BACKEND_FEATURES, "future.feature.v1"] }));
     await expect(verifyBackendContract(origin, key, fetcher)).resolves.toBeUndefined();
   });
 
