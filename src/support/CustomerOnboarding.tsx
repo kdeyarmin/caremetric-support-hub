@@ -31,7 +31,7 @@ export function CustomerOnboarding({onLinked,request=send,initial}:{onLinked:()=
     finally{if(!controller.signal.aborted)setBusy(false);}
   }
   return <section className="support-onboarding" aria-label="Link a customer account">
-    <h3>Link a customer account</h3><p>Choose an existing app account and the person’s verified Hub SMS account. Review the exact pairing before granting access. CareBase customer access is managed with its completion-receipt setup in the course library.</p>
+    <h3>Link a customer account</h3><p>Choose an existing app account and the person’s verified Hub SMS account. Review the exact pairing before granting access. For CareBase, employee completion records are configured separately in the course library.</p>
     <form onSubmit={event=>{event.preventDefault();void run({operation:'preview',product,sourceUserId:user.trim(),sourceAccountId:product==='intel'?user.trim():account.trim(),hubUserId:hubUser.trim(),tenantName:name});}}>
       <fieldset disabled={busy}><label>Application<select value={product} onChange={event=>{clear();setProduct(event.target.value as typeof product);setUser('');setAccount('');}}>{onboardingProducts.map(value=><option value={value} key={value}>{labels[value]}</option>)}</select></label>
         <label>Native app user ID<input required value={user} maxLength={128} onChange={event=>{clear();setUser(event.target.value);}} /></label>
