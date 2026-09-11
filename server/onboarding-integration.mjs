@@ -62,6 +62,10 @@ try {
   const expired=await preview();await admin.query("update private.support_onboarding_intents set expires_at=now()-interval '1 second' where id=$1",[expired.intentId]);await assert.rejects(apply(expired));
   const ban=await preview();await admin.query("update auth.users set banned_until=now()+interval '1 hour' where id=$1",[customer]);await assert.rejects(apply(ban));await admin.query('update auth.users set banned_until=null where id=$1',[customer]);
   const revoked=await preview();await admin.query('update private.sms_identities set revoked_at=now() where user_id=$1',[customer]);await assert.rejects(apply(revoked));await admin.query('update private.sms_identities set revoked_at=null where user_id=$1',[customer]);
+  await assert.rejects(preview(),'restoring an identity does not restore SMS verification');
+  // Model a new completed SMS verification in this disposable fixture only.
+  await admin.query('update private.sms_identities set verified_at=now() where user_id=$1',[customer]);
+  await assert.rejects(apply(revoked),'a changed SMS identity invalidates the prior review even after verification');
   const concurrent=await Promise.all([preview(),preview()]);const sameRequest=randomUUID();
   const outcomes=await Promise.allSettled(concurrent.map(p=>apply(p,sameRequest)));assert.equal(outcomes.filter(r=>r.status==='fulfilled').length,1,'durable request key cannot apply two intents');
   const otherProduct=await preview({product:'caremetric-emr'});const emrResult=await apply(otherProduct);assert.notEqual(emrResult.hubTenantId,result.hubTenantId,'shared backend does not imply cross-product grants');

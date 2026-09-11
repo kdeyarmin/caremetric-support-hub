@@ -71,6 +71,8 @@ end; $$;
 create function private.support_onboarding_state(p_identity jsonb,p_hub_user uuid,p_hub_tenant uuid) returns text
 language sql stable security definer set search_path='' as $$
   select private.support_identity_hash(jsonb_build_object(
+    'hubIdentity',(select jsonb_build_object('version',i.identity_version,'verifiedAt',i.verified_at,'revokedAt',i.revoked_at) from private.sms_identities i where i.user_id=p_hub_user),
+    'hubProfile',(select to_jsonb(p) from hub.profiles p where p.id=p_hub_user),
     'issuer',(select to_jsonb(f) from private.federation_issuers f where f.issuer='urn:caremetric:support:'||(p_identity->>'product')),
     'principal',(select to_jsonb(p) from private.federated_principals p join private.federation_issuers f on f.id=p.issuer_id
       where f.issuer='urn:caremetric:support:'||(p_identity->>'product') and p.external_subject_hash=private.support_identity_hash(p_identity->>'sourceUserId')),
@@ -148,6 +150,9 @@ begin
     or (intent.request_id is not null and intent.request_id<>p_request_id)
     or (intent.applied_at is null and intent.expires_at<=now()) then raise exception 'Preview changed or expired.' using errcode='40001'; end if;
   -- Lock existing mutable rows as well as serializing this provisioning path.
+  perform 1 from auth.users where id=intent.hub_user_id for share;
+  perform 1 from hub.profiles where id=intent.hub_user_id for share;
+  perform 1 from private.sms_identities where user_id=intent.hub_user_id for share;
   perform 1 from hub.products where id=intent.product_id and status<>'retired' and support_enabled for update;
   if not found then raise exception 'Eligible support product required.' using errcode='42501'; end if;
   perform 1 from hub.tenants where id=intent.hub_tenant_id for update;
