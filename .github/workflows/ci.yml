@@ -53,6 +53,7 @@ jobs:
         run: |
           deno check supabase/functions/platform-admin/index.ts supabase/functions/platform-command/index.ts supabase/functions/app-media/index.ts
           deno check supabase/functions/publication-media/index.ts
+          deno check supabase/functions/docstudio-media/index.ts
           deno check --config supabase/functions/learning-receipts/deno.json supabase/functions/learning-receipts/index.ts
       - name: Verify connected builds fail closed without backend configuration
         run: |
@@ -98,6 +99,7 @@ jobs:
           node server/creation-integration.mjs
           node server/creation-contract-integration.mjs
           node server/publication-integration.mjs
+          node server/docstudio-integration.mjs
           node server/backend-contract-integration.mjs
           node server/billing-command-integration.mjs
           node server/billing-contract-integration.mjs
@@ -112,7 +114,9 @@ jobs:
         env:
           HUB_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           HUB_RUN_STORAGE_RECOVERY_DRILL: disposable-object-loss
-        run: node server/storage-recovery-integration.mjs
+        run: |
+          node server/storage-recovery-integration.mjs
+          node server/docstudio-storage-recovery.mjs
       - name: Check database security and performance advisors
         run: npx supabase db advisors --local --type all --level warn --fail-on error
       - name: Stop isolated Supabase stack
