@@ -5083,7 +5083,7 @@ begin
     or p_preview->>'reason' is distinct from intent.request->>'reason' or coalesce(p_preview->>'previewDigest','') !~ '^[0-9a-f]{64}$'
     or jsonb_typeof(p_preview->'summary') is distinct from 'object'
     or not(p_preview->'summary' ?& array['kind','organizationName','providerCustomerId','providerConfigurationId','returnPath'])
-    or p_preview->'summary'-array['kind','organizationName','providerCustomerId','providerConfigurationId','returnPath']<>'{}'::jsonb
+    or (p_preview->'summary')-array['kind','organizationName','providerCustomerId','providerConfigurationId','returnPath']<>'{}'::jsonb
     or p_preview->'summary'->>'kind' is distinct from 'portal' or p_preview->'summary'->>'returnPath' is distinct from '/admin/enterprise'
     or coalesce(p_preview->'summary'->>'providerCustomerId','') !~ '^cus_[A-Za-z0-9]+$'
     or coalesce(p_preview->'summary'->>'providerConfigurationId','') !~ '^bpc_[A-Za-z0-9]+$'
@@ -5140,7 +5140,7 @@ begin
     or (outcome<>'created' and p_result->'session' is distinct from 'null'::jsonb)
     or (outcome='created' and (jsonb_typeof(p_result->'session') is distinct from 'object'
       or not(p_result->'session' ?& array['kind','id','expiresAt','livemode'])
-      or p_result->'session'-array['kind','id','expiresAt','livemode']<>'{}'::jsonb
+      or (p_result->'session')-array['kind','id','expiresAt','livemode']<>'{}'::jsonb
       or p_result->'session'->>'kind' is distinct from 'portal' or coalesce(p_result->'session'->>'id','') !~ '^bps_[A-Za-z0-9]+$'
       or p_result->'session'->'expiresAt' is distinct from 'null'::jsonb or jsonb_typeof(p_result->'session'->'livemode') is distinct from 'boolean')) then
     raise exception 'Invalid redacted billing result.' using errcode='22023';
