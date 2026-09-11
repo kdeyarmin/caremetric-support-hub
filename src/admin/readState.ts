@@ -12,6 +12,11 @@ export interface AdminReadError {
 /** UI copy never exposes upstream exceptions, tokens, or response bodies. */
 export function describeAdminReadError(error: unknown): AdminReadError {
   const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+  if (code === "invalid_request") return {
+    title: "Search needs adjustment",
+    message: "Search by course title using up to 100 characters. Wildcards and control characters are not supported.",
+    retryable: false,
+  };
   if (code === "401" || code === "unauthenticated") return {
     title: "Sign-in required",
     message: "Your administrator session could not be verified. Sign in again and complete MFA, then retry.",

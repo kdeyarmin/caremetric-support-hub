@@ -18,7 +18,7 @@ function text(value: unknown, max = 1000): string {
   return value;
 }
 function nullableText(value: unknown, max = 1000): string | null { return value === null ? null : text(value, max); }
-function id(value: unknown): string { if (!isUuid(value)) throw new Error("Invalid contract"); return value; }
+function id(value: unknown): string { if (!isUuid(value)) throw new Error("Invalid contract"); return value.toLowerCase(); }
 
 export function parseAdminOperation(input: unknown): AdminOperation {
   const row = object(input);
@@ -66,10 +66,11 @@ export function parseAdminEnvelope(input: unknown, request: AdminOperation) {
   } else {
     if (!Array.isArray(row.lessons) || row.lessons.length > 200 || typeof row.lessonsTruncated !== "boolean") throw new Error("Invalid contract");
     const summary = course(row.course);
-    if (summary.id !== request.courseId) throw new Error("Invalid contract");
+    if (summary.id !== request.courseId.toLowerCase()) throw new Error("Invalid contract");
     data = { course: summary, lessons: row.lessons.map(value => {
       const lesson = object(value);
-      return { id: id(lesson.id), title: nullableText(lesson.title, 1000), type: text(lesson.type, 100), position: integer(lesson.position) };
+      if (typeof lesson.position !== "number" || !Number.isSafeInteger(lesson.position)) throw new Error("Invalid contract");
+      return { id: id(lesson.id), title: nullableText(lesson.title, 1000), type: text(lesson.type, 100), position: lesson.position };
     }), lessonsTruncated: row.lessonsTruncated };
   }
   return { contractVersion: 1 as const, product: "carebase" as const, operation: request.operation, generatedAt: String(envelope.generatedAt), data };

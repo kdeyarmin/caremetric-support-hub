@@ -73,9 +73,9 @@ describe("central administrator boundary", () => {
     expect(response.status).toBe(404); expect(await response.json()).toEqual({ error: { code: "notfound" } });
   });
   it("projects course details and rejects a different course or pagination window", () => {
-    const operation = parseAdminOperation({ operation: "courses.get", courseId: userId });
+    const operation = parseAdminOperation({ operation: "courses.get", courseId: userId.toUpperCase() });
     const summary = { id: userId, title: "Course", description: null, category: null, status: "published", estimatedDurationMinutes: 10, updatedAt: "2026-09-11", privateMedia: "secret" };
-    const result = parseAdminEnvelope({ ...overview, operation: "courses.get", data: { course: summary, lessons: [{ id: userId, title: "Lesson", type: "video", position: 0, url: "private" }], lessonsTruncated: false } }, operation);
+    const result = parseAdminEnvelope({ ...overview, operation: "courses.get", data: { course: summary, lessons: [{ id: userId, title: "Lesson", type: "video", position: -1, url: "private" }], lessonsTruncated: false } }, operation);
     expect(JSON.stringify(result)).not.toMatch(/secret|privateMedia|"url"/);
     expect(() => parseAdminEnvelope({ ...overview, operation: "courses.get", data: { course: { ...summary, id: "different" }, lessons: [], lessonsTruncated: false } }, operation)).toThrow();
     expect(() => parseAdminEnvelope({ ...overview, operation: "courses.list", data: { items: [], total: 0, limit: 20, offset: 20 } }, { operation: "courses.list", limit: 20, offset: 0 })).toThrow();
