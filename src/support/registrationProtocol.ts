@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { onboardingProducts, supportIdentity, supportIdentityOperation } from './onboardingProtocol';
+import { onboardingProducts, supportIdentity, supportIdentityOperation } from './onboardingProtocol.ts';
 
 const uuid=z.uuid().transform(value=>value.toLowerCase());
 const digest=z.string().regex(/^[0-9a-f]{64}$/);
