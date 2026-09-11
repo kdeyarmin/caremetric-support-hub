@@ -183,7 +183,11 @@ try {
   assert.equal((await checkout({...identity(originalRecovery.body.preview),action:'billing.checkout.create'},newSessionJar)).status,403,'Relabelling a recovery command cannot obtain creation authority');
   await assert.rejects(withSession(pool,newSessionJar[sessionCookie],async db=>{await db.query('reset role');return db.query('select private.claim_billing_checkout($1,$2,false)',[recoveredCheck.commandId,recoveredCheck.expectedDigest]);}),error=>error.code==='42501');
   const expiredRecoveryTime=new Date(Date.now()-60000).toISOString();records.get(recovery.requestId).preview.expiresAt=expiredRecoveryTime;
-  await admin.query("update private.billing_checkout_intents set preview_expires_at=$2::timestamptz,preview=jsonb_set(preview,'{expiresAt}',to_jsonb($2::text)) where request_id=$1",[recovery.requestId,expiredRecoveryTime]);
+  // Separate typed placeholders preserve the native ISO JSON string: reusing a
+  // timestamptz parameter as text would produce PostgreSQL's display format.
+  await admin.query("update private.billing_checkout_intents set preview_expires_at=$2::timestamptz,preview=jsonb_set(preview,'{expiresAt}',to_jsonb($3::text)) where request_id=$1",[recovery.requestId,expiredRecoveryTime,expiredRecoveryTime]);
+  assert.equal((await admin.query("select preview->>'expiresAt' as value from private.billing_checkout_intents where request_id=$1",[recovery.requestId])).rows[0].value,expiredRecoveryTime);
+  databaseFailure=null;
   const current=await checkout(recoveredCheck,newSessionJar);assert.equal(current.status,200,JSON.stringify(databaseFailure));assert.equal(current.body.session.url,checkoutUrl);assert.equal(providerWrites,1);
   let releaseRecovery,startedRecovery;const recoveryStarted=new Promise(resolve=>{startedRecovery=resolve;});
   holdObservation={started:startedRecovery,release:new Promise(resolve=>{releaseRecovery=resolve;})};
