@@ -5,12 +5,24 @@ import { prepareGovernedImport, governedStageResultSchema } from "../imports/gov
 const sha = z.string().regex(/^[0-9a-f]{64}$/);
 const text = (min: number, max: number) => z.string().min(min).max(max).refine(v => v === v.trim() && !/\p{Cc}/u.test(v));
 const instant = z.iso.datetime({ offset: true }).max(40).refine(v => Number.isFinite(Date.parse(v)));
-const action = z.enum(["learning.cloneVersion", "learning.publishVersion"]);
+const action = z.enum(["learning.cloneVersion", "learning.publishVersion", "learning.patchDraft", "learning.reviewDraft"]);
+const draftText = z.string().max(12_000).refine(v => !/\p{Cc}/u.test(v.replaceAll("\n", "").replaceAll("\r", "").replaceAll("\t", "")));
+export const draftPatchSchema = z.strictObject({
+  version: z.strictObject({ title: text(1, 300).optional(), description: draftText.nullable().optional() }).refine(v => Object.keys(v).length > 0).optional(),
+  blocks: z.array(z.strictObject({ blockId: id, title: text(0, 300).nullable().optional(), content: draftText.optional(),
+    transcript: draftText.optional(), estimatedMinutes: z.number().int().min(0).max(1440).optional() }).refine(v => Object.keys(v).length > 1))
+    .min(1).max(20).refine(v => new Set(v.map(b => b.blockId.toLowerCase())).size === v.length).optional(),
+}).refine(v => Object.keys(v).length > 0 && new TextEncoder().encode(JSON.stringify(v)).byteLength <= 24_576);
+export type DraftPatch = z.infer<typeof draftPatchSchema>;
 const previewOperation = z.union([
   z.strictObject({ operation: z.literal("preview"), requestId: id, action: z.literal("learning.cloneVersion"), courseId: id,
     parameters: z.strictObject({ versionId: id, sourceRevision: sha, title: text(1, 300) }), reason: text(10, 500) }),
   z.strictObject({ operation: z.literal("preview"), requestId: id, action: z.literal("learning.publishVersion"), courseId: id,
     parameters: z.strictObject({ versionId: id, sourceRevision: sha }), reason: text(10, 500) }),
+  z.strictObject({ operation: z.literal("preview"), requestId: id, action: z.literal("learning.patchDraft"), courseId: id,
+    parameters: z.strictObject({ versionId: id, sourceRevision: sha, patch: draftPatchSchema }), reason: text(10, 500) }),
+  z.strictObject({ operation: z.literal("preview"), requestId: id, action: z.literal("learning.reviewDraft"), courseId: id,
+    parameters: z.strictObject({ versionId: id, sourceRevision: sha, reviewed: z.literal(true) }), reason: text(10, 500) }),
 ]);
 export const nativeAuthoringOperationSchema = z.union([
   z.strictObject({ operation: z.literal("inspect"), courseId: id }),
@@ -33,7 +45,8 @@ export const authoringInspectSchema = z.object({ courseId: id, title: text(1, 30
 export const authoringPreviewSchema = z.object({ commandId: id, courseId: id, action, reason: text(10, 500), previewDigest: sha,
   expiresAt: instant, before: versionStateSchema, after: versionStateSchema });
 export const authoringResultSchema = z.object({ commandId: id, courseId: id, action, versionId: id,
-  versionNumber: z.number().int().positive(), status: z.enum(["draft", "published"]), appliedAt: instant, replayed: z.boolean() });
+  versionNumber: z.number().int().positive(), status: z.enum(["draft", "published"]), appliedAt: instant, replayed: z.boolean(), sourceRevision: sha.optional() })
+  .refine(v => (v.action === "learning.patchDraft" || v.action === "learning.reviewDraft") === Object.hasOwn(v, "sourceRevision"));
 export const authoringSourceSchema = z.object({ courseId: id, versionId: id, sourceRevision: sha, payload: z.string().max(2_000_000) });
 export const authoringSourceViewSchema = authoringSourceSchema.extend({ headRevision: sha.nullable(), snapshotId: id.nullable() });
 export type AuthoringPreview = z.infer<typeof authoringPreviewSchema>;
@@ -56,16 +69,23 @@ export async function projectAuthoringResult(value: unknown, op: NativeAuthoring
     const result = authoringPreviewSchema.parse(value);
     if (!sameId(result.courseId, op.courseId) || result.action !== op.action || result.reason !== op.reason ||
       !sameId(result.before.courseId, op.courseId) || !sameId(result.before.versionId, op.parameters.versionId) || result.before.sourceRevision !== op.parameters.sourceRevision ||
-      result.after.status !== (op.action === "learning.cloneVersion" ? "draft" : "published") ||
+      result.after.status !== (op.action === "learning.publishVersion" ? "published" : "draft") ||
       (op.action === "learning.cloneVersion" && (result.after.title !== op.parameters.title || !sameId(result.after.sourceVersionId, op.parameters.versionId)))) throw new Error("Preview identity mismatch");
     if (Date.parse(result.expiresAt) > Date.now() + 305_000) throw new Error("Preview expiry exceeds native lifetime");
     if (op.action === "learning.cloneVersion") {
       if (result.before.status !== "published" || !sameId(result.before.currentVersionId ?? undefined, op.parameters.versionId) ||
         result.after.versionNumber <= result.before.versionNumber || ["courseId", "versionId", "currentVersionId", "sourceRevision"].some(key => Object.hasOwn(result.after, key))) throw new Error("Clone preview mismatch");
-    } else {
+    } else if (op.action === "learning.publishVersion") {
       const expected = { ...result.before, status: "published", currentVersionId: result.before.versionId };
       if (result.before.status !== "draft" || Object.keys(expected).length !== Object.keys(result.after).length ||
         Object.entries(expected).some(([key, value]) => result.after[key as keyof typeof result.after] !== value)) throw new Error("Publication preview mismatch");
+    } else {
+      const expected = { ...result.before, title: op.action === "learning.patchDraft" ? op.parameters.patch.version?.title ?? result.before.title : result.before.title,
+        aiReviewRequired: op.action === "learning.reviewDraft" ? false : result.after.aiReviewRequired };
+      delete expected.sourceRevision;
+      if (result.before.status !== "draft" || typeof expected.aiReviewRequired !== "boolean" ||
+        Object.keys(expected).length !== Object.keys(result.after).length ||
+        Object.entries(expected).some(([key, value]) => result.after[key as keyof typeof result.after] !== value)) throw new Error("Draft preview mismatch");
     }
     return result;
   }
@@ -77,7 +97,7 @@ export function verifyAuthoringOutcome(value: unknown, preview: AuthoringPreview
   const result = authoringResultSchema.parse(value);
   if (!sameId(result.commandId, preview.commandId) || !sameId(result.courseId, preview.courseId) || result.action !== preview.action ||
     result.status !== preview.after.status || result.versionNumber !== preview.after.versionNumber ||
-    (preview.action === "learning.publishVersion" && !sameId(result.versionId, preview.before.versionId!)) ||
+    (preview.action !== "learning.cloneVersion" && !sameId(result.versionId, preview.before.versionId!)) ||
     (preview.action === "learning.cloneVersion" && sameId(result.versionId, preview.before.versionId!))) throw new Error("Command outcome mismatch");
   return result;
 }
