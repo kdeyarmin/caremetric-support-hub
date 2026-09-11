@@ -88,13 +88,18 @@ try {
   const objects = await inventory();
   assert.ok(objects.length>20, 'Archive must include the entire Hub data domain');
   const before = await dataState(objects), authority = await authorityState();
+  // Supabase's ordinary postgres role is deliberately not a superuser. Only
+  // the disposable container administrator can suspend foreign-key triggers.
+  const restoreAuthority = await execDb(['psql','-U','supabase_admin','-d','postgres','-At','-c',
+    "select rolsuper from pg_roles where rolname=current_user"]);
+  assert.equal(restoreAuthority.trim(),'t','Disposable restore administrator required before data loss');
   const started = Date.now();
   await execDb(['pg_dump','-U','postgres','-d','postgres','--format=custom','--data-only','--schema=hub','--schema=private',`--file=${archive}`]);
   // No CASCADE: any foreign dependency outside the exact domain must stop the drill.
   await admin.query(`truncate table ${objects.filter(o=>o.relkind==='r').map(qualified).join(',')} restart identity`);
   assert.equal((await admin.query('select count(*)::int as count from hub.support_cases')).rows[0].count,0);
   await assert.rejects(thread(customerToken), /Sign in/, 'Lost session state must deny requests');
-  await execDb(['pg_restore','-U','postgres','-d','postgres','--exit-on-error','--single-transaction','--data-only','--disable-triggers',archive]);
+  await execDb(['pg_restore','-U','supabase_admin','-d','postgres','--exit-on-error','--single-transaction','--data-only','--disable-triggers',archive]);
   assert.deepEqual(await dataState(objects),before, 'Every archived row and sequence must restore exactly');
   assert.equal(await authorityState(),authority, 'Grants, RLS, functions and all trigger modes must remain intact');
   assert.deepEqual(await thread(customerToken),customerThread);
