@@ -13,6 +13,7 @@ await admin.query("alter role hub_app_server login password 'ephemeral-test-only
 local.username='hub_app_server';local.password='ephemeral-test-only';const pool=new pg.Pool({connectionString:local.href});
 const owner=randomUUID(),outsider=randomUUID(),ownerSession=randomUUID(),otherSession=randomUUID(),ownerToken=token(),otherToken=token();
 const claimed=[],tenants=[],sent=[],verified=[];let nativeAllowed=true,nativeRevision='a'.repeat(64),providerAccepts=true,providerFails=false,bridge;
+const fixturePhones=new Set(['+12025550999']);
 const provider={send:async phone=>{if(providerFails)throw new Error('Synthetic provider outage');sent.push(phone);return randomUUID();},
   verify:async(id,phone,code)=>{verified.push({id,phone});return providerAccepts&&code==='123456';}};
 const fetchImpl=async(url,options)=>{
@@ -39,8 +40,9 @@ async function call(path,body,{jar=ownerJar,headers={}}={}){
 let phoneCounter=10;
 function input(product='breathe'){
   const native=()=>['intel','pennsync'].includes(product)?randomUUID().replaceAll('-','').slice(0,24):randomUUID();
-  const sourceUserId=native();return {operation:'preview',product,sourceUserId,sourceAccountId:product==='intel'?sourceUserId:native(),
-    phone:`+120255509${String(phoneCounter++).padStart(2,'0')}`,displayName:'Synthetic invited customer',tenantName:'Synthetic customer account'};
+  const sourceUserId=native(),phone=`+120255509${String(phoneCounter++).padStart(2,'0')}`;fixturePhones.add(phone);
+  return {operation:'preview',product,sourceUserId,sourceAccountId:product==='intel'?sourceUserId:native(),
+    phone,displayName:'Synthetic invited customer',tenantName:'Synthetic customer account'};
 }
 async function prepare(fields=input()){
   const result=await call('admin/registration',fields);assert.equal(result.status,200);return {fields,preview:result.body};
@@ -58,7 +60,7 @@ try {
   await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550901',now()),($2,'+12025550902',now())",[owner,outsider]);
   for(const [id,uid,value] of [[ownerSession,owner,ownerToken],[otherSession,outsider,otherToken]])await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) select $1,$2,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$3",[id,digest(value),uid]);
   assert.equal((await call('admin/registration',input(),{jar:{}})).status,401);
-  assert.equal((await call('admin/registration',input(),{jar:otherJar})).status,403);
+  assert.equal((await call('admin/registration',input(),{jar:otherJar})).status,401,'existing administrator authority returns 28000 for a nonadministrator');
   assert.equal((await call('admin/registration',input(),{headers:{Origin:'https://external.invalid'}})).status,403);
   await assert.rejects(withSession(pool,ownerToken,db=>db.query('select hub.prepare_support_registration($1,$2,$3,$4,$5,$6)',[owner,ownerSession,'{}','+12025550903','Denied','Denied'])));
   assert.equal((await call('rpc/complete_support_registration',{p_challenge_id:randomUUID()})).status,400);
@@ -77,6 +79,7 @@ try {
   assert.equal((await verify(challenge,{})).status,400,'browser cookie required');
   assert.equal((await verify(challenge,{[challengeCookie]:token()})).status,401,'challenge bound to the initiating browser');
   assert.equal((await verify(challenge,jar,'000000')).status,401);
+  providerAccepts=false;assert.equal((await verify(challenge,jar)).status,401,'provider acceptance is mandatory');providerAccepts=true;
   const claimJars=[{...jar},{...jar}],claims=await Promise.all(claimJars.map(value=>verify(challenge,value)));
   assert.deepEqual(claims.map(value=>value.status).sort(),[200,401],'concurrent claims create exactly one session and identity');
   Object.assign(jar,claimJars[claims.findIndex(value=>value.status===200)]);
@@ -87,7 +90,7 @@ try {
   assert.equal((await call('auth/invitation/verify',{challengeId:challenge.body.challengeId,code:'123456'},{jar})).status,400,'used browser challenge is cleared');
   assert.equal((await admin.query('select count(*) from hub.tenant_product_memberships where user_id=$1',[row.hubUserId])).rows[0].count,'0');
   assert.equal((await admin.query('select count(*) from private.staff_permissions where user_id=$1',[row.hubUserId])).rows[0].count,'0');
-  assert.equal((await call('admin/registration',input(),{jar})).status,403);
+  assert.equal((await call('admin/registration',input(),{jar})).status,401);
   // App access is a distinct review with a fresh native relationship.
   const pairing=await bridge.onboarding(ownerToken,{operation:'preview',product:staged.fields.product,sourceUserId:staged.fields.sourceUserId,
     sourceAccountId:staged.fields.sourceAccountId,hubUserId:row.hubUserId,tenantName:staged.fields.tenantName});
@@ -118,7 +121,7 @@ try {
   const users=[owner,outsider,...claimed];
   await admin.query('delete from private.audit_events where actor_id=any($1::uuid[])',[users]);
   await admin.query('delete from private.sms_challenges where registration_invitation_id in(select id from private.support_registration_invitations where actor_id=$1)',[owner]);
-  await admin.query('delete from private.sms_challenges where phone_hash=any($1::text[])',[[...sent,'+12025550999'].map(digest)]);
+  await admin.query('delete from private.sms_challenges where phone_hash=any($1::text[])',[[...fixturePhones].map(digest)]);
   await admin.query('delete from private.support_registration_invitations where actor_id=$1',[owner]);
   await admin.query('delete from private.support_registration_reviews where actor_id=$1',[owner]);
   await admin.query('delete from private.support_onboarding_intents where actor_id=$1',[owner]);
