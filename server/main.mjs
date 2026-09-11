@@ -7,6 +7,7 @@ import { appServer } from './http.mjs';
 import { assertBackendContract } from '../src/lib/backendContract.ts';
 import { databaseConfig } from './database-config.mjs';
 import { publications } from './publications.mjs';
+import { docstudio } from './docstudio.mjs';
 
 const storageUrl='https://xgauehtwksmnoqhgqegm.supabase.co';
 const pool=new pg.Pool(databaseConfig());
@@ -16,7 +17,8 @@ const contract=await api.rpc('get_backend_contract',{});
 assertBackendContract(contract);
 const capabilities=delegations({pool,storageUrl,provider});
 const publicationService=publications({pool,delegations:capabilities,storageUrl});
-const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:capabilities,publications:publicationService,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
+const studio=docstudio({pool,publications:publicationService,workerToken:process.env.DOCSTUDIO_WORKER_TOKEN});
+const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:capabilities,publications:publicationService,docstudio:studio,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
 let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;
