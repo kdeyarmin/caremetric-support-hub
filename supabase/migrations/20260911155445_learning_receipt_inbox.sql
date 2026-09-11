@@ -105,7 +105,7 @@ begin
   if p_native_organization_id is null or p_native_employee_id is null or p_native_profile_id is null or p_hub_tenant_id is null
     or p_tenant_name is null or char_length(btrim(p_tenant_name)) not between 2 and 180 then
     raise exception 'Explicit verified native identifiers and canonical tenant required.' using errcode='22023'; end if;
-  select id into product from hub.products where slug='penntrain' and status<>'retired';
+  select id into product from hub.products where slug='carebase' and status<>'retired';
   if product is null or not exists(select 1 from auth.users u join hub.profiles p on p.id=u.id where u.id=p_hub_user_id
     and u.deleted_at is null and not coalesce(u.is_anonymous,false) and (u.banned_until is null or u.banned_until<=now())) then
     raise exception 'Existing active Hub account and product required.' using errcode='22023'; end if;
@@ -169,7 +169,7 @@ begin
   if not private.learning_receipt_identity_active(p_native_organization_id,p_native_employee_id,p_hub_tenant_id,p_hub_user_id) then
     raise exception 'Provision and review native tenant and principal access first.' using errcode='42501'; end if;
   select * into snapshot from private.learning_source_snapshots where id=p_source_snapshot_id;
-  select id into product from hub.products where slug='penntrain' and status<>'retired';
+  select id into product from hub.products where slug='carebase' and status<>'retired';
   if snapshot.id is null or snapshot.publication_state<>'published' or product is null
     or not private.receipt_membership_is_active(p_hub_tenant_id,p_hub_user_id,product) then
     raise exception 'Reviewed published source and active Hub learner membership required.' using errcode='42501';
@@ -279,8 +279,8 @@ begin
         and (u.banned_until is null or u.banned_until<=now()) order by p.created_at desc limit 100) p),'[]'::jsonb),
     'snapshots',coalesce((select jsonb_agg(jsonb_build_object('id',s.id,'sourceCourseId',s.source_course_id,'sourceVersionId',s.source_version_id,
       'sourceRevision',s.source_revision,'title',s.source_payload::jsonb->'course'->>'title')) from
-      (select distinct on(source_course_id) * from private.learning_source_snapshots where publication_state='published'
-        order by source_course_id,sequence desc limit 100) s),'[]'::jsonb),
+      (select * from (select distinct on(source_course_id) * from private.learning_source_snapshots order by source_course_id,sequence desc) latest
+        where publication_state='published' limit 100) s),'[]'::jsonb),
     'mappingTotal',(select count(*) from private.learning_receipt_mappings),
     'receiptTotal',(select count(distinct assignment_id) from private.learning_receipt_inbox));
 end;

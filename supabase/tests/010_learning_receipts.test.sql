@@ -16,6 +16,10 @@ select is((select count(*) from hub.tenants where id=pg_temp.rid(10)),1::bigint,
 select is((select enabled from private.case_intake_settings where tenant_id=pg_temp.rid(10)),false,'new case intake remains disabled');
 select is((select role::text||'/'||case_scope::text||'/'||can_manage_members::text from hub.tenant_product_memberships where tenant_id=pg_temp.rid(10)),'customer/own/false','membership grants only product customer access');
 select lives_ok('select pg_temp.access()','same identity setup is idempotent');
+select is((select count(*) from private.federated_tenants where hub_tenant_id=pg_temp.rid(10)),1::bigint,'learning reuses canonical tenant registry');
+select is((select count(*) from private.federated_principals where hub_user_id=pg_temp.rid(2)),1::bigint,'learning reuses canonical principal registry');
+select is((select enabled from private.federation_issuers where issuer='https://xsqobvvreaovwibxwyvv.supabase.co/auth/v1'),false,'identity setup does not enable JWT federation');
+select is(private.carebase_external_identity_hash('ABF00000-0000-4000-8000-000000000013'),private.carebase_external_identity_hash(pg_temp.rid(13)),'identity hash canonicalizes UUID case');
 select throws_ok('select pg_temp.access(pg_temp.rid(3))','40001','Native principal cannot be repointed.','no automatic account merge or repointing');
 select is(pg_temp.access(pg_temp.rid(2),pg_temp.rid(99))->>'hubTenantId',pg_temp.rid(10)::text,'exact native tenant mapping is reused and never repointed');
 insert into hub.content_items(id,content_key,kind,status,access_level,source_system)
@@ -40,6 +44,9 @@ select throws_ok($$select pg_temp.ingest(document||jsonb_build_object('completio
 select is((select pg_temp.ingest(document)->>'accepted' from receipt_fixture),'true','verified receipt accepted');
 select is((select pg_temp.ingest(document)->>'replayed' from receipt_fixture),'true','worker retry is idempotent');
 select is((select count(*) from private.learning_receipt_inbox where assignment_id=pg_temp.rid(21)),1::bigint,'retry does not duplicate evidence');
+update private.federated_principals set revoked_at=now() where hub_user_id=pg_temp.rid(2);
+select throws_ok($$select pg_temp.ingest(document||jsonb_build_object('assignmentId',pg_temp.rid(61),'eventId',pg_temp.rid(62))) from receipt_fixture$$,'42501','Active explicit receipt mapping required.','canonical principal revocation blocks new receipt consumption');
+update private.federated_principals set revoked_at=null where hub_user_id=pg_temp.rid(2);
 select is((select count(*) from private.learning_enrollments where user_id=pg_temp.rid(2)),0::bigint,'receipt ingestion never creates enrollment or completion writer');
 select throws_ok($$select pg_temp.ingest(document||'{"finalExamScore":80}'::jsonb) from receipt_fixture$$,'40001','Receipt event ID was reused.','same event ID cannot alter immutable evidence');
 select lives_ok($$select pg_temp.ingest(document||jsonb_build_object('eventId',pg_temp.rid(23),'kind','retracted','sequence',2)) from receipt_fixture$$,'withdrawal advances the receipt head');
