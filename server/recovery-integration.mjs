@@ -19,7 +19,7 @@ assert.equal(names.length, 1, 'Exactly one disposable Supabase database must be 
 const container = names[0];
 const [inspected] = JSON.parse(await docker(['inspect', container]));
 assert.match(inspected.Config.Image, /supabase\/postgres:/);
-assert.ok(inspected.NetworkSettings.Ports['5432/tcp'].some(binding => binding.HostPort === '54322'));
+assert.ok(inspected.NetworkSettings.Ports['5432/tcp'].some(binding => binding.HostPort === '54322' && ['127.0.0.1','0.0.0.0'].includes(binding.HostIp)));
 const execDb = args => docker(['exec', container, ...args]);
 const archive = `/tmp/hub-recovery-${randomUUID()}.dump`;
 const admin = new pg.Pool({ connectionString: url.href });
@@ -66,8 +66,8 @@ try {
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')", [owner]);
   await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550981',now()),($2,'+12025550982',now())", [owner,customer]);
   for (const [user,token] of [[owner,ownerToken],[customer,customerToken]]) {
-    await admin.query(`insert into private.sms_sessions(token_hash,user_id,identity_version,expires_at)
-      select $1,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$2`, [digest(token),user]);
+    await admin.query(`insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at)
+      select gen_random_uuid(),$1,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$2`, [digest(token),user]);
   }
   await admin.query("insert into hub.tenants(id,slug,name) values($1,$2,'Synthetic recovery customer')", [tenant,`recovery-${tenant}`]);
   await admin.query('insert into hub.tenant_products(tenant_id,product_id) values($1,$2)', [tenant,product]);
@@ -110,6 +110,9 @@ try {
   // A restore may resurrect old sessions. Quarantine them before reopening traffic.
   await admin.query('update private.sms_sessions set revoked_at=now() where revoked_at is null');
   await admin.query('update private.sms_challenges set consumed_at=now() where consumed_at is null');
+  await admin.query('update private.app_delegations set consumed_at=now() where consumed_at is null');
+  await admin.query('update private.publication_cleanup_tokens set consumed_at=now() where consumed_at is null');
+  await admin.query('delete from private.publication_public_downloads');
   await assert.rejects(thread(customerToken),/Sign in/);
   await assert.rejects(thread(ownerToken),/Sign in/);
   console.log(JSON.stringify({drill:'hub-logical-data-recovery',tables:objects.filter(o=>o.relkind==='r').length,
