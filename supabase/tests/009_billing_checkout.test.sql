@@ -1,0 +1,17 @@
+begin;
+select plan(13);
+select has_table('private','billing_checkout_intents','Checkout reviews have private durable ownership');
+select is(enum_range(null::private.billing_checkout_action)::text[],array['billing.checkout.create','billing.checkout.recover'],'Only reviewed creation and GET-only recovery actions are supported');
+select ok((select relrowsecurity from pg_class where oid='private.billing_checkout_intents'::regclass),'Checkout intent table has RLS');
+select ok(not has_table_privilege('anon','private.billing_checkout_intents','SELECT'),'Anonymous callers cannot read saved checkout reviews');
+select ok(not has_table_privilege('authenticated','private.billing_checkout_intents','SELECT'),'Browser sessions cannot read checkout rows directly');
+select ok(not has_table_privilege('hub_app_server','private.billing_checkout_intents','UPDATE'),'App connection cannot bypass guarded checkout observations');
+select ok(not has_function_privilege('authenticated','private.reserve_billing_checkout(jsonb)','EXECUTE'),'Browser roles cannot manufacture native checkout previews');
+select ok(not has_function_privilege('authenticated','private.record_billing_checkout_result(uuid,uuid,jsonb)','EXECUTE'),'Browser roles cannot manufacture checkout outcomes');
+select ok(not has_function_privilege('service_role','private.record_billing_checkout_result(uuid,uuid,jsonb)','EXECUTE'),'Generic service role has no checkout observation writer');
+select ok(has_function_privilege('hub_app_server','private.claim_billing_checkout(uuid,text,boolean)','EXECUTE'),'Dedicated server has the current-session guarded claim');
+select ok(not has_function_privilege('hub_app_server','private.require_billing_checkout_intent(uuid)','EXECUTE'),'Internal ownership reader is not a general server API');
+select col_type_is('private','billing_checkout_intents','observation_id','uuid','Concurrent observations have an exact durable nonce');
+select col_type_is('private','billing_checkout_intents','provider_session_id','text','Native session identity persists across pending observations');
+select * from finish();
+rollback;
