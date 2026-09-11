@@ -145,6 +145,9 @@ try{
   await login();const otherSession=await command(ctx);expectStatus(otherSession,200);assert.equal(otherSession.body.intents.items[0].canFinishThisSession,false);expectStatus(await finish(abandonedRow),409);
   const repeated={...abandoned,sourceRevision:revision()};expectStatus(await stage(repeated),200);assert.equal(rows[4].request.requestId,abandonedRow.request.requestId);assert.notEqual(rows[4].operationId,abandonedRow.operationId);
   expectStatus(await command(ctx),200);expectStatus(await finish(rows[4]),200);assert.equal(commits,4);
+  await preserve();
+  const racing=upload();postAction={operation:'upload',run:async()=>{source.version.label='Concurrently preserved source';payload=JSON.stringify(source);await preserve();}};
+  expectStatus(await stage(racing),409);assert.equal(commits,4);expectStatus(await finish(rows.at(-1)),409);
   const session=(await admin.query('select id from private.sms_sessions where token_hash=$1',[digest(jar[sessionCookie])])).rows[0].id;
   await admin.query("update private.sms_sessions set created_at=now()-interval '9 hours',expires_at=now()+interval '1 hour' where id=$1",[session]);
   const agedCalls=calls;expectStatus(await command(ctx),401);assert.equal(calls,agedCalls);
