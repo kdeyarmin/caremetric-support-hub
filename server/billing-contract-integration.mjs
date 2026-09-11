@@ -58,7 +58,7 @@ try {
   try {
     const before=await readContract();
     await client.query(migration);
-    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>feature!=='support.customer-onboarding.v1')});
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['support.customer-onboarding.v1','support.customer-registration.v1'].includes(feature))});
     const portalOnly=await readContract();
     assert.throws(()=>assertBackendContract(portalOnly),/incompatible/);
   } finally { await client.query('rollback'); }

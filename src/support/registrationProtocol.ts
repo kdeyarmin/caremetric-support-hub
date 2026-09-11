@@ -4,7 +4,7 @@ import { onboardingProducts, supportIdentity, supportIdentityOperation } from '.
 const uuid=z.uuid().transform(value=>value.toLowerCase());
 const digest=z.string().regex(/^[0-9a-f]{64}$/);
 const nativeId=z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/);
-export const registrationProducts=['carebase',...onboardingProducts] as const;
+export const registrationProducts=onboardingProducts;
 export const registrationProduct=z.enum(registrationProducts);
 export const registrationIdentity=z.union([supportIdentity,z.object({product:z.literal('carebase'),sourceUserId:uuid,sourceAccountId:uuid,
   accountKind:z.literal('organization'),relationship:z.literal('organization_member'),revision:digest}).strict()]);

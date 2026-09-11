@@ -46,10 +46,12 @@ begin
     or exists(select 1 from private.federated_principals p join private.federation_issuers i on i.id=p.issuer_id
       where i.issuer='urn:caremetric:support:'||(p_identity->>'product') and p.external_subject_hash=private.support_identity_hash(p_identity->>'sourceUserId')) then
     raise exception 'Use the existing Hub identity.' using errcode='40001'; end if;
-  if p_identity->>'product'='carebase' and exists(select 1 from private.federated_principals p join private.federation_issuers i on i.id=p.issuer_id
-    where i.issuer='https://xsqobvvreaovwibxwyvv.supabase.co/auth/v1'
-      and p.external_subject_hash=private.carebase_external_identity_hash((p_identity->>'sourceUserId')::uuid)) then
-    raise exception 'Use the existing Hub identity.' using errcode='40001';end if;
+  if p_identity->>'product'='carebase' then
+    if exists(select 1 from private.federated_principals p join private.federation_issuers i on i.id=p.issuer_id
+      where i.issuer='https://xsqobvvreaovwibxwyvv.supabase.co/auth/v1'
+        and p.external_subject_hash=private.carebase_external_identity_hash((p_identity->>'sourceUserId')::uuid)) then
+      raise exception 'Use the existing Hub identity.' using errcode='40001';end if;
+  end if;
   if not exists(select 1 from hub.products where slug=case p_identity->>'product' when 'intel' then 'caremetric-intel' else p_identity->>'product' end
     and status<>'retired' and support_enabled) then raise exception 'Product unavailable.' using errcode='42501'; end if;
 end; $$;

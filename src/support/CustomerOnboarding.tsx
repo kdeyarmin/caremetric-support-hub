@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { appRequest } from '../lib/appSession';
 import { onboardingPreview, onboardingRequest, onboardingResult, onboardingProducts, type OnboardingPreview } from './onboardingProtocol';
 
-const labels = {breathe:'CareMetric Breathe','caremetric-emr':'CareMetric EMR','caremetric-go':'CareMetric Go',pennsync:'PennSync',intel:'CareMetric Intel'};
+const labels = {carebase:'CareBase',breathe:'CareMetric Breathe','caremetric-emr':'CareMetric EMR','caremetric-go':'CareMetric Go',pennsync:'PennSync',intel:'CareMetric Intel'};
 const send = (body:unknown,signal:AbortSignal) => appRequest('admin/onboarding',body,signal);
 export interface OnboardingInitial {product:typeof onboardingProducts[number];sourceUserId:string;sourceAccountId:string;hubUserId:string;tenantName:string;}
 export function CustomerOnboarding({onLinked,request=send,initial}:{onLinked:()=>void;request?:typeof send;initial?:OnboardingInitial}) {

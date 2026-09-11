@@ -24,12 +24,12 @@ it('requires a fresh review when the customer number changes',async()=>{
   await screen.findByRole('button',{name:'Create invitation code'});fireEvent.change(screen.getByLabelText('Customer mobile number'),{target:{value:'2025550101'}});
   expect(screen.queryByRole('button',{name:'Create invitation code'})).toBeNull();
 });
-it('requires explicit revocation and shows a verified CareBase identity for its existing learner setup',async()=>{
-  const claimed={...invitation,identity:{...identity,product:'carebase',sourceUserId:id},state:'claimed',hubUserId:id};
+it('requires explicit revocation and prefills a distinct CareBase customer-access review after SMS claim',async()=>{
+  const claimed={...invitation,invitationId:'22222222-2222-4222-8222-222222222222',identity:{...identity,product:'carebase',sourceUserId:id},state:'claimed',hubUserId:id};
   const request=vi.fn(async(body:unknown)=>(body as {operation:string}).operation==='list'?{rows:[invitation,claimed],offset:0,total:2}:{...invitation,state:'revoked'});
   render(<MemoryRouter><CustomerRegistration request={request} onLinked={()=>{}}/></MemoryRouter>);fireEvent.click(await screen.findByRole('button',{name:'Revoke invitation'}));
   const revoke=screen.getByRole('button',{name:'Confirm invitation revocation'});expect(revoke).toHaveProperty('disabled',true);fireEvent.click(screen.getByRole('checkbox'));fireEvent.click(revoke);
   await waitFor(()=>expect(request.mock.calls.some(([b])=>(b as {operation:string}).operation==='revoke')).toBe(true));
-  fireEvent.click(screen.getByRole('button',{name:'Review app access'}));expect(screen.getByLabelText('Verified Hub user ID')).toHaveProperty('value',id);
-  expect(screen.getByRole('link',{name:'Open CareBase course and learner setup'})).toHaveProperty('pathname','/admin');
+  fireEvent.click(screen.getByRole('button',{name:'Review app access'}));expect(screen.getByLabelText('Existing Hub user ID')).toHaveProperty('value',id);
+  expect(screen.getByLabelText('Application')).toHaveProperty('value','carebase');expect(screen.getByLabelText('Native organization ID')).toHaveProperty('value',id);
 });
