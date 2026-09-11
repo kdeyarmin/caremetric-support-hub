@@ -7,6 +7,7 @@ import { timeLabel } from "./readState";
 import { useAdminRead } from "./useAdminRead";
 import type { AdminClient, CareBaseCourseSummary } from "./types";
 import { AuthoringPanel } from "../learning/AuthoringPanel";
+import { CourseCreationPanel } from "../learning/CourseCreationPanel";
 
 const PAGE_SIZE = 20;
 const number = new Intl.NumberFormat();
@@ -33,6 +34,7 @@ export function CourseCatalog({ client }: { client: AdminClient }) {
   return <section className="panel admin-course-panel" aria-labelledby="admin-course-heading">
     <div className="panel-heading"><div><h2 id="admin-course-heading">Shared courses in CareBase</h2><p>Global courses · all publication states · governed version controls</p></div><Link className="text-link" to="/library">Hub content library <ChevronRight size={14} aria-hidden="true" /></Link></div>
     <div className="admin-section-body">
+      <CourseCreationPanel onOpen={courseId => { setSelectedId(courseId); retry(); }} />
       <form className="admin-course-search" onSubmit={submitSearch}><label className="admin-search"><span className="admin-field-label">Search course titles</span><span className="admin-search-input"><Search size={16} aria-hidden="true" /><input type="search" maxLength={100} value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Search the CareBase catalog…" /></span></label><button type="submit" className="button button-primary">Search</button></form>
       <div className={`admin-catalog-layout${selectedId ? " has-selection" : ""}`}>
         <CourseList key={`${search}:${offset}:${refresh}`} client={client} search={search} offset={offset} selectedId={selectedId} selectCourse={setSelectedId} changePage={changePage} retry={retry} />
