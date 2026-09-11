@@ -1,5 +1,6 @@
 import { digest, token, transaction, withSession, HttpError } from './sms-auth.mjs';
 import { parsePortfolioRequest, parsePortfolioEnvelope } from '../supabase/functions/_shared/portfolioProtocol.ts';
+import { isOperationalRead } from '../supabase/functions/_shared/operationsProtocol.ts';
 import { adminRegistry } from '../supabase/functions/_shared/adminRegistry.ts';
 import { parsePortfolioCommand, parseCommandEnvelope } from '../supabase/functions/_shared/adminCommandProtocol.ts';
 import { callNativeAdmin } from './admin-transport.mjs';
@@ -51,6 +52,11 @@ async function authorize(db,audience,payload) {
       return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
     }
     parsePortfolioRequest({product:audience,...payload});
+    // Operational metadata requires the original, bounded SMS assurance window.
+    // Keep the read audience: session fields must never grant a command capability.
+    if (audience==='carebase' && isOperationalRead(payload.operation)) {
+      return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
+    }
     return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
   }
   if (audience==='carebase.command') {
@@ -110,7 +116,11 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch}) {
       if (!entry.endpoint || !['carebase','breathe','caremetric-emr','pennsync','caremetric-go','intel'].includes(request.product)) throw new HttpError(503,'This application has not connected its administrator session.','unconfigured');
       const operation=request.operation;
       const capability=await issue(sessionToken,request.product,operation);
-      return callNativeAdmin(fetchImpl,entry.endpoint,entry.authorizationHeader ?? 'Authorization',capability,operation,value=>parsePortfolioEnvelope(value,request));
+      const result=await callNativeAdmin(fetchImpl,entry.endpoint,entry.authorizationHeader ?? 'Authorization',capability,operation,value=>parsePortfolioEnvelope(value,request));
+      // A logout, revocation or role change while the native read was in flight
+      // must prevent the response from reaching the browser.
+      await withSession(pool,sessionToken,db=>authorize(db,request.product,operation));
+      return result;
     },
     async command(sessionToken,input) {
       let request;
