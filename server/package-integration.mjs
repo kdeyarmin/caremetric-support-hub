@@ -131,8 +131,8 @@ try{
   // Current authority is re-entered after a successful remote response.
   postAction={operation:'context',run:()=>admin.query('update private.staff_permissions set revoked_at=now() where user_id=$1',[owner])};
   expectStatus(await command(ctx),401);await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
-  const next=upload();postAction={operation:'upload',run:()=>admin.query('update private.sms_identities set revoked_at=now() where user_id=$1',[owner])};
-  expectStatus(await stage(next),401);assert.equal(commits,2);await admin.query('update private.sms_identities set revoked_at=null where user_id=$1',[owner]);
+  const next=upload();postAction={operation:'upload',run:()=>admin.query('update private.staff_permissions set revoked_at=now() where user_id=$1',[owner])};
+  expectStatus(await stage(next),401);assert.equal(commits,2);await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
   expectStatus(await command(ctx),200);const nextRow=rows[2];
   postAction={operation:'finish',run:()=>admin.query('update private.staff_permissions set revoked_at=now() where user_id=$1',[owner])};
   expectStatus(await finish(nextRow),401);assert.equal(commits,3);await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
@@ -151,5 +151,9 @@ try{
   const session=(await admin.query('select id from private.sms_sessions where token_hash=$1',[digest(jar[sessionCookie])])).rows[0].id;
   await admin.query("update private.sms_sessions set created_at=now()-interval '9 hours',expires_at=now()+interval '1 hour' where id=$1",[session]);
   const agedCalls=calls;expectStatus(await command(ctx),401);assert.equal(calls,agedCalls);
+  await admin.query("update private.sms_sessions set created_at=now(),expires_at=now()+interval '8 hours' where id=$1",[session]);
+  postAction={operation:'context',run:()=>admin.query('update private.sms_identities set revoked_at=now() where user_id=$1',[owner])};
+  expectStatus(await command(ctx),401);
+  const revokedCalls=calls;expectStatus(await command(ctx),401);assert.equal(calls,revokedCalls);
   console.log('Package PostgreSQL/HTTP integration passed: closed streaming route, original SMS tickets, one-use/audience binding, explicit stage/finish, lost replies, immutable pre/post receipts, preserved-head CAS, tampered result denial, native/current Hub revocation, expiry and distinct same-request operations across real sessions.');
 }finally{await new Promise(resolve=>server.close(resolve));await pool.end();await admin.end();}
