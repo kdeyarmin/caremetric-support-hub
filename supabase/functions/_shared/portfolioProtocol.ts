@@ -117,7 +117,7 @@ export function parsePortfolioEnvelope(input: unknown, request: PortfolioRequest
     data = { apiVersion: 1, operations: [...new Set(row.operations.filter(value => portfolioOperations.includes(value as PortfolioOperationName)))] as PortfolioOperationName[], sourceRevision: revision };
   } else if (operation.operation === "overview" && product === "breathe") {
     data = { organizationCount: count(row.organizationCount), activeUserCount: count(row.activeUserCount), subscriptionCount: count(row.subscriptionCount) };
-  } else if (operation.operation === "overview" && (product === "caremetric-emr" || product === "pennsync")) {
+  } else if (operation.operation === "overview" && (product === "caremetric-emr" || product === "caremetric-go" || product === "pennsync")) {
     if (row.activeUserCount !== null) throw new Error("Unverified account activity count");
     data = { organizationCount: count(row.organizationCount), activeUserCount: null, registeredUserCount: count(row.registeredUserCount), subscriptionCount: count(row.subscriptionCount) };
   } else if (operation.operation === "organizations.list") data = page(row, operation, value => organization(value, product));

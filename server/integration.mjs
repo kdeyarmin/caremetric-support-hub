@@ -85,6 +85,16 @@ try {
   await assert.rejects(caps.consume(breatheCapability,'carebase'));
   assert.deepEqual(await caps.consume(breatheCapability,'breathe'),{user_id:editor,role:'platform_admin',method:'sms',operation:{operation:'capabilities'}});
   await assert.rejects(caps.consume(breatheCapability,'breathe'));
+  const goCapability='cmh_'+'g'.repeat(43);
+  await admin.query("insert into private.app_delegations(token_hash,session_id,audience,payload,expires_at) values($1,$2,'caremetric-go','{\"operation\":\"overview\"}',now()+interval '30 seconds')",[digest(goCapability),session]);
+  await assert.rejects(caps.consume(goCapability,'caremetric-emr'));
+  await assert.rejects(caps.consume(goCapability,'carebase'));
+  assert.deepEqual(await caps.consume(goCapability,'caremetric-go'),{user_id:editor,role:'platform_admin',method:'sms',operation:{operation:'overview'}});
+  await assert.rejects(caps.consume(goCapability,'caremetric-go'));
+  const emrCapability='cmh_'+'e'.repeat(43);
+  await admin.query("insert into private.app_delegations(token_hash,session_id,audience,payload,expires_at) values($1,$2,'caremetric-emr','{\"operation\":\"capabilities\"}',now()+interval '30 seconds')",[digest(emrCapability),session]);
+  await assert.rejects(caps.consume(emrCapability,'caremetric-go'));
+  assert.deepEqual(await caps.consume(emrCapability,'caremetric-emr'),{user_id:editor,role:'platform_admin',method:'sms',operation:{operation:'capabilities'}});
   const commandOperation={operation:'preview',requestId:randomUUID(),action:'users.setActive',targetId:learner,parameters:{active:false},reason:'Synthetic session integration'};
   assert.equal((await call('admin/command',{product:'carebase',...commandOperation},{Origin:'https://evil.test'})).status,403);
   assert.equal(nativeCalls.length,0);
