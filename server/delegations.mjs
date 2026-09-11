@@ -9,6 +9,8 @@ import { nativeLearningOperationSchema } from '../src/learning/receiptProtocol.t
 import { learningReceipts } from './learning-receipts.mjs';
 import { nativeAuthoringOperationSchema } from '../src/learning/authoringProtocol.ts';
 import { learningAuthoring } from './learning-authoring.mjs';
+import { nativeBillingCommandSchema } from '../supabase/functions/_shared/billingCommandProtocol.ts';
+import { billingCommands } from './billing-commands.mjs';
 
 const prefix = 'cmh_';
 export const validDelegation = value => typeof value==='string' && /^cmh_[A-Za-z0-9_-]{43}$/.test(value);
@@ -32,7 +34,7 @@ async function authorize(db,audience,payload) {
     return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
   }
   if (audience==='carebase.command') {
-    parsePortfolioCommand({product:'carebase',...payload});
+    if (!nativeBillingCommandSchema.safeParse(payload).success) parsePortfolioCommand({product:'carebase',...payload});
     return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
   }
   if (audience==='carebase.learning') {
@@ -59,6 +61,7 @@ export function delegations({pool,storageUrl,fetchImpl=fetch}) {
   return {
     learning: learningReceipts({pool,issue,fetchImpl}),
     authoring: learningAuthoring({pool,issue,fetchImpl}),
+    billingCommand: billingCommands({pool,issue,fetchImpl}),
     async consume(capability,audience) {
       if (!validDelegation(capability)) throw new HttpError(401,'Invalid authorization.');
       return transaction(pool,async db => {

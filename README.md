@@ -1,5 +1,13 @@
 # CareMetric Support Hub
 
+CareBase organizations now have a reviewed [Stripe billing portal workflow](docs/BILLING_PORTAL.md)
+when the native billing-command capabilities are enabled. Creation requires a
+reason, exact customer/configuration preview and confirmation. Uncertain responses
+retain the same command; opening rechecks current authority and retrieves the
+same provider session. The Hub stores redacted recovery metadata and keeps
+provider credentials and billing logic in CareBase. Deployment requires the
+API 4 `billing.portal.v1` gate and the reviewed native adapter.
+
 CareBase course details include exact governed source review and native version
 controls. An administrator loads a version, reviews its material and policy,
 preserves that immutable source in the Hub, and previews a clone or publication.
