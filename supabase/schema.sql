@@ -6825,3 +6825,101 @@ begin
 end; $migration$;
 revoke all on function hub.get_backend_contract() from public;
 grant execute on function hub.get_backend_contract() to anon,authenticated;
+
+-- 20260911215749_learning_credit_policy_intents.sql
+-- Extend the existing source-bound native authoring ledger to training credit policy.
+-- Course credit writes remain native; this change only validates reviewed outcomes.
+create or replace function private.learning_authoring_actions() returns text[]
+language sql immutable security invoker set search_path='' as $$
+  select array['learning.cloneVersion','learning.publishVersion','learning.patchDraft','learning.reviewDraft','learning.editStructure','learning.editCreditPolicy']::text[];
+$$;
+revoke all on function private.learning_authoring_actions() from public,anon,authenticated,hub_app_server;
+
+create or replace function hub.record_learning_authoring_result(p_command_id uuid,p_expected_digest text,p_result jsonb) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare intent private.learning_authoring_intents%rowtype; actor jsonb; source_item uuid;
+begin
+  actor:=hub.authorize_app_command();
+  perform hub.get_learning_authoring_intent(p_command_id,p_expected_digest);
+  select * into intent from private.learning_authoring_intents where command_id=p_command_id for update;
+  if p_result is null or jsonb_typeof(p_result)<>'object' or octet_length(p_result::text)>8000
+    or not(p_result ?& array['commandId','courseId','action','versionId','versionNumber','status','appliedAt','replayed'])
+    or p_result-array['commandId','courseId','action','versionId','versionNumber','status','appliedAt','replayed','sourceRevision']<>'{}'::jsonb
+    or ((p_result->>'action' in ('learning.patchDraft','learning.reviewDraft','learning.editStructure','learning.editCreditPolicy')) is distinct from (p_result ? 'sourceRevision'))
+    or (p_result ? 'sourceRevision' and coalesce(p_result->>'sourceRevision','') !~ '^[0-9a-f]{64}$')
+    or p_result->>'commandId' is distinct from intent.preview->>'commandId'
+    or p_result->>'courseId' is distinct from intent.preview->>'courseId'
+    or p_result->>'action' is distinct from intent.preview->>'action'
+    or p_result->>'status' is distinct from intent.preview->'after'->>'status'
+    or p_result->'versionNumber' is distinct from intent.preview->'after'->'versionNumber'
+    or coalesce(p_result->>'versionId','') !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    or jsonb_typeof(p_result->'replayed') is distinct from 'boolean'
+    or (p_result->>'action'<>'learning.cloneVersion' and p_result->>'versionId' is distinct from intent.preview->'before'->>'versionId')
+    or (p_result->>'action'='learning.cloneVersion' and p_result->>'versionId' is not distinct from intent.preview->'before'->>'versionId') then
+    raise exception 'The native outcome does not match the preview.' using errcode='22023';
+  end if;
+  if intent.result is not null then
+    if intent.result-'replayed' is distinct from p_result-'replayed' then
+      raise exception 'The native result changed.' using errcode='40001';
+    end if;
+    return intent.result||jsonb_build_object('replayed',true);
+  end if;
+  update private.learning_authoring_intents set result=p_result,completed_at=now() where command_id=p_command_id;
+  select item_id into source_item from private.learning_source_snapshots where id=intent.snapshot_id;
+  insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata)
+    values((actor->>'user_id')::uuid,'learning.authoring.applied','content_item',source_item,
+      jsonb_build_object('command_id',p_command_id,'action',p_result->>'action','version_id',p_result->>'versionId'));
+  return p_result;
+end;
+$$;
+revoke all on function hub.remember_learning_authoring_preview(uuid,jsonb),hub.get_learning_authoring_intent(uuid,text),hub.record_learning_authoring_result(uuid,text,jsonb) from public,anon,authenticated;
+grant execute on function hub.remember_learning_authoring_preview(uuid,jsonb),hub.get_learning_authoring_intent(uuid,text),hub.record_learning_authoring_result(uuid,text,jsonb) to authenticated;
+
+-- 20260911215751_learning_credit_policy_contract.sql
+-- Declaration proves the reviewed Hub boundary, not native provider readiness.
+do $$
+declare signature text; definition text;
+begin
+  if (hub.get_backend_contract() @> '{"api_version":4,"features":["learning.runtime.v1","platform.admin.read.v1","app.sms.v1","learning.sources.v1","platform.admin.command.v1","learning.receipts.v1","learning.authoring.v1","knowledge.publications.v1","support.readiness.v1","platform.admin.intel.v1","learning.draft-editing.v1","billing.portal.v1","support.customer-onboarding.v1","learning.structure.v1","support.customer-registration.v1","billing.checkout.v1","learning.course-creation.v1"]}'::jsonb) is not true
+    or to_regclass('private.learning_authoring_intents') is null or to_regclass('private.learning_source_snapshots') is null then
+    raise exception 'Apply the reviewed creation, source and checkout foundation before credit policy' using errcode='55000';
+  end if;
+  foreach signature in array array['private.learning_authoring_actions()','private.require_learning_editor()',
+    'hub.authorize_app_command()','hub.remember_learning_authoring_preview(uuid,jsonb)',
+    'hub.get_learning_authoring_intent(uuid,text)','hub.record_learning_authoring_result(uuid,text,jsonb)',
+    'private.validate_governed_learning_source(text,text)'] loop
+    if to_regprocedure(signature) is null then raise exception 'Missing reviewed credit policy function: %',signature using errcode='55000'; end if;
+  end loop;
+  if private.learning_authoring_actions() is distinct from array['learning.cloneVersion','learning.publishVersion','learning.patchDraft','learning.reviewDraft','learning.editStructure','learning.editCreditPolicy']::text[] then
+    raise exception 'Apply the closed credit policy action contract first' using errcode='55000';
+  end if;
+  definition:=pg_catalog.pg_get_functiondef('hub.remember_learning_authoring_preview(uuid,jsonb)'::regprocedure);
+  if position('private.learning_authoring_actions()' in definition)=0 or position('private.require_learning_editor()' in definition)=0
+    or position('prior.session_id' in definition)=0 or position('source.source_revision' in definition)=0 then
+    raise exception 'Apply the source-bound credit policy preview guard first' using errcode='55000';
+  end if;
+  definition:=pg_catalog.pg_get_functiondef('hub.record_learning_authoring_result(uuid,text,jsonb)'::regprocedure);
+  if position('''learning.editCreditPolicy''' in definition)=0 or position('''sourceRevision''' in definition)=0
+    or position('hub.get_learning_authoring_intent(p_command_id,p_expected_digest)' in definition)=0
+    or position('hub.authorize_app_command()' in definition)=0 or position('for update' in definition)=0 then
+    raise exception 'Apply the credit policy result digest and current-authority guard first' using errcode='55000';
+  end if;
+end;
+$$;
+do $declaration$
+declare contract jsonb:=hub.get_backend_contract(); features jsonb;
+begin
+  features:=contract->'features';
+  if jsonb_typeof(features) is distinct from 'array' or jsonb_array_length(features)>99
+    or exists(select 1 from jsonb_array_elements(features) value where jsonb_typeof(value)<>'string')
+    or (select count(*)<>count(distinct value) from jsonb_array_elements(features) value) then
+    raise exception 'Invalid prior credit policy feature declaration' using errcode='55000';
+  end if;
+  if not(features ? 'learning.credit-policy.v1') then features:=features||'["learning.credit-policy.v1"]'::jsonb; end if;
+  contract:=jsonb_build_object('api_version',4,'features',features);
+  execute format('create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='''' as %L',
+    format('select %L::jsonb',contract::text));
+end;
+$declaration$;
+revoke all on function hub.get_backend_contract() from public;
+grant execute on function hub.get_backend_contract() to anon,authenticated;

@@ -19,7 +19,7 @@ const owner=randomUUID(),item=randomUUID(),phone='+12025550401';
 const source=JSON.parse(readFileSync(new URL('../src/imports/fixtures/governedCourse.json',import.meta.url)));
 source.sourceCourseId=randomUUID();source.sourceVersionId=randomUUID();
 const course=source.sourceCourseId,version=source.sourceVersionId;
-let payload=JSON.stringify(source),nativeRevoked=false,writes=0,calls=0,tamperOutcome=false;
+let payload=JSON.stringify(source),nativeRevoked=false,writes=0,calls=0,tamperOutcome=false,revokeAfterPolicy=false;
 const revision=()=>digest(payload),commands=new Map();
 await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'authoring-sms-owner@test.invalid',false)",[owner]);
 await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')",[owner]);
@@ -41,7 +41,7 @@ const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(u
   if(op.operation==='preview') {
     if(op.parameters.sourceRevision!==revision())return Response.json({error:{code:'conflict'}},{status:409});
     let row=commands.get(op.requestId);
-    if(!row && ['learning.patchDraft','learning.reviewDraft','learning.editStructure'].includes(op.action)) {
+    if(!row && ['learning.patchDraft','learning.reviewDraft','learning.editStructure','learning.editCreditPolicy'].includes(op.action)) {
       const before={courseId:course,versionId:version,currentVersionId:version,sourceRevision:revision(),status:'draft',versionNumber:2,title:source.version.title};
       const after={...before,title:op.parameters.patch?.version?.title??before.title,aiReviewRequired:op.action!=='learning.reviewDraft'};delete after.sourceRevision;
       row={commandId:randomUUID(),courseId:course,action:op.action,reason:op.reason,previewDigest:digest(JSON.stringify(op)),expiresAt:new Date(Date.now()+240000).toISOString(),before,after};
@@ -56,7 +56,7 @@ const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(u
   if(!preview||preview.previewDigest!==op.expectedDigest)return Response.json({error:{code:'conflict'}},{status:409});
   if(preview.result)return Response.json({...preview.result,replayed:true});
   if(preview.before.sourceRevision!==revision())return Response.json({error:{code:'conflict'}},{status:409});
-  if(['learning.patchDraft','learning.reviewDraft','learning.editStructure'].includes(preview.action)) {
+  if(['learning.patchDraft','learning.reviewDraft','learning.editStructure','learning.editCreditPolicy'].includes(preview.action)) {
     if(preview.action==='learning.patchDraft') {
       const patch=preview.parameters.patch;
       Object.assign(source.version,patch.version??{});source.version.aiReviewedAt=null;
@@ -87,10 +87,24 @@ const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(u
         } else assert.fail('Unexpected synthetic structure operation');
       }
       source.version.aiReviewedAt=null;
+    } else if(preview.action==='learning.editCreditPolicy') {
+      const parameters=preview.parameters,old=new Map(source.credits.map(row=>[row.id,row]));
+      const retained=new Set(parameters.credits.map(row=>row.creditId));
+      assert.deepEqual(parameters.removedCreditIds.slice().sort(),source.credits.filter(row=>!retained.has(row.id)).map(row=>row.id).sort());
+      source.credits=parameters.credits.map(row=>{
+        if(row.preserve){assert.ok(old.has(row.creditId));return old.get(row.creditId);}
+        const prior=old.get(row.creditId);if(prior)assert.equal(prior.trainingTypeId,row.trainingTypeId);
+        return {id:row.creditId,trainingTypeId:row.trainingTypeId,topicCode:row.topicCode,creditHours:row.creditHours,mode:row.creditMode,citationNote:row.citationNote,active:row.isActive};
+      });
+      if(Object.hasOwn(parameters.policy,'versionLabel'))source.version.label=parameters.policy.versionLabel;
+      if(Object.hasOwn(parameters.policy,'creditedDurationRationale'))source.version.creditedDurationRationale=parameters.policy.creditedDurationRationale;
+      source.version.aiReviewedAt=null;
     } else source.version.aiReviewedAt=new Date().toISOString();
     payload=JSON.stringify(source);
     const result={commandId:preview.commandId,courseId:course,action:preview.action,versionId:version,versionNumber:2,status:'draft',appliedAt:new Date().toISOString(),replayed:false,sourceRevision:revision()};
-    writes++;Object.defineProperty(preview,'result',{value:result,enumerable:false});return Response.json(result);
+    writes++;Object.defineProperty(preview,'result',{value:result,enumerable:false});
+    if(preview.action==='learning.editCreditPolicy'&&revokeAfterPolicy)await admin.query('update private.staff_permissions set revoked_at=now() where user_id=$1',[owner]);
+    return Response.json(result);
   }
   const result={commandId:preview.commandId,courseId:course,action:preview.action,versionId:randomUUID(),versionNumber:3,status:'draft',appliedAt:new Date().toISOString(),replayed:false};
   if(tamperOutcome)return Response.json({...result,versionNumber:99});
@@ -192,9 +206,34 @@ try {
   assert.equal(source.blocks[0].id,incompleteId);assert.equal(source.blocks[0].quiz.questions[0].points,101);assert.equal(source.version.aiReviewedAt,null);
   await preserveLatest();
   nativeRevoked=true;assert.equal((await author(compoundApply)).status,403);nativeRevoked=false;
+  // A policy mutation uses the same actual source/session ledger. The unchanged
+  // legacy citation remains in the native fixture; only its ID crosses the request.
+  source.credits[1].citationNote='Legacy citation preserved exactly. '.repeat(500);
+  payload=JSON.stringify(source);await preserveLatest();
+  const oldCredit=structuredClone(source.credits[1]),removedCredit=source.credits[0].id,newCredit=randomUUID();
+  const originalBlocks=JSON.stringify(source.blocks),originalProvider=JSON.stringify(source.provider);
+  const policyOp={operation:'preview',requestId:randomUUID(),courseId:course,action:'learning.editCreditPolicy',parameters:{versionId:version,sourceRevision:revision(),
+    policy:{versionLabel:'Reviewed credit edition',creditedDurationRationale:'The reviewed duration aligns with the instructional material and verification requirements.'},
+    credits:[{creditId:oldCredit.id,preserve:true},{creditId:newCredit,trainingTypeId:source.credits[0].trainingTypeId,topicCode:'REVIEWED.CREDIT',creditHours:'0.10',creditMode:'verified_only',citationNote:'Reviewed synthetic citation. '.repeat(200),isActive:true}],
+    removedCreditIds:[removedCredit]},reason:'Review original credit evidence and replace the explicitly removed rule'};
+  assert.ok(Buffer.byteLength(JSON.stringify(policyOp))>4096);
+  assert.equal((await author({...policyOp,parameters:{...policyOp.parameters,policy:{providerId:randomUUID()}}})).status,400);
+  const policyPreview=await author(policyOp);assert.equal(policyPreview.status,200,JSON.stringify(policyPreview.body));
+  assert.equal(policyPreview.body.after.aiReviewRequired,true);
+  const policyApply={operation:'apply',commandId:policyPreview.body.commandId,expectedDigest:policyPreview.body.previewDigest};
+  revokeAfterPolicy=true;assert.equal((await author(policyApply)).status,401);assert.equal(writes,6);
+  assert.equal((await admin.query('select result from private.learning_authoring_intents where command_id=$1',[policyApply.commandId])).rows[0].result,null);
+  revokeAfterPolicy=false;await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
+  const policyResult=await author(policyApply);assert.equal(policyResult.status,200,JSON.stringify(policyResult.body));assert.equal(policyResult.body.replayed,true);assert.equal(writes,6);
+  assert.equal(policyResult.body.sourceRevision,revision());assert.deepEqual(source.credits[0],oldCredit);assert.equal(source.credits[1].creditHours,'0.10');
+  assert.equal(source.credits.some(row=>row.id===removedCredit),false);assert.equal(JSON.stringify(source.blocks),originalBlocks);assert.equal(JSON.stringify(source.provider),originalProvider);
+  const {sourceRevision:policyDigest,...missingPolicyDigest}=policyResult.body;assert.equal(policyDigest,revision());
+  await assert.rejects(withSession(pool,jar[sessionCookie],db=>db.query('select hub.record_learning_authoring_result($1,$2,$3::jsonb)',[policyApply.commandId,policyApply.expectedDigest,JSON.stringify(missingPolicyDigest)])),error=>error.code==='22023');
+  assert.equal((await author({...policyOp,requestId:randomUUID()})).status,409);
+  await preserveLatest();nativeRevoked=true;assert.equal((await author(policyApply)).status,403);nativeRevoked=false;
   await admin.query('update private.staff_permissions set revoked_at=now() where user_id=$1',[owner]);assert.equal((await author(apply)).status,401);
   await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
   await admin.query('update private.sms_identities set revoked_at=now() where user_id=$1',[owner]);assert.equal((await author(apply)).status,401);
-  assert.equal(Number((await admin.query("select count(*) from private.audit_events where actor_id=$1 and action='learning.authoring.applied'",[owner])).rows[0].count),5);
-  console.log('Authoring PostgreSQL/HTTP integration passed: source preservation, clone/edit/review/structure, incomplete draft assessments, complete weighted answers, exact digest receipts, large bounded edits, native/Hub revocation and immutable replay.');
+  assert.equal(Number((await admin.query("select count(*) from private.audit_events where actor_id=$1 and action='learning.authoring.applied'",[owner])).rows[0].count),6);
+  console.log('Authoring PostgreSQL/HTTP integration passed: source preservation, clone/edit/review/structure/credit policy, explicit credit removals and lossless preservation, post-write revocation recovery, incomplete draft assessments, complete weighted answers, exact digest receipts, large bounded edits, native/Hub revocation and immutable replay.');
 } finally {await new Promise(resolve=>server.close(resolve));await pool.end();await admin.end();}
