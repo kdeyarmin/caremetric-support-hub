@@ -22,12 +22,12 @@ const workerRequest=z.discriminatedUnion('operation',[
 const errors={P4040:[404,'This draft or media is unavailable.'],P4090:[409,'The draft, review, or render changed. Reload and review again.'],P4130:[413,'The file exceeds the configured limit.'],P4290:[429,'DocStudio is at its current capacity. Try again later.'],P5030:[503,'The render worker is unavailable.'],22023:[400,'The DocStudio request is invalid.'],23505:[409,'This operation already exists. Reload its result.'],28000:[401,'Sign in with an SMS code to continue.'],42501:[403,'Content editor permission is required for every affected product.']};
 const parse=(schema,value)=>{try{return schema.parse(value);}catch{throw new HttpError(400,'Invalid DocStudio request.');}};
 
-export function docstudio({pool,publications,workerToken,fetchImpl=fetch}) {
+export function docstudio({pool,publications,workerToken,fetchImpl=fetch,onDatabaseError=()=>{}}) {
   async function dbCall(session,name,args=[],worker=false) {
     try {
       const call=async db=>(await db.query(`select private.${name}(${args.map((_,index)=>`$${index+1}`).join(',')}) as result`,args)).rows[0].result;
       return worker?await transaction(pool,call):await withSession(pool,session,async db=>{await db.query('reset role');return call(db);});
-    } catch(error) { if(errors[error.code]) throw new HttpError(...errors[error.code]); throw error; }
+    } catch(error) { if(errors[error.code]) throw new HttpError(...errors[error.code]); onDatabaseError(error); throw error; }
   }
   function authorizeWorker(authorization) {
     if(!workerToken || !opaque.safeParse(workerToken).success || typeof authorization!=='string' || !/^Bearer [A-Za-z0-9_-]{43}$/.test(authorization)

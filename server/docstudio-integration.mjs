@@ -49,7 +49,7 @@ const remote=async(url,options)=>{
 };
 const caps=delegations({pool,storageUrl:'https://xgauehtwksmnoqhgqegm.supabase.co',fetchImpl:remote});
 const publication=publications({pool,delegations:caps,storageUrl:'https://xgauehtwksmnoqhgqegm.supabase.co',fetchImpl:remote});
-const studio=docstudio({pool,publications:publication,workerToken,fetchImpl:remote});
+const studio=docstudio({pool,publications:publication,workerToken,fetchImpl:remote,onDatabaseError:error=>console.error('Disposable DocStudio SQL failure',{code:error.code,message:error.message,where:error.where})});
 const server=appServer({auth:smsAuth({pool,provider}),gateway:gateway(pool),delegations:caps,publications:publication,docstudio:studio,origins:['https://hub.test']});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));baseUrl=`http://127.0.0.1:${server.address().port}`;
 let jar={};

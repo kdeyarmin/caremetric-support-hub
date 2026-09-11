@@ -546,11 +546,3 @@ grant execute on function private.docstudio_read(jsonb),private.docstudio_projec
  private.docstudio_worker(text,uuid,text,jsonb),private.docstudio_stage_asset(uuid,jsonb),private.docstudio_prepare_output(uuid,text,text,text,integer,text),
  private.docstudio_issue_media(text,jsonb,text),private.docstudio_consume_media(text),private.docstudio_verify_media(jsonb),private.docstudio_export_context(uuid),private.docstudio_stage_export(uuid,integer,uuid),private.docstudio_worker_manifest(uuid,text) to hub_app_server;
 grant execute on function private.docstudio_issue_cleanup(text),private.docstudio_finish_cleanup(uuid) to hub_app_server;
-do $$ declare contract jsonb:=hub.get_backend_contract(); begin
- if not (contract->'features' @> '["knowledge.publications.v1","app.sms.v1"]'::jsonb) then raise exception 'Apply the reviewed publication and SMS foundation first'; end if;
- contract:=jsonb_set(contract,'{features}',(contract->'features')||'["knowledge.docstudio.v1"]'::jsonb);
- execute format('create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='''' as %L','select '||quote_literal(contract::text)||'::jsonb');
-end $$;
-revoke all on function hub.get_backend_contract() from public;
-grant execute on function hub.get_backend_contract() to anon,authenticated;
-
