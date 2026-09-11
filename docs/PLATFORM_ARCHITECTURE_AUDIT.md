@@ -2,6 +2,26 @@
 
 Reviewed September 10, 2026. Scope: the Support Hub and eight connected/canonical repositories, their integration boundaries, selected production infrastructure, and shared publication contracts. This is an integration and readiness audit, not an exhaustive security audit of every clinical workflow.
 
+## September 11 implementation checkpoint
+
+The findings and target design below describe the September 10 audit. The
+[September 11 production record](PRODUCTION_ROLLOUT.md#september-11-central-administration-and-learning-release)
+now supersedes its earlier claims that Hub course editing and all remote
+administration are unimplemented.
+
+The Hub frontend, central learning migration, administrator authorization RPC,
+and administrator Edge Function are deployed. `/admin` includes the audited app
+inventory and a read-only CareBase adapter client. The CareBase server change is
+merged; deployment and the owner's MFA-authorized connection await verification.
+Stages 0 and 1 therefore remain incomplete at their real-administrator acceptance
+gates. Stage 2 has a deployed runtime for **new Hub courses**; existing CareBase
+courses retain their native runtime, and imported drafts are blocked from
+publication until quiz behavior, credits, and completion reporting are connected.
+Cross-app course cutover and legacy-history transfer are not complete.
+Consolidated billing, customer SSO, support transports, and remaining app-control
+adapters remain pending. No stage is declared complete solely because its UI or
+database migration is deployed.
+
 ## Decision
 
 Evolve the existing Hub into **CareMetric Admin**, with one administrator sign-in and one interface for organizations, users, courses, subscriptions, support, integrations, and operational health. Add a central backend that checks permissions and calls narrowly scoped application adapters. Retain the existing app databases and their domain rules. Use CareBase as the shared learning service and the Hub as the common support service.
