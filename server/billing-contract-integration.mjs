@@ -9,6 +9,7 @@ const databaseUrl=process.env.HUB_TEST_DATABASE_URL,local=new URL(databaseUrl);
 assert.equal(local.hostname,'127.0.0.1');assert.equal(local.port,'54322');
 const client=new pg.Client({connectionString:databaseUrl});
 const migration=await readFile(new URL('../supabase/migrations/20260911195910_billing_portal_backend_contract.sql',import.meta.url),'utf8');
+const structureMigration=await readFile(new URL('../supabase/migrations/20260911202823_learning_structure_backend_contract.sql',import.meta.url),'utf8');
 const readContract=async()=> (await client.query('select hub.get_backend_contract() as contract')).rows[0].contract;
 const fixtures=[
   {
@@ -58,6 +59,8 @@ try {
   try {
     const before=await readContract();
     await client.query(migration);
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>feature!=='learning.structure.v1')});
+    await client.query(structureMigration);
     assert.deepEqual(await readContract(),before);
     assertBackendContract(await readContract());
   } finally { await client.query('rollback'); }

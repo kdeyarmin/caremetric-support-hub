@@ -7,6 +7,7 @@ import { authoringOperationSchema, authoringInspectSchema, authoringPreviewSchem
 import { validateGovernedCourse } from "../imports/governedLearningImport";
 import { DraftEditor } from "./DraftEditor";
 import { StructureEditor } from "./StructureEditor";
+import { StructureReview } from "./StructureReview";
 import type { StructureChange } from "./structureProtocol";
 
 async function run(operation: AuthoringOperation) {
@@ -120,9 +121,7 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
     {preview && <div className="learning-notice"><h4>Review the native change</h4>
       <p>{{ "learning.cloneVersion": "Create a new draft", "learning.publishVersion": "Publish this version", "learning.patchDraft": "Save draft edits", "learning.reviewDraft": "Approve reviewed material", "learning.editStructure": "Save lesson and assessment changes" }[preview.action]}: {preview.after.title}, version {preview.after.versionNumber}.</p>
       {previewPatch && <details open><summary>Review the exact field changes</summary><pre>{JSON.stringify(previewPatch, null, 2)}</pre></details>}
-      {previewStructure && <details open><summary>Review every lesson, answer and removal</summary>
-        <p>These changes are saved together. Removal entries identify the exact lessons, questions and answers being removed.</p>
-        <pre>{JSON.stringify(previewStructure, null, 2)}</pre></details>}
+      {previewStructure && material && <StructureReview material={material} changes={previewStructure} />}
       <p>{preview.reason}</p><p>Preview expires {new Date(preview.expiresAt).toLocaleString()}.</p>
       <p>{preview.action === "learning.cloneVersion" ? "The published source stays intact. AI review and package acceptance must be completed for the new draft." :
         preview.action === "learning.publishVersion" ? "Publishing changes the version CareBase offers for new course activity." :
