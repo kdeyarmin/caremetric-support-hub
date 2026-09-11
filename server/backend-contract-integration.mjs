@@ -13,6 +13,7 @@ const migration=await readFile(new URL('../supabase/migrations/20260911190819_co
 const editingMigration=await readFile(new URL('../supabase/migrations/20260911192238_learning_draft_editing_contract.sql',import.meta.url),'utf8');
 const billingMigration=await readFile(new URL('../supabase/migrations/20260911195910_billing_portal_backend_contract.sql',import.meta.url),'utf8');
 const structureMigration=await readFile(new URL('../supabase/migrations/20260911202823_learning_structure_backend_contract.sql',import.meta.url),'utf8');
+const checkoutMigration=await readFile(new URL('../supabase/migrations/20260911204842_billing_checkout_backend_contract.sql',import.meta.url),'utf8');
 const readContract=async()=> (await client.query('select hub.get_backend_contract() as contract')).rows[0].contract;
 const cases=[
   {
@@ -55,15 +56,18 @@ try {
   try {
     const before=await readContract();
     await client.query(migration);
-    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['learning.draft-editing.v1','billing.portal.v1','learning.structure.v1'].includes(feature))});
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['learning.draft-editing.v1','billing.portal.v1','learning.structure.v1','billing.checkout.v1'].includes(feature))});
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='learning.draft-editing.v1')}),/incompatible/);
     await client.query(editingMigration);
-    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['billing.portal.v1','learning.structure.v1'].includes(feature))});
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['billing.portal.v1','learning.structure.v1','billing.checkout.v1'].includes(feature))});
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='billing.portal.v1')}),/incompatible/);
     await client.query(billingMigration);
-    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>feature!=='learning.structure.v1')});
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['learning.structure.v1','billing.checkout.v1'].includes(feature))});
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='learning.structure.v1')}),/incompatible/);
     await client.query(structureMigration);
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>feature!=='billing.checkout.v1')});
+    assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='billing.checkout.v1')}),/incompatible/);
+    await client.query(checkoutMigration);
     assert.deepEqual(await readContract(),before,'Forward declarations restore the exact current feature set');
     assertBackendContract(await readContract());
   } finally { await client.query('rollback'); }

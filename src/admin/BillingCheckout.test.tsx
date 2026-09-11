@@ -31,7 +31,7 @@ describe("reviewed subscription checkout", () => {
   it("shows recorded exact amounts and cadence, and never selects an unmapped price", async () => {
     const page = checkoutCatalog(); page.items.push({ ...checkoutChoice, id: checkoutRequest.requestId, name: "Unmapped plan", availability: "unmapped", providerPriceId: null }); page.total++;
     const api = client({ packages: vi.fn(async () => page) }); await mount(api);
-    expect(screen.getByText(/92,233,720,368,547,758.07/).textContent).toContain("USD");
+    expect(screen.getAllByText(/92,233,720,368,547,758.07/).every(node => node.textContent?.includes("USD"))).toBe(true);
     expect(screen.getByText(/provider prices not checked/)).toBeTruthy();
     expect((screen.getByRole("button", { name: "Choose Unmapped plan · Every 3 months" }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "Preview subscription checkout" }) as HTMLButtonElement).disabled).toBe(true);
@@ -103,5 +103,15 @@ describe("reviewed subscription checkout", () => {
     const api = client({ resume: vi.fn().mockRejectedValue(new Error("Unavailable")) }); await mount(api);
     expect(screen.queryByLabelText("Administrative reason")).toBeNull(); expect(api.packages).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Recover checkout review" })).toBeTruthy();
+  });
+  it("recovers authoritative undispatched state after apply fails before Hub acceptance", async () => {
+    const saved = checkoutIntent();
+    const api = client({ resume: vi.fn(async () => saved), apply: vi.fn().mockRejectedValue({ code: "conflict" }) });
+    await mount(api); fireEvent.click(screen.getByRole("checkbox")); await click("Create reviewed checkout");
+    expect(screen.getByText("The original checkout result is unconfirmed.")).toBeTruthy();
+    await click("Recover saved checkout review");
+    expect(screen.getByRole("button", { name: "Create reviewed checkout" })).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Create reviewed checkout" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(api.check).not.toHaveBeenCalled(); expect(api.apply).toHaveBeenCalledTimes(1);
   });
 });

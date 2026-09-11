@@ -45,7 +45,7 @@ export function BillingCheckout({ target, client = checkoutCommandClient, onClos
       if (!active) return;
       setIntent(saved); setRequest(saved?.request ?? null); setReason(saved?.request.reason ?? "");
       setStarted(saved?.dispatchedAt !== null && saved?.dispatchedAt !== undefined);
-      setRetryAt(saved?.retryAt ? Date.parse(saved.retryAt) : 0); setReady(true); setError("");
+      setRetryAt(saved?.retryAt ? Date.parse(saved.retryAt) : 0); setConfirmed(false); setReady(true); setError("");
     }).catch(caught => { if (active) { setReady(false); setError(failure(caught)); } });
     return () => { active = false; current.abort(); };
   }, [client, target.id, reload]);
@@ -120,9 +120,9 @@ export function BillingCheckout({ target, client = checkoutCommandClient, onClos
         {!request && <><p>CareBase application database · provider prices not checked. Amounts below preserve the recorded currency and minor units; pricing models and included quantities may affect the final charge.</p><PagedRecords<BillingPackageChoice> app="CareBase" title="Native subscription plans" searchLabel="Search native plan names" columns={["Plan", "Recorded amounts", "Cadence", "Mapping", "Choice"]} read={readPackages} render={row => <><td><strong>{row.name}</strong><p>{row.description}</p><small>{row.pricingModel.replaceAll("_", " ")} · {row.billingMetric.replaceAll("_", " ")}</small></td><td><div>Base: {formatBillingMoney(row.baseAmountMinor, row.currency)}</div><div>Unit: {row.unitAmountMinor === null ? "Not recorded" : formatBillingMoney(row.unitAmountMinor, row.currency)}</div><small>Included {row.includedQuantity}; minimum {row.minimumQuantity}{row.maximumQuantity === null ? "" : `; maximum ${row.maximumQuantity}`}</small></td><td>{checkoutCadence(row.billingInterval, row.intervalCount)}<div>{row.trialDays} trial days</div></td><td>{row.availability === "mapped" ? row.providerPriceId : "Provider price not mapped"}</td><td><button type="button" className="button button-secondary button-small" disabled={busy || row.availability !== "mapped"} aria-pressed={choice?.id === row.id} onClick={() => setChoice(row)}>Choose {row.name} · {checkoutCadence(row.billingInterval, row.intervalCount)}</button></td></>} /></>}
         <form onSubmit={event => void prepare(event)}>{request ? <p>Saved selection: {request.parameters.packageId} · {request.parameters.billingInterval}. The original request identity is preserved.</p> : choice && <p>Selected: {choice.name} · {checkoutCadence(choice.billingInterval, choice.intervalCount)} · {choice.currency.toUpperCase()}.</p>}<label>Administrative reason<input required minLength={10} maxLength={500} value={reason} disabled={busy || request !== null} onChange={event => setReason(event.target.value)} /></label><button type="submit" className="button button-secondary" disabled={busy || reason.trim().length < 10 || !request && !choice}>{busy ? "Preparing checkout preview…" : request ? "Retry same checkout preview" : "Preview subscription checkout"}</button></form>
       </>}
-    {intent && intent.previewDispatchedAt === null && intent.dispatchedAt === null && <button type="button" className="button button-secondary" disabled={busy} onClick={() => void discard()}>Discard undispatched checkout review</button>}
-    {canStartNew && <button type="button" className="button button-secondary" disabled={busy} onClick={newReview}>Review another checkout</button>}
-    {error && <p role="alert">{error}</p>}
+    {ready && intent && intent.previewDispatchedAt === null && intent.dispatchedAt === null && <button type="button" className="button button-secondary" disabled={busy} onClick={() => void discard()}>Discard undispatched checkout review</button>}
+    {ready && canStartNew && <button type="button" className="button button-secondary" disabled={busy} onClick={newReview}>Review another checkout</button>}
+    {error && <p role="alert">{error}</p>}{ready && error && <button type="button" className="button button-secondary" disabled={busy} onClick={() => { setReady(false); setReload(value => value + 1); }}>Recover saved checkout review</button>}
     {ready && <p className="admin-explanation">Closing preserves this checkout review for the current SMS session. CareBase remains the owner of subscriptions, payment events and access.</p>}
   </section>;
 }

@@ -203,6 +203,7 @@ begin
     or p_result->>'action' is distinct from 'billing.checkout.create' or coalesce(v_outcome,'') not in ('open','complete','expired','pending','failed')
     or jsonb_typeof(p_result->'replayed') is distinct from 'boolean' or jsonb_typeof(p_result->'canStartNewCheckout') is distinct from 'boolean'
     or coalesce(p_result->>'availability','') not in ('available','unavailable')
+    or jsonb_typeof(p_result->'checkedAt') not in ('string','null')
     or (p_result->'providerStatus'<>'null'::jsonb and coalesce(p_result->>'providerStatus','') not in ('open','complete','expired'))
     or (v_outcome in ('open','pending') and p_result->'canStartNewCheckout' is distinct from 'false'::jsonb)
     or (v_outcome='pending' and (p_result->'retryAfterSeconds' is distinct from '30'::jsonb or v_session is distinct from 'null'::jsonb))
