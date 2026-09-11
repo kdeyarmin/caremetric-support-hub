@@ -4,7 +4,7 @@ The Hub accepts a registered mobile number and a six-digit SMS code directly in 
 
 ## Deployment
 
-1. Pass the application, database and HTTP integration CI jobs. Apply `20260911152708_app_sms_sessions.sql` before building the connected frontend (backend contract 3).
+1. Pass the application, database and HTTP integration CI jobs. Apply `20260911160622_app_sms_sessions.sql` before building the connected frontend (backend contract 3).
 2. Enable the dedicated `hub_app_server` database role with a generated private password. Use a verified TLS connection with that role, never the database owner or service role. It can manage SMS sessions and assume the existing restricted application roles; it cannot read the Auth user directory or change registered numbers.
 3. Bind the owner's approved mobile number to the existing administrator UUID in `private.sms_identities`. Do not create a second administrator or commit the number. Other users must have an explicitly registered number before using SMS sign-in. Phone changes and revocation rotate the identity version and invalidate existing sessions.
 4. Set Railway server-only variables `HUB_DATABASE_URL`, `HUB_TELNYX_API_KEY` and `HUB_TELNYX_VERIFY_PROFILE_ID`. Do not give any of these a `VITE_` prefix. Use the dedicated CareMetric Support Hub Verify profile (six digits, five-minute expiry and a daily spend cap).
@@ -26,3 +26,4 @@ The migration is additive and retains legacy authorization. Roll the Railway app
 ## Validation status
 
 The repository includes unit tests for provider verdicts, fixed RPC boundaries, cookies, origins and object paths; pgTAP authorization contracts; and an isolated HTTP/PostgreSQL test for browser binding, rate limits, retries, real role enforcement, course authoring, delegation replay and logout. Automated tests use synthetic numbers and a fake SMS sender. They do not establish real SMS delivery; record that separately after the owner signs in.
+
