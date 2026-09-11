@@ -202,7 +202,7 @@ try {
     await db.query('select private.publication_public_object($1,$2)',[videoId,'primary']);
   }),/Public publication access denied/,'public policy strips even real staff authority');
   const retirement=await publicTicket();
-  await admin.query("update hub.content_publications set expires_at=now()-interval '1 second' where revision_id=$1",[publicId]);
+  await admin.query('update hub.content_publications set expires_at=clock_timestamp() where revision_id=$1',[publicId]);
   assert.equal((await consumePublic(retirement)).status,403,'public policy rechecks a retirement after issue');
   assert.equal((await fetch(`${publicPath}/primary`,{method:'HEAD'})).status,403);
   await admin.query('update hub.content_publications set expires_at=null where revision_id=$1',[publicId]);
