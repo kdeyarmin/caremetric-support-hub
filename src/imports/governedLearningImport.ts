@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // Source UUIDs are opaque identifiers; older native seeds need not be RFC v4.
-const id = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+const id = z.string().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/);
 const hash = z.string().regex(/^[0-9a-f]{64}$/);
 const text = z.string().max(250_000);
 const nullableText = text.nullable();
