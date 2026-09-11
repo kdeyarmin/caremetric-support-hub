@@ -45,6 +45,7 @@ export function appServer({auth,gateway,delegations,origins,dist=resolve('dist')
             '/api/internal/media/authorize':'media', '/api/internal/admin/authorize':'carebase',
             '/api/internal/admin/breathe/authorize':'breathe', '/api/internal/admin/emr/authorize':'caremetric-emr',
             '/api/internal/admin/pennsync/authorize':'pennsync', '/api/internal/command/carebase/authorize':'carebase.command',
+            '/api/internal/learning/carebase/authorize':'carebase.learning',
           }[path];
           if(!audience) throw new HttpError(404,'Unavailable.');
           const authorization=req.headers.authorization;
@@ -74,6 +75,7 @@ export function appServer({auth,gateway,delegations,origins,dist=resolve('dist')
         if(path.startsWith('/api/rows/') && req.method==='GET') return json(await gateway.rows(path.slice(10),session));
         if(path==='/api/admin/read' && req.method==='POST') return json(await delegations.admin(session,await jsonBody(req,2048)));
         if(path==='/api/admin/command' && req.method==='POST') return json(await delegations.command(session,await jsonBody(req,4096)));
+        if(path==='/api/admin/learning' && req.method==='POST') return json(await delegations.learning(session,await jsonBody(req,4096)));
         if(path==='/api/media/sign' && req.method==='POST') {
           const {path:objectPath}=await jsonBody(req,2048);
           const response=await delegations.media(session,objectPath,'sign');

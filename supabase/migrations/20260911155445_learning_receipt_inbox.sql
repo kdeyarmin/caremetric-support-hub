@@ -25,11 +25,11 @@ create table private.learning_receipt_mappings (
   source_snapshot_id uuid not null references private.learning_source_snapshots(id),
   native_organization_id uuid not null,
   native_employee_id uuid not null,
-  hub_tenant_id uuid not null references hub.tenants(id),
-  hub_user_id uuid not null references auth.users(id),
+  hub_tenant_id uuid not null,
+  hub_user_id uuid not null,
   product_id uuid not null references hub.products(id),
   state text not null check(state in ('pending','active','revoked')),
-  created_by uuid not null references hub.profiles(id),
+  created_by uuid not null,
   created_at timestamptz not null default now(),
   activated_at timestamptz,
   revoked_at timestamptz
@@ -42,7 +42,7 @@ create table private.learning_receipt_inbox (
   kind text not null check(kind in ('completed','retracted')),
   source_digest text not null check(source_digest ~ '^[0-9a-f]{64}$'),
   payload text not null check(octet_length(payload)<=100000),
-  accepted_by uuid not null references hub.profiles(id),
+  accepted_by uuid not null,
   accepted_at timestamptz not null default now(),
   unique(assignment_id,sequence)
 );
@@ -65,32 +65,41 @@ select exists(select 1 from hub.tenant_product_memberships m join hub.tenant_pro
     and (u.banned_until is null or u.banned_until<=now()));
 $$;
 
--- Each native organization starts as its own canonical tenant. Cross-app tenant
--- consolidation is a separate reviewed action; names and emails never match identities.
-create table private.learning_native_tenants (
-  native_organization_id uuid primary key, hub_tenant_id uuid not null unique references hub.tenants(id),
-  created_by uuid not null references hub.profiles(id), created_at timestamptz not null default now()
-);
-create table private.learning_native_principals (
-  native_employee_id uuid primary key, native_profile_id uuid not null unique,
-  native_organization_id uuid not null references private.learning_native_tenants(native_organization_id),
-  hub_user_id uuid not null references hub.profiles(id), created_by uuid not null references hub.profiles(id),
-  created_at timestamptz not null default now()
-);
-create index learning_native_tenant_actor on private.learning_native_tenants(created_by);
-create index learning_native_principal_org on private.learning_native_principals(native_organization_id);
-create index learning_native_principal_user on private.learning_native_principals(hub_user_id);
-create index learning_native_principal_actor on private.learning_native_principals(created_by);
-alter table private.learning_native_tenants enable row level security;
-alter table private.learning_native_principals enable row level security;
-revoke all on private.learning_native_tenants,private.learning_native_principals from public,anon,authenticated,service_role;
+-- Version 1: lowerhex SHA256 of canonical lowercase UUID UTF8, issuer-scoped.
+create function private.carebase_external_identity_hash(p_id uuid) returns text
+language sql immutable strict set search_path='' as $$ select encode(extensions.digest(p_id::text,'sha256'),'hex'); $$;
 
--- The trusted coordinator verifies the native IDs with CareBase on every call.
--- The owner explicitly selects an EXISTING Hub account; no invitation or email matching.
+-- Learning-specific employee/profile relationship; canonical user and tenant
+-- ownership lives exclusively in the existing federation tables.
+create table private.learning_employee_bindings (
+  native_employee_id uuid primary key, native_profile_id uuid not null unique, native_organization_id uuid not null,
+  issuer_id uuid not null, external_subject_hash text not null, external_tenant_hash text not null,
+  created_by uuid not null, created_at timestamptz not null default now(),
+  foreign key(issuer_id,external_subject_hash) references private.federated_principals(issuer_id,external_subject_hash) on delete cascade,
+  foreign key(issuer_id,external_tenant_hash) references private.federated_tenants(issuer_id,external_tenant_hash) on delete cascade
+);
+create index learning_employee_principal on private.learning_employee_bindings(issuer_id,external_subject_hash);
+create index learning_employee_tenant on private.learning_employee_bindings(issuer_id,external_tenant_hash);
+alter table private.learning_employee_bindings enable row level security;
+revoke all on private.learning_employee_bindings from public,anon,authenticated,service_role;
+create function private.learning_receipt_identity_active(p_organization uuid,p_employee uuid,p_tenant uuid,p_user uuid) returns boolean
+language sql stable security definer set search_path='' as $$
+  select exists(select 1 from private.learning_employee_bindings e
+    join private.federated_principals p on p.issuer_id=e.issuer_id and p.external_subject_hash=e.external_subject_hash
+    join private.federated_tenants t on t.issuer_id=e.issuer_id and t.external_tenant_hash=e.external_tenant_hash
+    where e.native_organization_id=p_organization and e.native_employee_id=p_employee and p.revoked_at is null
+      and p.hub_user_id=p_user and t.hub_tenant_id=p_tenant
+      and e.external_subject_hash=private.carebase_external_identity_hash(e.native_profile_id)
+      and e.external_tenant_hash=private.carebase_external_identity_hash(e.native_organization_id));
+$$;
+
+-- The coordinator verifies native IDs before each call. Explicit choice of an
+-- EXISTING Hub account; no names/email matching, no invitation, no auto-merge.
 create function hub.provision_learning_receipt_access(p_actor_id uuid,p_session_id uuid,p_native_organization_id uuid,
   p_native_employee_id uuid,p_native_profile_id uuid,p_hub_tenant_id uuid,p_tenant_name text,p_hub_user_id uuid) returns jsonb
 language plpgsql security definer set search_path='' as $$
-declare product uuid; prior_tenant uuid; principal private.learning_native_principals%rowtype;
+declare product uuid; prior_tenant uuid; v_issuer_id uuid; subject_hash text; tenant_hash text;
+  principal private.federated_principals%rowtype; employee private.learning_employee_bindings%rowtype;
 begin
   perform private.require_receipt_command_actor(p_actor_id,p_session_id);
   if p_native_organization_id is null or p_native_employee_id is null or p_native_profile_id is null or p_hub_tenant_id is null
@@ -100,23 +109,42 @@ begin
   if product is null or not exists(select 1 from auth.users u join hub.profiles p on p.id=u.id where u.id=p_hub_user_id
     and u.deleted_at is null and not coalesce(u.is_anonymous,false) and (u.banned_until is null or u.banned_until<=now())) then
     raise exception 'Existing active Hub account and product required.' using errcode='22023'; end if;
+  -- Verified public OIDC discovery and JWKS, 2026-09-11. Metadata does not enable
+  -- JWT federation. Authenticated learning pull uses its own reviewed authority.
+  insert into private.federation_issuers(product_id,issuer,audience,jwks_url,enabled)
+    values(product,'https://xsqobvvreaovwibxwyvv.supabase.co/auth/v1','authenticated',
+      'https://xsqobvvreaovwibxwyvv.supabase.co/auth/v1/.well-known/jwks.json',false) on conflict(issuer) do nothing;
+  select id into v_issuer_id from private.federation_issuers f where f.issuer='https://xsqobvvreaovwibxwyvv.supabase.co/auth/v1'
+    and f.product_id=product and f.audience='authenticated' and f.jwks_url='https://xsqobvvreaovwibxwyvv.supabase.co/auth/v1/.well-known/jwks.json';
+  if v_issuer_id is null then raise exception 'Review the existing CareBase issuer configuration.' using errcode='40001'; end if;
+  subject_hash:=private.carebase_external_identity_hash(p_native_profile_id);
+  tenant_hash:=private.carebase_external_identity_hash(p_native_organization_id);
   perform pg_advisory_xact_lock(hashtextextended('carebase-tenant:'||p_native_organization_id::text,0));
-  select hub_tenant_id into prior_tenant from private.learning_native_tenants where native_organization_id=p_native_organization_id;
+  select hub_tenant_id into prior_tenant from private.federated_tenants t where t.issuer_id=v_issuer_id and t.external_tenant_hash=tenant_hash;
   if prior_tenant is null then
-    -- Never attach a native organization to an unrelated existing Hub tenant.
     insert into hub.tenants(id,slug,name) values(p_hub_tenant_id,'carebase-'||p_native_organization_id::text,btrim(p_tenant_name));
-    insert into private.learning_native_tenants(native_organization_id,hub_tenant_id,created_by)
-      values(p_native_organization_id,p_hub_tenant_id,p_actor_id);
+    insert into private.federated_tenants(issuer_id,external_tenant_hash,hub_tenant_id) values(v_issuer_id,tenant_hash,p_hub_tenant_id);
     insert into hub.tenant_products(tenant_id,product_id) values(p_hub_tenant_id,product);
     insert into private.case_intake_settings(tenant_id,product_id,enabled) values(p_hub_tenant_id,product,false) on conflict do nothing;
-  elsif prior_tenant<>p_hub_tenant_id then raise exception 'Native tenant cannot be repointed.' using errcode='40001'; end if;
-  select * into principal from private.learning_native_principals where native_employee_id=p_native_employee_id for update;
-  if found then
-    if principal.native_profile_id<>p_native_profile_id or principal.native_organization_id<>p_native_organization_id
-      or principal.hub_user_id<>p_hub_user_id then raise exception 'Native principal cannot be repointed.' using errcode='40001'; end if;
   else
-    insert into private.learning_native_principals(native_employee_id,native_profile_id,native_organization_id,hub_user_id,created_by)
-      values(p_native_employee_id,p_native_profile_id,p_native_organization_id,p_hub_user_id,p_actor_id);
+    -- Reuse the already reviewed exact native-ID mapping; never repoint it.
+    p_hub_tenant_id:=prior_tenant;
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('carebase-principal:'||p_native_profile_id::text,0));
+  select * into principal from private.federated_principals p where p.issuer_id=v_issuer_id and p.external_subject_hash=subject_hash for update;
+  if found then
+    if principal.hub_user_id<>p_hub_user_id then raise exception 'Native principal cannot be repointed.' using errcode='40001'; end if;
+    if principal.revoked_at is not null then raise exception 'Existing revoked or suspended access requires separate review.' using errcode='42501'; end if;
+  else
+    insert into private.federated_principals(issuer_id,external_subject_hash,hub_user_id) values(v_issuer_id,subject_hash,p_hub_user_id);
+  end if;
+  select * into employee from private.learning_employee_bindings where native_employee_id=p_native_employee_id for update;
+  if found then
+    if employee.native_profile_id<>p_native_profile_id or employee.native_organization_id<>p_native_organization_id or employee.issuer_id<>v_issuer_id then
+      raise exception 'Native employee binding cannot be repointed.' using errcode='40001'; end if;
+  else
+    insert into private.learning_employee_bindings(native_employee_id,native_profile_id,native_organization_id,issuer_id,external_subject_hash,external_tenant_hash,created_by)
+      values(p_native_employee_id,p_native_profile_id,p_native_organization_id,v_issuer_id,subject_hash,tenant_hash,p_actor_id);
   end if;
   insert into hub.tenant_product_memberships(tenant_id,product_id,user_id,role,case_scope,can_manage_members)
     values(p_hub_tenant_id,product,p_hub_user_id,'customer','own',false) on conflict do nothing;
@@ -128,6 +156,7 @@ begin
     'nativeEmployeeId',p_native_employee_id,'nativeProfileId',p_native_profile_id);
 end;
 $$;
+revoke all on function private.carebase_external_identity_hash(uuid),private.learning_receipt_identity_active(uuid,uuid,uuid,uuid) from public,anon,authenticated,service_role;
 
 create function hub.prepare_learning_receipt_mapping(p_actor_id uuid,p_session_id uuid,p_mapping_id uuid,p_source_snapshot_id uuid,
   p_native_organization_id uuid,p_native_employee_id uuid,p_hub_tenant_id uuid,p_hub_user_id uuid) returns jsonb
@@ -137,9 +166,7 @@ begin
   perform private.require_receipt_command_actor(p_actor_id,p_session_id);
   if p_mapping_id is null or p_native_organization_id is null or p_native_employee_id is null then
     raise exception 'Explicit source mapping identifiers required.' using errcode='22023'; end if;
-  if not exists(select 1 from private.learning_native_tenants t join private.learning_native_principals p
-    on p.native_organization_id=t.native_organization_id where t.native_organization_id=p_native_organization_id
-    and t.hub_tenant_id=p_hub_tenant_id and p.native_employee_id=p_native_employee_id and p.hub_user_id=p_hub_user_id) then
+  if not private.learning_receipt_identity_active(p_native_organization_id,p_native_employee_id,p_hub_tenant_id,p_hub_user_id) then
     raise exception 'Provision and review native tenant and principal access first.' using errcode='42501'; end if;
   select * into snapshot from private.learning_source_snapshots where id=p_source_snapshot_id;
   select id into product from hub.products where slug='penntrain' and status<>'retired';
@@ -196,7 +223,8 @@ begin
   select * into snapshot from private.learning_source_snapshots where id=mapping.source_snapshot_id;
   if mapping.id is null or snapshot.id is null
     or (receipt->>'kind'='completed' and (mapping.state<>'active'
-      or not private.receipt_membership_is_active(mapping.hub_tenant_id,mapping.hub_user_id,mapping.product_id)))
+      or not private.receipt_membership_is_active(mapping.hub_tenant_id,mapping.hub_user_id,mapping.product_id)
+      or not private.learning_receipt_identity_active(mapping.native_organization_id,mapping.native_employee_id,mapping.hub_tenant_id,mapping.hub_user_id)))
     or mapping.hub_tenant_id<>(receipt->>'hubTenantId')::uuid or mapping.hub_user_id<>(receipt->>'hubUserId')::uuid
     or snapshot.source_course_id<>(receipt->>'sourceCourseId')::uuid or snapshot.source_version_id<>(receipt->>'sourceVersionId')::uuid
     or snapshot.source_revision<>receipt->>'mappingRevision' then
@@ -243,8 +271,9 @@ begin
       'eventId',r.event_id,'mappingId',r.mapping_id,'completedAt',r.payload::jsonb->>'completedAt') order by r.accepted_at desc)
       from (select * from (select distinct on(assignment_id) * from private.learning_receipt_inbox order by assignment_id,sequence desc) latest
         order by accepted_at desc limit 100) r),'[]'::jsonb),
-    'tenants',coalesce((select jsonb_agg(jsonb_build_object('nativeOrganizationId',r.native_organization_id,'hubTenantId',r.hub_tenant_id,'name',t.name))
-      from (select * from private.learning_native_tenants order by created_at desc limit 100) r join hub.tenants t on t.id=r.hub_tenant_id),'[]'::jsonb),
+    'tenants',coalesce((select jsonb_agg(jsonb_build_object('nativeOrganizationId',r.native_organization_id,'hubTenantId',t.hub_tenant_id,'name',h.name))
+      from (select distinct native_organization_id,issuer_id,external_tenant_hash from private.learning_employee_bindings order by native_organization_id limit 100) r
+      join private.federated_tenants t on t.issuer_id=r.issuer_id and t.external_tenant_hash=r.external_tenant_hash join hub.tenants h on h.id=t.hub_tenant_id),'[]'::jsonb),
     'users',coalesce((select jsonb_agg(jsonb_build_object('id',p.id,'displayName',p.display_name)) from
       (select p.* from hub.profiles p join auth.users u on u.id=p.id where u.deleted_at is null and not coalesce(u.is_anonymous,false)
         and (u.banned_until is null or u.banned_until<=now()) order by p.created_at desc limit 100) p),'[]'::jsonb),

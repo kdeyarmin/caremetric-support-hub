@@ -17,7 +17,7 @@ select is((select enabled from private.case_intake_settings where tenant_id=pg_t
 select is((select role::text||'/'||case_scope::text||'/'||can_manage_members::text from hub.tenant_product_memberships where tenant_id=pg_temp.rid(10)),'customer/own/false','membership grants only product customer access');
 select lives_ok('select pg_temp.access()','same identity setup is idempotent');
 select throws_ok('select pg_temp.access(pg_temp.rid(3))','40001','Native principal cannot be repointed.','no automatic account merge or repointing');
-select throws_ok('select pg_temp.access(pg_temp.rid(2),pg_temp.rid(99))','40001','Native tenant cannot be repointed.','native organization cannot move to an unrelated tenant');
+select is(pg_temp.access(pg_temp.rid(2),pg_temp.rid(99))->>'hubTenantId',pg_temp.rid(10)::text,'exact native tenant mapping is reused and never repointed');
 insert into hub.content_items(id,content_key,kind,status,access_level,source_system)
 values(pg_temp.rid(14),'receipt.fixture','course','published','public','penntrain');
 insert into private.learning_source_snapshots(id,item_id,source_course_id,source_version_id,source_revision,sequence,publication_state,source_payload,staged_by)
