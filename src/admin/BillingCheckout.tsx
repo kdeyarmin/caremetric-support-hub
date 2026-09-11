@@ -10,7 +10,7 @@ import { PagedRecords } from "./PagedRecords";
 import { formatBillingMoney } from "./billingMoney";
 import { timeLabel } from "./readState";
 
-export const checkoutCadence = (interval: "month" | "year", count: number) => `Every ${count} ${interval}${count === 1 ? "" : "s"}`;
+const checkoutCadence = (interval: "month" | "year", count: number) => `Every ${count} ${interval}${count === 1 ? "" : "s"}`;
 const navigateToCheckout = (url: string) => window.location.assign(url);
 function failure(error: unknown) {
   const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";

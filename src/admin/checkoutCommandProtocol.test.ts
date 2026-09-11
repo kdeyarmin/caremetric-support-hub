@@ -73,7 +73,7 @@ describe("closed subscription checkout protocol", () => {
     const page = checkoutCatalog();
     expect(parseCheckoutCatalog(page, operation).items[0].baseAmountMinor).toBe("9223372036854775807");
     expect(parsePortfolioEnvelope(envelope(operation.operation, page), { product: "carebase", operation }).data).toEqual(page);
-    for (const amount of [9223372036854775807, "9223372036854775808", "1e3", "01", "-1", "1.50"]) {
+    for (const amount of [Number("9223372036854775807"), "9223372036854775808", "1e3", "01", "-1", "1.50"]) {
       expect(() => parseCheckoutCatalog({ ...page, items: [{ ...page.items[0], baseAmountMinor: amount }] }, operation)).toThrow();
     }
     expect(() => parseCheckoutCatalog({ ...page, providerAvailability: "available" }, operation)).toThrow();
