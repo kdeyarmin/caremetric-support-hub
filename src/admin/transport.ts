@@ -5,7 +5,7 @@ export class AdminApiError extends Error {
   readonly code: string;
   constructor(code: string) { super("Administrator request could not be completed."); this.code = code; }
 }
-export async function requestAdmin(functionName: "platform-admin" | "platform-command", body: unknown, signal: AbortSignal): Promise<unknown> {
+export async function requestAdmin(functionName: "platform-admin" | "platform-command" | "learning-receipts", body: unknown, signal: AbortSignal): Promise<unknown> {
   if (!supabase) throw new AdminApiError("unconfigured");
   const { data, error } = await supabase.auth.getSession();
   if (error || !data.session) throw new AdminApiError("401");

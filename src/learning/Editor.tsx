@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { Product } from "../domain";
 import { ImportPanel } from "./ImportPanel";
+import { ReceiptPanel } from "./ReceiptPanel";
 import { learningApi } from "./api";
 import { draftDocumentSchema, newDocument, newUnit, type Draft, type DraftDocument, type DraftUnit } from "./model";
 
@@ -16,7 +17,7 @@ export function CourseLibrary({ products }: { products: Product[] }) {
     try { const access = await learningApi.editorAccess(); const drafts = access ? await learningApi.drafts() : []; if (active) { setAllowed(access); setRows(drafts); setLoaded(true); } }
     catch (caught) { if (active) setError(message(caught)); }
   })(); return () => { active = false; }; }, []);
-  return <div className="learning-workspace"><nav className="learning-links"><Link to="/learn">Browse courses</Link><Link to="/learn/my">My learning</Link></nav><header><p className="eyebrow">Shared learning library</p><h1>Create once. Teach across CareMetric.</h1><p>Create courses, upload captioned video lessons, and publish to the products you choose. The Hub handles delivery, quizzes, and completion records.</p></header>{error && <p role="alert" className="learning-error">{error}</p>}{allowed && <Link className="button button-primary" to="/library/courses/new">Create course</Link>}{loaded && !allowed && <p>Course editing requires shared content permission and two-step verification.</p>}{allowed && !rows.length && <p>No course drafts yet.</p>}{rows.map(row => <article className="panel learning-notice" key={row.itemId}><div><h2>{row.title}</h2><p>{row.published ? "Published · working draft" : "Draft"} · revision {row.draftVersion}</p></div><Link className="button button-secondary" to={`/library/courses/${row.itemId}`}>Edit course</Link></article>)}{allowed && <ImportPanel products={products} onImported={async () => setRows(await learningApi.drafts())} />}</div>;
+  return <div className="learning-workspace"><nav className="learning-links"><Link to="/learn">Browse courses</Link><Link to="/learn/my">My learning</Link></nav><header><p className="eyebrow">Shared learning library</p><h1>Create once. Teach across CareMetric.</h1><p>Create courses, upload captioned video lessons, and publish to the products you choose. The Hub handles delivery, quizzes, and completion records.</p></header>{error && <p role="alert" className="learning-error">{error}</p>}{allowed && <Link className="button button-primary" to="/library/courses/new">Create course</Link>}{loaded && !allowed && <p>Course editing requires shared content permission and two-step verification.</p>}{allowed && !rows.length && <p>No course drafts yet.</p>}{rows.map(row => <article className="panel learning-notice" key={row.itemId}><div><h2>{row.title}</h2><p>{row.published ? "Published · working draft" : "Draft"} · revision {row.draftVersion}</p></div><Link className="button button-secondary" to={`/library/courses/${row.itemId}`}>Edit course</Link></article>)}{allowed && <><ImportPanel products={products} onImported={async () => setRows(await learningApi.drafts())} /><ReceiptPanel /></>}</div>;
 }
 
 export function CourseEditor({ products }: { products: Product[] }) {

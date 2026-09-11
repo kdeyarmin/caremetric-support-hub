@@ -105,8 +105,12 @@ export function createAdminGateway<T>({ publishableKey, fetcher = fetch }: Admin
         if (!response.ok) {
         let code = response.status === 401 ? "unauthenticated" : response.status === 403 ? "forbidden" : response.status === 404 ? "unconfigured" : "upstream";
         try {
-          const error = await readJson(response, 4096, signal) as { error?: { code?: string } };
+          const error = await readJson(response, 4096, signal) as { code?: string; error?: { code?: string } };
           if (error.error?.code && safeErrors.has(error.error.code)) code = error.error.code;
+          if (contract.commandErrors && error.code) {
+            const sqlErrors: Record<string, string> = { "42501": "forbidden", "40001": "conflict", "22023": "invalid_request", "P0002": "notfound" };
+            code = sqlErrors[error.code] ?? code;
+          }
         } catch { /* Never expose upstream pages, exception text, or credentials. */ }
           throw new GatewayError(code as SafeError);
         }
