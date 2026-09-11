@@ -5312,59 +5312,7 @@ revoke all on function private.billing_portal_actor(),private.billing_portal_int
 grant execute on function private.resume_billing_portal(uuid),private.reserve_billing_portal(jsonb),private.dispatch_billing_portal_preview(uuid),private.remember_billing_portal_preview(uuid,jsonb),
   private.claim_billing_portal(uuid,text),private.record_billing_portal_result(uuid,jsonb),private.discard_billing_portal(uuid) to hub_app_server;
 
--- 20260911195910_billing_portal_backend_contract.sql
--- Additive compatibility only: Stripe/native configuration remains runtime state.
-do $$
-declare signature text;
-begin
-  if to_regprocedure('hub.get_backend_contract()') is null then
-    raise exception 'Apply the reviewed billing portal foundation first' using errcode='55000';
-  end if;
-  if (hub.get_backend_contract() @> '{"api_version":4,"features":["learning.runtime.v1","platform.admin.read.v1","app.sms.v1","learning.sources.v1","platform.admin.command.v1","learning.receipts.v1","learning.authoring.v1","knowledge.publications.v1","support.readiness.v1","platform.admin.intel.v1","learning.draft-editing.v1"]}'::jsonb) is not true then
-    raise exception 'Apply the reviewed combined editing contract before billing portal declaration' using errcode='55000';
-  end if;
-  if to_regclass('private.billing_portal_intents') is null
-    or to_regtype('private.billing_portal_action') is null then
-    raise exception 'Apply the reviewed billing portal intent table and action enum first' using errcode='55000';
-  end if;
-  foreach signature in array array[
-    'hub.authorize_app_command()',
-    'private.current_app_session_verified()',
-    'private.billing_portal_actor()',
-    'private.billing_portal_intent_view(private.billing_portal_intents)',
-    'private.require_billing_portal_intent(uuid)',
-    'private.resume_billing_portal(uuid)',
-    'private.reserve_billing_portal(jsonb)',
-    'private.dispatch_billing_portal_preview(uuid)',
-    'private.remember_billing_portal_preview(uuid,jsonb)',
-    'private.claim_billing_portal(uuid,text)',
-    'private.record_billing_portal_result(uuid,jsonb)',
-    'private.discard_billing_portal(uuid)'
-  ] loop
-    if to_regprocedure(signature) is null then
-      raise exception 'Apply reviewed billing portal migration first; missing function %',signature using errcode='55000';
-    end if;
-  end loop;
-  if enum_range(null::private.billing_portal_action)::text[] is distinct from array['billing.portal.create']::text[]
-    or not exists(select 1 from pg_catalog.pg_attribute a
-      where a.attrelid='private.billing_portal_intents'::regclass and a.attname='action'
-        and not a.attisdropped and a.attnotnull and a.atttypid='private.billing_portal_action'::regtype)
-    or position('''billing.portal.create''' in pg_catalog.pg_get_functiondef('private.reserve_billing_portal(jsonb)'::regprocedure))=0 then
-    raise exception 'Apply the reviewed closed billing portal action contract first' using errcode='55000';
-  end if;
-end;
-$$;
-create or replace function hub.get_backend_contract() returns jsonb
-language sql stable security invoker set search_path='' as $$
-  select jsonb_build_object('api_version',4,'features',jsonb_build_array(
-    'learning.runtime.v1','platform.admin.read.v1','app.sms.v1','learning.sources.v1',
-    'platform.admin.command.v1','learning.receipts.v1','learning.authoring.v1',
-    'knowledge.publications.v1','support.readiness.v1','platform.admin.intel.v1',
-    'learning.draft-editing.v1','billing.portal.v1'));
-$$;
-revoke all on function hub.get_backend_contract() from public;
-grant execute on function hub.get_backend_contract() to anon,authenticated;
-
+-- 20260911193000_support_customer_onboarding.sql
 -- Operator-reviewed native account proof. This migration provisions no users,
 -- memberships, mappings or case intake. The HTTP coordinator alone supplies
 -- freshly resolved native facts; browsers cannot call these SQL functions.
@@ -5578,6 +5526,60 @@ revoke all on function hub.prepare_support_onboarding(uuid,uuid,jsonb,uuid,text)
 grant execute on function hub.prepare_support_onboarding(uuid,uuid,jsonb,uuid,text),hub.inspect_support_onboarding(uuid,uuid,uuid,text,uuid),
   hub.apply_support_onboarding(uuid,uuid,uuid,text,uuid,jsonb,boolean) to hub_app_server;
 
+-- 20260911195910_billing_portal_backend_contract.sql
+-- Additive compatibility only: Stripe/native configuration remains runtime state.
+do $$
+declare signature text;
+begin
+  if to_regprocedure('hub.get_backend_contract()') is null then
+    raise exception 'Apply the reviewed billing portal foundation first' using errcode='55000';
+  end if;
+  if (hub.get_backend_contract() @> '{"api_version":4,"features":["learning.runtime.v1","platform.admin.read.v1","app.sms.v1","learning.sources.v1","platform.admin.command.v1","learning.receipts.v1","learning.authoring.v1","knowledge.publications.v1","support.readiness.v1","platform.admin.intel.v1","learning.draft-editing.v1"]}'::jsonb) is not true then
+    raise exception 'Apply the reviewed combined editing contract before billing portal declaration' using errcode='55000';
+  end if;
+  if to_regclass('private.billing_portal_intents') is null
+    or to_regtype('private.billing_portal_action') is null then
+    raise exception 'Apply the reviewed billing portal intent table and action enum first' using errcode='55000';
+  end if;
+  foreach signature in array array[
+    'hub.authorize_app_command()',
+    'private.current_app_session_verified()',
+    'private.billing_portal_actor()',
+    'private.billing_portal_intent_view(private.billing_portal_intents)',
+    'private.require_billing_portal_intent(uuid)',
+    'private.resume_billing_portal(uuid)',
+    'private.reserve_billing_portal(jsonb)',
+    'private.dispatch_billing_portal_preview(uuid)',
+    'private.remember_billing_portal_preview(uuid,jsonb)',
+    'private.claim_billing_portal(uuid,text)',
+    'private.record_billing_portal_result(uuid,jsonb)',
+    'private.discard_billing_portal(uuid)'
+  ] loop
+    if to_regprocedure(signature) is null then
+      raise exception 'Apply reviewed billing portal migration first; missing function %',signature using errcode='55000';
+    end if;
+  end loop;
+  if enum_range(null::private.billing_portal_action)::text[] is distinct from array['billing.portal.create']::text[]
+    or not exists(select 1 from pg_catalog.pg_attribute a
+      where a.attrelid='private.billing_portal_intents'::regclass and a.attname='action'
+        and not a.attisdropped and a.attnotnull and a.atttypid='private.billing_portal_action'::regtype)
+    or position('''billing.portal.create''' in pg_catalog.pg_get_functiondef('private.reserve_billing_portal(jsonb)'::regprocedure))=0 then
+    raise exception 'Apply the reviewed closed billing portal action contract first' using errcode='55000';
+  end if;
+end;
+$$;
+create or replace function hub.get_backend_contract() returns jsonb
+language sql stable security invoker set search_path='' as $$
+  select jsonb_build_object('api_version',4,'features',jsonb_build_array(
+    'learning.runtime.v1','platform.admin.read.v1','app.sms.v1','learning.sources.v1',
+    'platform.admin.command.v1','learning.receipts.v1','learning.authoring.v1',
+    'knowledge.publications.v1','support.readiness.v1','platform.admin.intel.v1',
+    'learning.draft-editing.v1','billing.portal.v1'));
+$$;
+revoke all on function hub.get_backend_contract() from public;
+grant execute on function hub.get_backend_contract() to anon,authenticated;
+
+-- 20260911200100_support_customer_onboarding_contract.sql
 -- Keep the deployed feature union, including any independently reviewed feature.
 do $migration$
 declare signature text; contract jsonb;
@@ -5609,6 +5611,7 @@ $migration$;
 revoke all on function hub.get_backend_contract() from public;
 grant execute on function hub.get_backend_contract() to anon,authenticated;
 
+-- 20260911202021_learning_structure_intents.sql
 -- Extend exact source-bound authoring to atomic lesson and assessment edits.
 create or replace function private.learning_authoring_actions() returns text[]
 language sql immutable security invoker set search_path='' as $$
@@ -5699,6 +5702,7 @@ begin
 end;
 $$;
 
+-- 20260911202823_learning_structure_backend_contract.sql
 -- The structure editor needs atomic native intents and readable incomplete drafts.
 do $$
 declare signature text;
@@ -6081,7 +6085,7 @@ grant execute on function private.resume_billing_checkout(uuid),private.reserve_
   private.remember_billing_checkout_preview(uuid,jsonb),private.claim_billing_checkout(uuid,text,boolean),
   private.record_billing_checkout_result(uuid,uuid,jsonb),private.claim_billing_checkout_recovery(uuid),private.remember_billing_checkout_recovery(uuid,uuid,jsonb),private.discard_billing_checkout(uuid) to hub_app_server;
 
-
+-- 20260911203000_support_customer_registration.sql
 -- Invited first-use SMS registration creates no app access. The current native
 -- relationship must be reviewed again through customer onboarding before linking.
 create table private.support_registration_reviews (
@@ -6317,6 +6321,7 @@ grant execute on function private.start_registration_challenge(text,text,text,te
   hub.issue_support_registration(uuid,uuid,uuid,text,uuid,text,jsonb,boolean),hub.list_support_registrations(uuid,uuid,integer),
   hub.revoke_support_registration(uuid,uuid,uuid,boolean) to hub_app_server;
 
+-- 20260911203050_carebase_customer_onboarding.sql
 -- Extend the reviewed customer pairing path to nonemployee CareBase accounts.
 -- Reuse CareBase's canonical issuer, native UUID hashes and tenant lock namespace.
 -- This performs no provisioning at migration time and writes no learning evidence.
@@ -6482,7 +6487,7 @@ begin
   return v_result;
 end; $$;
 
-
+-- 20260911203100_support_customer_registration_contract.sql
 -- Registration is separate from granting app access. Preserve every reviewed
 -- feature already present, including course controls released independently.
 do $migration$
@@ -6583,4 +6588,3 @@ end;
 $declaration$;
 revoke all on function hub.get_backend_contract() from public;
 grant execute on function hub.get_backend_contract() to anon,authenticated;
-
