@@ -93,7 +93,7 @@ language sql stable security definer set search_path='' as $$
 $$;
 create function private.docstudio_validate(p_body jsonb) returns void
 language plpgsql stable security definer set search_path='' as $$
-declare s jsonb; a jsonb; n integer:=0; duration integer:=0; total bigint:=0;
+declare v_scene jsonb; v_asset jsonb; n integer:=0; duration integer:=0; total bigint:=0;
 begin
  if jsonb_typeof(p_body) is distinct from 'object' or octet_length(p_body::text)>1000000
   or coalesce(p_body->>'kind','') not in ('article','video') or coalesce(p_body->>'accessLevel','') not in ('public','customer','staff')
@@ -110,24 +110,24 @@ begin
   if length(trim(p_body->>'markdown'))=0 or jsonb_array_length(p_body->'scenes')<>0 or jsonb_array_length(p_body->'assets')<>0 or p_body ? 'narrationAssetId' then raise exception 'Invalid article' using errcode='22023'; end if;
  else
   if p_body->>'markdown'<>'' or jsonb_array_length(p_body->'scenes')=0 then raise exception 'Invalid video' using errcode='22023'; end if;
-  for s in select value from jsonb_array_elements(p_body->'scenes') loop
+  for v_scene in select value from jsonb_array_elements(p_body->'scenes') loop
    n:=n+1;
-   if (s->>'order')::integer<>n or coalesce(s->>'type','') not in ('intro','step','outro') or (s->>'durationSeconds')::integer not between 3 and 120
-    or length(coalesce(s->>'title','')) not between 1 and 180 or length(coalesce(s->>'narration','')) not between 1 and 4000
-    or length(coalesce(s->>'captionText','')) not between 1 and 2000
-    or exists(select 1 from jsonb_object_keys(s) k where k not in ('order','type','durationSeconds','title','narration','captionText','screenshotAssetId')) then raise exception 'Invalid scene' using errcode='22023'; end if;
-   duration:=duration+(s->>'durationSeconds')::integer;
-   if s ? 'screenshotAssetId' and not exists(select 1 from jsonb_array_elements(p_body->'assets') x where x->>'id'=s->>'screenshotAssetId' and x->>'mediaType' in ('image/png','image/jpeg')) then raise exception 'Invalid image reference' using errcode='22023'; end if;
+   if (v_scene->>'order')::integer<>n or coalesce(v_scene->>'type','') not in ('intro','step','outro') or (v_scene->>'durationSeconds')::integer not between 3 and 120
+    or length(coalesce(v_scene->>'title','')) not between 1 and 180 or length(coalesce(v_scene->>'narration','')) not between 1 and 4000
+    or length(coalesce(v_scene->>'captionText','')) not between 1 and 2000
+    or exists(select 1 from jsonb_object_keys(v_scene) k where k not in ('order','type','durationSeconds','title','narration','captionText','screenshotAssetId')) then raise exception 'Invalid scene' using errcode='22023'; end if;
+   duration:=duration+(v_scene->>'durationSeconds')::integer;
+   if v_scene ? 'screenshotAssetId' and not exists(select 1 from jsonb_array_elements(p_body->'assets') x where x->>'id'=v_scene->>'screenshotAssetId' and x->>'mediaType' in ('image/png','image/jpeg')) then raise exception 'Invalid image reference' using errcode='22023'; end if;
   end loop;
   if duration>3600 then raise exception 'Video too long' using errcode='22023'; end if;
   if p_body ? 'narrationAssetId' and not exists(select 1 from jsonb_array_elements(p_body->'assets') x where x->>'id'=p_body->>'narrationAssetId' and x->>'mediaType' in ('audio/mpeg','audio/wav')) then raise exception 'Invalid narration reference' using errcode='22023'; end if;
   if (select count(distinct value->>'id') from jsonb_array_elements(p_body->'assets'))<>jsonb_array_length(p_body->'assets') then raise exception 'Duplicate asset' using errcode='22023'; end if;
-  for a in select value from jsonb_array_elements(p_body->'assets') loop
-   if coalesce(a->>'sha256','') !~ '^[0-9a-f]{64}$' or coalesce(a->>'mediaType','') not in ('image/png','image/jpeg','audio/mpeg','audio/wav')
-    or (a->>'byteLength')::integer not between 1 and 33554432 or (a->>'id')::uuid is null
-    or exists(select 1 from jsonb_object_keys(a) k where k not in ('id','sha256','byteLength','mediaType'))
-    or (not exists(select 1 from jsonb_array_elements(p_body->'scenes') s where s->>'screenshotAssetId'=a->>'id') and (p_body->>'narrationAssetId') is distinct from (a->>'id')) then raise exception 'Invalid source asset' using errcode='22023'; end if;
-   total:=total+(a->>'byteLength')::integer;
+  for v_asset in select value from jsonb_array_elements(p_body->'assets') loop
+   if coalesce(v_asset->>'sha256','') !~ '^[0-9a-f]{64}$' or coalesce(v_asset->>'mediaType','') not in ('image/png','image/jpeg','audio/mpeg','audio/wav')
+    or (v_asset->>'byteLength')::integer not between 1 and 33554432 or (v_asset->>'id')::uuid is null
+    or exists(select 1 from jsonb_object_keys(v_asset) k where k not in ('id','sha256','byteLength','mediaType'))
+    or (not exists(select 1 from jsonb_array_elements(p_body->'scenes') scene_ref where scene_ref->>'screenshotAssetId'=v_asset->>'id') and (p_body->>'narrationAssetId') is distinct from (v_asset->>'id')) then raise exception 'Invalid source asset' using errcode='22023'; end if;
+   total:=total+(v_asset->>'byteLength')::integer;
   end loop;
   if total>33554432 then raise exception 'Assets too large' using errcode='P4130'; end if;
  end if;
