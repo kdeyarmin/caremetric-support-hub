@@ -162,6 +162,15 @@ try {
  assert.equal((await worker('complete',{...complete,durationMs:6000})).status,400);
  assert.equal((await worker('complete',complete)).status,200);assert.equal((await worker('complete',complete)).status,200,'completion retry returns prior result');
  assert.equal((await call('docstudio/export',{projectId:vid,expectedRevision:1,requestId:randomUUID(),reviewConfirmed:true})).status,200);
+ // Retention removes an abandoned attempt but preserves completed output and
+ // every source referenced by an immutable revision, even when they are old.
+ const abandonedPath=`hub-docstudio/renders/${imageJob.manifest.jobId}/1/primary`;
+ objects.set(abandonedPath,{bytes:primary,type:'video/mp4'});
+ await admin.query("insert into private.docstudio_outputs(job_id,attempt,part,sha256,byte_length,media_type,verified_at) values($1,1,'primary',$2,$3,'video/mp4',now())",[imageJob.manifest.jobId,digest(primary),primary.length]);
+ await admin.query("update private.docstudio_jobs set created_at=now()-interval '8 days' where id=any($1::uuid[])",[[imageJob.manifest.jobId,render.jobId]]);
+ await studio.cleanupExpired();assert.equal(objects.has(abandonedPath),false);
+ for(const output of outputs)assert.equal(objects.has(`hub-docstudio/renders/${render.jobId}/1/${output.kind}`),true,'completed render bytes remain immutable');
+ assert.equal(objects.has(`hub-docstudio/assets/${assetsId}/${imageAsset.id}`),true);
  await command('edit',vid,1,{...video,title:'New render revision'});await command('submit',vid,2);await command('approve',vid,2);await command('render',vid,2);
  const stale=(await worker('claim')).body.job;
  await admin.query("update private.docstudio_jobs set lease_expires_at=now()-interval '1 second' where id=$1",[stale.manifest.jobId]);
