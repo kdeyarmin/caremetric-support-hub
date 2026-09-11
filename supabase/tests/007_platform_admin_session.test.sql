@@ -3,8 +3,8 @@ select plan(14);
 
 insert into auth.users (id,aud,role,email,email_confirmed_at,is_anonymous,created_at,updated_at)
 values ('99000000-0000-4000-8000-000000000001','authenticated','authenticated','platform-session@test.invalid',now(),false,now(),now());
-insert into hub.profiles (id,display_name)
-values ('99000000-0000-4000-8000-000000000001','Platform session test');
+update hub.profiles set display_name='Platform session test'
+where id='99000000-0000-4000-8000-000000000001';
 insert into private.staff_permissions (user_id,permission,product_id)
 values ('99000000-0000-4000-8000-000000000001','platform.admin',null);
 insert into auth.mfa_factors (id,user_id,factor_type,status,created_at,updated_at)
