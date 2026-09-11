@@ -4,9 +4,10 @@ import { onboardingPreview, onboardingRequest, onboardingResult, onboardingProdu
 
 const labels = {breathe:'CareMetric Breathe','caremetric-emr':'CareMetric EMR','caremetric-go':'CareMetric Go',pennsync:'PennSync',intel:'CareMetric Intel'};
 const send = (body:unknown,signal:AbortSignal) => appRequest('admin/onboarding',body,signal);
-export function CustomerOnboarding({onLinked,request=send}:{onLinked:()=>void;request?:typeof send}) {
-  const [product,setProduct]=useState<typeof onboardingProducts[number]>('breathe');
-  const [user,setUser]=useState(''),[account,setAccount]=useState(''),[hubUser,setHubUser]=useState(''),[name,setName]=useState('');
+export interface OnboardingInitial {product:typeof onboardingProducts[number];sourceUserId:string;sourceAccountId:string;hubUserId:string;tenantName:string;}
+export function CustomerOnboarding({onLinked,request=send,initial}:{onLinked:()=>void;request?:typeof send;initial?:OnboardingInitial}) {
+  const [product,setProduct]=useState<typeof onboardingProducts[number]>(initial?.product??'breathe');
+  const [user,setUser]=useState(initial?.sourceUserId??''),[account,setAccount]=useState(initial?.sourceAccountId??''),[hubUser,setHubUser]=useState(initial?.hubUserId??''),[name,setName]=useState(initial?.tenantName??'');
   const [preview,setPreview]=useState<OnboardingPreview|null>(null),[reviewed,setReviewed]=useState(false),[busy,setBusy]=useState(false);
   const [error,setError]=useState(''),[message,setMessage]=useState(''),[expired,setExpired]=useState(false);
   const active=useRef<AbortController|null>(null),requestId=useRef<string|null>(null);

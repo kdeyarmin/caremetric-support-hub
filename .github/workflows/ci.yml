@@ -92,6 +92,7 @@ jobs:
           node server/learning-integration.mjs
           node server/support-integration.mjs
           node server/onboarding-integration.mjs
+          node server/registration-integration.mjs
           node server/authoring-integration.mjs
           node server/publication-integration.mjs
       - name: Check database security and performance advisors

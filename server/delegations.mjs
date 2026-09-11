@@ -11,6 +11,7 @@ import { nativeAuthoringOperationSchema } from '../src/learning/authoringProtoco
 import { learningAuthoring } from './learning-authoring.mjs';
 import { supportIdentityOperation } from '../src/support/onboardingProtocol.ts';
 import { supportOnboarding } from './support-onboarding.mjs';
+import { supportRegistration } from './support-registration.mjs';
 
 const prefix = 'cmh_';
 export const validDelegation = value => typeof value==='string' && /^cmh_[A-Za-z0-9_-]{43}$/.test(value);
@@ -30,7 +31,7 @@ async function authorize(db,audience,payload) {
     return {...asset,range:range?.header ?? null};
   }
   if (['carebase','breathe','caremetric-emr','pennsync','caremetric-go','intel'].includes(audience)) {
-    if(audience!=='carebase' && payload?.operation==='support.identity.resolve') {
+    if(payload?.operation==='support.identity.resolve') {
       supportIdentityOperation.parse(payload);
       await db.query('select hub.authorize_app_command()');
       return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
@@ -51,7 +52,7 @@ async function authorize(db,audience,payload) {
   if (!(await db.query('select hub.authorize_learning_object($1,$2) as allowed',[payload.path,payload.operation])).rows[0].allowed) throw new HttpError(403,'Media access denied.');
   return payload;
 }
-export function delegations({pool,storageUrl,fetchImpl=fetch}) {
+export function delegations({pool,storageUrl,provider,fetchImpl=fetch}) {
   const issue = async (sessionToken,audience,payload) => {
     return withSession(pool,sessionToken,async(db,session) => {
       await authorize(db,audience,payload);
@@ -67,6 +68,7 @@ export function delegations({pool,storageUrl,fetchImpl=fetch}) {
     learning: learningReceipts({pool,issue,fetchImpl}),
     authoring: learningAuthoring({pool,issue,fetchImpl}),
     onboarding: supportOnboarding({pool,issue,fetchImpl}),
+    registration: supportRegistration({pool,issue,provider,fetchImpl}),
     async consume(capability,audience) {
       if (!validDelegation(capability)) throw new HttpError(401,'Invalid authorization.');
       return transaction(pool,async db => {

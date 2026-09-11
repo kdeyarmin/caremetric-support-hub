@@ -14,7 +14,7 @@ const provider=smsProvider({apiKey:process.env.HUB_TELNYX_API_KEY,profileId:proc
 const api=gateway(pool);
 const contract=await api.rpc('get_backend_contract',{});
 assertBackendContract(contract);
-const capabilities=delegations({pool,storageUrl});
+const capabilities=delegations({pool,storageUrl,provider});
 const publicationService=publications({pool,delegations:capabilities,storageUrl});
 const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:capabilities,publications:publicationService,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
 let cleanupRunning=false;
