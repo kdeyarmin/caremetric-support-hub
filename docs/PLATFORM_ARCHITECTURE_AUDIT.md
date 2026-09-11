@@ -12,7 +12,8 @@ administration are unimplemented.
 The Hub frontend, central learning migration, administrator authorization RPC,
 and administrator Edge Function are deployed. `/admin` includes the audited app
 inventory and a read-only CareBase adapter client. The CareBase server change is
-merged; deployment and the owner's MFA-authorized connection await verification.
+deployed; health and anonymous-denial probes passed. The owner's MFA-authorized
+connection still awaits verification.
 Stages 0 and 1 therefore remain incomplete at their real-administrator acceptance
 gates. Stage 2 has a deployed runtime for **new Hub courses**; existing CareBase
 courses retain their native runtime, and imported drafts are blocked from

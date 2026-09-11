@@ -39,7 +39,14 @@ Verification recorded for this release:
 
 CareBase PR [#517](https://github.com/kdeyarmin/PennTrain/pull/517) merged as
 `4e7e1a6dc586f3dfe7a2c5c0f60b1cf535eb8124`. Its Railway deployment
-`616e7e4b` is awaiting verification; the adapter is not yet certified live.
+`616e7e4b-8b69-4a33-b3c5-7ec5f5c418a1` reached `SUCCESS`; its healthcheck passed
+at 15:06 UTC. Live `/health` returned `200` with the existing Supabase provider
+runtime, and the public frontend and script asset returned `200`. An anonymous
+POST to `/api/platform-admin/read` returned JSON `401 unauthenticated`; a POST
+with a browser Origin returned JSON `403 forbidden`. Both used `no-store` and
+exposed no CORS allowance. The [post-CI backend deployment](https://github.com/kdeyarmin/PennTrain/actions/runs/34613550719)
+also succeeded. These probes establish deployed behavior, not a successful
+privileged Hub-to-CareBase session.
 The [CareBase main-branch CI run 34612563342](https://github.com/kdeyarmin/PennTrain/actions/runs/34612563342)
 passed for that merge; CI success alone does not establish production readiness.
 The owner must complete Hub TOTP enrollment and verify the authorized connection

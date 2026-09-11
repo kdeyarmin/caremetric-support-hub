@@ -22,8 +22,8 @@ administration, shared course authoring, and consolidated SaaS billing, see
 [the platform architecture audit](docs/PLATFORM_ARCHITECTURE_AUDIT.md).
 The deployed Hub includes `/admin`, a searchable inventory of 97 app functions,
 a read-only CareBase adapter client, and the central learning pilot. The CareBase
-server adapter is merged; its deployment and the authenticated connection are
-awaiting verification. See
+server adapter is deployed and its health and anonymous-denial probes passed;
+the authenticated connection still requires owner-session verification. See
 [the administrator connection](docs/CENTRAL_ADMIN_PILOT.md) and
 [central learning](docs/CENTRAL_LEARNING.md) for their exact scope and deployment
 order. Billing mutations, customer SSO, remaining app adapters, and CareBase
