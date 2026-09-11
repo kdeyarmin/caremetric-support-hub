@@ -1,13 +1,14 @@
 import { isUuid, parseAdminEnvelope, parseAdminOperation, type AdminOperation } from "./adminProtocol.ts";
 import { billingReadOperations, parseBillingData, parseBillingOperation } from "./billingProtocol.ts";
 import type { AdminInvoiceDetail, AdminInvoicePage, AdminSubscriptionVerification, BillingReadOperation } from "./billingProtocol.ts";
+import { parseCheckoutCatalog, type BillingCatalogOperation, type BillingPackagePage } from "./checkoutCatalogProtocol.ts";
 
 export const portfolioProducts = ["carebase", "breathe", "caremetric-emr", "pennsync", "intel", "caremetric-go"] as const;
 export type PortfolioProduct = typeof portfolioProducts[number];
-export const portfolioOperations = ["capabilities", "overview", "courses.list", "courses.get", "organizations.list", "users.list", "billing.overview", "billing.subscriptions.list", ...billingReadOperations, "commands.preview", "commands.apply", "billing.commands.preview", "billing.commands.apply", "support.identity.resolve"] as const;
+export const portfolioOperations = ["capabilities", "overview", "courses.list", "courses.get", "organizations.list", "users.list", "billing.overview", "billing.subscriptions.list", ...billingReadOperations, "billing.packages.list", "commands.preview", "commands.apply", "billing.commands.preview", "billing.commands.apply", "billing.checkout.preview", "billing.checkout.apply", "billing.checkout.check", "billing.checkout.recover", "support.identity.resolve"] as const;
 export type PortfolioOperationName = typeof portfolioOperations[number];
 export type DirectoryOperation = { operation: "organizations.list" | "users.list" | "billing.subscriptions.list"; search?: string; limit: number; offset: number };
-export type PortfolioOperation = AdminOperation | DirectoryOperation | BillingReadOperation | { operation: "capabilities" | "billing.overview" };
+export type PortfolioOperation = AdminOperation | DirectoryOperation | BillingReadOperation | BillingCatalogOperation | { operation: "capabilities" | "billing.overview" };
 export interface PortfolioRequest { product: PortfolioProduct; operation: PortfolioOperation; }
 export interface PortfolioCapabilities { apiVersion: 1; operations: PortfolioOperationName[]; sourceRevision: string | null; }
 export interface PortfolioOverview { organizationCount: number | null; activeUserCount: number | null; registeredUserCount?: number; globalCourseCount?: number; subscriptionCount?: number; }
@@ -57,7 +58,12 @@ export function parsePortfolioRequest(input: unknown): PortfolioRequest {
   const { product = "carebase", ...operation } = row;
   if (!portfolioProducts.includes(product as PortfolioProduct)) throw new Error("Unsupported application");
   let parsed: PortfolioOperation;
-  if (billingReadOperations.includes(operation.operation as typeof billingReadOperations[number])) {
+  if (operation.operation === "billing.packages.list") {
+    if (product !== "carebase") throw new Error("Unsupported application checkout catalog");
+    const page = parseAdminOperation({ ...operation, operation: "courses.list" });
+    if (page.operation !== "courses.list") throw new Error("Invalid checkout pagination");
+    parsed = { ...page, operation: "billing.packages.list" };
+  } else if (billingReadOperations.includes(operation.operation as typeof billingReadOperations[number])) {
     if (product !== "carebase") throw new Error("Unsupported application billing read");
     parsed = parseBillingOperation(operation);
   } else if (operation.operation === "capabilities" || operation.operation === "billing.overview") {
@@ -107,8 +113,11 @@ export function parsePortfolioEnvelope(input: unknown, request: PortfolioRequest
     return parseAdminEnvelope(input, operation as AdminOperation);
   }
   const row = object(envelope.data);
-  let data: PortfolioCapabilities | PortfolioOverview | AdminPage<AdminOrganization> | AdminPage<AdminDirectoryUser> | AdminSubscriptionPage | AdminBillingOverview | AdminInvoicePage | AdminInvoiceDetail | AdminSubscriptionVerification;
-  if (billingReadOperations.includes(operation.operation as typeof billingReadOperations[number])) {
+  let data: PortfolioCapabilities | PortfolioOverview | AdminPage<AdminOrganization> | AdminPage<AdminDirectoryUser> | AdminSubscriptionPage | AdminBillingOverview | AdminInvoicePage | AdminInvoiceDetail | AdminSubscriptionVerification | BillingPackagePage;
+  if (operation.operation === "billing.packages.list") {
+    if (product !== "carebase" || Object.keys(envelope).length !== 5) throw new Error("Invalid checkout catalog envelope");
+    data = parseCheckoutCatalog(row, operation);
+  } else if (billingReadOperations.includes(operation.operation as typeof billingReadOperations[number])) {
     if (product !== "carebase") throw new Error("Unsupported application billing read");
     data = parseBillingData(row, operation as BillingReadOperation, value => subscription(value, product));
   } else if (operation.operation === "capabilities") {
