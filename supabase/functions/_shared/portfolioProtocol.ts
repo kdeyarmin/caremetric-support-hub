@@ -10,7 +10,7 @@ export type DirectoryOperation = { operation: "organizations.list" | "users.list
 export type PortfolioOperation = AdminOperation | DirectoryOperation | BillingReadOperation | { operation: "capabilities" | "billing.overview" };
 export interface PortfolioRequest { product: PortfolioProduct; operation: PortfolioOperation; }
 export interface PortfolioCapabilities { apiVersion: 1; operations: PortfolioOperationName[]; sourceRevision: string | null; }
-export interface PortfolioOverview { organizationCount: number; activeUserCount: number | null; registeredUserCount?: number; globalCourseCount?: number; subscriptionCount?: number; }
+export interface PortfolioOverview { organizationCount: number | null; activeUserCount: number | null; registeredUserCount?: number; globalCourseCount?: number; subscriptionCount?: number; }
 export interface AdminOrganization { id: string; name: string | null; slug: string | null; status: string; createdAt: string | null; }
 export interface AdminDirectoryUser { id: string; displayName: string | null; email: string | null; role: string; status: string; createdAt: string | null; }
 export interface AdminSubscription {
@@ -37,8 +37,8 @@ function count(value: unknown): number {
 }
 function id(value: unknown): string { if (!isUuid(value)) throw new Error("Invalid administration contract"); return value.toLowerCase(); }
 function entityId(value: unknown, product: PortfolioProduct): string {
-  if (product !== "pennsync") return id(value);
-  if (typeof value !== "string" || !/^[0-9a-f]{24}$/.test(value)) throw new Error("Invalid PennSync identity");
+  if (product !== "pennsync" && product !== "intel") return id(value);
+  if (typeof value !== "string" || !/^[0-9a-f]{24}$/.test(value)) throw new Error("Invalid native application identity");
   return value;
 }
 function timestamp(value: unknown): string | null {
@@ -82,6 +82,7 @@ function organization(value: unknown, product: PortfolioProduct): AdminOrganizat
 }
 function user(value: unknown, product: PortfolioProduct): AdminDirectoryUser {
   const row = object(value);
+  if (product === "intel" && row.status !== "registered") throw new Error("Unverified Intel account activity");
   // Breathe's native identity column is TEXT; legacy IDs must retain their case.
   const userId = product === "breathe" ? string(row.id, 128) : entityId(row.id, product);
   if (product === "breathe" && !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(userId)) throw new Error("Invalid native identity");
@@ -115,6 +116,9 @@ export function parsePortfolioEnvelope(input: unknown, request: PortfolioRequest
     const revision = nullableString(row.sourceRevision, 64);
     if (revision !== null && !/^[a-f0-9]{7,64}$/i.test(revision)) throw new Error("Invalid source revision");
     data = { apiVersion: 1, operations: [...new Set(row.operations.filter(value => portfolioOperations.includes(value as PortfolioOperationName)))] as PortfolioOperationName[], sourceRevision: revision };
+  } else if (operation.operation === "overview" && product === "intel") {
+    if (row.organizationCount !== null || row.activeUserCount !== null || row.subscriptionCount !== undefined) throw new Error("Unverified Intel totals");
+    data = { organizationCount: null, activeUserCount: null, registeredUserCount: count(row.registeredUserCount) };
   } else if (operation.operation === "overview" && product === "breathe") {
     data = { organizationCount: count(row.organizationCount), activeUserCount: count(row.activeUserCount), subscriptionCount: count(row.subscriptionCount) };
   } else if (operation.operation === "overview" && (product === "caremetric-emr" || product === "caremetric-go" || product === "pennsync")) {
