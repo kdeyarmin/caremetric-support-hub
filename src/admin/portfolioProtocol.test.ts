@@ -90,12 +90,27 @@ describe("portfolio proxy routing", () => {
     expect(fetcher.mock.calls[1][1]?.headers).not.toHaveProperty("apikey");
     expect(await response.json()).toEqual(envelope("users.list", { ...page, items: [staff] }));
   });
-  it.each(["intel", "caremetric-go"])("never sends the user token to an unconfigured %s connection", async product => {
+  it.each(["intel"])("never sends the user token to an unconfigured %s connection", async product => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(actor));
     const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product, operation: "capabilities" }));
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: { code: "unconfigured" } });
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it("routes Go to its independent adapter while preserving shared EMR data semantics", async () => {
+    const data = { organizationCount: 2, activeUserCount: null, registeredUserCount: 8, subscriptionCount: 3 };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(actor)).mockResolvedValueOnce(Response.json(envelope("overview", data, "caremetric-go")));
+    const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product: "caremetric-go", operation: "overview" }));
+    expect(response.status).toBe(200);
+    expect(fetcher.mock.calls[1][0]).toBe("https://ubbtgcaosuebrlwcvihw.supabase.co/functions/v1/central-go-admin-read");
+    expect((await response.json()).data).toEqual(data);
+    expect(() => parse("overview", { ...data, activeUserCount: 8 }, "caremetric-go")).toThrow();
+  });
+  it("does not accept EMR's response as Go even though both use the same database", async () => {
+    const data = { organizationCount: 2, activeUserCount: null, registeredUserCount: 8, subscriptionCount: 3 };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(actor)).mockResolvedValueOnce(Response.json(envelope("overview", data, "caremetric-emr")));
+    const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product: "caremetric-go", operation: "overview" }));
+    expect(response.status).toBe(503);
   });
   it("does not accept a valid response from the wrong application", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(actor)).mockResolvedValueOnce(Response.json(envelope("organizations.list", { ...page, items: [organization] }, "carebase")));

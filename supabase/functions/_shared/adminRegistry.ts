@@ -7,5 +7,5 @@ export const adminRegistry: Record<PortfolioProduct, { name: string; endpoint: s
   "caremetric-emr": { name: "CareMetric EMR", endpoint: "https://ubbtgcaosuebrlwcvihw.supabase.co/functions/v1/central-admin-read", userScope: "Registered staff profiles · application entitlements" },
   pennsync: { name: "PennSync", endpoint: "https://caremetricai.base44.app/functions/centralAdminRead", authorizationHeader: "X-CareMetric-Hub-Authorization", userScope: "Registered administrators and agency members · individual subscriptions" },
   intel: { name: "CareMetric Intel", endpoint: null, userScope: "Connection pending" },
-  "caremetric-go": { name: "CareMetric Go", endpoint: null, userScope: "Connection pending" },
+  "caremetric-go": { name: "CareMetric Go", endpoint: "https://ubbtgcaosuebrlwcvihw.supabase.co/functions/v1/central-go-admin-read", userScope: "Organizations, staff and application entitlements shared with CareMetric EMR" },
 };

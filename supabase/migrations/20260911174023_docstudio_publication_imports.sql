@@ -67,6 +67,7 @@ create table private.publication_public_downloads (
   expires_at timestamptz not null default now()+interval '30 seconds'
 );
 create index publication_public_download_expiry_idx on private.publication_public_downloads(expires_at);
+create index publication_public_download_revision_idx on private.publication_public_downloads(revision_id);
 alter table private.publication_import_settings enable row level security;
 alter table private.publication_imports enable row level security;
 alter table private.publication_import_assets enable row level security;

@@ -60,6 +60,7 @@ export function appServer({auth,gateway,delegations,publications,origins,dist=re
             '/api/internal/media/authorize':'media', '/api/internal/admin/authorize':'carebase',
             '/api/internal/admin/breathe/authorize':'breathe', '/api/internal/admin/emr/authorize':'caremetric-emr',
             '/api/internal/admin/pennsync/authorize':'pennsync', '/api/internal/command/carebase/authorize':'carebase.command',
+            '/api/internal/admin/go/authorize':'caremetric-go',
             '/api/internal/learning/carebase/authorize':'carebase.learning',
           }[path];
           if(!audience) throw new HttpError(404,'Unavailable.');
