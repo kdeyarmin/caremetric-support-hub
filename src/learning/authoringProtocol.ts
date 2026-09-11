@@ -2,11 +2,12 @@ import { z } from "zod";
 import { receiptUuid as id } from "./receiptProtocol.ts";
 import { prepareGovernedImport, governedStageResultSchema } from "../imports/governedLearningImport.ts";
 import { structureChangesSchema } from "./structureProtocol.ts";
+import { creditPolicyParametersSchema } from "./creditPolicyProtocol.ts";
 
 const sha = z.string().regex(/^[0-9a-f]{64}$/);
 const text = (min: number, max: number) => z.string().min(min).max(max).refine(v => v === v.trim() && !/\p{Cc}/u.test(v));
 const instant = z.iso.datetime({ offset: true }).max(40).refine(v => Number.isFinite(Date.parse(v)));
-const action = z.enum(["learning.cloneVersion", "learning.publishVersion", "learning.patchDraft", "learning.reviewDraft", "learning.editStructure"]);
+const action = z.enum(["learning.cloneVersion", "learning.publishVersion", "learning.patchDraft", "learning.reviewDraft", "learning.editStructure", "learning.editCreditPolicy"]);
 const draftText = z.string().max(12_000).refine(v => !/\p{Cc}/u.test(v.replaceAll("\n", "").replaceAll("\r", "").replaceAll("\t", "")));
 export const draftPatchSchema = z.strictObject({
   version: z.strictObject({ title: text(1, 300).optional(), description: draftText.nullable().optional() }).refine(v => Object.keys(v).length > 0).optional(),
@@ -26,6 +27,8 @@ const previewOperation = z.union([
     parameters: z.strictObject({ versionId: id, sourceRevision: sha, reviewed: z.literal(true) }), reason: text(10, 500) }),
   z.strictObject({ operation: z.literal("preview"), requestId: id, action: z.literal("learning.editStructure"), courseId: id,
     parameters: z.strictObject({ versionId: id, sourceRevision: sha, changes: structureChangesSchema }), reason: text(10, 500) }),
+  z.strictObject({ operation: z.literal("preview"), requestId: id, action: z.literal("learning.editCreditPolicy"), courseId: id,
+    parameters: creditPolicyParametersSchema, reason: text(10, 500) }),
 ]);
 export const nativeAuthoringOperationSchema = z.union([
   z.strictObject({ operation: z.literal("inspect"), courseId: id }),
@@ -49,7 +52,7 @@ export const authoringPreviewSchema = z.object({ commandId: id, courseId: id, ac
   expiresAt: instant, before: versionStateSchema, after: versionStateSchema });
 export const authoringResultSchema = z.object({ commandId: id, courseId: id, action, versionId: id,
   versionNumber: z.number().int().positive(), status: z.enum(["draft", "published"]), appliedAt: instant, replayed: z.boolean(), sourceRevision: sha.optional() })
-  .refine(v => (["learning.patchDraft", "learning.reviewDraft", "learning.editStructure"].includes(v.action)) === Object.hasOwn(v, "sourceRevision"));
+  .refine(v => (["learning.patchDraft", "learning.reviewDraft", "learning.editStructure", "learning.editCreditPolicy"].includes(v.action)) === Object.hasOwn(v, "sourceRevision"));
 export const authoringSourceSchema = z.object({ courseId: id, versionId: id, sourceRevision: sha, payload: z.string().max(2_000_000) });
 export const authoringSourceViewSchema = authoringSourceSchema.extend({ headRevision: sha.nullable(), snapshotId: id.nullable() });
 export type AuthoringPreview = z.infer<typeof authoringPreviewSchema>;
