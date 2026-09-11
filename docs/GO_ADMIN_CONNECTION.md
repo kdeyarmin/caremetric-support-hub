@@ -16,7 +16,7 @@ Release order:
 1. Review and deploy the native Go adapter from `kdeyarmin/CMbackup`, with
    `CAREMETRIC_GO_ADMIN_ENABLED` absent/false.
 2. Apply `20260911181026_hub_go_admin_audience.sql`, preserving all existing
-   command, learning and media audiences.
+   command, learning, publication and media audiences.
 3. Deploy the reviewed Hub source, including the shared registry/protocol files.
 4. Configure a separately verified existing native super-administrator mapping
    and activate Go only after that identity review. EMR's map is never a fallback.
