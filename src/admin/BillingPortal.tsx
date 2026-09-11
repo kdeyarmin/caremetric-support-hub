@@ -32,6 +32,7 @@ export function BillingPortal({ target, client = billingCommandClient, onClose, 
   const [retryAt, setRetryAt] = useState(0);
   const [reload, setReload] = useState(0);
   const controller = useRef(new AbortController());
+  const inFlight = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     const current = new AbortController(); controller.current = current;
@@ -53,22 +54,28 @@ export function BillingPortal({ target, client = billingCommandClient, onClose, 
   const remaining = Math.max(0, Math.ceil((retryAt - now) / 1000));
 
   async function prepare(event?: FormEvent<HTMLFormElement>) {
-    event?.preventDefault(); setBusy(true); setError("");
+    event?.preventDefault();
+    if (inFlight.current) return;
+    inFlight.current = true;
+    const signal = controller.current.signal;
+    setBusy(true); setError("");
     const original = request ?? { operation: "preview" as const, requestId: crypto.randomUUID(), action: "billing.portal.create" as const,
       targetId: target.id, parameters: {}, reason: reason.trim() };
     setRequest(original);
     try {
-      const saved = await client.preview(original, controller.current.signal);
-      if (!controller.current.signal.aborted) { setIntent(saved); setConfirmed(false); }
-    } catch (caught) { if (!controller.current.signal.aborted) setError(failure(caught)); }
-    finally { if (!controller.current.signal.aborted) setBusy(false); }
+      const saved = await client.preview(original, signal);
+      if (!signal.aborted) { setIntent(saved); setConfirmed(false); }
+    } catch (caught) { if (!signal.aborted) setError(failure(caught)); }
+    finally { inFlight.current = false; if (!signal.aborted) setBusy(false); }
   }
   async function apply(open = false) {
-    if (!preview) return;
+    if (!preview || inFlight.current) return;
+    inFlight.current = true;
+    const signal = controller.current.signal;
     setBusy(true); setError(""); setStarted(true);
     try {
-      const response = await client.apply({ operation: "apply", commandId: preview.commandId, expectedDigest: preview.previewDigest }, preview, controller.current.signal);
-      if (controller.current.signal.aborted) return;
+      const response = await client.apply({ operation: "apply", commandId: preview.commandId, expectedDigest: preview.previewDigest }, preview, signal);
+      if (signal.aborted) return;
       const nextRetry = response.outcome === "pending" ? Date.now() + response.retryAfterSeconds * 1000 : 0;
       setRetryAt(nextRetry); setNow(Date.now());
       setIntent(value => value ? { ...value, result: billingResultMetadata(response), dispatchedAt: value.dispatchedAt ?? new Date().toISOString(), retryAt: nextRetry ? new Date(nextRetry).toISOString() : null } : value);
@@ -76,17 +83,19 @@ export function BillingPortal({ target, client = billingCommandClient, onClose, 
       // cached in component state, local/session storage, or a reusable href.
       if (open && response.outcome === "created") navigate(billingPortalUrlSchema.parse(response.session.url));
     } catch (caught) {
-      if (!controller.current.signal.aborted) { setError(failure(caught)); setRetryAt(Date.now() + 30000); }
-    } finally { if (!controller.current.signal.aborted) setBusy(false); }
+      if (!signal.aborted) { setError(failure(caught)); setRetryAt(Date.now() + 30000); }
+    } finally { inFlight.current = false; if (!signal.aborted) setBusy(false); }
   }
   async function discard() {
-    if (!intent || intent.previewDispatchedAt !== null || intent.dispatchedAt !== null) return;
+    if (!intent || intent.previewDispatchedAt !== null || intent.dispatchedAt !== null || inFlight.current) return;
+    inFlight.current = true;
+    const signal = controller.current.signal;
     setBusy(true); setError("");
     try {
-      await client.discard(intent.request.requestId, controller.current.signal);
-      if (!controller.current.signal.aborted) { setIntent(null); setRequest(null); setReason(""); }
-    } catch (caught) { if (!controller.current.signal.aborted) setError(failure(caught)); }
-    finally { if (!controller.current.signal.aborted) setBusy(false); }
+      await client.discard(intent.request.requestId, signal);
+      if (!signal.aborted) { setIntent(null); setRequest(null); setReason(""); }
+    } catch (caught) { if (!signal.aborted) setError(failure(caught)); }
+    finally { inFlight.current = false; if (!signal.aborted) setBusy(false); }
   }
   function newReview() { setIntent(null); setRequest(null); setReason(""); setStarted(false); setConfirmed(false); setRetryAt(0); setError(""); }
   return <section className="panel access-command" aria-label="Review Stripe billing portal">

@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { billingResultMetadata } from "../../supabase/functions/_shared/billingCommandProtocol";
-import type { BillingResult } from "../../supabase/functions/_shared/billingCommandProtocol";
+import type { BillingIntent, BillingResult } from "../../supabase/functions/_shared/billingCommandProtocol";
 import { BillingPortal } from "./BillingPortal";
 import type { BillingCommandClient } from "./billingCommandClient";
 import { billingApply, billingCreated, billingIntent, billingOrganization, billingPending, billingRequest, portalUrl } from "./fixtures/billingPortal";
@@ -22,6 +22,19 @@ const renderPortal = async(api: BillingCommandClient, navigate = vi.fn()) => {
 };
 
 describe("reviewed billing portal interactions", () => {
+  it("keeps one request identity when a form is submitted twice before state updates", async () => {
+    let resolve!: (intent: BillingIntent) => void;
+    const pending = new Promise<BillingIntent>(done => { resolve = done; });
+    const api = client({ preview: vi.fn(() => pending) });
+    await renderPortal(api);
+    const input = screen.getByLabelText("Administrative reason");
+    fireEvent.change(input, { target: { value: billingRequest.reason } });
+    const form = input.closest("form")!;
+    await act(async () => { fireEvent.submit(form); fireEvent.submit(form); });
+    expect(api.preview).toHaveBeenCalledTimes(1);
+    await act(async () => { resolve(billingIntent()); });
+    expect(screen.getByRole("button", { name: "Create reviewed portal session" })).toBeTruthy();
+  });
   it("requires a reason and explicit confirmation; navigation replays the same command", async () => {
     const api = client(), navigate = vi.fn(); await renderPortal(api, navigate);
     expect((screen.getByRole("button", { name: "Preview billing portal" }) as HTMLButtonElement).disabled).toBe(true);

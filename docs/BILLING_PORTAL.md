@@ -53,6 +53,8 @@ completed replay still calls the native owner, so removing an administrator or
 changing the native customer mapping prevents retrieval of a cached link. Current
 Hub authority is checked again after the native response and before disclosure.
 Out-of-order pending observations cannot regress a terminal receipt.
+These checks do not revoke an already-open Stripe session, which follows
+Stripe's own lifetime and configuration.
 
 Private reservations are limited to 20 per actor and 200 globally per hour.
 Metadata whose session expiry is more than 30 days old is removed during a later

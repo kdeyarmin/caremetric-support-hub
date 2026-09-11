@@ -134,8 +134,8 @@ try {
   await admin.query('delete from private.billing_portal_intents where actor_id=any($1::uuid[])',[[owner,other]]);
   await admin.query('delete from private.app_delegations where session_id in(select id from private.sms_sessions where user_id=any($1::uuid[]))',[[owner,other]]);
   await admin.query('delete from private.sms_sessions where user_id=any($1::uuid[])',[[owner,other]]);
-  await admin.query('delete from private.sms_identities where user_id=any($1::uuid[])',[[owner,other]]);
   await admin.query('delete from private.sms_challenges where user_id=any($1::uuid[])',[[owner,other]]);
+  await admin.query('delete from private.sms_identities where user_id=any($1::uuid[])',[[owner,other]]);
   await admin.query('delete from auth.users where id=any($1::uuid[])',[[owner,other]]);
   await pool.end();await admin.end();
 }
