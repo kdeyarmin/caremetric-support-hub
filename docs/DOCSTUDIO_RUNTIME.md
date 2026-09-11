@@ -39,6 +39,10 @@ health check is `GET /health`, which returns ready only after the Hub accepts
 its heartbeat. Keep the service continuously running with one replica and a
 bounded restart policy. No public worker domain is needed.
 
+Set `RAILWAY_DOCKERFILE_PATH=Dockerfile.render-worker` on the renderer service
+as well as selecting that Dockerfile in its service configuration. Create a fresh
+deployment after changing this value so Railway builds the renderer image.
+
 Database writes use the Hub's existing restricted `hub_app_server` role and
 fixed private functions. All `private.docstudio_*` tables use RLS, with no raw
 table grants to application, browser or service-role callers. Render claims use
