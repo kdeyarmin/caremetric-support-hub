@@ -23,7 +23,7 @@ await admin.query(`insert into auth.users(id,email,raw_user_meta_data,is_anonymo
 await admin.query("insert into private.staff_permissions(user_id,permission,product_id) values($1,'platform.admin',null),($2,'content.write',(select id from hub.products where slug='carebase'))",[owner,scoped]);
 await admin.query("insert into private.sms_identities(user_id,phone_e164) values($1,'+12025550210'),($2,'+12025550211'),($3,'+12025550212')",[owner,scoped,learner]);
 const provider={send:async()=>randomUUID(),verify:async(_id,_phone,code)=>code==='123456'};
-const objects=new Map();let baseUrl,loseResponse=false,writeCount=0;
+const objects=new Map();let baseUrl,loseResponse=false,writeCount=0,pausedUpload=null;
 const storageFetch=async(url,options)=>{
  if(url.startsWith('https://support-hub-web-production.up.railway.app/api/internal/'))return fetch(baseUrl+new URL(url).pathname,options);
  const prefix='https://xgauehtwksmnoqhgqegm.supabase.co/storage/v1/object/';assert.ok(url.startsWith(prefix));
@@ -32,6 +32,7 @@ const storageFetch=async(url,options)=>{
  if(options.method==='POST') {
   const key=url.slice(prefix.length);assert.equal(headers.get('x-upsert'),'false');
   if(objects.has(key))return new Response('{}',{status:409});
+  if(pausedUpload?.key===key){pausedUpload.started();await pausedUpload.release;}
   const bytes=new Uint8Array(await new Response(options.body).arrayBuffer());objects.set(key,{bytes,type:headers.get('content-type')});writeCount++;
   return Response.json({Key:key});
  }
@@ -139,11 +140,31 @@ try {
  assert.equal((await fetch(workerSource+imageAsset.id,{headers:sourceHeaders})).status,409);
  const unused={...imageAsset,id:randomUUID()};assert.equal((await call(`docstudio/projects/${assetsId}/assets`,unused)).status,200);
  const unusedUpload=await fetch(`${baseUrl}/api/docstudio/projects/${assetsId}/assets/${unused.id}`,{method:'POST',headers:{Origin:'https://hub.test',Cookie:`${sessionCookie}=${jar[sessionCookie]}`,'Content-Type':'image/png'},body:imageBytes});assert.equal(unusedUpload.status,200);
- await admin.query("update private.docstudio_assets set created_at=now()-interval '2 days' where project_id=$1",[assetsId]);
+ await admin.query("update private.docstudio_assets set created_at=now()-interval '2 days',transfer_expires_at=now()-interval '1 second' where project_id=$1",[assetsId]);
  await studio.cleanupExpired();
  assert.equal(objects.has(`hub-docstudio/assets/${assetsId}/${unused.id}`),false,'unused staged bytes are cleaned');
  assert.equal((await call(`docstudio/projects/${assetsId}/assets`,unused)).status,409,'cleaned identities cannot replace previous immutable objects');
  assert.equal(objects.has(`hub-docstudio/assets/${assetsId}/${imageAsset.id}`),true,'every immutable revision keeps its source bytes');
+ // A previously staged old asset can be uploading after its capability was
+ // consumed. Cleanup must retain its row/key until the bounded transfer ends.
+ const uploading={...imageAsset,id:randomUUID()};assert.equal((await call(`docstudio/projects/${assetsId}/assets`,uploading)).status,200);
+ await admin.query("update private.docstudio_assets set created_at=now()-interval '2 days' where id=$1",[uploading.id]);
+ let beginUpload,releaseUpload;
+ const reachedUpload=new Promise(resolve=>{beginUpload=resolve;});
+ pausedUpload={key:`hub-docstudio/assets/${assetsId}/${uploading.id}`,started:beginUpload,release:new Promise(resolve=>{releaseUpload=resolve;})};
+ const inFlight=fetch(`${baseUrl}/api/docstudio/projects/${assetsId}/assets/${uploading.id}`,{method:'POST',headers:{Origin:'https://hub.test',Cookie:`${sessionCookie}=${jar[sessionCookie]}`,'Content-Type':'image/png'},body:imageBytes});
+ try {
+  let deadline;try {await Promise.race([reachedUpload,new Promise((_,reject)=>{deadline=setTimeout(()=>reject(new Error('Upload did not reach Storage')),10000);})]);}finally{clearTimeout(deadline);}
+  const expiry=digest(token());await admin.query("insert into private.docstudio_media_tokens(token_hash,descriptor,expires_at) values($1,'{}',now()-interval '1 second')",[expiry]);
+  await studio.cleanupExpired();
+  const protectedAsset=(await admin.query('select cleanup_at,transfer_expires_at>now() as protected from private.docstudio_assets where id=$1',[uploading.id])).rows[0];
+  assert.deepEqual(protectedAsset,{cleanup_at:null,protected:true},'active transfer survives a no-candidate cleanup pass');
+  assert.equal((await admin.query('select count(*)::integer n from private.docstudio_media_tokens where token_hash=$1',[expiry])).rows[0].n,0,'expiry runs even without a cleanup candidate');
+ } finally {releaseUpload();}
+ const finishedUpload=await inFlight;assert.equal(finishedUpload.status,200,await finishedUpload.text());pausedUpload=null;
+ assert.equal(objects.has(`hub-docstudio/assets/${assetsId}/${uploading.id}`),true);
+ await admin.query("update private.docstudio_assets set transfer_expires_at=now()-interval '1 second' where id=$1",[uploading.id]);
+ await studio.cleanupExpired();assert.equal(objects.has(`hub-docstudio/assets/${assetsId}/${uploading.id}`),false,'unused bytes retire after transfer expiry');
  const vid=randomUUID();await command('create',vid,0,video);await command('submit',vid,1);await command('approve',vid,1);
  const render=await command('render',vid,1);
  const claims=await Promise.all([worker('claim'),worker('claim')]);assert.ok(claims.every(result=>result.status===200));assert.equal(claims.filter(result=>result.body.job).length,1,'one durable lease per job');
@@ -168,6 +189,9 @@ try {
  objects.set(abandonedPath,{bytes:primary,type:'video/mp4'});
  await admin.query("insert into private.docstudio_outputs(job_id,attempt,part,sha256,byte_length,media_type,verified_at) values($1,1,'primary',$2,$3,'video/mp4',now())",[imageJob.manifest.jobId,digest(primary),primary.length]);
  await admin.query("update private.docstudio_jobs set created_at=now()-interval '8 days' where id=any($1::uuid[])",[[imageJob.manifest.jobId,render.jobId]]);
+ await admin.query("update private.docstudio_outputs set transfer_expires_at=now()+interval '3 minutes' where job_id=$1",[imageJob.manifest.jobId]);
+ await studio.cleanupExpired();assert.equal(objects.has(abandonedPath),true,'cancelled jobs retain in-flight output transfers');
+ await admin.query("update private.docstudio_outputs set transfer_expires_at=now()-interval '1 second' where job_id=$1",[imageJob.manifest.jobId]);
  await studio.cleanupExpired();assert.equal(objects.has(abandonedPath),false);
  for(const output of outputs)assert.equal(objects.has(`hub-docstudio/renders/${render.jobId}/1/${output.kind}`),true,'completed render bytes remain immutable');
  assert.equal(objects.has(`hub-docstudio/assets/${assetsId}/${imageAsset.id}`),true);

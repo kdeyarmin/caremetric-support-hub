@@ -23,7 +23,7 @@ Completed publication revisions remain immutable and are not deleted by an edit.
 ## Paired services
 
 The renderer is `kdeyarmin/DocStudio`'s `Dockerfile.render-worker`. Pull request
-6 adds a real Remotion render of the committed TutorialVideo composition and
+6 and 7 add a real Remotion render of the committed TutorialVideo composition and
 independent ffprobe verification of actual 1080p, 30fps H264 output. It accepts
 the closed `caremetric.docstudio.render.v1` protocol. It does not accept shell
 commands, filesystem paths, source URLs, native credentials or reported browser
@@ -73,7 +73,10 @@ only unused source assets older than one day and failed/cancelled or superseded
 render-attempt outputs older than seven days. It retains every source referenced
 by any immutable revision and every completed render's final outputs. Marking an
 unused source for cleanup is serialized with draft edits; that source cannot be
-attached while deletion is in flight. Each pass handles at most 20 exact keys,
+attached while deletion is in flight. Source and output upload authorization
+also persists a three-minute transfer deadline, exceeding the bounded external
+upload. Cleanup excludes these transfers and rechecks under the same project
+or job lock. Expired capabilities are removed even when no object needs cleanup. Each pass handles at most 20 exact keys,
 and lost cleanup responses can retry without deleting another object.
 
 Include this bucket's exact object bytes in the production backup plan. The

@@ -38,8 +38,10 @@ export function docstudio({pool,publications,workerToken,fetchImpl=fetch,onDatab
   async function media(session,resource,operation,body,contentType) {
     const capability='cmh_'+token();
     const descriptor=await dbCall(session,'docstudio_issue_media',[digest(capability),JSON.stringify(resource),operation],!!resource.leaseHash);
-    const response=await fetchImpl(`${storageOrigin}/functions/v1/docstudio-media`,{method:'POST',headers:{Authorization:`Bearer ${capability}`,'Content-Type':contentType||'application/json'},
-      body:body||'{}',redirect:'error',signal:AbortSignal.timeout(120000),...(body?{duplex:'half'}:{})});
+    let response;
+    try {response=await fetchImpl(`${storageOrigin}/functions/v1/docstudio-media`,{method:'POST',headers:{Authorization:`Bearer ${capability}`,'Content-Type':contentType||'application/json'},
+      body:body||'{}',redirect:'error',signal:AbortSignal.timeout(120000),...(body?{duplex:'half'}:{})});}
+    catch {throw new HttpError(503,'Private DocStudio media transfer was not confirmed. Retry the same file.');}
     if(!response.ok) {await response.body?.cancel();throw new HttpError(503,'Private DocStudio media transfer was not confirmed. Retry the same file.');}
     if(operation==='download' && (response.headers.get('content-length')!==String(descriptor.byteLength) || response.headers.get('content-type')?.split(';')[0]!==descriptor.contentType)) {
       await response.body?.cancel();throw new HttpError(503,'Private media metadata is invalid.');

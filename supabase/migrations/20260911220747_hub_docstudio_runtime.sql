@@ -32,7 +32,7 @@ create table private.docstudio_assets (
  id uuid primary key, project_id uuid not null references private.docstudio_projects(id),
  sha256 text not null check(sha256 ~ '^[0-9a-f]{64}$'), byte_length integer not null check(byte_length between 1 and 33554432),
  media_type text not null check(media_type in ('image/png','image/jpeg','audio/mpeg','audio/wav')),
- created_at timestamptz not null default now(), verified_at timestamptz, cleanup_at timestamptz
+ created_at timestamptz not null default now(), verified_at timestamptz, cleanup_at timestamptz, transfer_expires_at timestamptz
 );
 create index docstudio_assets_project_idx on private.docstudio_assets(project_id);
 create index docstudio_assets_cleanup_idx on private.docstudio_assets(created_at) where cleanup_at is null;
@@ -59,7 +59,7 @@ create table private.docstudio_outputs (
  job_id uuid not null references private.docstudio_jobs(id), attempt integer not null check(attempt between 1 and 3),
  part text not null check(part in ('primary','captions','transcript')),
  sha256 text not null check(sha256 ~ '^[0-9a-f]{64}$'), byte_length integer not null check(byte_length between 1 and 268435456),
- media_type text not null check(media_type in ('video/mp4','text/vtt','text/plain')), verified_at timestamptz, cleanup_at timestamptz,
+ media_type text not null check(media_type in ('video/mp4','text/vtt','text/plain')), verified_at timestamptz, cleanup_at timestamptz, transfer_expires_at timestamptz,
  primary key(job_id,attempt,part)
 );
 create table private.docstudio_cleanup_queue (
@@ -305,13 +305,17 @@ begin
  else p:=private.docstudio_project((p_resource->>'projectId')::uuid);
  end if;
  if p_resource ? 'assetId' then
+  if p_operation='upload' then perform pg_advisory_xact_lock(hashtextextended('docstudio-project:'||coalesce(j.project_id,(p->>'id')::uuid)::text,0));end if;
   select * into a from private.docstudio_assets where id=(p_resource->>'assetId')::uuid;
   if a.id is null or a.cleanup_at is not null or a.project_id<>coalesce(j.project_id,(p->>'id')::uuid) or (p_operation='download' and a.verified_at is null) then raise exception 'Asset unavailable' using errcode='P4040'; end if;
   if j.id is not null and (p_operation<>'download' or not exists(select 1 from jsonb_array_elements(j.manifest->'assets') x where x->>'id'=a.id::text and x->>'sha256'=a.sha256 and (x->>'byteLength')::integer=a.byte_length and x->>'mediaType'=a.media_type)) then raise exception 'Asset is not in the leased revision' using errcode='42501'; end if;
+  -- Covers the 110-second Edge upload and 120-second server transfer deadlines.
+  if p_operation='upload' then update private.docstudio_assets set transfer_expires_at=now()+interval '3 minutes' where id=a.id;end if;
   path:='assets/'||a.project_id::text||'/'||a.id::text; media:=a.media_type; sha:=a.sha256; bytes:=a.byte_length;
  else
   select * into o from private.docstudio_outputs where job_id=j.id and attempt=j.attempts and part=p_resource->>'part';
   if o.job_id is null or o.cleanup_at is not null or (p_operation='download' and o.verified_at is null) then raise exception 'Output unavailable' using errcode='P4040'; end if;
+  if p_operation='upload' then update private.docstudio_outputs set transfer_expires_at=now()+interval '3 minutes' where job_id=j.id and attempt=j.attempts and part=o.part;end if;
   path:='renders/'||j.id::text||'/'||j.attempts::text||'/'||o.part; media:=o.media_type; sha:=o.sha256; bytes:=o.byte_length;
  end if;
  return jsonb_build_object('path',path,'operation',p_operation,'contentType',media,'sha256',sha,'byteLength',bytes,'maxBytes',bytes,'range',null);
@@ -322,7 +326,7 @@ declare descriptor jsonb; sid uuid;
 begin
  descriptor:=private.docstudio_media_descriptor(p_resource,p_operation);
  if not (p_resource ? 'leaseHash') then sid:=(auth.jwt()->>'sms_session_id')::uuid; end if;
- delete from private.docstudio_media_tokens where expires_at<=now();
+ delete from private.docstudio_media_tokens where token_hash in (select token_hash from private.docstudio_media_tokens where expires_at<=now() order by expires_at limit 1000);
  insert into private.docstudio_media_tokens(token_hash,session_id,job_id,lease_hash,descriptor) values(p_hash,sid,(p_resource->>'jobId')::uuid,p_resource->>'leaseHash',jsonb_build_object('resource',p_resource,'operation',p_operation));
  return descriptor;
 end $$;
@@ -496,27 +500,33 @@ language plpgsql security definer set search_path='' as $$
 declare q private.docstudio_cleanup_queue; a private.docstudio_assets; output_row private.docstudio_outputs; resource jsonb; path text;
 begin
  perform pg_advisory_xact_lock(hashtextextended('docstudio-cleanup',0));
+ delete from private.docstudio_media_tokens where token_hash in (select token_hash from private.docstudio_media_tokens where expires_at<=now() order by expires_at limit 1000);
  select * into q from private.docstudio_cleanup_queue where completed_at is null order by created_at limit 1;
  if q.id is null then
-  select * into a from private.docstudio_assets x where x.created_at<now()-interval '1 day' and x.cleanup_at is null
+  select * into a from private.docstudio_assets x where x.created_at<now()-interval '1 day' and x.cleanup_at is null and (x.transfer_expires_at is null or x.transfer_expires_at<=now())
    and not exists(select 1 from private.docstudio_revisions r where r.project_id=x.project_id and r.body->'assets' @> jsonb_build_array(jsonb_build_object('id',x.id))) order by x.created_at limit 1;
   if a.id is not null then
    -- Use the same project lock as draft writes. Once marked, an upload or edit
    -- cannot attach these bytes while external Storage deletion is in flight.
    if not pg_try_advisory_xact_lock(hashtextextended('docstudio-project:'||a.project_id::text,0)) then return null;end if;
+   if exists(select 1 from private.docstudio_assets where id=a.id and transfer_expires_at>now()) then return null;end if;
    if exists(select 1 from private.docstudio_revisions r where r.project_id=a.project_id and r.body->'assets' @> jsonb_build_array(jsonb_build_object('id',a.id))) then return null;end if;
    update private.docstudio_assets set cleanup_at=now() where id=a.id;
    resource:=jsonb_build_object('assetId',a.id,'projectId',a.project_id);path:='assets/'||a.project_id::text||'/'||a.id::text;
   else
-   select o.* into output_row from private.docstudio_outputs o join private.docstudio_jobs j on j.id=o.job_id where j.created_at<now()-interval '7 days' and o.cleanup_at is null
+   select o.* into output_row from private.docstudio_outputs o join private.docstudio_jobs j on j.id=o.job_id where j.created_at<now()-interval '7 days' and o.cleanup_at is null and (o.transfer_expires_at is null or o.transfer_expires_at<=now())
     and (j.status in ('failed','cancelled') or o.attempt<j.attempts) order by j.created_at,o.job_id,o.attempt,o.part limit 1;
    if output_row.job_id is null then return null;end if;
+   -- Upload descriptors lock the job first; recheck the transfer and current
+   -- attempt after acquiring that same lock before retiring any output key.
+   perform 1 from private.docstudio_jobs where id=output_row.job_id for update skip locked;
+   if not found then return null;end if;
+   if not exists(select 1 from private.docstudio_outputs o join private.docstudio_jobs j on j.id=o.job_id where o.job_id=output_row.job_id and o.attempt=output_row.attempt and o.part=output_row.part and o.cleanup_at is null and (o.transfer_expires_at is null or o.transfer_expires_at<=now()) and (j.status in ('failed','cancelled') or o.attempt<j.attempts)) then return null;end if;
    update private.docstudio_outputs set cleanup_at=now() where job_id=output_row.job_id and attempt=output_row.attempt and part=output_row.part;
    resource:=jsonb_build_object('jobId',output_row.job_id,'attempt',output_row.attempt,'part',output_row.part);path:='renders/'||output_row.job_id::text||'/'||output_row.attempt::text||'/'||output_row.part;
   end if;
   insert into private.docstudio_cleanup_queue(id,resource,path) values(gen_random_uuid(),resource,path) returning * into q;
  end if;
- delete from private.docstudio_media_tokens where expires_at<=now();
  insert into private.docstudio_media_tokens(token_hash,cleanup_id,descriptor) values(p_hash,q.id,'{}'::jsonb);
  return q.id;
 end $$;
