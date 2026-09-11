@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import fixture from "../imports/fixtures/governedCourse.json";
 import { sourceDigest } from "../imports/governedLearningImport";
-import { authoringOperationSchema, projectAuthoringResult, verifyAuthoringOutcome } from "./authoringProtocol";
+import { authoringOperationSchema, draftPatchSchema, projectAuthoringResult, verifyAuthoringOutcome } from "./authoringProtocol";
 const id = "aaaaaaaa-0000-0000-0000-000000000001", sha = "a".repeat(64);
 const command = { operation: "preview" as const, requestId: id, action: "learning.cloneVersion" as const, courseId: fixture.sourceCourseId,
   parameters: { versionId: fixture.sourceVersionId, sourceRevision: sha, title: "New draft" }, reason: "Review source for the next revision" };
@@ -9,6 +9,37 @@ const preview = () => ({ commandId: id, courseId: fixture.sourceCourseId, action
   expiresAt: "2026-09-11T00:00:00Z", before: { courseId: fixture.sourceCourseId, versionId: fixture.sourceVersionId, sourceRevision: sha,
     status: "published" as const, versionNumber: 2, title: "Original", currentVersionId: fixture.sourceVersionId },
   after: { status: "draft" as const, versionNumber: 3, title: "New draft", sourceVersionId: fixture.sourceVersionId } });
+it("bounds draft patches and forbids media, ownership, review flags and duplicate descendants", () => {
+  expect(draftPatchSchema.parse({ version: { description: "Two lines\nreviewed" }, blocks: [{ blockId: id, content: "", estimatedMinutes: 0 }] })).toBeDefined();
+  for (const patch of [{}, { version: {} }, { blocks: [] }, { blocks: [{ blockId: id }] },
+    { version: { aiReviewedAt: "now" } }, { blocks: [{ blockId: id, videoUrl: "https://example.invalid" }] },
+    { blocks: [{ blockId: id, content: "ok" }, { blockId: id.toUpperCase(), content: "other" }] },
+    { version: { description: "😀".repeat(6500) } }, { blocks: [{ blockId: id, content: "bad\u0000value" }] },
+    { blocks: [{ blockId: id, estimatedMinutes: 1.5 }] }, { blocks: [{ blockId: id, title: " leading space" }] },
+    { blocks: [{ blockId: id, title: "Two\nlines" }] }]) expect(draftPatchSchema.safeParse(patch).success).toBe(false);
+  expect(authoringOperationSchema.safeParse({ ...command, action: "learning.reviewDraft", parameters: { versionId: fixture.sourceVersionId, sourceRevision: sha, reviewed: false } }).success).toBe(false);
+});
+it.each(["learning.patchDraft", "learning.reviewDraft"] as const)("binds %s to the reviewed draft and requires the resulting source digest", async action => {
+  const parameters = { versionId: fixture.sourceVersionId, sourceRevision: sha };
+  const op = action === "learning.patchDraft" ? { ...command, action, parameters: { ...parameters, patch: { version: { title: "Edited" } } } }
+    : { ...command, action, parameters: { ...parameters, reviewed: true as const } };
+  const before = { ...preview().before, status: "draft" as const };
+  const { sourceRevision: _old, ...identity } = before;
+  expect(_old).toBe(sha);
+  const after = { ...identity, title: action === "learning.patchDraft" ? "Edited" : before.title, aiReviewRequired: action === "learning.patchDraft" };
+  const value = { ...preview(), action, before, after };
+  const approved = await projectAuthoringResult(value, op);
+  expect(approved).toEqual(value);
+  for (const patch of [{ versionId: id }, { courseId: id }, { status: "published" }, { versionNumber: 500 }, { sourceRevision: sha }])
+    await expect(projectAuthoringResult({ ...value, after: { ...after, ...patch } }, op)).rejects.toThrow();
+  const result = { commandId: id, action, courseId: fixture.sourceCourseId, versionId: fixture.sourceVersionId,
+    versionNumber: before.versionNumber, status: "draft", appliedAt: new Date().toISOString(), replayed: false, sourceRevision: "b".repeat(64) };
+  expect(verifyAuthoringOutcome(result, value)).toEqual(result);
+  const { sourceRevision: _new, ...withoutDigest } = result;
+  expect(_new).toMatch(/^[0-9a-f]{64}$/);
+  expect(() => verifyAuthoringOutcome(withoutDigest, value)).toThrow();
+  expect(() => verifyAuthoringOutcome({ ...result, versionId: id }, value)).toThrow();
+});
 it("accepts only exact, bounded authoring operations", () => {
   expect(authoringOperationSchema.parse(command)).toEqual(command);
   for (const value of [{ ...command, url: "https://untrusted.invalid" }, { ...command, reason: "short" },
