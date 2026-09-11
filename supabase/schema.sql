@@ -6047,4 +6047,3 @@ end;
 $migration$;
 revoke all on function hub.get_backend_contract() from public;
 grant execute on function hub.get_backend_contract() to anon,authenticated;
-

@@ -76,7 +76,10 @@ try {
   assert.equal((await start(invitation,{})).status,429,'persisted shared resend limit');
   assert.equal((await verify(challenge,{})).status,400,'browser cookie required');
   assert.equal((await verify(challenge,{[challengeCookie]:token()})).status,401,'challenge bound to the initiating browser');
-  assert.equal((await verify(challenge,jar,'000000')).status,401);assert.equal((await verify(challenge,jar)).status,200);
+  assert.equal((await verify(challenge,jar,'000000')).status,401);
+  const claimJars=[{...jar},{...jar}],claims=await Promise.all(claimJars.map(value=>verify(challenge,value)));
+  assert.deepEqual(claims.map(value=>value.status).sort(),[200,401],'concurrent claims create exactly one session and identity');
+  Object.assign(jar,claimJars[claims.findIndex(value=>value.status===200)]);
   const list=(await call('admin/registration',{operation:'list',offset:0})).body;
   const row=list.rows.find(r=>r.invitationId===issued.op.requestId);assert.equal(row.state,'claimed');claimed.push(row.hubUserId);
   assert.ok(!JSON.stringify(list).includes(issued.op.claimCode));assert.ok(!JSON.stringify(list).includes(staged.fields.phone));
