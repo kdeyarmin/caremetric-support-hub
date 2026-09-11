@@ -1,5 +1,6 @@
 import { digest, token, transaction, withSession, HttpError } from './sms-auth.mjs';
-import { parseAdminOperation, parseAdminEnvelope } from '../supabase/functions/_shared/adminProtocol.ts';
+import { parsePortfolioRequest, parsePortfolioEnvelope } from '../supabase/functions/_shared/portfolioProtocol.ts';
+import { adminRegistry } from '../supabase/functions/_shared/adminRegistry.ts';
 
 const prefix = 'cmh_';
 export const validDelegation = value => typeof value==='string' && /^cmh_[A-Za-z0-9_-]{43}$/.test(value);
@@ -8,7 +9,7 @@ export function validateMedia(path,operation) {
   if (!mediaPath.test(path || '') || !['upload','download','sign'].includes(operation)) throw new HttpError(400,'Invalid media request.');
 }
 async function authorize(db,audience,payload) {
-  if (audience==='carebase') return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
+  if (audience==='carebase' || audience==='breathe') return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
   validateMedia(payload.path,payload.operation);
   if (!(await db.query('select hub.authorize_learning_object($1,$2) as allowed',[payload.path,payload.operation])).rows[0].allowed) throw new HttpError(403,'Media access denied.');
   return payload;
@@ -37,21 +38,23 @@ export function delegations({pool,storageUrl,fetchImpl=fetch}) {
         await db.query('set local role authenticated');
         await db.query("select set_config('request.jwt.claims',$1,true)",[JSON.stringify({sub:delegation.user_id,role:'authenticated',sms_session_id:delegation.id})]);
         const authorized=await authorize(db,audience,delegation.payload);
-        return audience==='carebase' ? { ...authorized, operation:delegation.payload } : authorized;
+        return audience==='media' ? authorized : { ...authorized, operation:delegation.payload };
       });
     },
     async admin(sessionToken,input) {
-      let operation;
-      try { operation=parseAdminOperation(input); } catch { throw new HttpError(400,'Invalid administrator request.'); }
-      const capability=await issue(sessionToken,'carebase',operation);
-      const response=await fetchImpl('https://cmcarebase.com/api/platform-admin/read',{
+      let request;
+      try { request=parsePortfolioRequest(input); } catch { throw new HttpError(400,'Invalid administrator request.'); }
+      if (!['carebase','breathe'].includes(request.product)) throw new HttpError(503,'This application has not connected its SMS administrator session.','unconfigured');
+      const operation=request.operation;
+      const capability=await issue(sessionToken,request.product,operation);
+      const response=await fetchImpl(adminRegistry[request.product].endpoint,{
         method:'POST',headers:{Authorization:`Bearer ${capability}`,'Content-Type':'application/json'},body:JSON.stringify(operation),
         signal:AbortSignal.timeout(12000),redirect:'manual',
       });
       if (!response.ok) throw new HttpError(response.status===401 || response.status===403 ? response.status : 503,'Administrator connection is unavailable.');
       const raw=await response.text();
       if (raw.length>1000000) throw new HttpError(503,'Administrator response is too large.');
-      return parseAdminEnvelope(JSON.parse(raw),operation);
+      return parsePortfolioEnvelope(JSON.parse(raw),request);
     },
     async media(sessionToken,path,operation,body,contentType) {
       validateMedia(path,operation);

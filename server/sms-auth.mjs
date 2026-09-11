@@ -13,7 +13,7 @@ export function readCookie(header, name) {
   return /^[a-zA-Z0-9_-]{43}$/.test(value) ? value : null;
 }
 export class HttpError extends Error {
-  constructor(status, message) { super(message); this.status = status; }
+  constructor(status, message, code) { super(message); this.status = status; this.code = code; }
 }
 export async function transaction(pool, operation) {
   const connection = await pool.connect();

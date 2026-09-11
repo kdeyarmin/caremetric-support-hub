@@ -41,7 +41,7 @@ export function appServer({auth,gateway,delegations,origins,dist=resolve('dist')
         res.setHeader('Cache-Control','no-store');
         if (path.startsWith('/api/internal/')) {
           if(req.method!=='POST' || req.headers.origin) throw new HttpError(403,'Forbidden.');
-          const audience=path==='/api/internal/media/authorize' ? 'media' : path==='/api/internal/admin/authorize' ? 'carebase' : null;
+          const audience=path==='/api/internal/media/authorize' ? 'media' : path==='/api/internal/admin/authorize' ? 'carebase' : path==='/api/internal/admin/breathe/authorize' ? 'breathe' : null;
           if(!audience) throw new HttpError(404,'Unavailable.');
           const authorization=req.headers.authorization;
           if(typeof authorization!=='string' || !authorization.startsWith('Bearer ')) throw new HttpError(401,'Authorization required.');
@@ -110,7 +110,7 @@ export function appServer({auth,gateway,delegations,origins,dist=resolve('dist')
       if(res.headersSent) { res.destroy(); return; }
       const status=error instanceof HttpError?error.status:error?.code==='28000'?401:error?.code==='42501'?403:500;
       const message=error instanceof HttpError?error.message:error?.code==='P0001'?'The action could not be completed. Check the form and try again.':status===401?'Sign in with an SMS code to continue.':status===403?'You do not have access to this action.':'The service is temporarily unavailable.';
-      json({error:message},status);
+      json({error:error instanceof HttpError && error.code ? {code:error.code} : message},status);
     }
   });
 }

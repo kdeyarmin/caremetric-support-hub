@@ -1,7 +1,8 @@
-import { isUuid, parseAdminEnvelope, parseAdminOperation } from "../_shared/adminProtocol.ts";
+import { isUuid } from "../_shared/adminProtocol.ts";
+import { parsePortfolioEnvelope, parsePortfolioRequest } from "../_shared/portfolioProtocol.ts";
+import { adminRegistry } from "../_shared/adminRegistry.ts";
 
 const hubOrigin = "https://xgauehtwksmnoqhgqegm.supabase.co";
-const appUrl = "https://cmcarebase.com/api/platform-admin/read";
 const allowedOrigins = new Set(["https://support-hub-web-production.up.railway.app", "https://help.caremetric.ai"]);
 const safeErrors = new Set(["unauthenticated", "forbidden", "unconfigured", "notfound", "upstream"]);
 export interface AdminProxyOptions { publishableKey: string; fetcher?: typeof fetch; }
@@ -59,9 +60,12 @@ export function createAdminProxy({ publishableKey, fetcher = fetch }: AdminProxy
         authResponse.status === 401 ? "unauthenticated" : authResponse.status === 403 ? "forbidden" : "unconfigured");
       const actor = await readJson(authResponse, 4096, signal) as Record<string, unknown>;
       if (!actor || !isUuid(actor.user_id) || actor.role !== "platform_admin" || actor.aal !== "aal2") return reply(403, "forbidden");
-      let operation;
-      try { operation = parseAdminOperation(await readJson(request, 4096, signal)); }
+      let parsed;
+      try { parsed = parsePortfolioRequest(await readJson(request, 4096, signal)); }
       catch { return reply(400, "invalid_request"); }
+      const appUrl = adminRegistry[parsed.product].endpoint;
+      if (!appUrl) return reply(503, "unconfigured");
+      const operation = parsed.operation;
       const response = await fetcher(appUrl, { method: "POST", headers: { Authorization: authorization, "Content-Type": "application/json" }, body: JSON.stringify(operation), redirect: "error", signal });
       if (!response.ok) {
         let code = response.status === 401 ? "unauthenticated" : response.status === 403 ? "forbidden" : response.status === 404 ? "unconfigured" : "upstream";
@@ -73,7 +77,7 @@ export function createAdminProxy({ publishableKey, fetcher = fetch }: AdminProxy
         return reply(status, code);
       }
       if (!response.headers.get("content-type")?.includes("application/json")) return reply(502, "upstream");
-      const data = parseAdminEnvelope(await readJson(response, 1048576, signal), operation);
+      const data = parsePortfolioEnvelope(await readJson(response, 1048576, signal), parsed);
       return new Response(JSON.stringify(data), { status: 200, headers });
     } catch { return reply(503, "upstream"); }
   };

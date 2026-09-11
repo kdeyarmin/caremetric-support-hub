@@ -60,8 +60,14 @@ try {
   const capability='cmh_'+'a'.repeat(43);
   await admin.query("insert into private.app_delegations(token_hash,session_id,audience,payload,expires_at) values($1,$2,'carebase','{\"operation\":\"overview\"}',now()+interval '30 seconds')",[digest(capability),session]);
   await assert.rejects(caps.consume(capability,'media'));
+  await assert.rejects(caps.consume(capability,'breathe'));
   assert.deepEqual(await caps.consume(capability,'carebase'),{user_id:editor,role:'platform_admin',method:'sms',operation:{operation:'overview'}});
   await assert.rejects(caps.consume(capability,'carebase'));
+  const breatheCapability='cmh_'+'b'.repeat(43);
+  await admin.query("insert into private.app_delegations(token_hash,session_id,audience,payload,expires_at) values($1,$2,'breathe','{\"operation\":\"capabilities\"}',now()+interval '30 seconds')",[digest(breatheCapability),session]);
+  await assert.rejects(caps.consume(breatheCapability,'carebase'));
+  assert.deepEqual(await caps.consume(breatheCapability,'breathe'),{user_id:editor,role:'platform_admin',method:'sms',operation:{operation:'capabilities'}});
+  await assert.rejects(caps.consume(breatheCapability,'breathe'));
   await admin.query("update auth.users set banned_until=now()+interval '1 day' where id=$1",[editor]);
   assert.equal((await call('rpc/get_learning_editor_access',{})).body,false,'banned users lose permissions');
   await admin.query('update auth.users set banned_until=null where id=$1',[editor]);
