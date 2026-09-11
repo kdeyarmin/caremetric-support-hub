@@ -48,7 +48,7 @@ Version `0.1.0` now runs as the first production vertical slice:
 - A dedicated `hub`/`private` Supabase schema design, RLS policies, narrow grants, atomic case RPCs, physically separate internal notes, and metadata-only audit records.
 - A live TOTP enrollment/challenge flow with database-enforced AAL2 for every staff principal and for customers who opt into TOTP; the AAL1 bootstrap reveals only the minimum identity and role needed to complete enrollment.
 - Fail-closed, per-tenant/product case-intake settings plus UUID request keys that make case creation and replies safely retryable without putting support text in the idempotency ledger. Runtime checks immediately reject deleted, banned, or anonymous principals and keep dual-role staff/customer authority paths separate.
-- A credential-free DocStudio publication preview that validates the closed six-product manifest, verifies SHA-256 assets, plans immutable revisions, and performs no network, database, storage, or deletion operation.
+- A credential-free DocStudio publication preview plus an SMS-authorized [publication import executor](docs/PUBLICATION_IMPORTS.md): exact streamed asset checks, immutable catalog revisions, explicit placement confirmations, private media, and bounded staging cleanup.
 - Pull-request CI for both the application and a clean local Supabase migration/pgTAP stack.
 - A polished implementation preview that works without credentials. Demo mode is never a production data store.
 
@@ -184,7 +184,7 @@ docs/                        API, integration, and rollout guidance
 - DocStudio remains a content-production source, not an independently verified
   production application or the system of record for published media.
 
-The first CareBase snapshot now includes 80 published courses and 70 published help articles. The DocStudio boundary can now validate and hash a publication bundle and produce a deterministic, approval-required preview, but it cannot commit, upload, fetch, or delete anything. Legacy source IDs are provenance only; stable Support Hub `content_key` values are canonical.
+The first CareBase snapshot now includes 80 published courses and 70 published help articles. The DocStudio preview remains pure; the separate publication executor applies reviewed changes through current Hub permissions and private immutable asset storage. Deployment requires the reviewed migration and protected Edge transport described in [Publication imports](docs/PUBLICATION_IMPORTS.md). Legacy source IDs are provenance only; stable Support Hub `content_key` values are canonical.
 
 See [docs/PRODUCTION_ROLLOUT.md](docs/PRODUCTION_ROLLOUT.md) for the verified
 application-by-application deployment record, excluded duplicate/prototype

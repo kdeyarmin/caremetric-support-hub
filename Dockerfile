@@ -27,6 +27,7 @@ COPY --from=build /app/server ./server
 COPY --from=build /app/src/lib/backendContract.ts ./src/lib/backendContract.ts
 COPY --from=build /app/supabase/functions/_shared ./supabase/functions/_shared
 COPY --from=build /app/src/learning/receiptProtocol.ts /app/src/learning/receiptCoordinator.ts ./src/learning/
+COPY --from=build /app/src/imports/publicationImportPreview.ts /app/src/imports/publicationProtocol.ts ./src/imports/
 USER node
 EXPOSE 8080
 CMD ["node", "server/main.mjs"]

@@ -52,6 +52,7 @@ jobs:
       - name: Check administrator Edge Function
         run: |
           deno check supabase/functions/platform-admin/index.ts supabase/functions/platform-command/index.ts supabase/functions/app-media/index.ts
+          deno check supabase/functions/publication-media/index.ts
           deno check --config supabase/functions/learning-receipts/deno.json supabase/functions/learning-receipts/index.ts
       - name: Verify connected builds fail closed without backend configuration
         run: |
@@ -89,6 +90,7 @@ jobs:
         run: |
           node server/integration.mjs
           node server/learning-integration.mjs
+          node server/publication-integration.mjs
       - name: Check database security and performance advisors
         run: npx supabase db advisors --local --type all --level warn --fail-on error
       - name: Stop isolated Supabase stack

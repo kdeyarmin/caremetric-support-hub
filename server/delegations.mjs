@@ -3,6 +3,8 @@ import { parsePortfolioRequest, parsePortfolioEnvelope } from '../supabase/funct
 import { adminRegistry } from '../supabase/functions/_shared/adminRegistry.ts';
 import { parsePortfolioCommand, parseCommandEnvelope } from '../supabase/functions/_shared/adminCommandProtocol.ts';
 import { callNativeAdmin } from './admin-transport.mjs';
+import { publicationId, publicationPart } from '../src/imports/publicationProtocol.ts';
+import { publicationRange } from './publication-assets.mjs';
 import { nativeLearningOperationSchema } from '../src/learning/receiptProtocol.ts';
 import { learningReceipts } from './learning-receipts.mjs';
 
@@ -13,6 +15,16 @@ export function validateMedia(path,operation) {
   if (!mediaPath.test(path || '') || !['upload','download','sign'].includes(operation)) throw new HttpError(400,'Invalid media request.');
 }
 async function authorize(db,audience,payload) {
+  if(audience==='publication') {
+    if(!payload || Object.keys(payload).sort().join(',')!=='id,operation,part,range'
+      || !['upload','download'].includes(payload.operation) || (payload.operation==='upload' && payload.range!==null)) throw new HttpError(400,'Invalid publication capability.');
+    publicationId.parse(payload.id); publicationPart.parse(payload.part);
+    await db.query('reset role');
+    const asset=(await db.query('select private.publication_object($1,$2,$3) as result',[payload.id,payload.part,payload.operation])).rows[0].result;
+    await db.query('set local role authenticated');
+    const range=payload.operation==='download'?publicationRange(payload.range,asset.byteLength):null;
+    return {...asset,range:range?.header ?? null};
+  }
   if (['carebase','breathe','caremetric-emr','pennsync'].includes(audience)) {
     parsePortfolioRequest({product:audience,...payload});
     return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
@@ -57,7 +69,7 @@ export function delegations({pool,storageUrl,fetchImpl=fetch}) {
         await db.query('set local role authenticated');
         await db.query("select set_config('request.jwt.claims',$1,true)",[JSON.stringify({sub:delegation.user_id,role:'authenticated',sms_session_id:delegation.id})]);
         const authorized=await authorize(db,audience,delegation.payload);
-        return audience==='media' ? authorized : { ...authorized, operation:delegation.payload };
+        return ['media','publication'].includes(audience) ? authorized : { ...authorized, operation:delegation.payload };
       });
     },
     async admin(sessionToken,input) {
@@ -81,6 +93,13 @@ export function delegations({pool,storageUrl,fetchImpl=fetch}) {
       return fetchImpl(`${storageUrl}/functions/v1/app-media`,{
         method:'POST',headers:{Authorization:`Bearer ${capability}`,'Content-Type':contentType || 'application/json'},
         body:body || '{}', ...(body ? {duplex:'half'} : {}), signal:AbortSignal.timeout(120000),redirect:'manual',
+      });
+    },
+    async publication(sessionToken,id,part,operation,body,contentType,range=null) {
+      const capability=await issue(sessionToken,'publication',{id,part,operation,range});
+      return fetchImpl(`${storageUrl}/functions/v1/publication-media`,{
+        method:'POST',headers:{Authorization:`Bearer ${capability}`,'Content-Type':contentType || 'application/json'},
+        body:body || '{}',...(body?{duplex:'half'}:{}),signal:AbortSignal.timeout(120000),redirect:'error',
       });
     },
   };
