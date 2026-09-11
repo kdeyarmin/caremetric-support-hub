@@ -13,7 +13,7 @@ const fixtures=[
   ['alter function private.record_billing_checkout_result(uuid,uuid,jsonb) rename to test_missing_checkout_record',/Missing reviewed checkout function/],
   ['alter function private.claim_billing_checkout_recovery(uuid) rename to test_missing_recovery_claim',/Missing reviewed checkout function/],
   ['alter function private.remember_billing_checkout_recovery(uuid,uuid,jsonb) rename to test_missing_recovery_record',/Missing reviewed checkout function/],
-  ["create or replace function private.claim_billing_checkout(p_command_id uuid,p_expected_digest text,p_check_only boolean) returns jsonb language sql set search_path='' as $ select null::jsonb $",/GET-only recovery boundary/],
+  ["create or replace function private.claim_billing_checkout(p_command_id uuid,p_expected_digest text,p_check_only boolean) returns jsonb language sql set search_path='' as $$ select null::jsonb $$",/GET-only recovery boundary/],
   ['alter table private.billing_checkout_intents rename to test_missing_checkout_intents',/checkout intent table/],
   ["alter type private.billing_checkout_action rename value 'billing.checkout.create' to 'test.unsupported'",/closed checkout action/],
   ['alter table private.billing_checkout_intents alter column action drop not null',/closed checkout action/],
