@@ -1,5 +1,11 @@
 -- Extend reviewed native intentions to draft edits and explicit human approval.
 -- Existing source pinning, current session authority and immutable replay are preserved.
+create function private.learning_authoring_actions() returns text[]
+language sql immutable security invoker set search_path='' as $$
+  select array['learning.cloneVersion','learning.publishVersion','learning.patchDraft','learning.reviewDraft']::text[];
+$$;
+revoke all on function private.learning_authoring_actions() from public,anon,authenticated,hub_app_server;
+
 create or replace function hub.remember_learning_authoring_preview(p_snapshot_id uuid,p_preview jsonb) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare actor jsonb; source private.learning_source_snapshots%rowtype; prior private.learning_authoring_intents%rowtype;
@@ -10,7 +16,7 @@ begin
   if p_preview is null or jsonb_typeof(p_preview)<>'object' or octet_length(p_preview::text)>32000
     or not(p_preview ?& array['commandId','courseId','action','reason','previewDigest','expiresAt','before','after'])
     or p_preview-array['commandId','courseId','action','reason','previewDigest','expiresAt','before','after']<>'{}'::jsonb
-    or coalesce(p_preview->>'action','') not in ('learning.cloneVersion','learning.publishVersion','learning.patchDraft','learning.reviewDraft')
+    or not(coalesce(p_preview->>'action','')=any(private.learning_authoring_actions()))
     or coalesce(p_preview->>'previewDigest','') !~ '^[0-9a-f]{64}$'
     or jsonb_typeof(p_preview->'before')<>'object' or jsonb_typeof(p_preview->'after')<>'object'
     or coalesce(length(p_preview->>'reason'),0) not between 10 and 500 then
@@ -89,7 +95,7 @@ begin
     or p_result->'versionNumber' is distinct from intent.preview->'after'->'versionNumber'
     or coalesce(p_result->>'versionId','') !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
     or jsonb_typeof(p_result->'replayed') is distinct from 'boolean'
-    or (p_result->>'action'<>'learning.cloneVersion' and p_result->>'versionId' is distinct from intent.preview->'before'->>'versionId') 
+    or (p_result->>'action'<>'learning.cloneVersion' and p_result->>'versionId' is distinct from intent.preview->'before'->>'versionId')
     or (p_result->>'action'='learning.cloneVersion' and p_result->>'versionId' is not distinct from intent.preview->'before'->>'versionId') then
     raise exception 'The native outcome does not match the preview.' using errcode='22023';
   end if;
