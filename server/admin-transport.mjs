@@ -1,7 +1,7 @@
 import { HttpError } from './sms-auth.mjs';
 
 /** Fixed registry destinations only; callers never supply a URL or header name. */
-export async function callNativeAdmin(fetcher, target, authorizationHeader, capability, operation, project, command = false, parentSignal) {
+export async function callNativeAdmin(fetcher, target, authorizationHeader, capability, operation, project, command = false, parentSignal, maximumBytes = 1000000) {
   const signal = AbortSignal.any([...(parentSignal ? [parentSignal] : []), AbortSignal.timeout(12000)]);
   try {
     const response = await fetcher(target, {
@@ -26,12 +26,12 @@ export async function callNativeAdmin(fetcher, target, authorizationHeader, capa
         const {done,value}=await reader.read();
         if (done) break;
         size+=value.byteLength;
-        if (size>1000000) { await reader.cancel(); throw new Error('Oversized response'); }
+        if (size>maximumBytes) { await reader.cancel(); throw new Error('Oversized response'); }
         chunks.push(Buffer.from(value));
       }
       signal.throwIfAborted();
     } finally { signal.removeEventListener('abort',cancel); reader.releaseLock(); }
-    return project(JSON.parse(Buffer.concat(chunks,size).toString('utf8')));
+    return await project(JSON.parse(Buffer.concat(chunks,size).toString('utf8')));
   } catch (error) {
     if (error instanceof HttpError) throw error;
     throw new HttpError(503,'Administrator connection is unavailable.','upstream');

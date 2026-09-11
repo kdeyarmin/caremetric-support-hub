@@ -5,6 +5,8 @@ import { parsePortfolioCommand, parseCommandEnvelope } from '../supabase/functio
 import { callNativeAdmin } from './admin-transport.mjs';
 import { nativeLearningOperationSchema } from '../src/learning/receiptProtocol.ts';
 import { learningReceipts } from './learning-receipts.mjs';
+import { nativeAuthoringOperationSchema } from '../src/learning/authoringProtocol.ts';
+import { learningAuthoring } from './learning-authoring.mjs';
 
 const prefix = 'cmh_';
 export const validDelegation = value => typeof value==='string' && /^cmh_[A-Za-z0-9_-]{43}$/.test(value);
@@ -22,7 +24,7 @@ async function authorize(db,audience,payload) {
     return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
   }
   if (audience==='carebase.learning') {
-    nativeLearningOperationSchema.parse(payload);
+    nativeLearningOperationSchema.or(nativeAuthoringOperationSchema).parse(payload);
     return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
   }
   if (audience!=='media') throw new HttpError(403,'Unsupported authorization audience.');
@@ -44,6 +46,7 @@ export function delegations({pool,storageUrl,fetchImpl=fetch}) {
   };
   return {
     learning: learningReceipts({pool,issue,fetchImpl}),
+    authoring: learningAuthoring({pool,issue,fetchImpl}),
     async consume(capability,audience) {
       if (!validDelegation(capability)) throw new HttpError(401,'Invalid authorization.');
       return transaction(pool,async db => {

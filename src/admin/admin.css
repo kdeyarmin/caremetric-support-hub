@@ -154,3 +154,12 @@
 .access-command table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
 .access-command th, .access-command td { text-align: left; border-bottom: 1px solid #e2e8f0; padding: .65rem; overflow-wrap: anywhere; }
 .access-command [role="alert"] { color: #9f1239; }
+.admin-authoring { padding: 20px; border-top: 1px solid var(--border, #dce3ed); display: grid; gap: 12px; min-width: 0; }
+.admin-authoring h3, .admin-authoring h4, .admin-authoring p { margin: 0; }
+.admin-authoring label, .admin-authoring-actions { display: grid; gap: 8px; }
+.admin-authoring select, .admin-authoring textarea, .admin-authoring input:not([type=checkbox]) { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; }
+.admin-authoring pre { overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 360px; font-size: 12px; padding: 10px; background: #f1f5f9; }
+.admin-authoring details { width: 100%; margin-top: 10px; }
+.admin-authoring summary { cursor: pointer; font-weight: 600; }
+.admin-authoring .learning-notice { display: block; min-width: 0; }
+.admin-authoring .learning-checkbox { display: flex; align-items: flex-start; }
