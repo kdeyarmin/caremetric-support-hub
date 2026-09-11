@@ -5,6 +5,8 @@ import { parsePortfolioCommand, parseCommandEnvelope } from '../supabase/functio
 import { callNativeAdmin } from './admin-transport.mjs';
 import { nativeLearningOperationSchema } from '../src/learning/receiptProtocol.ts';
 import { learningReceipts } from './learning-receipts.mjs';
+import { nativeAuthoringOperationSchema } from '../src/learning/authoringProtocol.ts';
+import { learningAuthoring } from './learning-authoring.mjs';
 
 const prefix = 'cmh_';
 export const validDelegation = value => typeof value==='string' && /^cmh_[A-Za-z0-9_-]{43}$/.test(value);
@@ -13,7 +15,7 @@ export function validateMedia(path,operation) {
   if (!mediaPath.test(path || '') || !['upload','download','sign'].includes(operation)) throw new HttpError(400,'Invalid media request.');
 }
 async function authorize(db,audience,payload) {
-  if (['carebase','breathe','caremetric-emr','pennsync'].includes(audience)) {
+  if (['carebase','breathe','caremetric-emr','pennsync','caremetric-go'].includes(audience)) {
     parsePortfolioRequest({product:audience,...payload});
     return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
   }
@@ -22,7 +24,7 @@ async function authorize(db,audience,payload) {
     return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
   }
   if (audience==='carebase.learning') {
-    nativeLearningOperationSchema.parse(payload);
+    nativeLearningOperationSchema.or(nativeAuthoringOperationSchema).parse(payload);
     return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
   }
   if (audience!=='media') throw new HttpError(403,'Unsupported authorization audience.');
@@ -44,6 +46,7 @@ export function delegations({pool,storageUrl,fetchImpl=fetch}) {
   };
   return {
     learning: learningReceipts({pool,issue,fetchImpl}),
+    authoring: learningAuthoring({pool,issue,fetchImpl}),
     async consume(capability,audience) {
       if (!validDelegation(capability)) throw new HttpError(401,'Invalid authorization.');
       return transaction(pool,async db => {
@@ -64,7 +67,7 @@ export function delegations({pool,storageUrl,fetchImpl=fetch}) {
       let request;
       try { request=parsePortfolioRequest(input); } catch { throw new HttpError(400,'Invalid administrator request.'); }
       const entry=adminRegistry[request.product];
-      if (!entry.endpoint || !['carebase','breathe','caremetric-emr','pennsync'].includes(request.product)) throw new HttpError(503,'This application has not connected its administrator session.','unconfigured');
+      if (!entry.endpoint || !['carebase','breathe','caremetric-emr','pennsync','caremetric-go'].includes(request.product)) throw new HttpError(503,'This application has not connected its administrator session.','unconfigured');
       const operation=request.operation;
       const capability=await issue(sessionToken,request.product,operation);
       return callNativeAdmin(fetchImpl,entry.endpoint,entry.authorizationHeader ?? 'Authorization',capability,operation,value=>parsePortfolioEnvelope(value,request));

@@ -46,7 +46,7 @@ export async function sourceDigest(payload: string): Promise<string> {
   return Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
-// A SHA is provenance/integrity, not source authentication. Only an MFA-verified
+// A SHA is provenance/integrity, not source authentication. Only a verified
 // portfolio editor can stage; no snapshot can change live ownership or completion.
 export function validateGovernedCourse(value: unknown): GovernedCourse {
   const course = governedCourseSchema.parse(value);
@@ -72,7 +72,7 @@ export function validateGovernedCourse(value: unknown): GovernedCourse {
   // Reject provider playback credentials anywhere in authored JSON, too. Source
   // video URLs are represented by a hash and a source block ID, never fetched.
   const serialized = JSON.stringify(course);
-  if (/(?:[?&](?:token|access_token|signature|sig|key|policy|jwt|auth|h|hdnts|hdnea|key-pair-id|api_key|apikey|x-amz-[a-z-]+|x-goog-[a-z-]+)=|"(?:access_token|refresh_token|service_role_key|authorization|accessToken|refreshToken|password|client_secret|storage_path|storage_bucket|video_url|playback_url|signed_url)"\s*:)/i.test(serialized)) {
+  if (/(?:[?&](?:token|access_token|signature|sig|key|policy|jwt|auth|h|hdnts|hdnea|key-pair-id|api_key|apikey|x-amz-[a-z-]+|x-goog-[a-z-]+)=|"(?:access_?token|refresh_?token|service_?role_?key|authorization|password|client_?secret|storage_?(path|bucket)|video_?url|playback_?(url|token)|signed_?url|api_?key|token|secret|secret_?key|signing_?secret)"\s*:)/i.test(serialized)) {
     throw new Error("Remove playback credentials from the source export before staging.");
   }
   return course;

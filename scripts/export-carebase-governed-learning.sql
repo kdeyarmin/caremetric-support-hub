@@ -55,7 +55,7 @@ with snapshots as (
   from public.courses c join public.course_versions v on v.id=c.current_version_id and v.course_id=c.id
   where c.organization_id is null and v.organization_id is null
 )
-select case when exists(select 1 from snapshots where payload ~* '([?&](token|access_token|signature|sig|key|policy|jwt|auth|h|hdnts|hdnea|key-pair-id|api_key|apikey|x-amz-[a-z-]+|x-goog-[a-z-]+)=|"(access_token|refresh_token|service_role_key|authorization|accessToken|refreshToken|password|client_secret|storage_path|storage_bucket|video_url|playback_url|signed_url)"[[:space:]]*:)')
+select case when exists(select 1 from snapshots where payload ~* '([?&](token|access_token|signature|sig|key|policy|jwt|auth|h|hdnts|hdnea|key-pair-id|api_key|apikey|x-amz-[a-z-]+|x-goog-[a-z-]+)=|"(access_?token|refresh_?token|service_?role_?key|authorization|password|client_?secret|storage_?(path|bucket)|video_?url|playback_?(url|token)|signed_?url|api_?key|token|secret|secret_?key|signing_?secret)"[[:space:]]*:)')
 then jsonb_build_object('error','Source content contains an excluded credential or storage field. Review it in CareBase before exporting.')
 else jsonb_build_object('contract','carebase.catalog-snapshot.v1','scope','global-courses-with-current-version',
   'courses',coalesce(jsonb_agg(jsonb_build_object('sourceRevision',encode(extensions.digest(payload,'sha256'),'hex'),
