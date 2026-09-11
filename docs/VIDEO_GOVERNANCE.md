@@ -1,5 +1,12 @@
 # Video and learning governance
 
+The approved ownership direction is now full Hub course creation and delivery.
+The staged runtime and reviewed media-transfer workflow are documented in
+[CENTRAL_LEARNING.md](CENTRAL_LEARNING.md). It accepts private, immutable MP4s
+with captions and transcripts without a HeyGen dependency. The inventory below
+describes the existing source deployment; it is not evidence of a completed
+central migration.
+
 ## Production inventory (2026-09-07)
 
 CareBase remains the authoritative course runtime. The Support Hub is the

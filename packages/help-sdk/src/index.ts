@@ -159,6 +159,16 @@ export interface HelpLauncherOptions extends BuildHelpUrlOptions {
   target?: "_self" | "_blank";
 }
 
+/** Open the shared authoring workspace; no product-local identity or data is sent. */
+export function buildCourseEditorUrl({ baseUrl = DEFAULT_HELP_BASE_URL }: { baseUrl?: string } = {}): string {
+  return new URL("/library/courses/new", resolveBaseUrl(baseUrl)).toString();
+}
+
+/** The Hub authenticates the learner before returning any progress or certificates. */
+export function buildMyLearningUrl({ baseUrl = DEFAULT_HELP_BASE_URL }: { baseUrl?: string } = {}): string {
+  return new URL("/learn/my", resolveBaseUrl(baseUrl)).toString();
+}
+
 export function openHelp(options: HelpLauncherOptions): void {
   if (typeof window === "undefined") {
     throw new Error("openHelp can only be called in a browser. Use buildHelpUrl during server rendering.");

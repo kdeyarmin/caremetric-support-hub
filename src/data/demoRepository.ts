@@ -349,8 +349,8 @@ const customerActor: ActorContext = {
 export class DemoSupportRepository implements HubRepository {
   private actor: ActorContext = staffActor;
 
-  setActorRole(role: "staff" | "customer"): void {
-    this.actor = role === "staff" ? staffActor : customerActor;
+  setActorRole(role: "staff" | "customer" | "admin"): void {
+    this.actor = role === "admin" ? { ...staffActor, id: "admin-demo", name: "CareMetric Administrator", role: "platform_admin" } : role === "staff" ? staffActor : customerActor;
   }
 
   async getActorContext(): Promise<ActorContext> {
