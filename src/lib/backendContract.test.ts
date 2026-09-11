@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { verifyBackendContract } from "./backendContract";
+import { verifyBackendContract, REQUIRED_BACKEND_FEATURES } from "./backendContract";
 
 const origin = "https://project.supabase.co";
 const key = "sb_publishable_test";
 
 describe("deployed backend compatibility", () => {
   it("checks the hub schema using only public configuration", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ api_version: 2 }));
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ api_version: 4, features: REQUIRED_BACKEND_FEATURES }));
     await verifyBackendContract(origin, key, fetcher);
     expect(fetcher).toHaveBeenCalledOnce();
     const [url, options] = fetcher.mock.calls[0];
@@ -18,12 +18,22 @@ describe("deployed backend compatibility", () => {
     expect(options?.headers).not.toHaveProperty("Authorization");
   });
 
+  it.each(REQUIRED_BACKEND_FEATURES)("rejects a release missing required feature %s even when its integer matches", async feature => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ api_version: 4, features: REQUIRED_BACKEND_FEATURES.filter(value => value !== feature) }));
+    await expect(verifyBackendContract(origin, key, fetcher)).rejects.toThrow(/incompatible/);
+  });
+
+  it("accepts a later additive feature without weakening required capabilities", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ api_version: 4, features: [...REQUIRED_BACKEND_FEATURES, "learning.receipts.v1"] }));
+    await expect(verifyBackendContract(origin, key, fetcher)).resolves.toBeUndefined();
+  });
+
   it.each([404, 401, 500, 503])("blocks deployment on HTTP %s", async (status) => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status }));
     await expect(verifyBackendContract(origin, key, fetcher)).rejects.toThrow(/Apply the reviewed migrations/);
   });
 
-  it.each([null, {}, { api_version: "2" }, { api_version: 0 }, { api_version: 1 }, { api_version: 3 }])("rejects incompatible responses: %j", async (contract) => {
+  it.each([null, {}, { api_version: "4" }, { api_version: 0 }, { api_version: 1 }, { api_version: 2 }, { api_version: 3 }, { api_version: 5 }])("rejects incompatible responses: %j", async (contract) => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(contract));
     await expect(verifyBackendContract(origin, key, fetcher)).rejects.toThrow(/incompatible/);
   });

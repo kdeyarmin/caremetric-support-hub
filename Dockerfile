@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 ARG VITE_DEMO_MODE
 ARG VITE_SUPABASE_URL
@@ -15,8 +15,14 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM nginx:1.29-alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
+FROM node:24-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /app/package.json /app/package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/server ./server
+COPY --from=build /app/supabase/functions/_shared ./supabase/functions/_shared
+USER node
 EXPOSE 8080
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["node", "server/main.mjs"]

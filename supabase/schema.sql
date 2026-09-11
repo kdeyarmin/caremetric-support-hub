@@ -3235,3 +3235,468 @@ returns jsonb language sql stable security invoker set search_path = ''
 as $$ select jsonb_build_object('api_version', 2); $$;
 revoke all on function hub.get_backend_contract() from public;
 grant execute on function hub.get_backend_contract() to anon, authenticated;
+
+
+-- 20260911152329_governed_learning_snapshots.sql
+-- Source preservation only. No source or Hub course, publication, enrollment,
+-- assignment, completion, credit, certificate, or media writer is changed here.
+create extension if not exists pg_jsonschema with schema extensions;
+
+-- Generated from governedCourseSchema. The contract test compares this schema to
+-- the TypeScript definition so bypassing browser validation cannot relax it.
+create function private.governed_learning_schema() returns json
+language sql immutable set search_path='' as $$
+select $schema${"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"contract":{"type":"string","const":"carebase.course.v1"},"sourceCourseId":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"sourceVersionId":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"sourceVersionNumber":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"publicationState":{"type":"string","enum":["draft","published","archived"]},"sourceVersionState":{"type":"string","enum":["draft","published"]},"course":{"type":"object","properties":{"title":{"type":"string","maxLength":250000},"description":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"category":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"estimatedDurationMinutes":{"anyOf":[{"type":"integer","minimum":0,"maximum":2147483647},{"type":"null"}]},"catalogCode":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"recurrenceIntervalDays":{"anyOf":[{"type":"integer","minimum":1,"maximum":2147483647},{"type":"null"}]},"legacyTrainingTypeId":{"anyOf":[{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},{"type":"null"}]},"renewalTrainingTypeId":{"anyOf":[{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},{"type":"null"}]},"creditedDurationCheckExempt":{"type":"boolean"}},"required":["title","description","category","estimatedDurationMinutes","catalogCode","recurrenceIntervalDays","legacyTrainingTypeId","renewalTrainingTypeId","creditedDurationCheckExempt"],"additionalProperties":false},"version":{"type":"object","properties":{"title":{"type":"string","maxLength":250000},"description":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"label":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"contentStandard":{"type":"string","enum":["legacy","comprehensive"]},"creditedDurationRationale":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"aiGenerated":{"type":"boolean"},"aiReviewedAt":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]}},"required":["title","description","label","contentStandard","creditedDurationRationale","aiGenerated","aiReviewedAt"],"additionalProperties":false},"blocks":{"maxItems":500,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"type":{"type":"string","enum":["text","video","pdf","scorm","quiz","attestation"]},"sortOrder":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"title":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"body":{"$ref":"#/definitions/__schema0"},"documentId":{"anyOf":[{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},{"type":"null"}]},"videoLocatorSha256":{"anyOf":[{"type":"string","pattern":"^[0-9a-f]{64}$"},{"type":"null"}]},"quiz":{"anyOf":[{"type":"object","properties":{"id":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"title":{"type":"string","maxLength":250000},"passingScore":{"type":"integer","minimum":0,"maximum":100},"maxAttempts":{"anyOf":[{"type":"integer","minimum":1,"maximum":2147483647},{"type":"null"}]},"kind":{"type":"string","enum":["assessment","knowledge_check","final_exam"]},"shuffleQuestions":{"type":"boolean"},"shuffleAnswers":{"type":"boolean"},"revealsAnswersAfterAttempt":{"type":"boolean"},"questions":{"maxItems":500,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"sortOrder":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"prompt":{"type":"string","maxLength":250000},"type":{"type":"string","enum":["single_choice","multiple_choice","true_false"]},"points":{"type":"integer","minimum":1,"maximum":2147483647},"topicCode":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"topicLabel":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"explanation":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"options":{"maxItems":100,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"sortOrder":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"text":{"type":"string","maxLength":250000},"correct":{"type":"boolean"}},"required":["id","sortOrder","text","correct"],"additionalProperties":false}}},"required":["id","sortOrder","prompt","type","points","topicCode","topicLabel","explanation","options"],"additionalProperties":false}}},"required":["id","title","passingScore","maxAttempts","kind","shuffleQuestions","shuffleAnswers","revealsAnswersAfterAttempt","questions"],"additionalProperties":false},{"type":"null"}]}},"required":["id","type","sortOrder","title","body","documentId","videoLocatorSha256","quiz"],"additionalProperties":false}},"credits":{"maxItems":100,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"trainingTypeId":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"topicCode":{"type":"string","maxLength":250000},"creditHours":{"type":"string","pattern":"^\\d{1,4}(\\.\\d{1,2})?$"},"mode":{"type":"string","enum":["automatic","verified_only"]},"citationNote":{"type":"string","maxLength":250000},"active":{"type":"boolean"}},"required":["id","trainingTypeId","topicCode","creditHours","mode","citationNote","active"],"additionalProperties":false}},"provider":{"anyOf":[{"type":"object","properties":{"id":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"fullName":{"type":"string","maxLength":250000},"professionalTitle":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"credential":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"credentialNumber":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"credentialIssuingOrganization":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"credentialExpiresOn":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"courseAuthor":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"signatureName":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"signatureRecordedAt":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"contentVersion":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"lastClinicalReviewDate":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"reviewedBy":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"nextReviewDue":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"regulationReviewDate":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"reviewNotes":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]}},"required":["id","fullName","professionalTitle","credential","credentialNumber","credentialIssuingOrganization","credentialExpiresOn","courseAuthor","signatureName","signatureRecordedAt","contentVersion","lastClinicalReviewDate","reviewedBy","nextReviewDue","regulationReviewDate","reviewNotes"],"additionalProperties":false},{"type":"null"}]},"packages":{"maxItems":100,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"standard":{"type":"string","enum":["scorm_1_2","scorm_2004_4th","xapi","lti_1_3"]},"contentSha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},"entryPoint":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"manifest":{"$ref":"#/definitions/__schema1"},"capabilities":{"maxItems":100,"type":"array","items":{"type":"string","maxLength":250000}},"connectivityMode":{"type":"string","enum":["online_only","offline_supported"]},"validationStatus":{"type":"string","enum":["pending","validating","accepted","rejected","quarantined"]}},"required":["id","standard","contentSha256","entryPoint","manifest","capabilities","connectivityMode","validationStatus"],"additionalProperties":false}}},"required":["contract","sourceCourseId","sourceVersionId","sourceVersionNumber","publicationState","sourceVersionState","course","version","blocks","credits","provider","packages"],"additionalProperties":false,"definitions":{"__schema0":{"anyOf":[{"type":"string"},{"type":"number"},{"type":"boolean"},{"type":"null"},{"type":"array","items":{"$ref":"#/definitions/__schema0"}},{"type":"object","propertyNames":{"type":"string"},"additionalProperties":{"$ref":"#/definitions/__schema0"}}]},"__schema1":{"anyOf":[{"type":"string"},{"type":"number"},{"type":"boolean"},{"type":"null"},{"type":"array","items":{"$ref":"#/definitions/__schema1"}},{"type":"object","propertyNames":{"type":"string"},"additionalProperties":{"$ref":"#/definitions/__schema1"}}]}}}$schema$::json;
+$$;
+
+create function private.validate_governed_learning_source(p_payload text, p_revision text) returns jsonb
+language plpgsql set search_path='' as $$
+declare document jsonb;
+begin
+  if p_payload is null or octet_length(p_payload)>2000000 or p_revision is null
+    or p_revision !~ '^[0-9a-f]{64}$'
+    or encode(extensions.digest(p_payload,'sha256'),'hex')<>p_revision then
+    raise exception 'Source revision checksum or size is invalid.' using errcode='22023';
+  end if;
+  begin document:=p_payload::jsonb;
+  exception when invalid_text_representation then
+    raise exception 'Source payload is not valid JSON.' using errcode='22023';
+  end;
+  if not extensions.jsonb_matches_schema(private.governed_learning_schema(),document) then
+    raise exception 'Source snapshot does not match carebase.course.v1.' using errcode='22023';
+  end if;
+  if document::text ~* '([?&](token|access_token|signature|sig|key|policy|jwt|auth|h|hdnts|hdnea|key-pair-id|api_key|apikey|x-amz-[a-z-]+|x-goog-[a-z-]+)=|"(access_token|refresh_token|service_role_key|authorization|accessToken|refreshToken|password|client_secret|storage_path|storage_bucket|video_url|playback_url|signed_url)"[[:space:]]*:)' then
+    raise exception 'Remove playback credentials from the source export before staging.' using errcode='22023';
+  end if;
+  if exists(select 1 from jsonb_array_elements(document->'blocks') b
+    where ((b->>'type'='quiz') is distinct from (b->'quiz'<>'null'::jsonb))
+      or ((b->'quiz'->>'revealsAnswersAfterAttempt')::boolean and b->'quiz'->>'kind'<>'knowledge_check')) then
+    raise exception 'Source quiz configuration is invalid.' using errcode='22023';
+  end if;
+  if exists(
+    with blocks as(select value b from jsonb_array_elements(document->'blocks')),
+    questions as(select q from blocks cross join lateral jsonb_array_elements(coalesce(nullif(b->'quiz'->'questions','null'::jsonb),'[]'::jsonb)) q),
+    ids as (
+      select 'block' kind, lower(b->>'id') id from blocks
+      union all select 'quiz',lower(b->'quiz'->>'id') from blocks where b->'quiz'<>'null'::jsonb
+      union all select 'question',lower(q->>'id') from questions
+      union all select 'answer',lower(a->>'id') from questions cross join lateral jsonb_array_elements(q->'options') a
+      union all select 'credit',lower(c->>'id') from jsonb_array_elements(document->'credits') c
+      union all select 'package',lower(p->>'id') from jsonb_array_elements(document->'packages') p
+    ) select 1 from ids group by kind,id having count(*)>1
+  ) then raise exception 'The source snapshot repeats a content identifier.' using errcode='22023'; end if;
+  return document;
+end;
+$$;
+
+create table private.learning_source_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  item_id uuid not null references hub.content_items(id),
+  source_course_id uuid not null,
+  source_version_id uuid not null,
+  source_revision text not null check(source_revision ~ '^[0-9a-f]{64}$'),
+  sequence integer not null check(sequence>0),
+  publication_state text not null check(publication_state in ('draft','published','archived')),
+  source_payload text not null check(octet_length(source_payload)<=2000000),
+  staged_by uuid not null references hub.profiles(id),
+  staged_at timestamptz not null default now(),
+  unique(source_course_id,source_revision),
+  unique(source_course_id,sequence)
+);
+create index learning_source_snapshots_item_idx on private.learning_source_snapshots(item_id);
+create index learning_source_snapshots_actor_idx on private.learning_source_snapshots(staged_by);
+alter table private.learning_source_snapshots enable row level security;
+revoke all on private.learning_source_snapshots from public,anon,authenticated;
+
+create function hub.stage_learning_source(p_payload text,p_source_revision text,p_expected_revision text) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare editor uuid; doc jsonb; item uuid; source_id uuid; prior private.learning_source_snapshots%rowtype;
+  head private.learning_source_snapshots%rowtype; staged private.learning_source_snapshots%rowtype;
+begin
+  editor:=private.require_learning_editor();
+  doc:=private.validate_governed_learning_source(p_payload,p_source_revision);
+  source_id:=(doc->>'sourceCourseId')::uuid;
+  -- The existing catalog item is the lock boundary for all imports of a source
+  -- course. Concurrent first imports serialize without a second mutable head.
+  select l.content_item_id into item from hub.course_links l join hub.content_items i on i.id=l.content_item_id
+    where lower(l.penntrain_course_id)=source_id::text and i.kind='course' and i.source_system='penntrain'
+    for update of i;
+  if not found then raise exception 'Source course is not registered in the central catalog.' using errcode='22023'; end if;
+  select * into head from private.learning_source_snapshots where source_course_id=source_id order by sequence desc limit 1;
+  select * into prior from private.learning_source_snapshots where source_course_id=source_id and source_revision=p_source_revision;
+  if found then
+    -- Replaying a historical revision acknowledges it but NEVER rewinds the head.
+    return jsonb_build_object('snapshotId',prior.id,'sourceRevision',prior.source_revision,
+      'headRevision',head.source_revision,'sequence',prior.sequence,'replayed',true);
+  end if;
+  if p_expected_revision is distinct from head.source_revision then
+    raise exception 'A newer source snapshot was staged. Reload the export preview before continuing.' using errcode='40001';
+  end if;
+  insert into private.learning_source_snapshots(item_id,source_course_id,source_version_id,source_revision,sequence,publication_state,source_payload,staged_by)
+    values(item,source_id,(doc->>'sourceVersionId')::uuid,p_source_revision,coalesce(head.sequence,0)+1,doc->>'publicationState',p_payload,editor)
+    returning * into staged;
+  insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata)
+    values(editor,'learning.source.staged','content_item',item,jsonb_build_object('source_revision',p_source_revision,'sequence',staged.sequence));
+  return jsonb_build_object('snapshotId',staged.id,'sourceRevision',staged.source_revision,
+    'headRevision',staged.source_revision,'sequence',staged.sequence,'replayed',false);
+end;
+$$;
+
+create function hub.list_learning_source_heads() returns jsonb
+language plpgsql stable security definer set search_path='' as $$
+begin
+  perform private.require_learning_editor();
+  return coalesce((select jsonb_agg(jsonb_build_object('sourceCourseId',s.source_course_id,'snapshotId',s.id,
+    'sourceRevision',s.source_revision,'sequence',s.sequence,'publicationState',s.publication_state) order by s.source_course_id)
+    from (select distinct on(source_course_id) * from private.learning_source_snapshots order by source_course_id,sequence desc) s),'[]'::jsonb);
+end;
+$$;
+
+create function hub.get_learning_source_snapshot(p_snapshot_id uuid) returns jsonb
+language plpgsql stable security definer set search_path='' as $$
+declare result jsonb;
+begin
+  perform private.require_learning_editor();
+  select jsonb_build_object('sourceRevision',source_revision,'payload',source_payload) into result
+    from private.learning_source_snapshots where id=p_snapshot_id;
+  if result is null then raise exception 'Source snapshot unavailable.' using errcode='22023'; end if;
+  return result;
+end;
+$$;
+revoke all on function private.governed_learning_schema(),private.validate_governed_learning_source(text,text) from public,anon,authenticated;
+revoke all on function hub.stage_learning_source(text,text,text),hub.list_learning_source_heads(),hub.get_learning_source_snapshot(uuid) from public,anon,authenticated;
+grant execute on function hub.stage_learning_source(text,text,text),hub.list_learning_source_heads(),hub.get_learning_source_snapshot(uuid) to authenticated;
+
+
+-- 20260911154818_governed_learning_backend_contract.sql
+-- Release 3 may expose governed import UI only after its full staging API exists.
+do $$
+begin
+  if to_regprocedure('hub.get_learning_editor_access()') is null
+    or to_regprocedure('hub.authorize_platform_admin()') is null
+    or to_regprocedure('hub.stage_learning_source(text,text,text)') is null
+    or to_regprocedure('hub.list_learning_source_heads()') is null
+    or to_regprocedure('hub.get_learning_source_snapshot(uuid)') is null
+    or to_regprocedure('extensions.jsonb_matches_schema(json,jsonb)') is null
+    or to_regclass('private.learning_source_snapshots') is null then
+    raise exception 'Apply governed learning preservation and administrator authorization first';
+  end if;
+end;
+$$;
+create or replace function hub.get_backend_contract()
+returns jsonb language sql stable security invoker set search_path=''
+as $$ select jsonb_build_object('api_version',3); $$;
+revoke all on function hub.get_backend_contract() from public;
+grant execute on function hub.get_backend_contract() to anon,authenticated;
+
+-- Delegated command authorization and release contract 4.
+-- Mutation delegation retains the native CareBase eight-hour privileged-session
+-- window. Refreshing a token does not extend the original session creation time.
+create function hub.authorize_platform_command()
+returns jsonb language plpgsql stable security definer set search_path='' as $$
+declare
+  actor jsonb;
+  session_id uuid;
+  started_at timestamptz;
+  not_after timestamptz;
+  issued_at text := (select auth.jwt()->>'iat');
+begin
+  actor := hub.authorize_platform_admin();
+  session_id := (select auth.jwt()->>'session_id')::uuid;
+  select s.created_at,s.not_after into started_at,not_after
+    from auth.sessions s where s.id=session_id and s.user_id=(actor->>'user_id')::uuid;
+  if started_at is null or started_at < now()-interval '480 minutes'
+    or started_at > now()+interval '5 minutes'
+    or issued_at is null or issued_at !~ '^[0-9]{1,12}$' then
+    raise exception 'Sign in again before changing application access.' using errcode='28000';
+  end if;
+  if issued_at::numeric > extract(epoch from now()+interval '5 minutes') then
+    raise exception 'Sign in again before changing application access.' using errcode='28000';
+  end if;
+  return actor || jsonb_build_object('session_id',session_id,'session_started_at',started_at,
+    'assurance_expires_at',least(started_at+interval '480 minutes',not_after));
+end;
+$$;
+revoke all on function hub.authorize_platform_command() from public,anon,authenticated;
+grant execute on function hub.authorize_platform_command() to authenticated;
+
+do $$ begin
+  if to_regprocedure('hub.authorize_platform_command()') is null
+    or to_regprocedure('hub.stage_learning_source(text,text,text)') is null
+    or (hub.get_backend_contract()->>'api_version')::integer < 3 then
+    raise exception 'Apply governed learning and command authorization before contract 4';
+  end if;
+end $$;
+create or replace function hub.get_backend_contract()
+returns jsonb language sql stable security invoker set search_path='' as $$
+  select jsonb_build_object('api_version',4);
+$$;
+revoke all on function hub.get_backend_contract() from public;
+grant execute on function hub.get_backend_contract() to anon,authenticated;
+
+-- First-party SMS sessions. Telnyx verifies the code; the Hub owns the session.
+-- Supabase Auth rows remain identity references, not the SMS verification service.
+do $$ begin
+  if not exists(select 1 from pg_roles where rolname='hub_app_server') then
+    create role hub_app_server nologin noinherit nosuperuser nocreatedb nocreaterole nobypassrls;
+  end if;
+end $$;
+grant authenticated, anon to hub_app_server;
+grant usage on schema private, hub to hub_app_server;
+
+create table private.sms_identities (
+  user_id uuid primary key references auth.users(id),
+  phone_e164 text not null unique check(phone_e164 ~ '^\+[1-9][0-9]{7,14}$'),
+  identity_version uuid not null default gen_random_uuid(),
+  verified_at timestamptz,
+  revoked_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create table private.sms_challenges (
+  id uuid primary key,
+  user_id uuid references private.sms_identities(user_id),
+  identity_version uuid,
+  phone_hash text not null,
+  client_hash text not null,
+  browser_hash text not null,
+  provider_id uuid,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null default now()+interval '5 minutes',
+  attempts integer not null default 0 check(attempts between 0 and 5),
+  consumed_at timestamptz
+);
+create index sms_challenge_phone_time on private.sms_challenges(phone_hash,created_at);
+create index sms_challenge_client_time on private.sms_challenges(client_hash,created_at);
+create index sms_challenge_user on private.sms_challenges(user_id);
+create table private.sms_sessions (
+  id uuid primary key,
+  token_hash text not null unique,
+  user_id uuid not null references private.sms_identities(user_id),
+  identity_version uuid not null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  revoked_at timestamptz
+);
+create index sms_sessions_user on private.sms_sessions(user_id);
+create table private.app_delegations (
+  token_hash text primary key,
+  session_id uuid not null references private.sms_sessions(id),
+  audience text not null check(audience in ('carebase','media')),
+  payload jsonb not null,
+  expires_at timestamptz not null,
+  consumed_at timestamptz
+);
+create index app_delegations_session on private.app_delegations(session_id);
+
+-- Changing or disabling a registered number invalidates every old challenge and session.
+create function private.rotate_sms_identity() returns trigger
+language plpgsql set search_path='' as $$
+begin
+  if new.phone_e164 is distinct from old.phone_e164 or new.revoked_at is distinct from old.revoked_at then
+    new.identity_version:=gen_random_uuid(); new.verified_at:=null;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function private.rotate_sms_identity() from public,anon,authenticated;
+create trigger rotate_sms_identity before update on private.sms_identities
+for each row execute function private.rotate_sms_identity();
+
+alter table private.sms_identities enable row level security;
+alter table private.sms_challenges enable row level security;
+alter table private.sms_sessions enable row level security;
+alter table private.app_delegations enable row level security;
+revoke all on private.sms_identities,private.sms_challenges,private.sms_sessions,private.app_delegations from public,anon,authenticated;
+grant select on private.sms_identities to hub_app_server;
+grant update(verified_at) on private.sms_identities to hub_app_server;
+grant select,insert,update,delete on private.sms_challenges,private.sms_sessions,private.app_delegations to hub_app_server;
+create policy sms_identity_server on private.sms_identities for select to hub_app_server using(true);
+create policy sms_identity_verify on private.sms_identities for update to hub_app_server using(true) with check(true);
+create policy sms_challenge_server on private.sms_challenges for all to hub_app_server using(true) with check(true);
+create policy sms_session_server on private.sms_sessions for all to hub_app_server using(true) with check(true);
+create policy app_delegation_server on private.app_delegations for all to hub_app_server using(true) with check(true);
+
+create function private.current_app_session_verified() returns boolean
+language sql stable security definer set search_path='' as $$
+  select session_user='hub_app_server' and private.current_user_is_usable() and exists (
+    select 1 from private.sms_sessions s join private.sms_identities i on i.user_id=s.user_id
+    where s.id::text=(select auth.jwt()->>'sms_session_id') and s.user_id=(select auth.uid())
+      and s.identity_version=i.identity_version and i.revoked_at is null
+      and s.revoked_at is null and s.expires_at>now()
+  );
+$$;
+create function private.current_session_is_verified() returns boolean
+language sql stable security definer set search_path='' as $$
+  select private.current_app_session_verified() or private.current_session_is_aal2();
+$$;
+revoke all on function private.current_app_session_verified(),private.current_session_is_verified() from public,anon,authenticated;
+
+-- Preserve existing role/tenant checks while accepting the app-owned verified
+-- session at every protected RPC. Legacy AAL2 checks keep their original meaning.
+do $$ declare fn record; definition text;
+begin
+  for fn in
+    select p.oid from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname in ('private','hub') and p.prokind='f'
+      and p.proname not in ('current_session_is_aal2','current_session_is_verified','authorize_platform_admin')
+      and p.prosrc like '%private.current_session_is_aal2()%'
+  loop
+    definition := replace(pg_get_functiondef(fn.oid),'private.current_session_is_aal2()','private.current_session_is_verified()');
+    execute definition;
+  end loop;
+end $$;
+
+create function hub.authorize_app_admin() returns jsonb
+language plpgsql stable security definer set search_path='' as $$
+begin
+  if not private.current_app_session_verified() or not private.has_staff_permission('platform.admin',null) then
+    raise exception 'Current administrator session required.' using errcode='28000';
+  end if;
+  return jsonb_build_object('user_id',auth.uid(),'role','platform_admin','method','sms');
+end;
+$$;
+revoke all on function hub.authorize_app_admin() from public,anon;
+grant execute on function hub.authorize_app_admin() to authenticated;
+
+create function hub.authorize_learning_object(p_path text,p_operation text) returns boolean
+language sql stable security definer set search_path='' as $$
+  select private.current_app_session_verified()
+    and p_path ~ '^learning/[0-9a-f-]{36}/(video.mp4|captions.vtt|transcript.txt)$'
+    and case when p_operation='upload' then private.can_upload_learning_object(p_path)
+      when p_operation in ('download','sign') then private.can_read_learning_object(p_path) else false end;
+$$;
+revoke all on function hub.authorize_learning_object(text,text) from public,anon;
+grant execute on function hub.authorize_learning_object(text,text) to authenticated;
+
+create function private.usable_sms_identity(p_phone text) returns table(user_id uuid,identity_version uuid)
+language sql stable security definer set search_path='' as $$
+  select i.user_id,i.identity_version from private.sms_identities i
+    join auth.users u on u.id=i.user_id join hub.profiles p on p.id=u.id
+    where i.phone_e164=p_phone and i.revoked_at is null and u.deleted_at is null
+      and (u.banned_until is null or u.banned_until<=now()) and not coalesce(u.is_anonymous,false);
+$$;
+revoke all on function private.usable_sms_identity(text) from public,anon,authenticated;
+grant execute on function private.usable_sms_identity(text) to hub_app_server;
+
+create or replace function hub.get_backend_contract() returns jsonb
+language sql stable security invoker set search_path='' as $$ select jsonb_build_object('api_version',3); $$;
+
+-- No login password, telephone number, provider key, or session is provisioned
+-- in source. The deployment operator binds an approved number to an existing
+-- user and enables the dedicated server role with a generated secret.
+
+-- Intake still needs an active, verified support owner.
+create or replace function private.is_case_intake_enabled(
+  p_tenant_id uuid,
+  p_product_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from private.case_intake_settings setting
+    join hub.tenant_products entitlement
+      on entitlement.tenant_id = setting.tenant_id
+     and entitlement.product_id = setting.product_id
+    join hub.tenants tenant on tenant.id = setting.tenant_id
+    join hub.products product on product.id = setting.product_id
+    where setting.tenant_id = p_tenant_id
+      and setting.product_id = p_product_id
+      and setting.enabled
+      and setting.activated_at is not null
+      and setting.activated_by is not null
+      and entitlement.status = 'active'
+      and tenant.status = 'active'
+      and product.status <> 'retired'
+      and product.support_enabled
+      and exists (
+        select 1
+        from private.staff_permissions permission
+        join auth.users staff_user on staff_user.id = permission.user_id
+        where permission.revoked_at is null
+          and permission.permission in ('case.write', 'platform.admin')
+          and (permission.product_id is null or permission.product_id = p_product_id)
+          and staff_user.deleted_at is null
+          and (staff_user.banned_until is null or staff_user.banned_until <= now())
+          and not coalesce(staff_user.is_anonymous, false)
+          and exists (
+            select 1
+            from hub.profiles staff_profile
+            where staff_profile.id = permission.user_id
+          )
+          and (exists (
+            select 1 from auth.mfa_factors factor
+            where factor.user_id = permission.user_id
+              and factor.factor_type = 'totp'
+              and factor.status = 'verified'
+          ) or exists (
+            select 1 from private.sms_identities sms
+            where sms.user_id=permission.user_id and sms.revoked_at is null and sms.verified_at is not null
+          ))
+      )
+  );
+$$;
+
+-- Each native administrator adapter receives a different single-use audience.
+alter table private.app_delegations drop constraint app_delegations_audience_check;
+alter table private.app_delegations add constraint app_delegations_audience_check
+  check(audience in ('carebase','breathe','media'));
+
+-- Preserve the already deployed SMS migration and combine independently shipped
+-- features. API version 4 remains stable for additive, explicitly named features.
+create function hub.authorize_app_command() returns jsonb
+language plpgsql stable security definer set search_path='' as $$
+declare actor jsonb; session private.sms_sessions%rowtype; expires timestamptz;
+begin
+  actor:=hub.authorize_app_admin();
+  select * into session from private.sms_sessions
+    where id::text=(select auth.jwt()->>'sms_session_id') and user_id=(select auth.uid());
+  if not found or session.created_at<now()-interval '8 hours'
+    or session.created_at>now()+interval '5 minutes' then
+    raise exception 'Current administrator session required.' using errcode='28000';
+  end if;
+  expires:=least(session.expires_at,session.created_at+interval '8 hours');
+  if expires<=now() then
+    raise exception 'Current administrator session required.' using errcode='28000';
+  end if;
+  return actor || jsonb_build_object('session_id',session.id,
+    'session_started_at',session.created_at,'assurance_expires_at',expires);
+end;
+$$;
+revoke all on function hub.authorize_app_command() from public,anon;
+grant execute on function hub.authorize_app_command() to authenticated;
+
+alter table private.app_delegations drop constraint app_delegations_audience_check;
+alter table private.app_delegations add constraint app_delegations_audience_check
+  check(audience in ('carebase','breathe','caremetric-emr','pennsync','carebase.command','media'));
+
+do $$
+begin
+  if to_regprocedure('hub.authorize_platform_admin()') is null
+    or to_regprocedure('hub.authorize_platform_command()') is null
+    or to_regprocedure('hub.authorize_app_admin()') is null
+    or to_regprocedure('hub.authorize_app_command()') is null
+    or to_regprocedure('private.current_app_session_verified()') is null
+    or to_regprocedure('hub.stage_learning_source(text,text,text)') is null
+    or to_regprocedure('hub.list_learning_source_heads()') is null
+    or to_regprocedure('hub.get_learning_source_snapshot(uuid)') is null
+    or to_regprocedure('hub.get_learning_editor_access()') is null
+    or to_regprocedure('extensions.jsonb_matches_schema(json,jsonb)') is null
+    or to_regclass('private.learning_source_snapshots') is null
+    or to_regclass('private.sms_sessions') is null then
+    raise exception 'Apply all reviewed learning, SMS and administrator migrations first';
+  end if;
+end;
+$$;
+create or replace function hub.get_backend_contract() returns jsonb
+language sql stable security invoker set search_path='' as $$
+  select jsonb_build_object('api_version',4,'features',jsonb_build_array(
+    'learning.runtime.v1','platform.admin.read.v1','app.sms.v1',
+    'learning.sources.v1','platform.admin.command.v1'));
+$$;
+revoke all on function hub.get_backend_contract() from public;
+grant execute on function hub.get_backend_contract() to anon,authenticated;

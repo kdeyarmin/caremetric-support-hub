@@ -2,17 +2,17 @@ import { isUuid, parseAdminEnvelope, parseAdminOperation, type AdminOperation } 
 
 export const portfolioProducts = ["carebase", "breathe", "caremetric-emr", "pennsync", "intel", "caremetric-go"] as const;
 export type PortfolioProduct = typeof portfolioProducts[number];
-export const portfolioOperations = ["capabilities", "overview", "courses.list", "courses.get", "organizations.list", "users.list", "billing.overview", "billing.subscriptions.list"] as const;
+export const portfolioOperations = ["capabilities", "overview", "courses.list", "courses.get", "organizations.list", "users.list", "billing.overview", "billing.subscriptions.list", "commands.preview", "commands.apply"] as const;
 export type PortfolioOperationName = typeof portfolioOperations[number];
 export type DirectoryOperation = { operation: "organizations.list" | "users.list" | "billing.subscriptions.list"; search?: string; limit: number; offset: number };
 export type PortfolioOperation = AdminOperation | DirectoryOperation | { operation: "capabilities" | "billing.overview" };
 export interface PortfolioRequest { product: PortfolioProduct; operation: PortfolioOperation; }
 export interface PortfolioCapabilities { apiVersion: 1; operations: PortfolioOperationName[]; sourceRevision: string | null; }
-export interface PortfolioOverview { organizationCount: number; activeUserCount: number; globalCourseCount?: number; subscriptionCount?: number; }
+export interface PortfolioOverview { organizationCount: number; activeUserCount: number | null; registeredUserCount?: number; globalCourseCount?: number; subscriptionCount?: number; }
 export interface AdminOrganization { id: string; name: string | null; slug: string | null; status: string; createdAt: string | null; }
 export interface AdminDirectoryUser { id: string; displayName: string | null; email: string | null; role: string; status: string; createdAt: string | null; }
 export interface AdminSubscription {
-  id: string; organizationId: string; organizationName: string | null; planCode: string | null; planName: string | null;
+  id: string; organizationId: string | null; organizationName: string | null; planCode: string | null; planName: string | null;
   status: string; providerStatus: string | null; providerCustomerId: string | null; providerSubscriptionId: string | null;
   currentPeriodEnd: string | null; updatedAt: string | null;
 }
@@ -34,6 +34,11 @@ function count(value: unknown): number {
   return value;
 }
 function id(value: unknown): string { if (!isUuid(value)) throw new Error("Invalid administration contract"); return value.toLowerCase(); }
+function entityId(value: unknown, product: PortfolioProduct): string {
+  if (product !== "pennsync") return id(value);
+  if (typeof value !== "string" || !/^[0-9a-f]{24}$/.test(value)) throw new Error("Invalid PennSync identity");
+  return value;
+}
 function timestamp(value: unknown): string | null {
   if (value === null) return null;
   const result = string(value, 100);
@@ -66,21 +71,21 @@ function page<T>(row: Record<string, unknown>, operation: DirectoryOperation, pr
   if (!Array.isArray(row.items) || row.items.length > operation.limit || row.limit !== operation.limit || row.offset !== operation.offset) throw new Error("Invalid administration page");
   return { items: row.items.map(project), total: count(row.total), limit: operation.limit, offset: operation.offset };
 }
-function organization(value: unknown): AdminOrganization {
+function organization(value: unknown, product: PortfolioProduct): AdminOrganization {
   const row = object(value);
-  return { id: id(row.id), name: nullableString(row.name), slug: nullableString(row.slug, 255), status: string(row.status, 100), createdAt: timestamp(row.createdAt) };
+  return { id: entityId(row.id, product), name: nullableString(row.name), slug: nullableString(row.slug, 255), status: string(row.status, 100), createdAt: timestamp(row.createdAt) };
 }
 function user(value: unknown, product: PortfolioProduct): AdminDirectoryUser {
   const row = object(value);
   // Breathe's native identity column is TEXT; legacy IDs must retain their case.
-  const userId = product === "breathe" ? string(row.id, 128) : id(row.id);
+  const userId = product === "breathe" ? string(row.id, 128) : entityId(row.id, product);
   if (product === "breathe" && !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(userId)) throw new Error("Invalid native identity");
   return { id: userId, displayName: nullableString(row.displayName), email: nullableString(row.email, 500), role: string(row.role, 100), status: string(row.status, 100), createdAt: timestamp(row.createdAt) };
 }
-function subscription(value: unknown): AdminSubscription {
+function subscription(value: unknown, product: PortfolioProduct): AdminSubscription {
   const row = object(value);
   return {
-    id: id(row.id), organizationId: id(row.organizationId), organizationName: nullableString(row.organizationName),
+    id: entityId(row.id, product), organizationId: product === "pennsync" && row.organizationId === null ? null : entityId(row.organizationId, product), organizationName: nullableString(row.organizationName),
     planCode: nullableString(row.planCode, 255), planName: nullableString(row.planName), status: string(row.status, 100),
     providerStatus: nullableString(row.providerStatus, 100), providerCustomerId: nullableString(row.providerCustomerId, 255),
     providerSubscriptionId: nullableString(row.providerSubscriptionId, 255), currentPeriodEnd: timestamp(row.currentPeriodEnd), updatedAt: timestamp(row.updatedAt),
@@ -104,11 +109,14 @@ export function parsePortfolioEnvelope(input: unknown, request: PortfolioRequest
     data = { apiVersion: 1, operations: [...new Set(row.operations.filter(value => portfolioOperations.includes(value as PortfolioOperationName)))] as PortfolioOperationName[], sourceRevision: revision };
   } else if (operation.operation === "overview" && product === "breathe") {
     data = { organizationCount: count(row.organizationCount), activeUserCount: count(row.activeUserCount), subscriptionCount: count(row.subscriptionCount) };
-  } else if (operation.operation === "organizations.list") data = page(row, operation, organization);
+  } else if (operation.operation === "overview" && (product === "caremetric-emr" || product === "pennsync")) {
+    if (row.activeUserCount !== null) throw new Error("Unverified account activity count");
+    data = { organizationCount: count(row.organizationCount), activeUserCount: null, registeredUserCount: count(row.registeredUserCount), subscriptionCount: count(row.subscriptionCount) };
+  } else if (operation.operation === "organizations.list") data = page(row, operation, value => organization(value, product));
   else if (operation.operation === "users.list") data = page(row, operation, value => user(value, product));
   else if (operation.operation === "billing.subscriptions.list") {
     if (row.source !== "application_database") throw new Error("Unrecognized billing source");
-    data = { ...page(row, operation, subscription), source: "application_database" };
+    data = { ...page(row, operation, value => subscription(value, product)), source: "application_database" };
   } else if (operation.operation === "billing.overview") {
     if (row.source !== "application_database" || !Array.isArray(row.statusCounts) || row.statusCounts.length > 100) throw new Error("Invalid billing overview");
     const statusCounts = row.statusCounts.map(value => { const status = object(value); return { status: string(status.status, 100), count: count(status.count) }; });

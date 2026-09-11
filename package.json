@@ -7,7 +7,7 @@
     "packages/help-sdk"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "scripts": {
     "dev": "vite",
@@ -23,11 +23,13 @@
     "check": "npm run typecheck && npm run lint && npm run test && npm run test:sdk && npm run build:sdk && npm run build",
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
-    "supabase:test": "supabase test db"
+    "supabase:test": "supabase test db",
+    "start": "node server/main.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.115.0",
     "lucide-react": "1.16.0",
+    "pg": "8.23.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-router-dom": "7.18.2",

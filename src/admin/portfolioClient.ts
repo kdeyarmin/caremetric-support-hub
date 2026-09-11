@@ -1,12 +1,8 @@
-import { supabase } from "../lib/supabase";
-import { config } from "../lib/config";
+import { AdminApiError, requestAdmin } from "./transport";
+export { AdminApiError } from "./transport";
 import { parsePortfolioEnvelope, parsePortfolioRequest } from "../../supabase/functions/_shared/portfolioProtocol";
 import type { AdminBillingOverview, AdminDirectoryUser, AdminOrganization, AdminPage, AdminSubscriptionPage, PortfolioCapabilities, PortfolioOperation, PortfolioOverview, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
 
-export class AdminApiError extends Error {
-  readonly code: string;
-  constructor(code: string) { super("Administrator request could not be completed."); this.code = code; }
-}
 export interface PortfolioReadOptions { product: PortfolioProduct; signal: AbortSignal; }
 export interface PortfolioPageOptions extends PortfolioReadOptions { search?: string; limit: number; offset: number; }
 export interface PortfolioClient {
@@ -21,22 +17,8 @@ export interface PortfolioClient {
 export async function readPortfolio(product: PortfolioProduct, operation: PortfolioOperation, signal: AbortSignal) {
   let parsed;
   try { parsed = parsePortfolioRequest({ product, ...operation }); } catch { throw new AdminApiError("invalid_request"); }
-  if (!supabase) throw new AdminApiError("unconfigured");
-  const { data, error } = await supabase.auth.getSession();
-  if (error || !data.session) throw new AdminApiError("401");
-  const response = await fetch(`${config.supabaseUrl}/functions/v1/platform-admin`, {
-    method: "POST", headers: { "Content-Type": "application/json", apikey: config.supabasePublishableKey, Authorization: `Bearer ${data.session.access_token}` },
-    body: JSON.stringify({ product: parsed.product, ...parsed.operation }), signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]), redirect: "error", cache: "no-store",
-  });
-  if (!response.ok) {
-    let code = response.status === 401 ? "401" : response.status === 403 ? "403" : "upstream";
-    try {
-      const body = await response.json() as { error?: { code?: string } };
-      if (body.error?.code && ["unconfigured", "notfound", "upstream", "invalid_request"].includes(body.error.code)) code = body.error.code;
-    } catch { /* Error details are intentionally not displayed. */ }
-    throw new AdminApiError(code);
-  }
-  return parsePortfolioEnvelope(await response.json(), parsed).data;
+  const response = await requestAdmin("platform-admin", { product: parsed.product, ...parsed.operation }, signal);
+  return parsePortfolioEnvelope(response, parsed).data;
 }
 
 export const portfolioClient: PortfolioClient = {

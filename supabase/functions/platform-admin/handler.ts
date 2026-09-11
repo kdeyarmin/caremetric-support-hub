@@ -1,84 +1,13 @@
-import { isUuid } from "../_shared/adminProtocol.ts";
 import { parsePortfolioEnvelope, parsePortfolioRequest } from "../_shared/portfolioProtocol.ts";
 import { adminRegistry } from "../_shared/adminRegistry.ts";
+import { createAdminGateway, type AdminProxyOptions } from "../_shared/adminGateway.ts";
+export type { AdminProxyOptions } from "../_shared/adminGateway.ts";
 
-const hubOrigin = "https://xgauehtwksmnoqhgqegm.supabase.co";
-const allowedOrigins = new Set(["https://support-hub-web-production.up.railway.app", "https://help.caremetric.ai"]);
-const safeErrors = new Set(["unauthenticated", "forbidden", "unconfigured", "notfound", "upstream"]);
-export interface AdminProxyOptions { publishableKey: string; fetcher?: typeof fetch; }
-
-async function readJson(source: Request | Response, max: number, signal: AbortSignal): Promise<unknown> {
-  if (!source.body) throw new Error("Missing JSON");
-  const reader = source.body.getReader();
-  const cancel = () => { void reader.cancel().catch(() => {}); };
-  signal.addEventListener("abort", cancel, { once: true });
-  try {
-    let size = 0;
-    const chunks: Uint8Array[] = [];
-    while (true) {
-      if (signal.aborted) throw new Error("Request timed out");
-      const { value, done } = await reader.read();
-      if (signal.aborted) throw new Error("Request timed out");
-      if (done) break;
-      size += value.length;
-      if (size > max) { cancel(); throw new Error("Response too large"); }
-      chunks.push(value);
-    }
-    const joined = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) { joined.set(chunk, offset); offset += chunk.length; }
-    return JSON.parse(new TextDecoder().decode(joined));
-  } finally { signal.removeEventListener("abort", cancel); reader.releaseLock(); }
-}
-
-export function createAdminProxy({ publishableKey, fetcher = fetch }: AdminProxyOptions) {
-  return async (request: Request): Promise<Response> => {
-    const origin = request.headers.get("origin");
-    const headers: Record<string, string> = {
-      "Cache-Control": "no-store", "Content-Type": "application/json", "X-Content-Type-Options": "nosniff", Vary: "Origin",
-    };
-    if (origin && allowedOrigins.has(origin)) {
-      headers["Access-Control-Allow-Origin"] = origin;
-      headers["Access-Control-Allow-Headers"] = "authorization, apikey, content-type, x-client-info";
-      headers["Access-Control-Allow-Methods"] = "POST, OPTIONS";
-    }
-    const reply = (status: number, code: string) => new Response(JSON.stringify({ error: { code } }), { status, headers });
-    if (origin && !allowedOrigins.has(origin)) return reply(403, "forbidden");
-    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers });
-    if (request.method !== "POST") return reply(405, "method_not_allowed");
-    if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) return reply(400, "invalid_request");
-    const authorization = request.headers.get("authorization") ?? "";
-    if (!/^Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(authorization) || authorization.length > 8192) return reply(401, "unauthenticated");
-    if (!publishableKey || publishableKey.startsWith("sb_secret_")) return reply(503, "unconfigured");
-    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(12000)]);
-    try {
-      const authResponse = await fetcher(`${hubOrigin}/rest/v1/rpc/authorize_platform_admin`, {
-        method: "POST", headers: { apikey: publishableKey, Authorization: authorization, "Content-Type": "application/json", "Content-Profile": "hub" },
-        body: "{}", redirect: "error", signal,
-      });
-      if (!authResponse.ok) return reply(authResponse.status === 401 ? 401 : authResponse.status === 403 ? 403 : 503,
-        authResponse.status === 401 ? "unauthenticated" : authResponse.status === 403 ? "forbidden" : "unconfigured");
-      const actor = await readJson(authResponse, 4096, signal) as Record<string, unknown>;
-      if (!actor || !isUuid(actor.user_id) || actor.role !== "platform_admin" || actor.aal !== "aal2") return reply(403, "forbidden");
-      let parsed;
-      try { parsed = parsePortfolioRequest(await readJson(request, 4096, signal)); }
-      catch { return reply(400, "invalid_request"); }
-      const appUrl = adminRegistry[parsed.product].endpoint;
-      if (!appUrl) return reply(503, "unconfigured");
-      const operation = parsed.operation;
-      const response = await fetcher(appUrl, { method: "POST", headers: { Authorization: authorization, "Content-Type": "application/json" }, body: JSON.stringify(operation), redirect: "error", signal });
-      if (!response.ok) {
-        let code = response.status === 401 ? "unauthenticated" : response.status === 403 ? "forbidden" : response.status === 404 ? "unconfigured" : "upstream";
-        try {
-          const error = await readJson(response, 4096, signal) as { error?: { code?: string } };
-          if (error.error?.code && safeErrors.has(error.error.code)) code = error.error.code;
-        } catch { /* Never expose upstream pages, exception text, or credentials. */ }
-        const status = code === "unauthenticated" ? 401 : code === "forbidden" ? 403 : code === "notfound" ? 404 : 503;
-        return reply(status, code);
-      }
-      if (!response.headers.get("content-type")?.includes("application/json")) return reply(502, "upstream");
-      const data = parsePortfolioEnvelope(await readJson(response, 1048576, signal), parsed);
-      return new Response(JSON.stringify(data), { status: 200, headers });
-    } catch { return reply(503, "upstream"); }
-  };
+export function createAdminProxy(options: AdminProxyOptions) {
+  return createAdminGateway(options, {
+    authorizationRpc: "authorize_platform_admin",
+    parse: parsePortfolioRequest,
+    target: parsed => ({ endpoint: adminRegistry[parsed.product].endpoint, authorizationHeader: adminRegistry[parsed.product].authorizationHeader, body: parsed.operation }),
+    project: parsePortfolioEnvelope,
+  });
 }
