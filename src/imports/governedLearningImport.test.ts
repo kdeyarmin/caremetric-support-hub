@@ -32,6 +32,10 @@ describe("governed CareBase source contract", () => {
   it("accepts lowercase and uppercase opaque native IDs without requiring RFC v4", async () => {
     const value = { ...fixture, sourceVersionId: "AAAAAAAA-0000-0000-0000-000000000000" };
     expect((await prepareGovernedImport(await envelope(value)))[0].course.sourceVersionId).toBe(value.sourceVersionId);
+    const schema = z.toJSONSchema(governedCourseSchema, { target: "draft-7" });
+    const { pattern } = z.object({ pattern: z.string() }).parse(schema.properties!.sourceVersionId);
+    expect(new RegExp(pattern).test(value.sourceVersionId)).toBe(true);
+    expect(new RegExp(pattern).test(value.sourceVersionId.toLowerCase())).toBe(true);
   });
   it("detects changed content, credit policy, provider and retirement despite an unchanged native version UUID", async () => {
     const original = await sourceDigest(JSON.stringify(fixture));
