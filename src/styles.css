@@ -21,6 +21,34 @@
 }
 
 * { box-sizing: border-box; }
+.learning-workspace { max-width: 1200px; margin: auto; }
+.learning-workspace header { margin: 24px 0; }
+.learning-links { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; margin: 18px 0; }
+.learning-links a { color: var(--teal-dark); text-decoration: underline; text-underline-offset: 3px; }
+.learning-player { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; align-items: start; }
+.learning-player aside { padding: 18px; }
+.learning-player ol { padding-left: 20px; }
+.learning-player li { padding: 8px 0; }
+.learning-player aside button { background: none; border: 0; text-align: left; cursor: pointer; }
+.learning-player [aria-current="step"] { font-weight: 700; color: var(--teal-dark); }
+.lesson-panel { padding: 28px; margin: 20px 0; }
+.lesson-panel video { width: 100%; max-height: 65vh; background: #142e3b; }
+.lesson-body { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; margin: 24px 0; }
+.learning-check { display: flex !important; flex-direction: row !important; gap: 10px; align-items: start; margin: 14px 0; line-height: 1.5; }
+.learning-check input { width: auto !important; flex: 0 0 auto; margin-top: 5px; }
+.learning-editor label { display: flex; flex-direction: column; gap: 7px; margin: 16px 0; }
+.learning-editor input, .learning-editor textarea, .learning-editor select { width: 100%; padding: 10px; border: 1px solid #bbcfc9; border-radius: 6px; }
+.learning-editor > fieldset { padding: 0; border: 0; }
+.lesson-panel fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 22px 0; padding: 18px; }
+.learning-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 20px; }
+.learning-option { display: flex; align-items: center; gap: 12px; margin: 12px 0; }
+.learning-option input[type="radio"] { width: auto; }
+.learning-notice { padding: 24px; margin: 20px 0; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.learning-error { background: #ffefed; border: 1px solid #d99287; border-radius: 8px; padding: 16px; overflow-wrap: anywhere; }
+.learning-certificate { padding: 60px; text-align: center; border: 4px double #367668; }
+.learning-certificate small { overflow-wrap: anywhere; }
+@media (max-width: 760px) { .learning-player { grid-template-columns: 1fr; } .learning-notice { flex-direction: column; align-items: start; } .lesson-panel, .learning-certificate { padding: 20px; } }
+@media print { body * { visibility: hidden; } .learning-certificate, .learning-certificate * { visibility: visible; } .learning-certificate { position: absolute; inset: 20px; box-shadow: none; } }
 body { margin: 0; min-width: 320px; min-height: 100vh; }
 button, input, select, textarea { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }

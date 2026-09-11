@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildHelpUrl,
   buildLearningUrl,
+  buildCourseEditorUrl,
+  buildMyLearningUrl,
   CAREMETRIC_PRODUCT_SLUGS,
   DEFAULT_HELP_BASE_URL,
   openHelp,
@@ -10,6 +12,16 @@ import {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe("central learning workspace", () => {
+  it("links directly to authoring and the authenticated learner record", () => {
+    expect(buildCourseEditorUrl()).toBe(`${DEFAULT_HELP_BASE_URL}/library/courses/new`);
+    expect(buildMyLearningUrl()).toBe(`${DEFAULT_HELP_BASE_URL}/learn/my`);
+  });
+  it("does not forward app-local identifiers or query strings", () => {
+    expect(new URL(buildCourseEditorUrl({ baseUrl: `${DEFAULT_HELP_BASE_URL}/patient/123?token=private` })).search).toBe("");
+  });
 });
 
 describe("buildHelpUrl", () => {

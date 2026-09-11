@@ -5,7 +5,7 @@ Version `0.1.0` uses RLS-governed reads and narrow atomic RPCs in the `hub` sche
 ## Reads
 
 - `hub.get_backend_contract()`: anonymous/authenticated, security-invoker
-  release metadata, currently exactly `{ "api_version": 1 }`. It reads no
+  release metadata, currently exactly `{ "api_version": 2 }`. It reads no
   application tables and grants no actor access. Connected production builds
   check it before bundling. Required migrations must precede frontend rollout;
   increment the required contract when a future frontend requires a new
@@ -27,6 +27,12 @@ The actor bootstrap is intentionally callable at AAL1 so a usable staff user can
 
 ## Commands
 
+The read-only central-admin pilot uses `hub.authorize_platform_admin()` and
+the `platform-admin` Edge Function. It requires a live first-party AAL2 session
+and current portfolio-wide relational permission. CareBase independently checks
+an explicit native identity mapping and native authority before returning
+projected counts/course metadata. See [the request and deployment contract](CENTRAL_ADMIN_PILOT.md).
+
 - `hub.create_support_case(..., p_request_key uuid)`: validates active exact tenant/product membership and a private, explicit intake activation, then creates the case, participant, first message, and audit metadata atomically. A repeated identical key returns the original case; changed data with the same key fails.
 - `hub.reply_to_support_case(..., p_request_key uuid)`: validates `case.write` independently from requester/participant/tenant-scoped membership authority, keeps staff notes private, derives the stored author role from the path that authorized the write, updates case state, and appends metadata-only audit history. A repeated identical key returns the original message or note.
 - `hub.update_support_case(...)`: requires `case.write`, verifies assignee product authorization plus a currently usable non-anonymous Auth account and provisioned profile, and changes only operational fields.
@@ -37,9 +43,18 @@ Every command derives the actor from `auth.uid()`. No caller may set requester i
 
 ## Client launch contract
 
-`@caremetric/help-sdk` 0.3 provides `buildHelpUrl`/`openHelp` and `buildLearningUrl`/`openLearning`. Learning links use `/learn` and may include only one compile-time registered product slug. Help links may additionally include only caller-allowlisted static route/feature context and format-validated app version, locale, and environment. Both launchers require HTTPS, reject credentials and loopback destinations, and default to the permanent Railway Hub origin.
+`@caremetric/help-sdk` 0.4 provides `buildHelpUrl`/`openHelp`, `buildLearningUrl`/`openLearning`, `buildCourseEditorUrl`, and `buildMyLearningUrl`. Learning links use `/learn` and may include only one compile-time registered product slug. Authoring uses `/library/courses/new`; personal learning uses `/learn/my`. Help links may additionally include only caller-allowlisted static route/feature context and format-validated app version, locale, and environment. Launchers require HTTPS, reject credentials and loopback destinations, and default to the permanent Railway Hub origin.
 
-Course metadata never supplies an arbitrary destination. The web client reconstructs the launch only when the configured origin is exactly `https://cmcarebase.com` and the stored relative path is exactly `/app/courses` or `/app/courses/<uuid>`.
+Course metadata never supplies an arbitrary destination. Published Hub-owned courses open at `/learn/courses/<uuid>`, including contextual-help links and courses retaining legacy provenance. Courses awaiting migration launch only when the configured origin is exactly `https://cmcarebase.com` and the stored relative path is exactly `/app/courses` or `/app/courses/<uuid>`.
+
+## Central learning RPCs
+
+The staged [central learning runtime](CENTRAL_LEARNING.md) adds editor, import,
+publication, enrollment, grading, progress, certificate, and media RPCs in `hub`.
+Answer keys and learner state remain in private tables without browser table
+grants. Publication creates an immutable version; enrollment pins that version.
+Every mutation derives identity from the current usable Auth principal and
+checks the required permissions and MFA. Deploy the migration before the UI.
 
 ## Publication preview boundary
 
