@@ -105,8 +105,8 @@ try {
  // authorized cohort itself and prove all >100 older permitted rows reachable.
  for(const [count,products,age] of [[501,['breathe'],'0 days'],[105,['carebase'],'2 days']]) {
   const body={...article,products};
-  await admin.query(`with inserted as (insert into private.docstudio_projects(id,content_key,revision,status,created_by,updated_at)
-   select gen_random_uuid(),'pagination.'||replace(gen_random_uuid()::text,'-',''),1,'draft',$1,now()-$4::interval from generate_series(1,$2::integer) returning id)
+  await admin.query(`with inserted as (insert into private.docstudio_projects(id,content_key,revision,status,created_by,created_at,updated_at)
+   select gen_random_uuid(),'pagination.'||replace(gen_random_uuid()::text,'-',''),1,'draft',$1,now()-interval '3 days',now()-$4::interval from generate_series(1,$2::integer) returning id)
    insert into private.docstudio_revisions(project_id,revision,body,body_hash,author_id) select id,1,$3::jsonb,encode(extensions.digest(($3::jsonb)::text,'sha256'),'hex'),$1 from inserted`,[owner,count,JSON.stringify(body),age]);
  }
  let page=(await call('docstudio')).body;const visible=[...page.projects];assert.equal(page.projects.length,100);assert.ok(page.nextCursor);
@@ -142,6 +142,7 @@ try {
  await admin.query("update private.docstudio_assets set created_at=now()-interval '2 days' where project_id=$1",[assetsId]);
  await studio.cleanupExpired();
  assert.equal(objects.has(`hub-docstudio/assets/${assetsId}/${unused.id}`),false,'unused staged bytes are cleaned');
+ assert.equal((await call(`docstudio/projects/${assetsId}/assets`,unused)).status,409,'cleaned identities cannot replace previous immutable objects');
  assert.equal(objects.has(`hub-docstudio/assets/${assetsId}/${imageAsset.id}`),true,'every immutable revision keeps its source bytes');
  const vid=randomUUID();await command('create',vid,0,video);await command('submit',vid,1);await command('approve',vid,1);
  const render=await command('render',vid,1);

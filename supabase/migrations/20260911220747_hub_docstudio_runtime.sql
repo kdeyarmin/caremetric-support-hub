@@ -265,6 +265,7 @@ declare a private.docstudio_assets;
 begin
  perform private.docstudio_project(p_project);
  perform pg_advisory_xact_lock(hashtextextended('docstudio-assets:'||p_project::text,0));
+ if exists(select 1 from private.docstudio_cleanup_queue where resource->>'assetId'=p_asset->>'id') then raise exception 'Asset identity was retired' using errcode='P4090';end if;
  select * into a from private.docstudio_assets where id=(p_asset->>'id')::uuid;
  if a.id is not null then
   if a.cleanup_at is not null or a.project_id<>p_project or a.sha256<>p_asset->>'sha256' or a.byte_length<>(p_asset->>'byteLength')::integer or a.media_type<>p_asset->>'mediaType' then raise exception 'Asset identity already used' using errcode='P4090'; end if;
