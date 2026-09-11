@@ -5022,7 +5022,7 @@ end;
 $$;
 create function private.reserve_billing_portal(p_request jsonb) returns jsonb
 language plpgsql security definer set search_path='' as $$
-declare actor jsonb; intent private.billing_portal_intents%rowtype; request_id uuid; organization_id uuid;
+declare actor jsonb; intent private.billing_portal_intents%rowtype; v_request_id uuid; v_organization_id uuid;
 begin
   actor:=private.billing_portal_actor();
   if p_request is null or jsonb_typeof(p_request)<>'object' or octet_length(p_request::text)>4096
@@ -5034,19 +5034,19 @@ begin
     or p_request->>'reason' ~ '[[:cntrl:]]' then
     raise exception 'Invalid billing review.' using errcode='22023';
   end if;
-  begin request_id:=(p_request->>'requestId')::uuid; organization_id:=(p_request->>'targetId')::uuid;
+  begin v_request_id:=(p_request->>'requestId')::uuid; v_organization_id:=(p_request->>'targetId')::uuid;
   exception when others then raise exception 'Invalid billing identity.' using errcode='22023'; end;
-  if request_id is null or organization_id is null then raise exception 'Invalid billing identity.' using errcode='22023'; end if;
+  if v_request_id is null or v_organization_id is null then raise exception 'Invalid billing identity.' using errcode='22023'; end if;
   perform pg_advisory_xact_lock(hashtextextended('billing.portal.reserve',0));
   -- Private request metadata expires; native financial/session audit remains native.
   delete from private.billing_portal_intents where expires_at<now()-interval '30 days';
-  select * into intent from private.billing_portal_intents i where i.request_id=reserve_billing_portal.request_id;
+  select * into intent from private.billing_portal_intents i where i.request_id=v_request_id;
   if found then
-    intent:=private.require_billing_portal_intent(request_id);
+    intent:=private.require_billing_portal_intent(v_request_id);
     if intent.request is distinct from p_request then raise exception 'This request key has a different review.' using errcode='40001'; end if;
     return private.billing_portal_intent_view(intent);
   end if;
-  if exists(select 1 from private.billing_portal_intents i where i.organization_id=reserve_billing_portal.organization_id
+  if exists(select 1 from private.billing_portal_intents i where i.organization_id=v_organization_id
     and actor_id=(actor->>'user_id')::uuid and session_id=(actor->>'session_id')::uuid and expires_at>now() and discarded_at is null
     and (result is null or result->>'outcome'='pending')
     and (dispatched_at is not null or preview_expires_at>now() or (preview is null and created_at>now()-interval '6 minutes'))) then
@@ -5057,7 +5057,7 @@ begin
     raise exception 'Billing review limit reached.' using errcode='54000';
   end if;
   insert into private.billing_portal_intents(request_id,actor_id,session_id,organization_id,request,expires_at)
-    values(request_id,(actor->>'user_id')::uuid,(actor->>'session_id')::uuid,organization_id,p_request,(actor->>'assurance_expires_at')::timestamptz)
+    values(v_request_id,(actor->>'user_id')::uuid,(actor->>'session_id')::uuid,v_organization_id,p_request,(actor->>'assurance_expires_at')::timestamptz)
     returning * into intent;
   return private.billing_portal_intent_view(intent);
 end;
@@ -5073,7 +5073,7 @@ end;
 $$;
 create function private.remember_billing_portal_preview(p_request_id uuid,p_preview jsonb) returns jsonb
 language plpgsql security definer set search_path='' as $$
-declare intent private.billing_portal_intents%rowtype; command_id uuid; expires timestamptz;
+declare intent private.billing_portal_intents%rowtype; v_command_id uuid; expires timestamptz;
 begin
   intent:=private.require_billing_portal_intent(p_request_id);
   if intent.preview_dispatched_at is null or p_preview is null or jsonb_typeof(p_preview)<>'object'
@@ -5091,9 +5091,9 @@ begin
     or length(p_preview->'summary'->>'organizationName')>500 then
     raise exception 'Invalid native billing preview.' using errcode='22023';
   end if;
-  begin command_id:=(p_preview->>'commandId')::uuid; expires:=(p_preview->>'expiresAt')::timestamptz;
+  begin v_command_id:=(p_preview->>'commandId')::uuid; expires:=(p_preview->>'expiresAt')::timestamptz;
   exception when others then raise exception 'Invalid billing preview identity.' using errcode='22023'; end;
-  if command_id is null or expires is null or not isfinite(expires) or expires>clock_timestamp()+interval '5 minutes 1 second' then
+  if v_command_id is null or expires is null or not isfinite(expires) or expires>clock_timestamp()+interval '5 minutes 1 second' then
     raise exception 'Invalid billing preview lifetime.' using errcode='22023';
   end if;
   if intent.preview is not null then
@@ -5101,10 +5101,10 @@ begin
     return private.billing_portal_intent_view(intent);
   end if;
   if expires<=clock_timestamp() then raise exception 'The billing preview expired.' using errcode='40001'; end if;
-  update private.billing_portal_intents set command_id=remember_billing_portal_preview.command_id,preview=p_preview,preview_expires_at=expires
+  update private.billing_portal_intents set command_id=v_command_id,preview=p_preview,preview_expires_at=expires
     where request_id=p_request_id returning * into intent;
   insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata)
-    values(intent.actor_id,'billing.portal.preview','native_organization',intent.organization_id,jsonb_build_object('command_id',command_id));
+    values(intent.actor_id,'billing.portal.preview','native_organization',intent.organization_id,jsonb_build_object('command_id',v_command_id));
   return private.billing_portal_intent_view(intent);
 end;
 $$;
