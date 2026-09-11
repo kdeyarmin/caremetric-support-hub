@@ -106,6 +106,21 @@
 .portfolio-selector .admin-quick-links { margin: 0; }
 .portfolio-billing-summary { padding: 22px; margin-bottom: 20px; }
 .portfolio-billing-summary p { line-height: 1.65; font-size: 12px; color: #475569; }
+.billing-detail { margin: 20px 0; border-color: var(--brand); }
+.billing-detail h2:focus { outline: 2px solid var(--brand); outline-offset: 4px; }
+.billing-detail p, .billing-records-intro p { line-height: 1.6; font-size: 12px; color: var(--muted); }
+.billing-records-intro { margin: 28px 0 16px; }
+.billing-record-updated { display: block; margin-top: 6px; }
+.billing-money { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.billing-provider-status { border-left: 3px solid var(--line); padding: 12px 16px; background: var(--soft); margin: 16px 0; }
+.billing-provider-status p { margin: 5px 0 0; }
+.billing-provider-available { border-left-color: var(--brand); background: var(--brand-light); }
+.billing-comparison-table { width: 100%; margin-bottom: 18px; border-collapse: collapse; font-size: 12px; }
+.billing-comparison-table th, .billing-comparison-table td { padding: 12px; text-align: left; border-bottom: 1px solid var(--line); }
+.billing-application-access { margin: 22px 0; }
+.billing-application-access dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+.billing-application-access dt { font-size: 12px; color: var(--muted); }
+.billing-application-access dd { margin: 5px 0 0; overflow-wrap: anywhere; }
 .portfolio-status-counts { display: flex; flex-wrap: wrap; gap: 10px; }
 .portfolio-status-counts > span { background: #eef3fc; border-radius: 6px; padding: 7px 10px; font-size: 12px; }
 .portfolio-table-wrap { overflow: auto; width: 100%; }
