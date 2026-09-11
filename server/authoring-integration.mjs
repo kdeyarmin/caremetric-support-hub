@@ -41,6 +41,12 @@ const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(u
   if(op.operation==='preview') {
     if(op.parameters.sourceRevision!==revision())return Response.json({error:{code:'conflict'}},{status:409});
     let row=commands.get(op.requestId);
+    if(!row && ['learning.patchDraft','learning.reviewDraft'].includes(op.action)) {
+      const before={courseId:course,versionId:version,currentVersionId:version,sourceRevision:revision(),status:'draft',versionNumber:2,title:source.version.title};
+      const after={...before,title:op.parameters.patch?.version?.title??before.title,aiReviewRequired:op.action==='learning.patchDraft'};delete after.sourceRevision;
+      row={commandId:randomUUID(),courseId:course,action:op.action,reason:op.reason,previewDigest:digest(JSON.stringify(op)),expiresAt:new Date(Date.now()+240000).toISOString(),before,after};
+      Object.defineProperty(row,'parameters',{value:op.parameters,enumerable:false});commands.set(op.requestId,row);
+    }
     if(!row){row={commandId:randomUUID(),courseId:course,action:op.action,reason:op.reason,previewDigest:digest(JSON.stringify(op)),expiresAt:new Date(Date.now()+240000).toISOString(),
       before:{courseId:course,versionId:version,currentVersionId:version,sourceRevision:revision(),status:'published',versionNumber:2,title:source.version.title},
       after:{status:'draft',versionNumber:3,title:op.parameters.title,aiReviewRequired:false,sourceVersionId:version}};commands.set(op.requestId,row);}
@@ -50,6 +56,20 @@ const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(u
   if(!preview||preview.previewDigest!==op.expectedDigest)return Response.json({error:{code:'conflict'}},{status:409});
   if(preview.result)return Response.json({...preview.result,replayed:true});
   if(preview.before.sourceRevision!==revision())return Response.json({error:{code:'conflict'}},{status:409});
+  if(['learning.patchDraft','learning.reviewDraft'].includes(preview.action)) {
+    if(preview.action==='learning.patchDraft') {
+      const patch=preview.parameters.patch;
+      Object.assign(source.version,patch.version??{});source.version.aiReviewedAt=null;
+      for(const edit of patch.blocks??[]) {
+        const block=source.blocks.find(b=>b.id===edit.blockId);assert.ok(block);
+        if(Object.hasOwn(edit,'title'))block.title=edit.title;
+        for(const key of ['content','transcript','estimatedMinutes'])if(Object.hasOwn(edit,key))block.body[key==='estimatedMinutes'?'estimated_minutes':key]=edit[key];
+      }
+    } else source.version.aiReviewedAt=new Date().toISOString();
+    payload=JSON.stringify(source);
+    const result={commandId:preview.commandId,courseId:course,action:preview.action,versionId:version,versionNumber:2,status:'draft',appliedAt:new Date().toISOString(),replayed:false,sourceRevision:revision()};
+    writes++;Object.defineProperty(preview,'result',{value:result,enumerable:false});return Response.json(result);
+  }
   const result={commandId:preview.commandId,courseId:course,action:preview.action,versionId:randomUUID(),versionNumber:3,status:'draft',appliedAt:new Date().toISOString(),replayed:false};
   if(tamperOutcome)return Response.json({...result,versionNumber:99});
   writes++;Object.defineProperty(preview,'result',{value:result,enumerable:false});return Response.json(result);
@@ -98,9 +118,30 @@ try {
   payload+=' ';assert.equal((await author({operation:'apply',commandId:driftPreview.body.commandId,expectedDigest:driftPreview.body.previewDigest})).status,409);
   const next=await author({...preserve,sourceRevision:revision(),expectedHeadRevision:preserve.sourceRevision});assert.equal(next.status,200,JSON.stringify(next.body));
   assert.equal((await author(apply)).status,200);assert.equal(writes,1); // preserved head advances without invalidating a completed native receipt
+  // Same real SMS/HTTP/delegation/SQL lane accepts bounded edits larger than
+  // receipt requests, requires preservation after changes, and pins new receipts.
+  source.sourceVersionState='draft';source.version.aiGenerated=true;source.version.aiReviewedAt=null;payload=JSON.stringify(source);
+  const draftSource=await author(sourceOp);assert.equal(draftSource.status,200);
+  assert.equal((await author({...preserve,sourceRevision:revision(),expectedHeadRevision:draftSource.body.headRevision})).status,200);
+  const draftOp={operation:'preview',requestId:randomUUID(),courseId:course,action:'learning.patchDraft',parameters:{versionId:version,sourceRevision:revision(),patch:{version:{title:'Edited draft',description:'Synthetic detailed description '.repeat(220)}}},reason:'Review exact draft edits before saving'};
+  assert.ok(Buffer.byteLength(JSON.stringify(draftOp))>4096);
+  const editedPreview=await author(draftOp);assert.equal(editedPreview.status,200,JSON.stringify(editedPreview.body));
+  const editApply={operation:'apply',commandId:editedPreview.body.commandId,expectedDigest:editedPreview.body.previewDigest};
+  const edited=await author(editApply);assert.equal(edited.status,200,JSON.stringify(edited.body));assert.equal(edited.body.sourceRevision,revision());assert.equal(writes,2);
+  assert.equal((await author(editApply)).body.replayed,true);assert.equal(writes,2);
+  const reviewOp={operation:'preview',requestId:randomUUID(),courseId:course,action:'learning.reviewDraft',parameters:{versionId:version,sourceRevision:revision(),reviewed:true},reason:'Approve exact saved AI material and assessment'};
+  assert.equal((await author(reviewOp)).status,409); // latest native material has not been preserved
+  const editedSource=await author(sourceOp);assert.equal(editedSource.body.payload,payload);
+  assert.equal((await author({...preserve,sourceRevision:revision(),expectedHeadRevision:editedSource.body.headRevision})).status,200);
+  const approval=await author(reviewOp);assert.equal(approval.status,200,JSON.stringify(approval.body));assert.equal(approval.body.after.aiReviewRequired,false);
+  const reviewApply={operation:'apply',commandId:approval.body.commandId,expectedDigest:approval.body.previewDigest};
+  const reviewedResult=await author(reviewApply);assert.equal(reviewedResult.status,200,JSON.stringify(reviewedResult.body));assert.equal(reviewedResult.body.sourceRevision,revision());assert.equal(writes,3);
+  assert.equal((await author(reviewApply)).body.replayed,true);assert.equal(writes,3);
+  await assert.rejects(withSession(pool,jar[sessionCookie],db=>db.query('select hub.record_learning_authoring_result($1,$2,$3::jsonb)',[reviewApply.commandId,reviewApply.expectedDigest,JSON.stringify({...reviewedResult.body,sourceRevision:'f'.repeat(64)})])),/result changed/);
+  nativeRevoked=true;assert.equal((await author(reviewApply)).status,403);nativeRevoked=false;
   await admin.query('update private.staff_permissions set revoked_at=now() where user_id=$1',[owner]);assert.equal((await author(apply)).status,401);
   await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
   await admin.query('update private.sms_identities set revoked_at=now() where user_id=$1',[owner]);assert.equal((await author(apply)).status,401);
-  assert.equal(Number((await admin.query("select count(*) from private.audit_events where actor_id=$1 and action='learning.authoring.applied'",[owner])).rows[0].count),1);
-  console.log('Authoring PostgreSQL/HTTP integration passed: exact source review, private snapshot pin, preview recovery, native outcome validation, single write, current native/Hub revocation and replay after head advancement.');
+  assert.equal(Number((await admin.query("select count(*) from private.audit_events where actor_id=$1 and action='learning.authoring.applied'",[owner])).rows[0].count),3);
+  console.log('Authoring PostgreSQL/HTTP integration passed: source preservation, clone/edit/review, exact digest receipts, large bounded edits, preview recovery, native/Hub revocation and immutable replay.');
 } finally {await new Promise(resolve=>server.close(resolve));await pool.end();await admin.end();}
