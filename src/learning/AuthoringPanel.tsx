@@ -6,6 +6,8 @@ import { authoringOperationSchema, authoringInspectSchema, authoringPreviewSchem
   type AuthoringResult, type AuthoringSourceView, type DraftPatch } from "./authoringProtocol";
 import { validateGovernedCourse } from "../imports/governedLearningImport";
 import { DraftEditor } from "./DraftEditor";
+import { StructureEditor } from "./StructureEditor";
+import type { StructureChange } from "./structureProtocol";
 
 async function run(operation: AuthoringOperation) {
   const op = authoringOperationSchema.parse(operation);
@@ -23,13 +25,19 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
   const [preview, setPreview] = useState<AuthoringPreview | null>(null);
   const [result, setResult] = useState<AuthoringResult | null>(null);
   const [previewPatch, setPreviewPatch] = useState<DraftPatch | null>(null);
+  const [previewStructure, setPreviewStructure] = useState<StructureChange[] | null>(null);
+  const [editing, setEditing] = useState<"fields" | "structure" | null>(null);
+  const [editorGeneration, setEditorGeneration] = useState(0);
   const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [message, setMessage] = useState("");
   const intents = useRef(new Map<string, string>());
+  const actionPending = useRef(false);
   const version = catalog?.versions.find(v => v.versionId === versionId);
   const material = source ? validateGovernedCourse(JSON.parse(source.payload)) : null;
-  const clearPreview = () => { setPreview(null); setResult(null); setPreviewPatch(null); };
-  const clearSource = () => { setSource(null); setReviewed(false); clearPreview(); };
+  const clearPreview = () => { setPreview(null); setResult(null); setPreviewPatch(null); setPreviewStructure(null); };
+  const clearSource = () => { setSource(null); setReviewed(false); setEditing(null); clearPreview(); };
   async function action(work: () => Promise<void>) {
+    if (actionPending.current) return;
+    actionPending.current = true;
     setBusy(true); setError(""); setMessage("");
     try { await work(); }
     catch (caught) {
@@ -39,25 +47,27 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
         code === "invalid_request" ? "Check the form. Source preservation also requires this CareBase course to be registered in the Hub catalog." :
         code === "401" || code === "403" ? "A current administrator session in the Hub and CareBase is required." :
         "The request did not finish. Check the connection, then retry the same action. A completed native command will return its original result.");
-    } finally { setBusy(false); }
+    } finally { actionPending.current = false; setBusy(false); }
   }
   async function load() {
     const value = authoringInspectSchema.parse(await run({ operation: "inspect", courseId }));
     setCatalog(value); setVersionId(value.currentVersionId ?? value.versions[0]?.versionId ?? ""); clearSource(); intents.current.clear();
   }
-  async function prepare(action: "learning.cloneVersion" | "learning.publishVersion" | "learning.patchDraft" | "learning.reviewDraft", patch?: DraftPatch) {
+  async function prepare(action: AuthoringPreview["action"], patch?: DraftPatch, changes?: StructureChange[]) {
     if (!source || !source.snapshotId || source.headRevision !== source.sourceRevision) throw new Error("Source review required");
     const parameters = { versionId, sourceRevision: source.sourceRevision };
     const common = { operation: "preview" as const, courseId, reason: reason.trim() };
     const intent = action === "learning.cloneVersion" ? { ...common, action, parameters: { ...parameters, title: title.trim() } }
       : action === "learning.patchDraft" ? { ...common, action, parameters: { ...parameters, patch: patch! } }
       : action === "learning.reviewDraft" ? { ...common, action, parameters: { ...parameters, reviewed: true as const } }
+      : action === "learning.editStructure" ? { ...common, action, parameters: { ...parameters, changes: changes! } }
       : { ...common, action, parameters };
     const key = JSON.stringify(intent); let requestId = intents.current.get(key);
     if (!requestId) { requestId = crypto.randomUUID(); intents.current.set(key, requestId); }
     const nextPreview = authoringPreviewSchema.parse(await run({ ...intent, requestId }));
-    if (action === "learning.patchDraft" && nextPreview.after.aiReviewRequired !== material?.version.aiGenerated) throw new Error("Draft approval state mismatch");
-    setPreview(nextPreview); setPreviewPatch(action === "learning.patchDraft" ? patch! : null); setResult(null);
+    if ((action === "learning.patchDraft" || action === "learning.editStructure") && nextPreview.after.aiReviewRequired !== material?.version.aiGenerated) throw new Error("Draft approval state mismatch");
+    setPreview(nextPreview); setPreviewPatch(action === "learning.patchDraft" ? patch! : null);
+    setPreviewStructure(action === "learning.editStructure" ? changes! : null); setResult(null);
   }
   return <section className="admin-authoring" aria-label="CareBase course material and version controls">
     <h3>Course material and version controls</h3>
@@ -93,21 +103,30 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
         {material.sourceVersionState === "published" && <><label>New draft title<input disabled={busy} value={title} maxLength={300} onChange={event => { setTitle(event.target.value); clearPreview(); }} /></label>
           <button type="button" className="button button-secondary" disabled={busy || reason.trim().length < 10 || !title.trim()} onClick={() => void action(() => prepare("learning.cloneVersion"))}>Preview new draft from this version</button></>}
         {material.sourceVersionState === "draft" && <>
-          {version?.governed && <DraftEditor key={source.sourceRevision} material={material} busy={busy || Boolean(result)} reasonReady={reason.trim().length >= 10}
-            onChange={clearPreview} onPreview={patch => void action(() => prepare("learning.patchDraft", patch))}
+          {version?.governed && <><DraftEditor key={source.sourceRevision + editorGeneration} material={material} busy={busy || Boolean(result) || editing === "structure"} reasonReady={reason.trim().length >= 10}
+            onChange={() => { clearPreview(); setEditing("fields"); }} onPreview={patch => void action(() => prepare("learning.patchDraft", patch))}
             onReview={() => void action(() => prepare("learning.reviewDraft"))} publishReady={!version.aiReviewRequired && !version.unresolvedPackages}
-            onPublish={() => void action(() => prepare("learning.publishVersion"))} />}
+            onPublish={() => void action(() => prepare("learning.publishVersion"))} />
+            <StructureEditor key={"structure" + source.sourceRevision + editorGeneration} material={material} busy={busy || Boolean(result) || editing === "fields"}
+              reasonReady={reason.trim().length >= 10} onChange={() => { clearPreview(); setEditing("structure"); }}
+              onPreview={changes => void action(() => prepare("learning.editStructure", undefined, changes))} />
+            {editing && !result && <><p>Finish this group of edits before starting another group or approving the draft.</p>
+              <button type="button" disabled={busy} onClick={() => { clearPreview(); setEditing(null); setEditorGeneration(value => value + 1); }}>Discard unsaved edits</button></>}
+          </>}
           {!version?.governed && <p>Create a governed draft from the published version to edit and review its material here.</p>}
         </>}
       </div>}
     </>}
     {preview && <div className="learning-notice"><h4>Review the native change</h4>
-      <p>{{ "learning.cloneVersion": "Create a new draft", "learning.publishVersion": "Publish this version", "learning.patchDraft": "Save draft edits", "learning.reviewDraft": "Approve reviewed material" }[preview.action]}: {preview.after.title}, version {preview.after.versionNumber}.</p>
+      <p>{{ "learning.cloneVersion": "Create a new draft", "learning.publishVersion": "Publish this version", "learning.patchDraft": "Save draft edits", "learning.reviewDraft": "Approve reviewed material", "learning.editStructure": "Save lesson and assessment changes" }[preview.action]}: {preview.after.title}, version {preview.after.versionNumber}.</p>
       {previewPatch && <details open><summary>Review the exact field changes</summary><pre>{JSON.stringify(previewPatch, null, 2)}</pre></details>}
+      {previewStructure && <details open><summary>Review every lesson, answer and removal</summary>
+        <p>These changes are saved together. Removal entries identify the exact lessons, questions and answers being removed.</p>
+        <pre>{JSON.stringify(previewStructure, null, 2)}</pre></details>}
       <p>{preview.reason}</p><p>Preview expires {new Date(preview.expiresAt).toLocaleString()}.</p>
       <p>{preview.action === "learning.cloneVersion" ? "The published source stays intact. AI review and package acceptance must be completed for the new draft." :
         preview.action === "learning.publishVersion" ? "Publishing changes the version CareBase offers for new course activity." :
-        preview.action === "learning.patchDraft" ? "These edits apply to the reviewed draft and clear its prior content approval." :
+        preview.action === "learning.patchDraft" || preview.action === "learning.editStructure" ? "These edits apply to the reviewed draft and clear its prior content approval." :
         "This records your approval of the exact saved material. Later material changes invalidate this approval."}</p>
       <button type="button" className="button button-primary" disabled={busy || Boolean(result)} onClick={() => void action(async () => {
         setResult(verifyAuthoringOutcome(await run({ operation: "apply", commandId: preview.commandId, expectedDigest: preview.previewDigest }), preview));

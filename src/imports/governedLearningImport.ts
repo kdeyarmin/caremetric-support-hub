@@ -58,7 +58,9 @@ export function validateGovernedCourse(value: unknown): GovernedCourse {
   }
   for (const block of course.blocks) {
     unique("block", block.id);
-    if ((block.type === "quiz") !== (block.quiz !== null)) throw new Error("Source quiz blocks and configuration do not agree.");
+    if ((block.type !== "quiz" && block.quiz !== null) || (block.type === "quiz" && block.quiz === null && course.sourceVersionState !== "draft")) {
+      throw new Error("Source quiz blocks and configuration do not agree.");
+    }
     if (!block.quiz) continue;
     unique("quiz", block.quiz.id);
     if (block.quiz.revealsAnswersAfterAttempt && block.quiz.kind !== "knowledge_check") throw new Error("Source answer visibility is invalid.");
