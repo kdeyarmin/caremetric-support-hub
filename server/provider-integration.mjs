@@ -73,7 +73,7 @@ try{
   const previewOp={domain,operation:'preview',requestId:randomUUID(),courseId:course,providerContextRevision:context.providerContextRevision,patch:{providerFullName:'Updated provider'},reason:providerPreview.reason};
   const preview=await run(previewOp);assert.equal(preview.status,200,JSON.stringify(preview.body));assert.deepEqual((await run(previewOp)).body,preview.body);assert.equal(writes,0);
   const apply={domain,operation:'apply',commandId:preview.body.commandId,expectedDigest:preview.body.previewDigest},status={...apply,operation:'status'};
-  const beforeWrongRoute=calls;assert.equal((await call('admin/authoring',apply)).status,400);assert.equal((await call('admin/creation',apply)).status,400);assert.equal(calls,beforeWrongRoute);
+  const beforeWrongRoute=calls;assert.equal((await call('admin/authoring',apply)).status,400);assert.equal((await call('admin/course-creation',apply)).status,400);assert.equal(calls,beforeWrongRoute);
   revokeAfterWrite=true;const lost=await run(apply);assert.ok([401,403].includes(lost.status),JSON.stringify(lost));assert.equal(writes,1);assert.equal(JSON.stringify(lost.body).includes('privateDetail'),false);
   revokeAfterWrite=false;await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
   const recovered=await run(status);assert.equal(recovered.status,200,JSON.stringify(recovered.body));assert.equal(recovered.body.result.commandId,apply.commandId);assert.equal(recovered.body.canApplyThisSession,false);
