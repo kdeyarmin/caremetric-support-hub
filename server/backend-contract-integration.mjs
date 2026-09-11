@@ -28,6 +28,10 @@ const cases=[
     sql:"create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='' as $$ select '{\"api_version\":4,\"features\":[]}'::jsonb $$",
     error:/API 4 foundation and receipt features/,
   },
+  {
+    sql:"create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='' as $$ select null::jsonb $$",
+    error:/API 4 foundation and receipt features/,
+  },
 ];
 
 await client.connect();
@@ -51,5 +55,5 @@ try {
     assert.deepEqual(await readContract(),before,'A valid declaration preserves the exact combined feature set');
     assertBackendContract(await readContract());
   } finally { await client.query('rollback'); }
-  console.log('Backend declaration rejected four incomplete SQL boundaries and accepted the complete combined contract.');
+  console.log('Backend declaration rejected five incomplete SQL boundaries and accepted the complete combined contract.');
 } finally { await client.end(); }

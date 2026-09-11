@@ -6,7 +6,7 @@ begin
   if to_regprocedure('hub.get_backend_contract()') is null then
     raise exception 'Apply the reviewed API 4 foundation first' using errcode='55000';
   end if;
-  if not (hub.get_backend_contract() @> '{"api_version":4,"features":["learning.runtime.v1","platform.admin.read.v1","app.sms.v1","learning.sources.v1","platform.admin.command.v1","learning.receipts.v1"]}'::jsonb) then
+  if (hub.get_backend_contract() @> '{"api_version":4,"features":["learning.runtime.v1","platform.admin.read.v1","app.sms.v1","learning.sources.v1","platform.admin.command.v1","learning.receipts.v1"]}'::jsonb) is not true then
     raise exception 'Apply the reviewed API 4 foundation and receipt features first' using errcode='55000';
   end if;
   foreach signature in array array[
