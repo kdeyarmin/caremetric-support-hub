@@ -71,7 +71,7 @@ try {
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')",[owner]);
   await admin.query('insert into private.sms_identities(user_id,phone_e164) values($1,$2)',[owner,phone]);
   assert.equal((await create({operation:'resume'})).status,401);
-  const started=ok(await call('auth/start',{phone}));ok(await call('auth/verify',{challengeId:started.challengeId,code:'123456'}));
+  const started=ok(await call('auth/sms/start',{phone}));ok(await call('auth/sms/verify',{challengeId:started.challengeId,code:'123456'}));
   assert.equal((await create(request(),{Origin:'https://evil.test'})).status,403);
   assert.equal((await create({...request(),organizationId:randomUUID()})).status,400);
   assert.deepEqual(ok(await create({operation:'creationOptions',offset:0})),{trainingTypes:[],nextOffset:null});
