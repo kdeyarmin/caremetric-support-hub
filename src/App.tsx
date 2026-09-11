@@ -62,6 +62,7 @@ import { safeLearningPath } from "./learning/model";
 import { config } from "./lib/config";
 import { appSession } from "./lib/appSession";
 import { SmsSignIn } from "./auth/SmsSignIn";
+import { JoinHub } from "./auth/JoinHub";
 import { PublicationImport } from "./imports/PublicationImport";
 import { PublicationVideo } from "./imports/PublicationVideo";
 import { courseLaunchUrl } from "./security/courseLaunch";
@@ -990,6 +991,7 @@ export default function App() {
   };
 
   const publicPortal = !authenticated && !config.demoMode && ["/help", "/learn"].includes(location.pathname);
+  if(location.pathname==='/join'&&!config.demoMode)return <JoinHub authenticated={authenticated}/>;
   if (!authenticated && !config.demoMode && !publicPortal) return <SmsSignIn rememberPath={rememberPendingPortalPath} />;
   if (loading) return <LoadingScreen />;
   if (error) return <ErrorScreen message={error} onRetry={() => void (publicPortal ? loadPublicHelp() : authenticated ? loadAuthenticated() : load())} />;

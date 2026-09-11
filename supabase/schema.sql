@@ -6082,6 +6082,445 @@ grant execute on function private.resume_billing_checkout(uuid),private.reserve_
   private.record_billing_checkout_result(uuid,uuid,jsonb),private.claim_billing_checkout_recovery(uuid),private.remember_billing_checkout_recovery(uuid,uuid,jsonb),private.discard_billing_checkout(uuid) to hub_app_server;
 
 
+-- Invited first-use SMS registration creates no app access. The current native
+-- relationship must be reviewed again through customer onboarding before linking.
+create table private.support_registration_reviews (
+  id uuid primary key default gen_random_uuid(),actor_id uuid not null references auth.users(id),
+  session_id uuid not null references private.sms_sessions(id),identity jsonb not null,
+  phone_e164 text not null check(phone_e164 ~ '^\+[1-9][0-9]{7,14}$'),
+  display_name text not null check(length(display_name) between 1 and 120),tenant_name text not null check(length(tenant_name) between 2 and 180),
+  proof_digest text not null,created_at timestamptz not null default now(),expires_at timestamptz not null default now()+interval '60 seconds'
+);
+create index support_registration_review_session_idx on private.support_registration_reviews(session_id,created_at);
+create table private.support_registration_invitations (
+  id uuid primary key,review_id uuid not null unique references private.support_registration_reviews(id),
+  actor_id uuid not null references auth.users(id),session_id uuid not null references private.sms_sessions(id),
+  identity jsonb not null,phone_e164 text not null check(phone_e164 ~ '^\+[1-9][0-9]{7,14}$'),
+  display_name text not null,tenant_name text not null,token_hash text not null unique check(token_hash ~ '^[0-9a-f]{64}$'),
+  created_at timestamptz not null default now(),expires_at timestamptz not null default now()+interval '15 minutes',
+  revoked_at timestamptz,claimed_at timestamptz,claimed_user_id uuid references auth.users(id),
+  check((claimed_at is null)=(claimed_user_id is null))
+);
+create unique index support_registration_native_unique on private.support_registration_invitations((identity->>'product'),(identity->>'sourceUserId')) where revoked_at is null;
+create unique index support_registration_phone_unique on private.support_registration_invitations(phone_e164) where revoked_at is null;
+alter table private.sms_challenges add column registration_invitation_id uuid references private.support_registration_invitations(id);
+create index sms_challenge_registration_idx on private.sms_challenges(registration_invitation_id);
+alter table private.support_registration_reviews enable row level security;
+alter table private.support_registration_invitations enable row level security;
+revoke all on private.support_registration_reviews,private.support_registration_invitations from public,anon,authenticated,service_role,hub_app_server;
+
+create function private.validate_registration_identity(p_identity jsonb) returns void
+language plpgsql immutable set search_path='' as $$
+declare pattern text:='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+begin
+  if p_identity->>'product' is distinct from 'carebase' then perform private.validate_support_identity(p_identity);return;end if;
+  if jsonb_typeof(p_identity)<>'object' or (select array_agg(key order by key) from jsonb_object_keys(p_identity) key)
+    is distinct from array['accountKind','product','relationship','revision','sourceAccountId','sourceUserId']::text[]
+    or p_identity->>'accountKind' is distinct from 'organization' or p_identity->>'relationship' is distinct from 'organization_member'
+    or coalesce(p_identity->>'sourceUserId','') !~ pattern or coalesce(p_identity->>'sourceAccountId','') !~ pattern
+    or coalesce(p_identity->>'revision','') !~ '^[0-9a-f]{64}$' then raise exception 'Verified CareBase relationship required.' using errcode='22023';end if;
+end; $$;
+
+create function private.registration_available(p_identity jsonb,p_phone text) returns void
+language plpgsql stable security definer set search_path='' as $$
+begin
+  perform private.validate_registration_identity(p_identity);
+  if p_phone is null or p_phone !~ '^\+[1-9][0-9]{7,14}$' then raise exception 'Invalid phone.' using errcode='22023'; end if;
+  if exists(select 1 from private.sms_identities where phone_e164=p_phone)
+    or exists(select 1 from private.federated_principals p join private.federation_issuers i on i.id=p.issuer_id
+      where i.issuer='urn:caremetric:support:'||(p_identity->>'product') and p.external_subject_hash=private.support_identity_hash(p_identity->>'sourceUserId')) then
+    raise exception 'Use the existing Hub identity.' using errcode='40001'; end if;
+  if p_identity->>'product'='carebase' then
+    if exists(select 1 from private.federated_principals p join private.federation_issuers i on i.id=p.issuer_id
+      where i.issuer='https://xsqobvvreaovwibxwyvv.supabase.co/auth/v1'
+        and p.external_subject_hash=private.carebase_external_identity_hash((p_identity->>'sourceUserId')::uuid)) then
+      raise exception 'Use the existing Hub identity.' using errcode='40001';end if;
+  end if;
+  if not exists(select 1 from hub.products where slug=case p_identity->>'product' when 'intel' then 'caremetric-intel' else p_identity->>'product' end
+    and status<>'retired' and support_enabled) then raise exception 'Product unavailable.' using errcode='42501'; end if;
+end; $$;
+
+-- The invitation carries no user-supplied administrator identity. Claims use the
+-- issuing session captured by the reviewed operation and recheck its live authority.
+create function private.registration_issuer_current(i private.support_registration_invitations) returns boolean
+language plpgsql security definer set search_path='' as $$
+declare prior text:=current_setting('request.jwt.claims',true);allowed boolean:=false;
+begin
+  if session_user<>'hub_app_server' then return false; end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',i.actor_id,'role','authenticated','sms_session_id',i.session_id)::text,true);
+  begin
+    perform private.require_support_onboarding_actor(i.actor_id,i.session_id);allowed:=true;
+  exception when sqlstate '28000' or sqlstate '42501' then allowed:=false;
+  end;
+  perform set_config('request.jwt.claims',coalesce(prior,''),true);
+  return allowed;
+end; $$;
+
+create function private.start_registration_challenge(p_invitation_hash text,p_phone text,p_client_hash text,p_browser_hash text,p_challenge_id uuid) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare i private.support_registration_invitations%rowtype;counts record;v_phone_hash text;
+begin
+  if session_user<>'hub_app_server' then raise exception 'Server required.' using errcode='42501'; end if;
+  if p_invitation_hash is null or p_invitation_hash !~ '^[0-9a-f]{64}$' or p_browser_hash is null or p_browser_hash !~ '^[0-9a-f]{64}$'
+    or p_client_hash is null or p_client_hash !~ '^[0-9a-f]{64}$' or p_phone is null or p_phone !~ '^\+[1-9][0-9]{7,14}$' then
+    raise exception 'Invalid registration challenge.' using errcode='22023'; end if;
+  v_phone_hash:=private.support_identity_hash(p_phone);
+  perform pg_advisory_xact_lock(hashtextextended('hub_sms_start',0));
+  select count(*) as total,count(*) filter(where c.phone_hash=v_phone_hash) as phone_count,
+    count(*) filter(where c.client_hash=p_client_hash) as client_count,
+    count(*) filter(where c.phone_hash=v_phone_hash and c.created_at>now()-interval '60 seconds') as recent
+    into counts from private.sms_challenges c where c.created_at>now()-interval '15 minutes';
+  if counts.total>=100 or counts.phone_count>=5 or counts.client_count>=30 or counts.recent>0 then raise exception 'Wait before requesting another code.' using errcode='P0429'; end if;
+  select * into i from private.support_registration_invitations where token_hash=p_invitation_hash and phone_e164=p_phone
+    and claimed_at is null and revoked_at is null and expires_at>now() for update;
+  if i.id is not null and (not private.registration_issuer_current(i) or exists(select 1 from private.sms_identities where phone_e164=p_phone)) then i:=null; end if;
+  -- Failed attempts consume the same persisted quota but do not reveal an invitation or send a message.
+  update private.sms_challenges set consumed_at=now() where private.sms_challenges.phone_hash=v_phone_hash and consumed_at is null;
+  insert into private.sms_challenges(id,phone_hash,client_hash,browser_hash,registration_invitation_id)
+    values(p_challenge_id,v_phone_hash,p_client_hash,p_browser_hash,i.id);
+  return jsonb_build_object('phone',case when i.id is not null then p_phone else null end);
+end; $$;
+
+create function private.inspect_registration_challenge(p_challenge_id uuid,p_browser_hash text) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare c private.sms_challenges%rowtype;i private.support_registration_invitations%rowtype;
+begin
+  if session_user<>'hub_app_server' then raise exception 'Server required.' using errcode='42501'; end if;
+  perform pg_advisory_xact_lock(hashtextextended('hub_sms_start',0));
+  select * into c from private.sms_challenges where id=p_challenge_id and browser_hash=p_browser_hash
+    and consumed_at is null and expires_at>now() and attempts<5 and registration_invitation_id is not null for update;
+  if c.id is null then return null; end if;
+  update private.sms_challenges set attempts=attempts+1 where id=c.id;
+  select * into i from private.support_registration_invitations where id=c.registration_invitation_id and claimed_at is null and revoked_at is null and expires_at>now() for update;
+  if i.id is null or not private.registration_issuer_current(i) then return null; end if;
+  return jsonb_build_object('phone',i.phone_e164,'providerId',c.provider_id);
+end; $$;
+
+-- Called only after the application server receives an accepted Telnyx response
+-- for the exact challenge and phone. It is not exposed as a browser RPC.
+create function private.complete_support_registration(p_challenge_id uuid,p_browser_hash text) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare c private.sms_challenges%rowtype;i private.support_registration_invitations%rowtype;uid uuid:=gen_random_uuid();version uuid;
+begin
+  if session_user<>'hub_app_server' then raise exception 'Server required.' using errcode='42501'; end if;
+  perform pg_advisory_xact_lock(hashtextextended('hub_sms_start',0));
+  select * into c from private.sms_challenges where id=p_challenge_id and browser_hash=p_browser_hash and consumed_at is null
+    and expires_at>now() and attempts between 1 and 5 and provider_id is not null and registration_invitation_id is not null for update;
+  if c.id is null then raise exception 'Challenge unavailable.' using errcode='28000'; end if;
+  select * into i from private.support_registration_invitations where id=c.registration_invitation_id and claimed_at is null and revoked_at is null and expires_at>now() for update;
+  if i.id is null or not private.registration_issuer_current(i) then raise exception 'Invitation unavailable.' using errcode='28000'; end if;
+  perform private.registration_available(i.identity,i.phone_e164);
+  -- No password, email credential, Supabase verification, tenant membership or
+  -- staff permission is created. The Auth row is only a durable foreign-key identity.
+  insert into auth.users(id,aud,role,raw_user_meta_data,raw_app_meta_data,created_at,updated_at,is_anonymous)
+    values(uid,'authenticated','authenticated',jsonb_build_object('display_name',i.display_name),jsonb_build_object('provider','caremetric_sms','providers','[]'::jsonb),now(),now(),false);
+  insert into private.sms_identities(user_id,phone_e164,verified_at) values(uid,i.phone_e164,now()) returning identity_version into version;
+  update private.support_registration_invitations set claimed_at=now(),claimed_user_id=uid where id=i.id;
+  update private.sms_challenges set consumed_at=now() where id=c.id;
+  insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata) values(uid,'support.registration.claim','support_registration_invitation',i.id,
+    jsonb_build_object('issuingActorId',i.actor_id,'accessGranted',false));
+  return jsonb_build_object('userId',uid,'identityVersion',version);
+end; $$;
+
+create function private.registration_review_view(r private.support_registration_reviews) returns jsonb
+language sql stable set search_path='' as $$ select jsonb_build_object('reviewId',r.id,'proofDigest',r.proof_digest,'expiresAt',r.expires_at,
+  'identity',r.identity,'phone',r.phone_e164,'displayName',r.display_name,'tenantName',r.tenant_name); $$;
+create function private.registration_invitation_view(i private.support_registration_invitations) returns jsonb
+language sql stable set search_path='' as $$ select jsonb_build_object('invitationId',i.id,'identity',i.identity,'displayName',i.display_name,
+  'tenantName',i.tenant_name,'phoneEnding',right(i.phone_e164,4),'expiresAt',i.expires_at,'hubUserId',i.claimed_user_id,
+  'state',case when i.claimed_at is not null then 'claimed' when i.revoked_at is not null then 'revoked' when i.expires_at<=now() then 'expired' else 'pending' end); $$;
+
+create function hub.prepare_support_registration(p_actor_id uuid,p_session_id uuid,p_identity jsonb,p_phone text,p_display_name text,p_tenant_name text) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare r private.support_registration_reviews%rowtype;
+begin
+  perform private.require_support_onboarding_actor(p_actor_id,p_session_id);
+  perform private.registration_available(p_identity,p_phone);
+  if length(btrim(p_display_name)) not between 1 and 120 or length(btrim(p_tenant_name)) not between 2 and 180
+    or p_display_name is null or p_tenant_name is null then raise exception 'Invalid account name.' using errcode='22023'; end if;
+  perform pg_advisory_xact_lock(hashtextextended('support_registration_review:'||p_session_id,0));
+  if (select count(*) from private.support_registration_reviews where session_id=p_session_id and created_at>now()-interval '15 minutes')>=30 then
+    raise exception 'Too many registration reviews.' using errcode='42501'; end if;
+  insert into private.support_registration_reviews(actor_id,session_id,identity,phone_e164,display_name,tenant_name,proof_digest)
+    values(p_actor_id,p_session_id,p_identity,p_phone,btrim(p_display_name),btrim(p_tenant_name),encode(extensions.gen_random_bytes(32),'hex')) returning * into r;
+  return private.registration_review_view(r);
+end; $$;
+
+create function hub.inspect_support_registration(p_actor_id uuid,p_session_id uuid,p_review_id uuid,p_proof_digest text) returns jsonb
+language plpgsql stable security definer set search_path='' as $$
+declare r private.support_registration_reviews%rowtype;
+begin
+  perform private.require_support_onboarding_actor(p_actor_id,p_session_id);
+  select * into r from private.support_registration_reviews where id=p_review_id and actor_id=p_actor_id and session_id=p_session_id
+    and proof_digest=p_proof_digest and expires_at>now();
+  if r.id is null then raise exception 'Registration review expired.' using errcode='40001'; end if;
+  return private.registration_review_view(r);
+end; $$;
+
+create function hub.issue_support_registration(p_actor_id uuid,p_session_id uuid,p_review_id uuid,p_proof_digest text,p_request_id uuid,p_token_hash text,p_identity jsonb,p_reviewed boolean) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare r private.support_registration_reviews%rowtype;i private.support_registration_invitations%rowtype;
+begin
+  perform private.require_support_onboarding_actor(p_actor_id,p_session_id);
+  if p_reviewed is distinct from true or p_token_hash is null or p_token_hash !~ '^[0-9a-f]{64}$' or p_request_id is null then raise exception 'Explicit review required.' using errcode='22023'; end if;
+  select * into r from private.support_registration_reviews where id=p_review_id and actor_id=p_actor_id and session_id=p_session_id
+    and proof_digest=p_proof_digest for update;
+  if r.id is null or r.identity is distinct from p_identity then raise exception 'Review changed.' using errcode='40001'; end if;
+  select * into i from private.support_registration_invitations where id=p_request_id;
+  if i.id is not null then
+    if i.review_id<>r.id or i.token_hash<>p_token_hash or i.revoked_at is not null or i.expires_at<=now() then raise exception 'Invitation changed.' using errcode='40001'; end if;
+    return private.registration_invitation_view(i);
+  end if;
+  if r.expires_at<=now() then raise exception 'Review expired.' using errcode='40001'; end if;
+  perform pg_advisory_xact_lock(hashtextextended('hub_sms_start',0));
+  perform private.registration_available(p_identity,r.phone_e164);
+  -- Expired, unclaimed invitations may be replaced. A claimed identity can never be replaced here.
+  update private.support_registration_invitations set revoked_at=now() where revoked_at is null and claimed_at is null and expires_at<=now()
+    and (phone_e164=r.phone_e164 or (identity->>'product'=p_identity->>'product' and identity->>'sourceUserId'=p_identity->>'sourceUserId'));
+  insert into private.support_registration_invitations(id,review_id,actor_id,session_id,identity,phone_e164,display_name,tenant_name,token_hash)
+    values(p_request_id,r.id,p_actor_id,p_session_id,p_identity,r.phone_e164,r.display_name,r.tenant_name,p_token_hash) returning * into i;
+  insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata) values(p_actor_id,'support.registration.invite','support_registration_invitation',i.id,
+    jsonb_build_object('product',p_identity->>'product','reviewId',r.id,'accessGranted',false));
+  return private.registration_invitation_view(i);
+end; $$;
+
+create function hub.list_support_registrations(p_actor_id uuid,p_session_id uuid,p_offset integer) returns jsonb
+language plpgsql stable security definer set search_path='' as $$
+begin
+  perform private.require_support_onboarding_actor(p_actor_id,p_session_id);
+  if p_offset is null or p_offset<0 or p_offset>10000 then raise exception 'Invalid offset.' using errcode='22023'; end if;
+  return jsonb_build_object('rows',coalesce((select jsonb_agg(page.result) from
+    (select private.registration_invitation_view(i) as result from private.support_registration_invitations i order by created_at desc,id limit 20 offset p_offset)page),'[]'::jsonb),
+    'offset',p_offset,'total',(select count(*) from private.support_registration_invitations));
+end; $$;
+create function hub.revoke_support_registration(p_actor_id uuid,p_session_id uuid,p_invitation_id uuid,p_reviewed boolean) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare i private.support_registration_invitations%rowtype;
+begin
+  perform private.require_support_onboarding_actor(p_actor_id,p_session_id);
+  if p_reviewed is distinct from true then raise exception 'Explicit review required.' using errcode='22023'; end if;
+  select * into i from private.support_registration_invitations where id=p_invitation_id for update;
+  if i.id is null or i.claimed_at is not null then raise exception 'Invitation unavailable.' using errcode='40001'; end if;
+  update private.support_registration_invitations set revoked_at=coalesce(revoked_at,now()) where id=i.id returning * into i;
+  insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata) values(p_actor_id,'support.registration.revoke','support_registration_invitation',i.id,'{}');
+  return private.registration_invitation_view(i);
+end; $$;
+
+revoke all on function private.validate_registration_identity(jsonb),private.registration_available(jsonb,text),private.registration_issuer_current(private.support_registration_invitations),
+  private.registration_review_view(private.support_registration_reviews),private.registration_invitation_view(private.support_registration_invitations),
+  private.start_registration_challenge(text,text,text,text,uuid),private.inspect_registration_challenge(uuid,text),private.complete_support_registration(uuid,text),
+  hub.prepare_support_registration(uuid,uuid,jsonb,text,text,text),hub.inspect_support_registration(uuid,uuid,uuid,text),
+  hub.issue_support_registration(uuid,uuid,uuid,text,uuid,text,jsonb,boolean),hub.list_support_registrations(uuid,uuid,integer),
+  hub.revoke_support_registration(uuid,uuid,uuid,boolean) from public,anon,authenticated,service_role,hub_app_server;
+grant execute on function private.start_registration_challenge(text,text,text,text,uuid),private.inspect_registration_challenge(uuid,text),private.complete_support_registration(uuid,text),
+  hub.prepare_support_registration(uuid,uuid,jsonb,text,text,text),hub.inspect_support_registration(uuid,uuid,uuid,text),
+  hub.issue_support_registration(uuid,uuid,uuid,text,uuid,text,jsonb,boolean),hub.list_support_registrations(uuid,uuid,integer),
+  hub.revoke_support_registration(uuid,uuid,uuid,boolean) to hub_app_server;
+
+-- Extend the reviewed customer pairing path to nonemployee CareBase accounts.
+-- Reuse CareBase's canonical issuer, native UUID hashes and tenant lock namespace.
+-- This performs no provisioning at migration time and writes no learning evidence.
+create function private.support_native_issuer(p_product text) returns text
+language sql immutable strict set search_path='' as $$
+  select case when p_product='carebase' then 'https://xsqobvvreaovwibxwyvv.supabase.co/auth/v1'
+    else 'urn:caremetric:support:'||p_product end;
+$$;
+revoke all on function private.support_native_issuer(text) from public,anon,authenticated,service_role,hub_app_server;
+
+create or replace function private.validate_support_identity(p_identity jsonb) returns text
+language plpgsql immutable set search_path='' as $$
+declare product text:=p_identity->>'product'; uid text:=p_identity->>'sourceUserId'; aid text:=p_identity->>'sourceAccountId';
+  kind text; relation text; pattern text;
+begin
+  if p_identity is null or jsonb_typeof(p_identity)<>'object' or
+    (select array_agg(key order by key) from jsonb_object_keys(p_identity) key)
+      is distinct from array['accountKind','product','relationship','revision','sourceAccountId','sourceUserId']::text[]
+    or product not in ('carebase','breathe','caremetric-emr','caremetric-go','pennsync','intel') or product is null
+    or p_identity->>'revision' is null or (p_identity->>'revision') !~ '^[0-9a-f]{64}$' then
+    raise exception 'Verified native identity required.' using errcode='22023'; end if;
+  kind:=case product when 'intel' then 'individual' when 'pennsync' then 'agency' else 'organization' end;
+  relation:=case product when 'intel' then 'individual_owner' when 'pennsync' then 'agency_member' else 'organization_member' end;
+  pattern:=case when product in ('intel','pennsync') then '^[0-9a-f]{24}$' else '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' end;
+  if p_identity->>'accountKind' is distinct from kind or p_identity->>'relationship' is distinct from relation
+    or aid is null or aid !~ pattern or uid is null
+    or (product='breathe' and uid !~ '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$')
+    or (product<>'breathe' and uid !~ pattern) or (product='intel' and uid<>aid) then
+    raise exception 'Verified native account relationship required.' using errcode='22023'; end if;
+  return product;
+end; $$;
+
+create or replace function private.support_onboarding_state(p_identity jsonb,p_hub_user uuid,p_hub_tenant uuid) returns text
+language sql stable security definer set search_path='' as $$
+  select private.support_identity_hash(jsonb_build_object(
+    'hubIdentity',(select jsonb_build_object('version',i.identity_version,'verifiedAt',i.verified_at,'revokedAt',i.revoked_at) from private.sms_identities i where i.user_id=p_hub_user),
+    'hubProfile',(select to_jsonb(p) from hub.profiles p where p.id=p_hub_user),
+    'issuer',(select to_jsonb(f) from private.federation_issuers f where f.issuer=private.support_native_issuer(p_identity->>'product')),
+    'principal',(select to_jsonb(p) from private.federated_principals p join private.federation_issuers f on f.id=p.issuer_id
+      where f.issuer=private.support_native_issuer(p_identity->>'product') and p.external_subject_hash=private.support_identity_hash(p_identity->>'sourceUserId')),
+    'binding',(select to_jsonb(t) from private.federated_tenants t join private.federation_issuers f on f.id=t.issuer_id
+      where f.issuer=private.support_native_issuer(p_identity->>'product') and t.external_tenant_hash=private.support_identity_hash(p_identity->>'sourceAccountId')),
+    'tenant',(select to_jsonb(t) from hub.tenants t where t.id=p_hub_tenant),
+    'product',(select to_jsonb(p) from hub.products p where p.slug=case p_identity->>'product' when 'intel' then 'caremetric-intel' else p_identity->>'product' end),
+    'access',(select to_jsonb(t) from hub.tenant_products t join hub.products p on p.id=t.product_id where t.tenant_id=p_hub_tenant and p.slug=case p_identity->>'product' when 'intel' then 'caremetric-intel' else p_identity->>'product' end),
+    'member',(select to_jsonb(m) from hub.tenant_product_memberships m join hub.products p on p.id=m.product_id where m.tenant_id=p_hub_tenant and m.user_id=p_hub_user and p.slug=case p_identity->>'product' when 'intel' then 'caremetric-intel' else p_identity->>'product' end),
+    'intake',(select to_jsonb(s) from private.case_intake_settings s join hub.products p on p.id=s.product_id where s.tenant_id=p_hub_tenant and p.slug=case p_identity->>'product' when 'intel' then 'caremetric-intel' else p_identity->>'product' end)
+  )::text);
+$$;
+
+create or replace function hub.prepare_support_onboarding(p_actor_id uuid,p_session_id uuid,p_identity jsonb,p_hub_user_id uuid,p_tenant_name text) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare product text; pid uuid; tenant uuid; display_name text; intent private.support_onboarding_intents%rowtype;
+begin
+  perform private.require_support_onboarding_actor(p_actor_id,p_session_id);
+  product:=private.validate_support_identity(p_identity);
+  display_name:=private.support_onboarding_user(p_hub_user_id);
+  if p_tenant_name is null or char_length(btrim(p_tenant_name)) not between 2 and 180 then
+    raise exception 'Review the customer account name.' using errcode='22023'; end if;
+  select id into pid from hub.products where slug=case product when 'intel' then 'caremetric-intel' else product end and status<>'retired' and support_enabled;
+  if pid is null then raise exception 'Eligible support product required.' using errcode='42501'; end if;
+  perform pg_advisory_xact_lock(hashtextextended('support-preview:'||p_session_id::text,0));
+  if (select count(*) from private.support_onboarding_intents where session_id=p_session_id and created_at>now()-interval '15 minutes')>=30 then
+    raise exception 'Too many account previews. Try later.' using errcode='42501'; end if;
+  select t.hub_tenant_id into tenant from private.federated_tenants t join private.federation_issuers f on f.id=t.issuer_id
+    where f.issuer=private.support_native_issuer(product) and t.external_tenant_hash=private.support_identity_hash(p_identity->>'sourceAccountId');
+  tenant:=coalesce(tenant,gen_random_uuid());
+  if exists(select 1 from private.case_intake_settings where tenant_id=tenant and product_id=pid and enabled) then
+    raise exception 'Disable and review existing intake before linking another customer.' using errcode='42501'; end if;
+  -- Display the canonical name for an existing account; never rename it implicitly.
+  select coalesce((select name from hub.tenants where id=tenant),btrim(p_tenant_name)) into p_tenant_name;
+  insert into private.support_onboarding_intents(actor_id,session_id,product_id,identity,hub_user_id,hub_tenant_id,tenant_name,hub_display_name,state_digest,proof_digest)
+    values(p_actor_id,p_session_id,pid,p_identity,p_hub_user_id,tenant,p_tenant_name,display_name,
+      private.support_onboarding_state(p_identity,p_hub_user_id,tenant),private.support_identity_hash(gen_random_uuid()::text)) returning * into intent;
+  return private.support_onboarding_view(intent);
+end; $$;
+
+create or replace function hub.apply_support_onboarding(p_actor_id uuid,p_session_id uuid,p_intent_id uuid,p_proof_digest text,p_request_id uuid,p_identity jsonb,p_reviewed boolean) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare intent private.support_onboarding_intents%rowtype; product text; fid uuid; principal private.federated_principals%rowtype;
+  prior_tenant uuid; member hub.tenant_product_memberships%rowtype; v_result jsonb;
+begin
+  perform hub.inspect_support_onboarding(p_actor_id,p_session_id,p_intent_id,p_proof_digest,p_request_id);
+  if p_reviewed is distinct from true then raise exception 'Review the exact account pairing.' using errcode='22023'; end if;
+  product:=private.validate_support_identity(p_identity);
+  select * into intent from private.support_onboarding_intents where id=p_intent_id for update;
+  if intent.identity is distinct from p_identity then raise exception 'Native account relationship changed.' using errcode='40001'; end if;
+  -- Serialize both mappings, including concurrent previews by different admins.
+  perform pg_advisory_xact_lock(hashtextextended('support-issuer:'||product,0));
+  perform pg_advisory_xact_lock(hashtextextended('support-request:'||p_request_id::text,0));
+  if exists(select 1 from private.support_onboarding_intents where request_id=p_request_id and id<>p_intent_id)
+    or (intent.request_id is not null and intent.request_id<>p_request_id)
+    or (intent.applied_at is null and intent.expires_at<=now()) then raise exception 'Preview changed or expired.' using errcode='40001'; end if;
+  -- Serialize with the existing receipt setup before taking tenant/product row
+  -- locks. Customer pairing never creates an employee binding or learning receipt.
+  if product='carebase' then
+    perform pg_advisory_xact_lock(hashtextextended('carebase-tenant:'||(p_identity->>'sourceAccountId'),0));
+    perform pg_advisory_xact_lock(hashtextextended('carebase-principal:'||(p_identity->>'sourceUserId'),0));
+  end if;
+  -- Lock existing mutable rows as well as serializing this provisioning path.
+  perform 1 from auth.users where id=intent.hub_user_id for share;
+  perform 1 from hub.profiles where id=intent.hub_user_id for share;
+  perform 1 from private.sms_identities where user_id=intent.hub_user_id for share;
+  perform 1 from hub.products where id=intent.product_id and status<>'retired' and support_enabled for update;
+  if not found then raise exception 'Eligible support product required.' using errcode='42501'; end if;
+  perform 1 from hub.tenants where id=intent.hub_tenant_id for update;
+  perform 1 from hub.tenant_products where tenant_id=intent.hub_tenant_id and product_id=intent.product_id for update;
+  perform 1 from hub.tenant_product_memberships where tenant_id=intent.hub_tenant_id and product_id=intent.product_id and user_id=intent.hub_user_id for update;
+  perform 1 from private.case_intake_settings where tenant_id=intent.hub_tenant_id and product_id=intent.product_id for update;
+  if intent.applied_at is null and intent.state_digest<>private.support_onboarding_state(p_identity,intent.hub_user_id,intent.hub_tenant_id) then
+    raise exception 'Customer access changed. Preview again.' using errcode='40001'; end if;
+  if exists(select 1 from private.case_intake_settings where tenant_id=intent.hub_tenant_id and product_id=intent.product_id and enabled) then
+    raise exception 'Existing intake requires separate review.' using errcode='42501'; end if;
+  if product='carebase' then
+    if intent.applied_at is null then
+      insert into private.federation_issuers(product_id,issuer,audience,jwks_url,enabled,verification_method)
+        values(intent.product_id,private.support_native_issuer(product),'authenticated',
+          'https://xsqobvvreaovwibxwyvv.supabase.co/auth/v1/.well-known/jwks.json',false,'oidc') on conflict(issuer) do nothing;
+    end if;
+    select id into fid from private.federation_issuers where issuer=private.support_native_issuer(product) and product_id=intent.product_id
+      and audience='authenticated' and verification_method='oidc'
+      and jwks_url='https://xsqobvvreaovwibxwyvv.supabase.co/auth/v1/.well-known/jwks.json' for update;
+  else
+  if intent.applied_at is null then
+    insert into private.federation_issuers(product_id,issuer,audience,jwks_url,enabled,verification_method)
+      values(intent.product_id,private.support_native_issuer(product),'support.operator_review',null,false,'operator_review') on conflict(issuer) do nothing;
+  end if;
+  select id into fid from private.federation_issuers where issuer=private.support_native_issuer(product) and product_id=intent.product_id
+    and audience='support.operator_review' and verification_method='operator_review' and not enabled and jwks_url is null for update;
+  end if;
+  if fid is null then raise exception 'Review the existing source configuration.' using errcode='40001'; end if;
+  select * into principal from private.federated_principals where issuer_id=fid and external_subject_hash=private.support_identity_hash(p_identity->>'sourceUserId') for update;
+  if found and (principal.hub_user_id<>intent.hub_user_id or principal.revoked_at is not null) then
+    raise exception 'Existing principal cannot be repointed or restored.' using errcode='40001'; end if;
+  select hub_tenant_id into prior_tenant from private.federated_tenants where issuer_id=fid and external_tenant_hash=private.support_identity_hash(p_identity->>'sourceAccountId') for update;
+  if prior_tenant is not null and prior_tenant<>intent.hub_tenant_id then raise exception 'Existing account cannot be repointed.' using errcode='40001'; end if;
+  if intent.applied_at is not null and (principal.hub_user_id is null or prior_tenant is null) then
+    raise exception 'Existing identity binding requires review.' using errcode='40001'; end if;
+  if intent.applied_at is null then
+    if prior_tenant is null then
+      insert into hub.tenants(id,slug,name) values(intent.hub_tenant_id,case when product='carebase' then 'carebase-'||(p_identity->>'sourceAccountId') else 'support-'||intent.hub_tenant_id::text end,intent.tenant_name);
+      insert into private.federated_tenants(issuer_id,external_tenant_hash,hub_tenant_id) values(fid,private.support_identity_hash(p_identity->>'sourceAccountId'),intent.hub_tenant_id);
+      insert into hub.tenant_products(tenant_id,product_id) values(intent.hub_tenant_id,intent.product_id);
+    end if;
+    insert into private.federated_principals(issuer_id,external_subject_hash,hub_user_id) values(fid,private.support_identity_hash(p_identity->>'sourceUserId'),intent.hub_user_id) on conflict do nothing;
+    insert into hub.tenant_product_memberships(tenant_id,product_id,user_id,role,case_scope,can_manage_members)
+      values(intent.hub_tenant_id,intent.product_id,intent.hub_user_id,'customer','own',false) on conflict do nothing;
+    insert into private.case_intake_settings(tenant_id,product_id,enabled) values(intent.hub_tenant_id,intent.product_id,false) on conflict do nothing;
+  end if;
+  select * into member from hub.tenant_product_memberships where tenant_id=intent.hub_tenant_id and product_id=intent.product_id and user_id=intent.hub_user_id;
+  if member.user_id is null or member.status<>'active' or member.revoked_at is not null or member.role<>'customer' or member.case_scope<>'own' or member.can_manage_members
+    or not exists(select 1 from hub.tenants t join hub.tenant_products p on p.tenant_id=t.id where t.id=intent.hub_tenant_id and p.product_id=intent.product_id and t.status='active' and p.status='active') then
+    raise exception 'Existing access requires separate review.' using errcode='42501'; end if;
+  perform private.support_onboarding_user(intent.hub_user_id);
+  perform private.require_support_onboarding_actor(p_actor_id,p_session_id);
+  if intent.applied_at is not null then return intent.result||jsonb_build_object('replayed',true); end if;
+  v_result:=jsonb_build_object('intentId',intent.id,'hubTenantId',intent.hub_tenant_id,'hubUserId',intent.hub_user_id,'product',product,
+    'replayed',false,'access','customer','caseScope','own','intakeEnabled',false);
+  update private.support_onboarding_intents set applied_at=now(),request_id=p_request_id,result=v_result where id=intent.id;
+  insert into private.audit_events(actor_id,action,entity_type,entity_id,tenant_id,product_id,metadata)
+    values(p_actor_id,'support.customer.link','tenant',intent.hub_tenant_id,intent.hub_tenant_id,intent.product_id,
+      jsonb_build_object('intentId',intent.id,'requestId',p_request_id,'hubUserId',intent.hub_user_id,'reviewed',true,'intakeEnabled',false));
+  return v_result;
+end; $$;
+
+
+-- Registration is separate from granting app access. Preserve every reviewed
+-- feature already present, including course controls released independently.
+do $migration$
+declare signature text; contract jsonb;
+begin
+  if to_regprocedure('hub.get_backend_contract()') is null then raise exception 'Apply the Hub foundation first' using errcode='55000';end if;
+  contract:=hub.get_backend_contract();
+  if (contract @> '{"api_version":4,"features":["app.sms.v1","support.customer-onboarding.v1","learning.receipts.v1"]}'::jsonb) is not true
+    or to_regclass('private.support_registration_reviews') is null or to_regclass('private.support_registration_invitations') is null then
+    raise exception 'Apply the reviewed registration foundation first' using errcode='55000';end if;
+  foreach signature in array array[
+    'private.validate_registration_identity(jsonb)','private.registration_available(jsonb,text)',
+    'private.support_native_issuer(text)',
+    'private.registration_issuer_current(private.support_registration_invitations)',
+    'private.start_registration_challenge(text,text,text,text,uuid)',
+    'private.inspect_registration_challenge(uuid,text)','private.complete_support_registration(uuid,text)',
+    'hub.prepare_support_registration(uuid,uuid,jsonb,text,text,text)',
+    'hub.inspect_support_registration(uuid,uuid,uuid,text)',
+    'hub.issue_support_registration(uuid,uuid,uuid,text,uuid,text,jsonb,boolean)',
+    'hub.list_support_registrations(uuid,uuid,integer)','hub.revoke_support_registration(uuid,uuid,uuid,boolean)'
+  ] loop
+    if to_regprocedure(signature) is null then raise exception 'Missing reviewed registration function %',signature using errcode='55000';end if;
+    if has_function_privilege('anon',signature,'execute') or has_function_privilege('authenticated',signature,'execute') then
+      raise exception 'Registration functions must remain private: %',signature using errcode='55000';end if;
+  end loop;
+  if private.support_native_issuer('carebase') is distinct from 'https://xsqobvvreaovwibxwyvv.supabase.co/auth/v1'
+    or private.validate_support_identity('{"product":"carebase","sourceUserId":"11111111-1111-4111-8111-111111111111","sourceAccountId":"22222222-2222-4222-8222-222222222222","accountKind":"organization","relationship":"organization_member","revision":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'::jsonb) is distinct from 'carebase' then
+    raise exception 'Apply canonical CareBase support pairing first' using errcode='55000';end if;
+  if not (contract->'features' @> '["support.customer-registration.v1"]'::jsonb) then
+    contract:=jsonb_set(contract,'{features}',(contract->'features')||'["support.customer-registration.v1"]'::jsonb);
+  end if;
+  execute format('create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='''' as %L',
+    'select '||quote_literal(contract::text)||'::jsonb');
+end;
+$migration$;
+revoke all on function hub.get_backend_contract() from public;
+grant execute on function hub.get_backend_contract() to anon,authenticated;
+
 -- 20260911204842_billing_checkout_backend_contract.sql
 -- Hub compatibility is separate from native/Stripe configuration and readiness.
 do $$
