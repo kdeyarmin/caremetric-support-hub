@@ -5,7 +5,7 @@ const allowedOrigins = new Set(["https://support-hub-web-production.up.railway.a
 interface GatewayContract<T> {
   authorizationRpc: "authorize_platform_admin" | "authorize_platform_command";
   parse(input: unknown): T;
-  target(input: T): { endpoint: string | null; body: unknown };
+  target(input: T): { endpoint: string | null; body: unknown; authorizationHeader?: "Authorization" | "X-CareMetric-Hub-Authorization" };
   project(response: unknown, input: T): unknown;
   validateAuthority?(actor: Record<string, unknown>): boolean;
   commandErrors?: boolean;
@@ -72,7 +72,7 @@ export function createAdminGateway<T>({ publishableKey, fetcher = fetch }: Admin
       const target = contract.target(parsed);
       const appUrl = target.endpoint;
       if (!appUrl) return reply(503, "unconfigured");
-      const response = await fetcher(appUrl, { method: "POST", headers: { Authorization: authorization, "Content-Type": "application/json" }, body: JSON.stringify(target.body), redirect: "error", signal });
+      const response = await fetcher(appUrl, { method: "POST", headers: { [target.authorizationHeader ?? "Authorization"]: authorization, "Content-Type": "application/json" }, body: JSON.stringify(target.body), redirect: "error", signal });
       if (!response.ok) {
         let code = response.status === 401 ? "unauthenticated" : response.status === 403 ? "forbidden" : response.status === 404 ? "unconfigured" : "upstream";
         try {

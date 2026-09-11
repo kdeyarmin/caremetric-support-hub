@@ -90,7 +90,7 @@ describe("portfolio proxy routing", () => {
     expect(fetcher.mock.calls[1][1]?.headers).not.toHaveProperty("apikey");
     expect(await response.json()).toEqual(envelope("users.list", { ...page, items: [staff] }));
   });
-  it.each(["pennsync", "intel", "caremetric-go"])("never sends the user token to an unconfigured %s connection", async product => {
+  it.each(["intel", "caremetric-go"])("never sends the user token to an unconfigured %s connection", async product => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(actor));
     const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product, operation: "capabilities" }));
     expect(response.status).toBe(503);
@@ -109,5 +109,27 @@ describe("portfolio proxy routing", () => {
     for (const product of ["carebase", "breathe"]) expect((await handler(request({ product, operation: "users.list" }))).status).toBe(403);
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(fetcher.mock.calls.every(([url]) => String(url).endsWith("/rpc/authorize_platform_admin"))).toBe(true);
+  });
+  it("uses only PennSync's reviewed custom header and preserves its exact native identities", async () => {
+    const data = { ...page, items: [{ ...staff, id: "694ec16f72e01b60d22f7cc0", role: "admin", status: "registered" }] };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(actor)).mockResolvedValueOnce(Response.json(envelope("users.list", data, "pennsync")));
+    const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product: "pennsync", operation: "users.list" }));
+    expect(response.status).toBe(200);
+    expect(fetcher.mock.calls[1]).toMatchObject(["https://caremetricai.base44.app/functions/centralAdminRead", { headers: { "X-CareMetric-Hub-Authorization": "Bearer header.payload.signature" } }]);
+    expect(fetcher.mock.calls[1][1]?.headers).not.toHaveProperty("Authorization");
+    expect(fetcher.mock.calls[1][1]?.headers).not.toHaveProperty("apikey");
+    expect((await response.json()).data).toEqual(data);
+  });
+});
+
+describe("PennSync native billing boundaries", () => {
+  it("allows its individual subscriptions without inventing an organization", () => {
+    const row = { ...subscription, id: "694ec16f72e01b60d22f7cc0", organizationId: null };
+    const data = { ...page, source: "application_database", items: [row] };
+    expect(parse("billing.subscriptions.list", data, "pennsync").data).toEqual(data);
+    expect(() => parse("billing.subscriptions.list", { ...data, items: [{ ...subscription, organizationId: null }] }, "carebase")).toThrow();
+  });
+  it.each([uuid, "694EC16F72E01B60D22F7CC0", "../694ec16f72e01b60d22f7cc0"])("rejects mismatched native IDs %s", id => {
+    expect(() => parse("organizations.list", { ...page, items: [{ ...organization, id }] }, "pennsync")).toThrow();
   });
 });

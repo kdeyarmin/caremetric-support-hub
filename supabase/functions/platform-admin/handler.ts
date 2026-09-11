@@ -7,7 +7,7 @@ export function createAdminProxy(options: AdminProxyOptions) {
   return createAdminGateway(options, {
     authorizationRpc: "authorize_platform_admin",
     parse: parsePortfolioRequest,
-    target: parsed => ({ endpoint: adminRegistry[parsed.product].endpoint, body: parsed.operation }),
+    target: parsed => ({ endpoint: adminRegistry[parsed.product].endpoint, authorizationHeader: adminRegistry[parsed.product].authorizationHeader, body: parsed.operation }),
     project: parsePortfolioEnvelope,
   });
 }
