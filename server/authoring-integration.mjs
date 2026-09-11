@@ -63,7 +63,7 @@ const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(u
       for(const edit of patch.blocks??[]) {
         const block=source.blocks.find(b=>b.id===edit.blockId);assert.ok(block);
         if(Object.hasOwn(edit,'title'))block.title=edit.title;
-        for(const key of ['content','transcript','estimatedMinutes'])if(Object.hasOwn(edit,key))block.body[key]=edit[key];
+        for(const key of ['content','transcript','estimatedMinutes'])if(Object.hasOwn(edit,key))block.body[key==='estimatedMinutes'?'estimated_minutes':key]=edit[key];
       }
     } else source.version.aiReviewedAt=new Date().toISOString();
     payload=JSON.stringify(source);

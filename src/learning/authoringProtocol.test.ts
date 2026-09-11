@@ -15,7 +15,8 @@ it("bounds draft patches and forbids media, ownership, review flags and duplicat
     { version: { aiReviewedAt: "now" } }, { blocks: [{ blockId: id, videoUrl: "https://example.invalid" }] },
     { blocks: [{ blockId: id, content: "ok" }, { blockId: id.toUpperCase(), content: "other" }] },
     { version: { description: "😀".repeat(6500) } }, { blocks: [{ blockId: id, content: "bad\u0000value" }] },
-    { blocks: [{ blockId: id, estimatedMinutes: 1.5 }] }]) expect(draftPatchSchema.safeParse(patch).success).toBe(false);
+    { blocks: [{ blockId: id, estimatedMinutes: 1.5 }] }, { blocks: [{ blockId: id, title: " leading space" }] },
+    { blocks: [{ blockId: id, title: "Two\nlines" }] }]) expect(draftPatchSchema.safeParse(patch).success).toBe(false);
   expect(authoringOperationSchema.safeParse({ ...command, action: "learning.reviewDraft", parameters: { versionId: fixture.sourceVersionId, sourceRevision: sha, reviewed: false } }).success).toBe(false);
 });
 it.each(["learning.patchDraft", "learning.reviewDraft"] as const)("binds %s to the reviewed draft and requires the resulting source digest", async action => {

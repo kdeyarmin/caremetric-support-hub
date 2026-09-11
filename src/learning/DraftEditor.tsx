@@ -33,23 +33,27 @@ export function DraftEditor({ material, busy, reasonReady, publishReady, onChang
     <label>Draft title<input value={title} maxLength={300} disabled={busy} onChange={event => { changed(); setTitle(event.target.value); }} /></label>
     <label>Draft description<textarea value={description} maxLength={12_000} disabled={busy} onChange={event => { changed(); setDescription(event.target.value); }} /></label>
     {material.blocks.map(block => {
-      const body = block.body && typeof block.body === "object" && !Array.isArray(block.body) ? block.body : null;
+      const body = block.body == null ? {} : typeof block.body === "object" && !Array.isArray(block.body) ? block.body : null;
       const contentKey = block.type === "text" ? "content" : block.type === "video" ? "transcript" : null;
+      const contentEditable = body && contentKey && (body[contentKey] == null || typeof body[contentKey] === "string");
       const content = body && contentKey && typeof body[contentKey] === "string" ? body[contentKey] as string : "";
-      const minutes = body && typeof body.estimatedMinutes === "number" ? body.estimatedMinutes : null;
+      const minutesEditable = body && (body.estimated_minutes == null || typeof body.estimated_minutes === "number");
+      const minutes = body && typeof body.estimated_minutes === "number" ? body.estimated_minutes : null;
       const edits = blocks[block.id];
       const fieldValue = (key: keyof BlockPatch, original: string | number | null) => edits && Object.hasOwn(edits, key) ? edits[key] : original;
       return <details key={block.id}><summary>Edit {block.title || "untitled lesson"} · {block.type}</summary>
         <label>Lesson title<input value={fieldValue("title", block.title) ?? ""} maxLength={300} disabled={busy}
           onChange={event => editBlock(block.id, "title", event.target.value || null, block.title)} /></label>
-        {body && contentKey && <>
+        {contentEditable && <>
           <label>{contentKey === "content" ? "Lesson text" : "Video transcript"}<textarea disabled={busy} maxLength={12_000}
             value={String(fieldValue(contentKey, content) ?? "")}
             onChange={event => editBlock(block.id, contentKey, event.target.value, content)} /></label>
-          <label>Estimated minutes<input type="number" min={0} max={1440} step={1} disabled={busy}
-            value={Number.isNaN(fieldValue("estimatedMinutes", minutes)) ? "" : fieldValue("estimatedMinutes", minutes) ?? ""}
-            onChange={event => editBlock(block.id, "estimatedMinutes", event.target.value === "" ? Number.NaN : Number(event.target.value), minutes)} /></label>
         </>}
+        {contentKey && !contentEditable && <p>Edit this lesson’s existing content format in the native course editor.</p>}
+        {contentKey && minutesEditable && <label>Estimated minutes<input type="number" min={0} max={1440} step={1} disabled={busy}
+            value={Number.isNaN(fieldValue("estimatedMinutes", minutes)) ? "" : fieldValue("estimatedMinutes", minutes) ?? ""}
+            onChange={event => editBlock(block.id, "estimatedMinutes", event.target.value === "" ? Number.NaN : Number(event.target.value), minutes)} /></label>}
+        {contentKey && !minutesEditable && <p>Edit this lesson’s existing duration format in the native course editor.</p>}
       </details>;
     })}
     <p>Changes require a preview and confirmation. Saved edits clear prior content approval; review the saved material before publication.</p>

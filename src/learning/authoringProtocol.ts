@@ -9,7 +9,7 @@ const action = z.enum(["learning.cloneVersion", "learning.publishVersion", "lear
 const draftText = z.string().max(12_000).refine(v => !/\p{Cc}/u.test(v.replaceAll("\n", "").replaceAll("\r", "").replaceAll("\t", "")));
 export const draftPatchSchema = z.strictObject({
   version: z.strictObject({ title: text(1, 300).optional(), description: draftText.nullable().optional() }).refine(v => Object.keys(v).length > 0).optional(),
-  blocks: z.array(z.strictObject({ blockId: id, title: draftText.max(300).nullable().optional(), content: draftText.optional(),
+  blocks: z.array(z.strictObject({ blockId: id, title: text(0, 300).nullable().optional(), content: draftText.optional(),
     transcript: draftText.optional(), estimatedMinutes: z.number().int().min(0).max(1440).optional() }).refine(v => Object.keys(v).length > 1))
     .min(1).max(20).refine(v => new Set(v.map(b => b.blockId.toLowerCase())).size === v.length).optional(),
 }).refine(v => Object.keys(v).length > 0 && new TextEncoder().encode(JSON.stringify(v)).byteLength <= 24_576);
