@@ -11,6 +11,15 @@ const rpcArguments = {
   set_learning_receipt_mapping_state: {p_mapping_id:'uuid',p_state:'text'},
   ingest_learning_receipt: {p_payload:'text',p_source_digest:'text'},
 };
+async function withinDeadline(work,signal) {
+  let abort=()=>{};
+  try {
+    return await Promise.race([work,new Promise((_,reject)=>{
+      abort=()=>reject(new GatewayError('upstream'));
+      if(signal.aborted) abort(); else signal.addEventListener('abort',abort,{once:true});
+    })]);
+  } finally {signal.removeEventListener('abort',abort);}
+}
 export function learningReceipts({pool,issue,fetchImpl=fetch}) {
   return async (sessionToken,input,requestSignal) => {
     let op;
@@ -44,7 +53,7 @@ export function learningReceipts({pool,issue,fetchImpl=fetch}) {
       catch(error) { throw new GatewayError(error.status===401?'unauthenticated':error.status===403?'forbidden':error.status===409?'conflict':'upstream'); }
     };
     try {
-      const result=projectReceiptResult(await coordinateLearningReceipt(op,{signal,hub,native}),op);
+      const result=projectReceiptResult(await withinDeadline(coordinateLearningReceipt(op,{signal,hub,native}),signal),op);
       signal.throwIfAborted();
       if(Buffer.byteLength(JSON.stringify(result))>1000000) throw new GatewayError('upstream');
       return result;
