@@ -99,7 +99,7 @@ try {
   // Source freshness is checked before dispatch too, even if a session expiry was extended.
   await admin.query("update private.sms_sessions set created_at=now()-interval '8 hours 1 second',expires_at=now()+interval '1 hour' where id=$1", [sessionId]);
   const beforeExpired = calls;
-  assert.equal((await call('admin/read', input(operationalReadOperations[0]))).status, 403); assert.equal(calls, beforeExpired); await restore();
+  assert.equal((await call('admin/read', input(operationalReadOperations[0]))).status, 401); assert.equal(calls, beforeExpired); await restore();
   mode = 'empty'; const empty = await call('admin/read', input(operationalReadOperations[2]));
   assert.equal(empty.status, 200); assert.equal(empty.body.data.total, 0); assert.deepEqual(empty.body.data.items, []);
   console.log('Operational reads: real SMS issue/consume, original assurance, read-only audience, exact projection, current-session revocation and pagination passed.');
