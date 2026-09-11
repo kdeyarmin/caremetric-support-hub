@@ -9,6 +9,30 @@ permissions:
   contents: read
 
 jobs:
+  runtime-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the actual runtime image with synthetic frontend configuration
+        run: docker build --build-arg VITE_DEMO_MODE=true --build-arg SUPPORT_HUB_ALLOW_DEMO_BUILD=true -t hub-runtime-check .
+      - name: Resolve the complete startup module graph inside the production image
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          docker run --rm --network none hub-runtime-check > runtime-startup.log 2>&1
+          result=$?
+          set -e
+          # No credentials or network are supplied. A fully packaged runtime
+          # must reach configuration validation, after all static imports load.
+          if [ "$result" -ne 1 ] || ! grep -Fq 'HUB_DATABASE_URL must be a valid private PostgreSQL connection URL.' runtime-startup.log; then
+            cat runtime-startup.log
+            echo 'Runtime image did not reach the expected configuration boundary.'
+            exit 1
+          fi
+          echo 'Runtime image resolved startup imports and rejected missing configuration.'
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
