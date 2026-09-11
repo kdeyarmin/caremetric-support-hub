@@ -1,15 +1,15 @@
 begin;
-select plan(8);
+select plan(9);
 
 select ok(not p.prosecdef, 'Public release metadata uses invoker privileges')
 from pg_proc p where p.oid = 'hub.get_backend_contract()'::regprocedure;
 
 set local role anon;
-select is(hub.get_backend_contract(), '{"api_version":4,"features":["learning.runtime.v1","platform.admin.read.v1","app.sms.v1","learning.sources.v1","platform.admin.command.v1","learning.receipts.v1","learning.authoring.v1","knowledge.publications.v1","support.readiness.v1","platform.admin.intel.v1"]}'::jsonb, 'Anonymous callers see only the reviewed release features');
+select is(hub.get_backend_contract(), '{"api_version":4,"features":["learning.runtime.v1","platform.admin.read.v1","app.sms.v1","learning.sources.v1","platform.admin.command.v1","learning.receipts.v1","learning.authoring.v1","knowledge.publications.v1","support.readiness.v1","platform.admin.intel.v1","learning.draft-editing.v1","billing.portal.v1"]}'::jsonb, 'Anonymous callers see only the reviewed release features');
 reset role;
 
 set local role authenticated;
-select is(hub.get_backend_contract(), '{"api_version":4,"features":["learning.runtime.v1","platform.admin.read.v1","app.sms.v1","learning.sources.v1","platform.admin.command.v1","learning.receipts.v1","learning.authoring.v1","knowledge.publications.v1","support.readiness.v1","platform.admin.intel.v1"]}'::jsonb, 'Authenticated callers see the same release metadata');
+select is(hub.get_backend_contract(), '{"api_version":4,"features":["learning.runtime.v1","platform.admin.read.v1","app.sms.v1","learning.sources.v1","platform.admin.command.v1","learning.receipts.v1","learning.authoring.v1","knowledge.publications.v1","support.readiness.v1","platform.admin.intel.v1","learning.draft-editing.v1","billing.portal.v1"]}'::jsonb, 'Authenticated callers see the same release metadata');
 select throws_ok('select hub.get_support_actor_context()', '28000', 'Authentication required', 'Release metadata never grants actor access');
 reset role;
 
@@ -44,6 +44,10 @@ select ok(to_regprocedure('hub.authorize_app_admin()') is not null
       and c.conname='app_delegations_audience_check' and c.contype='c' and c.convalidated
       and position('''intel''::text' in pg_catalog.pg_get_expr(c.conbin,c.conrelid))>0),
   'Declared Intel reads have a validated native audience and current SMS authority');
+
+select ok(private.learning_authoring_actions() @> array['learning.patchDraft','learning.reviewDraft']::text[]
+  and not has_function_privilege('authenticated','private.learning_authoring_actions()','execute'),
+  'Draft edits have a closed private action boundary');
 
 select * from finish();
 rollback;

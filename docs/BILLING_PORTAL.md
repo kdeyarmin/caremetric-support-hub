@@ -80,6 +80,11 @@ navigation. Existing CSP and referrer protections remain unchanged.
 Apply the reviewed Hub migration, native reservation migration and native adapter
 release before enabling the existing native billing-command flag. Verify the
 real native customer/configuration ownership and fixed return destination.
+The Hub migrations are `20260911192604_billing_portal_intents.sql` and
+`20260911195910_billing_portal_backend_contract.sql`. The latter declares
+`billing.portal.v1` only after the actual private intent boundaries exist and
+retains all eleven earlier API 4 features. Node startup and the connected Vite
+build use the same compatibility assertion.
 Hub SQL compatibility alone never declares provider readiness. Deployment creates
 no Stripe portal session and changes no payment, subscription, tax or access state.
 Tax configuration and portal features remain with the existing Stripe account;

@@ -4564,7 +4564,6 @@ grant execute on function private.publication_import_access(),private.stage_publ
   private.verify_publication_asset(uuid,text,text,integer,text),private.store_publication_preview(uuid,jsonb),private.commit_publication_import(uuid,jsonb),private.publication_object(uuid,text,text),private.publication_media_info(uuid),
   private.issue_publication_cleanup(text),private.consume_publication_cleanup(text),private.finish_publication_cleanup(uuid) to hub_app_server;
 
-
 -- 20260911181026_hub_go_admin_audience.sql
 -- Go shares EMR's native data authority but must never consume its capability.
 -- Preserve existing readers, command, learning and media audiences.
@@ -4572,7 +4571,6 @@ alter table private.app_delegations drop constraint app_delegations_audience_che
 alter table private.app_delegations add constraint app_delegations_audience_check
   check(audience in ('carebase','breathe','caremetric-emr','pennsync','caremetric-go',
     'carebase.command','carebase.learning','publication','media'));
-
 
 -- 20260911181309_learning_authoring_intents.sql
 -- The Hub pins reviewed source evidence; CareBase remains the only native
@@ -4703,7 +4701,6 @@ $$;
 revoke all on function hub.remember_learning_authoring_preview(uuid,jsonb),hub.get_learning_authoring_intent(uuid,text),hub.record_learning_authoring_result(uuid,text,jsonb) from public,anon,authenticated;
 grant execute on function hub.remember_learning_authoring_preview(uuid,jsonb),hub.get_learning_authoring_intent(uuid,text),hub.record_learning_authoring_result(uuid,text,jsonb) to authenticated;
 
-
 -- 20260911182857_support_intake_readiness.sql
 -- Readiness is measured from current access, not static rollout labels.
 -- This migration grants no memberships and enables no customer intake.
@@ -4813,7 +4810,6 @@ grant execute on function hub.get_support_readiness() to authenticated;
 grant execute on function hub.list_support_intake_tenants(uuid,integer,integer) to authenticated;
 grant execute on function hub.set_support_intake(uuid,uuid,boolean,boolean,timestamptz) to authenticated;
 
-
 -- 20260911183517_governed_source_credential_keys.sql
 -- Preserve the deployed validator and its ACL; tighten recognized credential
 -- field spellings in authored JSON without rewriting source evidence.
@@ -4857,7 +4853,6 @@ begin
 end;
 $$;
 
-
 -- 20260911184616_hub_intel_admin_audience.sql
 -- Intel's verified live Base44 runtime consumes only its own one-use SMS audience.
 -- Preserve Go and all governed content/learning/command capabilities.
@@ -4866,6 +4861,124 @@ alter table private.app_delegations add constraint app_delegations_audience_chec
   check(audience in ('carebase','breathe','caremetric-emr','pennsync','caremetric-go','intel',
     'carebase.command','carebase.learning','publication','media'));
 
+-- 20260911190122_learning_draft_editing_intents.sql
+-- Extend reviewed native intentions to draft edits and explicit human approval.
+-- Existing source pinning, current session authority and immutable replay are preserved.
+create function private.learning_authoring_actions() returns text[]
+language sql immutable security invoker set search_path='' as $$
+  select array['learning.cloneVersion','learning.publishVersion','learning.patchDraft','learning.reviewDraft']::text[];
+$$;
+revoke all on function private.learning_authoring_actions() from public,anon,authenticated,hub_app_server;
+
+create or replace function hub.remember_learning_authoring_preview(p_snapshot_id uuid,p_preview jsonb) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare actor jsonb; source private.learning_source_snapshots%rowtype; prior private.learning_authoring_intents%rowtype;
+  v_command_id uuid; expires timestamptz; head_id uuid;
+begin
+  actor:=hub.authorize_app_command();
+  perform private.require_learning_editor();
+  if p_preview is null or jsonb_typeof(p_preview)<>'object' or octet_length(p_preview::text)>32000
+    or not(p_preview ?& array['commandId','courseId','action','reason','previewDigest','expiresAt','before','after'])
+    or p_preview-array['commandId','courseId','action','reason','previewDigest','expiresAt','before','after']<>'{}'::jsonb
+    or not(coalesce(p_preview->>'action','')=any(private.learning_authoring_actions()))
+    or coalesce(p_preview->>'previewDigest','') !~ '^[0-9a-f]{64}$'
+    or jsonb_typeof(p_preview->'before')<>'object' or jsonb_typeof(p_preview->'after')<>'object'
+    or coalesce(length(p_preview->>'reason'),0) not between 10 and 500 then
+    raise exception 'Invalid course preview.' using errcode='22023';
+  end if;
+  begin v_command_id:=(p_preview->>'commandId')::uuid; expires:=(p_preview->>'expiresAt')::timestamptz;
+  exception when others then raise exception 'Invalid course preview identity.' using errcode='22023'; end;
+  if v_command_id is null or expires is null or not isfinite(expires) or expires>clock_timestamp()+interval '5 minutes 5 seconds' then
+    raise exception 'Invalid course preview lifetime.' using errcode='22023';
+  end if;
+  select * into source from private.learning_source_snapshots where id=p_snapshot_id;
+  if not found or (p_preview->>'courseId')::uuid is distinct from source.source_course_id
+    or (p_preview->'before'->>'courseId')::uuid is distinct from source.source_course_id
+    or (p_preview->'before'->>'versionId')::uuid is distinct from source.source_version_id
+    or p_preview->'before'->>'sourceRevision' is distinct from source.source_revision then
+    raise exception 'The preview does not match the reviewed source.' using errcode='40001';
+  end if;
+  -- Serialize against source staging. A first preview must pin the current head.
+  perform 1 from hub.content_items where id=source.item_id for update;
+  select id into head_id from private.learning_source_snapshots where source_course_id=source.source_course_id order by sequence desc limit 1;
+  select * into prior from private.learning_authoring_intents where learning_authoring_intents.command_id=v_command_id;
+  if found then
+    if prior.actor_id is distinct from (actor->>'user_id')::uuid or prior.session_id is distinct from (actor->>'session_id')::uuid
+      or prior.snapshot_id is distinct from p_snapshot_id or prior.preview is distinct from p_preview then
+      raise exception 'This command belongs to a different preview.' using errcode='40001';
+    end if;
+    return prior.preview;
+  end if;
+  if head_id is distinct from p_snapshot_id or expires<=clock_timestamp() then
+    raise exception 'The preview or reviewed source changed. Refresh it.' using errcode='40001';
+  end if;
+  insert into private.learning_authoring_intents(command_id,actor_id,session_id,snapshot_id,preview_digest,preview,expires_at)
+    values(v_command_id,(actor->>'user_id')::uuid,(actor->>'session_id')::uuid,p_snapshot_id,p_preview->>'previewDigest',p_preview,expires);
+  insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata)
+    values((actor->>'user_id')::uuid,'learning.authoring.preview','content_item',source.item_id,
+      jsonb_build_object('command_id',v_command_id,'snapshot_id',source.id,'source_revision',source.source_revision));
+  return p_preview;
+end;
+$$;
+
+create or replace function hub.get_learning_authoring_intent(p_command_id uuid,p_expected_digest text) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare actor jsonb; intent private.learning_authoring_intents%rowtype;
+begin
+  actor:=hub.authorize_app_command();
+  perform private.require_learning_editor();
+  select * into intent from private.learning_authoring_intents where command_id=p_command_id;
+  if not found or intent.actor_id is distinct from (actor->>'user_id')::uuid or intent.session_id is distinct from (actor->>'session_id')::uuid then
+    raise exception 'This course preview is unavailable.' using errcode='42501';
+  end if;
+  if p_expected_digest is distinct from intent.preview_digest then
+    raise exception 'The course preview changed.' using errcode='40001';
+  end if;
+  -- Immutable source snapshots cannot be overwritten. Native CAS checks the
+  -- current source before the first write; native replay checks current authority.
+  return jsonb_build_object('preview',intent.preview,'result',intent.result);
+end;
+$$;
+
+create or replace function hub.record_learning_authoring_result(p_command_id uuid,p_expected_digest text,p_result jsonb) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare intent private.learning_authoring_intents%rowtype; actor jsonb; source_item uuid;
+begin
+  actor:=hub.authorize_app_command();
+  perform hub.get_learning_authoring_intent(p_command_id,p_expected_digest);
+  select * into intent from private.learning_authoring_intents where command_id=p_command_id for update;
+  if p_result is null or jsonb_typeof(p_result)<>'object' or octet_length(p_result::text)>8000
+    or not(p_result ?& array['commandId','courseId','action','versionId','versionNumber','status','appliedAt','replayed'])
+    or p_result-array['commandId','courseId','action','versionId','versionNumber','status','appliedAt','replayed','sourceRevision']<>'{}'::jsonb
+    or ((p_result->>'action' in ('learning.patchDraft','learning.reviewDraft')) is distinct from (p_result ? 'sourceRevision'))
+    or (p_result ? 'sourceRevision' and coalesce(p_result->>'sourceRevision','') !~ '^[0-9a-f]{64}$')
+    or p_result->>'commandId' is distinct from intent.preview->>'commandId'
+    or p_result->>'courseId' is distinct from intent.preview->>'courseId'
+    or p_result->>'action' is distinct from intent.preview->>'action'
+    or p_result->>'status' is distinct from intent.preview->'after'->>'status'
+    or p_result->'versionNumber' is distinct from intent.preview->'after'->'versionNumber'
+    or coalesce(p_result->>'versionId','') !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    or jsonb_typeof(p_result->'replayed') is distinct from 'boolean'
+    or (p_result->>'action'<>'learning.cloneVersion' and p_result->>'versionId' is distinct from intent.preview->'before'->>'versionId')
+    or (p_result->>'action'='learning.cloneVersion' and p_result->>'versionId' is not distinct from intent.preview->'before'->>'versionId') then
+    raise exception 'The native outcome does not match the preview.' using errcode='22023';
+  end if;
+  if intent.result is not null then
+    if intent.result-'replayed' is distinct from p_result-'replayed' then
+      raise exception 'The native result changed.' using errcode='40001';
+    end if;
+    return intent.result||jsonb_build_object('replayed',true);
+  end if;
+  update private.learning_authoring_intents set result=p_result,completed_at=now() where command_id=p_command_id;
+  select item_id into source_item from private.learning_source_snapshots where id=intent.snapshot_id;
+  insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata)
+    values((actor->>'user_id')::uuid,'learning.authoring.applied','content_item',source_item,
+      jsonb_build_object('command_id',p_command_id,'action',p_result->>'action','version_id',p_result->>'versionId'));
+  return p_result;
+end;
+$$;
+revoke all on function hub.remember_learning_authoring_preview(uuid,jsonb),hub.get_learning_authoring_intent(uuid,text),hub.record_learning_authoring_result(uuid,text,jsonb) from public,anon,authenticated;
+grant execute on function hub.remember_learning_authoring_preview(uuid,jsonb),hub.get_learning_authoring_intent(uuid,text),hub.record_learning_authoring_result(uuid,text,jsonb) to authenticated;
 
 -- 20260911190819_combined_authoring_publication_support_contract.sql
 -- Declare only reviewed, additive capabilities after their SQL boundaries exist.
@@ -4948,6 +5061,30 @@ $$;
 revoke all on function hub.get_backend_contract() from public;
 grant execute on function hub.get_backend_contract() to anon,authenticated;
 
+-- 20260911192238_learning_draft_editing_contract.sql
+-- The editing interface must not start against clone/publication-only intent SQL.
+do $$
+begin
+  if to_regprocedure('private.learning_authoring_actions()') is null
+    or to_regprocedure('hub.remember_learning_authoring_preview(uuid,jsonb)') is null
+    or to_regprocedure('hub.record_learning_authoring_result(uuid,text,jsonb)') is null then
+    raise exception 'Apply the reviewed draft editing intent migration first' using errcode='55000';
+  end if;
+  if (private.learning_authoring_actions() @> array['learning.patchDraft','learning.reviewDraft']::text[]) is not true
+    or (hub.get_backend_contract() @> '{"api_version":4,"features":["learning.runtime.v1","platform.admin.read.v1","app.sms.v1","learning.sources.v1","platform.admin.command.v1","learning.receipts.v1","learning.authoring.v1","knowledge.publications.v1","support.readiness.v1","platform.admin.intel.v1"]}'::jsonb) is not true then
+    raise exception 'Apply the reviewed draft editing and combined platform contract first' using errcode='55000';
+  end if;
+end;
+$$;
+create or replace function hub.get_backend_contract() returns jsonb
+language sql stable security invoker set search_path='' as $$
+  select jsonb_build_object('api_version',4,'features',jsonb_build_array(
+    'learning.runtime.v1','platform.admin.read.v1','app.sms.v1','learning.sources.v1',
+    'platform.admin.command.v1','learning.receipts.v1','learning.authoring.v1',
+    'knowledge.publications.v1','support.readiness.v1','platform.admin.intel.v1','learning.draft-editing.v1'));
+$$;
+revoke all on function hub.get_backend_contract() from public;
+grant execute on function hub.get_backend_contract() to anon,authenticated;
 
 -- 20260911192604_billing_portal_intents.sql
 -- Hub preserves review ownership only. CareBase owns the Stripe reservation,
@@ -5174,3 +5311,56 @@ revoke all on function private.billing_portal_actor(),private.billing_portal_int
   private.claim_billing_portal(uuid,text),private.record_billing_portal_result(uuid,jsonb),private.discard_billing_portal(uuid) from public,anon,authenticated,service_role,hub_app_server;
 grant execute on function private.resume_billing_portal(uuid),private.reserve_billing_portal(jsonb),private.dispatch_billing_portal_preview(uuid),private.remember_billing_portal_preview(uuid,jsonb),
   private.claim_billing_portal(uuid,text),private.record_billing_portal_result(uuid,jsonb),private.discard_billing_portal(uuid) to hub_app_server;
+
+-- 20260911195910_billing_portal_backend_contract.sql
+-- Additive compatibility only: Stripe/native configuration remains runtime state.
+do $$
+declare signature text;
+begin
+  if to_regprocedure('hub.get_backend_contract()') is null then
+    raise exception 'Apply the reviewed billing portal foundation first' using errcode='55000';
+  end if;
+  if (hub.get_backend_contract() @> '{"api_version":4,"features":["learning.runtime.v1","platform.admin.read.v1","app.sms.v1","learning.sources.v1","platform.admin.command.v1","learning.receipts.v1","learning.authoring.v1","knowledge.publications.v1","support.readiness.v1","platform.admin.intel.v1","learning.draft-editing.v1"]}'::jsonb) is not true then
+    raise exception 'Apply the reviewed combined editing contract before billing portal declaration' using errcode='55000';
+  end if;
+  if to_regclass('private.billing_portal_intents') is null
+    or to_regtype('private.billing_portal_action') is null then
+    raise exception 'Apply the reviewed billing portal intent table and action enum first' using errcode='55000';
+  end if;
+  foreach signature in array array[
+    'hub.authorize_app_command()',
+    'private.current_app_session_verified()',
+    'private.billing_portal_actor()',
+    'private.billing_portal_intent_view(private.billing_portal_intents)',
+    'private.require_billing_portal_intent(uuid)',
+    'private.resume_billing_portal(uuid)',
+    'private.reserve_billing_portal(jsonb)',
+    'private.dispatch_billing_portal_preview(uuid)',
+    'private.remember_billing_portal_preview(uuid,jsonb)',
+    'private.claim_billing_portal(uuid,text)',
+    'private.record_billing_portal_result(uuid,jsonb)',
+    'private.discard_billing_portal(uuid)'
+  ] loop
+    if to_regprocedure(signature) is null then
+      raise exception 'Apply reviewed billing portal migration first; missing function %',signature using errcode='55000';
+    end if;
+  end loop;
+  if enum_range(null::private.billing_portal_action)::text[] is distinct from array['billing.portal.create']::text[]
+    or not exists(select 1 from pg_catalog.pg_attribute a
+      where a.attrelid='private.billing_portal_intents'::regclass and a.attname='action'
+        and not a.attisdropped and a.attnotnull and a.atttypid='private.billing_portal_action'::regtype)
+    or position('''billing.portal.create''' in pg_catalog.pg_get_functiondef('private.reserve_billing_portal(jsonb)'::regprocedure))=0 then
+    raise exception 'Apply the reviewed closed billing portal action contract first' using errcode='55000';
+  end if;
+end;
+$$;
+create or replace function hub.get_backend_contract() returns jsonb
+language sql stable security invoker set search_path='' as $$
+  select jsonb_build_object('api_version',4,'features',jsonb_build_array(
+    'learning.runtime.v1','platform.admin.read.v1','app.sms.v1','learning.sources.v1',
+    'platform.admin.command.v1','learning.receipts.v1','learning.authoring.v1',
+    'knowledge.publications.v1','support.readiness.v1','platform.admin.intel.v1',
+    'learning.draft-editing.v1','billing.portal.v1'));
+$$;
+revoke all on function hub.get_backend_contract() from public;
+grant execute on function hub.get_backend_contract() to anon,authenticated;

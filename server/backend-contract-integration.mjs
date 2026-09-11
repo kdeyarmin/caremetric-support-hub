@@ -10,6 +10,8 @@ const local=new URL(databaseUrl);
 assert.equal(local.hostname,'127.0.0.1'); assert.equal(local.port,'54322');
 const client=new pg.Client({connectionString:databaseUrl});
 const migration=await readFile(new URL('../supabase/migrations/20260911190819_combined_authoring_publication_support_contract.sql',import.meta.url),'utf8');
+const editingMigration=await readFile(new URL('../supabase/migrations/20260911192238_learning_draft_editing_contract.sql',import.meta.url),'utf8');
+const billingMigration=await readFile(new URL('../supabase/migrations/20260911195910_billing_portal_backend_contract.sql',import.meta.url),'utf8');
 const readContract=async()=> (await client.query('select hub.get_backend_contract() as contract')).rows[0].contract;
 const cases=[
   {
@@ -52,8 +54,22 @@ try {
   try {
     const before=await readContract();
     await client.query(migration);
-    assert.deepEqual(await readContract(),before,'A valid declaration preserves the exact combined feature set');
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['learning.draft-editing.v1','billing.portal.v1'].includes(feature))});
+    assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='learning.draft-editing.v1')}),/incompatible/);
+    await client.query(editingMigration);
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>feature!=='billing.portal.v1')});
+    assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='billing.portal.v1')}),/incompatible/);
+    await client.query(billingMigration);
+    assert.deepEqual(await readContract(),before,'Forward declarations restore the exact current feature set');
     assertBackendContract(await readContract());
   } finally { await client.query('rollback'); }
-  console.log('Backend declaration rejected five incomplete SQL boundaries and accepted the complete combined contract.');
+  for(const sql of [
+    'alter function private.learning_authoring_actions() rename to test_missing_editing_actions',
+    "create or replace function private.learning_authoring_actions() returns text[] language sql immutable security invoker set search_path='' as $$ select array['learning.cloneVersion','learning.publishVersion']::text[] $$",
+  ]) {
+    await client.query('begin');
+    try { await client.query(sql);await assert.rejects(()=>client.query(editingMigration),error=>error.code==='55000' && /draft editing/.test(error.message)); }
+    finally { await client.query('rollback'); }
+  }
+  console.log('Backend declarations rejected seven incomplete SQL boundaries and accepted the complete combined editing contract.');
 } finally { await client.end(); }

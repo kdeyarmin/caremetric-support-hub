@@ -95,6 +95,7 @@ jobs:
           node server/publication-integration.mjs
           node server/backend-contract-integration.mjs
           node server/billing-command-integration.mjs
+          node server/billing-contract-integration.mjs
       - name: Check database security and performance advisors
         run: npx supabase db advisors --local --type all --level warn --fail-on error
       - name: Stop isolated Supabase stack
