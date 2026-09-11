@@ -3388,3 +3388,48 @@ returns jsonb language sql stable security invoker set search_path=''
 as $$ select jsonb_build_object('api_version',3); $$;
 revoke all on function hub.get_backend_contract() from public;
 grant execute on function hub.get_backend_contract() to anon,authenticated;
+
+-- Delegated command authorization and release contract 4.
+-- Mutation delegation retains the native CareBase eight-hour privileged-session
+-- window. Refreshing a token does not extend the original session creation time.
+create function hub.authorize_platform_command()
+returns jsonb language plpgsql stable security definer set search_path='' as $$
+declare
+  actor jsonb;
+  session_id uuid;
+  started_at timestamptz;
+  not_after timestamptz;
+  issued_at text := (select auth.jwt()->>'iat');
+begin
+  actor := hub.authorize_platform_admin();
+  session_id := (select auth.jwt()->>'session_id')::uuid;
+  select s.created_at,s.not_after into started_at,not_after
+    from auth.sessions s where s.id=session_id and s.user_id=(actor->>'user_id')::uuid;
+  if started_at is null or started_at < now()-interval '480 minutes'
+    or started_at > now()+interval '5 minutes'
+    or issued_at is null or issued_at !~ '^[0-9]{1,12}$' then
+    raise exception 'Sign in again before changing application access.' using errcode='28000';
+  end if;
+  if issued_at::numeric > extract(epoch from now()+interval '5 minutes') then
+    raise exception 'Sign in again before changing application access.' using errcode='28000';
+  end if;
+  return actor || jsonb_build_object('session_id',session_id,'session_started_at',started_at,
+    'assurance_expires_at',least(started_at+interval '480 minutes',not_after));
+end;
+$$;
+revoke all on function hub.authorize_platform_command() from public,anon,authenticated;
+grant execute on function hub.authorize_platform_command() to authenticated;
+
+do $$ begin
+  if to_regprocedure('hub.authorize_platform_command()') is null
+    or to_regprocedure('hub.stage_learning_source(text,text,text)') is null
+    or (hub.get_backend_contract()->>'api_version')::integer < 3 then
+    raise exception 'Apply governed learning and command authorization before contract 4';
+  end if;
+end $$;
+create or replace function hub.get_backend_contract()
+returns jsonb language sql stable security invoker set search_path='' as $$
+  select jsonb_build_object('api_version',4);
+$$;
+revoke all on function hub.get_backend_contract() from public;
+grant execute on function hub.get_backend_contract() to anon,authenticated;

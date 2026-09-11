@@ -1,148 +1,126 @@
-import { useCallback, useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import { useCallback, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ArrowRight, BookOpen, Building2, ChevronRight, CircleAlert, Layers3, LoaderCircle, RefreshCw, Search, ShieldCheck, Users, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Building2, CreditCard, Layers3, RefreshCw, Search, Users } from "lucide-react";
+import { adminRegistry } from "../../supabase/functions/_shared/adminRegistry";
+import { portfolioProducts } from "../../supabase/functions/_shared/portfolioProtocol";
+import type { AdminDirectoryUser, AdminOrganization, AdminPage, AdminSubscription, PortfolioCapabilities, PortfolioOperationName, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
 import { AdminInventory } from "./AdminInventory";
-import { adminInventory, adminInventoryProducts } from "./inventory";
-import { readAdminResource } from "./readState";
-import type { AdminReadError, AdminReadState } from "./readState";
-import type { AdminClient, CareBaseCourseSummary } from "./types";
+import { adminInventory } from "./inventory";
+import { CourseCatalog } from "./CareBaseCourses";
+import { AccessCommand } from "./AccessCommand";
+import type { AccessTarget } from "./AccessCommand";
+import { Loading, ReadFailure } from "./AdminReads";
+import { timeLabel } from "./readState";
+import { useAdminRead } from "./useAdminRead";
+import { portfolioClient } from "./portfolioClient";
+import type { PortfolioClient } from "./portfolioClient";
+import type { AdminClient } from "./types";
 import "./admin.css";
 
-type WorkspaceView = "overview" | "courses" | "inventory";
-const PAGE_SIZE = 20;
-const number = new Intl.NumberFormat();
+type View = "overview" | "organizations" | "users" | "billing" | "courses" | "inventory";
+const viewOperations: Record<Exclude<View, "inventory">, PortfolioOperationName[]> = {
+  overview: ["overview"], organizations: ["organizations.list"], users: ["users.list"],
+  billing: ["billing.overview", "billing.subscriptions.list"], courses: ["courses.list", "courses.get"],
+};
+const views = [
+  { id: "overview", name: "Overview", icon: Layers3 }, { id: "organizations", name: "Organizations", icon: Building2 },
+  { id: "users", name: "Users", icon: Users }, { id: "billing", name: "Billing", icon: CreditCard },
+  { id: "courses", name: "CareBase courses", icon: BookOpen },
+] as const;
+const formatNumber = new Intl.NumberFormat();
 
-function useAdminRead<T>(reader: (signal: AbortSignal) => Promise<T>): AdminReadState<T> {
-  const [entry, setEntry] = useState<{ reader: typeof reader; state: AdminReadState<T> }>(() => ({ reader, state: { status: "loading" } }));
-  useEffect(() => {
-    const controller = new AbortController();
-    void readAdminResource(reader, controller.signal, (state) => setEntry({ reader, state }));
-    return () => controller.abort();
-  }, [reader]);
-  // A changed query/selection must never display the preceding request's data.
-  return entry.reader === reader ? entry.state : { status: "loading" };
-}
-
-function Loading({ label }: { label: string }) {
-  return <div className="admin-read-message" role="status"><LoaderCircle size={20} className="spin" aria-hidden="true" /><div><strong>{label}</strong><p>Requesting current CareBase data.</p></div></div>;
-}
-
-function ReadFailure({ error, retry }: { error: AdminReadError; retry: () => void }) {
-  return <div className="admin-read-message admin-read-error" role="alert"><CircleAlert size={21} aria-hidden="true" /><div><strong>{error.title}</strong><p>{error.message}</p>{error.retryable && <button className="button button-secondary button-small" type="button" onClick={retry}><RefreshCw size={13} aria-hidden="true" />Retry</button>}</div></div>;
-}
-
-function timeLabel(value: string | Date): string {
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.valueOf()) ? "Not available" : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-}
-
-export function AdminWorkspace({ client }: { client: AdminClient }) {
-  const [view, setView] = useState<WorkspaceView>("overview");
+export function AdminWorkspace({ client, portfolio = portfolioClient }: { client: AdminClient; portfolio?: PortfolioClient }) {
+  const [product, setProduct] = useState<PortfolioProduct>("carebase");
   const [refresh, setRefresh] = useState(0);
-  const retry = () => setRefresh((value) => value + 1);
-
   return <div className="admin-workspace">
-    <div className="page-heading">
-      <div><span className="eyebrow">CareMetric Admin</span><h1>Your apps, in one workspace</h1><p>View current CareBase totals and shared course metadata, use the hub’s support tools, and browse administration functions across your apps.</p></div>
-      {view !== "inventory" && <button type="button" className="button button-secondary" onClick={retry}><RefreshCw size={15} aria-hidden="true" />Refresh data</button>}
-    </div>
-    <nav className="admin-view-nav" aria-label="Administration workspace views">
-      <button type="button" className={view === "overview" ? "active" : ""} aria-pressed={view === "overview"} onClick={() => setView("overview")}><Layers3 size={16} aria-hidden="true" />Overview</button>
-      <button type="button" className={view === "courses" ? "active" : ""} aria-pressed={view === "courses"} onClick={() => setView("courses")}><BookOpen size={16} aria-hidden="true" />CareBase courses</button>
-      <button type="button" className={view === "inventory" ? "active" : ""} aria-pressed={view === "inventory"} onClick={() => setView("inventory")}><Building2 size={16} aria-hidden="true" />All app functions <span>{adminInventory.length}</span></button>
-    </nav>
-    {view === "overview" && <AdminOverview key={refresh} client={client} retry={retry} openCourses={() => setView("courses")} openInventory={() => setView("inventory")} />}
-    {view === "courses" && <CourseCatalog key={refresh} client={client} />}
-    {view === "inventory" && <AdminInventory />}
+    <div className="page-heading"><div><span className="eyebrow">CareMetric Admin</span><h1>Your apps, in one workspace</h1><p>Manage shared learning and support, and inspect current organizations, users, and subscriptions across connected apps.</p></div><button className="button button-secondary" type="button" onClick={() => setRefresh(value => value + 1)}><RefreshCw size={15} aria-hidden="true" />Refresh connection</button></div>
+    <section className="panel portfolio-selector" aria-label="Application selection"><label><span>Application</span><select value={product} onChange={event => setProduct(event.target.value as PortfolioProduct)}>{portfolioProducts.map(id => <option key={id} value={id}>{adminRegistry[id].name}{adminRegistry[id].endpoint ? "" : " — connection pending"}</option>)}</select></label><div className="admin-quick-links"><Link to="/library">Create and manage courses</Link><Link to="/cases">Support cases</Link><Link to="/security">Security</Link></div></section>
+    <ApplicationWorkspace key={`${product}:${refresh}`} product={product} client={client} portfolio={portfolio} />
   </div>;
 }
 
-function AdminOverview({ client, retry, openCourses, openInventory }: { client: AdminClient; retry: () => void; openCourses: () => void; openInventory: () => void }) {
-  const reader = useCallback((signal: AbortSignal) => client.getOverview({ signal }), [client]);
-  const state = useAdminRead(reader);
-  const overview = state.status === "ready" ? state.data : null;
-  const metrics = [
-    { label: "CareBase organizations", value: overview?.organizationCount, icon: Building2, color: "teal", note: "All CareBase organizations" },
-    { label: "Active CareBase profiles", value: overview?.activeUserCount, icon: Users, color: "blue", note: "Aggregate count only" },
-    { label: "Shared CareBase courses", value: overview?.globalCourseCount, icon: BookOpen, color: "violet", note: "Global courses, all publication states" },
-  ];
-
-  return <div className="admin-sections">
-    <section aria-labelledby="admin-carebase-heading">
-      <div className="admin-section-title"><div><h2 id="admin-carebase-heading">CareBase connection</h2><p>Live totals from CareBase. Other apps are not included in these counts.</p></div><span className={`admin-status ${state.status === "ready" ? "admin-status-connected" : "admin-status-muted"}`}>{state.status === "ready" ? "Live read succeeded" : state.status === "loading" ? "Connecting" : "Unavailable"}</span></div>
-      <div className="metric-grid admin-metric-grid">{metrics.map(({ label, value, icon: Icon, color, note }) => <div className={`metric-card metric-${color}`} key={label}><div className="metric-icon"><Icon aria-hidden="true" /></div><div><p>{label}</p><strong aria-label={`${label}: ${value === undefined ? (state.status === "loading" ? "loading" : "unavailable") : value}`}>{value === undefined ? "—" : number.format(value)}</strong><small>{value === undefined ? (state.status === "loading" ? "Loading live count" : "Count unavailable") : note}</small></div></div>)}</div>
-      {state.status === "loading" && <Loading label="Connecting to CareBase" />}
-      {state.status === "error" && <ReadFailure error={state.error} retry={retry} />}
-      {state.status === "ready" && <p className="admin-read-time">Last loaded {timeLabel(state.receivedAt)}. Refresh to request current totals.</p>}
-    </section>
-    <section className="admin-capability-grid" aria-label="Available administration tools">
-      <div className="panel admin-capability"><span className="admin-status admin-status-muted">CareBase · read only</span><BookOpen className="admin-capability-icon" aria-hidden="true" /><h2>Shared course catalog</h2><p>Browse live global courses and their lesson outlines from CareBase. Private videos and tenant-specific courses stay in CareBase.</p><button className="text-link" type="button" onClick={openCourses}>Browse CareBase courses <ChevronRight size={14} aria-hidden="true" /></button></div>
-      <div className="panel admin-capability"><span className="admin-status admin-status-muted">Available in this hub</span><ShieldCheck className="admin-capability-icon" aria-hidden="true" /><h2>Support and learning</h2><p>Manage support cases, the shared content library, product information, and administrator security.</p><div className="admin-quick-links"><Link to="/cases">Support cases <ChevronRight size={13} aria-hidden="true" /></Link><Link to="/library">Content library <ChevronRight size={13} aria-hidden="true" /></Link><Link to="/products">Products <ChevronRight size={13} aria-hidden="true" /></Link><Link to="/security">Security <ChevronRight size={13} aria-hidden="true" /></Link></div></div>
-      <div className="panel admin-capability"><span className="admin-status admin-status-muted">Source inventory</span><Layers3 className="admin-capability-icon" aria-hidden="true" /><h2>Every app’s functions</h2><p>Search {adminInventory.length} audited surfaces across {adminInventoryProducts.length} apps, including billing, course creation, users, operations, and support.</p><button className="text-link" type="button" onClick={openInventory}>Browse all app functions <ChevronRight size={14} aria-hidden="true" /></button></div>
-    </section>
-    <div className="admin-scope-note"><CircleAlert size={18} aria-hidden="true" /><p><strong>Consolidation in progress.</strong> The CareBase connection currently provides read-only totals and shared course metadata. Billing changes and other app administration actions still require their owning apps.</p></div>
-  </div>;
-}
-
-function CourseCatalog({ client }: { client: AdminClient }) {
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [offset, setOffset] = useState(0);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+function ApplicationWorkspace({ product, client, portfolio }: { product: PortfolioProduct; client: AdminClient; portfolio: PortfolioClient }) {
+  const [view, setView] = useState<View>("overview");
   const [refresh, setRefresh] = useState(0);
-  const retry = () => setRefresh((value) => value + 1);
-  function submitSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSearch(searchInput.trim());
-    setOffset(0);
-    setSelectedId(null);
-    retry();
-  }
-  function changePage(nextOffset: number) {
-    setOffset(nextOffset);
-    setSelectedId(null);
-  }
+  const retry = () => setRefresh(value => value + 1);
+  const readCapabilities = useCallback((signal: AbortSignal) => { void refresh; return portfolio.capabilities({ product, signal }); }, [portfolio, product, refresh]);
+  const state = useAdminRead(readCapabilities);
+  const app = adminRegistry[product];
+  const capabilities = state.status === "ready" ? state.data : null;
+  const supports = (candidate: Exclude<View, "inventory">) => viewOperations[candidate].every(operation => capabilities?.operations.includes(operation));
+  const allowCommands = product === "carebase" && capabilities?.operations.includes("commands.preview") === true && capabilities.operations.includes("commands.apply");
+  return <>
+    <div className="admin-section-title"><div><h2>{app.name}</h2><p>{app.userScope}</p></div><span className={`admin-status ${state.status === "ready" ? "admin-status-connected" : "admin-status-muted"}`}>{state.status === "ready" ? "Connection verified" : state.status === "loading" ? "Checking connection" : "Unavailable"}</span></div>
+    <nav className="admin-view-nav" aria-label="Administration workspace views">{views.filter(item => supports(item.id)).map(({ id, name, icon: Icon }) => <button key={id} type="button" className={view === id ? "active" : ""} aria-pressed={view === id} onClick={() => setView(id)}><Icon size={16} aria-hidden="true" />{name}</button>)}<button type="button" className={view === "inventory" ? "active" : ""} aria-pressed={view === "inventory"} onClick={() => setView("inventory")}><Layers3 size={16} aria-hidden="true" />All app functions <span>{adminInventory.length}</span></button></nav>
+    {view === "inventory" ? <AdminInventory /> : <>
+      {state.status === "loading" && <Loading label={`Checking ${app.name} capabilities`} app={app.name} />}
+      {state.status === "error" && <ReadFailure error={state.error} retry={retry} />}
+      {capabilities && !supports(view) && <p className="admin-explanation">This connection does not currently provide this operation.</p>}
+      {capabilities && supports(view) && <div key={`${view}:${refresh}`}>
+        {view === "overview" && <Overview product={product} portfolio={portfolio} capabilities={capabilities} retry={retry} />}
+        {view === "organizations" && <Directory product={product} portfolio={portfolio} kind="organizations" allowCommands={allowCommands} />}
+        {view === "users" && <Directory product={product} portfolio={portfolio} kind="users" allowCommands={allowCommands} />}
+        {view === "billing" && <Billing product={product} portfolio={portfolio} retry={retry} allowCommands={allowCommands} />}
+        {view === "courses" && product === "carebase" && <CourseCatalog client={client} />}
+      </div>}
+    </>}
+  </>;
+}
 
-  return <section className="panel admin-course-panel" aria-labelledby="admin-course-heading">
-    <div className="panel-heading"><div><h2 id="admin-course-heading">Shared courses in CareBase</h2><p>Current global course metadata · all publication states · read only</p></div><Link className="text-link" to="/library">Hub content library <ChevronRight size={14} aria-hidden="true" /></Link></div>
-    <div className="admin-section-body">
-      <form className="admin-course-search" onSubmit={submitSearch}><label className="admin-search"><span className="admin-field-label">Search course titles</span><span className="admin-search-input"><Search size={16} aria-hidden="true" /><input type="search" maxLength={100} value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Search the CareBase catalog…" /></span></label><button type="submit" className="button button-primary">Search</button></form>
-      <div className={`admin-catalog-layout${selectedId ? " has-selection" : ""}`}>
-        <CourseList key={`${search}:${offset}:${refresh}`} client={client} search={search} offset={offset} selectedId={selectedId} selectCourse={setSelectedId} changePage={changePage} retry={retry} />
-        {selectedId && <CourseDetail key={`${selectedId}:${refresh}`} client={client} courseId={selectedId} close={() => setSelectedId(null)} retry={retry} />}
-      </div>
-    </div>
+function Overview({ product, portfolio, capabilities, retry }: { product: PortfolioProduct; portfolio: PortfolioClient; capabilities: PortfolioCapabilities; retry: () => void }) {
+  const reader = useCallback((signal: AbortSignal) => portfolio.overview({ product, signal }), [portfolio, product]);
+  const state = useAdminRead(reader);
+  const app = adminRegistry[product];
+  if (state.status === "loading") return <Loading label="Loading application overview" app={app.name} />;
+  if (state.status === "error") return <ReadFailure error={state.error} retry={retry} />;
+  const metrics = [
+    { label: "Organizations", value: state.data.organizationCount },
+    { label: product === "breathe" || product === "caremetric-emr" ? "Active staff accounts" : "Active application profiles", value: state.data.activeUserCount },
+    ...(state.data.registeredUserCount === undefined ? [] : [{ label: "Registered staff profiles", value: state.data.registeredUserCount }]),
+    ...(state.data.globalCourseCount === undefined ? [] : [{ label: "Shared courses · all publication states", value: state.data.globalCourseCount }]),
+    ...(state.data.subscriptionCount === undefined ? [] : [{ label: "Recorded subscriptions", value: state.data.subscriptionCount }]),
+  ];
+  return <section><div className="metric-grid admin-metric-grid">{metrics.map(metric => <div className="metric-card metric-teal" key={metric.label}><div><p>{metric.label}</p><strong>{metric.value === null ? "Not reported" : formatNumber.format(metric.value)}</strong><small>{app.name}</small></div></div>)}</div><p className="admin-read-time">Last loaded {timeLabel(state.receivedAt)}. These totals include only {app.name}.</p><details className="portfolio-connection-details"><summary>Connection details</summary><p>Supported reads: {capabilities.operations.join(", ")}</p><p>Deployed source: {capabilities.sourceRevision ?? "Not reported"}</p></details></section>;
+}
+
+function Directory({ product, portfolio, kind, allowCommands }: { product: PortfolioProduct; portfolio: PortfolioClient; kind: "organizations" | "users"; allowCommands: boolean }) {
+  const [selected, setSelected] = useState<AccessTarget | null>(null);
+  const [revision, setRevision] = useState(0);
+  const columns = kind === "organizations" ? ["Organization", "Slug", product === "carebase" ? "Subscription status" : "Status", "Created"] : ["Name", "Email", "Role", product === "carebase" ? "Profile status" : "Account status", "Created"];
+  if (allowCommands) columns.push("Access");
+  const read = useCallback((search: string, offset: number, signal: AbortSignal) => kind === "organizations"
+    ? portfolio.organizations({ product, search: search || undefined, offset, limit: 20, signal })
+    : portfolio.users({ product, search: search || undefined, offset, limit: 20, signal }), [kind, portfolio, product]);
+  return <>{selected && <AccessCommand key={`${selected.action}:${selected.id}`} target={selected} onClose={() => setSelected(null)} onApplied={() => setRevision(value => value + 1)} />}<PagedRecords<AdminOrganization | AdminDirectoryUser> key={revision} app={adminRegistry[product].name} title={kind === "organizations" ? "Organizations" : product === "breathe" ? "Staff accounts" : "Application user profiles"} searchLabel={kind === "organizations" ? "Search organization names" : "Search account emails"} columns={columns} read={read} render={row => <>{"name" in row
+    ? <><td>{row.name ?? row.slug ?? row.id}</td><td>{row.slug ?? "—"}</td><td>{row.status}</td><td>{timeLabel(row.createdAt)}</td></>
+    : <><td>{row.displayName ?? "Not recorded"}</td><td>{row.email ?? "Not recorded"}</td><td>{row.role}</td><td>{row.status}</td><td>{timeLabel(row.createdAt)}</td></>}{allowCommands && <td>{!("name" in row) && row.role === "platform_admin" ? "Protected administrator" : <button type="button" className="button button-secondary button-small" onClick={() => setSelected({ id: row.id, label: "name" in row ? row.name ?? row.slug ?? row.id : row.displayName ?? row.email ?? row.id, action: "name" in row ? "organizations.setSuspension" : "users.setActive" })}>Change access</button>}</td>}</>} /></>;
+}
+
+function Billing({ product, portfolio, retry, allowCommands }: { product: PortfolioProduct; portfolio: PortfolioClient; retry: () => void; allowCommands: boolean }) {
+  const [selected, setSelected] = useState<AccessTarget | null>(null);
+  const [revision, setRevision] = useState(0);
+  const reader = useCallback((signal: AbortSignal) => { void revision; return portfolio.billing({ product, signal }); }, [portfolio, product, revision]);
+  const state = useAdminRead(reader);
+  const read = useCallback((search: string, offset: number, signal: AbortSignal) => portfolio.subscriptions({ product, search: search || undefined, offset, limit: 20, signal }), [portfolio, product]);
+  return <section><div className="panel portfolio-billing-summary"><h2>Subscription administration</h2><p>These are subscription records stored by {adminRegistry[product].name}, including historical records. Provider status reflects the app’s latest recorded synchronization. It is not a new query to the payment provider.</p>{product === "caremetric-emr" && <p>EMR records shown here are application entitlements. Chargebee subscription records are excluded until their organization mappings are verified.</p>}{state.status === "loading" && <Loading label="Loading subscription states" app={adminRegistry[product].name} />}{state.status === "error" && <ReadFailure error={state.error} retry={retry} />}{state.status === "ready" && <><p><strong>{formatNumber.format(state.data.subscriptionCount)}</strong> recorded subscriptions · loaded {timeLabel(state.receivedAt)}</p><div className="portfolio-status-counts">{state.data.statusCounts.map(item => <span key={item.status}>{item.status}: <strong>{formatNumber.format(item.count)}</strong></span>)}</div></>}</div>
+    {selected && <AccessCommand key={`${selected.action}:${selected.id}`} target={selected} onClose={() => setSelected(null)} onApplied={() => setRevision(value => value + 1)} />}
+    <PagedRecords<AdminSubscription> key={revision} app={adminRegistry[product].name} title="Subscription records" searchLabel="Search provider subscription IDs" columns={["Organization", "Plan", "Application state", "Provider state", "Provider IDs", "Period end", "Updated", ...(allowCommands ? ["Access"] : [])]} read={read} render={row => <><td>{row.organizationName ?? row.organizationId}</td><td>{row.planName ?? row.planCode ?? "Not recorded"}</td><td>{row.status}</td><td>{row.providerStatus ?? "Not recorded"}</td><td><div>{row.providerSubscriptionId ?? "No subscription ID"}</div><small>{row.providerCustomerId ?? "No customer ID"}</small></td><td>{timeLabel(row.currentPeriodEnd)}</td><td>{timeLabel(row.updatedAt)}</td>{allowCommands && <td><button type="button" className="button button-secondary button-small" onClick={() => setSelected({ id: row.organizationId, label: row.organizationName ?? row.organizationId, action: "billing.setAccessOverride" })}>Change access</button></td>}</>} />
   </section>;
 }
 
-function CourseList({ client, search, offset, selectedId, selectCourse, changePage, retry }: { client: AdminClient; search: string; offset: number; selectedId: string | null; selectCourse: (id: string) => void; changePage: (offset: number) => void; retry: () => void }) {
-  const reader = useCallback((signal: AbortSignal) => client.listCourses({ search: search || undefined, offset, limit: PAGE_SIZE, signal }), [client, search, offset]);
+function PagedRecords<T extends { id: string }>({ app, title, searchLabel, columns, read, render }: { app: string; title: string; searchLabel: string; columns: string[]; read: (search: string, offset: number, signal: AbortSignal) => Promise<AdminPage<T>>; render: (item: T) => ReactNode }) {
+  const [input, setInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [refresh, setRefresh] = useState(0);
+  const retry = () => setRefresh(value => value + 1);
+  const reader = useCallback((signal: AbortSignal) => { void refresh; return read(search, offset, signal); }, [read, search, offset, refresh]);
   const state = useAdminRead(reader);
-  if (state.status === "loading") return <Loading label="Loading shared courses" />;
-  if (state.status === "error") return <ReadFailure error={state.error} retry={retry} />;
-  const { items, total, limit } = state.data;
-  const nextOffset = offset + limit;
-
-  return <div className="admin-course-list">
-    <div className="admin-course-list-heading"><p role="status">{number.format(total)} {total === 1 ? "course" : "courses"}{search ? ` matching “${search}”` : " in the shared catalog"}</p><span>Loaded {timeLabel(state.receivedAt)}</span></div>
-    {items.length === 0 ? <div className="empty-state"><BookOpen aria-hidden="true" /><strong>{offset > 0 ? "No courses on this page" : search ? "No matching shared courses" : "No shared courses returned"}</strong><p>{offset > 0 ? "Return to the previous page or refresh the catalog." : search ? "Try another course title." : "CareBase returned an empty global catalog."}</p></div> : <ul>{items.map((course) => <li key={course.id}><button className={selectedId === course.id ? "selected" : ""} type="button" aria-pressed={selectedId === course.id} onClick={() => selectCourse(course.id)}><span className="admin-course-list-icon"><BookOpen size={18} aria-hidden="true" /></span><span className="admin-course-list-copy"><strong>{course.title}</strong><span>{course.category || "Uncategorized"} · {course.estimatedDurationMinutes === null ? "Duration not set" : `${course.estimatedDurationMinutes} min`}</span></span><span className="admin-course-status">{course.status}</span><ChevronRight size={17} aria-hidden="true" /></button></li>)}</ul>}
-    <div className="admin-pagination"><span>{items.length > 0 ? `${number.format(offset + 1)}–${number.format(offset + items.length)} of ${number.format(total)}` : "0 shown"}</span><div><button type="button" className="button button-secondary button-small" disabled={offset === 0} onClick={() => changePage(Math.max(0, offset - limit))}><ArrowLeft size={13} aria-hidden="true" />Previous</button><button type="button" className="button button-secondary button-small" disabled={nextOffset >= total || nextOffset > 10000} onClick={() => changePage(nextOffset)}>Next <ArrowRight size={13} aria-hidden="true" /></button></div></div>
-    {nextOffset > 10000 && nextOffset < total && <p className="admin-explanation">Refine the title search to browse more results.</p>}
-  </div>;
-}
-
-function CourseDetail({ client, courseId, close, retry }: { client: AdminClient; courseId: string; close: () => void; retry: () => void }) {
-  const reader = useCallback((signal: AbortSignal) => client.getCourse({ courseId, signal }), [client, courseId]);
-  const state = useAdminRead(reader);
-
-  return <aside className="admin-course-detail" aria-labelledby="admin-course-detail-heading"><div className="admin-detail-heading"><h3 id="admin-course-detail-heading">Course details</h3><button type="button" className="icon-button" aria-label="Close course details" onClick={close}><X size={16} aria-hidden="true" /></button></div>
-    {state.status === "loading" && <Loading label="Loading course details" />}
+  function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setSearch(input.trim()); setOffset(0); retry(); }
+  return <section className="panel portfolio-records"><div className="panel-heading"><h2>{title}</h2></div><div className="admin-section-body"><form className="admin-course-search" onSubmit={submit}><label className="admin-search"><span className="admin-field-label">{searchLabel}</span><span className="admin-search-input"><Search size={16} aria-hidden="true" /><input type="search" maxLength={100} value={input} onChange={event => setInput(event.target.value)} /></span></label><button className="button button-primary" type="submit">Search</button></form>
+    {state.status === "loading" && <Loading label={`Loading ${title.toLowerCase()}`} app={app} />}
     {state.status === "error" && <ReadFailure error={state.error} retry={retry} />}
-    {state.status === "ready" && <div className="admin-detail-body"><CourseMetadata course={state.data.course} /><h3 className="admin-outline-heading">Lesson outline <span>{state.data.lessons.length}{state.data.lessonsTruncated ? "+" : ""}</span></h3>{state.data.lessons.length > 0 ? <ol className="admin-lesson-list">{state.data.lessons.map((lesson) => <li key={lesson.id}><strong>{lesson.title || "Untitled lesson"}</strong><span>{lesson.type.replaceAll("_", " ")}</span></li>)}</ol> : <p className="admin-explanation">No lesson outline was returned for this course’s current version.</p>}{state.data.lessonsTruncated && <p className="admin-explanation">Showing the first {state.data.lessons.length} lessons. The remaining outline is available in CareBase.</p>}<p className="admin-private-note">This view contains metadata and lesson titles. Course bodies, assessments, and private media are not included.</p></div>}
-  </aside>;
-}
-
-function CourseMetadata({ course }: { course: CareBaseCourseSummary }) {
-  return <><span className="admin-course-status">{course.status}</span><h2 className="admin-detail-title">{course.title}</h2>{course.description && <p className="admin-course-description">{course.description}</p>}<dl className="admin-course-metadata"><div><dt>Category</dt><dd>{course.category || "Uncategorized"}</dd></div><div><dt>Estimated duration</dt><dd>{course.estimatedDurationMinutes === null ? "Not set" : `${course.estimatedDurationMinutes} minutes`}</dd></div><div><dt>Updated in CareBase</dt><dd>{timeLabel(course.updatedAt)}</dd></div><div><dt>Scope</dt><dd>Global shared course</dd></div></dl></>;
+    {state.status === "ready" && <><p role="status">{formatNumber.format(state.data.total)} matching records · loaded {timeLabel(state.receivedAt)}</p><div className="portfolio-table-wrap"><table><thead><tr>{columns.map(column => <th key={column} scope="col">{column}</th>)}</tr></thead><tbody>{state.data.items.map(row => <tr key={row.id}>{render(row)}</tr>)}</tbody></table></div>{state.data.items.length === 0 && <p>No records on this page. Adjust your search or return to the previous page.</p>}<div className="admin-pagination"><span>{state.data.items.length} shown</span><div><button className="button button-secondary button-small" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 20))}><ArrowLeft size={13} aria-hidden="true" />Previous</button><button className="button button-secondary button-small" disabled={offset + 20 >= state.data.total || offset + 20 > 10000} onClick={() => setOffset(offset + 20)}>Next<ArrowRight size={13} aria-hidden="true" /></button></div></div>{offset + 20 > 10000 && offset + 20 < state.data.total && <p>Refine your search to browse more records.</p>}</>}
+    </div></section>;
 }

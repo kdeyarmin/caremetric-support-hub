@@ -9,12 +9,18 @@ export interface AdminReadError {
   retryable: boolean;
 }
 
+export function timeLabel(value: string | Date | null): string {
+  if (!value) return "Not recorded";
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.valueOf()) ? "Not available" : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
 /** UI copy never exposes upstream exceptions, tokens, or response bodies. */
 export function describeAdminReadError(error: unknown): AdminReadError {
   const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
   if (code === "invalid_request") return {
     title: "Search needs adjustment",
-    message: "Search by course title using up to 100 characters. Wildcards and control characters are not supported.",
+    message: "Use up to 100 characters in the selected search field. Wildcards and control characters are not supported.",
     retryable: false,
   };
   if (code === "401" || code === "unauthenticated") return {
@@ -28,17 +34,17 @@ export function describeAdminReadError(error: unknown): AdminReadError {
     retryable: false,
   };
   if (code === "unconfigured") return {
-    title: "CareBase connection unavailable",
-    message: "The CareBase administration connection has not been configured. Live totals and courses are unavailable.",
+    title: "Application connection unavailable",
+    message: "This administration connection is not ready. Its records and totals are unavailable.",
     retryable: true,
   };
   if (code === "notfound" || code === "404") return {
-    title: "Course unavailable",
-    message: "This course could not be found in the shared CareBase catalog. Refresh the course list to check current records.",
+    title: "Record unavailable",
+    message: "This record could not be found. Refresh the list to check current records.",
     retryable: true,
   };
   return {
-    title: "CareBase could not be reached",
+    title: "Application could not be reached",
     message: "Live data could not be loaded. Retry after the connection is available.",
     retryable: true,
   };
