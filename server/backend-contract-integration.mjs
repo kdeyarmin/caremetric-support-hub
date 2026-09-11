@@ -13,6 +13,7 @@ const migration=await readFile(new URL('../supabase/migrations/20260911190819_co
 const editingMigration=await readFile(new URL('../supabase/migrations/20260911192238_learning_draft_editing_contract.sql',import.meta.url),'utf8');
 const billingMigration=await readFile(new URL('../supabase/migrations/20260911195910_billing_portal_backend_contract.sql',import.meta.url),'utf8');
 const structureMigration=await readFile(new URL('../supabase/migrations/20260911202823_learning_structure_backend_contract.sql',import.meta.url),'utf8');
+const onboardingMigration=await readFile(new URL('../supabase/migrations/20260911200100_support_customer_onboarding_contract.sql',import.meta.url),'utf8');
 const readContract=async()=> (await client.query('select hub.get_backend_contract() as contract')).rows[0].contract;
 const cases=[
   {
@@ -55,12 +56,15 @@ try {
   try {
     const before=await readContract();
     await client.query(migration);
-    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['learning.draft-editing.v1','billing.portal.v1','learning.structure.v1'].includes(feature))});
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['learning.draft-editing.v1','billing.portal.v1','support.customer-onboarding.v1','learning.structure.v1'].includes(feature))});
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='learning.draft-editing.v1')}),/incompatible/);
     await client.query(editingMigration);
-    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['billing.portal.v1','learning.structure.v1'].includes(feature))});
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['billing.portal.v1','support.customer-onboarding.v1','learning.structure.v1'].includes(feature))});
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='billing.portal.v1')}),/incompatible/);
     await client.query(billingMigration);
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['support.customer-onboarding.v1','learning.structure.v1'].includes(feature))});
+    assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='support.customer-onboarding.v1')}),/incompatible/);
+    await client.query(onboardingMigration);
     assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>feature!=='learning.structure.v1')});
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='learning.structure.v1')}),/incompatible/);
     await client.query(structureMigration);
@@ -97,5 +101,17 @@ try {
     assert.deepEqual(await readContract(),withLaterFeature,'An additive declaration preserves independently reviewed features');
     assertBackendContract(await readContract());
   } finally {await client.query('rollback');}
-  console.log('Backend declarations rejected twelve incomplete SQL boundaries, preserved an independently declared feature and accepted the combined structure contract.');
+  for(const signature of ['hub.prepare_support_onboarding(uuid,uuid,jsonb,uuid,text)','hub.inspect_support_onboarding(uuid,uuid,uuid,text,uuid)','hub.apply_support_onboarding(uuid,uuid,uuid,text,uuid,jsonb,boolean)']) {
+    await client.query('begin');
+    try {await client.query(`alter function ${signature} rename to fixture_missing_onboarding`);await assert.rejects(()=>client.query(onboardingMigration),error=>error.code==='55000');}
+    finally {await client.query('rollback');}
+  }
+  await client.query('begin');
+  try {
+    const future={...await readContract(),features:[...(await readContract()).features,'fixture.future.v1']};
+    const declaration=(await client.query("select format('create or replace function hub.get_backend_contract() returns jsonb language sql stable set search_path='''' as %L', 'select '||quote_literal($1::text)||'::jsonb') as sql",[JSON.stringify(future)])).rows[0].sql;
+    await client.query(declaration);
+    const before=await readContract();await client.query(onboardingMigration);assert.deepEqual(await readContract(),before,'Onboarding preserves other reviewed features and is idempotent');
+  } finally {await client.query('rollback');}
+  console.log('Backend declarations rejected fifteen incomplete SQL boundaries and preserved independent onboarding and structure features.');
 } finally { await client.end(); }
