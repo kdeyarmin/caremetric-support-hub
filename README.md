@@ -18,6 +18,8 @@ Deployment requires the native governed-authoring migration and adapter plus
 administrator/command configuration. The Hub intent migration is
 `20260911181309_learning_authoring_intents.sql`. Its private records pin source
 evidence and native outcomes; they introduce no second course-content writer.
+`20260911183517_governed_source_credential_keys.sql` also tightens recognized
+credential fields in source JSON while preserving existing validator permissions.
 
 CareMetric Support Hub is the first-party support, knowledge, media, learning, and product-contact platform for the CareMetric software portfolio. It is designed to replace duplicated help pages and disconnected ticket tables without introducing an outside help-desk vendor.
 

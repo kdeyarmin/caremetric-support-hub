@@ -77,6 +77,10 @@ try {
   assert.equal((await author({...preserve,reviewed:false})).status,400);
   const originalPayload=payload;payload+=' ';assert.equal((await author(preserve)).status,409);payload=originalPayload;
   const staged=await author(preserve);assert.equal(staged.status,200,JSON.stringify(staged.body));
+  for(const key of ['playbackToken','signedUrl','token','api_key','clientSecret','secretKey','signing_secret']) {
+    const bad=structuredClone(source);bad.blocks[0].body={[key]:'synthetic-only'};const raw=JSON.stringify(bad);
+    await assert.rejects(withSession(pool,jar[sessionCookie],db=>db.query('select hub.stage_learning_source($1,$2,$3)',[raw,digest(raw),preserve.sourceRevision])),/credentials/);
+  }
   assert.equal((await author(preserve)).body.replayed,true);
   const command=previewOp(),preview=await author(command);assert.equal(preview.status,200,JSON.stringify(preview.body));
   assert.equal((await author(command)).body.commandId,preview.body.commandId);
