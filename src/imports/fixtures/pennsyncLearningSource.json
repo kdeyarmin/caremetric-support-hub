@@ -1,0 +1,95 @@
+{
+  "contract": "pennsync.learning-source.v1",
+  "sourceAppId": "694ec16e72e01b60d22f7cbf",
+  "scope": "private-administrator-migration",
+  "records": {
+    "TrainingCourse": [
+      {
+        "id": "000000000000000000000001",
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "fields": {
+          "id": "000000000000000000000001",
+          "title": "Fixture course",
+          "status": "published",
+          "ceu_hours": 1,
+          "passing_score": 80
+        }
+      }
+    ],
+    "TrainingModule": [
+      {
+        "id": "000000000000000000000002",
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "fields": {
+          "id": "000000000000000000000002",
+          "course_id": "000000000000000000000001",
+          "title": "Fixture lesson",
+          "content_json": {
+            "intro": "Exact lesson content"
+          }
+        }
+      },
+      {
+        "id": "000000000000000000000003",
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "fields": {
+          "id": "000000000000000000000003",
+          "title": "Standalone fixture",
+          "content": {
+            "text": "Required module"
+          }
+        }
+      }
+    ],
+    "TrainingQuestion": [
+      {
+        "id": "000000000000000000000004",
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "fields": {
+          "id": "000000000000000000000004",
+          "course_id": "000000000000000000000001",
+          "type": "multi_select",
+          "prompt": "Select two",
+          "correct_answer_json": {
+            "answer": [
+              "a",
+              "b"
+            ]
+          }
+        }
+      }
+    ],
+    "TrainingCompletion": [
+      {
+        "id": "000000000000000000000005",
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "fields": {
+          "id": "000000000000000000000005",
+          "training_module_id": "000000000000000000000003",
+          "nurse_email": "unmatched@example.test",
+          "status": "assigned"
+        }
+      }
+    ],
+    "TrainingAssignment": [],
+    "TrainingAttempt": [],
+    "TrainingAttestation": [],
+    "TrainingCertificate": [],
+    "LearningPlan": [],
+    "LearningPlanCourse": [],
+    "User": [
+      {
+        "id": "000000000000000000000006",
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "fields": {
+          "id": "000000000000000000000006",
+          "email": "registered@example.test",
+          "role": "admin"
+        }
+      }
+    ],
+    "Agency": [],
+    "AgencyMembership": []
+  },
+  "references": []
+}
