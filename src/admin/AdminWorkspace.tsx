@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
-import { BookOpen, Building2, CreditCard, Layers3, RefreshCw, Users } from "lucide-react";
+import { Activity, BookOpen, Building2, CreditCard, Flag, History, Layers3, RefreshCw, Users } from "lucide-react";
 import { adminRegistry } from "../../supabase/functions/_shared/adminRegistry";
 import { portfolioProducts } from "../../supabase/functions/_shared/portfolioProtocol";
 import type { AdminDirectoryUser, AdminOrganization, AdminSubscription, PortfolioCapabilities, PortfolioOperationName, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
@@ -16,21 +16,24 @@ import { portfolioClient } from "./portfolioClient";
 import type { PortfolioClient } from "./portfolioClient";
 import type { AdminClient } from "./types";
 import { PagedRecords } from "./PagedRecords";
+import { AuditRecords, JobRecords, ReleaseRecords } from "./OperationalRecords";
 import { InvoiceRecords, SubscriptionVerification } from "./BillingRecords";
 import { BillingPortal } from "./BillingPortal";
 import { BillingCheckout } from "./BillingCheckout";
 import type { BillingPortalTarget } from "./BillingPortal";
 import "./admin.css";
 
-type View = "overview" | "organizations" | "users" | "billing" | "courses" | "inventory";
+type View = "overview" | "organizations" | "users" | "billing" | "courses" | "jobs" | "releases" | "audit" | "inventory";
 const viewOperations: Record<Exclude<View, "inventory">, PortfolioOperationName[]> = {
   overview: ["overview"], organizations: ["organizations.list"], users: ["users.list"],
   billing: ["billing.overview", "billing.subscriptions.list"], courses: ["courses.list", "courses.get"],
+  jobs: ["operations.jobs.list"], releases: ["operations.releases.list"], audit: ["operations.audit.list"],
 };
 const views = [
   { id: "overview", name: "Overview", icon: Layers3 }, { id: "organizations", name: "Organizations", icon: Building2 },
   { id: "users", name: "Users", icon: Users }, { id: "billing", name: "Billing", icon: CreditCard },
   { id: "courses", name: "CareBase courses", icon: BookOpen },
+  { id: "jobs", name: "Jobs", icon: Activity }, { id: "releases", name: "Releases", icon: Flag }, { id: "audit", name: "Audit", icon: History },
 ] as const;
 const formatNumber = new Intl.NumberFormat();
 
@@ -54,7 +57,7 @@ function ApplicationWorkspace({ product, client, portfolio }: { product: Portfol
   const state = useAdminRead(readCapabilities);
   const app = adminRegistry[product];
   const capabilities = state.status === "ready" ? state.data : null;
-  const supports = (candidate: Exclude<View, "inventory">) => viewOperations[candidate].every(operation => capabilities?.operations.includes(operation));
+  const supports = (candidate: Exclude<View, "inventory">) => (product === "carebase" || !["jobs", "releases", "audit"].includes(candidate)) && viewOperations[candidate].every(operation => capabilities?.operations.includes(operation));
   const allowCommands = product === "carebase" && capabilities?.operations.includes("commands.preview") === true && capabilities.operations.includes("commands.apply");
   const allowPortal = product === "carebase" && capabilities?.operations.includes("billing.commands.preview") === true && capabilities.operations.includes("billing.commands.apply");
   return <>
@@ -70,6 +73,9 @@ function ApplicationWorkspace({ product, client, portfolio }: { product: Portfol
         {view === "users" && <Directory product={product} portfolio={portfolio} kind="users" allowCommands={allowCommands} allowPortal={false} allowCheckout={false} />}
         {view === "billing" && <Billing product={product} portfolio={portfolio} retry={retry} allowCommands={allowCommands} capabilities={capabilities} />}
         {view === "courses" && product === "carebase" && <CourseCatalog client={client} />}
+        {view === "jobs" && product === "carebase" && <JobRecords />}
+        {view === "releases" && product === "carebase" && <ReleaseRecords />}
+        {view === "audit" && product === "carebase" && <AuditRecords />}
       </div>}
     </>}
   </>;
