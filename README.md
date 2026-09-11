@@ -4,6 +4,12 @@ CareMetric Support Hub is the first-party support, knowledge, media, course-cata
 
 ## Current implementation status
 
+For the September 10 portfolio audit and the proposed path to one-login
+administration, shared course authoring, and consolidated SaaS billing, see
+[the platform architecture audit](docs/PLATFORM_ARCHITECTURE_AUDIT.md).
+Those central administration capabilities are not yet implemented by the
+current support and catalog application.
+
 Version `0.1.0` now runs as the first production vertical slice:
 
 - A unified customer portal and CareMetric agent console.
@@ -83,6 +89,13 @@ That escape hatch is for this credential-free local verification only. A
 connected check can instead use `VITE_DEMO_MODE=false` with both Supabase
 browser variables present.
 
+Connected builds also call the public, data-free `hub.get_backend_contract()`
+RPC and require API version `1`. Apply migrations through
+`20260910205232_expose_backend_contract.sql` before building this frontend.
+Missing/incompatible contracts or connection failures stop deployment. Use a
+modern `sb_publishable_` key; the build probe rejects secret and legacy keys.
+Preview builds keep their explicitly enabled, credential-free CI path.
+
 ## Connect the production backend
 
 Do not connect this application to `CM Train`, PennFit, CMbackup, or any other existing production database. Create one dedicated Support Hub project in the selected Supabase organization.
@@ -136,7 +149,9 @@ docs/                        API, integration, and rollout guidance
   remains gated by a verified EAS project and release workflow.
 - CareMetric Intel is registered as a pilot with the shared course catalog;
   its privacy-safe launcher and deterministic guide inventory are merged, while
-  Base44 publication remains blocked by the hosted sandbox/bridge.
+  authenticated production equivalence remains unverified. Current source uses
+  an Express `/api` backend; reconcile the historical Base44 deployment record
+  before connecting identity or delegated administration.
 - DocStudio remains a content-production source, not an independently verified
   production application or the system of record for published media.
 

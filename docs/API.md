@@ -4,6 +4,14 @@ Version `0.1.0` uses RLS-governed reads and narrow atomic RPCs in the `hub` sche
 
 ## Reads
 
+- `hub.get_backend_contract()`: anonymous/authenticated, security-invoker
+  release metadata, currently exactly `{ "api_version": 1 }`. It reads no
+  application tables and grants no actor access. Connected production builds
+  check it before bundling. Required migrations must precede frontend rollout;
+  increment the required contract when a future frontend requires a new
+  incompatible backend capability. This is a compatibility marker, not an
+  end-to-end health check or authorization mechanism.
+
 - `hub.products`: active product registry.
 - `hub.support_contacts`: verified public product/contact routing only.
 - `hub.support_case_queue`: requester/tenant-scoped or staff-permission-scoped safe case rows.

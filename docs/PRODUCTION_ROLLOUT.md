@@ -7,6 +7,28 @@ checked.
 
 ## Central platform
 
+### September 10 reconciliation
+
+The audit verified Hub Railway deployment `8bcf9edd-f03e-49fc-b5a9-7f914119259d`
+at `def580fed48550696ec676f6d0655d7e8054d73c`. Its actor mapper required
+memberships, but production had not received the two September 8 migrations.
+Both exact merged migrations have now been applied and their history versions
+reconciled to the original filenames after checking SQL equality. The new
+`20260910205232_expose_backend_contract.sql` migration is also deployed.
+Anonymous and authenticated role checks return only API version `1`; an
+unauthenticated actor request remains denied. A connected frontend build passed.
+
+The frontend build gate and corrected CareBase authoring link are source
+changes prepared after that deployed commit. They are not labeled deployed.
+Production still has no tenants, cases, intake activation rows, verified TOTP
+factors, federation issuers, or federated principals. The latest full portfolio
+findings and source revisions are in [the architecture audit](PLATFORM_ARCHITECTURE_AUDIT.md).
+
+The tables below retain the September 7 release evidence. The September 10
+reconciliation above supersedes their Hub revision/migration status. Intel's
+current source uses Express/Postgres, so its historical Base44 rollout row is
+not evidence that the current authenticated backend has been deployed.
+
 | Capability | Verified state |
 | --- | --- |
 | Support Hub | `kdeyarmin/caremetric-support-hub@3ac0722` is live at `https://support-hub-web-production.up.railway.app` with direct `/help` and `/learn` routes; no rendered link uses localhost. Production migration history and the repository are aligned through `20260907222641_gate_case_intake_and_add_idempotency.sql`. |
