@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { containsGovernedCredentials } from "../imports/governedLearningImport.ts";
 
 const id = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i).transform(value => value.toLowerCase());
 const line = (min: number, max: number) => z.string().min(min).max(max).refine(value => value === value.trim() && !/\p{Cc}/u.test(value));
@@ -36,7 +37,8 @@ export const structureChangeSchema = z.union([
   z.strictObject({ operation: z.literal("reorderQuestions"), quizId: id, questionIds: ids(1, 500) }),
 ]);
 export const structureChangesSchema = z.array(structureChangeSchema).min(1).max(20)
-  .refine(value => new TextEncoder().encode(JSON.stringify(value)).byteLength <= 24_576);
+  .refine(value => new TextEncoder().encode(JSON.stringify(value)).byteLength <= 24_576)
+  .refine(value => !containsGovernedCredentials(JSON.stringify(value)));
 export type StructureChange = z.infer<typeof structureChangeSchema>;
 export type QuestionChange = z.infer<typeof questionChangeSchema>;
 export type QuizConfiguration = z.infer<typeof quizConfigurationSchema>;

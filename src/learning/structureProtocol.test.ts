@@ -22,6 +22,7 @@ it("bounds compound structure changes and rejects native media or ownership fiel
     [{ ...lesson, body: { transcript: "wrong lesson type" } }], [{ ...lesson, body: { videoUrl: "https://example.invalid" } }],
     [{ ...lesson, organizationId: fixture.sourceCourseId }], [{ ...lesson, title: " untrimmed " }],
     [{ ...lesson, body: { content: "日".repeat(9000) } }],
+    [{ ...lesson, body: { content: "https://media.test/video?token=private" } }],
     [{ operation: "reorderLessons", blockIds: [fixture.blocks[0].id, fixture.blocks[0].id.toUpperCase()] }],
     [{ operation: "editLesson", blockId: fixture.blocks[0].id, patch: {} }]]) expect(structureChangesSchema.safeParse(values).success).toBe(false);
 });

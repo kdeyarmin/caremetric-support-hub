@@ -74,10 +74,14 @@ export function validateGovernedCourse(value: unknown): GovernedCourse {
   // Reject provider playback credentials anywhere in authored JSON, too. Source
   // video URLs are represented by a hash and a source block ID, never fetched.
   const serialized = JSON.stringify(course);
-  if (/(?:[?&](?:token|access_token|signature|sig|key|policy|jwt|auth|h|hdnts|hdnea|key-pair-id|api_key|apikey|x-amz-[a-z-]+|x-goog-[a-z-]+)=|"(?:access_?token|refresh_?token|service_?role_?key|authorization|password|client_?secret|storage_?(path|bucket)|video_?url|playback_?(url|token)|signed_?url|api_?key|token|secret|secret_?key|signing_?secret)"\s*:)/i.test(serialized)) {
+  if (containsGovernedCredentials(serialized)) {
     throw new Error("Remove playback credentials from the source export before staging.");
   }
   return course;
+}
+
+export function containsGovernedCredentials(serialized: string): boolean {
+  return /(?:[?&](?:token|access_token|signature|sig|key|policy|jwt|auth|h|hdnts|hdnea|key-pair-id|api_key|apikey|x-amz-[a-z-]+|x-goog-[a-z-]+)=|"(?:access_?token|refresh_?token|service_?role_?key|authorization|password|client_?secret|storage_?(path|bucket)|video_?url|playback_?(url|token)|signed_?url|api_?key|token|secret|secret_?key|signing_?secret)"\s*:)/i.test(serialized);
 }
 
 export async function prepareGovernedImport(value: unknown): Promise<GovernedImport[]> {
