@@ -13,6 +13,7 @@ import { nativeCreationOperationSchema } from '../src/learning/creationProtocol.
 import { learningCreation } from './learning-creation.mjs';
 import { supportIdentityOperation } from '../src/support/onboardingProtocol.ts';
 import { supportOnboarding } from './support-onboarding.mjs';
+import { supportRegistration } from './support-registration.mjs';
 import { nativeBillingCommandSchema } from '../supabase/functions/_shared/billingCommandProtocol.ts';
 import { billingCommands } from './billing-commands.mjs';
 
@@ -34,7 +35,7 @@ async function authorize(db,audience,payload) {
     return {...asset,range:range?.header ?? null};
   }
   if (['carebase','breathe','caremetric-emr','pennsync','caremetric-go','intel'].includes(audience)) {
-    if(audience!=='carebase' && payload?.operation==='support.identity.resolve') {
+    if(payload?.operation==='support.identity.resolve') {
       supportIdentityOperation.parse(payload);
       await db.query('select hub.authorize_app_command()');
       return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
@@ -55,7 +56,7 @@ async function authorize(db,audience,payload) {
   if (!(await db.query('select hub.authorize_learning_object($1,$2) as allowed',[payload.path,payload.operation])).rows[0].allowed) throw new HttpError(403,'Media access denied.');
   return payload;
 }
-export function delegations({pool,storageUrl,fetchImpl=fetch}) {
+export function delegations({pool,storageUrl,provider,fetchImpl=fetch}) {
   const issue = async (sessionToken,audience,payload) => {
     return withSession(pool,sessionToken,async(db,session) => {
       await authorize(db,audience,payload);
@@ -72,6 +73,7 @@ export function delegations({pool,storageUrl,fetchImpl=fetch}) {
     authoring: learningAuthoring({pool,issue,fetchImpl}),
     creation: learningCreation({pool,issue,fetchImpl}),
     onboarding: supportOnboarding({pool,issue,fetchImpl}),
+    registration: supportRegistration({pool,issue,provider,fetchImpl}),
     billingCommand: billingCommands({pool,issue,fetchImpl}),
     async consume(capability,audience) {
       if (!validDelegation(capability)) throw new HttpError(401,'Invalid authorization.');

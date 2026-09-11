@@ -14,6 +14,7 @@ const editingMigration=await readFile(new URL('../supabase/migrations/2026091119
 const billingMigration=await readFile(new URL('../supabase/migrations/20260911195910_billing_portal_backend_contract.sql',import.meta.url),'utf8');
 const structureMigration=await readFile(new URL('../supabase/migrations/20260911202823_learning_structure_backend_contract.sql',import.meta.url),'utf8');
 const onboardingMigration=await readFile(new URL('../supabase/migrations/20260911200100_support_customer_onboarding_contract.sql',import.meta.url),'utf8');
+const registrationMigration=await readFile(new URL('../supabase/migrations/20260911203100_support_customer_registration_contract.sql',import.meta.url),'utf8');
 const creationMigration=await readFile(new URL('../supabase/migrations/20260911212027_governed_course_creation_contract.sql',import.meta.url),'utf8');
 const readContract=async()=> (await client.query('select hub.get_backend_contract() as contract')).rows[0].contract;
 const cases=[
@@ -57,18 +58,20 @@ try {
   try {
     const before=await readContract();
     await client.query(migration);
-    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['learning.draft-editing.v1','billing.portal.v1','support.customer-onboarding.v1','learning.structure.v1','learning.course-creation.v1'].includes(feature))});
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['learning.draft-editing.v1','billing.portal.v1','support.customer-onboarding.v1','learning.structure.v1','support.customer-registration.v1','learning.course-creation.v1'].includes(feature))});
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='learning.draft-editing.v1')}),/incompatible/);
     await client.query(editingMigration);
-    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['billing.portal.v1','support.customer-onboarding.v1','learning.structure.v1','learning.course-creation.v1'].includes(feature))});
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['billing.portal.v1','support.customer-onboarding.v1','learning.structure.v1','support.customer-registration.v1','learning.course-creation.v1'].includes(feature))});
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='billing.portal.v1')}),/incompatible/);
     await client.query(billingMigration);
-    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['support.customer-onboarding.v1','learning.structure.v1','learning.course-creation.v1'].includes(feature))});
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['support.customer-onboarding.v1','learning.structure.v1','support.customer-registration.v1','learning.course-creation.v1'].includes(feature))});
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='support.customer-onboarding.v1')}),/incompatible/);
     await client.query(onboardingMigration);
-    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['learning.structure.v1','learning.course-creation.v1'].includes(feature))});
-    assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>!['learning.structure.v1','learning.course-creation.v1'].includes(feature))}),/incompatible/);
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['learning.structure.v1','support.customer-registration.v1','learning.course-creation.v1'].includes(feature))});
+    assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>!['learning.structure.v1','support.customer-registration.v1','learning.course-creation.v1'].includes(feature))}),/incompatible/);
     await client.query(structureMigration);
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['support.customer-registration.v1','learning.course-creation.v1'].includes(feature))});
+    await client.query(registrationMigration);
     assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>feature!=='learning.course-creation.v1')});
     await client.query(creationMigration);
     assert.deepEqual(await readContract(),before,'Forward declarations restore the exact current feature set');
