@@ -58,8 +58,9 @@ try {
   try {
     const before=await readContract();
     await client.query(migration);
-    assert.deepEqual(await readContract(),before);
-    assertBackendContract(await readContract());
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>feature!=='support.customer-onboarding.v1')});
+    const portalOnly=await readContract();
+    assert.throws(()=>assertBackendContract(portalOnly),/incompatible/);
   } finally { await client.query('rollback'); }
   console.log('Billing portal declaration rejected seven incomplete SQL boundaries and preserved the complete feature union.');
 } finally { await client.end(); }

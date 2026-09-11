@@ -4,7 +4,7 @@ import type { AdminInvoiceDetail, AdminInvoicePage, AdminSubscriptionVerificatio
 
 export const portfolioProducts = ["carebase", "breathe", "caremetric-emr", "pennsync", "intel", "caremetric-go"] as const;
 export type PortfolioProduct = typeof portfolioProducts[number];
-export const portfolioOperations = ["capabilities", "overview", "courses.list", "courses.get", "organizations.list", "users.list", "billing.overview", "billing.subscriptions.list", ...billingReadOperations, "commands.preview", "commands.apply", "billing.commands.preview", "billing.commands.apply"] as const;
+export const portfolioOperations = ["capabilities", "overview", "courses.list", "courses.get", "organizations.list", "users.list", "billing.overview", "billing.subscriptions.list", ...billingReadOperations, "commands.preview", "commands.apply", "billing.commands.preview", "billing.commands.apply", "support.identity.resolve"] as const;
 export type PortfolioOperationName = typeof portfolioOperations[number];
 export type DirectoryOperation = { operation: "organizations.list" | "users.list" | "billing.subscriptions.list"; search?: string; limit: number; offset: number };
 export type PortfolioOperation = AdminOperation | DirectoryOperation | BillingReadOperation | { operation: "capabilities" | "billing.overview" };
