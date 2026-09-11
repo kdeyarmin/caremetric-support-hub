@@ -77,12 +77,12 @@ function Overview({ product, portfolio, capabilities, retry }: { product: Portfo
   if (state.status === "error") return <ReadFailure error={state.error} retry={retry} />;
   const metrics = [
     { label: "Organizations", value: state.data.organizationCount },
-    { label: product === "breathe" || product === "caremetric-emr" ? "Active staff accounts" : "Active application profiles", value: state.data.activeUserCount },
+    { label: product === "breathe" || product === "caremetric-emr" || product === "caremetric-go" ? "Active staff accounts" : "Active application profiles", value: state.data.activeUserCount },
     ...(state.data.registeredUserCount === undefined ? [] : [{ label: "Registered staff profiles", value: state.data.registeredUserCount }]),
     ...(state.data.globalCourseCount === undefined ? [] : [{ label: "Shared courses · all publication states", value: state.data.globalCourseCount }]),
     ...(state.data.subscriptionCount === undefined ? [] : [{ label: "Recorded subscriptions", value: state.data.subscriptionCount }]),
   ];
-  return <section><div className="metric-grid admin-metric-grid">{metrics.map(metric => <div className="metric-card metric-teal" key={metric.label}><div><p>{metric.label}</p><strong>{metric.value === null ? "Not reported" : formatNumber.format(metric.value)}</strong><small>{app.name}</small></div></div>)}</div><p className="admin-read-time">Last loaded {timeLabel(state.receivedAt)}. These totals include only {app.name}.</p><details className="portfolio-connection-details"><summary>Connection details</summary><p>Supported reads: {capabilities.operations.join(", ")}</p><p>Deployed source: {capabilities.sourceRevision ?? "Not reported"}</p></details></section>;
+  return <section><div className="metric-grid admin-metric-grid">{metrics.map(metric => <div className="metric-card metric-teal" key={metric.label}><div><p>{metric.label}</p><strong>{metric.value === null ? "Not reported" : formatNumber.format(metric.value)}</strong><small>{app.name}</small></div></div>)}</div><p className="admin-read-time">Last loaded {timeLabel(state.receivedAt)}. {product === "caremetric-go" ? "These records are shared with CareMetric EMR and must not be counted as additional organizations or subscriptions." : `These totals include only ${app.name}.`}</p><details className="portfolio-connection-details"><summary>Connection details</summary><p>Supported reads: {capabilities.operations.join(", ")}</p><p>Deployed source: {capabilities.sourceRevision ?? "Not reported"}</p></details></section>;
 }
 
 function Directory({ product, portfolio, kind, allowCommands }: { product: PortfolioProduct; portfolio: PortfolioClient; kind: "organizations" | "users"; allowCommands: boolean }) {

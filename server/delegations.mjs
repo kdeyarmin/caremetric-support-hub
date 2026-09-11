@@ -13,7 +13,7 @@ export function validateMedia(path,operation) {
   if (!mediaPath.test(path || '') || !['upload','download','sign'].includes(operation)) throw new HttpError(400,'Invalid media request.');
 }
 async function authorize(db,audience,payload) {
-  if (['carebase','breathe','caremetric-emr','pennsync'].includes(audience)) {
+  if (['carebase','breathe','caremetric-emr','pennsync','caremetric-go'].includes(audience)) {
     parsePortfolioRequest({product:audience,...payload});
     return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
   }
@@ -64,7 +64,7 @@ export function delegations({pool,storageUrl,fetchImpl=fetch}) {
       let request;
       try { request=parsePortfolioRequest(input); } catch { throw new HttpError(400,'Invalid administrator request.'); }
       const entry=adminRegistry[request.product];
-      if (!entry.endpoint || !['carebase','breathe','caremetric-emr','pennsync'].includes(request.product)) throw new HttpError(503,'This application has not connected its administrator session.','unconfigured');
+      if (!entry.endpoint || !['carebase','breathe','caremetric-emr','pennsync','caremetric-go'].includes(request.product)) throw new HttpError(503,'This application has not connected its administrator session.','unconfigured');
       const operation=request.operation;
       const capability=await issue(sessionToken,request.product,operation);
       return callNativeAdmin(fetchImpl,entry.endpoint,entry.authorizationHeader ?? 'Authorization',capability,operation,value=>parsePortfolioEnvelope(value,request));
