@@ -71,12 +71,14 @@ try {
   const demoted=await preview();await admin.query('update private.staff_permissions set revoked_at=now() where user_id=$1',[owner]);await assert.rejects(apply(demoted));await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
   await admin.query('update private.sms_sessions set revoked_at=now() where id=$1',[ownerSession]);await assert.rejects(apply(staged,request));
   assert.ok(nativeCalls>10);console.log('Customer onboarding: real SMS authority, one-use native proof, reviewed pairing, fresh recheck, CAS, durable retries, revocation and all five products passed.');
+} catch(error) { console.error('Customer onboarding fixture failed:',error); throw error;
 } finally {
   await admin.query('delete from private.audit_events where actor_id=$1',[owner]);
   await admin.query('delete from private.support_onboarding_intents where actor_id=$1',[owner]);
   await admin.query('delete from private.federated_principals where hub_user_id in ($1,$2)',[customer,other]);
   await admin.query('delete from private.federated_tenants where hub_tenant_id=any($1::uuid[])',[Array.from(tenants)]);
   await admin.query('delete from hub.tenants where id=any($1::uuid[])',[Array.from(tenants)]);
+  await admin.query('delete from private.app_delegations where session_id in(select id from private.sms_sessions where user_id=any($1::uuid[]))',[[owner,customer,other]]);
   await admin.query('delete from private.sms_sessions where user_id=any($1::uuid[])',[[owner,customer,other]]);
   await admin.query('delete from private.sms_identities where user_id=any($1::uuid[])',[[owner,customer,other]]);
   await admin.query('delete from auth.users where id=any($1::uuid[])',[[owner,customer,other]]);
