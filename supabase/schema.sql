@@ -7632,7 +7632,8 @@ begin
     or p_generated_at<clock_timestamp()-interval '2 minutes' or p_generated_at>clock_timestamp()+interval '30 seconds' then
     raise exception 'Invalid current source observation.' using errcode='22023'; end if;
   select * into v_row from private.learning_distribution_observations where course_id=p_course_id for update;
-  if not found or v_row.observation_id<>p_observation_id then raise exception 'Source observation was superseded.' using errcode='40001'; end if;
+  perform private.current_distribution_actor();
+  if v_row.course_id is null or v_row.observation_id<>p_observation_id then raise exception 'Source observation was superseded.' using errcode='40001'; end if;
   update private.learning_distribution_observations set observed_at=clock_timestamp(),native_generated_at=p_generated_at,
     observer_verified_at=case when p_machine then clock_timestamp() else observer_verified_at end,
     observer_source_revision=case when p_machine then p_status->>'sourceRevision' else observer_source_revision end,
@@ -7643,7 +7644,7 @@ end; $$;
 create function private.distribution_intent_view(p_intent private.learning_distribution_intents) returns jsonb
 language sql stable set search_path='' as $$
   select p_intent.preview||jsonb_build_object('result',p_intent.result,'canCommitThisSession',
-    p_intent.result is null and p_intent.expires_at>clock_timestamp() and p_intent.session_id=(hub.authorize_app_command()->>'session_id')::uuid);
+    p_intent.result is null and p_intent.expires_at>clock_timestamp() and p_intent.session_id=(private.current_distribution_actor()->>'session_id')::uuid);
 $$;
 create function private.distribution_availability(p_course_id uuid) returns jsonb
 language plpgsql stable security definer set search_path='' as $$
@@ -7689,7 +7690,8 @@ language plpgsql security definer set search_path='' as $$
 declare v_actor jsonb; v_intent private.learning_distribution_intents%rowtype;
 begin
   v_actor:=private.current_distribution_actor();select * into v_intent from private.learning_distribution_intents where request_id=p_request_id for update;
-  if not found or v_intent.actor_id is distinct from (v_actor->>'user_id')::uuid then
+  perform private.current_distribution_actor();
+  if v_intent.request_id is null or v_intent.actor_id is distinct from (v_actor->>'user_id')::uuid then
     raise exception 'Distribution owner required.' using errcode='42501'; end if;
   return v_intent;
 end; $$;
@@ -7837,6 +7839,7 @@ begin
   v_digest:=encode(extensions.digest(jsonb_build_object('requestId',p_request_id,'actor',v_actor->>'user_id','session',v_actor->>'session_id','plan',p_plan)::text,'sha256'),'hex');
   v_preview:=jsonb_build_object('requestId',p_request_id,'plan',p_plan,'previewDigest',v_digest,'createdAt',v_created,'expiresAt',v_created+interval '5 minutes',
     'replacesPublished',exists(select 1 from hub.content_publications where item_id=v_item and (expires_at is null or expires_at>now())),'result',null);
+  perform private.current_distribution_actor();
   insert into private.learning_distribution_intents(request_id,actor_id,session_id,course_id,item_id,plan,source_payload,source_revision,preview_digest,preview,created_at,expires_at)
     values(p_request_id,(v_actor->>'user_id')::uuid,(v_actor->>'session_id')::uuid,(p_plan->>'courseId')::uuid,v_item,p_plan,p_payload,p_plan->>'sourceRevision',v_digest,v_preview,v_created,v_created+interval '5 minutes') returning * into v_intent;
   insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata) values(v_intent.actor_id,'learning.distribution.preview','content_item',v_item,
