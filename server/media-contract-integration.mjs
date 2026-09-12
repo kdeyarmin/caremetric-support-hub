@@ -9,7 +9,7 @@ try{
   for(const sql of [
     "create or replace function private.governed_learning_schema() returns json language sql immutable set search_path='' as $$ select '{}'::json $$",
     'grant execute on function private.validate_governed_learning_source(text,text) to authenticated',
-    "create or replace function private.validate_governed_learning_source(text,text) returns jsonb language sql set search_path='' as $$ select '{}'::jsonb $$",
+    "create or replace function private.validate_governed_learning_source(p_payload text,p_revision text) returns jsonb language sql set search_path='' as $$ select '{}'::jsonb $$",
   ]){
     await db.query('begin');try{const before=await read();await db.query(sql);await db.query('savepoint reviewed');
       await assert.rejects(db.query(declaration),error=>error.code==='55000');await db.query('rollback to savepoint reviewed');assert.deepEqual(await read(),before);
