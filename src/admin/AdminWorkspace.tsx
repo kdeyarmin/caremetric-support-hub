@@ -16,7 +16,8 @@ import { portfolioClient } from "./portfolioClient";
 import type { PortfolioClient } from "./portfolioClient";
 import type { AdminClient } from "./types";
 import { PagedRecords } from "./PagedRecords";
-import { AuditRecords, JobRecords, ReleaseRecords } from "./OperationalRecords";
+import { AuditRecords } from "./OperationalRecords";
+import {OperationalWorkspace} from './OperationalWorkspace';
 import { InvoiceRecords, SubscriptionVerification } from "./BillingRecords";
 import { BillingPortal } from "./BillingPortal";
 import { BillingCheckout } from "./BillingCheckout";
@@ -73,8 +74,7 @@ function ApplicationWorkspace({ product, client, portfolio }: { product: Portfol
         {view === "users" && <Directory product={product} portfolio={portfolio} kind="users" allowCommands={allowCommands} allowPortal={false} allowCheckout={false} />}
         {view === "billing" && <Billing product={product} portfolio={portfolio} retry={retry} allowCommands={allowCommands} capabilities={capabilities} />}
         {view === "courses" && product === "carebase" && <CourseCatalog client={client} />}
-        {view === "jobs" && product === "carebase" && <JobRecords />}
-        {view === "releases" && product === "carebase" && <ReleaseRecords />}
+        {(view === "jobs"||view === "releases") && product === "carebase" && <OperationalWorkspace view={view} canConfigure={capabilities.operations.includes('operations.config.v1')}/>}
         {view === "audit" && product === "carebase" && <AuditRecords />}
       </div>}
     </>}

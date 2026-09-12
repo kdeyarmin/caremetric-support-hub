@@ -25,6 +25,7 @@ RUN npm ci --omit=dev --ignore-scripts
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/server ./server
 COPY --from=build /app/src/lib/backendContract.ts ./src/lib/backendContract.ts
+COPY --from=build /app/src/admin/configurationProtocol.ts ./src/admin/configurationProtocol.ts
 COPY --from=build /app/src/docstudio/protocol.ts ./src/docstudio/protocol.ts
 COPY --from=build /app/src/support/onboardingProtocol.ts /app/src/support/registrationProtocol.ts ./src/support/
 COPY --from=build /app/supabase/functions/_shared ./supabase/functions/_shared
@@ -32,6 +33,8 @@ COPY --from=build /app/src/learning/receiptProtocol.ts /app/src/learning/receipt
 COPY --from=build /app/src/learning/providerPolicyProtocol.ts /app/src/learning/mediaProtocol.ts ./src/learning/
 COPY --from=build /app/src/imports/publicationImportPreview.ts /app/src/imports/publicationProtocol.ts /app/src/imports/governedLearningImport.ts ./src/imports/
 COPY --from=build /app/src/imports/pennsyncLearningSource.ts /app/src/imports/pennsyncSourceFields.json ./src/imports/
+COPY --from=build /app/src/imports/pennsyncCourseImport.ts /app/src/imports/pennsyncCourseReview.ts ./src/imports/
+COPY --from=build /app/src/learning/assessmentDocument.ts ./src/learning/assessmentDocument.ts
 USER node
 EXPOSE 8080
 CMD ["node", "server/main.mjs"]
