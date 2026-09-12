@@ -163,3 +163,7 @@
 .admin-authoring summary { cursor: pointer; font-weight: 600; }
 .admin-authoring .learning-notice { display: block; min-width: 0; }
 .admin-authoring .learning-checkbox { display: flex; align-items: flex-start; }
+.admin-function-list { list-style: none; padding: 0; margin: 16px 0; }
+.admin-function-list li { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px 0; border-bottom: 1px solid var(--border, #dce4ef); }
+.admin-function-list p { margin: 6px 0 0; }
+@media (max-width: 700px) { .admin-function-list li { align-items: flex-start; flex-direction: column; gap: 10px; } }
