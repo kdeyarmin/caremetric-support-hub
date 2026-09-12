@@ -14,7 +14,7 @@ export function pennsyncLearningMigration({pool,issue,fetchImpl=fetch}) {
       signal.throwIfAborted();return work(db);
     });
     const run=async()=>{
-      const head=await local(async db=>(await db.query('select private.pennsync_learning_head() as value')).rows[0].value);
+      await local(async db=>(await db.query('select private.pennsync_learning_head() as value')).rows[0].value);
       const native={operation:'learning.source.snapshot'};
       const capability=await issue(sessionToken,'pennsync',native);
       const entry=adminRegistry.pennsync;
@@ -23,8 +23,11 @@ export function pennsyncLearningMigration({pool,issue,fetchImpl=fetch}) {
         const source=await validatePennsyncSource(envelope.data.payload,envelope.data.sourceRevision);
         return {payload:envelope.data.payload,sourceRevision:envelope.data.sourceRevision,summary:summarizePennsyncSource(source)};
       },true,signal,8000000);
-      if(operation.operation==='inspect')return pennsyncMigrationResult.parse({sourceRevision:result.sourceRevision,headRevision:head?.sourceRevision??null,
-        snapshotId:head?.sourceRevision===result.sourceRevision?head.snapshotId:null,replayed:false,summary:result.summary});
+      if(operation.operation==='inspect')return local(async db=>{
+        const head=(await db.query('select private.pennsync_learning_head() as value')).rows[0].value;
+        return pennsyncMigrationResult.parse({sourceRevision:result.sourceRevision,headRevision:head?.sourceRevision??null,
+          snapshotId:head?.sourceRevision===result.sourceRevision?head.snapshotId:null,replayed:false,summary:result.summary});
+      });
       if(operation.sourceRevision!==result.sourceRevision)throw new HttpError(409,'PennSync source changed. Inspect it again before preserving.','conflict');
       return local(async db=>pennsyncMigrationResult.parse((await db.query('select private.pennsync_learning_preserve($1,$2,$3,$4::jsonb) as value',
         [result.payload,result.sourceRevision,operation.expectedHeadRevision,JSON.stringify(result.summary)])).rows[0].value));

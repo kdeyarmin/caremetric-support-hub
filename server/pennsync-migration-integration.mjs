@@ -74,6 +74,8 @@ try{
  nativeRevoked=true;assert.equal((await migrate(preserve)).status,403);nativeRevoked=false;
  revokeAfterRead=true;assert.equal((await migrate(preserve)).status,401);revokeAfterRead=false;
  await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
+ revokeAfterRead=true;assert.equal((await inspect()).status,401);revokeAfterRead=false;
+ await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
  await admin.query('update private.sms_identities set revoked_at=now() where user_id=$1',[owner]);assert.equal((await inspect()).status,401);
  assert.equal(await snapshotCount(),2);
  console.log('PennSync migration PostgreSQL/HTTP passed: private exact source/history preservation, current SMS/native authority, replay, concurrency, stale revisions, no learner grants or publication, one-use capabilities and direct-role denial.');
