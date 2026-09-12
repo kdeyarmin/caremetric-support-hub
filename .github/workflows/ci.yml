@@ -97,6 +97,7 @@ jobs:
           node server/registration-integration.mjs
           node server/authoring-integration.mjs
           node server/package-integration.mjs
+          node server/pennsync-migration-integration.mjs
           node server/credit-policy-contract-integration.mjs
           node server/provider-integration.mjs
           node server/creation-integration.mjs
