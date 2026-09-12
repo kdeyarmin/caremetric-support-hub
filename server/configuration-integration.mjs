@@ -16,9 +16,6 @@ const admin = new pg.Pool({ connectionString: local.href });
 await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
 const appUrl = new URL(local); appUrl.username = 'hub_app_server'; appUrl.password = 'ephemeral-test-only';
 const pool = new pg.Pool({ connectionString: appUrl.href }), owner = randomUUID(), phone = '+12025550831';
-await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'configuration-sms-owner@test.invalid',false)", [owner]);
-await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')", [owner]);
-await admin.query('insert into private.sms_identities(user_id,phone_e164) values($1,$2)', [owner, phone]);
 
 const domain = 'operations.config.v1', target = { kind: 'release', featureKey: 'fixture.safe-rollout' };
 const impact = { kind: 'feature', definitionActive: true, organizationName: null, globalKillSwitchActive: false,
@@ -77,8 +74,7 @@ const caps = delegations({ pool, storageUrl: 'https://storage.test', fetchImpl: 
   return Response.json(row.result);
 } });
 const server = appServer({ auth, gateway: gateway(pool), delegations: caps, origins: ['https://hub.test'] });
-await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-const origin = `http://127.0.0.1:${server.address().port}`, jar = {};
+let origin; const jar = {};
 async function call(path, body, headers = {}) {
   const response = await fetch(origin + '/api/' + path, { method: 'POST', headers: { Origin: 'https://hub.test', 'Content-Type': 'application/json',
     Cookie: Object.entries(jar).map(([key, value]) => `${key}=${value}`).join('; '), ...headers }, body: JSON.stringify(body) });
@@ -93,6 +89,11 @@ async function login() {
   assert.match(jar[sessionCookie], /^[A-Za-z0-9_-]{43}$/);
 }
 try {
+  await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'configuration-sms-owner@test.invalid',false)", [owner]);
+  await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')", [owner]);
+  await admin.query('insert into private.sms_identities(user_id,phone_e164) values($1,$2)', [owner, phone]);
+  await new Promise((resolve,reject) => { server.once('error',reject); server.listen(0, '127.0.0.1', () => {server.off('error',reject);resolve();}); });
+  origin = `http://127.0.0.1:${server.address().port}`;
   assert.equal((await run(contextOp)).status, 401); await login();
   assert.equal((await call('admin/configuration', contextOp, { Origin: 'https://evil.test' })).status, 403);
   const initial = await run(contextOp); assert.equal(initial.status, 200, JSON.stringify(initial.body));
@@ -142,4 +143,17 @@ try {
   await admin.query('update private.sms_identities set revoked_at=now() where user_id=$1', [owner]);
   assert.equal((await run(status)).status, 401); assert.equal(writes, 1);
   console.log('Configuration PostgreSQL/SMS/HTTP passed: exact one-use domain/audience, preserved cohort impact, native capability truth, durable preview identity, uncertain-write recovery, new-session observation, expiry and current authority, one native write.');
-} finally { await new Promise(resolve => server.close(resolve)); await pool.end(); await admin.end(); }
+} finally {
+  try {
+    if(server.listening)await new Promise(resolve => server.close(resolve));
+    await admin.query('delete from private.app_delegations where user_id=$1', [owner]);
+    await admin.query('delete from private.sms_challenges where phone_hash=$1', [digest(phone)]);
+    await admin.query('delete from private.sms_rate_events where subject_hash=$1', [digest(phone)]);
+    await admin.query('delete from private.sms_sessions where user_id=$1', [owner]);
+    await admin.query('delete from private.sms_identities where user_id=$1', [owner]);
+    await admin.query('delete from private.staff_permissions where user_id=$1', [owner]);
+    await admin.query('delete from auth.users where id=$1', [owner]);
+    const remaining=await admin.query('select count(*) as count from private.sms_identities where phone_e164=$1', [phone]);
+    assert.equal(Number(remaining.rows[0].count),0,'Fixture phone must be reusable on the next run');
+  } finally { await Promise.all([pool.end(),admin.end()]); }
+}

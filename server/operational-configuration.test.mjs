@@ -14,7 +14,8 @@ function setup({revoked=false,tamper=false}={}){
 }
 it('uses fixed native transport and rechecks current relational authority after native I/O',async()=>{
   const f=setup();expect(await f.run('x'.repeat(43),request)).toEqual(configurationContext);
-  expect(f.issue).toHaveBeenCalledWith('x'.repeat(43),'carebase.command',request);
+  expect(f.issue).toHaveBeenCalledWith('x'.repeat(43),'carebase.command',request,expect.any(AbortSignal));
+  expect(f.issue.mock.calls[0][3]).toBe(f.fetchImpl.mock.calls[0][1].signal);
   expect(f.fetchImpl.mock.calls[0][0]).toBe('https://cmcarebase.com/api/platform-admin/configuration');
   expect(f.fetchImpl.mock.calls[0][1].redirect).toBe('error');expect(Object.keys(f.fetchImpl.mock.calls[0][1].headers).sort()).toEqual(['Authorization','Content-Type']);
   expect(f.query).toHaveBeenCalledWith('select hub.authorize_app_command() as actor');
@@ -24,9 +25,17 @@ it('blocks domain confusion before issuing a ticket and hides revoked or unproje
   await expect(setup({revoked:true}).run('x'.repeat(43),request)).rejects.toMatchObject({status:403});
   await expect(setup({tamper:true}).run('x'.repeat(43),request)).rejects.toMatchObject({status:503});
 });
-it('cancellation bounds ticket issuance and prevents a late network write',async()=>{
-  let resolveIssue;const issue=new Promise(resolve=>{resolveIssue=resolve;});const fetchImpl=vi.fn();
-  const run=operationalConfiguration({pool:{},issue:()=>issue,fetchImpl}),controller=new AbortController();
-  const pending=run('x'.repeat(43),request,controller.signal);controller.abort();await expect(pending).rejects.toMatchObject({status:503});
+it('cancellation reaches ticket issuance and prevents a late network write',async()=>{
+  let resolveIssue;const pendingIssue=new Promise(resolve=>{resolveIssue=resolve;});const fetchImpl=vi.fn();
+  const issue=vi.fn(()=>pendingIssue);
+  const run=operationalConfiguration({pool:{},issue,fetchImpl}),controller=new AbortController();
+  const pending=run('x'.repeat(43),request,controller.signal);
+  const signal=issue.mock.calls[0][3];expect(signal).toBeInstanceOf(AbortSignal);expect(signal.aborted).toBe(false);
+  controller.abort();await expect(pending).rejects.toMatchObject({status:503});expect(signal.aborted).toBe(true);
   resolveIssue('cmh_'+'x'.repeat(43));await Promise.resolve();expect(fetchImpl).not.toHaveBeenCalled();
+});
+it('never starts ticket issuance when the caller is already cancelled',async()=>{
+  const f=setup(),controller=new AbortController();controller.abort();
+  await expect(f.run('x'.repeat(43),request,controller.signal)).rejects.toMatchObject({status:503});
+  expect(f.issue).not.toHaveBeenCalled();expect(f.fetchImpl).not.toHaveBeenCalled();
 });

@@ -7,7 +7,7 @@ export function operationalConfiguration({pool,issue,fetchImpl=fetch}){
     let operation;try{operation=parseConfigurationOperation(input);}catch{throw new HttpError(400,'Invalid operational configuration request.','invalid_request');}
     const signal=AbortSignal.any([...(requestSignal?[requestSignal]:[]),AbortSignal.timeout(12000)]);
     const run=async()=>{
-      signal.throwIfAborted();const capability=await issue(sessionToken,'carebase.command',operation);signal.throwIfAborted();
+      signal.throwIfAborted();const capability=await issue(sessionToken,'carebase.command',operation,signal);signal.throwIfAborted();
       const result=await callNativeAdmin(fetchImpl,'https://cmcarebase.com/api/platform-admin/configuration','Authorization',capability,operation,
         value=>projectConfigurationResult(value,operation),true,signal,1048576);
       await withSession(pool,sessionToken,async db=>{signal.throwIfAborted();await db.query('select hub.authorize_app_command() as actor');signal.throwIfAborted();});
