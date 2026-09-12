@@ -1,0 +1,28 @@
+name: Review branch ancestry
+on:
+  push:
+    branches: [codex/hub-course-media-20260911]
+    paths: [.github/workflows/review-source-snapshot.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Capture exact branch and main history
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/review-sources
+          git bundle create /tmp/review-sources/hub-reconcile.bundle HEAD refs/remotes/origin/main
+          git rev-parse HEAD refs/remotes/origin/main > /tmp/review-sources/versions.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-branch-ancestry
+          path: /tmp/review-sources/
+          retention-days: 1
+          if-no-files-found: error
