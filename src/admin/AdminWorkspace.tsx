@@ -5,6 +5,7 @@ import { adminRegistry } from "../../supabase/functions/_shared/adminRegistry";
 import { portfolioProducts } from "../../supabase/functions/_shared/portfolioProtocol";
 import type { AdminDirectoryUser, AdminOrganization, AdminSubscription, PortfolioCapabilities, PortfolioOperationName, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
 import { AdminInventory } from "./AdminInventory";
+import { AdminFunctionCatalog } from "./AdminFunctionCatalog";
 import { adminInventory } from "./inventory";
 import { CourseCatalog } from "./CareBaseCourses";
 import { AccessCommand } from "./AccessCommand";
@@ -64,7 +65,7 @@ function ApplicationWorkspace({ product, client, portfolio }: { product: Portfol
   return <>
     <div className="admin-section-title"><div><h2>{app.name}</h2><p>{app.userScope}</p></div><span className={`admin-status ${state.status === "ready" ? "admin-status-connected" : "admin-status-muted"}`}>{state.status === "ready" ? "Connection verified" : state.status === "loading" ? "Checking connection" : "Unavailable"}</span></div>
     <nav className="admin-view-nav" aria-label="Administration workspace views">{views.filter(item => supports(item.id)).map(({ id, name, icon: Icon }) => <button key={id} type="button" className={view === id ? "active" : ""} aria-pressed={view === id} onClick={() => setView(id)}><Icon size={16} aria-hidden="true" />{name}</button>)}<button type="button" className={view === "inventory" ? "active" : ""} aria-pressed={view === "inventory"} onClick={() => setView("inventory")}><Layers3 size={16} aria-hidden="true" />All app functions <span>{adminInventory.length}</span></button></nav>
-    {view === "inventory" ? <AdminInventory /> : <>
+    {view === "inventory" ? <><AdminFunctionCatalog product={product} capabilities={capabilities} onNavigate={setView}/><details><summary>View the original audit of {adminInventory.length} source surfaces</summary><AdminInventory /></details></> : <>
       {state.status === "loading" && <Loading label={`Checking ${app.name} capabilities`} app={app.name} />}
       {state.status === "error" && <ReadFailure error={state.error} retry={retry} />}
       {capabilities && !supports(view) && <p className="admin-explanation">This connection does not currently provide this operation.</p>}
