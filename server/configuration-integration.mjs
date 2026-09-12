@@ -146,9 +146,10 @@ try {
 } finally {
   try {
     if(server.listening)await new Promise(resolve => server.close(resolve));
-    await admin.query('delete from private.app_delegations where user_id=$1', [owner]);
-    await admin.query('delete from private.sms_challenges where phone_hash=$1', [digest(phone)]);
-    await admin.query('delete from private.sms_rate_events where subject_hash=$1', [digest(phone)]);
+    // This loopback-only fixture owns these sessions and their delegations.
+    // SMS rate history is stored in sms_challenges, not a separate events table.
+    await admin.query('delete from private.app_delegations where session_id in (select id from private.sms_sessions where user_id=$1)', [owner]);
+    await admin.query('delete from private.sms_challenges where user_id=$1 or phone_hash=$2', [owner,digest(phone)]);
     await admin.query('delete from private.sms_sessions where user_id=$1', [owner]);
     await admin.query('delete from private.sms_identities where user_id=$1', [owner]);
     await admin.query('delete from private.staff_permissions where user_id=$1', [owner]);
