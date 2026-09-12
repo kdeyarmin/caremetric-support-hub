@@ -13,6 +13,8 @@ import type { StructureChange } from "./structureProtocol";
 import { CreditPolicyEditor } from "./CreditPolicyEditor";
 import { CreditPolicyReview } from "./CreditPolicyReview";
 import type { CreditPolicyChanges } from "./creditPolicyProtocol";
+import { PackagePanel } from "./PackagePanel";
+import { DistributionPanel } from "./DistributionPanel";
 
 async function run(operation: AuthoringOperation) {
   const op = authoringOperationSchema.parse(operation);
@@ -32,9 +34,11 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
   const [previewPatch, setPreviewPatch] = useState<DraftPatch | null>(null);
   const [previewStructure, setPreviewStructure] = useState<StructureChange[] | null>(null);
   const [previewPolicy, setPreviewPolicy] = useState<CreditPolicyChanges | null>(null);
-  const [editing, setEditing] = useState<"fields" | "structure" | "credit-policy" | null>(null);
+  const [editing, setEditing] = useState<"fields" | "structure" | "credit-policy" | "packages" | null>(null);
   const [editorGeneration, setEditorGeneration] = useState(0);
-  const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [message, setMessage] = useState("");
+  const [working, setBusy] = useState(false); const [packageBusy, setPackageBusy] = useState(false);
+  const busy = working || packageBusy;
+  const [error, setError] = useState(""); const [message, setMessage] = useState("");
   const intents = useRef(new Map<string, string>());
   const actionPending = useRef(false);
   const version = catalog?.versions.find(v => v.versionId === versionId);
@@ -121,6 +125,10 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
             <CreditPolicyEditor key={"policy" + source.sourceRevision + editorGeneration} material={material} busy={busy || Boolean(result) || (editing !== null && editing !== "credit-policy")}
               reasonReady={reason.trim().length >= 10} onChange={() => { clearPreview(); setEditing("credit-policy"); }}
               onPreview={policy => void action(() => prepare("learning.editCreditPolicy", undefined, undefined, policy))} />
+            <PackagePanel key={"packages" + source.sourceRevision + editorGeneration} material={material} sourceRevision={source.sourceRevision} reason={reason}
+              disabled={working || Boolean(result) || (editing !== null && editing !== "packages")}
+              onEditing={() => { clearPreview(); setEditing("packages"); }} onBusy={setPackageBusy}
+              onChanged={receipt => { clearSource(); setMessage(`CareBase confirmed package ${receipt.packageId} as ${receipt.status}. Load course versions and preserve the new exact material before another change.`); }} />
             {editing && !result && <><p>Finish this group of edits before starting another group or approving the draft.</p>
               <button type="button" disabled={busy} onClick={() => { clearPreview(); setEditing(null); setEditorGeneration(value => value + 1); }}>Discard unsaved edits</button></>}
           </>}
@@ -145,5 +153,6 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
     </div>}
     {result && <p role="status">CareBase confirmed version {result.versionNumber} as {result.status}{result.replayed ? " (previously completed)" : ""}.</p>}
     <details><summary>Provider details for all course versions</summary><ProviderPolicyPanel key={courseId} courseId={courseId} onApplied={()=>{clearSource();setCatalog(null);intents.current.clear();}}/></details>
+    <DistributionPanel courseId={courseId} disabled={busy} />
   </section>;
 }
