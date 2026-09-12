@@ -31,7 +31,7 @@ export function pennsyncLearningMigration({pool,issue,fetchImpl=fetch}) {
     };
     let cancel=()=>{};
     try{return await Promise.race([run(),new Promise((_,reject)=>{cancel=()=>reject(new HttpError(503,'Source read did not finish. Retry the same request.','upstream'));if(signal.aborted)cancel();else signal.addEventListener('abort',cancel,{once:true});})]);}
-    catch(error){if(error instanceof HttpError)throw error;const code=({42501:'forbidden',40001:'conflict',22023:'invalid_request'})[error.code]??'upstream';throw new HttpError(code==='forbidden'?403:code==='conflict'?409:code==='invalid_request'?400:503,'Source migration did not complete.',code);}
+    catch(error){if(error instanceof HttpError)throw error;const code=({42501:'forbidden',28000:'unauthenticated',40001:'conflict',22023:'invalid_request'})[error.code]??'upstream';throw new HttpError(code==='forbidden'?403:code==='unauthenticated'?401:code==='conflict'?409:code==='invalid_request'?400:503,'Source migration did not complete.',code);}
     finally{signal.removeEventListener('abort',cancel);}
   };
 }
