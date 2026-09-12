@@ -58,7 +58,7 @@ function MediaPanel({ courseId, versionId, blockId, draft, disabled = false, onA
       {draft && <fieldset disabled={!canUpload}><legend>Upload replacement media</legend>
         <label>Media file<input type="file" accept={context.block.type === "pdf" ? "application/pdf" : "video/mp4,video/webm"}
           onChange={event => { setFile(event.target.files?.[0] ?? null); setReviewed(false); setConfirmed(false); }} /></label>
-        <label>Reason<textarea value={reason} maxLength={500} onChange={event => { setReason(event.target.value); setReviewed(false); }} /></label>
+        <label>Reason<textarea value={reason} maxLength={500} onChange={event => { setReason(event.target.value); setReviewed(false); setConfirmed(false); }} /></label>
         <label><input type="checkbox" checked={reviewed} onChange={event => setReviewed(event.target.checked)} />I reviewed this file and intend to replace this lesson’s attachment.</label>
         <p>Upload checks format and integrity. Attaching it clears the draft’s previous content approval.</p>
         <button type="button" disabled={!file || !reviewed || reason.trim().length < 8} onClick={() => void action(async signal => {
@@ -85,6 +85,8 @@ function MediaPanel({ courseId, versionId, blockId, draft, disabled = false, onA
       </li>)}</ul>{context.intents.hasMore && <p>Showing the 20 latest uploads. Keep the operation identifier for older receipt recovery.</p>}</>}
     </>}
     {intent && <div><p>Upload {intent.operationId}: {intent.fileName} · {intent.state}. Expires {new Date(intent.expiresAt).toLocaleString()}.</p>
+      <p>{intent.mimeType} / {intent.byteSize.toLocaleString()} bytes. Reason: {intent.reason}</p>
+      <details><summary>Verified file checksum</summary><code>{intent.contentSha256}</code></details>
       <button type="button" disabled={busy || disabled} onClick={() => void action(signal => status(intent.operationId, signal))}>Check attachment receipt</button>
       {!receipt && !canFinish && <p>This upload cannot be attached in the current session or source state. You can still inspect its receipt.</p>}
       {canFinish && <><label><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />Confirm attaching this verified file to this lesson.</label>
