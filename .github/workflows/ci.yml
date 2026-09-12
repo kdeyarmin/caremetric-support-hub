@@ -91,6 +91,9 @@ jobs:
         run: |
           node server/integration.mjs
           node server/operations-integration.mjs
+          node server/configuration-integration.mjs
+          # Repeat with the same fixture identity to prove complete teardown.
+          node server/configuration-integration.mjs
           node server/learning-integration.mjs
           node server/support-integration.mjs
           node server/onboarding-integration.mjs

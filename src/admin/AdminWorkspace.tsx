@@ -5,6 +5,8 @@ import { adminRegistry } from "../../supabase/functions/_shared/adminRegistry";
 import { portfolioProducts } from "../../supabase/functions/_shared/portfolioProtocol";
 import type { AdminDirectoryUser, AdminOrganization, AdminSubscription, PortfolioCapabilities, PortfolioOperationName, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
 import { AdminInventory } from "./AdminInventory";
+import { AdminFunctionCatalog } from "./AdminFunctionCatalog";
+import { adminFunctions } from "./functionCatalog";
 import { adminInventory } from "./inventory";
 import { CourseCatalog } from "./CareBaseCourses";
 import { AccessCommand } from "./AccessCommand";
@@ -16,7 +18,8 @@ import { portfolioClient } from "./portfolioClient";
 import type { PortfolioClient } from "./portfolioClient";
 import type { AdminClient } from "./types";
 import { PagedRecords } from "./PagedRecords";
-import { AuditRecords, JobRecords, ReleaseRecords } from "./OperationalRecords";
+import { AuditRecords } from "./OperationalRecords";
+import {OperationalWorkspace} from './OperationalWorkspace';
 import { InvoiceRecords, SubscriptionVerification } from "./BillingRecords";
 import { BillingPortal } from "./BillingPortal";
 import { BillingCheckout } from "./BillingCheckout";
@@ -62,8 +65,8 @@ function ApplicationWorkspace({ product, client, portfolio }: { product: Portfol
   const allowPortal = product === "carebase" && capabilities?.operations.includes("billing.commands.preview") === true && capabilities.operations.includes("billing.commands.apply");
   return <>
     <div className="admin-section-title"><div><h2>{app.name}</h2><p>{app.userScope}</p></div><span className={`admin-status ${state.status === "ready" ? "admin-status-connected" : "admin-status-muted"}`}>{state.status === "ready" ? "Connection verified" : state.status === "loading" ? "Checking connection" : "Unavailable"}</span></div>
-    <nav className="admin-view-nav" aria-label="Administration workspace views">{views.filter(item => supports(item.id)).map(({ id, name, icon: Icon }) => <button key={id} type="button" className={view === id ? "active" : ""} aria-pressed={view === id} onClick={() => setView(id)}><Icon size={16} aria-hidden="true" />{name}</button>)}<button type="button" className={view === "inventory" ? "active" : ""} aria-pressed={view === "inventory"} onClick={() => setView("inventory")}><Layers3 size={16} aria-hidden="true" />All app functions <span>{adminInventory.length}</span></button></nav>
-    {view === "inventory" ? <AdminInventory /> : <>
+    <nav className="admin-view-nav" aria-label="Administration workspace views">{views.filter(item => supports(item.id)).map(({ id, name, icon: Icon }) => <button key={id} type="button" className={view === id ? "active" : ""} aria-pressed={view === id} onClick={() => setView(id)}><Icon size={16} aria-hidden="true" />{name}</button>)}<button type="button" className={view === "inventory" ? "active" : ""} aria-pressed={view === "inventory"} onClick={() => setView("inventory")}><Layers3 size={16} aria-hidden="true" />All app functions <span>{adminFunctions.length}</span></button></nav>
+    {view === "inventory" ? <><AdminFunctionCatalog product={product} capabilities={capabilities} onNavigate={setView}/><details><summary>View the original audit of {adminInventory.length} source surfaces</summary><AdminInventory /></details></> : <>
       {state.status === "loading" && <Loading label={`Checking ${app.name} capabilities`} app={app.name} />}
       {state.status === "error" && <ReadFailure error={state.error} retry={retry} />}
       {capabilities && !supports(view) && <p className="admin-explanation">This connection does not currently provide this operation.</p>}
@@ -73,8 +76,7 @@ function ApplicationWorkspace({ product, client, portfolio }: { product: Portfol
         {view === "users" && <Directory product={product} portfolio={portfolio} kind="users" allowCommands={allowCommands} allowPortal={false} allowCheckout={false} />}
         {view === "billing" && <Billing product={product} portfolio={portfolio} retry={retry} allowCommands={allowCommands} capabilities={capabilities} />}
         {view === "courses" && product === "carebase" && <CourseCatalog client={client} />}
-        {view === "jobs" && product === "carebase" && <JobRecords />}
-        {view === "releases" && product === "carebase" && <ReleaseRecords />}
+        {(view === "jobs"||view === "releases") && product === "carebase" && <OperationalWorkspace view={view} canConfigure={capabilities.operations.includes('operations.config.v1')}/>}
         {view === "audit" && product === "carebase" && <AuditRecords />}
       </div>}
     </>}
