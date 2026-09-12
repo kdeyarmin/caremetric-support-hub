@@ -1,6 +1,7 @@
 import {useState} from 'react';
 import {pennsyncMigrationResult} from '../imports/pennsyncLearningSource';
 import type {z} from 'zod';
+import {PennsyncCourseReviewPanel} from './PennsyncCourseReviewPanel';
 type Result=z.infer<typeof pennsyncMigrationResult>;
 async function migrate(input:unknown):Promise<Result>{
   const response=await fetch('/api/admin/pennsync-migration',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});
@@ -28,6 +29,7 @@ export function PennsyncMigrationPanel(){
       <details><summary>Review source catalog and migration requirements</summary>{result.summary.catalog.map(row=><article key={row.kind+row.id}><h3>{row.title}</h3><p>{row.kind==='course'?'Course':'Standalone module'} · {row.status} · {row.modules} lessons · {row.questions} questions</p><ul>{row.issues.map(issue=><li key={issue}>{issue}</li>)}</ul></article>)}</details>
       <label className="learning-check"><input type="checkbox" checked={reviewed} disabled={busy} onChange={event=>setReviewed(event.target.checked)}/>I reviewed the source counts and migration requirements.</label>
       <button className="button button-primary" disabled={busy||!reviewed} onClick={()=>void run(true)}>Preserve current source</button>
+      {result.snapshotId&&<PennsyncCourseReviewPanel key={result.sourceRevision} sourceRevision={result.sourceRevision}/>}
     </>}{status&&<p role="status">{status}</p>}{error&&<p role="alert" className="learning-error">{error}</p>}
   </section>;
 }
