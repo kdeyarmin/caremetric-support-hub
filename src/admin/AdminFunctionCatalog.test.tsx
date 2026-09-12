@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import {cleanup,fireEvent,render,screen} from '@testing-library/react';
+import {cleanup,fireEvent,render,screen,within} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {AdminFunctionCatalog} from './AdminFunctionCatalog';
@@ -21,6 +21,23 @@ describe('current administration function navigation',()=>{
     expect(functionAvailable(checkout,'carebase',capabilities([...checkout.requires]))).toBe(true);
     for(const missing of checkout.requires)expect(functionAvailable(checkout,'carebase',capabilities(checkout.requires.filter(operation=>operation!==missing)))).toBe(false);
     expect(functionAvailable(checkout,'breathe',capabilities([...checkout.requires]))).toBe(false);
+  });
+  it('requires invoice detail permission as well as the billing and list capabilities',()=>{
+    const invoices=adminFunctions.find(item=>item.id==='invoices')!;
+    expect(invoices.requires).toContain('billing.invoices.get');
+    expect(functionAvailable(invoices,'carebase',capabilities([...invoices.requires]))).toBe(true);
+    for(const missing of invoices.requires)expect(functionAvailable(invoices,'carebase',capabilities(invoices.requires.filter(operation=>operation!==missing)))).toBe(false);
+    render(<MemoryRouter><AdminFunctionCatalog product="carebase" capabilities={capabilities(['billing.overview','billing.subscriptions.list','billing.invoices.list'])} onNavigate={vi.fn()}/></MemoryRouter>);
+    expect(screen.queryByRole('button',{name:'Open Invoice records'})).toBeNull();
+  });
+  it('distinguishes product scope from missing capabilities on a verified connection',()=>{
+    render(<MemoryRouter><AdminFunctionCatalog product="breathe" capabilities={capabilities(['organizations.list'])} onNavigate={vi.fn()}/></MemoryRouter>);
+    const scoped=screen.getByText('Job stop controls').closest('li')!;
+    expect(within(scoped).getByText('CareBase only')).toBeTruthy();
+    expect(within(scoped).queryByText('Not connected for this app')).toBeNull();
+    const unavailable=screen.getByText('User directory').closest('li')!;
+    expect(within(unavailable).getByText('Not connected for this app')).toBeTruthy();
+    expect(screen.getByRole('button',{name:'Open Organization directory'})).toBeTruthy();
   });
   it('keeps shared routes usable without claiming an unavailable native connection',()=>{
     render(<MemoryRouter><AdminFunctionCatalog product="caremetric-emr" capabilities={null} onNavigate={vi.fn()}/></MemoryRouter>);

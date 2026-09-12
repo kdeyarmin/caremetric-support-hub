@@ -19,7 +19,7 @@ export function AdminFunctionCatalog({product,capabilities,onNavigate}:{product:
       <ul className="admin-function-list">{functions.map(item=>{
         const available=functionAvailable(item,product,capabilities);
         return <li key={item.id}><div><strong>{item.title}</strong><p>{item.description}</p></div><div>
-          {available?<button className="button button-secondary button-small" type="button" onClick={()=>onNavigate(item.view)} aria-label={`Open ${item.title}`}>Open control</button>:<span className="admin-status admin-status-muted">{capabilities?'Not connected for this app':'Connection not verified'}</span>}
+          {available?<button className="button button-secondary button-small" type="button" onClick={()=>onNavigate(item.view)} aria-label={`Open ${item.title}`}>Open control</button>:<span className="admin-status admin-status-muted">{item.carebaseOnly&&product!=='carebase'?'CareBase only':capabilities?'Not connected for this app':'Connection not verified'}</span>}
         </div></li>;
       })}</ul>
       {!functions.length&&<p>No matching controls. Try another search.</p>}
