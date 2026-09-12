@@ -40,3 +40,22 @@ it('cancelled pool waits terminate without staging',async()=>{
  const controller=new AbortController();const run=pennsyncLearningMigration({pool:{connect:()=>new Promise(()=>{})},issue:vi.fn()});
  const pending=run('x'.repeat(43),{operation:'inspect'},controller.signal);controller.abort();await expect(pending).rejects.toMatchObject({status:503});
 });
+it('a capability that arrives after cancellation is never dispatched',async()=>{
+ const f=setup(),controller=new AbortController();let complete;
+ f.issue.mockImplementation(()=>new Promise(resolve=>{complete=resolve;}));
+ const pending=f.run('x'.repeat(43),{operation:'inspect'},controller.signal);
+ await vi.waitFor(()=>expect(f.issue).toHaveBeenCalledTimes(1));controller.abort();await expect(pending).rejects.toMatchObject({status:503});
+ complete('cmh_'+'x'.repeat(43));await new Promise(resolve=>setTimeout(resolve,0));expect(f.fetchImpl).not.toHaveBeenCalled();
+});
+it('a database result after cancellation is rolled back and every statement has a bounded timeout',async()=>{
+ const f=setup(),controller=new AbortController(),original=f.query.getMockImplementation();let complete;
+ f.query.mockImplementation((sql,args)=>sql.includes('pennsync_learning_preserve')?new Promise(resolve=>{complete=resolve;}):original(sql,args));
+ const pending=f.run('x'.repeat(43),{operation:'preserve',sourceRevision:revision,expectedHeadRevision:null,reviewed:true},controller.signal);
+ await vi.waitFor(()=>expect(complete).toBeTypeOf('function'));
+ const commits=f.query.mock.calls.filter(([sql])=>sql==='commit').length;
+ controller.abort();await expect(pending).rejects.toMatchObject({status:503});
+ complete({rows:[{value:{sourceRevision:revision,headRevision:revision,snapshotId:id,replayed:false,summary}}]});
+ await vi.waitFor(()=>expect(f.query.mock.calls.some(([sql])=>sql==='rollback')).toBe(true));
+ expect(f.query.mock.calls.filter(([sql])=>sql==='commit')).toHaveLength(commits);
+ for(const [sql,args] of f.query.mock.calls)if(sql.includes("set_config('statement_timeout'"))expect(parseInt(args[0])).toBeLessThanOrEqual(12000);
+});
