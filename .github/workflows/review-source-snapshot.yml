@@ -1,0 +1,34 @@
+name: Review source snapshot
+on:
+  push:
+    branches: [codex/hub-operational-configuration-20260911]
+    paths: [.github/workflows/review-source-snapshot.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Archive checked-out source
+        run: |
+          mkdir -p /tmp/review-sources
+          git archive --format=tar.gz --output=/tmp/review-sources/hub38.tar.gz HEAD
+          git rev-parse HEAD > /tmp/review-sources/hub38.sha
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/hub-course-media-20260911
+          persist-credentials: false
+      - name: Archive media branch
+        run: |
+          git archive --format=tar.gz --output=/tmp/review-sources/hub39.tar.gz HEAD
+          git rev-parse HEAD > /tmp/review-sources/hub39.sha
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-source-snapshots
+          path: /tmp/review-sources/
+          retention-days: 1
+          if-no-files-found: error
