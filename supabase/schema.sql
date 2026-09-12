@@ -6926,6 +6926,104 @@ grant execute on function hub.get_backend_contract() to anon,authenticated;
 
 
 -- Governed course media source compatibility
+
+
+
+
+
+-- Immutable private migration evidence. This does not grant learner access,
+-- publish source content, issue credits, or alter PennSync's source records.
+create table private.pennsync_learning_snapshots (
+ id uuid primary key default gen_random_uuid(),
+ source_revision text not null unique check(source_revision ~ '^[0-9a-f]{64}$'),
+ sequence integer not null unique check(sequence>0),
+ source_payload text not null check(octet_length(source_payload)<=7000000),
+ summary jsonb not null,
+ staged_by uuid not null references auth.users(id),
+ staged_at timestamptz not null default now()
+);
+create index pennsync_learning_snapshots_actor_idx on private.pennsync_learning_snapshots(staged_by);
+alter table private.pennsync_learning_snapshots enable row level security;
+revoke all on private.pennsync_learning_snapshots from public,anon,authenticated,service_role,hub_app_server;
+
+create function private.pennsync_learning_source_schema() returns json
+language sql immutable set search_path='' as $$ select $schema${"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"contract":{"type":"string","const":"pennsync.learning-source.v1"},"sourceAppId":{"type":"string","const":"694ec16e72e01b60d22f7cbf"},"scope":{"type":"string","const":"private-administrator-migration"},"records":{"type":"object","properties":{"TrainingCourse":{"maxItems":10000,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[a-f0-9]{24}$"},"revision":{"type":"string","pattern":"^[a-f0-9]{64}$"},"fields":{"type":"object","propertyNames":{"type":"string","maxLength":160},"additionalProperties":{"$ref":"#/definitions/__schema0"}}},"required":["id","revision","fields"],"additionalProperties":false}},"TrainingModule":{"maxItems":10000,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[a-f0-9]{24}$"},"revision":{"type":"string","pattern":"^[a-f0-9]{64}$"},"fields":{"type":"object","propertyNames":{"type":"string","maxLength":160},"additionalProperties":{"$ref":"#/definitions/__schema0"}}},"required":["id","revision","fields"],"additionalProperties":false}},"TrainingQuestion":{"maxItems":10000,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[a-f0-9]{24}$"},"revision":{"type":"string","pattern":"^[a-f0-9]{64}$"},"fields":{"type":"object","propertyNames":{"type":"string","maxLength":160},"additionalProperties":{"$ref":"#/definitions/__schema0"}}},"required":["id","revision","fields"],"additionalProperties":false}},"TrainingCompletion":{"maxItems":10000,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[a-f0-9]{24}$"},"revision":{"type":"string","pattern":"^[a-f0-9]{64}$"},"fields":{"type":"object","propertyNames":{"type":"string","maxLength":160},"additionalProperties":{"$ref":"#/definitions/__schema0"}}},"required":["id","revision","fields"],"additionalProperties":false}},"TrainingAssignment":{"maxItems":10000,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[a-f0-9]{24}$"},"revision":{"type":"string","pattern":"^[a-f0-9]{64}$"},"fields":{"type":"object","propertyNames":{"type":"string","maxLength":160},"additionalProperties":{"$ref":"#/definitions/__schema0"}}},"required":["id","revision","fields"],"additionalProperties":false}},"TrainingAttempt":{"maxItems":10000,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[a-f0-9]{24}$"},"revision":{"type":"string","pattern":"^[a-f0-9]{64}$"},"fields":{"type":"object","propertyNames":{"type":"string","maxLength":160},"additionalProperties":{"$ref":"#/definitions/__schema0"}}},"required":["id","revision","fields"],"additionalProperties":false}},"TrainingAttestation":{"maxItems":10000,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[a-f0-9]{24}$"},"revision":{"type":"string","pattern":"^[a-f0-9]{64}$"},"fields":{"type":"object","propertyNames":{"type":"string","maxLength":160},"additionalProperties":{"$ref":"#/definitions/__schema0"}}},"required":["id","revision","fields"],"additionalProperties":false}},"TrainingCertificate":{"maxItems":10000,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[a-f0-9]{24}$"},"revision":{"type":"string","pattern":"^[a-f0-9]{64}$"},"fields":{"type":"object","propertyNames":{"type":"string","maxLength":160},"additionalProperties":{"$ref":"#/definitions/__schema0"}}},"required":["id","revision","fields"],"additionalProperties":false}},"LearningPlan":{"maxItems":10000,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[a-f0-9]{24}$"},"revision":{"type":"string","pattern":"^[a-f0-9]{64}$"},"fields":{"type":"object","propertyNames":{"type":"string","maxLength":160},"additionalProperties":{"$ref":"#/definitions/__schema0"}}},"required":["id","revision","fields"],"additionalProperties":false}},"LearningPlanCourse":{"maxItems":10000,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[a-f0-9]{24}$"},"revision":{"type":"string","pattern":"^[a-f0-9]{64}$"},"fields":{"type":"object","propertyNames":{"type":"string","maxLength":160},"additionalProperties":{"$ref":"#/definitions/__schema0"}}},"required":["id","revision","fields"],"additionalProperties":false}},"User":{"maxItems":10000,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[a-f0-9]{24}$"},"revision":{"type":"string","pattern":"^[a-f0-9]{64}$"},"fields":{"type":"object","propertyNames":{"type":"string","maxLength":160},"additionalProperties":{"$ref":"#/definitions/__schema0"}}},"required":["id","revision","fields"],"additionalProperties":false}},"Agency":{"maxItems":10000,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[a-f0-9]{24}$"},"revision":{"type":"string","pattern":"^[a-f0-9]{64}$"},"fields":{"type":"object","propertyNames":{"type":"string","maxLength":160},"additionalProperties":{"$ref":"#/definitions/__schema0"}}},"required":["id","revision","fields"],"additionalProperties":false}},"AgencyMembership":{"maxItems":10000,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[a-f0-9]{24}$"},"revision":{"type":"string","pattern":"^[a-f0-9]{64}$"},"fields":{"type":"object","propertyNames":{"type":"string","maxLength":160},"additionalProperties":{"$ref":"#/definitions/__schema0"}}},"required":["id","revision","fields"],"additionalProperties":false}}},"required":["TrainingCourse","TrainingModule","TrainingQuestion","TrainingCompletion","TrainingAssignment","TrainingAttempt","TrainingAttestation","TrainingCertificate","LearningPlan","LearningPlanCourse","User","Agency","AgencyMembership"],"additionalProperties":false},"references":{"maxItems":10000,"type":"array","items":{"type":"object","properties":{"entity":{"type":"string","enum":["TrainingCourse","TrainingModule","TrainingQuestion","TrainingCompletion","TrainingAssignment","TrainingAttempt","TrainingAttestation","TrainingCertificate","LearningPlan","LearningPlanCourse","User","Agency","AgencyMembership"]},"sourceId":{"type":"string","pattern":"^[a-f0-9]{24}$"},"path":{"type":"string","maxLength":2000},"sha256":{"type":"string","pattern":"^[a-f0-9]{64}$"},"kind":{"type":"string","enum":["source_reference","embedded_reference"]}},"required":["entity","sourceId","path","sha256","kind"],"additionalProperties":false}}},"required":["contract","sourceAppId","scope","records","references"],"additionalProperties":false,"definitions":{"__schema0":{"anyOf":[{"type":"string"},{"type":"number"},{"type":"boolean"},{"type":"null"},{"type":"array","items":{"$ref":"#/definitions/__schema0"}},{"type":"object","propertyNames":{"type":"string"},"additionalProperties":{"$ref":"#/definitions/__schema0"}}]}}}$schema$::json $$;
+create function private.pennsync_learning_summary_schema() returns json
+language sql immutable set search_path='' as $$ select $schema${"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"courses":{"type":"integer","minimum":0,"maximum":9007199254740991},"modules":{"type":"integer","minimum":0,"maximum":9007199254740991},"standaloneModules":{"type":"integer","minimum":0,"maximum":9007199254740991},"questions":{"type":"integer","minimum":0,"maximum":9007199254740991},"plans":{"type":"integer","minimum":0,"maximum":9007199254740991},"planCourses":{"type":"integer","minimum":0,"maximum":9007199254740991},"historyRecords":{"type":"integer","minimum":0,"maximum":9007199254740991},"unmatchedLegacyLearners":{"type":"integer","minimum":0,"maximum":9007199254740991},"ambiguousLegacyLearners":{"type":"integer","minimum":0,"maximum":9007199254740991},"sourceReferences":{"type":"integer","minimum":0,"maximum":9007199254740991},"brokenReferences":{"type":"integer","minimum":0,"maximum":9007199254740991},"catalog":{"maxItems":20000,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[a-f0-9]{24}$"},"kind":{"type":"string","enum":["course","standalone_module"]},"title":{"type":"string","maxLength":500},"status":{"type":"string","maxLength":80},"modules":{"type":"integer","minimum":0,"maximum":9007199254740991},"questions":{"type":"integer","minimum":0,"maximum":9007199254740991},"issues":{"maxItems":25,"type":"array","items":{"type":"string","maxLength":150}}},"required":["id","kind","title","status","modules","questions","issues"],"additionalProperties":false}}},"required":["courses","modules","standaloneModules","questions","plans","planCourses","historyRecords","unmatchedLegacyLearners","ambiguousLegacyLearners","sourceReferences","brokenReferences","catalog"],"additionalProperties":false}$schema$::json $$;
+
+create function private.pennsync_learning_head() returns jsonb
+language plpgsql stable security definer set search_path='' as $$
+declare result jsonb;
+begin
+ perform hub.authorize_app_command(); perform private.require_learning_editor();
+ select jsonb_build_object('snapshotId',id,'sourceRevision',source_revision,'sequence',sequence,'summary',summary)
+ into result from private.pennsync_learning_snapshots order by sequence desc limit 1;
+ return result;
+end $$;
+
+create function private.pennsync_learning_preserve(p_payload text,p_revision text,p_expected_revision text,p_summary jsonb,p_deadline timestamptz) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare actor uuid; authority jsonb; doc jsonb; head private.pennsync_learning_snapshots%rowtype; prior private.pennsync_learning_snapshots%rowtype;
+begin
+ perform hub.authorize_app_command(); actor:=private.require_learning_editor();
+ if p_payload is null or octet_length(p_payload)>7000000 or p_revision is null or p_revision !~ '^[0-9a-f]{64}$'
+   or encode(extensions.digest(p_payload,'sha256'),'hex')<>p_revision then
+   raise exception 'Invalid source checksum' using errcode='22023'; end if;
+ doc:=p_payload::jsonb;
+ if not extensions.jsonb_matches_schema(private.pennsync_learning_source_schema(),doc)
+   or p_summary is null or not extensions.jsonb_matches_schema(private.pennsync_learning_summary_schema(),p_summary) then
+   raise exception 'Invalid source contract' using errcode='22023'; end if;
+ if p_summary->>'courses'<>jsonb_array_length(doc#>'{records,TrainingCourse}')::text
+   or p_summary->>'modules'<>jsonb_array_length(doc#>'{records,TrainingModule}')::text
+   or p_summary->>'questions'<>jsonb_array_length(doc#>'{records,TrainingQuestion}')::text then
+   raise exception 'Source summary does not match' using errcode='22023'; end if;
+ if p_deadline is null or p_deadline<=clock_timestamp() or p_deadline>clock_timestamp()+interval '20 seconds' then raise exception 'Source request expired' using errcode='57014';end if;
+ perform pg_advisory_xact_lock(hashtextextended('pennsync.learning-source.v1',0));
+ -- The clock and authority must be checked after lock wait, using fresh reads.
+ authority:=hub.authorize_app_command(); actor:=private.require_learning_editor();
+ if p_deadline<=clock_timestamp() then raise exception 'Source request expired' using errcode='57014';end if;
+ if (authority->>'assurance_expires_at')::timestamptz<=clock_timestamp() or not exists(
+   select 1 from private.sms_sessions s join private.sms_identities i on i.user_id=s.user_id and i.identity_version=s.identity_version
+   where s.id=(authority->>'session_id')::uuid and s.user_id=actor and s.revoked_at is null and i.revoked_at is null
+     and s.expires_at>clock_timestamp() and s.created_at+interval '8 hours'>clock_timestamp()) then
+   raise exception 'Current administrator session required' using errcode='28000';end if;
+ select * into head from private.pennsync_learning_snapshots order by sequence desc limit 1;
+ select * into prior from private.pennsync_learning_snapshots where source_revision=p_revision;
+ if found then
+   if prior.source_payload<>p_payload or prior.summary<>p_summary then raise exception 'Source evidence changed' using errcode='40001'; end if;
+   return jsonb_build_object('snapshotId',prior.id,'sourceRevision',prior.source_revision,'headRevision',head.source_revision,'replayed',true,'summary',prior.summary);
+ end if;
+ if p_expected_revision is distinct from head.source_revision then raise exception 'Source head changed' using errcode='40001'; end if;
+ insert into private.pennsync_learning_snapshots(source_revision,sequence,source_payload,summary,staged_by)
+ values(p_revision,coalesce(head.sequence,0)+1,p_payload,p_summary,actor) returning * into prior;
+ insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata)
+ values(actor,'learning.pennsync.source_preserved','learning_source',prior.id,jsonb_build_object('source_revision',p_revision,'sequence',prior.sequence));
+ return jsonb_build_object('snapshotId',prior.id,'sourceRevision',p_revision,'headRevision',p_revision,'replayed',false,'summary',p_summary);
+end $$;
+revoke all on function private.pennsync_learning_source_schema(),private.pennsync_learning_summary_schema(),private.pennsync_learning_head(),private.pennsync_learning_preserve(text,text,text,jsonb,timestamptz)
+ from public,anon,authenticated,service_role,hub_app_server;
+grant execute on function private.pennsync_learning_head(),private.pennsync_learning_preserve(text,text,text,jsonb,timestamptz) to hub_app_server;
+
+do $$ declare contract jsonb:=hub.get_backend_contract(); signature text; role_name text; begin
+ if not (contract @> '{"api_version":4,"features":["learning.sources.v1","app.sms.v1"]}'::jsonb) then
+  raise exception 'Apply source and SMS foundations first' using errcode='55000'; end if;
+ if not exists(select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='private' and c.relname='pennsync_learning_snapshots' and c.relrowsecurity) then
+  raise exception 'Private PennSync source storage required' using errcode='55000';end if;
+ foreach role_name in array array['anon','authenticated','service_role','hub_app_server'] loop
+  if has_table_privilege(role_name,'private.pennsync_learning_snapshots','select,insert,update,delete') then raise exception 'PennSync source boundary invalid' using errcode='55000';end if;
+ end loop;
+ foreach signature in array array['private.pennsync_learning_head()','private.pennsync_learning_preserve(text,text,text,jsonb,timestamptz)'] loop
+  if to_regprocedure(signature) is null or not has_function_privilege('hub_app_server',signature,'execute') then raise exception 'Missing PennSync source operation' using errcode='55000';end if;
+  foreach role_name in array array['anon','authenticated','service_role'] loop
+   if has_function_privilege(role_name,signature,'execute') then raise exception 'PennSync source operation exposed' using errcode='55000';end if;
+  end loop;
+ end loop;
+ if not (contract->'features' @> '["learning.pennsync-source.v1"]'::jsonb) then contract:=jsonb_set(contract,'{features}',(contract->'features')||'["learning.pennsync-source.v1"]'::jsonb);end if;
+ execute format('create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='''' as %L','select '||quote_literal(contract::text)||'::jsonb');
+end $$;
+revoke all on function hub.get_backend_contract() from public;
+grant execute on function hub.get_backend_contract() to anon,authenticated;
+
 -- Optional immutable media references; existing source payloads and ACLs remain unchanged.
 create or replace function private.governed_learning_schema() returns json
 language sql immutable set search_path='' as $$
