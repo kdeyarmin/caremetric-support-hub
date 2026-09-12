@@ -14,6 +14,7 @@ import { CreditPolicyEditor } from "./CreditPolicyEditor";
 import { CreditPolicyReview } from "./CreditPolicyReview";
 import type { CreditPolicyChanges } from "./creditPolicyProtocol";
 import { PackagePanel } from "./PackagePanel";
+import { DistributionPanel } from "./DistributionPanel";
 
 async function run(operation: AuthoringOperation) {
   const op = authoringOperationSchema.parse(operation);
@@ -152,5 +153,6 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
     </div>}
     {result && <p role="status">CareBase confirmed version {result.versionNumber} as {result.status}{result.replayed ? " (previously completed)" : ""}.</p>}
     <details><summary>Provider details for all course versions</summary><ProviderPolicyPanel key={courseId} courseId={courseId} onApplied={()=>{clearSource();setCatalog(null);intents.current.clear();}}/></details>
+    <DistributionPanel courseId={courseId} disabled={busy} />
   </section>;
 }

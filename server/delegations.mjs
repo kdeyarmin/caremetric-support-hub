@@ -14,6 +14,9 @@ import { nativeCreationOperationSchema } from '../src/learning/creationProtocol.
 import { learningCreation } from './learning-creation.mjs';
 import { nativePackageOperationSchema } from '../src/learning/packageProtocol.ts';
 import { learningPackages } from './learning-packages.mjs';
+import { nativeDistributionOperationSchema } from '../src/learning/distributionProtocol.ts';
+import { learningDistribution } from './learning-distribution.mjs';
+import { distributionSession } from './distribution-session.mjs';
 import { providerOperationSchema } from '../src/learning/providerPolicyProtocol.ts';
 import { learningProvider } from './learning-provider.mjs';
 import { supportIdentityOperation } from '../src/support/onboardingProtocol.ts';
@@ -68,7 +71,7 @@ async function authorize(db,audience,payload) {
     return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
   }
   if (audience==='carebase.learning') {
-    nativeLearningOperationSchema.or(nativeAuthoringOperationSchema).or(nativeCreationOperationSchema).or(nativePackageOperationSchema).or(providerOperationSchema).parse(payload);
+    nativeLearningOperationSchema.or(nativeAuthoringOperationSchema).or(nativeCreationOperationSchema).or(nativePackageOperationSchema).or(nativeDistributionOperationSchema).or(providerOperationSchema).parse(payload);
     return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
   }
   if (audience!=='media') throw new HttpError(403,'Unsupported authorization audience.');
@@ -76,9 +79,10 @@ async function authorize(db,audience,payload) {
   if (!(await db.query('select hub.authorize_learning_object($1,$2) as allowed',[payload.path,payload.operation])).rows[0].allowed) throw new HttpError(403,'Media access denied.');
   return payload;
 }
-export function delegations({pool,storageUrl,provider,fetchImpl=fetch}) {
-  const issue = async (sessionToken,audience,payload) => {
-    return withSession(pool,sessionToken,async(db,session) => {
+export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,legacyDistributionOptIn=false}) {
+  const issue = async (sessionToken,audience,payload,signal) => {
+    const authorizeSession=work=>signal?distributionSession(pool,sessionToken,signal,work):withSession(pool,sessionToken,work);
+    return authorizeSession(async(db,session) => {
       await authorize(db,audience,payload);
       const capability=prefix+token();
       // Return to the dedicated connection role only after relational authorization.
@@ -93,6 +97,7 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch}) {
     authoring: learningAuthoring({pool,issue,fetchImpl}),
     creation: learningCreation({pool,issue,fetchImpl}),
     package: learningPackages({pool,issue,fetchImpl}),
+    distribution: learningDistribution({pool,issue,fetchImpl,observer,legacyOptInAllowed:legacyDistributionOptIn}),
     provider: learningProvider({pool,issue,fetchImpl}),
     onboarding: supportOnboarding({pool,issue,fetchImpl}),
     registration: supportRegistration({pool,issue,provider,fetchImpl}),
