@@ -7,6 +7,7 @@ import { authoringOperationSchema, authoringInspectSchema, authoringPreviewSchem
 import { validateGovernedCourse } from "../imports/governedLearningImport";
 import { DraftEditor } from "./DraftEditor";
 import { StructureEditor } from "./StructureEditor";
+import { CourseMediaPanel } from "./CourseMediaPanel";
 import { ProviderPolicyPanel } from "./ProviderPolicyPanel";
 import { StructureReview } from "./StructureReview";
 import type { StructureChange } from "./structureProtocol";
@@ -34,7 +35,7 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
   const [previewPolicy, setPreviewPolicy] = useState<CreditPolicyChanges | null>(null);
   const [editing, setEditing] = useState<"fields" | "structure" | "credit-policy" | null>(null);
   const [editorGeneration, setEditorGeneration] = useState(0);
-  const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [message, setMessage] = useState("");
+  const [actionBusy, setBusy] = useState(false); const [mediaBusy, setMediaBusy] = useState(false); const busy = actionBusy || mediaBusy; const [error, setError] = useState(""); const [message, setMessage] = useState("");
   const intents = useRef(new Map<string, string>());
   const actionPending = useRef(false);
   const version = catalog?.versions.find(v => v.versionId === versionId);
@@ -97,7 +98,10 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
         <p>{material.blocks.length} lesson blocks · {material.blocks.reduce((n,b) => n+(b.quiz?.questions.length ?? 0),0)} assessment questions · {material.credits.length} credit rules · {material.packages.length} packages</p>
         <p>Private media locations stay in CareBase. This review includes material and policy evidence; it does not copy learner records.</p>
         <details><summary>Review course and version policy</summary><pre>{JSON.stringify({ course: material.course, version: material.version }, null, 2)}</pre></details>
-        {material.blocks.map(block => <details key={block.id}><summary>{block.title || "Untitled lesson"} · {block.type}</summary><pre>{JSON.stringify(block, null, 2)}</pre></details>)}
+        {material.blocks.map(block => <details key={block.id}><summary>{block.title || "Untitled lesson"} / {block.type}</summary><pre>{JSON.stringify(block, null, 2)}</pre>
+          {["pdf", "video"].includes(block.type) && <CourseMediaPanel courseId={courseId} versionId={versionId} blockId={block.id} draft={version?.status === "draft"}
+            disabled={actionBusy || editing !== null || Boolean(preview && !result)} onBusy={setMediaBusy} onApplied={() => { clearSource(); setMessage("Media attached. Load the resulting course material and preserve it before editing."); }} />}
+        </details>)}
         <details><summary>Review credits, provider evidence and packages</summary><pre>{JSON.stringify({ credits: material.credits, provider: material.provider, packages: material.packages }, null, 2)}</pre></details>
       </div>
       <label className="learning-checkbox"><input type="checkbox" disabled={busy} checked={reviewed} onChange={event => setReviewed(event.target.checked)} />I reviewed this exact version and its policy evidence for preservation in the Hub.</label>

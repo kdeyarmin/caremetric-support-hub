@@ -81,7 +81,7 @@ describe("governed CareBase source contract", () => {
     await expect(prepareGovernedImport(snapshot)).rejects.toThrow("repeats a source course");
   });
   it("pins the database validator to the same strict schema", () => {
-    const sql = readFileSync("supabase/migrations/20260911152329_governed_learning_snapshots.sql", "utf8");
+    const sql = readFileSync("supabase/migrations/20260912002138_governed_course_media_source.sql", "utf8");
     expect(JSON.parse(sql.split("$schema$")[1])).toEqual(z.toJSONSchema(governedCourseSchema, { target: "draft-7" }));
   });
   it("keeps the exporter read-only and excludes learner tables and media locations", () => {

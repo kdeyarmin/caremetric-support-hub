@@ -1,7 +1,8 @@
 -- READ ONLY. Run as an authorized CareBase catalog operator. This result contains
 -- answer keys and authored course/provider metadata: keep it private, never commit it.
--- One SQL statement gives a consistent snapshot. No assets or learner/account/history
--- tables are queried. Video URLs become locator hashes. Authored JSON is retained,
+-- One SQL statement gives a consistent snapshot. No asset bytes or learner/account/history
+-- rows are exported. Native immutable media projection contains IDs and digests only.
+-- Video URLs become locator hashes. Authored JSON is retained,
 -- but the complete export fails closed on recognized credential or storage fields.
 -- An authorized operator must still review authored material for private data.
 -- A hash identifies the exact PostgreSQL JSONB serialization, including mutable policy
@@ -34,7 +35,7 @@ with snapshots as (
         ) order by qq.sort_order,qq.id) from public.quiz_questions qq
         where qq.quiz_id=q.id and qq.organization_id is null),'[]'::jsonb))
       from public.quizzes q where q.course_block_id=b.id and q.organization_id is null)
-    ) order by b.sort_order,b.id) from public.course_blocks b
+    ) || case when b.media_asset_id is null then '{}'::jsonb else jsonb_build_object('mediaAsset',app_private.course_media_asset_projection(b.media_asset_id)) end order by b.sort_order,b.id) from public.course_blocks b
       where b.course_version_id=v.id and b.organization_id is null),'[]'::jsonb),
     'credits',coalesce((select jsonb_agg(jsonb_build_object('id',cc.id,'trainingTypeId',cc.training_type_id,
       'topicCode',cc.topic_code,'creditHours',cc.credit_hours::text,'mode',cc.credit_mode,

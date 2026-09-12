@@ -6923,3 +6923,80 @@ end;
 $declaration$;
 revoke all on function hub.get_backend_contract() from public;
 grant execute on function hub.get_backend_contract() to anon,authenticated;
+
+
+-- Governed course media source compatibility
+-- Optional immutable media references; existing source payloads and ACLs remain unchanged.
+create or replace function private.governed_learning_schema() returns json
+language sql immutable set search_path='' as $$
+select $schema${"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"contract":{"type":"string","const":"carebase.course.v1"},"sourceCourseId":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"sourceVersionId":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"sourceVersionNumber":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"publicationState":{"type":"string","enum":["draft","published","archived"]},"sourceVersionState":{"type":"string","enum":["draft","published"]},"course":{"type":"object","properties":{"title":{"type":"string","maxLength":250000},"description":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"category":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"estimatedDurationMinutes":{"anyOf":[{"type":"integer","minimum":0,"maximum":2147483647},{"type":"null"}]},"catalogCode":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"recurrenceIntervalDays":{"anyOf":[{"type":"integer","minimum":1,"maximum":2147483647},{"type":"null"}]},"legacyTrainingTypeId":{"anyOf":[{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},{"type":"null"}]},"renewalTrainingTypeId":{"anyOf":[{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},{"type":"null"}]},"creditedDurationCheckExempt":{"type":"boolean"}},"required":["title","description","category","estimatedDurationMinutes","catalogCode","recurrenceIntervalDays","legacyTrainingTypeId","renewalTrainingTypeId","creditedDurationCheckExempt"],"additionalProperties":false},"version":{"type":"object","properties":{"title":{"type":"string","maxLength":250000},"description":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"label":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"contentStandard":{"type":"string","enum":["legacy","comprehensive"]},"creditedDurationRationale":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"aiGenerated":{"type":"boolean"},"aiReviewedAt":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]}},"required":["title","description","label","contentStandard","creditedDurationRationale","aiGenerated","aiReviewedAt"],"additionalProperties":false},"blocks":{"maxItems":500,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"type":{"type":"string","enum":["text","video","pdf","scorm","quiz","attestation"]},"sortOrder":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"title":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"body":{"$ref":"#/definitions/__schema0"},"documentId":{"anyOf":[{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},{"type":"null"}]},"videoLocatorSha256":{"anyOf":[{"type":"string","pattern":"^[0-9a-f]{64}$"},{"type":"null"}]},"mediaAsset":{"type":"object","properties":{"id":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"contentSha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},"mimeType":{"type":"string","enum":["application/pdf","video/mp4","video/webm"]},"byteSize":{"type":"integer","exclusiveMinimum":0,"maximum":104857600},"fileName":{"type":"string","minLength":1,"maxLength":320}},"required":["id","contentSha256","mimeType","byteSize","fileName"],"additionalProperties":false},"quiz":{"anyOf":[{"type":"object","properties":{"id":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"title":{"type":"string","maxLength":250000},"passingScore":{"type":"integer","minimum":0,"maximum":100},"maxAttempts":{"anyOf":[{"type":"integer","minimum":1,"maximum":2147483647},{"type":"null"}]},"kind":{"type":"string","enum":["assessment","knowledge_check","final_exam"]},"shuffleQuestions":{"type":"boolean"},"shuffleAnswers":{"type":"boolean"},"revealsAnswersAfterAttempt":{"type":"boolean"},"questions":{"maxItems":500,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"sortOrder":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"prompt":{"type":"string","maxLength":250000},"type":{"type":"string","enum":["single_choice","multiple_choice","true_false"]},"points":{"type":"integer","minimum":1,"maximum":2147483647},"topicCode":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"topicLabel":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"explanation":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"options":{"maxItems":100,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"sortOrder":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"text":{"type":"string","maxLength":250000},"correct":{"type":"boolean"}},"required":["id","sortOrder","text","correct"],"additionalProperties":false}}},"required":["id","sortOrder","prompt","type","points","topicCode","topicLabel","explanation","options"],"additionalProperties":false}}},"required":["id","title","passingScore","maxAttempts","kind","shuffleQuestions","shuffleAnswers","revealsAnswersAfterAttempt","questions"],"additionalProperties":false},{"type":"null"}]}},"required":["id","type","sortOrder","title","body","documentId","videoLocatorSha256","quiz"],"additionalProperties":false}},"credits":{"maxItems":100,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"trainingTypeId":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"topicCode":{"type":"string","maxLength":250000},"creditHours":{"type":"string","pattern":"^\\d{1,4}(\\.\\d{1,2})?$"},"mode":{"type":"string","enum":["automatic","verified_only"]},"citationNote":{"type":"string","maxLength":250000},"active":{"type":"boolean"}},"required":["id","trainingTypeId","topicCode","creditHours","mode","citationNote","active"],"additionalProperties":false}},"provider":{"anyOf":[{"type":"object","properties":{"id":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"fullName":{"type":"string","maxLength":250000},"professionalTitle":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"credential":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"credentialNumber":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"credentialIssuingOrganization":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"credentialExpiresOn":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"courseAuthor":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"signatureName":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"signatureRecordedAt":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"contentVersion":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"lastClinicalReviewDate":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"reviewedBy":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"nextReviewDue":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"regulationReviewDate":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"reviewNotes":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]}},"required":["id","fullName","professionalTitle","credential","credentialNumber","credentialIssuingOrganization","credentialExpiresOn","courseAuthor","signatureName","signatureRecordedAt","contentVersion","lastClinicalReviewDate","reviewedBy","nextReviewDue","regulationReviewDate","reviewNotes"],"additionalProperties":false},{"type":"null"}]},"packages":{"maxItems":100,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},"standard":{"type":"string","enum":["scorm_1_2","scorm_2004_4th","xapi","lti_1_3"]},"contentSha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},"entryPoint":{"anyOf":[{"type":"string","maxLength":250000},{"type":"null"}]},"manifest":{"$ref":"#/definitions/__schema1"},"capabilities":{"maxItems":100,"type":"array","items":{"type":"string","maxLength":250000}},"connectivityMode":{"type":"string","enum":["online_only","offline_supported"]},"validationStatus":{"type":"string","enum":["pending","validating","accepted","rejected","quarantined"]}},"required":["id","standard","contentSha256","entryPoint","manifest","capabilities","connectivityMode","validationStatus"],"additionalProperties":false}}},"required":["contract","sourceCourseId","sourceVersionId","sourceVersionNumber","publicationState","sourceVersionState","course","version","blocks","credits","provider","packages"],"additionalProperties":false,"definitions":{"__schema0":{"anyOf":[{"type":"string"},{"type":"number"},{"type":"boolean"},{"type":"null"},{"type":"array","items":{"$ref":"#/definitions/__schema0"}},{"type":"object","propertyNames":{"type":"string"},"additionalProperties":{"$ref":"#/definitions/__schema0"}}]},"__schema1":{"anyOf":[{"type":"string"},{"type":"number"},{"type":"boolean"},{"type":"null"},{"type":"array","items":{"$ref":"#/definitions/__schema1"}},{"type":"object","propertyNames":{"type":"string"},"additionalProperties":{"$ref":"#/definitions/__schema1"}}]}}}$schema$::json;
+$$;
+
+create or replace function private.validate_governed_learning_source(p_payload text, p_revision text) returns jsonb
+language plpgsql set search_path='' as $$
+declare document jsonb;
+begin
+  if p_payload is null or octet_length(p_payload)>2000000 or p_revision is null
+    or p_revision !~ '^[0-9a-f]{64}$'
+    or encode(extensions.digest(p_payload,'sha256'),'hex')<>p_revision then
+    raise exception 'Source revision checksum or size is invalid.' using errcode='22023';
+  end if;
+  begin document:=p_payload::jsonb;
+  exception when invalid_text_representation then
+    raise exception 'Source payload is not valid JSON.' using errcode='22023';
+  end;
+  if not extensions.jsonb_matches_schema(private.governed_learning_schema(),document) then
+    raise exception 'Source snapshot does not match carebase.course.v1.' using errcode='22023';
+  end if;
+  if document::text ~* '([?&](token|access_token|signature|sig|key|policy|jwt|auth|h|hdnts|hdnea|key-pair-id|api_key|apikey|x-amz-[a-z-]+|x-goog-[a-z-]+)=|"(access_?token|refresh_?token|service_?role_?key|authorization|password|client_?secret|storage_?(path|bucket)|video_?url|playback_?(url|token)|signed_?url|api_?key|token|secret|secret_?key|signing_?secret)"[[:space:]]*:)' then
+    raise exception 'Remove playback credentials from the source export before staging.' using errcode='22023';
+  end if;
+  if exists(select 1 from jsonb_array_elements(document->'blocks') b
+    where (b->>'type'<>'quiz' and b->'quiz'<>'null'::jsonb)
+      or (b->>'type'='quiz' and b->'quiz'='null'::jsonb and document->>'sourceVersionState'<>'draft')
+      or ((b->'quiz'->>'revealsAnswersAfterAttempt')::boolean and b->'quiz'->>'kind'<>'knowledge_check')) then
+    raise exception 'Source quiz configuration is invalid.' using errcode='22023';
+  end if;
+  if exists(
+    with blocks as(select value b from jsonb_array_elements(document->'blocks')),
+    questions as(select q from blocks cross join lateral jsonb_array_elements(coalesce(nullif(b->'quiz'->'questions','null'::jsonb),'[]'::jsonb)) q),
+    ids as (
+      select 'block' kind, lower(b->>'id') id from blocks
+      union all select 'quiz',lower(b->'quiz'->>'id') from blocks where b->'quiz'<>'null'::jsonb
+      union all select 'question',lower(q->>'id') from questions
+      union all select 'answer',lower(a->>'id') from questions cross join lateral jsonb_array_elements(q->'options') a
+      union all select 'credit',lower(c->>'id') from jsonb_array_elements(document->'credits') c
+      union all select 'package',lower(p->>'id') from jsonb_array_elements(document->'packages') p
+    ) select 1 from ids group by kind,id having count(*)>1
+  ) then raise exception 'The source snapshot repeats a content identifier.' using errcode='22023'; end if;
+  if exists(select 1 from jsonb_array_elements(document->'blocks') b where b ? 'mediaAsset' and (
+    b->>'type' not in ('pdf','video') or ((b->>'type'='pdf') is distinct from (b->'mediaAsset'->>'mimeType'='application/pdf'))
+    or b->'documentId'<>'null'::jsonb or b->'videoLocatorSha256'<>'null'::jsonb
+    or (b->'mediaAsset'->>'mimeType'='application/pdf' and (b->'mediaAsset'->>'byteSize')::bigint>26214400)
+    or char_length(b->'mediaAsset'->>'fileName')>160
+    or ascii(left(b->'mediaAsset'->>'fileName',1)) in (9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279)
+    or ascii(right(b->'mediaAsset'->>'fileName',1)) in (9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279)
+    or b->'mediaAsset'->>'fileName'<>normalize(b->'mediaAsset'->>'fileName',NFC)
+    or exists(select 1 from regexp_split_to_table(b->'mediaAsset'->>'fileName','') letter
+      where ascii(letter) between 1 and 31 or ascii(letter) between 127 and 159 or ascii(letter) in (47,58,92))
+  )) then raise exception 'Source media attachment is invalid.' using errcode='22023'; end if;
+  return document;
+end;
+$$;
+
+-- This feature declares source-reference compatibility, not native media enablement.
+-- Native capabilities remain independently disabled until their reviewed release.
+do $$ declare contract jsonb:=hub.get_backend_contract(); begin
+ if not (contract @> '{"api_version":4,"features":["app.sms.v1","learning.sources.v1"]}'::jsonb) then
+  raise exception 'Apply the governed source and SMS foundations first' using errcode='55000'; end if;
+ if private.governed_learning_schema()::jsonb#>'{properties,blocks,items,properties,mediaAsset}' is null
+  or position('Source media attachment is invalid.' in pg_get_functiondef('private.validate_governed_learning_source(text,text)'::regprocedure))=0
+  or has_function_privilege('authenticated','private.validate_governed_learning_source(text,text)','execute')
+  or has_function_privilege('anon','private.validate_governed_learning_source(text,text)','execute') then
+  raise exception 'Private immutable source media validation is required' using errcode='55000'; end if;
+ if not (contract->'features' @> '["learning.media.v1"]'::jsonb) then
+  contract:=jsonb_set(contract,'{features}',(contract->'features')||'["learning.media.v1"]'::jsonb); end if;
+ execute format('create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='''' as %L','select '||quote_literal(contract::text)||'::jsonb');
+end $$;
+revoke all on function hub.get_backend_contract() from public;
+grant execute on function hub.get_backend_contract() to anon,authenticated;

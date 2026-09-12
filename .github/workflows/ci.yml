@@ -98,6 +98,8 @@ jobs:
           node server/authoring-integration.mjs
           node server/credit-policy-contract-integration.mjs
           node server/provider-integration.mjs
+          node server/course-media-integration.mjs
+          node server/media-contract-integration.mjs
           node server/creation-integration.mjs
           node server/creation-contract-integration.mjs
           node server/publication-integration.mjs
