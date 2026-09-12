@@ -48,7 +48,7 @@ it("requires preserved source and explicit policy preview, isolates edit groups 
   expect(preview).toMatchObject({ action: "learning.editCreditPolicy", parameters: { sourceRevision: revision,
     policy: { versionLabel: "Reviewed training edition" }, credits: material.credits.map(row => ({ creditId: row.id, preserve: true })), removedCreditIds: [] } });
   expect(vi.mocked(requestAdmin).mock.calls.some(call => (call[1] as { operation: string }).operation === "apply")).toBe(false);
-  fireEvent.click(apply); await screen.findByRole("alert"); fail = false; fireEvent.click(apply);
+  fireEvent.click(apply); await screen.findByText(/The request did not finish. Check the connection/); fail = false; fireEvent.click(apply);
   await waitFor(() => expect(screen.getByText(/confirmed version.*previously completed/)).toBeDefined());
   const applies = vi.mocked(requestAdmin).mock.calls.filter(call => (call[1] as { operation: string }).operation === "apply");
   expect(applies).toHaveLength(2); expect(applies[0]![1]).toEqual(applies[1]![1]);

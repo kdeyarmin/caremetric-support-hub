@@ -1,0 +1,7 @@
+.package-panel { display: grid; min-width: 0; gap: 16px; padding-top: 18px; border-top: 1px solid var(--border, #dce3ed); }
+.package-panel fieldset, .package-card { display: grid; min-width: 0; gap: 12px; padding: 16px; border: 1px solid var(--border, #dce3ed); border-radius: 8px; }
+.package-panel legend, .package-panel h5 { margin: 0; font-size: 14px; font-weight: 700; color: var(--brand-dark); }
+.package-panel p, .package-panel details { overflow-wrap: anywhere; line-height: 1.6; }
+.package-panel button { justify-self: start; max-width: 100%; white-space: normal; }
+.package-saved { display: grid; min-width: 0; gap: 12px; }
+.package-card { background: var(--brand-light, #f4f7fb); }

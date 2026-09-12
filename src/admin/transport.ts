@@ -4,13 +4,12 @@ export class AdminApiError extends Error {
   readonly code: string;
   constructor(code: string) { super("Administrator request could not be completed."); this.code = code; }
 }
-export async function requestAdmin(functionName: "platform-admin" | "platform-command" | "learning-receipts" | "learning-authoring" | "billing-command" | "checkout-command" | "course-creation" | "learning-provider" | "operational-configuration", body: unknown, signal: AbortSignal): Promise<unknown> {
+export async function requestAdmin(functionName: "platform-admin" | "platform-command" | "learning-receipts" | "learning-authoring" | "billing-command" | "checkout-command" | "course-creation" | "course-distribution" | "learning-provider" | "operational-configuration", body: unknown, signal: AbortSignal): Promise<unknown> {
   if (config.demoMode) throw new AdminApiError("unconfigured");
-  const route = functionName === "operational-configuration" ? "configuration" : functionName === "learning-provider" ? "provider" : functionName === "course-creation" ? "course-creation" : functionName === "checkout-command" ? "checkout-command" : functionName === "billing-command" ? "billing-command" : functionName === "learning-authoring" ? "authoring" : functionName === "learning-receipts" ? "learning" : functionName === "platform-command" ? "command" : "read";
-
+  const route = functionName === "operational-configuration" ? "configuration" : functionName === "learning-provider" ? "provider" : functionName === "course-distribution" ? "course-distribution" : functionName === "course-creation" ? "course-creation" : functionName === "checkout-command" ? "checkout-command" : functionName === "billing-command" ? "billing-command" : functionName === "learning-authoring" ? "authoring" : functionName === "learning-receipts" ? "learning" : functionName === "platform-command" ? "command" : "read";
   const response = await fetch(`/api/admin/${route}`, {
     method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body), signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]), redirect: "error", cache: "no-store",
+    body: JSON.stringify(body), signal: AbortSignal.any([signal, AbortSignal.timeout(functionName === "course-distribution" ? 30000 : 15000)]), redirect: "error", cache: "no-store",
   });
   if (!response.ok) {
     let code = response.status === 401 ? "401" : response.status === 403 ? "403" : "upstream";
