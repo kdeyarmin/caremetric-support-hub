@@ -69,27 +69,29 @@ try {
   try {
     const before=await readContract();
     await client.query(migration);
-    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['support.customer-onboarding.v1','learning.structure.v1','support.customer-registration.v1','billing.checkout.v1','learning.course-creation.v1','learning.credit-policy.v1','knowledge.docstudio.v1','learning.pennsync-source.v1','learning.media.v1'].includes(feature))});
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['support.customer-onboarding.v1','learning.structure.v1','support.customer-registration.v1','billing.checkout.v1','learning.course-creation.v1','learning.credit-policy.v1','knowledge.docstudio.v1','learning.distribution.v1','learning.pennsync-source.v1','learning.media.v1'].includes(feature))});
     const portalOnly=await readContract(); assert.throws(()=>assertBackendContract(portalOnly),/incompatible/);
     await client.query(onboardingMigration);
     // Old declaration requires its exact historical five-action shape.
     await client.query(structureActionsSql);
     await client.query(structureMigration);
-    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['support.customer-registration.v1','billing.checkout.v1','learning.course-creation.v1','learning.credit-policy.v1','knowledge.docstudio.v1','learning.pennsync-source.v1','learning.media.v1'].includes(feature))});
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['support.customer-registration.v1','billing.checkout.v1','learning.course-creation.v1','learning.credit-policy.v1','knowledge.docstudio.v1','learning.distribution.v1','learning.pennsync-source.v1','learning.media.v1'].includes(feature))});
     await client.query(registrationMigration);
-    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['billing.checkout.v1','learning.course-creation.v1','learning.credit-policy.v1','knowledge.docstudio.v1','learning.pennsync-source.v1','learning.media.v1'].includes(feature))});
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['billing.checkout.v1','learning.course-creation.v1','learning.credit-policy.v1','knowledge.docstudio.v1','learning.distribution.v1','learning.pennsync-source.v1','learning.media.v1'].includes(feature))});
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='billing.checkout.v1')}),/incompatible/);
     await client.query(checkoutMigration);
-    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['learning.course-creation.v1','learning.credit-policy.v1','knowledge.docstudio.v1','learning.pennsync-source.v1','learning.media.v1'].includes(feature))});
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['learning.course-creation.v1','learning.credit-policy.v1','knowledge.docstudio.v1','learning.distribution.v1','learning.pennsync-source.v1','learning.media.v1'].includes(feature))});
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='learning.course-creation.v1')}),/incompatible/);
     await client.query(creationMigration);
-    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['learning.credit-policy.v1','knowledge.docstudio.v1','learning.pennsync-source.v1','learning.media.v1'].includes(feature))});
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['learning.credit-policy.v1','knowledge.docstudio.v1','learning.distribution.v1','learning.pennsync-source.v1','learning.media.v1'].includes(feature))});
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='learning.credit-policy.v1')}),/incompatible/);
     await client.query(policyIntentMigration);
     await client.query(policyMigration);
-    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['knowledge.docstudio.v1','learning.pennsync-source.v1','learning.media.v1'].includes(feature))});
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['knowledge.docstudio.v1','learning.distribution.v1','learning.pennsync-source.v1','learning.media.v1'].includes(feature))});
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='knowledge.docstudio.v1')}),/incompatible/);
     await client.query(docstudioMigration);
+    assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['learning.distribution.v1','learning.pennsync-source.v1','learning.media.v1'].includes(feature))});
+    await client.query(await readFile(new URL('../supabase/migrations/20260911234549_governed_course_distribution_contract.sql',import.meta.url),'utf8'));
     assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['learning.pennsync-source.v1','learning.media.v1'].includes(feature))});
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='learning.pennsync-source.v1')}),/incompatible/);
     await client.query(pennsyncMigration);

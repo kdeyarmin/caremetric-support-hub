@@ -1,0 +1,15 @@
+begin;
+select plan(12);
+select ok(not has_table_privilege('anon','private.learning_distribution_intents','select,insert,update,delete'),'Anonymous cannot access private source or intents');
+select ok(not has_table_privilege('authenticated','private.learning_distribution_intents','select,insert,update,delete'),'Browser roles cannot access source intents');
+select ok(not has_table_privilege('service_role','private.learning_distribution_revisions','select,insert,update,delete'),'Service credential cannot rewrite distribution provenance');
+select ok(not has_table_privilege('hub_app_server','private.learning_distribution_observations','select,insert,update,delete'),'Observer must use closed lease functions');
+select ok(not has_function_privilege('authenticated','private.commit_course_distribution(uuid,text,uuid,boolean)','execute'),'Browser cannot commit directly');
+select ok(not has_function_privilege('service_role','private.record_distribution_status_batch(uuid,timestamptz,jsonb)','execute'),'General service cannot forge native observations');
+select ok(has_function_privilege('hub_app_server','private.commit_course_distribution(uuid,text,uuid,boolean)','execute'),'Current session server can enter guarded commit');
+select ok(has_function_privilege('hub_app_server','private.claim_distribution_status_batch()','execute'),'Dedicated server can claim bounded observations');
+select throws_ok('select private.claim_distribution_status_batch()','42501','Application observer required.','Owner database session is not a native observation credential');
+select throws_ok('select private.get_course_distribution_context(gen_random_uuid())','42501','Application server required.','Definer does not bypass application session boundary');
+select is((select count(*)::integer from private.learning_distribution_observations where managed),0,'Migration does not opt in existing catalog');
+select ok(hub.get_backend_contract()->'features' ? 'learning.distribution.v1','Reviewed distribution gate is additive');
+select * from finish();rollback;

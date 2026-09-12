@@ -6,6 +6,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { cookie,readCookie,sessionCookie,challengeCookie,HttpError } from './sms-auth.mjs';
 import { parseMediaUploadHeader } from './learning-media.mjs';
+import { parsePackageUploadHeader } from './learning-packages.mjs';
 
 export const securityHeaders = {
   'X-Content-Type-Options':'nosniff','X-Frame-Options':'SAMEORIGIN',
@@ -204,17 +205,29 @@ export function appServer({auth,gateway,delegations,publications,docstudio,origi
         }
         if(path.startsWith('/api/rpc/') && req.method==='POST') return json(await gateway.rpc(path.slice(9),await jsonBody(req),session));
         if(path.startsWith('/api/rows/') && req.method==='GET') return json(await gateway.rows(path.slice(10),session));
+        if(path==='/api/admin/packages' && req.method==='POST') {
+          if(url.search)throw new HttpError(400,'Package query parameters are not supported.');
+          if(req.headers['content-encoding']&&req.headers['content-encoding']!=='identity')throw new HttpError(415,'Package content encoding is unsupported.');
+          const upload=req.headers['content-type']==='application/zip';
+          if(!upload&&req.headers['x-caremetric-package-request'])throw new HttpError(400,'Unexpected package metadata.');
+          const input=upload?parsePackageUploadHeader(req.headers['x-caremetric-package-request']):await jsonBody(req,8192);
+          const controller=new AbortController();const abort=()=>{if(!res.writableEnded)controller.abort();};
+          req.once('aborted',abort);res.once('close',abort);
+          try{return json(await delegations.package(session,input,{...(upload?{body:req,contentLength:req.headers['content-length']}:{}),signal:controller.signal}));}
+          finally{req.removeListener('aborted',abort);res.removeListener('close',abort);}
+        }
         if(path==='/api/admin/read' && req.method==='POST') return json(await delegations.admin(session,await jsonBody(req,2048)));
         if(path==='/api/admin/command' && req.method==='POST') return json(await delegations.command(session,await jsonBody(req,4096)));
         if(path==='/api/admin/registration' && req.method==='POST') {
           if(url.search)throw new HttpError(400,'Invitation query parameters are not supported.');
           return json(await delegations.registration.admin(session,await jsonBody(req,4096)));
         }
-        if(['/api/admin/pennsync-migration','/api/admin/learning','/api/admin/authoring','/api/admin/provider','/api/admin/course-creation','/api/admin/billing-command','/api/admin/checkout-command','/api/admin/onboarding'].includes(path) && req.method==='POST') {
-          const body=await jsonBody(req,path.endsWith('/authoring')||path.endsWith('/provider')||path.endsWith('/course-creation')?32768:4096);const controller=new AbortController();
+        if(['/api/admin/pennsync-migration','/api/admin/learning','/api/admin/authoring','/api/admin/provider','/api/admin/course-creation','/api/admin/course-distribution','/api/admin/billing-command','/api/admin/checkout-command','/api/admin/onboarding'].includes(path) && req.method==='POST') {
+          if(path==='/api/admin/course-distribution'&&url.search)throw new HttpError(400,'Distribution query parameters are not supported.');
+          const body=await jsonBody(req,path.endsWith('/authoring')||path.endsWith('/provider')||path.endsWith('/course-creation')||path.endsWith('/course-distribution')?32768:4096);const controller=new AbortController();
           const abort=()=>{if(!res.writableEnded)controller.abort();};
           req.once('aborted',abort);res.once('close',abort);
-          try {return json(await delegations[path.endsWith('/pennsync-migration')?'pennsyncMigration':path.endsWith('/provider')?'provider':path.endsWith('/course-creation')?'creation':path.endsWith('/onboarding')?'onboarding':path.endsWith('/checkout-command')?'checkoutCommand':path.endsWith('/billing-command')?'billingCommand':path.endsWith('/authoring')?'authoring':'learning'](session,body,controller.signal));}
+          try {return json(await delegations[path.endsWith('/pennsync-migration')?'pennsyncMigration':path.endsWith('/provider')?'provider':path.endsWith('/course-distribution')?'distribution':path.endsWith('/course-creation')?'creation':path.endsWith('/onboarding')?'onboarding':path.endsWith('/checkout-command')?'checkoutCommand':path.endsWith('/billing-command')?'billingCommand':path.endsWith('/authoring')?'authoring':'learning'](session,body,controller.signal));}
           finally {req.removeListener('aborted',abort);res.removeListener('close',abort);}
         }
         if(path==='/api/media/sign' && req.method==='POST') {
