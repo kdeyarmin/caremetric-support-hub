@@ -41,6 +41,21 @@ alter table private.learning_distribution_intents enable row level security;
 alter table private.learning_distribution_revisions enable row level security;
 revoke all on private.learning_distribution_observations,private.learning_distribution_intents,private.learning_distribution_revisions from public,anon,authenticated,service_role,hub_app_server;
 
+create function private.current_distribution_actor() returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare v_actor jsonb;
+begin
+  v_actor:=private.course_creation_actor();
+  -- Existing shared authorization uses transaction time. A queued publication
+  -- must also honor wall-clock session and original eight-hour assurance expiry.
+  if (v_actor->>'assurance_expires_at')::timestamptz is null
+    or (v_actor->>'assurance_expires_at')::timestamptz<=clock_timestamp()
+    or not exists(select 1 from private.sms_sessions s where s.id=(v_actor->>'session_id')::uuid and s.user_id=(v_actor->>'user_id')::uuid
+      and s.revoked_at is null and s.expires_at>clock_timestamp() and s.created_at+interval '480 minutes'>clock_timestamp()) then
+    raise exception 'Current distribution session expired.' using errcode='28000';end if;
+  return v_actor;
+end; $$;
+
 create function private.distribution_catalog_state(p_course_id uuid) returns jsonb
 language sql stable security definer set search_path='' as $$
   select jsonb_build_object('item',to_jsonb(i),'link',to_jsonb(l),
@@ -66,7 +81,7 @@ create function private.claim_course_distribution_observation(p_course_id uuid) 
 language plpgsql security definer set search_path='' as $$
 declare v_actor jsonb; v_item uuid; v_observation uuid:=gen_random_uuid();
 begin
-  v_actor:=private.course_creation_actor();
+  v_actor:=private.current_distribution_actor();
   select i.id into v_item from hub.content_items i join hub.course_links l on l.content_item_id=i.id
     where lower(l.penntrain_course_id)=p_course_id::text and i.kind='course' and i.source_system='penntrain';
   if v_item is null then raise exception 'Registered CareBase course required.' using errcode='22023'; end if;
@@ -97,7 +112,7 @@ create function private.record_course_distribution_observation(p_course_id uuid,
 language plpgsql security definer set search_path='' as $$
 declare v_actor jsonb; v_row private.learning_distribution_observations%rowtype;
 begin
-  v_actor:=private.course_creation_actor();perform private.validate_distribution_status(p_status);
+  v_actor:=private.current_distribution_actor();perform private.validate_distribution_status(p_status);
   if (p_status->>'courseId')::uuid is distinct from p_course_id or p_machine is null or p_generated_at is null or not isfinite(p_generated_at)
     or p_generated_at<clock_timestamp()-interval '2 minutes' or p_generated_at>clock_timestamp()+interval '30 seconds' then
     raise exception 'Invalid current source observation.' using errcode='22023'; end if;
@@ -135,7 +150,7 @@ create function private.get_course_distribution_context(p_course_id uuid) return
 language plpgsql stable security definer set search_path='' as $$
 declare v_actor jsonb; v_item hub.content_items%rowtype; v_revision hub.content_revisions%rowtype; v_products jsonb; v_ids jsonb; v_requests jsonb; v_legacy boolean;
 begin
-  v_actor:=private.course_creation_actor();
+  v_actor:=private.current_distribution_actor();
   select i.* into v_item from hub.content_items i join hub.course_links l on l.content_item_id=i.id
     where lower(l.penntrain_course_id)=p_course_id::text and i.kind='course' and i.source_system='penntrain';
   if not found then raise exception 'Registered CareBase course required.' using errcode='22023'; end if;
@@ -158,7 +173,7 @@ create function private.require_course_distribution_intent(p_request_id uuid) re
 language plpgsql security definer set search_path='' as $$
 declare v_actor jsonb; v_intent private.learning_distribution_intents%rowtype;
 begin
-  v_actor:=private.course_creation_actor();select * into v_intent from private.learning_distribution_intents where request_id=p_request_id for update;
+  v_actor:=private.current_distribution_actor();select * into v_intent from private.learning_distribution_intents where request_id=p_request_id for update;
   if not found or v_intent.actor_id is distinct from (v_actor->>'user_id')::uuid then
     raise exception 'Distribution owner required.' using errcode='42501'; end if;
   return v_intent;
@@ -186,7 +201,7 @@ begin
   if session_user<>'hub_app_server' then raise exception 'Application observer required.' using errcode='42501'; end if;
   if p_generated_at is null or not isfinite(p_generated_at) or p_generated_at<clock_timestamp()-interval '2 minutes' or p_generated_at>clock_timestamp()+interval '30 seconds'
     or p_items is null or jsonb_typeof(p_items)<>'array' or jsonb_array_length(p_items) not between 1 and 10
-    or (select count(distinct value->>'courseId') from jsonb_array_elements(p_items))<>jsonb_array_length(p_items) then
+    or (select count(distinct (value->>'courseId')::uuid) from jsonb_array_elements(p_items))<>jsonb_array_length(p_items) then
     raise exception 'Invalid observer batch.' using errcode='22023'; end if;
   -- Lock the whole exact lease before changing any member; superseded batches
   -- cannot partially overwrite a more recent human or worker observation.
@@ -210,7 +225,7 @@ create function private.validate_course_distribution_plan(p_plan jsonb,p_item_id
 language plpgsql stable security definer set search_path='' as $$
 declare v_metadata jsonb; v_id uuid; v_selected uuid[]; v_removed uuid[]; v_actual_removed uuid[]; v_key text; v_text text;
 begin
-  perform private.course_creation_actor();
+  perform private.current_distribution_actor();
   if p_plan is null or jsonb_typeof(p_plan)<>'object' or octet_length(p_plan::text)>32768
     or not(p_plan ?& array['courseId','versionId','sourceRevision','expectedCatalogDigest','metadata','productIds','removedProductIds','accessLevel','reason','reviewed','confirmReplacement','confirmRetirements'])
     or p_plan-array['courseId','versionId','sourceRevision','expectedCatalogDigest','metadata','productIds','removedProductIds','accessLevel','reason','reviewed','confirmReplacement','confirmRetirements']<>'{}'::jsonb
@@ -276,7 +291,7 @@ language plpgsql security definer set search_path='' as $$
 declare v_actor jsonb; v_item uuid; v_intent private.learning_distribution_intents%rowtype; v_doc jsonb;
   v_observation private.learning_distribution_observations%rowtype; v_digest text; v_created timestamptz:=clock_timestamp(); v_preview jsonb;
 begin
-  v_actor:=private.course_creation_actor();
+  v_actor:=private.current_distribution_actor();
   if p_request_id is null then raise exception 'Request identity required.' using errcode='22023'; end if;
   perform pg_advisory_xact_lock(hashtextextended('hub-distribution-request:'||p_request_id::text,0));
   select * into v_intent from private.learning_distribution_intents where request_id=p_request_id for update;
@@ -339,7 +354,7 @@ begin
     raise exception 'A current matching observer and published source are required.' using errcode='40001'; end if;
   -- Locks may have waited past expiry. Recheck current actor/product scope after
   -- those waits, then record actual publication time immediately before writing.
-  perform private.course_creation_actor();perform private.validate_course_distribution_plan(v_plan,v_intent.item_id,p_allow_legacy);
+  perform private.current_distribution_actor();perform private.validate_course_distribution_plan(v_plan,v_intent.item_id,p_allow_legacy);
   if v_intent.expires_at<=clock_timestamp() then raise exception 'Distribution preview expired.' using errcode='40001';end if;
   v_now:=clock_timestamp();
   v_before:=private.distribution_catalog_state(v_intent.course_id);
@@ -375,7 +390,8 @@ begin
     raise exception 'Distribution request and receipt are immutable.' using errcode='42501';
   end if;
   if tg_table_schema='private' then raise exception 'Distribution provenance is immutable.' using errcode='42501'; end if;
-  if exists(select 1 from private.learning_distribution_revisions where revision_id=old.id) then
+  if exists(select 1 from private.learning_distribution_revisions where revision_id=old.id)
+    or exists(select 1 from private.learning_distribution_observations where item_id=old.item_id and managed) then
     raise exception 'Distributed revision is immutable.' using errcode='42501'; end if;
   if tg_op='DELETE' then return old; end if; return new;
 end; $$;
@@ -442,7 +458,7 @@ begin
   -- attempted_at remains the retry backoff. Failures never invent fresh evidence.
   update private.learning_distribution_observations set lease_id=null,lease_until=null where lease_id=p_lease_id;
 end; $$;
-revoke all on function private.distribution_catalog_state(uuid),private.distribution_catalog_digest(uuid),private.course_distribution_available(uuid,uuid),
+revoke all on function private.current_distribution_actor(),private.distribution_catalog_state(uuid),private.distribution_catalog_digest(uuid),private.course_distribution_available(uuid,uuid),
   private.claim_course_distribution_observation(uuid),private.validate_distribution_status(jsonb),private.record_course_distribution_observation(uuid,uuid,timestamptz,jsonb,boolean),
   private.distribution_intent_view(private.learning_distribution_intents),private.distribution_availability(uuid),private.get_course_distribution_context(uuid),
   private.require_course_distribution_intent(uuid),private.get_course_distribution_intent(uuid),private.claim_distribution_status_batch(),private.record_distribution_status_batch(uuid,timestamptz,jsonb),

@@ -75,7 +75,9 @@ try{
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')",[owner]);await admin.query('insert into private.sms_identities(user_id,phone_e164) values($1,$2)',[owner,phone]);
   assert.equal((await run({operation:'context',courseId:randomUUID()})).status,401);
   const started=ok(await call('auth/sms/start',{phone}));ok(await call('auth/sms/verify',{challengeId:started.challengeId,code:'123456'}));
-  const course=await registered(),context=await load(course.id);assert.equal(context.catalog.availability.managed,false);assert.equal(context.catalog.legacy,false);
+  const course=await registered(),historicalRevision=randomUUID();
+  await admin.query("insert into hub.content_revisions(id,item_id,revision_no,title) values($1,$2,1,'Original catalog metadata')",[historicalRevision,course.item]);
+  const context=await load(course.id);assert.equal(context.catalog.availability.managed,false);assert.equal(context.catalog.legacy,false);
   assert.equal((await run({operation:'context',courseId:course.id},{Origin:'https://evil.test'})).status,403);
   assert.equal((await call('admin/course-distribution?url=evil',{operation:'context',courseId:course.id})).status,400);
   assert.equal((await run({...preview(context),payload:'caller bytes'})).status,400);
@@ -91,9 +93,10 @@ try{
   machineChange=true;assert.equal((await run(commit(review))).status,409);machineChange=false;
   const success=ok(await run(commit(review)));assert.ok(success.result);assert.equal(success.result.itemId,course.item);assert.deepEqual(success.result.productIds,request.plan.productIds);
   assert.deepEqual(ok(await run(commit(review))),success,'recovered response reuses exactly one revision');
-  assert.equal((await admin.query('select count(*) from hub.content_revisions where item_id=$1',[course.item])).rows[0].count,'1');
+  assert.equal((await admin.query('select count(*) from hub.content_revisions where item_id=$1',[course.item])).rows[0].count,'2');
   const publicRows=await visible(success.result.revisionId);assert.equal(publicRows.length,1);assert.equal(publicRows[0].placements.length,2,'one shared revision serves two selected app placements');
   assert.ok(!JSON.stringify(publicRows).includes('creditedDurationRationale'));assert.ok(!JSON.stringify(publicRows).includes('source_payload'));assert.ok(!JSON.stringify(publicRows).includes('correct'));
+  await assert.rejects(admin.query("update hub.content_revisions set title='Changed historical revision' where id=$1",[historicalRevision]),error=>error.code==='42501','opting in preserves the old catalog history too');
   await assert.rejects(admin.query("update hub.content_revisions set title='Changed immutable revision' where id=$1",[success.result.revisionId]),error=>error.code==='42501');
   await assert.rejects(admin.query('delete from private.learning_distribution_revisions where revision_id=$1',[success.result.revisionId]),error=>error.code==='42501');
   await assert.rejects(admin.query('update private.learning_distribution_intents set plan=plan where request_id=$1',[request.requestId]),error=>error.code==='42501');
@@ -105,11 +108,11 @@ try{
   const replaceContext=await load(course.id),replacement=preview(replaceContext,{productIds:[success.result.productIds[0]],removedProductIds:[success.result.productIds[1]],confirmRetirements:true});
   assert.equal((await run({...replacement,plan:{...replacement.plan,confirmRetirements:false}})).status,400);
   const replacementReview=ok(await run(replacement));
-  const second=ok(await run(commit(replacementReview)));assert.equal(second.result.itemId,course.item);assert.equal(second.result.revisionNumber,2);
+  const second=ok(await run(commit(replacementReview)));assert.equal(second.result.itemId,course.item);assert.equal(second.result.revisionNumber,3);
   assert.deepEqual((await admin.query('select id,source_revision,sequence from private.learning_source_snapshots where source_course_id=$1 order by sequence desc limit 1',[course.id])).rows,headBefore);
   assert.equal((await visible(success.result.revisionId)).length,0,'the replaced revision is not current');assert.equal((await visible(second.result.revisionId))[0].placements.length,1);
   const before=(await admin.query('select before_catalog from private.learning_distribution_revisions where revision_id=$1',[second.result.revisionId])).rows[0].before_catalog;
-  assert.equal(before.publications.length,2);assert.equal(before.revisions[0].id,success.result.revisionId);
+  assert.equal(before.publications.length,2);assert.ok(before.revisions.some(row=>row.id===success.result.revisionId));assert.ok(before.revisions.some(row=>row.id===historicalRevision));
   sources.get(course.id).publicationState='archived';await load(course.id);assert.equal((await visible(second.result.revisionId)).length,0);
   assert.deepEqual(ok(await run(commit(replacementReview))).result,second.result,'old receipt does not republish retired source');
   sources.get(course.id).publicationState='published';await load(course.id);assert.equal((await visible(second.result.revisionId)).length,1);
@@ -156,11 +159,34 @@ try{
   const batchCourse=await registered();const batchReview=ok(await run(preview(await load(batchCourse.id))));const batchSuccess=ok(await run(commit(batchReview)));
   await admin.query("update private.learning_distribution_observations set attempted_at=now()-interval '6 minutes' where course_id=any($1::uuid[])",[[course.id,batchCourse.id]]);
   const lease=(await observerQuery(pool,'select private.claim_distribution_status_batch() as value',[])).rows[0].value;assert.equal(lease.courseIds.length,2);
+  const repeated=status(lease.courseIds[0]);
+  await assert.rejects(observerQuery(pool,'select private.record_distribution_status_batch($1,$2,$3::jsonb)',
+    [lease.leaseId,new Date().toISOString(),JSON.stringify([repeated,{...repeated,courseId:repeated.courseId.toUpperCase()}])]),error=>error.code==='22023','case aliases cannot update one member twice and omit another');
   const claimedNonce=await withSession(pool,originalToken,async db=>{await db.query('reset role');return (await db.query('select private.claim_course_distribution_observation($1) as value',[course.id])).rows[0].value;});assert.ok(claimedNonce);
   await assert.rejects(observerQuery(pool,'select private.record_distribution_status_batch($1,$2,$3::jsonb)',[lease.leaseId,new Date().toISOString(),JSON.stringify(lease.courseIds.map(status).reverse())]),error=>error.code==='40001');
   await observerQuery(pool,'select private.release_distribution_status_batch($1)',[lease.leaseId]);
   sources.delete(batchCourse.id);const gone=await load(batchCourse.id);assert.equal(gone.native,null);assert.deepEqual(ok(await run({operation:'resume',requestId:batchReview.requestId})).result,batchSuccess.result);
   await admin.query("update private.learning_distribution_observations set attempted_at=now()-interval '6 minutes',lease_id=null,lease_until=null where course_id=$1",[batchCourse.id]);await observer.tick();assert.equal((await visible(batchSuccess.result.revisionId)).length,0,'missing source tombstone withholds publication');
+  // Transaction-time authorization is insufficient after a lock wait. Exercise
+  // both original eight-hour assurance and independently shortened session expiry.
+  for(const boundary of ['assurance','session']){
+    const currentToken=token(),currentSession=randomUUID();
+    await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) select $1,$2,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$3",[currentSession,digest(currentToken),owner]);
+    jar[sessionCookie]=currentToken;const currentContext=await load(course.id),currentReview=ok(await run(preview(currentContext,{confirmReplacement:true})));
+    const endAt=new Date(Date.now()+5000).toISOString();
+    if(boundary==='session')await admin.query('update private.sms_sessions set expires_at=$2 where id=$1',[currentSession,endAt]);
+    else await admin.query("update private.sms_sessions set created_at=$2::timestamptz-interval '480 minutes' where id=$1",[currentSession,endAt]);
+    const held=await admin.connect();await held.query('begin');await held.query('select 1 from hub.content_items where id=$1 for update',[course.item]);
+    try{
+      const queued=run(commit(currentReview));let blocked=false;
+      for(let n=0;n<80&&!blocked;n++){blocked=(await admin.query("select exists(select 1 from pg_stat_activity where usename='hub_app_server' and wait_event_type='Lock' and query like 'select private.commit_course_distribution%') as blocked")).rows[0].blocked;if(!blocked)await new Promise(resolve=>setTimeout(resolve,25));}
+      assert.equal(blocked,true,boundary+' crossed while holding catalog lock');
+      await new Promise(resolve=>setTimeout(resolve,Math.max(0,Date.parse(endAt)-Date.now()+100)));await held.query('rollback');
+      assert.equal((await queued).status,401,boundary+' wall-clock expiry denies a queued commit');
+      assert.equal((await admin.query('select result from private.learning_distribution_intents where request_id=$1',[currentReview.requestId])).rows[0].result,null);
+    }finally{await held.query('rollback');held.release();}
+  }
+  jar[sessionCookie]=originalToken;
   await admin.query('update private.sms_sessions set revoked_at=now() where token_hash=$1',[digest(originalToken)]);assert.equal((await run({operation:'context',courseId:course.id})).status,401);
   await admin.query("update private.learning_distribution_observations set attempted_at=now()-interval '6 minutes' where managed");await observer.tick();
   assert.equal((await admin.query('select count(*) from private.learning_distribution_revisions where item_id=$1',[course.item])).rows[0].count,'3');

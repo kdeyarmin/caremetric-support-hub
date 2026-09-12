@@ -1,4 +1,5 @@
-import { withSession,HttpError } from './sms-auth.mjs';
+import { HttpError } from './sms-auth.mjs';
+import { distributionSession } from './distribution-session.mjs';
 import { callNativeAdmin } from './admin-transport.mjs';
 import { parsePortfolioEnvelope } from '../supabase/functions/_shared/portfolioProtocol.ts';
 import { distributionDomain,distributionOperationSchema,distributionContextSchema,distributionPreviewSchema,projectDistributionContext } from '../src/learning/distributionProtocol.ts';
@@ -7,21 +8,21 @@ export function learningDistribution({pool,issue,observer,legacyOptInAllowed=fal
   return async(sessionToken,input,requestSignal)=>{
     let op;try{op=distributionOperationSchema.parse(input);}catch{throw new HttpError(400,'Invalid course distribution request.','invalid_request');}
     const signal=AbortSignal.any([...(requestSignal?[requestSignal]:[]),AbortSignal.timeout(28000)]);
-    const local=work=>withSession(pool,sessionToken,async db=>{
+    const local=work=>distributionSession(pool,sessionToken,signal,async db=>{
       signal.throwIfAborted();await db.query('select hub.authorize_app_command()');await db.query('reset role');
       const result=await work(db);signal.throwIfAborted();return result;
     });
     const intent=requestId=>local(async db=>distributionPreviewSchema.parse((await db.query('select private.get_course_distribution_intent($1) as value',[requestId])).rows[0].value));
     const authority=async()=>{
       const operation={operation:'capabilities'},request={product:'carebase',operation};
-      const capability=await issue(sessionToken,'carebase',operation);
+      const capability=await issue(sessionToken,'carebase',operation,signal);
       await callNativeAdmin(fetchImpl,'https://cmcarebase.com/api/platform-admin/read','Authorization',capability,operation,
         value=>parsePortfolioEnvelope(value,request),false,signal,16384);
     };
     const observe=async courseId=>{
       const nonce=await local(async db=>(await db.query('select private.claim_course_distribution_observation($1) as value',[courseId])).rows[0].value);
       const operation={domain:distributionDomain,operation:'context',courseId};
-      const capability=await issue(sessionToken,'carebase.learning',operation);signal.throwIfAborted();
+      const capability=await issue(sessionToken,'carebase.learning',operation,signal);signal.throwIfAborted();
       const value=await callNativeAdmin(fetchImpl,'https://cmcarebase.com/api/learning-admin/distribution','Authorization',capability,operation,
           async raw=>({native:await projectDistributionContext(raw,operation),generatedAt:raw.generatedAt}),true,signal,4100000);
       // HTTP 404 alone cannot prove a tombstone: an unavailable route can also

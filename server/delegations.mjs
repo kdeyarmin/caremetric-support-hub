@@ -15,6 +15,7 @@ import { nativePackageOperationSchema } from '../src/learning/packageProtocol.ts
 import { learningPackages } from './learning-packages.mjs';
 import { nativeDistributionOperationSchema } from '../src/learning/distributionProtocol.ts';
 import { learningDistribution } from './learning-distribution.mjs';
+import { distributionSession } from './distribution-session.mjs';
 import { supportIdentityOperation } from '../src/support/onboardingProtocol.ts';
 import { supportOnboarding } from './support-onboarding.mjs';
 import { supportRegistration } from './support-registration.mjs';
@@ -63,8 +64,9 @@ async function authorize(db,audience,payload) {
   return payload;
 }
 export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,legacyDistributionOptIn=false}) {
-  const issue = async (sessionToken,audience,payload) => {
-    return withSession(pool,sessionToken,async(db,session) => {
+  const issue = async (sessionToken,audience,payload,signal) => {
+    const authorizeSession=work=>signal?distributionSession(pool,sessionToken,signal,work):withSession(pool,sessionToken,work);
+    return authorizeSession(async(db,session) => {
       await authorize(db,audience,payload);
       const capability=prefix+token();
       // Return to the dedicated connection role only after relational authorization.

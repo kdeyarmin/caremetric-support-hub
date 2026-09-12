@@ -23,13 +23,15 @@ begin
       or has_function_privilege('authenticated',v_signature,'execute') or has_function_privilege('service_role',v_signature,'execute') then
       raise exception 'Distribution function boundary missing.' using errcode='55000';end if;
   end loop;
-  if to_regprocedure('private.course_distribution_available(uuid,uuid)') is null or to_regprocedure('private.validate_course_distribution_plan(jsonb,uuid,boolean)') is null
+  if to_regprocedure('private.current_distribution_actor()') is null or to_regprocedure('private.course_distribution_available(uuid,uuid)') is null or to_regprocedure('private.validate_course_distribution_plan(jsonb,uuid,boolean)') is null
     or to_regprocedure('private.protect_course_distribution()') is null then raise exception 'Distribution policy missing.' using errcode='55000';end if;
   select pg_get_functiondef('private.commit_course_distribution(uuid,text,uuid,boolean)'::regprocedure) into v_definition;
   if position('require_course_distribution_intent' in v_definition)=0 or position('observer_verified_at' in v_definition)=0
     or position('distribution_catalog_digest' in v_definition)=0 or position('observation_id' in v_definition)=0
-    or position('validate_course_distribution_plan' in v_definition)=0 or position('learning_distribution_revisions' in v_definition)=0 then
+    or position('validate_course_distribution_plan' in v_definition)=0 or position('learning_distribution_revisions' in v_definition)=0 or position('current_distribution_actor' in v_definition)=0 then
     raise exception 'Distribution commit guards missing.' using errcode='55000';end if;
+  if position('clock_timestamp' in pg_get_functiondef('private.current_distribution_actor()'::regprocedure))=0
+    or position('480 minutes' in pg_get_functiondef('private.current_distribution_actor()'::regprocedure))=0 then raise exception 'Distribution wall-clock authority missing.' using errcode='55000';end if;
   if position('course_distribution_available' in pg_get_functiondef('private.can_access_content_publication(uuid,uuid,uuid)'::regprocedure))=0
     or position('15 minutes' in pg_get_functiondef('private.course_distribution_available(uuid,uuid)'::regprocedure))=0
     or position('distributed_revision_id' in pg_get_functiondef('private.course_distribution_available(uuid,uuid)'::regprocedure))=0 then

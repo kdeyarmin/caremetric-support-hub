@@ -24,7 +24,9 @@ actor/session, exact source hash/version, complete catalog fingerprint, metadata
 placements and visibility. A changed/reused request ID cannot create another plan.
 
 Commit obtains the current native context again and a matching machine observation,
-then rechecks the current Hub session, product permissions and catalog fingerprint.
+then rechecks the current Hub session, product permissions and catalog fingerprint. After lock waits,
+it separately checks wall-clock session and original eight-hour assurance expiry;
+transaction-time authorization alone cannot extend either deadline.
 The SQL transaction writes the revision, provenance, placements and receipt together.
 An audit/storage failure rolls everything back. Concurrent stale observations are
 rejected; retries return the original immutable receipt. Source bytes remain only
@@ -33,7 +35,7 @@ provider evidence, raw media locations or learner information.
 
 Existing catalog IDs, native launch paths and previous revision rows are retained.
 Private provenance stores the previous item/link/placements and hashes/IDs of prior
-revision rows. Managed new revisions, intent/source bytes and committed receipts
+revision rows. All catalog revisions of a managed item, intent/source bytes and committed receipts
 cannot be updated or deleted. The separate source-preservation head is never moved:
 it may legitimately contain a newer draft than the current published version.
 Expired preview request IDs remain durable and cannot be reused. Preview creation
@@ -42,6 +44,10 @@ current same actor, including prior sessions. Read-only recovery separately prov
 current native administrator authority; only an unexpired review in its original
 session can be committed. An old receipt confirms its historical commit, not the
 availability of that source today.
+
+The distribution HTTP coordinator enforces its 28-second deadline across database
+pool acquisition, authorization/delegation queries and remote calls. Cancelled or
+late-acquired connections are destroyed; lost responses recover immutable receipts.
 
 ## Independent availability observer
 

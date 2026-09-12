@@ -9,6 +9,8 @@ const read=async()=>(await db.query('select hub.get_backend_contract() as value'
 try{
   assertBackendContract(await read());
   const omissions=[
+    'alter function private.current_distribution_actor() rename to fixture_missing_distribution_wallclock',
+    "create or replace function private.current_distribution_actor() returns jsonb language sql security definer set search_path='' as $$select private.course_creation_actor()$$",
     'alter table private.learning_distribution_intents rename to fixture_missing_distribution_intents',
     'alter function private.commit_course_distribution(uuid,text,uuid,boolean) rename to fixture_missing_distribution_commit',
     'alter function private.release_distribution_status_batch(uuid) rename to fixture_missing_distribution_retry',
@@ -28,5 +30,5 @@ try{
     const sql=(await db.query("select format('create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='''' as %L','select '||quote_literal($1::text)||'::jsonb') as sql",[JSON.stringify(future)])).rows[0].sql;
     await db.query(sql);await db.query(gate);assert.deepEqual(await read(),future);assertBackendContract(await read());
   }finally{await db.query('rollback');}
-  console.log('Distribution declaration rejected eleven incomplete permission, observer, immutable revision and freshness boundaries, preserving independent features.');
+  console.log('Distribution declaration rejected thirteen incomplete permission, observer, immutable revision and freshness boundaries, preserving independent features.');
 }finally{await db.end();}
