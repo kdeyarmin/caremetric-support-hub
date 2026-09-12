@@ -1,5 +1,6 @@
 import { digest, token, transaction, withSession, HttpError } from './sms-auth.mjs';
 import { parsePortfolioRequest, parsePortfolioEnvelope } from '../supabase/functions/_shared/portfolioProtocol.ts';
+import { isOperationalRead } from '../supabase/functions/_shared/operationsProtocol.ts';
 import { adminRegistry } from '../supabase/functions/_shared/adminRegistry.ts';
 import { parsePortfolioCommand, parseCommandEnvelope } from '../supabase/functions/_shared/adminCommandProtocol.ts';
 import { callNativeAdmin } from './admin-transport.mjs';
@@ -13,6 +14,8 @@ import { nativeCreationOperationSchema } from '../src/learning/creationProtocol.
 import { learningCreation } from './learning-creation.mjs';
 import { nativePackageOperationSchema } from '../src/learning/packageProtocol.ts';
 import { learningPackages } from './learning-packages.mjs';
+import { providerOperationSchema } from '../src/learning/providerPolicyProtocol.ts';
+import { learningProvider } from './learning-provider.mjs';
 import { supportIdentityOperation } from '../src/support/onboardingProtocol.ts';
 import { supportOnboarding } from './support-onboarding.mjs';
 import { supportRegistration } from './support-registration.mjs';
@@ -45,6 +48,11 @@ async function authorize(db,audience,payload) {
       return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
     }
     parsePortfolioRequest({product:audience,...payload});
+    // Operational metadata requires the original, bounded SMS assurance window.
+    // Keep the read audience: session fields must never grant a command capability.
+    if (audience==='carebase' && isOperationalRead(payload.operation)) {
+      return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
+    }
     return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
   }
   if (audience==='carebase.command') {
@@ -52,7 +60,7 @@ async function authorize(db,audience,payload) {
     return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
   }
   if (audience==='carebase.learning') {
-    nativeLearningOperationSchema.or(nativeAuthoringOperationSchema).or(nativeCreationOperationSchema).or(nativePackageOperationSchema).parse(payload);
+    nativeLearningOperationSchema.or(nativeAuthoringOperationSchema).or(nativeCreationOperationSchema).or(nativePackageOperationSchema).or(providerOperationSchema).parse(payload);
     return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
   }
   if (audience!=='media') throw new HttpError(403,'Unsupported authorization audience.');
@@ -77,6 +85,7 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch}) {
     authoring: learningAuthoring({pool,issue,fetchImpl}),
     creation: learningCreation({pool,issue,fetchImpl}),
     package: learningPackages({pool,issue,fetchImpl}),
+    provider: learningProvider({pool,issue,fetchImpl}),
     onboarding: supportOnboarding({pool,issue,fetchImpl}),
     registration: supportRegistration({pool,issue,provider,fetchImpl}),
     billingCommand: billingCommands({pool,issue,fetchImpl}),
@@ -104,7 +113,11 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch}) {
       if (!entry.endpoint || !['carebase','breathe','caremetric-emr','pennsync','caremetric-go','intel'].includes(request.product)) throw new HttpError(503,'This application has not connected its administrator session.','unconfigured');
       const operation=request.operation;
       const capability=await issue(sessionToken,request.product,operation);
-      return callNativeAdmin(fetchImpl,entry.endpoint,entry.authorizationHeader ?? 'Authorization',capability,operation,value=>parsePortfolioEnvelope(value,request));
+      const result=await callNativeAdmin(fetchImpl,entry.endpoint,entry.authorizationHeader ?? 'Authorization',capability,operation,value=>parsePortfolioEnvelope(value,request));
+      // A logout, revocation or role change while the native read was in flight
+      // must prevent the response from reaching the browser.
+      await withSession(pool,sessionToken,db=>authorize(db,request.product,operation));
+      return result;
     },
     async command(sessionToken,input) {
       let request;
