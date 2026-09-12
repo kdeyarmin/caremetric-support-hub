@@ -13,6 +13,7 @@ import { CreditPolicyEditor } from "./CreditPolicyEditor";
 import { CreditPolicyReview } from "./CreditPolicyReview";
 import type { CreditPolicyChanges } from "./creditPolicyProtocol";
 import { PackagePanel } from "./PackagePanel";
+import { DistributionPanel } from "./DistributionPanel";
 
 async function run(operation: AuthoringOperation) {
   const op = authoringOperationSchema.parse(operation);
@@ -150,5 +151,6 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
       })}>Confirm and apply this change</button>
     </div>}
     {result && <p role="status">CareBase confirmed version {result.versionNumber} as {result.status}{result.replayed ? " (previously completed)" : ""}.</p>}
+    <DistributionPanel courseId={courseId} disabled={busy} />
   </section>;
 }
