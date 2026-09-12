@@ -56,6 +56,9 @@ try{
  assert.equal(await snapshotCount(),0);
  const first=await migrate(preserve);assert.equal(first.status,200,JSON.stringify(first.body));assert.equal(first.body.replayed,false);
  const concurrent=await Promise.all([migrate(preserve),migrate(preserve)]);assert.ok(concurrent.every(row=>row.status===200&&row.body.replayed));assert.equal(await snapshotCount(),1);
+ const beforeReviewCalls=nativeCalls,review=await migrate({operation:'review',sourceRevision:first.body.sourceRevision});
+ assert.equal(review.status,200);assert.equal(review.body.courses.length,1);assert.equal(nativeCalls,beforeReviewCalls);
+ assert.equal(JSON.stringify(review.body).includes('unmatched@example.test'),false);assert.equal(JSON.stringify(review.body).includes('correct_answer_json'),false);
  const stored=(await admin.query('select source_payload from private.pennsync_learning_snapshots where id=$1',[first.body.snapshotId])).rows[0].source_payload;
  assert.equal(stored,payload);assert.equal(JSON.parse(stored).records.TrainingCompletion[0].fields.nurse_email,'unmatched@example.test');
  const originalDrafts=Number((await admin.query('select count(*) from private.learning_courses')).rows[0].count);
@@ -63,6 +66,7 @@ try{
  const next=await inspect();const nextOp={operation:'preserve',sourceRevision:next.body.sourceRevision,expectedHeadRevision:first.body.sourceRevision,reviewed:true};
  assert.equal((await migrate({...nextOp,expectedHeadRevision:null})).status,409);assert.equal(await snapshotCount(),1);
  const second=await migrate(nextOp);assert.equal(second.status,200);assert.equal(await snapshotCount(),2);
+ assert.equal((await migrate({operation:'review',sourceRevision:first.body.sourceRevision})).status,409);
  payload=original;const replay=await migrate(preserve);assert.equal(replay.status,200);assert.equal(replay.body.snapshotId,first.body.snapshotId);assert.equal(replay.body.headRevision,second.body.sourceRevision);
  assert.equal(Number((await admin.query('select count(*) from private.learning_courses')).rows[0].count),originalDrafts);
  assert.equal(Number((await admin.query('select count(*) from private.learning_enrollments where user_id=$1',[owner])).rows[0].count),0);
@@ -71,6 +75,7 @@ try{
   assert.equal((await admin.query("select has_table_privilege($1,'private.pennsync_learning_snapshots','SELECT,INSERT,UPDATE,DELETE') allowed",[role])).rows[0].allowed,false);
  }
  for(const role of ['anon','authenticated','service_role'])assert.equal((await admin.query("select has_function_privilege($1,'private.pennsync_learning_preserve(text,text,text,jsonb,timestamptz)','EXECUTE') allowed",[role])).rows[0].allowed,false);
+ for(const role of ['anon','authenticated','service_role'])assert.equal((await admin.query("select has_function_privilege($1,'private.pennsync_learning_review_source(text)','EXECUTE') allowed",[role])).rows[0].allowed,false);
  // Hold the real advisory lock until authority or the request deadline expires.
  // The source must never be committed after either condition changes.
  const blocker=await admin.connect();
@@ -108,6 +113,7 @@ try{
  revokeAfterRead=true;assert.equal((await inspect()).status,401);revokeAfterRead=false;
  await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
  await admin.query('update private.sms_identities set revoked_at=now() where user_id=$1',[owner]);assert.equal((await inspect()).status,401);
+ assert.equal((await migrate({operation:'review',sourceRevision:second.body.sourceRevision})).status,401);
  assert.equal(await snapshotCount(),2);
  console.log('PennSync migration PostgreSQL/HTTP passed: private exact source/history preservation, current SMS/native authority, replay, concurrency, stale revisions, no learner grants or publication, one-use capabilities and direct-role denial.');
 }finally{await new Promise(resolve=>server.close(resolve));await pool.end();await admin.end();}

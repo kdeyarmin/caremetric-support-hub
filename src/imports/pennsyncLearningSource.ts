@@ -12,6 +12,7 @@ export type PennsyncSource=z.infer<typeof pennsyncSourceSchema>;
 export const pennsyncNativeOperation=z.strictObject({operation:z.literal('learning.source.snapshot')});
 export const pennsyncMigrationOperation=z.discriminatedUnion('operation',[
   z.strictObject({operation:z.literal('inspect')}),
+  z.strictObject({operation:z.literal('review'),sourceRevision:hash}),
   z.strictObject({operation:z.literal('preserve'),sourceRevision:hash,expectedHeadRevision:hash.nullable(),reviewed:z.literal(true)}),
 ]);
 export const pennsyncSummarySchema=z.strictObject({courses:z.number().int().nonnegative(),modules:z.number().int().nonnegative(),standaloneModules:z.number().int().nonnegative(),

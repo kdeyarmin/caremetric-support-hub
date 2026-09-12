@@ -2,6 +2,8 @@ import {withSession,HttpError} from './sms-auth.mjs';
 import {callNativeAdmin} from './admin-transport.mjs';
 import {adminRegistry} from '../supabase/functions/_shared/adminRegistry.ts';
 import {pennsyncMigrationOperation,pennsyncMigrationResult,validatePennsyncSource,summarizePennsyncSource} from '../src/imports/pennsyncLearningSource.ts';
+import {convertPennsyncCourses} from '../src/imports/pennsyncCourseImport.ts';
+import {reviewPennsyncCourses} from '../src/imports/pennsyncCourseReview.ts';
 
 export function pennsyncLearningMigration({pool,issue,fetchImpl=fetch}) {
   return async(sessionToken,input,requestSignal)=>{
@@ -21,6 +23,19 @@ export function pennsyncLearningMigration({pool,issue,fetchImpl=fetch}) {
       return result;
     });
     const run=async()=>{
+      if(operation.operation==='review'){
+        const payload=await local(async db=>(await db.query('select private.pennsync_learning_review_source($1) as value',[operation.sourceRevision])).rows[0].value);
+        const source=await validatePennsyncSource(payload,operation.sourceRevision);
+        if(source.records.TrainingCourse.length>500)throw new HttpError(400,'This source requires a batched course migration.','invalid_request');
+        const summary=summarizePennsyncSource(source);
+        const result=reviewPennsyncCourses(await convertPennsyncCourses(source,operation.sourceRevision),operation.sourceRevision,summary.standaloneModules,summary.unmatchedLegacyLearners);
+        if(Buffer.byteLength(JSON.stringify(result))>7500000)throw new HttpError(400,'Course review is too large.','invalid_request');
+        return local(async db=>{
+          // Authorization and the preserved head can change during conversion.
+          await db.query('select private.pennsync_learning_review_source($1) as value',[operation.sourceRevision]);
+          return result;
+        });
+      }
       await local(async db=>(await db.query('select private.pennsync_learning_head() as value')).rows[0].value);
       const native={operation:'learning.source.snapshot'};
       signal.throwIfAborted();
