@@ -80,7 +80,7 @@ or publishes a changed version. It remains independent of an owner's SMS lifetim
 
 Apply the reviewed `232209` migration and additive API-4 `234549` declaration before
 shipping this server/frontend (`learning.distribution.v1`). `schema.sql` includes
-the full chronological DocStudio + distribution assembly; migrations are primary.
+the full chronological DocStudio, distribution and PennSync source assembly; migrations are primary.
 The schema feature does not assert that native code, the observer token or app
 consumers have been deployed. Native capability `learning.distribution.context`
 is accepted only for CareBase and the existing native authoring flags govern it.
