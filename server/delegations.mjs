@@ -26,6 +26,8 @@ import { nativeBillingCommandSchema } from '../supabase/functions/_shared/billin
 import { billingCommands } from './billing-commands.mjs';
 import { nativeCheckoutCommandSchema } from '../supabase/functions/_shared/checkoutCommandProtocol.ts';
 import { checkoutCommands } from './checkout-commands.mjs';
+import { pennsyncNativeOperation } from '../src/imports/pennsyncLearningSource.ts';
+import { pennsyncLearningMigration } from './pennsync-learning-migration.mjs';
 
 const prefix = 'cmh_';
 export const validDelegation = value => typeof value==='string' && /^cmh_[A-Za-z0-9_-]{43}$/.test(value);
@@ -45,6 +47,12 @@ async function authorize(db,audience,payload) {
     return {...asset,range:range?.header ?? null};
   }
   if (['carebase','breathe','caremetric-emr','pennsync','caremetric-go','intel'].includes(audience)) {
+    if(payload?.operation==='learning.source.snapshot') {
+      if(audience!=='pennsync')throw new HttpError(403,'Unsupported learning source.');
+      pennsyncNativeOperation.parse(payload);
+      await db.query('select hub.authorize_app_command()');
+      return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
+    }
     if(payload?.operation==='support.identity.resolve') {
       supportIdentityOperation.parse(payload);
       await db.query('select hub.authorize_app_command()');
@@ -95,6 +103,7 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
     registration: supportRegistration({pool,issue,provider,fetchImpl}),
     billingCommand: billingCommands({pool,issue,fetchImpl}),
     checkoutCommand: checkoutCommands({pool,issue,fetchImpl}),
+    pennsyncMigration: pennsyncLearningMigration({pool,issue,fetchImpl}),
     async consume(capability,audience) {
       if (!validDelegation(capability)) throw new HttpError(401,'Invalid authorization.');
       return transaction(pool,async db => {
