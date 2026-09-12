@@ -84,6 +84,7 @@ function DistributionEditor({ courseId, disabled = false }: { courseId: string; 
   const allowed = !!context && !!material && !!source && context.observerConfigured && (!context.catalog.legacy || context.catalog.availability.managed || context.legacyOptInAllowed);
   const locked = busy || disabled;
   const removed = context?.catalog.productIds.filter(id => !products.includes(id)) ?? [];
+  const requiresReplacement = !!context && (context.catalog.status === "published" || context.catalog.productIds.length > 0);
   const eligible = context?.products.filter(product => product.eligible) ?? [];
   const productName = (id: string) => context?.products.find(product => product.id === id)?.name ?? id;
   const parsedPlan = distributionPlanSchema.safeParse({ courseId, versionId: context?.native?.currentVersionId, sourceRevision: source?.sourceRevision,
@@ -128,11 +129,11 @@ function DistributionEditor({ courseId, disabled = false }: { courseId: string; 
         </select></label>
         <p>Catalog visibility does not grant a learner account, course assignment, or credit entitlement.</p>
         <label>Reason for distribution<textarea value={reason} maxLength={500} onChange={event => { edit(); setReason(event.target.value); }} /></label>
-        {context.catalog.status === "published" && <label className="learning-checkbox"><input type="checkbox" checked={replacement} onChange={event => setReplacement(event.target.checked)} />I confirm replacing the current published catalog revision.</label>}
+        {requiresReplacement && <label className="learning-checkbox"><input type="checkbox" checked={replacement} onChange={event => setReplacement(event.target.checked)} />I confirm replacing the current or scheduled app listings.</label>}
         {!!removed.length && <><p>Listings to remove: {removed.map(productName).join(", ")}.</p>
           <label className="learning-checkbox"><input type="checkbox" checked={retirements} onChange={event => setRetirements(event.target.checked)} />I confirm removing these app listings.</label></>}
         <label className="learning-checkbox"><input type="checkbox" checked={reviewed} onChange={event => setReviewed(event.target.checked)} />I reviewed this exact published material, its policies, and the catalog choices above.</label>
-        <button type="button" className="button button-primary" disabled={!parsedPlan.success || (context.catalog.status === "published" && !replacement)} onClick={() => void action(async signal => {
+        <button type="button" className="button button-primary" disabled={!parsedPlan.success || (requiresReplacement && !replacement)} onClick={() => void action(async signal => {
           if (!parsedPlan.success) return;
           const saved = { requestId: crypto.randomUUID(), plan: parsedPlan.data }; setPending(saved);
           await receive(await runDistribution({ operation: "preview", ...saved }, signal), saved.requestId, signal, saved.plan);
@@ -149,7 +150,7 @@ function DistributionEditor({ courseId, disabled = false }: { courseId: string; 
         <p>{preview.plan.metadata.title} · {preview.plan.accessLevel} visibility · Version {preview.plan.versionId}</p>
         <p>{preview.plan.metadata.summary}</p><p>Category: {preview.plan.metadata.category ?? "None"}. Duration: {preview.plan.metadata.durationMinutes ?? "Unspecified"}.</p>
         <p>Apps: {preview.plan.productIds.map(productName).join(", ")}. Removed: {preview.plan.removedProductIds.length ? preview.plan.removedProductIds.map(productName).join(", ") : "None"}.</p>
-        <p>{preview.replacesPublished ? "Replaces the published catalog revision." : "Creates a published catalog revision."}</p>
+        <p>{preview.replacesPublished ? "Replaces current or scheduled app listings." : "Creates a published catalog revision."}</p>
         <p>Reason: {preview.plan.reason}</p><p style={{ overflowWrap: "anywhere" }}>Reviewed source SHA-256: {preview.plan.sourceRevision}</p>
         <p>Request {preview.requestId}. Review expires {new Date(preview.expiresAt).toLocaleString()}.</p>
         {preview.result ? <p>Catalog revision {preview.result.revisionNumber} completed {new Date(preview.result.publishedAt).toLocaleString()}. Item {preview.result.itemId}.</p> : <>

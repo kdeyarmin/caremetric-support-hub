@@ -12,7 +12,7 @@ const app1 = "90100000-0000-0000-0000-000000000001", app2 = "90100000-0000-0000-
 function context(): DistributionContext {
   return { native: { courseId, publicationState: "published", currentVersionId: versionId, currentVersionState: "published", source: { payload: JSON.stringify(fixture), sourceRevision: sha } },
     catalog: { itemId: "90200000-0000-0000-0000-000000000001", status: "draft", accessLevel: "staff", catalogDigest: digest,
-      metadata: { title: "Shared course", summary: "A catalog description", category: "Clinical", durationMinutes: 240 }, productIds: [app1], legacy: false,
+      metadata: { title: "Shared course", summary: "A catalog description", category: "Clinical", durationMinutes: 240 }, productIds: [], legacy: false,
       availability: { managed: true, state: "unverified", observedAt: null, validUntil: null } },
     products: [{ id: app1, slug: "carebase", name: "CareBase", eligible: true }, { id: app2, slug: "breathe", name: "Breathe", eligible: true }, { id: app3, slug: "closed", name: "Closed app", eligible: false }],
     observerConfigured: true, legacyOptInAllowed: false, requests: [] };
@@ -38,6 +38,7 @@ function setup(value = context()) {
 }
 async function review() {
   await screen.findByText("Published version 2 · Original version title");
+  if (!(screen.getByLabelText("CareBase") as HTMLInputElement).checked) fireEvent.click(screen.getByLabelText("CareBase"));
   fireEvent.change(screen.getByLabelText("Reason for distribution"), { target: { value: "Review this exact shared course" } });
   fireEvent.click(screen.getByLabelText(/I reviewed this exact published material/));
 }
@@ -62,6 +63,17 @@ it("requires named replacement and app removal acknowledgements", async () => {
   fireEvent.click(screen.getByLabelText(/I confirm removing/)); fireEvent.click(button);
   await screen.findByRole("button", { name: "Publish reviewed distribution" });
   expect(vi.mocked(runDistribution).mock.calls[1]![0]).toMatchObject({ plan: { productIds: [app1], removedProductIds: [app2], confirmReplacement: true, confirmRetirements: true } });
+});
+it("requires explicit replacement for scheduled placements before the catalog is published", async () => {
+  const value = context(); value.catalog.status = "draft"; value.catalog.productIds = [app1]; setup(value);
+  await review();
+  const button = screen.getByRole("button", { name: "Preview distribution" });
+  expect(button.matches(":disabled")).toBe(true);
+  expect(runDistribution).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByLabelText("I confirm replacing the current or scheduled app listings."));
+  fireEvent.click(button);
+  await screen.findByRole("button", { name: "Publish reviewed distribution" });
+  expect(vi.mocked(runDistribution).mock.calls[1]![0]).toMatchObject({ plan: { productIds: [app1], confirmReplacement: true } });
 });
 it.each(["observer", "legacy", "unpublished"])("does not offer a write when %s is unavailable", async mode => {
   const value = context();
