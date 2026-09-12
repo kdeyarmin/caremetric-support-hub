@@ -30,3 +30,11 @@ it('cancellation bounds ticket issuance and prevents a late network write',async
   const pending=run('x'.repeat(43),request,controller.signal);controller.abort();await expect(pending).rejects.toMatchObject({status:503});
   resolveIssue('cmh_'+'x'.repeat(43));await Promise.resolve();expect(fetchImpl).not.toHaveBeenCalled();
 });
+it('cancellation bounds the final authority session before any late query runs',async()=>{
+  let resolve,started;const query=vi.fn(),release=vi.fn(),controller=new AbortController();
+  const waiting=new Promise(done=>{started=done;});
+  const pool={connect:()=>{started();return new Promise(done=>{resolve=done;});}};
+  const run=operationalConfiguration({pool,issue:async()=> 'cmh_'+'x'.repeat(43),fetchImpl:vi.fn(async()=>Response.json(configurationContext))});
+  const pending=run('x'.repeat(43),request,controller.signal);await waiting;controller.abort();await expect(pending).rejects.toMatchObject({status:503});
+  resolve({query,release});await new Promise(done=>setTimeout(done,0));expect(release).toHaveBeenCalledWith(true);expect(query).not.toHaveBeenCalled();
+});

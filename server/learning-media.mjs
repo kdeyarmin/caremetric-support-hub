@@ -99,7 +99,8 @@ export function learningMedia({pool,issue,fetchImpl=fetch,timeoutMs=120000,metad
         // A receipt is immutable observation, not permission to repeat attachment.
         if(intent.result){await local(async()=>{});return intent.result;}
         const current=await context();
-        if(!intent.canFinishThisSession||intent.sourceRevision!==current.sourceRevision||current.block.generationState==='pending')throw fail(409,'conflict');
+        if(!intent.canFinishThisSession||intent.sourceRevision!==current.sourceRevision||current.block.generationState==='pending'
+          ||(current.block.type==='pdf')!==(intent.mimeType==='application/pdf'))throw fail(409,'conflict');
         await requireHead(intent.sourceRevision);
         const result=verifyMediaReceipt(await native({operation:'media.finish',operationId:op.operationId}),intent);
         await local(async()=>{});return result;

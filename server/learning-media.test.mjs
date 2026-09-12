@@ -63,6 +63,10 @@ it('rejects another session write while retaining status observation',async()=>{
   expect(await f.run(token,{...mediaBase,operation:'media.status',operationId:f.intent.operationId})).toHaveProperty('canFinishThisSession',false);
   await expect(f.run(token,{...mediaBase,operation:'media.finish',operationId:f.intent.operationId})).rejects.toMatchObject({status:409});expect(f.writes()).toBe(0);
 });
+it('rejects finishing an intent whose MIME no longer matches the current block type',async()=>{
+  const f=setup();f.intent.mimeType='video/mp4';
+  await expect(f.run(token,{...mediaBase,operation:'media.finish',operationId:f.intent.operationId})).rejects.toMatchObject({status:409});expect(f.writes()).toBe(0);
+});
 it('retains immutable receipt observation after its source lesson is removed',async()=>{
   const f=setup(),finish={...mediaBase,operation:'media.finish',operationId:f.intent.operationId};
   await f.run(token,finish);f.removeBlock();f.moveHead();const priorCalls=f.fetchImpl.mock.calls.length;

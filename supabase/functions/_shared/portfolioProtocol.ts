@@ -132,7 +132,7 @@ export function parsePortfolioEnvelope(input: unknown, request: PortfolioRequest
     if (row.apiVersion !== 1 || !Array.isArray(row.operations) || row.operations.length > 100 || row.operations.some(value => typeof value !== "string")) throw new Error("Invalid capabilities");
     const revision = nullableString(row.sourceRevision, 64);
     if (revision !== null && !/^[a-f0-9]{7,64}$/i.test(revision)) throw new Error("Invalid source revision");
-    data = { apiVersion: 1, operations: [...new Set(row.operations.filter(value => portfolioOperations.includes(value as PortfolioOperationName) && (product === "carebase" || !isOperationalRead(value) && value !== "learning.distribution.context" && value !== "learning.media.v1" && !learningPackageCapabilities.includes(value as typeof learningPackageCapabilities[number]))))] as PortfolioOperationName[], sourceRevision: revision };
+    data = { apiVersion: 1, operations: [...new Set(row.operations.filter(value => portfolioOperations.includes(value as PortfolioOperationName) && (product === "carebase" || !isOperationalRead(value) && value !== "learning.distribution.context" && value !== "learning.media.v1" && value !== "operations.config.v1" && !learningPackageCapabilities.includes(value as typeof learningPackageCapabilities[number]))))] as PortfolioOperationName[], sourceRevision: revision };
   } else if (operation.operation === "overview" && product === "intel") {
     if (row.organizationCount !== null || row.activeUserCount !== null || row.subscriptionCount !== undefined) throw new Error("Unverified Intel totals");
     data = { organizationCount: null, activeUserCount: null, registeredUserCount: count(row.registeredUserCount) };

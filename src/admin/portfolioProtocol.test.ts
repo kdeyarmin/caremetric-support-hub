@@ -30,6 +30,10 @@ describe("portfolio contracts", () => {
     const result = parse("capabilities", { apiVersion: 1, operations: ["users.list", "users.list", "future.write"], sourceRevision: "abcdef1234567", secret: "private" });
     expect(result.data).toEqual({ apiVersion: 1, operations: ["users.list"], sourceRevision: "abcdef1234567" });
   });
+  it("keeps CareBase-only capabilities out of other product projections", () => {
+    const result = parse("capabilities", { apiVersion: 1, operations: ["users.list", "learning.media.v1", "operations.config.v1"], sourceRevision: null });
+    expect(result.data).toEqual({ apiVersion: 1, operations: ["users.list"], sourceRevision: null });
+  });
   it.each([{ apiVersion: 2, operations: [], sourceRevision: null }, { apiVersion: 1, operations: [42], sourceRevision: null }, { apiVersion: 1, operations: [], sourceRevision: "unverified branch" }])("rejects invalid capability metadata %j", data => expect(() => parse("capabilities", data)).toThrow());
   it("preserves opaque Breathe staff identities and strips unreviewed identity fields", () => {
     const result = parse("users.list", { ...page, items: [{ ...staff, passwordHash: "private", patient: { medicalRecord: "private" } }] });
