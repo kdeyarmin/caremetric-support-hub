@@ -29,7 +29,6 @@ jobs:
           assert hashlib.sha256(helper).hexdigest()=='4bc2f1cfd51384e85d96b0db1a582f639ab97cec25b6e7a588475cde16c65c80'
           subprocess.run(['python3','.github/review-apply.py'],check=True)
           subprocess.run(['git','add','server/operational-configuration.mjs','server/operational-configuration.test.mjs','server/learning-media.mjs','server/learning-media.test.mjs','src/learning/DistributionPanel.tsx','src/learning/DistributionPanel.test.tsx','src/admin/portfolioProtocol.test.ts','supabase/functions/_shared/portfolioProtocol.ts'],check=True)
-          subprocess.run(['git','rm','.github/review-apply.py','.github/workflows/review-source-snapshot.yml'],check=True)
           subprocess.run(['git','diff','--cached','--check'],check=True)
           def git(*args):return subprocess.check_output(['git',*args]).decode().strip()
           entries=[]
