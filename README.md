@@ -226,3 +226,12 @@ repositories, and the exact owner-controlled prerequisites that remain.
 See [docs/VIDEO_GOVERNANCE.md](docs/VIDEO_GOVERNANCE.md) for the verified
 HeyGen/Storage inventory and the caption, checksum, and entitlement gates for
 reviewed media uploads and source-course transfer.
+
+
+### Governed CareBase lesson media
+
+The lesson media controls use the native `learning.media.v1` capability. Uploads are streamed to the fixed CareBase media endpoint with exact size and SHA-256 binding (PDF up to 25 MiB; MP4/WebM up to 100 MiB). A separate confirmation attaches a verified immutable asset to the current draft. Each step rechecks the original SMS authority and the preserved source revision. Stored locations and playback tokens never enter the Hub source snapshot.
+
+Saved native operation IDs support receipt observation across sessions; a new session cannot finish an older session's pending upload. Committed receipts do not advance the Hub source head: reload and explicitly preserve the resulting material before editing again. PDF and video previews use the authenticated same-origin byte route with bounded single ranges. Native learner access remains governed by the native assignment/published-course resolver.
+
+The additive `learning.media.v1` backend feature declares support for optional immutable source references. Native writes additionally require the separately deployed `CAREMETRIC_ADMIN_MEDIA_ENABLED` flag (default false), the native administrator/command flags, and current native authorization. This repository change alone does not enable a native deployment. Integrity/format verification is separate from human course-content review.

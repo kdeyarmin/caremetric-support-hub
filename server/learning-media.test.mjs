@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 import { PassThrough, Readable } from 'node:stream';
+import { request } from 'node:http';
 import { expect,it,vi } from 'vitest';
 import { learningMedia,checkedMediaStream,mediaRange,parseMediaUploadHeader } from './learning-media.mjs';
+import { appServer } from './http.mjs';
 import { mediaBase,mediaFixture,mediaRevision } from '../src/learning/testFixtures/media.ts';
 const token='x'.repeat(43),bytes=Buffer.from('%PDF-1.7');
 function setup(){
@@ -77,4 +79,22 @@ it('rejects ambiguous metadata and cancels stalled incoming streams',async()=>{
   const body=new PassThrough(),controller=new AbortController(),checked=checkedMediaStream(body,f.upload,controller.signal);
   const consume=(async()=>{for await(const chunk of checked.stream)void chunk;})();body.write(bytes.subarray(0,2));controller.abort();
   await expect(consume).rejects.toThrow();expect(body.destroyed).toBe(true);expect(checked.completed()).toBe(false);
+});
+it('actual HTTP upload deadline destroys a client that sends two bytes and never finishes',async()=>{
+  const f=setup(),query=f.query,issue=f.issue,fetchImpl=f.fetchImpl;
+  const run=learningMedia({pool:{connect:async()=>({query,release:vi.fn()})},issue,fetchImpl,timeoutMs:100});
+  const server=appServer({delegations:{courseMedia:run},origins:['https://hub.test']});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  let client;
+  try{
+    await new Promise((resolve,reject)=>{
+      const timer=setTimeout(()=>{client?.destroy();reject(new Error('Upload did not stop'));},3000);
+      client=request({hostname:'127.0.0.1',port:server.address().port,path:'/api/course-media/upload',method:'POST',
+        headers:{Origin:'https://hub.test',Cookie:'__Host-caremetric_session='+token,'Content-Type':'application/pdf','Content-Length':'8',
+          'x-caremetric-media-request':Buffer.from(JSON.stringify(f.upload)).toString('base64url')}},response=>{
+        response.resume();response.once('end',()=>{clearTimeout(timer);expect(response.statusCode).not.toBe(200);resolve();});});
+      client.once('error',()=>{clearTimeout(timer);resolve();});client.flushHeaders();client.write(bytes.subarray(0,2));
+    });
+    expect(f.writes()).toBe(0);expect(f.issue.mock.calls.some(([, ,op])=>op.operation==='media.upload')).toBe(true);
+  }finally{client?.destroy();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
 });
