@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
-import { withSession, HttpError } from './sms-auth.mjs';
+import { HttpError } from './sms-auth.mjs';
+import { boundedSession } from './bounded-session.mjs';
 import { MEDIA_METADATA_LIMIT, parseHubMediaOperation, nativeMediaOperation, projectMediaEnvelope,
   projectMediaContextView, verifyMediaReceipt } from '../src/learning/mediaProtocol.ts';
 
@@ -48,15 +49,15 @@ export function mediaRange(value,size) {
   if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||start>=size||end<start)throw fail(416,'invalid_range');
   return {start,end};
 }
-export function learningMedia({pool,issue,fetchImpl=fetch,timeoutMs=120000}) {
+export function learningMedia({pool,issue,fetchImpl=fetch,timeoutMs=120000,metadataTimeoutMs=12000}) {
   return async(sessionToken,input,{body,contentType,contentLength,rangeHeader,headOnly=false,signal:requestSignal}={})=>{
     let op;try{op=parseHubMediaOperation(input);}catch{throw fail(400,'invalid_request');}
     if(op.operation==='media.upload'){
       if(!body||contentType!==op.mimeType)throw fail(400,'invalid_request');
       if(contentLength!==undefined&&(!/^(0|[1-9][0-9]*)$/.test(contentLength)||Number(contentLength)!==op.sourceBytes))throw fail(400,'invalid_request');
     }else if(body)throw fail(400,'invalid_request');
-    const signal=AbortSignal.any([...(requestSignal?[requestSignal]:[]),AbortSignal.timeout(timeoutMs)]);
-    const local=work=>withSession(pool,sessionToken,async db=>{
+    const signal=AbortSignal.any([...(requestSignal?[requestSignal]:[]),AbortSignal.timeout(['media.upload','media.read'].includes(op.operation)?timeoutMs:metadataTimeoutMs)]);
+    const local=work=>boundedSession(pool,sessionToken,signal,async db=>{
       signal.throwIfAborted();await db.query('select hub.authorize_app_command()');signal.throwIfAborted();return work(db);
     });
     const head=async db=>{
@@ -65,7 +66,7 @@ export function learningMedia({pool,issue,fetchImpl=fetch,timeoutMs=120000}) {
     };
     const requireHead=async expected=>local(async db=>{if(await head(db)!==expected)throw fail(409,'conflict');});
     const native=async(metadata,uploadBody)=>{
-      signal.throwIfAborted();const capability=await issue(sessionToken,'carebase.learning',metadata);signal.throwIfAborted();
+      signal.throwIfAborted();const capability=await issue(sessionToken,'carebase.learning',metadata,signal);signal.throwIfAborted();
       const streamed=uploadBody?checkedMediaStream(uploadBody,metadata,signal):null;
       const headers={Authorization:'Bearer '+capability,'Content-Type':streamed?metadata.mimeType:'application/json'};
       if(streamed)headers['x-caremetric-media-request']=Buffer.from(JSON.stringify(metadata),'utf8').toString('base64url');
@@ -87,9 +88,8 @@ export function learningMedia({pool,issue,fetchImpl=fetch,timeoutMs=120000}) {
     };
     const run=async()=>{
       await local(async()=>{});
-      const current=await context();
-      if(op.operation==='media.context')return local(async db=>{
-        const headRevision=await head(db);return projectMediaContextView({...current,headRevision,sourcePreserved:headRevision===current.sourceRevision},op);});
+      if(op.operation==='media.context'){const current=await context();return local(async db=>{
+        const headRevision=await head(db);return projectMediaContextView({...current,headRevision,sourcePreserved:headRevision===current.sourceRevision},op);});}
       if(op.operation==='media.status'||op.operation==='media.finish'){
         // Exact operation IDs disambiguate request IDs reused in another session.
         const intent=await native({operation:'media.status',operationId:op.operationId});
@@ -98,11 +98,13 @@ export function learningMedia({pool,issue,fetchImpl=fetch,timeoutMs=120000}) {
         if(!intent)throw fail(404,'notfound');
         // A receipt is immutable observation, not permission to repeat attachment.
         if(intent.result){await local(async()=>{});return intent.result;}
+        const current=await context();
         if(!intent.canFinishThisSession||intent.sourceRevision!==current.sourceRevision||current.block.generationState==='pending')throw fail(409,'conflict');
         await requireHead(intent.sourceRevision);
         const result=verifyMediaReceipt(await native({operation:'media.finish',operationId:op.operationId}),intent);
         await local(async()=>{});return result;
       }
+      const current=await context();
       if(op.operation==='media.upload'){
         if(current.sourceRevision!==op.sourceRevision||current.block.generationState==='pending'
           ||(current.block.type==='pdf')!==(op.mimeType==='application/pdf'))throw fail(409,'conflict');

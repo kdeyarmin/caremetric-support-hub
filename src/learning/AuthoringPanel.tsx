@@ -7,7 +7,7 @@ import { authoringOperationSchema, authoringInspectSchema, authoringPreviewSchem
 import { validateGovernedCourse } from "../imports/governedLearningImport";
 import { DraftEditor } from "./DraftEditor";
 import { StructureEditor } from "./StructureEditor";
-import { CourseMediaPanel } from "./CourseMediaPanel";
+import { CourseMediaPanel, CourseMediaReceiptRecovery } from "./CourseMediaPanel";
 import { ProviderPolicyPanel } from "./ProviderPolicyPanel";
 import { StructureReview } from "./StructureReview";
 import type { StructureChange } from "./structureProtocol";
@@ -156,6 +156,7 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
       })}>Confirm and apply this change</button>
     </div>}
     {result && <p role="status">CareBase confirmed version {result.versionNumber} as {result.status}{result.replayed ? " (previously completed)" : ""}.</p>}
+    {versionId && <CourseMediaReceiptRecovery key={courseId + versionId} courseId={courseId} versionId={versionId} disabled={busy || editing !== null} />}
     <details><summary>Provider details for all course versions</summary><ProviderPolicyPanel key={courseId} courseId={courseId} onApplied={()=>{clearSource();setCatalog(null);intents.current.clear();}}/></details>
     <DistributionPanel courseId={courseId} disabled={busy} />
   </section>;

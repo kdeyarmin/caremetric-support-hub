@@ -26,7 +26,7 @@ const item=randomUUID();await admin.query("insert into hub.content_items(id,cont
 await admin.query('insert into hub.course_links(content_item_id,penntrain_course_id,source_version,launch_path) values($1,$2,$3,$4)',[item,base.courseId,base.versionId,'/app/courses/'+base.courseId]);
 const bytes=Buffer.from('%PDF-1.7\nSynthetic fixture only\n'),hash=digest(bytes);
 const source=()=>JSON.stringify(material),revision=()=>digest(source());
-const intents=new Map();let calls=0,uploads=0,writes=0,revokeAfterWrite=false,nativeRevoked=false,tamper=false;
+const intents=new Map();let calls=0,uploads=0,writes=0,revokeAfterWrite=false,nativeRevoked=false,tamper=false,removedBlock=false;
 const auth=smsAuth({pool,provider:{send:async()=>randomUUID(),verify:async(_id,_phone,code)=>code==='123456'}});
 const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(url,options)=>{
   calls++;assert.equal(url,'https://cmcarebase.com/api/learning-admin/media');assert.equal(options.redirect,'error');assert.equal(options.cache,'no-store');
@@ -38,6 +38,7 @@ const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(u
   if(nativeRevoked)return Response.json({error:{code:'forbidden',privateDetail:'never forward'}},{status:403});
   const view=row=>({...row.intent,canFinishThisSession:row.intent.state==='staged'&&row.session===actor.session_id&&row.intent.sourceRevision===revision()});
   let data;
+  if(operation.operation==='media.context'&&removedBlock)return new Response(null,{status:404});
   if(operation.operation==='media.context')data={courseId:base.courseId,versionId:base.versionId,sourceRevision:revision(),block:{id:base.blockId,type:'pdf',title:block.title,mediaAsset:block.mediaAsset??null,
     legacyDocumentId:null,legacyVideoSha256:null,generationState:'none'},intents:{items:[...intents.values()].map(view),hasMore:false}};
   if(operation.operation==='media.upload'){
@@ -106,8 +107,10 @@ try{
   const observed=await run({...base,operation:'media.status',operationId:pending.body.operationId});assert.equal(observed.status,200);assert.equal(observed.body.canFinishThisSession,false);
   assert.equal((await run({...base,operation:'media.finish',operationId:pending.body.operationId})).status,409);assert.equal(writes,1);
   assert.equal((await run(finish)).body.assetId,block.mediaAsset.id);assert.equal(writes,1);
+  removedBlock=true;const afterRemoval=await run({...finish,operation:'media.status'});assert.equal(afterRemoval.status,200);assert.equal(afterRemoval.body.result.assetId,block.mediaAsset.id);
+  assert.equal((await run(finish)).body.assetId,block.mediaAsset.id);assert.equal(writes,1);
   nativeRevoked=true;assert.equal((await run(finish)).status,403);nativeRevoked=false;
   await admin.query("update private.sms_sessions set created_at=now()-interval '9 hours' where token_hash=$1",[digest(jar[sessionCookie])]);
-  const beforeExpired=calls;assert.equal((await run(finish)).status,403);assert.equal(calls,beforeExpired);
+  const beforeExpired=calls;assert.equal((await run(finish)).status,401);assert.equal(calls,beforeExpired);
   console.log('Course media actual PostgreSQL/SMS/HTTP passed: source preservation, raw bytes/ranges, exact one-use audience, separate attach, revoked-write recovery, new-session observation and eight-hour authority.');
 }finally{await new Promise(resolve=>server.close(resolve));await pool.end();await admin.end();}

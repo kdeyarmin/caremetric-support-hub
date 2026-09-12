@@ -16,7 +16,7 @@ import { nativePackageOperationSchema } from '../src/learning/packageProtocol.ts
 import { learningPackages } from './learning-packages.mjs';
 import { nativeDistributionOperationSchema } from '../src/learning/distributionProtocol.ts';
 import { learningDistribution } from './learning-distribution.mjs';
-import { distributionSession } from './distribution-session.mjs';
+import { boundedSession } from './bounded-session.mjs';
 import { providerOperationSchema } from '../src/learning/providerPolicyProtocol.ts';
 import { learningProvider } from './learning-provider.mjs';
 import { nativeMediaOperationSchema } from '../src/learning/mediaProtocol.ts';
@@ -83,7 +83,7 @@ async function authorize(db,audience,payload) {
 }
 export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,legacyDistributionOptIn=false}) {
   const issue = async (sessionToken,audience,payload,signal) => {
-    const authorizeSession=work=>signal?distributionSession(pool,sessionToken,signal,work):withSession(pool,sessionToken,work);
+    const authorizeSession=work=>signal?boundedSession(pool,sessionToken,signal,work):withSession(pool,sessionToken,work);
     return authorizeSession(async(db,session) => {
       await authorize(db,audience,payload);
       const capability=prefix+token();

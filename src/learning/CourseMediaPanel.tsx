@@ -98,3 +98,25 @@ function MediaPanel({ courseId, versionId, blockId, draft, disabled = false, onA
     {receipt && <p role="status">CareBase confirmed attachment {receipt.assetId}. Reload and preserve the resulting course material before another edit.</p>}
   </section>;
 }
+
+/** Exact receipt observation remains usable after a draft lesson is removed. */
+export function CourseMediaReceiptRecovery({ courseId, versionId, disabled = false }: { courseId: string; versionId: string; disabled?: boolean }) {
+  const [blockId, setBlockId] = useState(""); const [operationId, setOperationId] = useState("");
+  const [value, setValue] = useState<MediaIntent | null>(null); const [busy, setBusy] = useState(false); const [error, setError] = useState("");
+  const active = useRef<AbortController | null>(null);
+  useEffect(() => () => active.current?.abort(), []);
+  return <details><summary>Recover a media receipt for a removed lesson</summary>
+    <p>Use the exact lesson and operation identifiers from the saved upload. This only reads its recorded outcome.</p>
+    <label>Previous lesson ID<input value={blockId} disabled={busy || disabled} onChange={event => { setBlockId(event.target.value); setValue(null); }} /></label>
+    <label>Previous media operation ID<input value={operationId} disabled={busy || disabled} onChange={event => { setOperationId(event.target.value); setValue(null); }} /></label>
+    <button type="button" disabled={busy || disabled || !mediaUuid(blockId) || !mediaUuid(operationId)} onClick={() => {
+      if (active.current) return; const controller = new AbortController(); active.current = controller; setBusy(true); setError(""); setValue(null);
+      void runMedia({ operation: "media.status", courseId, versionId, blockId, operationId }, controller.signal).then(result => {
+        if (result === null) setError("No matching media receipt is available."); else setValue(projectMediaIntent(result));
+      }).catch(() => { if (!controller.signal.aborted) setError("The receipt could not be verified in the current session."); })
+        .finally(() => { active.current = null; setBusy(false); });
+    }}>Recover recorded media outcome</button>
+    {error && <p role="alert">{error}</p>}
+    {value && <p role="status">{value.fileName}: {value.result ? `attachment ${value.result.assetId} was confirmed` : `upload remains ${value.state}; no attachment is recorded`}.</p>}
+  </details>;
+}

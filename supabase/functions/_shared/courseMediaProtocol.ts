@@ -66,6 +66,18 @@ export function verifyMediaReceipt(value: MediaReceipt, expected: Pick<MediaRece
   for (const key of ["assetId", "versionId", "blockId", "contentSha256", "mimeType", "byteSize", "fileName"] as const) if (value[key] !== expected[key]) upstream();
   return value;
 }
+export function projectMediaStage(value: unknown, request: MediaUpload) {
+  if (mediaExact(value, ["state", "result"]) && value.state === "committed") {
+    const result = projectMediaReceipt(value.result);
+    verifyMediaReceipt(result, { ...request, assetId: result.assetId, contentSha256: request.sourceSha256, byteSize: request.sourceBytes });
+    return { state: "committed" as const, result };
+  }
+  if (!mediaExact(value, ["state", "operationId", "assetId", "versionId", "blockId", "contentSha256", "mimeType", "byteSize", "fileName"])
+    || value.state !== "staged" || !mediaUuid(value.operationId) || !mediaUuid(value.assetId)
+    || value.versionId !== request.versionId || value.blockId !== request.blockId || value.contentSha256 !== request.sourceSha256
+    || value.mimeType !== request.mimeType || value.byteSize !== request.sourceBytes || value.fileName !== request.fileName) upstream();
+  return value as { state: "staged"; operationId: string; assetId: string; versionId: string; blockId: string; contentSha256: string; mimeType: MediaMime; byteSize: number; fileName: string };
+}
 export function projectMediaIntent(value: unknown): MediaIntent {
   if (!mediaExact(value, ["requestId", "operationId", "versionId", "blockId", "assetId", "sourceRevision", "contentSha256", "mimeType", "byteSize", "fileName", "reason", "createdAt", "expiresAt", "state", "canFinishThisSession", "result"])
     || !mediaUuid(value.requestId) || !mediaUuid(value.operationId) || !mediaUuid(value.versionId) || !mediaUuid(value.blockId) || !mediaSha(value.sourceRevision)

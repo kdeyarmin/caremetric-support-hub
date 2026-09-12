@@ -4,12 +4,13 @@ import { request } from 'node:http';
 import { expect,it,vi } from 'vitest';
 import { learningMedia,checkedMediaStream,mediaRange,parseMediaUploadHeader } from './learning-media.mjs';
 import { appServer } from './http.mjs';
+import { delegations } from './delegations.mjs';
 import { mediaBase,mediaFixture,mediaRevision } from '../src/learning/testFixtures/media.ts';
 const token='x'.repeat(43),bytes=Buffer.from('%PDF-1.7');
 function setup(){
   const f=mediaFixture();f.receipt.contentSha256=f.intent.contentSha256=f.upload.sourceSha256=createHash('sha256').update(bytes).digest('hex');
   const {headRevision:unused,sourcePreserved:ignored,...context}=f.context;void unused;void ignored;
-  let head=mediaRevision,revoked=false,writes=0,earlyStage=false,tamper=false,afterWrite=false;
+  let head=mediaRevision,revoked=false,writes=0,earlyStage=false,tamper=false,afterWrite=false,missingBlock=false;
   const query=vi.fn(async sql=>{
     if(sql.includes('select s.id,s.user_id'))return {rows:[{id:mediaBase.courseId,user_id:mediaBase.courseId}]};
     if(sql==='select hub.authorize_app_command()'&&revoked)throw Object.assign(new Error('private'),{code:'42501'});
@@ -20,7 +21,7 @@ function setup(){
   const fetchImpl=vi.fn(async(url,options)=>{
     const op=options.headers['x-caremetric-media-request']?JSON.parse(Buffer.from(options.headers['x-caremetric-media-request'],'base64url')):JSON.parse(options.body);
     let data;
-    if(op.operation==='media.context')data=context;
+    if(op.operation==='media.context'){if(missingBlock)return new Response(null,{status:404});data=context;}
     if(op.operation==='media.status')data=f.intent;
     if(op.operation==='media.upload'){
       if(!earlyStage)for await(const chunk of options.body)expect(chunk.length).toBeGreaterThan(0);
@@ -38,7 +39,7 @@ function setup(){
   });
   return {...f,query,issue,fetchImpl,run:learningMedia({pool:{connect:async()=>({query,release:vi.fn()})},issue,fetchImpl}),
     moveHead:()=>{head='f'.repeat(64);},revokeAfterWrite:()=>{afterWrite=true;},restore:()=>{revoked=false;},writes:()=>writes,
-    early:()=>{earlyStage=true;},tamper:()=>{tamper=true;},attach:()=>{context.block.mediaAsset={id:f.receipt.assetId,contentSha256:f.receipt.contentSha256,mimeType:f.receipt.mimeType,byteSize:8,fileName:f.receipt.fileName};}};
+    removeBlock:()=>{missingBlock=true;},early:()=>{earlyStage=true;},tamper:()=>{tamper=true;},attach:()=>{context.block.mediaAsset={id:f.receipt.assetId,contentSha256:f.receipt.contentSha256,mimeType:f.receipt.mimeType,byteSize:8,fileName:f.receipt.fileName};}};
 }
 it('binds fixed native origin and exact byte stream to a preserved source; staging does not attach',async()=>{
   const f=setup();await f.run(token,f.upload,{body:Readable.from([bytes]),contentType:'application/pdf',contentLength:'8'});
@@ -61,6 +62,31 @@ it('rejects another session write while retaining status observation',async()=>{
   const f=setup();f.intent.canFinishThisSession=false;
   expect(await f.run(token,{...mediaBase,operation:'media.status',operationId:f.intent.operationId})).toHaveProperty('canFinishThisSession',false);
   await expect(f.run(token,{...mediaBase,operation:'media.finish',operationId:f.intent.operationId})).rejects.toMatchObject({status:409});expect(f.writes()).toBe(0);
+});
+it('retains immutable receipt observation after its source lesson is removed',async()=>{
+  const f=setup(),finish={...mediaBase,operation:'media.finish',operationId:f.intent.operationId};
+  await f.run(token,finish);f.removeBlock();f.moveHead();const priorCalls=f.fetchImpl.mock.calls.length;
+  expect(await f.run(token,{...finish,operation:'media.status'})).toHaveProperty('result.assetId',f.receipt.assetId);
+  expect(await f.run(token,finish)).toEqual(f.receipt);expect(f.writes()).toBe(1);
+  expect(f.fetchImpl.mock.calls.slice(priorCalls).every(([,options])=>JSON.parse(options.body).operation==='media.status')).toBe(true);
+});
+it('aborts late connection acquisition before any metadata query or native call',async()=>{
+  let resolve;const release=vi.fn(),query=vi.fn(),issue=vi.fn(),fetchImpl=vi.fn();
+  const pool={connect:()=>new Promise(done=>{resolve=done;})};
+  const run=learningMedia({pool,issue,fetchImpl,metadataTimeoutMs:20});
+  await expect(run(token,{...mediaBase,operation:'media.context'})).rejects.toMatchObject({status:503});
+  resolve({query,release});await new Promise(done=>setTimeout(done,0));expect(release).toHaveBeenCalledWith(true);expect(query).not.toHaveBeenCalled();expect(issue).not.toHaveBeenCalled();
+});
+it('aborts stalled delegation acquisition without a late INSERT or COMMIT',async()=>{
+  let resolveLate,ready;const waiting=new Promise(resolve=>{ready=resolve;});
+  const lateQuery=vi.fn(),lateRelease=vi.fn(),fetchImpl=vi.fn(),firstQuery=setup().query;
+  let connections=0;
+  const pool={connect:async()=>{if(++connections===1)return {query:firstQuery,release:vi.fn()};ready();return new Promise(resolve=>{resolveLate=resolve;});}};
+  const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl}),controller=new AbortController();
+  const pending=caps.courseMedia(token,{...mediaBase,operation:'media.status',operationId:mediaBase.courseId},{signal:controller.signal});
+  await waiting;controller.abort();await expect(pending).rejects.toMatchObject({status:503});
+  resolveLate({query:lateQuery,release:lateRelease});await new Promise(resolve=>setTimeout(resolve,0));
+  expect(lateRelease).toHaveBeenCalledWith(true);expect(lateQuery).not.toHaveBeenCalled();expect(fetchImpl).not.toHaveBeenCalled();
 });
 it('binds native range bytes and integrity headers to authorized context, with a current role recheck',async()=>{
   const f=setup();f.attach();const op={...mediaBase,operation:'media.read',assetId:f.receipt.assetId,range:null};

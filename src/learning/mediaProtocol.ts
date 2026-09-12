@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { mediaExact, mediaSha, mediaUuid, parseMediaOperation, projectMediaContext, projectMediaIntent, projectMediaReceipt,
-  verifyMediaReceipt, type MediaContext, type MediaIntent, type MediaOperation, type MediaReceipt } from "../../supabase/functions/_shared/courseMediaProtocol.ts";
+import { mediaExact, mediaSha, mediaUuid, parseMediaOperation, projectMediaContext, projectMediaIntent, projectMediaReceipt, projectMediaStage,
+  type MediaContext, type MediaIntent, type MediaOperation, type MediaReceipt } from "../../supabase/functions/_shared/courseMediaProtocol.ts";
 export * from "../../supabase/functions/_shared/courseMediaProtocol.ts";
 
 export type HubMediaOperation = MediaOperation & { courseId: string; versionId: string; blockId: string };
@@ -30,19 +30,6 @@ export function projectMediaContextView(value: unknown, operation: HubMediaOpera
   if (context.courseId !== operation.courseId || !(headRevision === null || mediaSha(headRevision))
     || sourcePreserved !== (headRevision === context.sourceRevision)) return invalid();
   return { ...context, headRevision, sourcePreserved } as MediaContextView;
-}
-export function projectMediaStage(value: unknown, op: Extract<MediaOperation, { operation: "media.upload" }>): MediaStage {
-  if (mediaExact(value, ["state", "result"]) && value.state === "committed") {
-    const result = projectMediaReceipt(value.result);
-    verifyMediaReceipt(result, { ...result, versionId: op.versionId, blockId: op.blockId, contentSha256: op.sourceSha256,
-      mimeType: op.mimeType, byteSize: op.sourceBytes, fileName: op.fileName });
-    return { state: "committed", result };
-  }
-  if (!mediaExact(value, ["state", "operationId", "assetId", "versionId", "blockId", "contentSha256", "mimeType", "byteSize", "fileName"])
-    || value.state !== "staged" || !mediaUuid(value.operationId) || !mediaUuid(value.assetId)) return invalid();
-  for (const [key, expected] of Object.entries({ versionId: op.versionId, blockId: op.blockId, contentSha256: op.sourceSha256,
-    mimeType: op.mimeType, byteSize: op.sourceBytes, fileName: op.fileName })) if (value[key] !== expected) return invalid();
-  return value as MediaStage;
 }
 export function projectMediaEnvelope(value: unknown, op: MediaOperation, now = Date.now()): MediaContext | MediaIntent | MediaReceipt | MediaStage | null {
   if (!mediaExact(value, ["contractVersion", "product", "operation", "generatedAt", "data"]) || value.contractVersion !== 1 || value.product !== "carebase"

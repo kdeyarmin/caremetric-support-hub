@@ -101,6 +101,7 @@ export function appServer({auth,gateway,delegations,publications,docstudio,origi
           if(url.search)throw new HttpError(400,'Media query parameters are not supported.');
           const controller=new AbortController();
           const abort=()=>{if(!res.writableEnded)controller.abort();};req.once('aborted',abort);res.once('close',abort);
+          const deadline=setTimeout(()=>{controller.abort();req.destroy();},path==='/api/course-media'?12000:120000);deadline.unref();
           try {
             if(path==='/api/course-media' && req.method==='POST'){
               const input=await jsonBody(req,8192);if(!['media.context','media.status','media.finish'].includes(input.operation))throw new HttpError(400,'Invalid media metadata operation.');
@@ -120,7 +121,7 @@ export function appServer({auth,gateway,delegations,publications,docstudio,origi
               await pipeline(result.body,res);return;
             }
             throw new HttpError(404,'Media resource unavailable.');
-          }finally{req.removeListener('aborted',abort);res.removeListener('close',abort);}
+          }finally{clearTimeout(deadline);req.removeListener('aborted',abort);res.removeListener('close',abort);}
         }
         if(path.startsWith('/api/docstudio') && docstudio) {
           if(url.search)throw new HttpError(400,'DocStudio query parameters are not supported.');
