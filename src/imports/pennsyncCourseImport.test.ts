@@ -1,4 +1,5 @@
 import {expect,it} from 'vitest';
+import {z} from 'zod';
 import fixture from './fixtures/pennsyncLearningSource.json';
 import {pennsyncSourceSchema} from './pennsyncLearningSource';
 import {convertPennsyncCourses} from './pennsyncCourseImport';
@@ -74,4 +75,19 @@ it('distinguishes required material references from a private authoring prompt',
 it('retains the native finite course cap even when an inconsistent legacy unlimited flag is true',async()=>{
   const s=source();(s.records.TrainingCourse[0].fields.retake_settings_json as Record<string,unknown>).unlimited_retakes=true;
   expect((await convertPennsyncCourses(s,revision))[0].document!.assessment.policy.maxAttempts).toBe(3);
+});
+it.each(['mcq','true_false','multi_select'])('decodes only the closed legacy answer.value format for %s and requires key review',async type=>{
+  const s=source(),q=s.records.TrainingQuestion[0].fields;q.type=type;
+  q.correct_answer_json={answer:{value:type==='multi_select'?['a','b']:'a'}};
+  s.records.TrainingCourse[0].fields.needs_sme_review=true;
+  const original=JSON.stringify(s),[row]=await convertPennsyncCourses(s,revision);
+  expect(row.document).not.toBeNull();expect(row.issues.map(i=>i.code)).toEqual(['clinical_review','legacy_answer_encoding']);
+  const question=row.document!.assessment.questions[0];
+  expect('correctOptionIds' in question&&question.correctOptionIds).toEqual('options' in question&&question.options.slice(0,type==='multi_select'?2:1).map(o=>o.id));
+  expect(JSON.stringify(s)).toBe(original);expect(row.document!.source.course.revision).toBe(revision);
+  expect(JSON.stringify(reviewPennsyncCourses([row],revision,1,1))).not.toContain('correctOptionIds');
+});
+it.each([{value:'a',extra:true},{value:{nested:'a'}},{value:['a',' A ']},{missing:'a'},{}])('rejects ambiguous, malformed or nonclosed legacy answers',async answer=>{
+  const s=source();s.records.TrainingQuestion[0].fields.correct_answer_json=z.json().parse({answer});
+  const [row]=await convertPennsyncCourses(s,revision);expect(row.document).toBeNull();expect(row.issues.some(i=>i.code==='invalid_source')).toBe(true);
 });

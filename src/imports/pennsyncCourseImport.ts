@@ -6,7 +6,7 @@ import { sourceDigest } from './governedLearningImport.ts';
 
 type Row=PennsyncSource['records'][string][number];
 type Fields=Row['fields'];
-export const conversionIssueSchema=z.strictObject({code:z.enum(['missing_lessons','empty_lesson','invalid_source','inactive_questions','untransferred_material','clinical_review','unpublished_source','supplementary_assessment','credit_policy']),message:z.string().max(250)});
+export const conversionIssueSchema=z.strictObject({code:z.enum(['missing_lessons','empty_lesson','invalid_source','inactive_questions','untransferred_material','clinical_review','unpublished_source','supplementary_assessment','credit_policy','legacy_answer_encoding']),message:z.string().max(250)});
 export type ConversionIssue=z.infer<typeof conversionIssueSchema>;
 export type PennsyncCourseConversion={sourceId:string;title:string;sourceStatus:string;document:AssessmentDocument|null;issues:ConversionIssue[]};
 const hash=z.string().regex(/^[a-f0-9]{64}$/);
@@ -27,6 +27,9 @@ export async function learningSourceId(namespace:string,key:string){
 function normalizeOption(v:unknown,multiple:boolean){
   return multiple?String(value.parse(v)).toLowerCase().replace(/\s+/g,''):JSON.stringify(value.parse(v)).toLowerCase().replace(/\s+/g,'');
 }
+function wrappedAnswer(v:unknown):v is {value:unknown}{
+  return Boolean(v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===1&&Object.hasOwn(v,'value'));
+}
 async function convertQuestion(row:Row):Promise<AssessmentQuestion>{
   const f=row.fields,type=string(f.type),id=await learningSourceId('question',row.id);
   const base={id,source:{id:row.id,revision:row.revision},prompt:string(f.prompt),points:finite(f.points,1),rationale:string(f.rationale)};
@@ -45,7 +48,10 @@ async function convertQuestion(row:Row):Promise<AssessmentQuestion>{
     return {id:optionId,text:option.label};
   }));
   const lookup=(v:unknown)=>{const found=optionIds.get(normalizeOption(v,kind==='multiple_choice'));if(!found)throw new Error('Answer has no source option');return found;};
-  const correct=jsonObject(f.correct_answer_json).answer;
+  const rawCorrect=jsonObject(f.correct_answer_json).answer;
+  // One explicit legacy storage format. The original object stays in the
+  // immutable source; a publication warning requires review of the decoded key.
+  const correct=kind!=='matching'&&wrappedAnswer(rawCorrect)?rawCorrect.value:rawCorrect;
   if(kind==='matching'){
     const pairs=z.array(z.object({left:z.string().min(1),right:value})).min(1).parse(jsonObject(correct).pairs);
     return assessmentQuestionSchema.parse({...base,kind,options,pairs:await Promise.all(pairs.map(async p=>({id:await learningSourceId('pair',`${row.id}:${p.left}`),left:p.left,correctOptionId:lookup(p.right)})))});
@@ -88,6 +94,8 @@ export async function convertPennsyncCourses(source:PennsyncSource,sourceRevisio
       const modules=order(source.records.TrainingModule.filter(m=>m.fields.course_id===course.id));
       const allQuestions=order(source.records.TrainingQuestion.filter(q=>q.fields.course_id===course.id));
       const questions=allQuestions.filter(q=>q.fields.active===true);
+      if(questions.some(q=>['mcq','multi_select','true_false'].includes(String(q.fields.type))&&wrappedAnswer(jsonObject(q.fields.correct_answer_json).answer)))
+        issue('legacy_answer_encoding','An older answer format was decoded. Review the imported answer keys before publication.');
       if(!modules.length)issue('missing_lessons','No source lessons exist for this course.');
       if(allQuestions.length&&!questions.length)issue('inactive_questions','The source question bank has no active questions.');
       const relevantIds=new Set([course.id,...modules.map(m=>m.id),...questions.map(q=>q.id)]);
