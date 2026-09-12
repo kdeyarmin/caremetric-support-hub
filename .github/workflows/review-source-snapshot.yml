@@ -21,12 +21,12 @@ jobs:
           set -euo pipefail
           git config user.name 'Review candidate'
           git config user.email 'review-candidate@users.noreply.github.com'
-          git merge --no-commit --no-ff 8a4a71325664c56cebbad6eaf6f7cbd10d7a50cf
+          git merge --no-commit --no-ff 8a4b186cedfdd8c43082ca70dbbd63f86bc53a31
           python3 - <<'PY'
           from pathlib import Path
           import hashlib,subprocess,json
           helper=Path('.github/review-apply.py').read_bytes()
-          assert hashlib.sha256(helper).hexdigest()=='dc10d8d4dbb02d696778de97a496003d045e4a0aa6ebefb8aa3fcb70b26bfa30'
+          assert hashlib.sha256(helper).hexdigest()=='4bc2f1cfd51384e85d96b0db1a582f639ab97cec25b6e7a588475cde16c65c80'
           subprocess.run(['python3','.github/review-apply.py'],check=True)
           subprocess.run(['git','add','server/operational-configuration.mjs','server/operational-configuration.test.mjs','server/learning-media.mjs','server/learning-media.test.mjs','src/learning/DistributionPanel.tsx','src/learning/DistributionPanel.test.tsx','src/admin/portfolioProtocol.test.ts','supabase/functions/_shared/portfolioProtocol.ts'],check=True)
           subprocess.run(['git','rm','.github/review-apply.py','.github/workflows/review-source-snapshot.yml'],check=True)
@@ -52,7 +52,7 @@ jobs:
           from pathlib import Path
           import json,os
           tree=json.loads(Path('/tmp/review-candidate/tree.json').read_text())['sha']
-          Path('/tmp/review-commit.json').write_text(json.dumps({'message':'fix(media): reconcile main and close media review findings','tree':tree,'parents':[os.environ['GITHUB_SHA'],'8a4a71325664c56cebbad6eaf6f7cbd10d7a50cf']}))
+          Path('/tmp/review-commit.json').write_text(json.dumps({'message':'fix(media): reconcile main and close media review findings','tree':tree,'parents':[os.environ['GITHUB_SHA'],'8a4b186cedfdd8c43082ca70dbbd63f86bc53a31']}))
           PY
           gh api --method POST "repos/$GITHUB_REPOSITORY/git/commits" --input /tmp/review-commit.json > /tmp/review-candidate/candidate.json
           cp /tmp/review-paths.json /tmp/review-candidate/paths.json
