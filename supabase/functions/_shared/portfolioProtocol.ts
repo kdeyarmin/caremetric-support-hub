@@ -2,14 +2,15 @@ import { isUuid, parseAdminEnvelope, parseAdminOperation, type AdminOperation } 
 import { billingReadOperations, parseBillingData, parseBillingOperation } from "./billingProtocol.ts";
 import type { AdminInvoiceDetail, AdminInvoicePage, AdminSubscriptionVerification, BillingReadOperation } from "./billingProtocol.ts";
 import { parseCheckoutCatalog, type BillingCatalogOperation, type BillingPackagePage } from "./checkoutCatalogProtocol.ts";
+import { isOperationalRead, operationalReadOperations, parseOperationalRead, parseOperationalPage, type OperationalPage, type OperationalRow, type OperationalReadOperation } from "./operationsProtocol.ts";
 
 export const portfolioProducts = ["carebase", "breathe", "caremetric-emr", "pennsync", "intel", "caremetric-go"] as const;
 export type PortfolioProduct = typeof portfolioProducts[number];
 export const learningPackageCapabilities = ["learning.packages.context", "learning.packages.status", "learning.packages.upload", "learning.packages.accept", "learning.packages.finish"] as const;
-export const portfolioOperations = ["capabilities", "overview", "courses.list", "courses.get", "organizations.list", "users.list", "billing.overview", "billing.subscriptions.list", ...billingReadOperations, ...learningPackageCapabilities, "learning.distribution.context", "billing.packages.list", "commands.preview", "commands.apply", "billing.commands.preview", "billing.commands.apply", "billing.checkout.preview", "billing.checkout.apply", "billing.checkout.check", "billing.checkout.recover", "support.identity.resolve"] as const;
+export const portfolioOperations = ["capabilities", "overview", "courses.list", "courses.get", "organizations.list", "users.list", "billing.overview", "billing.subscriptions.list", ...billingReadOperations, ...operationalReadOperations, ...learningPackageCapabilities, "learning.distribution.context", "billing.packages.list", "commands.preview", "commands.apply", "billing.commands.preview", "billing.commands.apply", "billing.checkout.preview", "billing.checkout.apply", "billing.checkout.check", "billing.checkout.recover", "support.identity.resolve"] as const;
 export type PortfolioOperationName = typeof portfolioOperations[number];
 export type DirectoryOperation = { operation: "organizations.list" | "users.list" | "billing.subscriptions.list"; search?: string; limit: number; offset: number };
-export type PortfolioOperation = AdminOperation | DirectoryOperation | BillingReadOperation | BillingCatalogOperation | { operation: "capabilities" | "billing.overview" };
+export type PortfolioOperation = AdminOperation | DirectoryOperation | BillingReadOperation | BillingCatalogOperation | OperationalReadOperation | { operation: "capabilities" | "billing.overview" };
 export interface PortfolioRequest { product: PortfolioProduct; operation: PortfolioOperation; }
 export interface PortfolioCapabilities { apiVersion: 1; operations: PortfolioOperationName[]; sourceRevision: string | null; }
 export interface PortfolioOverview { organizationCount: number | null; activeUserCount: number | null; registeredUserCount?: number; globalCourseCount?: number; subscriptionCount?: number; }
@@ -59,7 +60,10 @@ export function parsePortfolioRequest(input: unknown): PortfolioRequest {
   const { product = "carebase", ...operation } = row;
   if (!portfolioProducts.includes(product as PortfolioProduct)) throw new Error("Unsupported application");
   let parsed: PortfolioOperation;
-  if (operation.operation === "billing.packages.list") {
+  if (isOperationalRead(operation.operation)) {
+    if (product !== "carebase") throw new Error("Unsupported application operational read");
+    parsed = parseOperationalRead(operation);
+  } else if (operation.operation === "billing.packages.list") {
     if (product !== "carebase") throw new Error("Unsupported application checkout catalog");
     const page = parseAdminOperation({ ...operation, operation: "courses.list" });
     if (page.operation !== "courses.list") throw new Error("Invalid checkout pagination");
@@ -114,8 +118,11 @@ export function parsePortfolioEnvelope(input: unknown, request: PortfolioRequest
     return parseAdminEnvelope(input, operation as AdminOperation);
   }
   const row = object(envelope.data);
-  let data: PortfolioCapabilities | PortfolioOverview | AdminPage<AdminOrganization> | AdminPage<AdminDirectoryUser> | AdminSubscriptionPage | AdminBillingOverview | AdminInvoicePage | AdminInvoiceDetail | AdminSubscriptionVerification | BillingPackagePage;
-  if (operation.operation === "billing.packages.list") {
+  let data: PortfolioCapabilities | PortfolioOverview | AdminPage<AdminOrganization> | AdminPage<AdminDirectoryUser> | AdminSubscriptionPage | AdminBillingOverview | AdminInvoicePage | AdminInvoiceDetail | AdminSubscriptionVerification | BillingPackagePage | OperationalPage<OperationalRow>;
+  if (isOperationalRead(operation.operation)) {
+    if (product !== "carebase" || Object.keys(envelope).length !== 5 || typeof envelope.generatedAt !== "string" || !/^\d{4}-\d\d-\d\dT/.test(envelope.generatedAt)) throw new Error("Invalid operational read envelope");
+    data = parseOperationalPage(row, operation as OperationalReadOperation);
+  } else if (operation.operation === "billing.packages.list") {
     if (product !== "carebase" || Object.keys(envelope).length !== 5) throw new Error("Invalid checkout catalog envelope");
     data = parseCheckoutCatalog(row, operation);
   } else if (billingReadOperations.includes(operation.operation as typeof billingReadOperations[number])) {
@@ -125,7 +132,7 @@ export function parsePortfolioEnvelope(input: unknown, request: PortfolioRequest
     if (row.apiVersion !== 1 || !Array.isArray(row.operations) || row.operations.length > 100 || row.operations.some(value => typeof value !== "string")) throw new Error("Invalid capabilities");
     const revision = nullableString(row.sourceRevision, 64);
     if (revision !== null && !/^[a-f0-9]{7,64}$/i.test(revision)) throw new Error("Invalid source revision");
-    data = { apiVersion: 1, operations: [...new Set(row.operations.filter(value => portfolioOperations.includes(value as PortfolioOperationName) && (product === "carebase" || value !== "learning.distribution.context" && !learningPackageCapabilities.includes(value as typeof learningPackageCapabilities[number]))))] as PortfolioOperationName[], sourceRevision: revision };
+    data = { apiVersion: 1, operations: [...new Set(row.operations.filter(value => portfolioOperations.includes(value as PortfolioOperationName) && (product === "carebase" || !isOperationalRead(value) && value !== "learning.distribution.context" && !learningPackageCapabilities.includes(value as typeof learningPackageCapabilities[number]))))] as PortfolioOperationName[], sourceRevision: revision };
   } else if (operation.operation === "overview" && product === "intel") {
     if (row.organizationCount !== null || row.activeUserCount !== null || row.subscriptionCount !== undefined) throw new Error("Unverified Intel totals");
     data = { organizationCount: null, activeUserCount: null, registeredUserCount: count(row.registeredUserCount) };
