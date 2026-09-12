@@ -6,7 +6,7 @@ do $$ declare contract jsonb:=hub.get_backend_contract(); signature text; role_n
  foreach role_name in array array['anon','authenticated','service_role','hub_app_server'] loop
   if has_table_privilege(role_name,'private.pennsync_learning_snapshots','select,insert,update,delete') then raise exception 'PennSync source boundary invalid' using errcode='55000';end if;
  end loop;
- foreach signature in array array['private.pennsync_learning_head()','private.pennsync_learning_preserve(text,text,text,jsonb)'] loop
+ foreach signature in array array['private.pennsync_learning_head()','private.pennsync_learning_preserve(text,text,text,jsonb,timestamptz)'] loop
   if to_regprocedure(signature) is null or not has_function_privilege('hub_app_server',signature,'execute') then raise exception 'Missing PennSync source operation' using errcode='55000';end if;
   foreach role_name in array array['anon','authenticated','service_role'] loop
    if has_function_privilege(role_name,signature,'execute') then raise exception 'PennSync source operation exposed' using errcode='55000';end if;

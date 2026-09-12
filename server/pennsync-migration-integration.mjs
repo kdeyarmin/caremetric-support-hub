@@ -70,7 +70,38 @@ try{
  for(const role of ['anon','authenticated','service_role','hub_app_server']){
   assert.equal((await admin.query("select has_table_privilege($1,'private.pennsync_learning_snapshots','SELECT,INSERT,UPDATE,DELETE') allowed",[role])).rows[0].allowed,false);
  }
- for(const role of ['anon','authenticated','service_role'])assert.equal((await admin.query("select has_function_privilege($1,'private.pennsync_learning_preserve(text,text,text,jsonb)','EXECUTE') allowed",[role])).rows[0].allowed,false);
+ for(const role of ['anon','authenticated','service_role'])assert.equal((await admin.query("select has_function_privilege($1,'private.pennsync_learning_preserve(text,text,text,jsonb,timestamptz)','EXECUTE') allowed",[role])).rows[0].allowed,false);
+ // Hold the real advisory lock until authority or the request deadline expires.
+ // The source must never be committed after either condition changes.
+ const blocker=await admin.connect();
+ const waitForSourceLock=async()=>{
+  for(let attempt=0;attempt<100;attempt++){
+   const waiting=Number((await admin.query("select count(*) from pg_stat_activity where usename='hub_app_server' and wait_event_type='Lock' and query like 'select private.pennsync_learning_preserve(%'")).rows[0].count);
+   if(waiting>0)return;await new Promise(resolve=>setTimeout(resolve,30));
+  }
+  assert.fail('Source preservation did not reach its lock');
+ };
+ try{
+  for(const mode of ['expiry','revocation','deadline']){
+   payload=JSON.stringify({...source,records:{...source.records,TrainingCourse:[{...source.records.TrainingCourse[0],fields:{...source.records.TrainingCourse[0].fields,title:'Lock '+mode}}]}});
+   const current=await inspect();assert.equal(current.status,200);
+   await blocker.query('begin');await blocker.query("select pg_advisory_xact_lock(hashtextextended('pennsync.learning-source.v1',0))");
+   const started=Date.now(),pending=migrate({operation:'preserve',sourceRevision:current.body.sourceRevision,expectedHeadRevision:second.body.sourceRevision,reviewed:true});
+   await waitForSourceLock();
+   if(mode==='expiry'){
+    await admin.query("update private.sms_sessions set expires_at=clock_timestamp()+interval '500 milliseconds' where user_id=$1",[owner]);
+    await admin.query('select pg_sleep(0.7)');
+   }
+   if(mode==='revocation')await admin.query('update private.staff_permissions set revoked_at=clock_timestamp() where user_id=$1',[owner]);
+   if(mode!=='deadline')await blocker.query('rollback');
+   const denied=await pending;assert.equal(denied.status,mode==='deadline'?503:401,JSON.stringify(denied.body));
+   if(mode==='deadline'){assert.ok(Date.now()-started<18000);await blocker.query('rollback');}
+   assert.equal(await snapshotCount(),2);
+   await admin.query("update private.sms_sessions set expires_at=clock_timestamp()+interval '1 hour' where user_id=$1",[owner]);
+   await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
+  }
+ }finally{await blocker.query('rollback');blocker.release();}
+ payload=original;
  nativeRevoked=true;assert.equal((await migrate(preserve)).status,403);nativeRevoked=false;
  revokeAfterRead=true;assert.equal((await migrate(preserve)).status,401);revokeAfterRead=false;
  await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);

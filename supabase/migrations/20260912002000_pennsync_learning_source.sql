@@ -28,9 +28,9 @@ begin
  return result;
 end $$;
 
-create function private.pennsync_learning_preserve(p_payload text,p_revision text,p_expected_revision text,p_summary jsonb) returns jsonb
+create function private.pennsync_learning_preserve(p_payload text,p_revision text,p_expected_revision text,p_summary jsonb,p_deadline timestamptz) returns jsonb
 language plpgsql security definer set search_path='' as $$
-declare actor uuid; doc jsonb; head private.pennsync_learning_snapshots%rowtype; prior private.pennsync_learning_snapshots%rowtype;
+declare actor uuid; authority jsonb; doc jsonb; head private.pennsync_learning_snapshots%rowtype; prior private.pennsync_learning_snapshots%rowtype;
 begin
  perform hub.authorize_app_command(); actor:=private.require_learning_editor();
  if p_payload is null or octet_length(p_payload)>7000000 or p_revision is null or p_revision !~ '^[0-9a-f]{64}$'
@@ -44,7 +44,16 @@ begin
    or p_summary->>'modules'<>jsonb_array_length(doc#>'{records,TrainingModule}')::text
    or p_summary->>'questions'<>jsonb_array_length(doc#>'{records,TrainingQuestion}')::text then
    raise exception 'Source summary does not match' using errcode='22023'; end if;
+ if p_deadline is null or p_deadline<=clock_timestamp() or p_deadline>clock_timestamp()+interval '20 seconds' then raise exception 'Source request expired' using errcode='57014';end if;
  perform pg_advisory_xact_lock(hashtextextended('pennsync.learning-source.v1',0));
+ -- The clock and authority must be checked after lock wait, using fresh reads.
+ authority:=hub.authorize_app_command(); actor:=private.require_learning_editor();
+ if p_deadline<=clock_timestamp() then raise exception 'Source request expired' using errcode='57014';end if;
+ if (authority->>'assurance_expires_at')::timestamptz<=clock_timestamp() or not exists(
+   select 1 from private.sms_sessions s join private.sms_identities i on i.user_id=s.user_id and i.identity_version=s.identity_version
+   where s.id=(authority->>'session_id')::uuid and s.user_id=actor and s.revoked_at is null and i.revoked_at is null
+     and s.expires_at>clock_timestamp() and s.created_at+interval '8 hours'>clock_timestamp()) then
+   raise exception 'Current administrator session required' using errcode='28000';end if;
  select * into head from private.pennsync_learning_snapshots order by sequence desc limit 1;
  select * into prior from private.pennsync_learning_snapshots where source_revision=p_revision;
  if found then
@@ -58,6 +67,6 @@ begin
  values(actor,'learning.pennsync.source_preserved','learning_source',prior.id,jsonb_build_object('source_revision',p_revision,'sequence',prior.sequence));
  return jsonb_build_object('snapshotId',prior.id,'sourceRevision',p_revision,'headRevision',p_revision,'replayed',false,'summary',p_summary);
 end $$;
-revoke all on function private.pennsync_learning_source_schema(),private.pennsync_learning_summary_schema(),private.pennsync_learning_head(),private.pennsync_learning_preserve(text,text,text,jsonb)
+revoke all on function private.pennsync_learning_source_schema(),private.pennsync_learning_summary_schema(),private.pennsync_learning_head(),private.pennsync_learning_preserve(text,text,text,jsonb,timestamptz)
  from public,anon,authenticated,service_role,hub_app_server;
-grant execute on function private.pennsync_learning_head(),private.pennsync_learning_preserve(text,text,text,jsonb) to hub_app_server;
+grant execute on function private.pennsync_learning_head(),private.pennsync_learning_preserve(text,text,text,jsonb,timestamptz) to hub_app_server;

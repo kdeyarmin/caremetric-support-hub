@@ -7,16 +7,25 @@ export function pennsyncLearningMigration({pool,issue,fetchImpl=fetch}) {
   return async(sessionToken,input,requestSignal)=>{
     let operation;
     try{operation=pennsyncMigrationOperation.parse(input);}catch{throw new HttpError(400,'Invalid source migration request.','invalid_request');}
+    const deadline=Date.now()+15000;
     const signal=AbortSignal.any([...(requestSignal?[requestSignal]:[]),AbortSignal.timeout(15000)]);
     const local=work=>withSession(pool,sessionToken,async db=>{
+      signal.throwIfAborted();
+      const remaining=Math.max(1,Math.min(12000,deadline-Date.now()));
+      await db.query("select set_config('statement_timeout',$1,true),set_config('lock_timeout',$1,true)",[remaining+'ms']);
       signal.throwIfAborted();await db.query('select hub.authorize_app_command()');
       await db.query('reset role');
-      signal.throwIfAborted();return work(db);
+      signal.throwIfAborted();const result=await work(db);
+      // Roll back the transaction if its I/O finished after cancellation.
+      signal.throwIfAborted();if(Date.now()>=deadline)throw new HttpError(503,'Source request expired.','upstream');
+      return result;
     });
     const run=async()=>{
       await local(async db=>(await db.query('select private.pennsync_learning_head() as value')).rows[0].value);
       const native={operation:'learning.source.snapshot'};
+      signal.throwIfAborted();
       const capability=await issue(sessionToken,'pennsync',native);
+      signal.throwIfAborted();
       const entry=adminRegistry.pennsync;
       const result=await callNativeAdmin(fetchImpl,entry.endpoint,entry.authorizationHeader,capability,native,async envelope=>{
         if(envelope?.contractVersion!==1||envelope.product!=='pennsync'||envelope.operation!==native.operation||typeof envelope.data?.payload!=='string'||typeof envelope.data?.sourceRevision!=='string')throw new Error('Invalid native source');
@@ -29,8 +38,8 @@ export function pennsyncLearningMigration({pool,issue,fetchImpl=fetch}) {
           snapshotId:head?.sourceRevision===result.sourceRevision?head.snapshotId:null,replayed:false,summary:result.summary});
       });
       if(operation.sourceRevision!==result.sourceRevision)throw new HttpError(409,'PennSync source changed. Inspect it again before preserving.','conflict');
-      return local(async db=>pennsyncMigrationResult.parse((await db.query('select private.pennsync_learning_preserve($1,$2,$3,$4::jsonb) as value',
-        [result.payload,result.sourceRevision,operation.expectedHeadRevision,JSON.stringify(result.summary)])).rows[0].value));
+      return local(async db=>pennsyncMigrationResult.parse((await db.query('select private.pennsync_learning_preserve($1,$2,$3,$4::jsonb,$5::timestamptz) as value',
+        [result.payload,result.sourceRevision,operation.expectedHeadRevision,JSON.stringify(result.summary),new Date(deadline).toISOString()])).rows[0].value));
     };
     let cancel=()=>{};
     try{return await Promise.race([run(),new Promise((_,reject)=>{cancel=()=>reject(new HttpError(503,'Source read did not finish. Retry the same request.','upstream'));if(signal.aborted)cancel();else signal.addEventListener('abort',cancel,{once:true});})]);}

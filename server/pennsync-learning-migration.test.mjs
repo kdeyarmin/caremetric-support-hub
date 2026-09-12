@@ -25,7 +25,7 @@ it('browser inspection receives only counts and catalog metadata, with no source
 });
 it('preservation fetches native source again and only passes verified bytes to private SQL',async()=>{
  const f=setup();await f.run('x'.repeat(43),{operation:'preserve',sourceRevision:revision,expectedHeadRevision:null,reviewed:true});
- expect(f.fetchImpl).toHaveBeenCalledTimes(1);expect(f.query.mock.calls.find(([sql])=>sql.includes('pennsync_learning_preserve'))[1]).toEqual([payload,revision,null,JSON.stringify(summary)]);
+ expect(f.fetchImpl).toHaveBeenCalledTimes(1);const args=f.query.mock.calls.find(([sql])=>sql.includes('pennsync_learning_preserve'))[1];expect(args.slice(0,4)).toEqual([payload,revision,null,JSON.stringify(summary)]);expect(Date.parse(args[4])-Date.now()).toBeGreaterThan(10000);
 });
 it('changed source, checksum tampering and revoked authority prevent staging',async()=>{
  for(const options of [{changed:true},{revoked:true},{}]){
