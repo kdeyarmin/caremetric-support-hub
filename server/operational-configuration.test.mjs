@@ -13,9 +13,14 @@ function setup({revoked=false,tamper=false}={}){
   return {query,issue,fetchImpl,run:operationalConfiguration({pool:{connect:async()=>({query,release:vi.fn()})},issue,fetchImpl})};
 }
 it('uses fixed native transport and rechecks current relational authority after native I/O',async()=>{
-  const f=setup();expect(await f.run('x'.repeat(43),request)).toEqual(configurationContext);
+  const f=setup(),controller=new AbortController();
+  expect(await f.run('x'.repeat(43),request,controller.signal)).toEqual(configurationContext);
   expect(f.issue).toHaveBeenCalledWith('x'.repeat(43),'carebase.command',request,expect.any(AbortSignal));
-  expect(f.issue.mock.calls[0][3]).toBe(f.fetchImpl.mock.calls[0][1].signal);
+  const issueSignal=f.issue.mock.calls[0][3],nativeSignal=f.fetchImpl.mock.calls[0][1].signal;
+  expect(nativeSignal).toBeInstanceOf(AbortSignal);
+  expect(issueSignal.aborted).toBe(false);expect(nativeSignal.aborted).toBe(false);
+  // Native transport composes another deadline, but must inherit cancellation.
+  controller.abort();expect(issueSignal.aborted).toBe(true);expect(nativeSignal.aborted).toBe(true);
   expect(f.fetchImpl.mock.calls[0][0]).toBe('https://cmcarebase.com/api/platform-admin/configuration');
   expect(f.fetchImpl.mock.calls[0][1].redirect).toBe('error');expect(Object.keys(f.fetchImpl.mock.calls[0][1].headers).sort()).toEqual(['Authorization','Content-Type']);
   expect(f.query).toHaveBeenCalledWith('select hub.authorize_app_command() as actor');
