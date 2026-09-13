@@ -11,7 +11,7 @@ export function AdminInventory() {
   return <section className="panel admin-inventory" aria-labelledby="admin-inventory-heading">
     <div className="panel-heading">
       <div>
-        <h2 id="admin-inventory-heading">All app functions</h2>
+        <h2 id="admin-inventory-heading">Original source audit</h2>
         <p>{adminInventory.length} source surfaces across {adminInventoryProducts.length} apps · audited September 10, 2026</p>
       </div>
       <span className="admin-status admin-status-muted">Source inventory</span>

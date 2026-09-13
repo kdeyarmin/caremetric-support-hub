@@ -64,7 +64,7 @@ export function parseConfigurationOperation(v:unknown):ConfigurationOperation {
 export function validConfigurationState(target:ConfigurationTarget,v:unknown):v is ConfigurationState {
   if(target.kind==='job')return keys(v,['enabled','reason'])&&typeof v.enabled==='boolean'&&nullableText(v.reason);
   if(target.kind==='release')return keys(v,['configured','rolloutMode','isEnabled','owner','expiresAt','changeReason'])&&typeof v.configured==='boolean'
-    &&(v.configured?['off','cohort','global'].includes(String(v.rolloutMode))&&typeof v.isEnabled==='boolean'&&legacy(v.owner)&&legacy(v.changeReason):v.rolloutMode===null&&v.isEnabled===null&&v.owner===null&&v.changeReason===null&&v.expiresAt===null)
+    &&(v.configured?['off','cohort','global'].includes(String(v.rolloutMode))&&typeof v.isEnabled==='boolean'&&nullableText(v.owner)&&nullableText(v.changeReason):v.rolloutMode===null&&v.isEnabled===null&&v.owner===null&&v.changeReason===null&&v.expiresAt===null)
     &&nullableInstant(v.expiresAt);
   return keys(v,['configured','isDisabled','reason','expiresAt'])&&typeof v.configured==='boolean'&&typeof v.isDisabled==='boolean'&&nullableText(v.reason)&&nullableInstant(v.expiresAt)
     &&v.configured===v.isDisabled&&(v.configured||(v.reason===null&&v.expiresAt===null));

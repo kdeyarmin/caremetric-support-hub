@@ -103,3 +103,11 @@ The 18 annual courses specify pass 80%, three attempts, a 24-hour cooldown,
 randomized questions and answers, reshuffling on retake, no answer disclosure,
 required attestation, and a 12-month certificate. These are requirements to
 preserve, not switches to clear to accelerate publication.
+
+The medication-management source has an older `correct_answer_json.answer.value`
+encoding. Only that exact one-key wrapper is decoded for objective questions;
+the scalar or array must map unambiguously to actual options. Original source
+bytes and revisions remain unchanged. The review carries an explicit answer-key
+warning, together with the existing clinical-review requirement. The freeform
+provider uses the original prompt and rubric; it does not interpret objective
+answer keys or replace the Hub's objective grading.
