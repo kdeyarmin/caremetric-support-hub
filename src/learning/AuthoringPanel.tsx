@@ -7,6 +7,7 @@ import { authoringOperationSchema, authoringInspectSchema, authoringPreviewSchem
 import { validateGovernedCourse } from "../imports/governedLearningImport";
 import { DraftEditor } from "./DraftEditor";
 import { StructureEditor } from "./StructureEditor";
+import { CourseMediaPanel, CourseMediaReceiptRecovery } from "./CourseMediaPanel";
 import { ProviderPolicyPanel } from "./ProviderPolicyPanel";
 import { StructureReview } from "./StructureReview";
 import type { StructureChange } from "./structureProtocol";
@@ -37,7 +38,7 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
   const [editing, setEditing] = useState<"fields" | "structure" | "credit-policy" | "packages" | null>(null);
   const [editorGeneration, setEditorGeneration] = useState(0);
   const [working, setBusy] = useState(false); const [packageBusy, setPackageBusy] = useState(false);
-  const busy = working || packageBusy;
+  const [mediaBusy, setMediaBusy] = useState(false); const busy = working || packageBusy || mediaBusy;
   const [error, setError] = useState(""); const [message, setMessage] = useState("");
   const intents = useRef(new Map<string, string>());
   const actionPending = useRef(false);
@@ -101,7 +102,10 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
         <p>{material.blocks.length} lesson blocks · {material.blocks.reduce((n,b) => n+(b.quiz?.questions.length ?? 0),0)} assessment questions · {material.credits.length} credit rules · {material.packages.length} packages</p>
         <p>Private media locations stay in CareBase. This review includes material and policy evidence; it does not copy learner records.</p>
         <details><summary>Review course and version policy</summary><pre>{JSON.stringify({ course: material.course, version: material.version }, null, 2)}</pre></details>
-        {material.blocks.map(block => <details key={block.id}><summary>{block.title || "Untitled lesson"} · {block.type}</summary><pre>{JSON.stringify(block, null, 2)}</pre></details>)}
+        {material.blocks.map(block => <details key={block.id}><summary>{block.title || "Untitled lesson"} / {block.type}</summary><pre>{JSON.stringify(block, null, 2)}</pre>
+          {["pdf", "video"].includes(block.type) && <CourseMediaPanel courseId={courseId} versionId={versionId} blockId={block.id} draft={version?.status === "draft"}
+            disabled={busy || editing !== null || Boolean(preview && !result)} onBusy={setMediaBusy} onApplied={() => { clearSource(); setMessage("Media attached. Load the resulting course material and preserve it before editing."); }} />}
+        </details>)}
         <details><summary>Review credits, provider evidence and packages</summary><pre>{JSON.stringify({ credits: material.credits, provider: material.provider, packages: material.packages }, null, 2)}</pre></details>
       </div>
       <label className="learning-checkbox"><input type="checkbox" disabled={busy} checked={reviewed} onChange={event => setReviewed(event.target.checked)} />I reviewed this exact version and its policy evidence for preservation in the Hub.</label>
@@ -126,7 +130,7 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
               reasonReady={reason.trim().length >= 10} onChange={() => { clearPreview(); setEditing("credit-policy"); }}
               onPreview={policy => void action(() => prepare("learning.editCreditPolicy", undefined, undefined, policy))} />
             <PackagePanel key={"packages" + source.sourceRevision + editorGeneration} material={material} sourceRevision={source.sourceRevision} reason={reason}
-              disabled={working || Boolean(result) || (editing !== null && editing !== "packages")}
+              disabled={working || mediaBusy || Boolean(result) || (editing !== null && editing !== "packages")}
               onEditing={() => { clearPreview(); setEditing("packages"); }} onBusy={setPackageBusy}
               onChanged={receipt => { clearSource(); setMessage(`CareBase confirmed package ${receipt.packageId} as ${receipt.status}. Load course versions and preserve the new exact material before another change.`); }} />
             {editing && !result && <><p>Finish this group of edits before starting another group or approving the draft.</p>
@@ -152,6 +156,7 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
       })}>Confirm and apply this change</button>
     </div>}
     {result && <p role="status">CareBase confirmed version {result.versionNumber} as {result.status}{result.replayed ? " (previously completed)" : ""}.</p>}
+    {versionId && <CourseMediaReceiptRecovery key={courseId + versionId} courseId={courseId} versionId={versionId} disabled={busy || editing !== null} />}
     <details><summary>Provider details for all course versions</summary><ProviderPolicyPanel key={courseId} courseId={courseId} onApplied={()=>{clearSource();setCatalog(null);intents.current.clear();}}/></details>
     <DistributionPanel courseId={courseId} disabled={busy} />
   </section>;

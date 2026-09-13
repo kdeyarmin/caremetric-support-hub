@@ -1,0 +1,65 @@
+name: Prepare reviewed combined media candidate
+on:
+  push:
+    branches: [codex/hub-course-media-20260911]
+    paths: [.github/workflows/review-source-snapshot.yml, .github/review-apply.py]
+permissions:
+  contents: read
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Merge the reviewed main and apply the exact follow-up
+        run: |
+          set -euo pipefail
+          git config user.name 'Review candidate'
+          git config user.email 'review-candidate@users.noreply.github.com'
+          git merge --no-commit --no-ff 8a4b186cedfdd8c43082ca70dbbd63f86bc53a31
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,subprocess,json
+          files=['server/operational-configuration.mjs','server/operational-configuration.test.mjs','server/learning-media.mjs','server/learning-media.test.mjs','src/learning/DistributionPanel.tsx','src/learning/DistributionPanel.test.tsx','src/admin/portfolioProtocol.test.ts','supabase/functions/_shared/portfolioProtocol.ts']
+          helper=Path('.github/review-apply.py').read_bytes()
+          assert hashlib.sha256(helper).hexdigest()=='4bc2f1cfd51384e85d96b0db1a582f639ab97cec25b6e7a588475cde16c65c80'
+          subprocess.run(['python3','.github/review-apply.py'],check=True)
+          subprocess.run(['git','restore','--source=HEAD','--staged','--worktree','.github/workflows/ci.yml'],check=True)
+          subprocess.run(['git','add',*files],check=True)
+          subprocess.run(['git','diff','--cached','--check'],check=True)
+          def git(*args):return subprocess.check_output(['git',*args]).decode().strip()
+          entries=[]
+          for path in files:
+            item={'path':path,'mode':'100644','type':'blob'}
+            if not Path(path).exists():item['sha']=None
+            else:item['content']=Path(path).read_text()
+            entries.append(item)
+          Path('/tmp/review-tree.json').write_text(json.dumps({'base_tree':git('rev-parse','HEAD^{tree}'),'tree':entries}))
+          Path('/tmp/review-paths.json').write_text(json.dumps(files))
+          PY
+      - name: Create candidate objects for independent review
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/review-candidate
+          gh api --method POST "repos/$GITHUB_REPOSITORY/git/trees" --input /tmp/review-tree.json > /tmp/review-candidate/tree.json
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,os
+          tree=json.loads(Path('/tmp/review-candidate/tree.json').read_text())['sha']
+          Path('/tmp/review-commit.json').write_text(json.dumps({'message':'fix(media): reconcile main and close media review findings','tree':tree,'parents':[os.environ['GITHUB_SHA'],'8a4b186cedfdd8c43082ca70dbbd63f86bc53a31']}))
+          PY
+          gh api --method POST "repos/$GITHUB_REPOSITORY/git/commits" --input /tmp/review-commit.json > /tmp/review-candidate/candidate.json
+          cp /tmp/review-paths.json /tmp/review-candidate/paths.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-media-candidate
+          path: /tmp/review-candidate/
+          retention-days: 1
+          if-no-files-found: error

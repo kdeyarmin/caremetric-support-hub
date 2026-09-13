@@ -16,9 +16,11 @@ import { nativePackageOperationSchema } from '../src/learning/packageProtocol.ts
 import { learningPackages } from './learning-packages.mjs';
 import { nativeDistributionOperationSchema } from '../src/learning/distributionProtocol.ts';
 import { learningDistribution } from './learning-distribution.mjs';
-import { distributionSession } from './distribution-session.mjs';
+import { boundedSession } from './bounded-session.mjs';
 import { providerOperationSchema } from '../src/learning/providerPolicyProtocol.ts';
 import { learningProvider } from './learning-provider.mjs';
+import { nativeMediaOperationSchema } from '../src/learning/mediaProtocol.ts';
+import { learningMedia } from './learning-media.mjs';
 import { supportIdentityOperation } from '../src/support/onboardingProtocol.ts';
 import { supportOnboarding } from './support-onboarding.mjs';
 import { supportRegistration } from './support-registration.mjs';
@@ -74,7 +76,7 @@ async function authorize(db,audience,payload) {
     return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
   }
   if (audience==='carebase.learning') {
-    nativeLearningOperationSchema.or(nativeAuthoringOperationSchema).or(nativeCreationOperationSchema).or(nativePackageOperationSchema).or(nativeDistributionOperationSchema).or(providerOperationSchema).parse(payload);
+    nativeLearningOperationSchema.or(nativeAuthoringOperationSchema).or(nativeCreationOperationSchema).or(nativePackageOperationSchema).or(nativeDistributionOperationSchema).or(providerOperationSchema).or(nativeMediaOperationSchema).parse(payload);
     return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
   }
   if (audience!=='media') throw new HttpError(403,'Unsupported authorization audience.');
@@ -84,7 +86,7 @@ async function authorize(db,audience,payload) {
 }
 export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,legacyDistributionOptIn=false}) {
   const issue = async (sessionToken,audience,payload,signal) => {
-    const authorizeSession=work=>signal?distributionSession(pool,sessionToken,signal,work):withSession(pool,sessionToken,work);
+    const authorizeSession=work=>signal?boundedSession(pool,sessionToken,signal,work):withSession(pool,sessionToken,work);
     return authorizeSession(async(db,session) => {
       await authorize(db,audience,payload);
       const capability=prefix+token();
@@ -103,6 +105,7 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
     package: learningPackages({pool,issue,fetchImpl}),
     distribution: learningDistribution({pool,issue,fetchImpl,observer,legacyOptInAllowed:legacyDistributionOptIn}),
     provider: learningProvider({pool,issue,fetchImpl}),
+    courseMedia: learningMedia({pool,issue,fetchImpl}),
     onboarding: supportOnboarding({pool,issue,fetchImpl}),
     registration: supportRegistration({pool,issue,provider,fetchImpl}),
     billingCommand: billingCommands({pool,issue,fetchImpl}),

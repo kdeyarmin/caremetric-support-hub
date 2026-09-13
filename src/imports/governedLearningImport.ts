@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { projectMediaAsset } from "../../supabase/functions/_shared/courseMediaProtocol.ts";
 
 // Source UUIDs are opaque identifiers; older native seeds need not be RFC v4.
 const id = z.string().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/);
@@ -16,6 +17,8 @@ const quiz = z.strictObject({ id, title: text, passingScore: integer.min(0).max(
 // Authoring body/manifest JSON is retained verbatim, never rendered or projected to learners.
 // Asset tables, storage location columns, learner records and account IDs are not exported.
 // Recognized credential/storage fields inside authored JSON fail validation, too.
+const mediaAsset = z.strictObject({ id, contentSha256: hash, mimeType: z.enum(["application/pdf", "video/mp4", "video/webm"]),
+  byteSize: z.number().int().positive().max(104857600), fileName: z.string().min(1).max(320) });
 export const governedCourseSchema = z.strictObject({
   contract: z.literal("carebase.course.v1"), sourceCourseId: id, sourceVersionId: id, sourceVersionNumber: integer,
   publicationState: z.enum(["draft", "published", "archived"]), sourceVersionState: z.enum(["draft", "published"]),
@@ -24,7 +27,7 @@ export const governedCourseSchema = z.strictObject({
   version: z.strictObject({ title: text, description: nullableText, label: nullableText, contentStandard: z.enum(["legacy", "comprehensive"]),
     creditedDurationRationale: nullableText, aiGenerated: z.boolean(), aiReviewedAt: nullableText }),
   blocks: z.array(z.strictObject({ id, type: z.enum(["text", "video", "pdf", "scorm", "quiz", "attestation"]), sortOrder: integer, title: nullableText,
-    body: z.json(), documentId: id.nullable(), videoLocatorSha256: hash.nullable(), quiz: quiz.nullable() })).max(500),
+    body: z.json(), documentId: id.nullable(), videoLocatorSha256: hash.nullable(), mediaAsset: mediaAsset.optional(), quiz: quiz.nullable() })).max(500),
   credits: z.array(z.strictObject({ id, trainingTypeId: id, topicCode: text, creditHours: z.string().regex(/^\d{1,4}(\.\d{1,2})?$/),
     mode: z.enum(["automatic", "verified_only"]), citationNote: text, active: z.boolean() })).max(100),
   provider: z.strictObject({ id, fullName: text, professionalTitle: nullableText, credential: nullableText, credentialNumber: nullableText,
@@ -58,6 +61,11 @@ export function validateGovernedCourse(value: unknown): GovernedCourse {
   }
   for (const block of course.blocks) {
     unique("block", block.id);
+    if (block.mediaAsset !== undefined) {
+      const asset = projectMediaAsset(block.mediaAsset);
+      if (!["pdf", "video"].includes(block.type) || (block.type === "pdf") !== (asset.mimeType === "application/pdf")
+        || block.documentId !== null || block.videoLocatorSha256 !== null) throw new Error("Source media attachment is invalid.");
+    }
     if ((block.type !== "quiz" && block.quiz !== null) || (block.type === "quiz" && block.quiz === null && course.sourceVersionState !== "draft")) {
       throw new Error("Source quiz blocks and configuration do not agree.");
     }
@@ -106,5 +114,5 @@ export function governedImportSummary(imports: GovernedImport[]) {
     blocks: courses.reduce((n, c) => n + c.blocks.length, 0), quizzes: courses.reduce((n, c) => n + c.blocks.filter(b => b.quiz).length, 0),
     questions: courses.reduce((n, c) => n + c.blocks.reduce((m, b) => m + (b.quiz?.questions.length ?? 0), 0), 0),
     creditRules: courses.reduce((n, c) => n + c.credits.length, 0), providers: courses.filter(c => c.provider).length,
-    mediaReferences: courses.reduce((n, c) => n + c.blocks.filter(b => b.videoLocatorSha256 || b.documentId).length + c.packages.length, 0) };
+    mediaReferences: courses.reduce((n, c) => n + c.blocks.filter(b => b.videoLocatorSha256 || b.documentId || b.mediaAsset).length + c.packages.length, 0) };
 }

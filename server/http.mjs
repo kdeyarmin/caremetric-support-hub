@@ -5,6 +5,7 @@ import { resolve,extname } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { cookie,readCookie,sessionCookie,challengeCookie,HttpError } from './sms-auth.mjs';
+import { parseMediaUploadHeader } from './learning-media.mjs';
 import { parsePackageUploadHeader } from './learning-packages.mjs';
 
 export const securityHeaders = {
@@ -96,6 +97,32 @@ export function appServer({auth,gateway,delegations,publications,docstudio,origi
         }
         if (!['GET','POST','HEAD'].includes(req.method)) throw new HttpError(405,'Method not allowed.');
         if(req.method==='POST' && !sameOrigin(req,origins)) throw new HttpError(403,'Open this action in CareMetric.');
+        if(path.startsWith('/api/course-media')) {
+          if(url.search)throw new HttpError(400,'Media query parameters are not supported.');
+          const controller=new AbortController();
+          const abort=()=>{if(!res.writableEnded)controller.abort();};req.once('aborted',abort);res.once('close',abort);
+          const deadline=setTimeout(()=>{controller.abort();req.destroy();},path==='/api/course-media'?12000:120000);deadline.unref();
+          try {
+            if(path==='/api/course-media' && req.method==='POST'){
+              const input=await jsonBody(req,8192);if(!['media.context','media.status','media.finish'].includes(input.operation))throw new HttpError(400,'Invalid media metadata operation.');
+              return json(await delegations.courseMedia(session,input,{signal:controller.signal}));
+            }
+            if(path==='/api/course-media/upload' && req.method==='POST')return json(await delegations.courseMedia(session,parseMediaUploadHeader(req.headers['x-caremetric-media-request']),
+              {body:req,contentType:req.headers['content-type'],contentLength:req.headers['content-length'],signal:controller.signal}));
+            const ids=/^\/api\/course-media\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/([0-9a-f-]{36})$/.exec(path);
+            if(ids&&['GET','HEAD'].includes(req.method)) {
+              if(req.headers['sec-fetch-site']&&!['same-origin','none'].includes(req.headers['sec-fetch-site']))throw new HttpError(403,'Open this media in CareMetric.');
+              const result=await delegations.courseMedia(session,{operation:'media.read',courseId:ids[1],versionId:ids[2],blockId:ids[3],assetId:ids[4],range:null},
+                {rangeHeader:req.headers.range,headOnly:req.method==='HEAD',signal:controller.signal});
+              res.statusCode=result.range?206:200;res.setHeader('Content-Type',result.asset.mimeType);res.setHeader('Content-Length',String(result.length));
+              res.setHeader('Cache-Control','private, no-store');res.setHeader('Accept-Ranges','bytes');
+              if(result.range)res.setHeader('Content-Range',`bytes ${result.range.start}-${result.range.end}/${result.asset.byteSize}`);
+              if(req.method==='HEAD')return res.end();
+              await pipeline(result.body,res);return;
+            }
+            throw new HttpError(404,'Media resource unavailable.');
+          }finally{clearTimeout(deadline);req.removeListener('aborted',abort);res.removeListener('close',abort);}
+        }
         if(path.startsWith('/api/docstudio') && docstudio) {
           if(url.search)throw new HttpError(400,'DocStudio query parameters are not supported.');
           if(path==='/api/docstudio' && req.method==='GET') return json(await docstudio.read(session));
