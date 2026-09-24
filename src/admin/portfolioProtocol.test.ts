@@ -169,3 +169,15 @@ describe("PennSync native billing boundaries", () => {
     expect(() => parse("organizations.list", { ...page, items: [{ ...organization, id }] }, "pennsync")).toThrow();
   });
 });
+
+describe("shared phone message contract", () => {
+  const message = { id: uuid, contactName: "Caller", companyName: "Organization", phone: "+12025550111", email: null, message: "Callback requested.", status: "new", createdAt: now, product: "advisors", requestType: "healthcare_advisors" };
+  it("accepts bounded messages and strips internal metadata", () => {
+    expect(parse("phone.messages.list", { ...page, items: [{ ...message, transcript: "private", twilioCallSid: "private" }] }).data).toEqual({ ...page, items: [message] });
+  });
+  it("rejects alternate sources, oversized summaries, and mismatched pages", () => {
+    expect(() => parsePortfolioRequest({ product: "intel", operation: "phone.messages.list" })).toThrow();
+    expect(() => parse("phone.messages.list", { ...page, items: [{ ...message, message: "x".repeat(2001) }] })).toThrow();
+    expect(() => parse("phone.messages.list", { ...page, offset: 20, items: [message] })).toThrow();
+  });
+});
