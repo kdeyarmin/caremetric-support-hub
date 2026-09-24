@@ -7,13 +7,17 @@ import { isOperationalRead, operationalReadOperations, parseOperationalRead, par
 export const portfolioProducts = ["carebase", "breathe", "caremetric-emr", "pennsync", "intel", "caremetric-go"] as const;
 export type PortfolioProduct = typeof portfolioProducts[number];
 export const learningPackageCapabilities = ["learning.packages.context", "learning.packages.status", "learning.packages.upload", "learning.packages.accept", "learning.packages.finish"] as const;
-export const portfolioOperations = ["capabilities", "overview", "courses.list", "courses.get", "organizations.list", "users.list", "billing.overview", "billing.subscriptions.list", ...billingReadOperations, ...operationalReadOperations, ...learningPackageCapabilities, "learning.distribution.context", "billing.packages.list", "commands.preview", "commands.apply", "billing.commands.preview", "billing.commands.apply", "billing.checkout.preview", "billing.checkout.apply", "billing.checkout.check", "billing.checkout.recover", "support.identity.resolve", "learning.media.v1", "operations.config.v1"] as const;
+export const portfolioOperations = ["phone.messages.list", "capabilities", "overview", "courses.list", "courses.get", "organizations.list", "users.list", "billing.overview", "billing.subscriptions.list", ...billingReadOperations, ...operationalReadOperations, ...learningPackageCapabilities, "learning.distribution.context", "billing.packages.list", "commands.preview", "commands.apply", "billing.commands.preview", "billing.commands.apply", "billing.checkout.preview", "billing.checkout.apply", "billing.checkout.check", "billing.checkout.recover", "support.identity.resolve", "learning.media.v1", "operations.config.v1"] as const;
 export type PortfolioOperationName = typeof portfolioOperations[number];
-export type DirectoryOperation = { operation: "organizations.list" | "users.list" | "billing.subscriptions.list"; search?: string; limit: number; offset: number };
+export type DirectoryOperation = { operation: "organizations.list" | "users.list" | "billing.subscriptions.list" | "phone.messages.list"; search?: string; limit: number; offset: number };
 export type PortfolioOperation = AdminOperation | DirectoryOperation | BillingReadOperation | BillingCatalogOperation | OperationalReadOperation | { operation: "capabilities" | "billing.overview" };
 export interface PortfolioRequest { product: PortfolioProduct; operation: PortfolioOperation; }
 export interface PortfolioCapabilities { apiVersion: 1; operations: PortfolioOperationName[]; sourceRevision: string | null; }
 export interface PortfolioOverview { organizationCount: number | null; activeUserCount: number | null; registeredUserCount?: number; globalCourseCount?: number; subscriptionCount?: number; }
+export interface PhoneMessage {
+  id: string; contactName: string | null; companyName: string | null; phone: string | null;
+  email: string | null; message: string; status: string; createdAt: string | null; product: string; requestType: string;
+}
 export interface AdminOrganization { id: string; name: string | null; slug: string | null; status: string; createdAt: string | null; }
 export interface AdminDirectoryUser { id: string; displayName: string | null; email: string | null; role: string; status: string; createdAt: string | null; }
 export interface AdminSubscription {
@@ -74,7 +78,8 @@ export function parsePortfolioRequest(input: unknown): PortfolioRequest {
   } else if (operation.operation === "capabilities" || operation.operation === "billing.overview") {
     only(operation, ["operation"]);
     parsed = { operation: operation.operation };
-  } else if (["organizations.list", "users.list", "billing.subscriptions.list"].includes(String(operation.operation))) {
+  } else if (["organizations.list", "users.list", "billing.subscriptions.list", "phone.messages.list"].includes(String(operation.operation))) {
+    if (operation.operation === "phone.messages.list" && product !== "breathe") throw new Error("Unsupported phone inbox source");
     // Reuse the same bounded literal-search and pagination contract as courses.
     const page = parseAdminOperation({ ...operation, operation: "courses.list" });
     if (page.operation !== "courses.list") throw new Error("Invalid pagination");
@@ -118,7 +123,7 @@ export function parsePortfolioEnvelope(input: unknown, request: PortfolioRequest
     return parseAdminEnvelope(input, operation as AdminOperation);
   }
   const row = object(envelope.data);
-  let data: PortfolioCapabilities | PortfolioOverview | AdminPage<AdminOrganization> | AdminPage<AdminDirectoryUser> | AdminSubscriptionPage | AdminBillingOverview | AdminInvoicePage | AdminInvoiceDetail | AdminSubscriptionVerification | BillingPackagePage | OperationalPage<OperationalRow>;
+  let data: AdminPage<PhoneMessage> | PortfolioCapabilities | PortfolioOverview | AdminPage<AdminOrganization> | AdminPage<AdminDirectoryUser> | AdminSubscriptionPage | AdminBillingOverview | AdminInvoicePage | AdminInvoiceDetail | AdminSubscriptionVerification | BillingPackagePage | OperationalPage<OperationalRow>;
   if (isOperationalRead(operation.operation)) {
     if (product !== "carebase" || Object.keys(envelope).length !== 5 || typeof envelope.generatedAt !== "string" || !/^\d{4}-\d\d-\d\dT/.test(envelope.generatedAt)) throw new Error("Invalid operational read envelope");
     data = parseOperationalPage(row, operation as OperationalReadOperation);
@@ -133,6 +138,14 @@ export function parsePortfolioEnvelope(input: unknown, request: PortfolioRequest
     const revision = nullableString(row.sourceRevision, 64);
     if (revision !== null && !/^[a-f0-9]{7,64}$/i.test(revision)) throw new Error("Invalid source revision");
     data = { apiVersion: 1, operations: [...new Set(row.operations.filter(value => portfolioOperations.includes(value as PortfolioOperationName) && (product === "carebase" || !isOperationalRead(value) && value !== "learning.distribution.context" && value !== "learning.media.v1" && value !== "operations.config.v1" && !learningPackageCapabilities.includes(value as typeof learningPackageCapabilities[number]))))] as PortfolioOperationName[], sourceRevision: revision };
+  } else if (operation.operation === "phone.messages.list") {
+    if (product !== "breathe") throw new Error("Unsupported phone inbox source");
+    data = page(row, operation, value => {
+      const item = object(value);
+      return { id: id(item.id), contactName: nullableString(item.contactName, 160), companyName: nullableString(item.companyName, 200),
+        phone: nullableString(item.phone, 40), email: nullableString(item.email, 500), message: string(item.message, 2000),
+        status: string(item.status, 100), createdAt: timestamp(item.createdAt), product: string(item.product, 80), requestType: string(item.requestType, 80) };
+    });
   } else if (operation.operation === "overview" && product === "intel") {
     if (row.organizationCount !== null || row.activeUserCount !== null || row.subscriptionCount !== undefined) throw new Error("Unverified Intel totals");
     data = { organizationCount: null, activeUserCount: null, registeredUserCount: count(row.registeredUserCount) };
