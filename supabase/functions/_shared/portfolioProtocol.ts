@@ -17,6 +17,7 @@ export interface PortfolioOverview { organizationCount: number | null; activeUse
 export interface PhoneMessage {
   id: string; contactName: string | null; companyName: string | null; phone: string | null;
   email: string | null; message: string; status: string; createdAt: string | null; product: string; requestType: string;
+  sms?: { status: string; resources: string[]; errorCode: string | null } | null;
 }
 export interface AdminOrganization { id: string; name: string | null; slug: string | null; status: string; createdAt: string | null; }
 export interface AdminDirectoryUser { id: string; displayName: string | null; email: string | null; role: string; status: string; createdAt: string | null; }
@@ -142,9 +143,19 @@ export function parsePortfolioEnvelope(input: unknown, request: PortfolioRequest
     if (product !== "breathe") throw new Error("Unsupported phone inbox source");
     data = page(row, operation, value => {
       const item = object(value);
+      let sms: PhoneMessage["sms"];
+      if (item.sms !== undefined) {
+        if (item.sms === null) sms = null;
+        else {
+          const text = object(item.sms);
+          const status = string(text.status, 20);
+          if (!["submitting", "accepted", "delivered", "failed", "undelivered", "unknown"].includes(status) || !Array.isArray(text.resources) || text.resources.length > 3) throw new Error("Invalid text delivery record");
+          sms = { status, resources: text.resources.map(value => string(value, 80)), errorCode: nullableString(text.errorCode, 20) };
+        }
+      }
       return { id: id(item.id), contactName: nullableString(item.contactName, 160), companyName: nullableString(item.companyName, 200),
         phone: nullableString(item.phone, 40), email: nullableString(item.email, 500), message: string(item.message, 2000),
-        status: string(item.status, 100), createdAt: timestamp(item.createdAt), product: string(item.product, 80), requestType: string(item.requestType, 80) };
+        status: string(item.status, 100), createdAt: timestamp(item.createdAt), product: string(item.product, 80), requestType: string(item.requestType, 80), ...(sms !== undefined ? { sms } : {}) };
     });
   } else if (operation.operation === "overview" && product === "intel") {
     if (row.organizationCount !== null || row.activeUserCount !== null || row.subscriptionCount !== undefined) throw new Error("Unverified Intel totals");

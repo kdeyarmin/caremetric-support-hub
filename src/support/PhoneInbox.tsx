@@ -4,6 +4,8 @@ import { PagedRecords } from "../admin/PagedRecords";
 import type { AdminPage, PhoneMessage } from "../../supabase/functions/_shared/portfolioProtocol";
 
 const requestLabels: Record<string, string> = { healthcare_advisors: "Advisor message", tech_support: "Technical support", customer_service: "Customer service", sales: "Software inquiry", other: "Other" };
+const textStatuses: Record<string, string> = { submitting: "Submission pending", accepted: "Submitted — delivery unconfirmed", delivered: "Delivered", failed: "Failed", undelivered: "Not delivered", unknown: "Send outcome unknown — do not resend automatically" };
+const textResources: Record<string, string> = { support: "Support link", software: "Software directory", advisors: "Advisors contact form", account_access: "Account access steps", troubleshooting: "Support steps", breathe: "Breathe information" };
 export function PhoneInbox() {
   const [revision, setRevision] = useState(0);
   const read = useCallback(async (search: string, offset: number, signal: AbortSignal) =>
@@ -15,7 +17,7 @@ export function PhoneInbox() {
       <td>{row.createdAt ? new Date(row.createdAt).toLocaleString() : "Not recorded"}</td>
       <td><strong>{requestLabels[row.requestType] ?? row.requestType}</strong><div>{row.product}</div></td>
       <td>{row.contactName ?? "Name not provided"}<div>{row.companyName}</div></td>
-      <td><div>{row.phone ?? "No callback number"}</div><div>{row.email}</div></td>
+      <td><div>{row.phone ?? "No callback number"}</div><div>{row.email}</div>{row.sms && <div><strong>Requested text: {textStatuses[row.sms.status]}</strong><div>{row.sms.resources.map(key => textResources[key] ?? key).join(", ")}</div>{row.sms.errorCode && <div>Delivery error: {row.sms.errorCode}</div>}</div>}</td>
       <td style={{ whiteSpace: "pre-wrap", minWidth: "18rem" }}>{row.message}</td><td>{row.status === "new" ? "Needs review" : row.status.replaceAll("_", " ")}</td>
     </>} />
   </>;
