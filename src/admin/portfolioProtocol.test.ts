@@ -172,6 +172,11 @@ describe("PennSync native billing boundaries", () => {
 
 describe("shared phone message contract", () => {
   const message = { id: uuid, contactName: "Caller", companyName: "Organization", phone: "+12025550111", email: null, message: "Callback requested.", status: "new", createdAt: now, product: "advisors", requestType: "healthcare_advisors" };
+  it("keeps bounded text delivery details without internal provider identifiers", () => {
+    const sms = { status: "delivered", resources: ["advisors"], errorCode: null };
+    expect(parse("phone.messages.list", { ...page, items: [{ ...message, sms: { ...sms, twilioMessageSid: "private" } }] }).data).toEqual({ ...page, items: [{ ...message, sms }] });
+    expect(() => parse("phone.messages.list", { ...page, items: [{ ...message, sms: { ...sms, status: "invented" } }] })).toThrow();
+  });
   it("accepts bounded messages and strips internal metadata", () => {
     expect(parse("phone.messages.list", { ...page, items: [{ ...message, transcript: "private", twilioCallSid: "private" }] }).data).toEqual({ ...page, items: [message] });
   });
