@@ -1,0 +1,25 @@
+.phone-registry-actions{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
+.phone-registry-note{max-width:76rem;color:var(--text-muted,#526173);line-height:1.6}
+.phone-registry-counts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem;margin:1.5rem 0}
+.phone-registry-counts>div{border:1px solid #d9e2ed;border-radius:12px;padding:1rem;background:#fff;display:flex;flex-direction:column;gap:.25rem}
+.phone-registry-counts strong{font-size:1.8rem;color:#173b4b}
+.phone-registry-filters{display:flex;gap:1rem;flex-wrap:wrap;margin:1rem 0}
+.phone-registry-filters label,.phone-editor-grid label{display:flex;flex-direction:column;gap:.45rem;font-size:.9rem;font-weight:600}
+.phone-registry-filters input,.phone-registry-filters select,.phone-editor input,.phone-editor select,.phone-editor textarea{padding:.65rem;border:1px solid #b8c8d6;border-radius:7px;background:#fff;color:#172b3a;font:inherit;min-width:0;width:100%}
+.phone-registry-filters label:first-child{flex:1;min-width:200px}
+.phone-registry-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
+.phone-number-card{padding:1.3rem;min-width:0}
+.phone-number-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem}
+.phone-number-heading h2{margin:0 0 .3rem}
+.phone-number-heading p{margin:.35rem 0}
+.phone-number-status{display:flex;flex-wrap:wrap;gap:.4rem;margin:1rem 0}
+.phone-number-status span{padding:.25rem .5rem;border-radius:6px;background:#edf3f7;font-size:.8rem}
+.phone-number-card dl{margin:0 0 1rem;display:grid;gap:.8rem}
+.phone-number-card dt{font-weight:600;font-size:.8rem;color:#526173}
+.phone-number-card dd{margin:.2rem 0 0;overflow-wrap:anywhere;line-height:1.5}
+.phone-editor::backdrop{background:#12263880}
+.phone-editor{padding:1.5rem;width:min(920px,96vw);max-height:92dvh;overflow:auto;margin:auto;border:1px solid #b8c8d6}
+.phone-editor fieldset{border:0;padding:0;margin:0 0 1rem;min-width:0}
+.phone-editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
+@media(max-width:850px){.phone-registry-list{grid-template-columns:1fr}.phone-registry-counts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.phone-editor-grid{grid-template-columns:1fr}.phone-number-heading{flex-direction:column}.phone-editor{padding:1rem}.phone-editor-backdrop{padding:.4rem}.phone-registry-counts{gap:.5rem}}
