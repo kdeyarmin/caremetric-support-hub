@@ -51,12 +51,12 @@ try{
   assert.equal(initial.rows.length,4);
   assert.ok(initial.rows.some(row=>row.number==='+18775212890'&&row.sms_status==='pending'));
   assert.equal(initial.rows.filter(row=>row.usage_status==='unknown').length,3);
-  for(const invalid of [{...record,number:'not a number'},{...record,role:'platform_admin'},{...record,notes:'a'.repeat(2001)},{...record,notes:null},{...record,label:' '},{...record,lifecycle:'released'},{...record,usage_status:'observed'},{...record,reviewed_on:'9999-01-01'},{...record,reviewed_on:'2026-02-31'}])
+  for(const invalid of [{...record,account_sid:'secret-not-an-account-id'},{...record,account_type:'admin'},{...record,migration_status:'completed'},{...record,api_key:'not-allowed'},{...record,number:'not a number'},{...record,role:'platform_admin'},{...record,notes:'a'.repeat(2001)},{...record,notes:null},{...record,label:' '},{...record,lifecycle:'released'},{...record,usage_status:'observed'},{...record,reviewed_on:'9999-01-01'},{...record,reviewed_on:'2026-02-31'}])
     await assert.rejects(save(invalid));
-  const created=await save();recordId=created.id;assert.equal(created.version,1);
+  const created=await save({...record,tenant:'Example DME',account_type:'subaccount',account_sid:'AC'+'1'.repeat(32),parent_account_sid:'AC'+'0'.repeat(32),business_profile_status:'pending',migration_status:'staged',messaging_registration:'Customer Care'});recordId=created.id;assert.equal(created.version,1);
   await assert.rejects(save(),'duplicate numbers do not create another record');
   const updated=await save({...record,lifecycle:'retired',notes:'Keep for history'},created.id,1);
-  assert.equal(updated.version,2);assert.equal(updated.lifecycle,'retired');
+  assert.equal(updated.version,2);assert.equal(updated.lifecycle,'retired');assert.equal(updated.tenant,'Example DME');assert.equal(updated.migration_status,'staged');assert.equal(updated.account_sid,'AC'+'1'.repeat(32));
   await assert.rejects(save(record,created.id,1),'stale changes cannot overwrite');
   await assert.rejects(save({...record,number:'+12025550884'},created.id,2),'cannot rename an existing number');
   assert.ok((await rpc('list_phone_numbers')).rows.some(row=>row.id===created.id&&row.lifecycle==='retired'));

@@ -44,6 +44,19 @@ describe('phone inventory',()=>{
     expect((screen.getByLabelText('Purpose') as HTMLInputElement).value).toBe('New purpose');
     expect(screen.getByRole('dialog')).toBeTruthy();
   });
+  it('finds tenant accounts and shows planned migration without claiming activation',async()=>{
+    const client=setup([{...row,tenant:'Example DME',account_type:'shared',migration_status:'planned',business_profile_status:'pending',lifecycle:'active',usage_status:'observed',reviewed_on:'2026-09-24',evidence:'Provider call log.',voice_status:'configured',sms_status:'configured'}]);
+    await screen.findByText('Example DME');
+    fireEvent.change(screen.getByLabelText('Search numbers'),{target:{value:'Example DME'}});
+    fireEvent.change(screen.getByLabelText('Show'),{target:{value:'review'}});
+    expect(screen.getByText('Migration planned')).toBeTruthy();
+    expect(screen.getByText('Existing shared account')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'Edit (202) 555-0881'}));
+    fireEvent.change(screen.getByLabelText('Business / tenant'),{target:{value:'Example Medical'}});
+    fireEvent.change(screen.getByLabelText('Account migration'),{target:{value:'staged'}});
+    fireEvent.click(screen.getByRole('button',{name:'Save number'}));
+    await waitFor(()=>expect(client.save).toHaveBeenCalledWith(expect.objectContaining({tenant:'Example Medical',migration_status:'staged',account_type:'shared'}),expect.anything()));
+  });
   it('does not show cached records after a failed refresh',async()=>{
     const client=setup();await screen.findByText('(202) 555-0881');
     client.list.mockRejectedValue(new Error('forbidden'));fireEvent.click(screen.getByRole('button',{name:'Refresh'}));
@@ -66,6 +79,6 @@ describe('registry validation and transport',()=>{
   it('sends a closed update payload and optimistic version through same-origin API',async()=>{
     const fetcher=vi.fn(async()=>Response.json(row));vi.stubGlobal('fetch',fetcher);
     await phoneRegistryClient.save(record,row);
-    expect(fetcher).toHaveBeenCalledWith('/api/rpc/save_phone_number',expect.objectContaining({credentials:'same-origin',body:JSON.stringify({p_id:row.id,p_record:record,p_expected_version:1})}));
+    expect(fetcher).toHaveBeenCalledWith('/api/rpc/save_phone_number',expect.objectContaining({credentials:'same-origin',body:JSON.stringify({p_id:row.id,p_record:phoneRecordSchema.parse(record),p_expected_version:1})}));
   });
 });
