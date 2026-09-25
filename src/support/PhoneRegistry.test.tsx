@@ -64,4 +64,3 @@ describe('registry validation and transport',()=>{
     expect(fetcher).toHaveBeenCalledWith('/api/rpc/save_phone_number',expect.objectContaining({credentials:'same-origin',body:JSON.stringify({p_id:row.id,p_record:record,p_expected_version:1})}));
   });
 });
-

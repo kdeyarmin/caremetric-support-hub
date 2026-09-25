@@ -76,4 +76,3 @@ function PhoneEditor({initial,previous,client,onCancel,onSaved}:{initial:PhoneRe
     </div></fieldset>{error&&<p role="alert">{error}</p>}<div className="phone-registry-actions"><button type="submit" className="button button-primary" disabled={saving}>{saving?'Saving…':'Save number'}</button><button type="button" className="button button-secondary" disabled={saving} onClick={onCancel}>Cancel</button></div></form>
   </dialog>;
 }
-

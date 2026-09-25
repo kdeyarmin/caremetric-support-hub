@@ -37,7 +37,7 @@ export function displayPhone(number:string) {
   return /^\+1\d{10}$/.test(number) ? '('+number.slice(2,5)+') '+number.slice(5,8)+'-'+number.slice(8) : number;
 }
 export const phoneLabels = {
-  lifecycle:{active:'Active',reserved:'Reserved',retired:'Retired',unknown:'Needs review'},
+  lifecycle:{active:'Active',reserved:'Reserved',retired:'Retired',unknown:'Unknown'},
   usage_status:{observed:'Usage observed',no_activity_observed:'No activity observed',unknown:'Usage unknown'},
   voice_status:{configured:'Configured',not_configured:'Not configured',unknown:'Unknown'},
   sms_status:{configured:'Configured',pending:'Pending approval',rejected:'Rejected',disabled:'Disabled',unknown:'Unknown'},
