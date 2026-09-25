@@ -1,6 +1,6 @@
 import type {PortfolioCapabilities,PortfolioOperationName,PortfolioProduct} from '../../supabase/functions/_shared/portfolioProtocol';
 
-export type AdminView='overview'|'organizations'|'users'|'billing'|'courses'|'jobs'|'releases'|'audit';
+export type AdminView='overview'|'organizations'|'users'|'billing'|'training'|'courses'|'jobs'|'releases'|'audit';
 export interface AdminFunction {
   id:string; title:string; description:string; view:AdminView;
   requires:readonly PortfolioOperationName[]; carebaseOnly?:boolean;
@@ -20,6 +20,8 @@ export const adminFunctions:readonly AdminFunction[]=[
   {id:'portal',title:'Billing portal',description:'Choose an organization and review a provider billing portal request.',view:'organizations',requires:['organizations.list','billing.commands.preview','billing.commands.apply'],carebaseOnly:true},
   {id:'checkout',title:'Subscription checkout',description:'Choose an organization, compare configured packages, and review checkout before creating it.',view:'organizations',requires:['organizations.list','billing.packages.list','billing.checkout.preview','billing.checkout.apply','billing.checkout.check','billing.checkout.recover'],carebaseOnly:true},
   {id:'courses',title:'Native course catalog',description:'Inspect course versions, lessons and publication status before opening shared authoring.',view:'courses',requires:['courses.list','courses.get'],carebaseOnly:true},
+  {id:'training',title:'Facility training administration',description:'Set up a training facility and manage its students, enrollments, certificates and reports from the Hub.',view:'training',requires:['training.v1','organizations.list'],carebaseOnly:true},
+  {id:'training-access',title:'Training module access',description:'Review complimentary or contracted module terms for a selected training organization.',view:'training',requires:['training.v1','organizations.list'],carebaseOnly:true},
   {id:'jobs',title:'System jobs',description:'Inspect job definitions, recent outcomes and failures.',view:'jobs',requires:['operations.jobs.list'],carebaseOnly:true},
   {id:'job-stop',title:'Job stop controls',description:'Review a job’s stop switch and whether it can stop that execution type.',view:'jobs',requires:['operations.jobs.list','operations.config.v1'],carebaseOnly:true},
   {id:'releases',title:'Release settings',description:'Inspect release rollout, organization overrides and retained cohorts.',view:'releases',requires:['operations.releases.list'],carebaseOnly:true},

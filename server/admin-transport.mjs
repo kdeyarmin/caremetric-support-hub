@@ -12,6 +12,8 @@ export async function callNativeAdmin(fetcher, target, authorizationHeader, capa
       // The native error body is never forwarded or logged.
       if (response.status===401 || response.status===403) throw new HttpError(response.status,'Administrator access could not be verified.');
       if (response.status===404) throw new HttpError(404,'Record unavailable.','notfound');
+      if (target==='https://cmcarebase.com/api/platform-admin/training' && response.status===413) throw new HttpError(413,'Narrow the report filters before exporting.','report_too_large');
+      if (target==='https://cmcarebase.com/api/platform-admin/training' && response.status===400) throw new HttpError(400,'Review the training request and try again.','invalid_request');
       if (command && response.status===409) throw new HttpError(409,'The preview changed or expired. Reload before creating another preview.','conflict');
       throw new HttpError(503,'Administrator connection is unavailable.','upstream');
     }
