@@ -4,6 +4,8 @@ import { HttpError, withSession } from './sms-auth.mjs';
 export const rpcArguments = Object.freeze({
   get_support_actor_context: [], list_published_content: [], get_backend_contract: [],
   get_support_readiness: [],
+  list_phone_numbers: [],
+  save_phone_number: ['p_id','p_record','p_expected_version'],
   list_support_intake_tenants: ['p_product_id','p_offset','p_limit'],
   set_support_intake: ['p_tenant_id','p_product_id','p_enabled','p_reviewed','p_expected_updated_at'],
   get_support_case_thread: ['p_case_id'],
@@ -29,7 +31,7 @@ const reads = Object.freeze({
   support_contacts: 'select * from hub.support_contacts order by priority_order',
   support_case_queue: 'select * from hub.support_case_queue order by last_message_at desc',
 });
-const jsonFields = new Set(['p_document','p_answers']);
+const jsonFields = new Set(['p_document','p_answers','p_record']);
 const rowSets = new Set(['list_published_content','get_support_case_thread']);
 
 export function rpcQuery(name, args = {}) {

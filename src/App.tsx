@@ -56,6 +56,7 @@ import { CourseLibrary, CourseEditor } from "./learning/Editor";
 import { CoursePlayer, MyLearning, LearningCertificate } from "./learning/Player";
 import { LearningCatalog } from "./learning/Catalog";
 import { PhoneInbox } from "./support/PhoneInbox";
+import { PhoneRegistry } from "./support/PhoneRegistry";
 import { AdminWorkspace } from "./admin/AdminWorkspace";
 import { SupportReadiness } from "./support/SupportReadiness";
 import { adminClient } from "./admin/client";
@@ -100,6 +101,7 @@ const pendingHelpPathKey = "caremetric.pendingHelpPath";
 const registeredProductSlugs = new Set(Object.keys(integrationRolloutBySlug));
 
 const navItems = [
+  { to: "/phone-numbers", label: "Phone numbers", icon: Phone },
   { to: "/phone", label: "Phone messages", icon: Phone },
   { to: "/admin", label: "Platform admin", icon: Boxes },
   { to: "/overview", label: "Overview", icon: LayoutDashboard },
@@ -251,7 +253,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
         </div>
         <nav className="primary-nav" aria-label="Main navigation">
           <p className="nav-label">Workspace</p>
-          {navItems.filter(item => (!["/admin", "/phone"].includes(item.to) || data.actor.role === "platform_admin") && (item.to !== "/docstudio" || staff)).map(({ to, label, icon: Icon }) => (
+          {navItems.filter(item => (!["/admin", "/phone", "/phone-numbers"].includes(item.to) || data.actor.role === "platform_admin") && (item.to !== "/docstudio" || staff)).map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} onClick={() => setMobileOpen(false)}>
               <Icon size={18} /> <span>{label}</span>
             </NavLink>
@@ -296,6 +298,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
           )}
           <Routes>
             <Route path="/phone" element={data.actor.role === "platform_admin" ? <PhoneInbox key={data.actor.id} /> : <Navigate to="/overview" replace />} />
+            <Route path="/phone-numbers" element={data.actor.role === "platform_admin" ? <PhoneRegistry key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin" element={data.actor.role === "platform_admin" ? <AdminWorkspace key={data.actor.id} client={adminClient} /> : <Navigate to="/overview" replace />} />
             <Route path="/overview" element={<OverviewPage data={data} />} />
             <Route path="/cases" element={<CasesPage key={`${data.actor.id}:${data.actor.role}`} data={data} />} />
