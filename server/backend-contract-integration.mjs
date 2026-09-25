@@ -103,6 +103,7 @@ try {
     assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['learning.media.v1','phone.registry.v1','phone.accounts.v1'].includes(feature))});
     await client.query(await readFile(new URL('../supabase/migrations/20260912002345_governed_course_media_contract.sql',import.meta.url),'utf8'));
     await client.query(await readFile(new URL('../supabase/migrations/20260925022151_phone_registry_contract.sql',import.meta.url),'utf8'));
+    await client.query(await readFile(new URL('../supabase/migrations/20260925030135_phone_registry_tenant_accounts.sql',import.meta.url),'utf8'));
     assert.deepEqual(await readContract(),before,'Forward declarations restore the exact current feature set');
     assertBackendContract(await readContract());
   } finally { await client.query('rollback'); }
