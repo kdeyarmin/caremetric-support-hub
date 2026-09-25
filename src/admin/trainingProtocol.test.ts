@@ -22,6 +22,9 @@ describe('training response boundary',()=>{
     expect(projectTrainingResponse({...page,privateKey:'never returned',rows:[{...row,employeeSsn:'never returned'}]},report)).toEqual(page);
     for(const value of [{...page,total:2},{...page,total:10001},{...page,completion_denominator:0},{...page,rows:[{...row,percent_complete:101}]},{...page,rows:[{...row,assigned_at:'invalid'}]}])expect(()=>projectTrainingResponse(value,report)).toThrow();
     expect(()=>projectTrainingResponse(page,{...report,facilityId:other})).toThrow();
+    expect(()=>projectTrainingResponse(page,{...report,status:'in_progress'})).toThrow();
+    expect(projectTrainingResponse(page,{...report,status:'completed'})).toEqual(page);
+    expect(()=>projectTrainingResponse({...page,date_basis:'certificate',rows:[{...row,certificate_id:null,certificate_issued_at:null}]},{...report,dateBasis:'certificate'})).toThrow();
   });
   it('binds command receipts to reviewed request, target and result',()=>{
     const receipt={requestId:id,action:'facilities.provision',organizationId:other,replayed:false,result:{organizationId:other,facilityId:id,privateSecret:'stripped'}};
@@ -37,9 +40,13 @@ describe('training response boundary',()=>{
   });
   it('only returns explicitly scoped native certificate links, and no URL for unready PDFs',()=>{
     const op=parseTrainingOperation({domain:'training.v1',operation:'certificates.read',organizationId:id,certificateId:id});
-    const result={certificateId:id,status:'ready',expiresAt:'2026-09-25T02:05:00Z',url:'https://xsqobvvreaovwibxwyvv.supabase.co/storage/v1/object/sign/certificates/test.pdf?token=test'};
+    const now=Date.now();
+    const result={certificateId:id,status:'ready',expiresAt:new Date(now+600_000).toISOString(),url:`https://xsqobvvreaovwibxwyvv.supabase.co/storage/v1/object/sign/certificates/${id}/${id}.pdf?token=test`};
     expect(projectTrainingResponse(result,op)).toEqual(result);
     for(const value of [{...result,certificateId:other},{...result,url:'https://evil.test/file.pdf'},{...result,url:result.url.replace('/certificates/','/avatars/')},{...result,status:'pending'},{...result,url:null}])expect(()=>projectTrainingResponse(value,op)).toThrow();
+    for(const path of [`${other}/${id}.pdf`,`${id}/${other}.pdf`,`nested/${id}/${id}.pdf`,`${id}/%2e%2e/${id}.pdf`])expect(()=>projectTrainingResponse({...result,url:`https://xsqobvvreaovwibxwyvv.supabase.co/storage/v1/object/sign/certificates/${path}?token=test`},op)).toThrow();
+    for(const expiresAt of [new Date(now-1).toISOString(),new Date(now+660_001).toISOString()])expect(()=>projectTrainingResponse({...result,expiresAt},op,undefined,now)).toThrow();
+    expect(projectTrainingResponse({...result,expiresAt:new Date(now+660_000).toISOString()},op,undefined,now)).toMatchObject({status:'ready'});
   });
   it('never advertises CareBase training for another app',()=>{
     const response={contractVersion:1,product:'breathe',operation:'capabilities',generatedAt:'2026-09-25T02:00:00Z',data:{apiVersion:1,operations:['training.v1','overview'],sourceRevision:null}};

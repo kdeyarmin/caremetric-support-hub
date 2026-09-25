@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TrainingWorkspace } from "./TrainingWorkspace";
 import type { PortfolioClient } from "./portfolioClient";
 import type { TrainingOperation, TrainingResponse } from "../../supabase/functions/_shared/trainingProtocol";
-import { trainingIds as ids, trainingIntent, trainingReport } from "./fixtures/training";
+import { trainingIds as ids, trainingIntent, trainingReport, trainingRow } from "./fixtures/training";
 import { saveTrainingIntent } from "./trainingRecovery";
 import { AdminApiError } from "./transport";
 
@@ -42,7 +42,7 @@ describe("Hub facility training workspace", () => {
     let finish!: (response: TrainingResponse) => void;
     const request = vi.fn(async (operation: TrainingOperation) => operation.operation === "enrollments.report" && operation.limit === 1 ? await new Promise<TrainingResponse>(resolve => { finish = resolve; }) : read(operation));
     setup(request); expect(screen.queryByRole("button", { name: "Add student" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Invite facility administrator" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Invite organization administrator" })).toBeNull();
     await act(async () => finish(trainingReport));
     expect(await screen.findByRole("button", { name: "Add student" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Add student" }));
@@ -52,7 +52,7 @@ describe("Hub facility training workspace", () => {
     setup(vi.fn(async operation => { if (operation.operation === "enrollments.report") throw new AdminApiError("notfound"); return read(operation); }));
     await screen.findByText("Record unavailable");
     expect(screen.queryByRole("button", { name: "Add student" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Invite facility administrator" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Invite organization administrator" })).toBeNull();
   });
   it("creates a student only in the verified facility after review", async () => {
     const { request } = setup(); fireEvent.click(await screen.findByRole("button", { name: "Add student" }));
@@ -65,17 +65,50 @@ describe("Hub facility training workspace", () => {
     await screen.findByText(/Student added/);
   });
   it("invites administrators as org_admin with no implicit student or platform role", async () => {
-    const { request } = setup(); fireEvent.click(await screen.findByRole("button", { name: "Invite facility administrator" }));
+    const { request } = setup(); fireEvent.click(await screen.findByRole("button", { name: "Invite organization administrator" }));
+    const editor = screen.getByRole("region", { name: "Invite organization administrator" });
+    expect(within(editor).getByText(/organization administrator with access to all facilities in this organization/)).toBeTruthy();
+    expect(within(editor).queryByText(/Cedar Home/)).toBeNull();
     fill("First name", "Ava"); fill("Last name", "Admin"); fill("Email", "ava@example.test"); fill("Administrative reason", "Facility requested its administrator account.");
-    await approve();
+    fireEvent.click(screen.getByRole("button", { name: "Review training change" }));
+    const review = screen.getByRole("region", { name: "Review training change" });
+    expect(within(review).getByText("All facilities in this organization")).toBeTruthy();
+    expect(within(review).getByText("Organization administrator")).toBeTruthy();
+    expect(within(review).queryByText("Facility")).toBeNull();
+    expect(within(review).queryByText("Cedar Home")).toBeNull();
+    fireEvent.click(within(review).getByRole("checkbox", { name: "I reviewed this change." }));
+    fireEvent.click(within(review).getByRole("button", { name: "Apply reviewed change" }));
     await screen.findByText(/Delivery status: sent/);
     expect(request.mock.calls.find(([operation]) => operation.operation === "apply")![0]).toMatchObject({ action: "invitations.create", organizationId: ids.organization, parameters: { role: "org_admin", employeeId: null, facilityId: null, email: "ava@example.test" } });
+  });
+  it("shows the selected enrollment's facility when canceling from an all-facilities report", async () => {
+    const secondAssignment = "60000000-0000-4000-8000-000000000002";
+    const request = vi.fn(async (operation: TrainingOperation): Promise<TrainingResponse> => operation.operation === "enrollments.report"
+      ? { ...trainingReport, facility_name: null, total: 2, completed: 0, not_started: 2, rows: [
+        { ...trainingRow, status: "assigned", completed_at: null },
+        { ...trainingRow, id: secondAssignment, facility_id: ids.secondFacility, facility: "Aspen Home", status: "assigned", completed_at: null },
+      ] }
+      : read(operation));
+    setup(request, `/admin?view=training&organizationId=${ids.organization}&trainingTab=reports`);
+    const cancelButtons = await screen.findAllByRole("button", { name: "Cancel enrollment" });
+    fireEvent.click(cancelButtons[1]);
+    const editor = screen.getByRole("region", { name: "Cancel enrollment" });
+    expect(within(editor).getByText("Cedar Care · Aspen Home")).toBeTruthy();
+    expect(within(editor).getByText(/Fire safety for Ada Student at Aspen Home/)).toBeTruthy();
+    fill("Administrative reason", "Enrollment canceled at facility request.");
+    fireEvent.click(screen.getByRole("button", { name: "Review training change" }));
+    const review = screen.getByRole("region", { name: "Review training change" });
+    expect(within(review).getByText("Facility").nextElementSibling?.textContent).toBe("Aspen Home");
+    expect(within(review).queryByText("Cedar Home")).toBeNull();
+    fireEvent.click(within(review).getByRole("checkbox", { name: "I reviewed this change." }));
+    fireEvent.click(within(review).getByRole("button", { name: "Apply reviewed change" }));
+    await waitFor(() => expect(request.mock.calls.find(([operation]) => operation.operation === "apply")?.[0]).toMatchObject({ action: "enrollments.cancel", organizationId: ids.organization, parameters: { assignmentId: secondAssignment } }));
   });
   it("clearly reports a failed invitation and permits a corrected invitation only through a new review", async () => {
     const request = vi.fn(async (operation: TrainingOperation): Promise<TrainingResponse> => operation.operation === "apply" && operation.action === "invitations.create"
       ? { requestId: operation.requestId, action: operation.action, organizationId: ids.organization, replayed: false, result: { invitationId: null, deliveryStatus: "failed" } }
       : read(operation));
-    setup(request); fireEvent.click(await screen.findByRole("button", { name: "Invite facility administrator" }));
+    setup(request); fireEvent.click(await screen.findByRole("button", { name: "Invite organization administrator" }));
     fill("First name", "Ava"); fill("Last name", "Admin"); fill("Email", "ava@example.test"); fill("Administrative reason", "Facility requested its administrator account.");
     await approve();
     const notice = await screen.findByRole("alert");
@@ -84,7 +117,7 @@ describe("Hub facility training workspace", () => {
     expect(screen.queryByText(/recipient completes their own account setup/)).toBeNull();
     expect((await screen.findByRole("button", { name: "Add student" }) as HTMLButtonElement).disabled).toBe(false);
     const first = request.mock.calls.find(([operation]) => operation.operation === "apply")![0];
-    fireEvent.click(screen.getByRole("button", { name: "Invite facility administrator" }));
+    fireEvent.click(screen.getByRole("button", { name: "Invite organization administrator" }));
     fill("First name", "Ava"); fill("Last name", "Admin"); fill("Email", "corrected@example.test"); fill("Administrative reason", "Corrected facility administrator email.");
     expect(request.mock.calls.filter(([operation]) => operation.operation === "apply")).toHaveLength(1);
     await approve(); await screen.findByRole("alert");
