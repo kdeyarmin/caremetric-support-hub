@@ -34,6 +34,7 @@ export function TrainingWorkspace({ actorId, portfolio = portfolioClient, client
   const [facility, setFacility] = useState<TrainingFacility | null>(null);
   const [editor, setEditor] = useState<Editor | null>(recovery.intent ? { action: recovery.intent.command.action, draft: recovery.intent.command } : null), [intent, setIntent] = useState<TrainingIntent | null>(recovery.intent);
   const [revision, setRevision] = useState(0), [notice, setNotice] = useState("");
+  const [noticeKind, setNoticeKind] = useState<"success" | "warning">("success");
   const scopeReader = useCallback(async (signal: AbortSignal) => {
     void revision;
     if (!organizationId) return { organization_name: "", facility_name: null };
@@ -53,12 +54,16 @@ export function TrainingWorkspace({ actorId, portfolio = portfolioClient, client
   const edit = (value: Editor) => { setNotice(""); setIntent(null); setEditor(value); };
   const applied = (response: Awaited<ReturnType<TrainingClient["request"]>>) => {
     const result = response as TrainingCommandResult;
+    setNoticeKind("success");
     if (result.action === "facilities.provision" && typeof result.result.facilityId === "string") {
       const names = intent?.command.action === "facilities.provision" ? intent.command.parameters : null;
       setOrganization({ id: result.organizationId, name: names?.organizationName || "New organization", slug: null, status: "active", createdAt: null });
       setFacility({ id: result.result.facilityId, name: names?.facilityName || "New facility", facilityType: names?.facilityType || "PCH", isActive: true });
       setParams(previous => { const next = new URLSearchParams(previous); next.set("organizationId", result.organizationId); next.set("facilityId", String(result.result.facilityId)); return next; });
       setNotice("Training facility created. Next, invite its administrator and add students below.");
+    } else if (result.action === "invitations.create" && result.result.deliveryStatus === "failed") {
+      setNoticeKind("warning");
+      setNotice("Invitation was not delivered. This request is complete and will not resend. Check the recipient's existing account, email and invitation configuration before starting a new reviewed invitation. You can continue managing training below.");
     } else if (result.action === "invitations.create") setNotice(`Invitation recorded. Delivery status: ${String(result.result.deliveryStatus)}. The recipient completes their own account setup.`);
     else if (result.action === "students.create") setNotice("Student added. Invite the student to their account, then assign a course.");
     else if (result.action === "enrollments.assign") setNotice(result.result.alreadyAssigned ? "The student is already enrolled in this course." : "Course assigned. Follow the student's progress in Enrollment & reports.");
@@ -68,7 +73,7 @@ export function TrainingWorkspace({ actorId, portfolio = portfolioClient, client
   const readOrganizations = useCallback((search: string, offset: number, signal: AbortSignal) => portfolio.organizations({ product: "carebase", search: search || undefined, limit: 20, offset, signal }), [portfolio]);
   return <div className="training-workspace">
     <div className="training-heading"><div><h2>CareMetric CareBase · Facility training</h2><p>Set up training access, enroll facility staff, follow progress and print results here in the Hub.</p></div><button className="button button-primary" disabled={!!editor || recovery.error} onClick={() => edit({ action: "facilities.provision" })}>New training facility</button></div>
-    {notice && <p className="training-notice" role="status">{notice}</p>}
+    {notice && <p className={`training-notice${noticeKind === "warning" ? " training-notice-warning" : ""}`} role={noticeKind === "warning" ? "alert" : "status"}>{notice}</p>}
     {recovery.error && <p role="alert">An unfinished training request could not be recovered from this browser tab. Restore session storage or contact Hub support before creating another change. No new training changes will be sent.</p>}
     {editor && (intent ? <TrainingCommandReview intent={intent} client={client} actorId={actorId} recovered={recovered} onClose={() => setIntent(null)} onApplied={applied} /> : <TrainingEditor key={`${editor.action}:${editor.student?.id || editor.enrollment?.id || editor.term?.id || "new"}`} client={client} editor={editor} organizationId={organizationId || null} facilityId={facilityId || null} organizationName={organizationName} facilityName={facilityName} onReview={value => { setEditor({ ...editor, draft: value.command }); setIntent(value); }} close={() => setEditor(null)} />)}
     <fieldset className="training-workspace-content" disabled={!!editor || recovery.error}>

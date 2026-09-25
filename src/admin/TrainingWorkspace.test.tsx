@@ -71,6 +71,28 @@ describe("Hub facility training workspace", () => {
     await screen.findByText(/Delivery status: sent/);
     expect(request.mock.calls.find(([operation]) => operation.operation === "apply")![0]).toMatchObject({ action: "invitations.create", organizationId: ids.organization, parameters: { role: "org_admin", employeeId: null, facilityId: null, email: "ava@example.test" } });
   });
+  it("clearly reports a failed invitation and permits a corrected invitation only through a new review", async () => {
+    const request = vi.fn(async (operation: TrainingOperation): Promise<TrainingResponse> => operation.operation === "apply" && operation.action === "invitations.create"
+      ? { requestId: operation.requestId, action: operation.action, organizationId: ids.organization, replayed: false, result: { invitationId: null, deliveryStatus: "failed" } }
+      : read(operation));
+    setup(request); fireEvent.click(await screen.findByRole("button", { name: "Invite facility administrator" }));
+    fill("First name", "Ava"); fill("Last name", "Admin"); fill("Email", "ava@example.test"); fill("Administrative reason", "Facility requested its administrator account.");
+    await approve();
+    const notice = await screen.findByRole("alert");
+    expect(notice.textContent).toContain("Invitation was not delivered");
+    expect(notice.textContent).toContain("will not resend");
+    expect(screen.queryByText(/recipient completes their own account setup/)).toBeNull();
+    expect((await screen.findByRole("button", { name: "Add student" }) as HTMLButtonElement).disabled).toBe(false);
+    const first = request.mock.calls.find(([operation]) => operation.operation === "apply")![0];
+    fireEvent.click(screen.getByRole("button", { name: "Invite facility administrator" }));
+    fill("First name", "Ava"); fill("Last name", "Admin"); fill("Email", "corrected@example.test"); fill("Administrative reason", "Corrected facility administrator email.");
+    expect(request.mock.calls.filter(([operation]) => operation.operation === "apply")).toHaveLength(1);
+    await approve(); await screen.findByRole("alert");
+    const mutations = request.mock.calls.map(([operation]) => operation).filter(operation => operation.operation === "apply");
+    expect(mutations).toHaveLength(2);
+    expect(mutations[1]).toMatchObject({ parameters: { email: "corrected@example.test" } });
+    expect(mutations[1].requestId).not.toBe(first.operation === "apply" ? first.requestId : null);
+  });
   it("preserves facility selection and training section through browser back/forward and restored URLs", async () => {
     const first = setup();
     fireEvent.change(await screen.findByLabelText("Training facility"), { target: { value: ids.secondFacility } });

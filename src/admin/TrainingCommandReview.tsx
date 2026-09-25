@@ -27,7 +27,12 @@ export function TrainingCommandReview({ intent, client, actorId, recovered = fal
       if (!current.signal.aborted) {
         if ("action" in result && result.action === "invitations.create" && result.result.deliveryStatus === "unknown") {
           setUncertain(true); setError("The invitation delivery result is unconfirmed. Retry this same request to retrieve its delivery status without sending another invitation.");
-        } else { clearTrainingIntent(actorId); setUncertain(false); onApplied(result); }
+        } else {
+          // A verified "failed" invitation is a terminal no-delivery receipt, including
+          // when recovered after an uncertain attempt. It can safely leave recovery;
+          // the workspace explains the failure and requires a new review for any send.
+          clearTrainingIntent(actorId); setUncertain(false); onApplied(result);
+        }
       }
     } catch (caught) {
       if (!current.signal.aborted) {

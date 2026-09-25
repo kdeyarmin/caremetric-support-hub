@@ -24,6 +24,7 @@
 .training-workspace td { vertical-align: top; }
 .training-workspace table { width: 100%; border-collapse: collapse; }
 .training-notice { padding: 14px 18px; border: 1px solid #7ead98; background: #ecfdf5; border-radius: 9px; }
+.training-notice-warning { border-color: #c9a76c; background: #fff8e8; color: #72500d; }
 .training-review { border: 1px solid #96b1da; border-radius: 12px; background: #eff5ff; }
 .training-review dl { display: grid; gap: 12px; }
 .training-review dl > div { display: grid; grid-template-columns: minmax(90px, 160px) minmax(0, 1fr); gap: 14px; }

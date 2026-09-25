@@ -61,6 +61,20 @@ describe("reviewed training changes", () => {
     await screen.findByText(/invitation delivery result is unconfirmed/);
     expect(test.onApplied).not.toHaveBeenCalled(); expect(loadTrainingIntent("owner-a")).toEqual(intent);
   });
+  it("releases recovery only after a verified failed invitation receipt without resending or claiming delivery", async () => {
+    const intent: TrainingIntent = { ...trainingIntent, command: { ...trainingIntent.command, action: "invitations.create", organizationId: trainingIds.organization, parameters: { firstName: "Ava", lastName: "Admin", email: "ava@example.test", role: "org_admin", facilityId: null, employeeId: null } } };
+    const failed = { ...result, action: "invitations.create", replayed: true, result: { invitationId: null, deliveryStatus: "failed" } };
+    const request = vi.fn().mockResolvedValueOnce({ ...failed, result: { invitationId: null, deliveryStatus: "unknown" } }).mockResolvedValueOnce(failed);
+    const first = review(request, intent); apply();
+    await screen.findByText(/invitation delivery result is unconfirmed/);
+    expect(first.onApplied).not.toHaveBeenCalled();
+    const saved = loadTrainingIntent("owner-a")!; first.unmount();
+    const restored = review(request, saved, true);
+    fireEvent.click(screen.getByRole("button", { name: "Retry same training change" }));
+    await waitFor(() => expect(restored.onApplied).toHaveBeenCalledExactlyOnceWith(failed));
+    expect(loadTrainingIntent("owner-a")).toBeNull();
+    expect(request.mock.calls.map(call => call[0])).toEqual([intent.command, intent.command]);
+  });
   it("aborts callbacks on navigation while preserving the dispatched request for recovery", async () => {
     let finish!: (response: TrainingResponse) => void;
     const request = vi.fn(() => new Promise<TrainingResponse>(resolve => { finish = resolve; }));
