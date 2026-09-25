@@ -44,6 +44,8 @@ describe('current administration function navigation',()=>{
     expect(screen.queryByRole('button')).toBeNull();
     expect(screen.getByRole('link',{name:'Courses, creation and distribution'}).getAttribute('href')).toBe('/library');
     expect(screen.getByRole('link',{name:'Support cases'}).getAttribute('href')).toBe('/cases');
+    expect(screen.getByRole('link',{name:'Phone numbers and routing'}).getAttribute('href')).toBe('/phone-numbers');
+    expect(screen.getByRole('link',{name:'AI phone inbox'}).getAttribute('href')).toBe('/phone');
     expect(screen.getByRole('status').textContent).toContain('connection is not verified');
   });
   it('searches both names and descriptions and opens only the reviewed workspace',()=>{

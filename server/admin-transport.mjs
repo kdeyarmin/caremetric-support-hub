@@ -2,6 +2,8 @@ import { HttpError } from './sms-auth.mjs';
 
 /** Fixed registry destinations only; callers never supply a URL or header name. */
 export async function callNativeAdmin(fetcher, target, authorizationHeader, capability, operation, project, command = false, parentSignal, maximumBytes = 1000000) {
+  const trainingReport = target === 'https://cmcarebase.com/api/platform-admin/training'
+    && operation.domain === 'training.v1' && operation.operation === 'enrollments.report';
   const signal = AbortSignal.any([...(parentSignal ? [parentSignal] : []), AbortSignal.timeout(12000)]);
   try {
     const response = await fetcher(target, {
@@ -12,6 +14,8 @@ export async function callNativeAdmin(fetcher, target, authorizationHeader, capa
       // The native error body is never forwarded or logged.
       if (response.status===401 || response.status===403) throw new HttpError(response.status,'Administrator access could not be verified.');
       if (response.status===404) throw new HttpError(404,'Record unavailable.','notfound');
+      if (trainingReport && response.status===413) throw new HttpError(413,'Narrow the report filters before exporting.','report_too_large');
+      if (target==='https://cmcarebase.com/api/platform-admin/training' && response.status===400) throw new HttpError(400,'Review the training request and try again.','invalid_request');
       if (command && response.status===409) throw new HttpError(409,'The preview changed or expired. Reload before creating another preview.','conflict');
       throw new HttpError(503,'Administrator connection is unavailable.','upstream');
     }
@@ -26,7 +30,11 @@ export async function callNativeAdmin(fetcher, target, authorizationHeader, capa
         const {done,value}=await reader.read();
         if (done) break;
         size+=value.byteLength;
-        if (size>maximumBytes) { await reader.cancel(); throw new Error('Oversized response'); }
+        if (size>maximumBytes) {
+          await reader.cancel().catch(()=>{});
+          if (trainingReport) throw new HttpError(413,'Narrow the report filters before exporting.','report_too_large');
+          throw new Error('Oversized response');
+        }
         chunks.push(Buffer.from(value));
       }
       signal.throwIfAborted();

@@ -18,6 +18,18 @@ describe('application server native transport',()=>{
     await expect(call(async()=>new Response(body),project)).rejects.toMatchObject({status:503,code:'upstream'});
     expect(cancelled).toHaveBeenCalledOnce(); expect(project).not.toHaveBeenCalled();
   });
+  it('keeps the exact 12 MB report boundary and classifies only report overflow as actionable',async()=>{
+    const reportTarget='https://cmcarebase.com/api/platform-admin/training';
+    const report={domain:'training.v1',operation:'enrollments.report'};
+    const prefix='{"count":4}',atLimit=prefix+' '.repeat(12_000_000-Buffer.byteLength(prefix));
+    expect(await callNativeAdmin(async()=>new Response(atLimit),reportTarget,'Authorization',capability,report,value=>value,true,undefined,12_000_000)).toEqual({count:4});
+    const cancelled=vi.fn(),project=vi.fn();
+    const body=new ReadableStream({start(controller){controller.enqueue(new TextEncoder().encode(atLimit));controller.enqueue(new Uint8Array(1));},cancel:cancelled});
+    await expect(callNativeAdmin(async()=>new Response(body),reportTarget,'Authorization',capability,report,project,true,undefined,12_000_000)).rejects.toMatchObject({status:413,code:'report_too_large'});
+    expect(cancelled).toHaveBeenCalledOnce();expect(project).not.toHaveBeenCalled();
+    await expect(callNativeAdmin(async()=>new Response('x'.repeat(1_000_001)),reportTarget,'Authorization',capability,{domain:'training.v1',operation:'facilities.list'},project,true)).rejects.toMatchObject({status:503,code:'upstream'});
+    await expect(callNativeAdmin(async()=>new Response('x'.repeat(1_000_001)),target,'Authorization',capability,report,project,true)).rejects.toMatchObject({status:503,code:'upstream'});
+  });
   it.each([()=>Response.json({wrong:'contract'}),()=>new Response('private upstream error')])('hides malformed producer responses',async(makeResponse)=>{
     await expect(call(async()=>makeResponse(),()=>{throw new Error('private producer fields');})).rejects.toMatchObject({status:503,message:'Administrator connection is unavailable.'});
   });

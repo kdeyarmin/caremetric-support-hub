@@ -30,6 +30,8 @@ import { nativeCheckoutCommandSchema } from '../supabase/functions/_shared/check
 import { checkoutCommands } from './checkout-commands.mjs';
 import {parseConfigurationOperation} from '../supabase/functions/_shared/operationalConfiguration.ts';
 import {operationalConfiguration} from './operational-configuration.mjs';
+import {parseTrainingOperation} from '../supabase/functions/_shared/trainingProtocol.ts';
+import {trainingAdministration} from './training.mjs';
 import { pennsyncNativeOperation } from '../src/imports/pennsyncLearningSource.ts';
 import { pennsyncLearningMigration } from './pennsync-learning-migration.mjs';
 
@@ -71,7 +73,8 @@ async function authorize(db,audience,payload) {
     return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
   }
   if (audience==='carebase.command') {
-    if(payload?.domain==='operations.config.v1')parseConfigurationOperation(payload);
+    if(payload?.domain==='training.v1')parseTrainingOperation(payload);
+    else if(payload?.domain==='operations.config.v1')parseConfigurationOperation(payload);
     else if (!nativeBillingCommandSchema.safeParse(payload).success && !nativeCheckoutCommandSchema.safeParse(payload).success) parsePortfolioCommand({product:'carebase',...payload});
     return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
   }
@@ -98,6 +101,7 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
     });
   };
   return {
+    training:trainingAdministration({pool,issue,fetchImpl}),
     configuration:operationalConfiguration({pool,issue,fetchImpl}),
     learning: learningReceipts({pool,issue,fetchImpl}),
     authoring: learningAuthoring({pool,issue,fetchImpl}),

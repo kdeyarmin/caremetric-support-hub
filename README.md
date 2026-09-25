@@ -1,5 +1,7 @@
 # CareMetric Support Hub
 
+The Super Admin workspace now includes [facility training management](docs/FACILITY_TRAINING.md): create training-only facilities, invite administrators and students, manage enrollment and progress, open issued certificates, run complete printable/CSV reports and manage module access terms through the Hub session. Shared support, phone routing, course, onboarding and security workspaces are reachable from the same Admin page. The native CareBase `training.v1` capability gates these controls; deploy its migrations and adapter before this Hub update. Live owner verification remains separate from fixture testing.
+
 CareBase organizations now have a reviewed [Stripe billing portal workflow](docs/BILLING_PORTAL.md)
 when the native billing-command capabilities are enabled. Creation requires a
 reason, exact customer/configuration preview and confirmation. Uncertain responses

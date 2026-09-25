@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
-import { Link } from "react-router-dom";
-import { Activity, BookOpen, Building2, CreditCard, Flag, History, Layers3, RefreshCw, Users } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { Activity, BookOpen, Building2, CreditCard, Flag, GraduationCap, History, Layers3, RefreshCw, Users } from "lucide-react";
 import { adminRegistry } from "../../supabase/functions/_shared/adminRegistry";
 import { portfolioProducts } from "../../supabase/functions/_shared/portfolioProtocol";
 import type { AdminDirectoryUser, AdminOrganization, AdminSubscription, PortfolioCapabilities, PortfolioOperationName, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
@@ -23,44 +23,53 @@ import {OperationalWorkspace} from './OperationalWorkspace';
 import { InvoiceRecords, SubscriptionVerification } from "./BillingRecords";
 import { BillingPortal } from "./BillingPortal";
 import { BillingCheckout } from "./BillingCheckout";
+import { TrainingWorkspace } from "./TrainingWorkspace";
+import { SharedAdminWorkspaces } from "./SharedAdminWorkspaces";
 import type { BillingPortalTarget } from "./BillingPortal";
 import "./admin.css";
 
-type View = "overview" | "organizations" | "users" | "billing" | "courses" | "jobs" | "releases" | "audit" | "inventory";
+type View = "overview" | "organizations" | "users" | "billing" | "training" | "courses" | "jobs" | "releases" | "audit" | "inventory";
 const viewOperations: Record<Exclude<View, "inventory">, PortfolioOperationName[]> = {
   overview: ["overview"], organizations: ["organizations.list"], users: ["users.list"],
   billing: ["billing.overview", "billing.subscriptions.list"], courses: ["courses.list", "courses.get"],
+  training: ["training.v1", "organizations.list"],
   jobs: ["operations.jobs.list"], releases: ["operations.releases.list"], audit: ["operations.audit.list"],
 };
 const views = [
   { id: "overview", name: "Overview", icon: Layers3 }, { id: "organizations", name: "Organizations", icon: Building2 },
   { id: "users", name: "Users", icon: Users }, { id: "billing", name: "Billing", icon: CreditCard },
+  { id: "training", name: "Facility training", icon: GraduationCap },
   { id: "courses", name: "CareBase courses", icon: BookOpen },
   { id: "jobs", name: "Jobs", icon: Activity }, { id: "releases", name: "Releases", icon: Flag }, { id: "audit", name: "Audit", icon: History },
 ] as const;
 const formatNumber = new Intl.NumberFormat();
 
-export function AdminWorkspace({ client, portfolio = portfolioClient }: { client: AdminClient; portfolio?: PortfolioClient }) {
-  const [product, setProduct] = useState<PortfolioProduct>("carebase");
+export function AdminWorkspace({ client, actorId, portfolio = portfolioClient }: { client: AdminClient; actorId?: string; portfolio?: PortfolioClient }) {
+  const [params, setParams] = useSearchParams();
+  const product = portfolioProducts.includes(params.get("product") as PortfolioProduct) ? params.get("product") as PortfolioProduct : "carebase";
   const [refresh, setRefresh] = useState(0);
   return <div className="admin-workspace">
-    <div className="page-heading"><div><span className="eyebrow">CareMetric Admin</span><h1>Your apps, in one workspace</h1><p>Manage shared learning and support, and inspect current organizations, users, and subscriptions across connected apps.</p></div><button className="button button-secondary" type="button" onClick={() => setRefresh(value => value + 1)}><RefreshCw size={15} aria-hidden="true" />Refresh connection</button></div>
-    <section className="panel portfolio-selector" aria-label="Application selection"><label><span>Application</span><select value={product} onChange={event => setProduct(event.target.value as PortfolioProduct)}>{portfolioProducts.map(id => <option key={id} value={id}>{adminRegistry[id].name}{adminRegistry[id].endpoint ? "" : " — connection pending"}</option>)}</select></label><div className="admin-quick-links"><Link to="/library">Create and manage courses</Link><Link to="/cases">Support cases</Link><Link to="/phone">Phone messages</Link><Link to="/security">Security</Link></div></section>
-    <ApplicationWorkspace key={`${product}:${refresh}`} product={product} client={client} portfolio={portfolio} />
+    <div className="page-heading"><div><span className="eyebrow">CareMetric Admin</span><h1>Your apps, in one workspace</h1><p>Manage connected applications, facility training, courses, billing and support with your Hub sign-in.</p></div><button className="button button-secondary" type="button" onClick={() => setRefresh(value => value + 1)}><RefreshCw size={15} aria-hidden="true" />Refresh connection</button></div>
+    <SharedAdminWorkspaces />
+    <section className="panel portfolio-selector" aria-label="Application selection"><label><span>Application</span><select value={product} onChange={event => setParams({ product: event.target.value })}>{portfolioProducts.map(id => <option key={id} value={id}>{adminRegistry[id].name}{adminRegistry[id].endpoint ? "" : " — connection pending"}</option>)}</select></label><p>Application controls below appear when the connected service supports them.</p></section>
+    <ApplicationWorkspace key={`${product}:${refresh}`} product={product} actorId={actorId} client={client} portfolio={portfolio} />
   </div>;
 }
 
 const supportsCheckout = (product: PortfolioProduct, capabilities?: PortfolioCapabilities | null) => product === "carebase" && (["billing.packages.list", "billing.checkout.preview", "billing.checkout.apply", "billing.checkout.check", "billing.checkout.recover"] as const).every(operation => capabilities?.operations.includes(operation));
 
-function ApplicationWorkspace({ product, client, portfolio }: { product: PortfolioProduct; client: AdminClient; portfolio: PortfolioClient }) {
-  const [view, setView] = useState<View>("overview");
+function ApplicationWorkspace({ product, client, portfolio, actorId }: { product: PortfolioProduct; client: AdminClient; portfolio: PortfolioClient; actorId?: string }) {
+  const [params, setParams] = useSearchParams();
+  const requestedView = params.get("view");
+  const view: View = requestedView === "inventory" || views.some(item => item.id === requestedView) ? requestedView as View : "overview";
+  const setView = (next: View) => setParams(previous => { const updated = new URLSearchParams(previous); updated.set("view", next); return updated; });
   const [refresh, setRefresh] = useState(0);
   const retry = () => setRefresh(value => value + 1);
   const readCapabilities = useCallback((signal: AbortSignal) => { void refresh; return portfolio.capabilities({ product, signal }); }, [portfolio, product, refresh]);
   const state = useAdminRead(readCapabilities);
   const app = adminRegistry[product];
   const capabilities = state.status === "ready" ? state.data : null;
-  const supports = (candidate: Exclude<View, "inventory">) => (product === "carebase" || !["jobs", "releases", "audit"].includes(candidate)) && viewOperations[candidate].every(operation => capabilities?.operations.includes(operation));
+  const supports = (candidate: Exclude<View, "inventory">) => (product === "carebase" || !["training", "jobs", "releases", "audit"].includes(candidate)) && viewOperations[candidate].every(operation => capabilities?.operations.includes(operation));
   const allowCommands = product === "carebase" && capabilities?.operations.includes("commands.preview") === true && capabilities.operations.includes("commands.apply");
   const allowPortal = product === "carebase" && capabilities?.operations.includes("billing.commands.preview") === true && capabilities.operations.includes("billing.commands.apply");
   return <>
@@ -76,6 +85,7 @@ function ApplicationWorkspace({ product, client, portfolio }: { product: Portfol
         {view === "users" && <Directory product={product} portfolio={portfolio} kind="users" allowCommands={allowCommands} allowPortal={false} allowCheckout={false} />}
         {view === "billing" && <Billing product={product} portfolio={portfolio} retry={retry} allowCommands={allowCommands} capabilities={capabilities} />}
         {view === "courses" && product === "carebase" && <CourseCatalog client={client} />}
+        {view === "training" && product === "carebase" && (actorId ? <TrainingWorkspace actorId={actorId} portfolio={portfolio} /> : <p role="alert">Your administrator identity could not be verified. Refresh your Hub session before managing facility training.</p>)}
         {(view === "jobs"||view === "releases") && product === "carebase" && <OperationalWorkspace view={view} canConfigure={capabilities.operations.includes('operations.config.v1')}/>}
         {view === "audit" && product === "carebase" && <AuditRecords />}
       </div>}
