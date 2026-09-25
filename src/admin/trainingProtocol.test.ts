@@ -1,11 +1,13 @@
 import {describe,expect,it} from 'vitest';
-import {parseTrainingOperation,projectTrainingResponse,type TrainingReportOperation,type TrainingCommand} from '../../supabase/functions/_shared/trainingProtocol';
+import {parseTrainingOperation,projectTrainingResponse,type TrainingReportOperation,type TrainingCommand,type TrainingDateBasis} from '../../supabase/functions/_shared/trainingProtocol';
 import {parsePortfolioEnvelope} from '../../supabase/functions/_shared/portfolioProtocol';
 const id='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222';
 const report:TrainingReportOperation={domain:'training.v1',operation:'enrollments.report',organizationId:id,facilityId:null,courseSearch:'',status:'all',dateBasis:'assigned',dateFrom:null,dateThrough:null,limit:10000,offset:0};
 const command:TrainingCommand={domain:'training.v1',operation:'apply',requestId:id,action:'facilities.provision',organizationId:null,parameters:{organizationName:'Test organization',facilityName:'Test facility',facilityType:'ALR'},reason:'Training facility setup'};
 const row={id,employee_id:id,student:'Test student',facility_id:id,facility:'Test facility',course_id:id,course:'Training course',status:'completed',assigned_at:'2026-09-25T01:00:00Z',due_date:null,completed_at:'2026-09-25T01:30:00Z',percent_complete:100,certificate_id:id,credential_number:'TEST-1',certificate_issued_at:'2026-09-25T01:31:00Z',certificate_pdf_status:'pending'};
 const page={organization_name:'Test organization',facility_name:null,generated_at:'2026-09-25T02:00:00Z',date_basis:'assigned',limit:10000,offset:0,total:1,students:1,completed:1,in_progress:0,not_started:0,canceled:0,completion_denominator:1,certificates:1,rows:[row]};
+const dateFields:Record<TrainingDateBasis,'assigned_at'|'completed_at'|'certificate_issued_at'>={assigned:'assigned_at',completed:'completed_at',certificate:'certificate_issued_at'};
+const dateBases:TrainingDateBasis[]=['assigned','completed','certificate'];
 describe('training request boundary',()=>{
   it('accepts explicit owner scope and a complete export in one snapshot',()=>{expect(parseTrainingOperation(report)).toEqual(report);expect(parseTrainingOperation(command)).toEqual(command);});
   it('rejects scope, identity, product, pagination and date confusion',()=>{
@@ -32,11 +34,68 @@ describe('training response boundary',()=>{
     expect(()=>projectTrainingResponse({...receipt,requestId:other},command)).toThrow();
     expect(()=>projectTrainingResponse({...receipt,result:{organizationId:id,facilityId:id}},command)).toThrow();
   });
+  it.each(dateBases)('requires the selected %s report timestamp even without date bounds',dateBasis=>{
+    const op={...report,dateBasis};
+    expect(()=>projectTrainingResponse({...page,date_basis:dateBasis,rows:[{...row,[dateFields[dateBasis]]:null}]},op)).toThrow();
+    expect(projectTrainingResponse({...page,date_basis:dateBasis},op)).toMatchObject({date_basis:dateBasis});
+  });
+  it.each(dateBases)('applies inclusive and one-sided bounds to the selected %s date in Pennsylvania',dateBasis=>{
+    const differentDates={...row,assigned_at:'2026-09-25T01:00:00Z',completed_at:'2026-09-26T01:00:00Z',certificate_issued_at:'2026-09-27T01:00:00Z'};
+    const expected={assigned:'2026-09-24',completed:'2026-09-25',certificate:'2026-09-26'}[dateBasis];
+    const result={...page,date_basis:dateBasis,rows:[differentDates]},op={...report,dateBasis};
+    expect(projectTrainingResponse(result,{...op,dateFrom:expected,dateThrough:expected})).toEqual(result);
+    expect(projectTrainingResponse(result,{...op,dateFrom:expected})).toEqual(result);
+    expect(projectTrainingResponse(result,{...op,dateThrough:expected})).toEqual(result);
+    expect(()=>projectTrainingResponse(result,{...op,dateFrom:'2026-09-27'})).toThrow();
+    expect(()=>projectTrainingResponse(result,{...op,dateThrough:'2026-09-23'})).toThrow();
+  });
+  it.each(dateBases)('honors Pennsylvania midnight and both DST day lengths for %s dates',dateBasis=>{
+    const windows=[
+      {day:'2026-09-24',first:'2026-09-24T04:00:00Z',last:'2026-09-25T03:59:59.999Z',before:'2026-09-24T03:59:59.999Z',after:'2026-09-25T04:00:00Z'},
+      {day:'2026-03-08',first:'2026-03-08T05:00:00Z',last:'2026-03-09T03:59:59.999Z',before:'2026-03-08T04:59:59.999Z',after:'2026-03-09T04:00:00Z'},
+      {day:'2026-11-01',first:'2026-11-01T04:00:00Z',last:'2026-11-02T04:59:59.999Z',before:'2026-11-01T03:59:59.999Z',after:'2026-11-02T05:00:00Z'},
+    ];
+    for(const window of windows){
+      const op={...report,dateBasis,dateFrom:window.day,dateThrough:window.day};
+      const result=(value:string)=>({...page,date_basis:dateBasis,rows:[{...row,[dateFields[dateBasis]]:value}]});
+      for(const value of [window.first,window.last])expect(projectTrainingResponse(result(value),op)).toEqual(result(value));
+      for(const value of [window.before,window.after])expect(()=>projectTrainingResponse(result(value),op)).toThrow();
+    }
+    // Both occurrences of the repeated fall-back hour belong to November 1.
+    for(const value of ['2026-11-01T01:30:00-04:00','2026-11-01T01:30:00-05:00']){
+      const result={...page,date_basis:dateBasis,rows:[{...row,[dateFields[dateBasis]]:value}]};
+      expect(projectTrainingResponse(result,{...report,dateBasis,dateFrom:'2026-11-01',dateThrough:'2026-11-01'})).toEqual(result);
+    }
+  });
+  it('rejects impossible non-canceled counts while allowing overdue and paused enrollments',()=>{
+    const op={...report,limit:1},result={...page,limit:1,total:6,students:6,completed:1,in_progress:1,not_started:1,canceled:1,completion_denominator:5,certificates:1};
+    expect(projectTrainingResponse(result,op)).toEqual(result);
+    expect(projectTrainingResponse({...result,in_progress:2,not_started:2},op)).toMatchObject({completion_denominator:5});
+    for(const counts of [{completed:0,in_progress:6,not_started:0},{completed:0,in_progress:0,not_started:6},{completed:1,in_progress:3,not_started:2}]){
+      expect(()=>projectTrainingResponse({...result,...counts},op)).toThrow();
+    }
+  });
   it('accepts imported students without hire dates and rejects silent directory truncation',()=>{
     const op=parseTrainingOperation({domain:'training.v1',operation:'students.list',organizationId:id,facilityId:id,limit:20,offset:0,search:'',status:'all'});
     const student={id,firstName:'Test',lastName:'Student',email:null,jobTitle:'Staff',hireDate:null,isActive:true,status:'active',profileId:null};
     const result={items:[student],total:1,limit:20,offset:0};expect(projectTrainingResponse(result,op)).toEqual(result);
     expect(()=>projectTrainingResponse({...result,total:2},op)).toThrow();
+  });
+  it('enforces requested active and inactive student filters without excluding leave or termination',()=>{
+    const request={domain:'training.v1',operation:'students.list',organizationId:id,facilityId:id,limit:20,offset:0,search:''};
+    const student={id,firstName:'Test',lastName:'Student',email:null,jobTitle:'Staff',hireDate:null,isActive:true,status:'active',profileId:null};
+    const active={items:[student],total:1,limit:20,offset:0};
+    expect(projectTrainingResponse(active,parseTrainingOperation({...request,status:'active'}))).toEqual(active);
+    expect(()=>projectTrainingResponse(active,parseTrainingOperation({...request,status:'inactive'}))).toThrow();
+    for(const status of ['inactive','on_leave','terminated']){
+      const inactive={...active,items:[{...student,status,isActive:false}]};
+      expect(projectTrainingResponse(inactive,parseTrainingOperation({...request,status:'inactive'}))).toEqual(inactive);
+      expect(projectTrainingResponse(inactive,parseTrainingOperation({...request,status:'all'}))).toEqual(inactive);
+      expect(()=>projectTrainingResponse(inactive,parseTrainingOperation({...request,status:'active'}))).toThrow();
+    }
+    for(const inconsistent of [{...student,isActive:false},{...student,status:'terminated'}]){
+      expect(()=>projectTrainingResponse({...active,items:[inconsistent]},parseTrainingOperation({...request,status:'all'}))).toThrow();
+    }
   });
   it('only returns explicitly scoped native certificate links, and no URL for unready PDFs',()=>{
     const op=parseTrainingOperation({domain:'training.v1',operation:'certificates.read',organizationId:id,certificateId:id});

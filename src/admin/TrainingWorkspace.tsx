@@ -10,11 +10,28 @@ import { useAdminRead } from "./useAdminRead";
 import { PagedRecords } from "./PagedRecords";
 import { TrainingCommandReview, type TrainingIntent } from "./TrainingCommandReview";
 import { TrainingReports } from "./TrainingReports";
-import { trainingDate, trainingLocalDateTime, type TrainingReportRow, type TrainingReportPage } from "./trainingPresentation";
+import { trainingDate, trainingDateTime, trainingLocalDateTime, type TrainingReportRow, type TrainingReportPage } from "./trainingPresentation";
 import { loadTrainingIntent } from "./trainingRecovery";
 import "./training.css";
 
-type Editor = { draft?: TrainingCommand; action: TrainingAction; student?: TrainingStudent; enrollment?: TrainingReportRow; term?: TrainingTerm };
+type EditorTarget = { action: TrainingAction; student?: TrainingStudent; enrollment?: TrainingReportRow; term?: TrainingTerm };
+type EditorScope = { organizationId: string | null; facilityId: string | null; organizationName: string; facilityName: string };
+type CoursePicker = { search: string; filter: string; offset: number; selected: TrainingCourse | null };
+type Editor = EditorTarget & { scope: EditorScope; draft?: TrainingCommand; coursePicker?: CoursePicker };
+function recoveredEditor(intent: TrainingIntent): Editor {
+  const parameters = intent.command.parameters;
+  return { action: intent.command.action, draft: intent.command, scope: {
+    organizationId: intent.command.organizationId,
+    facilityId: "facilityId" in parameters ? parameters.facilityId : null,
+    organizationName: intent.details.find(([label]) => label === "Organization")?.[1] || "Saved organization",
+    facilityName: intent.details.find(([label]) => label === "Facility")?.[1] || "Saved facility",
+  } };
+}
+function termDetails(term: TrainingTerm): Array<[string, string]> {
+  const timestamp = (value: string) => `${trainingDateTime(value)} (${value})`;
+  return [["Term ID", term.id], ["Module", moduleNames[term.moduleKey]], ["Basis", term.source],
+    ["Starts", timestamp(term.startsAt)], ["Ends", term.endsAt ? timestamp(term.endsAt) : "No expiration"], ["Original reason", term.reason]];
+}
 const moduleNames = { "modules.train": "Facility training", "modules.workforce": "Workforce", "modules.compliance": "Compliance", "modules.billing": "Billing", "modules.carebase": "Full CareBase suite" };
 const actionNames: Record<TrainingAction, string> = {
   "facilities.provision": "Create training facility", "students.create": "Add student", "students.update": "Edit student",
@@ -32,7 +49,7 @@ export function TrainingWorkspace({ actorId, portfolio = portfolioClient, client
   const facilityId = uuid(params.get("facilityId"));
   const [organization, setOrganization] = useState<AdminOrganization | null>(null);
   const [facility, setFacility] = useState<TrainingFacility | null>(null);
-  const [editor, setEditor] = useState<Editor | null>(recovery.intent ? { action: recovery.intent.command.action, draft: recovery.intent.command } : null), [intent, setIntent] = useState<TrainingIntent | null>(recovery.intent);
+  const [editor, setEditor] = useState<Editor | null>(recovery.intent ? recoveredEditor(recovery.intent) : null), [intent, setIntent] = useState<TrainingIntent | null>(recovery.intent);
   const [revision, setRevision] = useState(0), [notice, setNotice] = useState("");
   const [noticeKind, setNoticeKind] = useState<"success" | "warning">("success");
   const scopeReader = useCallback(async (signal: AbortSignal) => {
@@ -51,7 +68,11 @@ export function TrainingWorkspace({ actorId, portfolio = portfolioClient, client
     setFacility(item); setNotice("");
     setParams(previous => { const next = new URLSearchParams(previous); if (item) next.set("facilityId", item.id); else next.delete("facilityId"); return next; });
   };
-  const edit = (value: Editor) => { setNotice(""); setIntent(null); setEditor(value); };
+  const edit = (value: EditorTarget) => {
+    setNotice(""); setIntent(null);
+    setEditor({ ...value, scope: { organizationId: organizationId || null, facilityId: value.enrollment?.facility_id || facilityId || null,
+      organizationName, facilityName: value.enrollment?.facility || facilityName } });
+  };
   const applied = (response: Awaited<ReturnType<TrainingClient["request"]>>) => {
     const result = response as TrainingCommandResult;
     setNoticeKind("success");
@@ -75,7 +96,7 @@ export function TrainingWorkspace({ actorId, portfolio = portfolioClient, client
     <div className="training-heading"><div><h2>CareMetric CareBase · Facility training</h2><p>Set up training access, enroll facility staff, follow progress and print results here in the Hub.</p></div><button className="button button-primary" disabled={!!editor || recovery.error} onClick={() => edit({ action: "facilities.provision" })}>New training facility</button></div>
     {notice && <p className={`training-notice${noticeKind === "warning" ? " training-notice-warning" : ""}`} role={noticeKind === "warning" ? "alert" : "status"}>{notice}</p>}
     {recovery.error && <p role="alert">An unfinished training request could not be recovered from this browser tab. Restore session storage or contact Hub support before creating another change. No new training changes will be sent.</p>}
-    {editor && (intent ? <TrainingCommandReview intent={intent} client={client} actorId={actorId} recovered={recovered} onClose={() => setIntent(null)} onApplied={applied} /> : <TrainingEditor key={`${editor.action}:${editor.student?.id || editor.enrollment?.id || editor.term?.id || "new"}`} client={client} editor={editor} organizationId={organizationId || null} facilityId={facilityId || null} organizationName={organizationName} facilityName={facilityName} onReview={value => { setEditor({ ...editor, draft: value.command }); setIntent(value); }} close={() => setEditor(null)} />)}
+    {editor && (intent ? <TrainingCommandReview intent={intent} client={client} actorId={actorId} recovered={recovered} onClose={() => setIntent(null)} onApplied={applied} /> : <TrainingEditor key={`${editor.action}:${editor.student?.id || editor.enrollment?.id || editor.term?.id || "new"}`} client={client} editor={editor} onReview={(value, coursePicker) => { setEditor({ ...editor, draft: value.command, coursePicker }); setIntent(value); }} close={() => setEditor(null)} />)}
     <fieldset className="training-workspace-content" disabled={!!editor || recovery.error}>
       <details open={!organizationId} className="training-organization-picker"><summary>{organizationId ? `Change organization · ${organizationName}` : "Choose an existing organization"}</summary>
         <PagedRecords<AdminOrganization> key={`organizations:${revision}`} app="CareBase" title="Training organizations" searchLabel="Search training organizations" columns={["Organization", "Status", "Training"]} read={readOrganizations} render={item => <><td>{item.name || item.slug || "Unnamed organization"}</td><td>{item.status}</td><td><button className="button button-secondary button-small" onClick={() => selectOrganization(item)}>Manage {item.name || item.slug || "organization"}</button></td></>} />
@@ -87,7 +108,7 @@ export function TrainingWorkspace({ actorId, portfolio = portfolioClient, client
 
 function OrganizationTraining({ client, organizationId, organizationName, facilityId, facilityName, selectFacility, edit }: {
   client: TrainingClient; organizationId: string; organizationName: string; facilityId: string | null; facilityName: string;
-  selectFacility: (facility: TrainingFacility | null) => void; edit: (value: Editor) => void;
+  selectFacility: (facility: TrainingFacility | null) => void; edit: (value: EditorTarget) => void;
 }) {
   const [search, setSearch] = useState(""), [filter, setFilter] = useState(""), [offset, setOffset] = useState(0), [revision, setRevision] = useState(0);
   const [params, setParams] = useSearchParams();
@@ -118,7 +139,7 @@ function OrganizationTraining({ client, organizationId, organizationName, facili
   </section>;
 }
 
-function Students({ client, organizationId, facilityId, edit }: { client: TrainingClient; organizationId: string; facilityId: string; edit: (value: Editor) => void }) {
+function Students({ client, organizationId, facilityId, edit }: { client: TrainingClient; organizationId: string; facilityId: string; edit: (value: EditorTarget) => void }) {
   const [status, setStatus] = useState<"all" | "active" | "inactive">("all");
   const read = useCallback(async (search: string, offset: number, signal: AbortSignal) => await client.request({ domain: "training.v1", operation: "students.list", organizationId, facilityId, search, status, offset, limit: 20 }, signal) as TrainingPage<TrainingStudent>, [client, organizationId, facilityId, status]);
   return <section>
@@ -131,7 +152,7 @@ function Students({ client, organizationId, facilityId, edit }: { client: Traini
   </section>;
 }
 
-function ModuleAccess({ client, organizationId, edit }: { client: TrainingClient; organizationId: string; edit: (value: Editor) => void }) {
+function ModuleAccess({ client, organizationId, edit }: { client: TrainingClient; organizationId: string; edit: (value: EditorTarget) => void }) {
   const [revision, setRevision] = useState(0);
   const [offset, setOffset] = useState(0);
   const [now] = useState(Date.now);
@@ -147,21 +168,21 @@ function ModuleAccess({ client, organizationId, edit }: { client: TrainingClient
   </div></section>;
 }
 
-function TrainingEditor({ client, editor, organizationId, facilityId, organizationName, facilityName, onReview, close }: {
-  client: TrainingClient; editor: Editor; organizationId: string | null; facilityId: string | null;
-  organizationName: string; facilityName: string; onReview: (intent: TrainingIntent) => void; close: () => void;
+function TrainingEditor({ client, editor, onReview, close }: {
+  client: TrainingClient; editor: Editor; onReview: (intent: TrainingIntent, coursePicker: CoursePicker) => void; close: () => void;
 }) {
+  const { organizationId, facilityId, organizationName, facilityName } = editor.scope;
   const [error, setError] = useState("");
   const [courseRevision, setCourseRevision] = useState(0);
   const initial = editor.draft?.parameters as Record<string, string | boolean | null> | undefined;
   const initialValue = (name: string, fallback = "") => typeof initial?.[name] === "string" ? initial[name] as string : fallback;
-  const [courseSearch, setCourseSearch] = useState(""), [courseFilter, setCourseFilter] = useState(""), [courseOffset, setCourseOffset] = useState(0), [courseId, setCourseId] = useState(initialValue("courseId"));
+  const [courseSearch, setCourseSearch] = useState(editor.coursePicker?.search || ""), [courseFilter, setCourseFilter] = useState(editor.coursePicker?.filter || ""), [courseOffset, setCourseOffset] = useState(editor.coursePicker?.offset || 0), [selectedCourse, setSelectedCourse] = useState<TrainingCourse | null>(editor.coursePicker?.selected || null);
+  const courseId = selectedCourse?.id || "";
   const courseReader = useCallback(async (signal: AbortSignal) => { void courseRevision; return editor.action === "enrollments.assign" && organizationId ? await client.request({ domain: "training.v1", operation: "courses.list", organizationId, search: courseFilter, limit: 20, offset: courseOffset }, signal) as TrainingPage<TrainingCourse> : { items: [], total: 0, limit: 20, offset: 0 }; }, [client, editor.action, organizationId, courseFilter, courseOffset, courseRevision]);
   const courses = useAdminRead(courseReader);
   const student = editor.student;
   const organizationInvitation = editor.action === "invitations.create" && !student;
   const reviewedFacilityName = editor.action === "enrollments.cancel" ? editor.enrollment?.facility : !organizationInvitation && facilityId ? facilityName : null;
-  const selectedCourse = courses.status === "ready" ? courses.data.items.find(item => item.id === courseId) : undefined;
   const studentFields = ["students.create", "students.update", "invitations.create"].includes(editor.action);
   const title = editor.action === "invitations.create" ? student ? "Invite student" : "Invite organization administrator" : actionNames[editor.action];
   function review(event: FormEvent<HTMLFormElement>) {
@@ -183,14 +204,14 @@ function TrainingEditor({ client, editor, organizationId, facilityId, organizati
         case "enrollments.assign": if (!student || !selectedCourse?.versionId) return; command = { ...common, action: editor.action, parameters: { employeeId: student.id, courseId: selectedCourse.id, versionId: selectedCourse.versionId, dueDate: value("dueDate") || null } }; details.push(["Course", selectedCourse.title], ["Due date", value("dueDate") || "No due date"]); break;
         case "enrollments.cancel": if (!editor.enrollment) return; command = { ...common, action: editor.action, parameters: { assignmentId: editor.enrollment.id } }; details.push(["Student", editor.enrollment.student], ["Course", editor.enrollment.course], ["Current status", editor.enrollment.status]); break;
         case "access.grant": command = { ...common, action: editor.action, parameters: { moduleKey: value("moduleKey") as TrainingTerm["moduleKey"], source: value("source") as TrainingTerm["source"], endsAt: value("endsAt") ? new Date(value("endsAt")).toISOString() : null } }; details.push(["Module", moduleNames[command.parameters.moduleKey]], ["Basis", command.parameters.source], ["Ends", command.parameters.endsAt || "No expiration"]); break;
-        case "access.revoke": if (!editor.term) return; command = { ...common, action: editor.action, parameters: { termId: editor.term.id } }; details.push(["Module", moduleNames[editor.term.moduleKey]], ["Original term", `${editor.term.source} · ${trainingDate(editor.term.startsAt)}`]); break;
+        case "access.revoke": if (!editor.term) return; command = { ...common, action: editor.action, parameters: { termId: editor.term.id } }; details.push(...termDetails(editor.term)); break;
       }
       const parsed = parseTrainingOperation(command);
-      if (parsed.operation === "apply") onReview({ command: parsed, title, details });
+      if (parsed.operation === "apply") onReview({ command: parsed, title, details }, { search: courseSearch, filter: courseFilter, offset: courseOffset, selected: selectedCourse });
     } catch { setError("Check the required names, dates, email and administrative reason before reviewing this change."); }
   }
   return <section className="panel training-editor" aria-label={title}><h3>{title}</h3>{organizationId && <p>{organizationName}{reviewedFacilityName ? ` · ${reviewedFacilityName}` : ""}{student ? ` · ${student.firstName} ${student.lastName}` : ""}</p>}
-    {editor.action === "enrollments.assign" && <form className="training-facility-picker" onSubmit={event => { event.preventDefault(); setCourseFilter(courseSearch.trim()); setCourseOffset(0); setCourseId(""); }}><label>Find a course<input type="search" maxLength={100} value={courseSearch} onChange={event => setCourseSearch(event.target.value)} /></label><button className="button button-secondary">Search courses</button></form>}
+    {editor.action === "enrollments.assign" && <form className="training-facility-picker" onSubmit={event => { event.preventDefault(); setCourseFilter(courseSearch.trim()); setCourseOffset(0); setSelectedCourse(null); }}><label>Find a course<input type="search" maxLength={100} value={courseSearch} onChange={event => setCourseSearch(event.target.value)} /></label><button className="button button-secondary">Search courses</button></form>}
     <form onSubmit={review} className="training-form">
       {editor.action === "facilities.provision" && <><label>Organization name<input name="organizationName" required maxLength={200} defaultValue={initialValue("organizationName")} /></label><label>Facility name<input name="facilityName" required maxLength={200} defaultValue={initialValue("facilityName")} /></label><label>Facility type<select name="facilityType" defaultValue={initialValue("facilityType", "PCH")}><option value="PCH">Pennsylvania Personal Care Home (PCH)</option><option value="ALR">Pennsylvania Assisted Living Facility (ALF)</option></select></label><p>Creates a new organization and its first facility with training module access. Add other modules only after separate agreement.</p></>}
       {studentFields && <><label>First name<input name="firstName" required maxLength={100} defaultValue={initialValue("firstName", student?.firstName || "")} /></label><label>Last name<input name="lastName" required maxLength={100} defaultValue={initialValue("lastName", student?.lastName || "")} /></label><label>Email<input name="email" type="email" maxLength={320} required={editor.action === "invitations.create"} readOnly={editor.action === "students.update" && !!student?.profileId} aria-describedby={editor.action === "students.update" && student?.profileId ? "linked-student-email-note" : undefined} defaultValue={initialValue("email", student?.email || "")} /></label>{editor.action !== "invitations.create" && <label>Position / job title<input name="jobTitle" required maxLength={200} defaultValue={initialValue("jobTitle", student?.jobTitle || "")} /></label>}</>}
@@ -198,10 +219,10 @@ function TrainingEditor({ client, editor, organizationId, facilityId, organizati
       {editor.action === "students.create" && <label>Hire date<input name="hireDate" type="date" defaultValue={initialValue("hireDate")} required /></label>}
       {editor.action === "invitations.create" && <p>{student ? "Invite as a student for this facility." : "Invite as an organization administrator with access to all facilities in this organization."} The recipient will receive an account setup invitation.</p>}
       {editor.action === "students.setActive" && <><p>{student?.isActive ? "Deactivate this student and follow the existing CareBase account and enrollment rules. Training history is retained." : "Reactivate this student using the existing CareBase employment and access rules."}</p><label>Effective date<input name="effectiveDate" type="date" defaultValue={initialValue("effectiveDate", dateToday())} required /></label></>}
-      {editor.action === "enrollments.assign" && <>{courses.status === "loading" ? <Loading label="Loading available courses" /> : courses.status === "error" ? <ReadFailure error={courses.error} retry={() => setCourseRevision(value => value + 1)} /> : <><label>Course<select value={courseId} required onChange={event => setCourseId(event.target.value)}><option value="">Select a course</option>{courses.data.items.map(course => <option key={course.id} value={course.id} disabled={!course.versionId}>{course.title}{course.versionId ? "" : " - no published version"}</option>)}</select></label><div className="admin-pagination"><span>{courses.data.total} courses</span><div><button type="button" className="button button-secondary button-small" disabled={courseOffset === 0} onClick={() => { setCourseOffset(Math.max(0, courseOffset - 20)); setCourseId(""); }}>Previous courses</button><button type="button" className="button button-secondary button-small" disabled={courseOffset + 20 >= courses.data.total} onClick={() => { setCourseOffset(courseOffset + 20); setCourseId(""); }}>Next courses</button></div></div></>}<label>Due date (optional)<input name="dueDate" type="date" defaultValue={initialValue("dueDate")} /></label></>}
+      {editor.action === "enrollments.assign" && <>{courses.status === "loading" ? <Loading label="Loading available courses" /> : courses.status === "error" ? <ReadFailure error={courses.error} retry={() => setCourseRevision(value => value + 1)} /> : <><label>Course<select value={courseId} required onChange={event => setSelectedCourse(courses.data.items.find(course => course.id === event.target.value) || null)}><option value="">Select a course</option>{selectedCourse && !courses.data.items.some(course => course.id === selectedCourse.id) && <option value={selectedCourse.id}>{selectedCourse.title} - saved selection</option>}{courses.data.items.map(course => <option key={course.id} value={course.id} disabled={!course.versionId}>{course.title}{course.versionId ? "" : " - no published version"}</option>)}</select></label><div className="admin-pagination"><span>{courses.data.total} courses</span><div><button type="button" className="button button-secondary button-small" disabled={courseOffset === 0} onClick={() => { setCourseOffset(Math.max(0, courseOffset - 20)); setSelectedCourse(null); }}>Previous courses</button><button type="button" className="button button-secondary button-small" disabled={courseOffset + 20 >= courses.data.total} onClick={() => { setCourseOffset(courseOffset + 20); setSelectedCourse(null); }}>Next courses</button></div></div></>}<label>Due date (optional)<input name="dueDate" type="date" defaultValue={initialValue("dueDate")} /></label></>}
       {editor.action === "enrollments.cancel" && <p>Cancel {editor.enrollment?.course} for {editor.enrollment?.student} at {editor.enrollment?.facility}. Completed training and issued certificates remain historical records.</p>}
       {editor.action === "access.grant" && <><label>Module<select name="moduleKey" defaultValue={initialValue("moduleKey", "modules.train")}>{trainingModules.map(key => <option key={key} value={key}>{moduleNames[key]}</option>)}</select></label><label>Access basis<select name="source" defaultValue={initialValue("source", "complimentary")}><option value="complimentary">Complimentary</option><option value="contract">Agreed contract</option></select></label><label>Access ends (optional, your local time)<input name="endsAt" type="datetime-local" defaultValue={trainingLocalDateTime(initialValue("endsAt"))} /></label><p>A contract term records agreed access; it does not charge the customer. Use Billing in this Hub for payment subscriptions.</p></>}
-      {editor.action === "access.revoke" && <p>Revoke the selected {editor.term && moduleNames[editor.term.moduleKey]} term. Other active terms and subscriptions may continue to provide access.</p>}
+      {editor.action === "access.revoke" && editor.term && <><p>Revoke this exact module term. Other active terms and subscriptions may continue to provide access.</p><dl>{termDetails(editor.term).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></>}
       <label>Administrative reason<textarea name="reason" defaultValue={editor.draft?.reason || ""} minLength={10} maxLength={500} required rows={3} /></label>
       {error && <p role="alert">{error}</p>}
       <div className="training-actions"><button className="button button-primary" disabled={editor.action === "enrollments.assign" && !selectedCourse?.versionId}>Review training change</button><button className="button button-secondary" type="button" onClick={close}>Cancel</button></div>
