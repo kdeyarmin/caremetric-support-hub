@@ -9,7 +9,7 @@ import { trainingIds as ids, trainingIntent, trainingReport, trainingRow } from 
 import { saveTrainingIntent } from "./trainingRecovery";
 import { AdminApiError } from "./transport";
 
-afterEach(() => { cleanup(); sessionStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); sessionStorage.clear(); vi.restoreAllMocks(); vi.useRealTimers(); });
 const organization = { id: ids.organization, name: "Cedar Care", slug: "cedar-care", status: "active", createdAt: null };
 const facilities = [{ id: ids.facility, name: "Cedar Home", facilityType: "PCH", isActive: true }, { id: ids.secondFacility, name: "Aspen Home", facilityType: "ALR", isActive: true }] as const;
 const student = { id: ids.student, firstName: "Ada", lastName: "Student", email: "ada@example.test", jobTitle: "Care aide", hireDate: null, isActive: true, status: "active", profileId: null };
@@ -147,7 +147,7 @@ describe("Hub facility training workspace", () => {
   it("requires a published course version and passes the selected version to enrollment", async () => {
     const { request } = setup(); fireEvent.click(await screen.findByRole("button", { name: "Assign course" }));
     const course = await screen.findByLabelText("Course");
-    expect((screen.getByRole("option", { name: "Draft course - no published version" }) as HTMLOptionElement).disabled).toBe(true);
+    expect((screen.getByRole("option", { name: /Draft course.*no published version/ }) as HTMLOptionElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "Review training change" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(course, { target: { value: ids.course } }); fill("Administrative reason", "Assigned required facility training.");
     await approve(); await screen.findByText(/Course assigned/);
@@ -219,14 +219,14 @@ describe("Hub facility training workspace", () => {
     setup(request); fireEvent.click(await screen.findByRole("button", { name: "Assign course" }));
     fill("Find a course", "Fire"); fireEvent.click(screen.getByRole("button", { name: "Search courses" }));
     fireEvent.click(await screen.findByRole("button", { name: "Next courses" }));
-    const choice = await screen.findByRole("option", { name: selected.title });
+    const choice = await screen.findByRole("option", { name: new RegExp(selected.title) });
     fireEvent.change(choice.parentElement!, { target: { value: selected.id } });
     fill("Due date (optional)", "2026-11-01"); fill("Administrative reason", "Selected advanced facility training.");
     fireEvent.click(screen.getByRole("button", { name: "Review training change" }));
     expect(within(screen.getByRole("region", { name: "Review training change" })).getByText(selected.title)).toBeTruthy();
     const beforeReturn = request.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: "Back to edit" }));
-    await screen.findByRole("option", { name: selected.title });
+    await screen.findByRole("option", { name: new RegExp(selected.title) });
     expect((screen.getByLabelText("Find a course") as HTMLInputElement).value).toBe("Fire");
     expect((screen.getByLabelText("Course") as HTMLSelectElement).value).toBe(selected.id);
     expect((screen.getByLabelText("Due date (optional)") as HTMLInputElement).value).toBe("2026-11-01");
@@ -255,5 +255,48 @@ describe("Hub facility training workspace", () => {
     fireEvent.click(within(review).getByRole("checkbox", { name: "I reviewed this change." }));
     fireEvent.click(within(review).getByRole("button", { name: "Apply reviewed change" }));
     await waitFor(() => expect(request.mock.calls.find(([operation]) => operation.operation === "apply")?.[0]).toMatchObject({ action: "access.revoke", parameters: { termId: terms[1].id } }));
+  });
+  it("updates term status at its start and expiry boundaries without requiring navigation", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-25T12:00:00.000Z"));
+    const terms: TrainingTerm[] = [
+      { id: "90000000-0000-4000-8000-000000000001", moduleKey: "modules.train", source: "complimentary", startsAt: "2026-09-25T12:00:01.000Z", endsAt: "2026-09-25T12:00:02.000Z", revokedAt: null, reason: "Short scheduled term" },
+      { id: "90000000-0000-4000-8000-000000000002", moduleKey: "modules.train", source: "complimentary", startsAt: "2026-09-25T11:00:00.000Z", endsAt: "2026-09-25T13:00:00.000Z", revokedAt: null, reason: "Longer term" },
+    ];
+    const request = vi.fn(async (operation: TrainingOperation): Promise<TrainingResponse> => operation.operation === "access.list" ? { items: terms, total: 2, limit: 20, offset: 0 } : read(operation));
+    const view = setup(request, `${route}&trainingTab=access`);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    const row = screen.getByText("Short scheduled term").closest("tr")!;
+    expect(within(row).getByText("Scheduled")).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(within(row).getByText("Active term")).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(within(row).getByText("Expired")).toBeTruthy();
+    expect(request.mock.calls.filter(([operation]) => operation.operation === "access.list")).toHaveLength(1);
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+    view.unmount(); expect(vi.getTimerCount()).toBe(0);
+  });
+  it("distinguishes duplicate course titles by exact course and published-version IDs before applying", async () => {
+    const choices = [
+      { id: ids.course, title: "Fire safety", versionId: ids.version },
+      { id: "40000000-0000-4000-8000-000000000002", title: "Fire safety", versionId: "50000000-0000-4000-8000-000000000002" },
+    ];
+    const request = vi.fn(async (operation: TrainingOperation): Promise<TrainingResponse> => operation.operation === "courses.list" ? { items: choices, total: 2, limit: 20, offset: 0 } : read(operation));
+    setup(request); fireEvent.click(await screen.findByRole("button", { name: "Assign course" }));
+    const options = await screen.findAllByRole("option", { name: /Fire safety/ });
+    expect(options).toHaveLength(2);
+    for (let index = 0; index < choices.length; index++) {
+      expect(options[index].textContent).toContain(choices[index].id);
+      expect(options[index].textContent).toContain(choices[index].versionId);
+    }
+    fireEvent.change(screen.getByLabelText("Course"), { target: { value: choices[1].id } });
+    fill("Administrative reason", "Assign the second published safety course.");
+    fireEvent.click(screen.getByRole("button", { name: "Review training change" }));
+    const review = screen.getByRole("region", { name: "Review training change" });
+    expect(within(review).getByText("Course ID").nextElementSibling?.textContent).toBe(choices[1].id);
+    expect(within(review).getByText("Published version ID").nextElementSibling?.textContent).toBe(choices[1].versionId);
+    expect(request.mock.calls.filter(([operation]) => operation.operation === "apply")).toHaveLength(0);
+    fireEvent.click(within(review).getByRole("checkbox", { name: "I reviewed this change." }));
+    fireEvent.click(within(review).getByRole("button", { name: "Apply reviewed change" }));
+    await waitFor(() => expect(request.mock.calls.find(([operation]) => operation.operation === "apply")?.[0]).toMatchObject({ action: "enrollments.assign", parameters: { courseId: choices[1].id, versionId: choices[1].versionId } }));
   });
 });
