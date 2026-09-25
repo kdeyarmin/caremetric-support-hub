@@ -1,6 +1,6 @@
 export const REQUIRED_BACKEND_CONTRACT = 4;
 export const REQUIRED_BACKEND_FEATURES = [
-  "phone.registry.v1",
+  "phone.registry.v1", "phone.accounts.v1",
   "learning.runtime.v1", "platform.admin.read.v1", "app.sms.v1", "learning.sources.v1",
   "platform.admin.command.v1", "learning.receipts.v1", "learning.authoring.v1",
   "knowledge.publications.v1", "support.readiness.v1", "platform.admin.intel.v1", "learning.draft-editing.v1",
