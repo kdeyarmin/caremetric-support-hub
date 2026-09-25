@@ -8327,3 +8327,35 @@ insert into private.phone_numbers(number,record) values('+18333489271','{"provid
 insert into private.phone_numbers(number,record) values('+18559542809','{"provider":"Twilio","account":"CareMetric AI","owner":"","lifecycle":"active","usage_status":"unknown","voice_status":"configured","sms_status":"unknown","last_used_on":"","reviewed_on":"2026-09-24","evidence":"Twilio Console configuration inspected September 24, 2026. Configuration alone does not prove recent traffic.","notes":"Do not consolidate with the shared software-support line without checking patient workflows. SMS approval and actual traffic still need review.","voice_routing":"https://pennpaps.com/resupply-api/voice/inbound-reorder","sms_routing":"Separate marketing messaging service (observed in Twilio).","number":"+18559542809","label":"PennPaps patient reorder — 855","purpose":"Patient supply reordering; separate messaging service.","apps":"PennPaps patient operations"}'::jsonb) on conflict (number) do nothing;
 insert into private.phone_numbers(number,record) values('+18149169606','{"provider":"Twilio","account":"CareMetric AI","owner":"","lifecycle":"active","usage_status":"unknown","voice_status":"configured","sms_status":"configured","last_used_on":"","reviewed_on":"2026-09-24","evidence":"Twilio Console configuration inspected September 24, 2026. Configuration alone does not prove recent traffic.","notes":"Preserve patient operations. Actual recent call/text usage has not been verified.","voice_routing":"https://pennpaps.com/resupply-api/voice/inbound-reorder","sms_routing":"Patient SMS Customer Care A2P Messaging Service.","number":"+18149169606","label":"PennPaps patient voice and SMS","purpose":"Patient supply reordering and patient SMS.","apps":"PennPaps patient operations"}'::jsonb) on conflict (number) do nothing;
 
+
+-- Phone registry deployment contract
+-- Additive deployment gate for the private phone inventory.
+do $$ declare contract jsonb:=hub.get_backend_contract(); signature text; begin
+  if (contract @> '{"api_version":4,"features":["app.sms.v1","platform.admin.read.v1"]}'::jsonb) is not true then
+    raise exception 'Apply the Hub SMS and administrator foundations first' using errcode='55000';
+  end if;
+  if to_regclass('private.phone_numbers') is null or to_regprocedure('hub.list_phone_numbers()') is null
+    or to_regprocedure('hub.save_phone_number(uuid,jsonb,integer)') is null
+    or to_regprocedure('hub.authorize_app_admin()') is null then
+    raise exception 'Apply the phone registry and administrator authorization first' using errcode='55000';
+  end if;
+  if not (select relrowsecurity from pg_class where oid='private.phone_numbers'::regclass)
+    or has_table_privilege('authenticated','private.phone_numbers','SELECT,INSERT,UPDATE,DELETE')
+    or has_table_privilege('anon','private.phone_numbers','SELECT,INSERT,UPDATE,DELETE')
+    or has_table_privilege('hub_app_server','private.phone_numbers','SELECT,INSERT,UPDATE,DELETE') then
+    raise exception 'Private phone registry access must remain closed' using errcode='55000';
+  end if;
+  foreach signature in array array['hub.list_phone_numbers()','hub.save_phone_number(uuid,jsonb,integer)'] loop
+    if has_function_privilege('anon',signature,'EXECUTE')
+      or not has_function_privilege('authenticated',signature,'EXECUTE')
+      or position('hub.authorize_app_admin()' in pg_get_functiondef(signature::regprocedure))=0 then
+      raise exception 'Phone registry RPCs require current administrator authorization' using errcode='55000';
+    end if;
+  end loop;
+  if not (contract->'features' @> '["phone.registry.v1"]'::jsonb) then
+    contract:=jsonb_set(contract,'{features}',(contract->'features')||'["phone.registry.v1"]'::jsonb);
+  end if;
+  execute format('create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='''' as %L','select '||quote_literal(contract::text)||'::jsonb');
+end $$;
+revoke all on function hub.get_backend_contract() from public;
+grant execute on function hub.get_backend_contract() to anon,authenticated;

@@ -30,6 +30,11 @@ describe('phone inventory',()=>{
     await waitFor(()=>expect(client.save).toHaveBeenCalledWith(expect.objectContaining({purpose:'Advisor reception',number:row.number}),row));
     await screen.findByText('Phone number saved.');
   });
+  it('includes unverified routing even when usage and lifecycle are known',async()=>{
+    setup([{...row,lifecycle:'active',usage_status:'observed',reviewed_on:'2026-09-24',evidence:'Verified call.',voice_status:'configured',sms_status:'unknown'}]);
+    await screen.findByText('(202) 555-0881');fireEvent.change(screen.getByLabelText('Show'),{target:{value:'review'}});
+    expect(screen.getByRole('heading',{name:'(202) 555-0881'})).toBeTruthy();
+  });
   it('keeps unsaved edits visible after a conflict',async()=>{
     const client=setup();client.save.mockRejectedValue(new Error('conflict'));
     await screen.findByText('(202) 555-0881');fireEvent.click(screen.getByRole('button',{name:'Edit (202) 555-0881'}));

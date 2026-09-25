@@ -25,8 +25,11 @@ keys, and uses version checks to prevent stale overwrites. Existing phone number
 cannot be renamed; add another record instead. Audits contain only the entity ID,
 action, and version, without free-text content.
 
-Deployment order: apply `20260925020325_phone_number_registry.sql`, then deploy
-the web/server image. The migration is additive and grants no new staff roles.
+Deployment order: apply `20260925020325_phone_number_registry.sql` and
+`20260925022151_phone_registry_contract.sql`, then deploy the web/server image.
+The startup/build compatibility gate requires `phone.registry.v1`; its declaration
+checks the private table, RLS, direct grants and guarded RPCs while preserving
+other backend features. These migrations are additive and grant no new staff roles.
 Run the UI/validation suite and `server/phone-registry-integration.mjs` against
 the isolated Supabase stack before release. The integration exercises real
 session authorization, customer denial, revoked/banned users, private-table

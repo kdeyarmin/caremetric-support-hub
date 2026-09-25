@@ -1,6 +1,7 @@
 // Real PostgreSQL/session tests. Never run against a hosted database.
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
 import pg from 'pg';
 import {digest} from './sms-auth.mjs';
 import {gateway} from './gateway.mjs';
@@ -16,7 +17,27 @@ let recordId;
 const rpc=(name,args={},token=ownerToken)=>api.rpc(name,args,token);
 const record={number:'+12025550881',label:'Synthetic support line',provider:'Test provider',account:'Test account',purpose:'Synthetic registry test',apps:'Test app',owner:'Test team',lifecycle:'active',usage_status:'unknown',voice_status:'unknown',voice_routing:'',sms_status:'unknown',sms_routing:'',last_used_on:'',reviewed_on:'',evidence:'',notes:''};
 const save=(value=record,id=null,version=0,token=ownerToken)=>rpc('save_phone_number',{p_id:id,p_record:value,p_expected_version:version},token);
+const contractMigration=await readFile(new URL('../supabase/migrations/20260925022151_phone_registry_contract.sql',import.meta.url),'utf8');
 try{
+  const contractConnection=await admin.connect();
+  try{
+    const current=(await contractConnection.query('select hub.get_backend_contract() as data')).rows[0].data;
+    assert.ok(current.features.includes('phone.registry.v1'));
+    await contractConnection.query(contractMigration);
+    assert.deepEqual((await contractConnection.query('select hub.get_backend_contract() as data')).rows[0].data,current,'declaration is idempotent');
+    for(const change of [
+      'alter table private.phone_numbers rename to fixture_missing_phone_numbers',
+      'alter function hub.list_phone_numbers() rename to fixture_missing_phone_list',
+      'alter function hub.save_phone_number(uuid,jsonb,integer) rename to fixture_missing_phone_save',
+      'alter table private.phone_numbers disable row level security',
+      'grant select on private.phone_numbers to authenticated',
+      'grant execute on function hub.list_phone_numbers() to anon',
+    ]){
+      await contractConnection.query('begin');
+      try{await contractConnection.query(change);await assert.rejects(contractConnection.query(contractMigration),error=>error.code==='55000');}
+      finally{await contractConnection.query('rollback');}
+    }
+  }finally{contractConnection.release();}
   await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'phone-owner@test.invalid',false),($2,'phone-customer@test.invalid',false)",[owner,customer]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')",[owner]);
   await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550882',now()),($2,'+12025550883',now())",[owner,customer]);
