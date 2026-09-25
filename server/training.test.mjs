@@ -2,6 +2,7 @@ import {expect,it,vi} from 'vitest';
 import {trainingAdministration} from './training.mjs';
 const id='11111111-1111-4111-8111-111111111111';
 const request={domain:'training.v1',operation:'facilities.list',organizationId:id,search:'',limit:20,offset:0};
+const report={domain:'training.v1',operation:'enrollments.report',organizationId:id,facilityId:null,courseSearch:'',status:'all',dateBasis:'assigned',dateFrom:null,dateThrough:null,limit:10000,offset:0};
 const result={items:[{id,name:'Test facility',facilityType:'PCH',isActive:true}],total:1,limit:20,offset:0};
 function setup({revoked=false,response=result,status=200}={}){
   const query=vi.fn(async sql=>{
@@ -29,8 +30,15 @@ it('rejects domain confusion before ticket issuance and rechecks revocation afte
   await expect(setup({response:{...result,total:2}}).run('x'.repeat(43),request)).rejects.toMatchObject({status:503});
 });
 it('conveys an explicit export cap and conflict without native error detail',async()=>{
-  await expect(setup({status:413,response:{secret:'private'}}).run('x'.repeat(43),request)).rejects.toMatchObject({status:413,code:'report_too_large'});
+  await expect(setup({status:413,response:{secret:'private'}}).run('x'.repeat(43),report)).rejects.toMatchObject({status:413,code:'report_too_large'});
+  await expect(setup({status:413,response:{secret:'private'}}).run('x'.repeat(43),request)).rejects.toMatchObject({status:503,code:'upstream'});
   await expect(setup({status:409,response:{secret:'private'}}).run('x'.repeat(43),request)).rejects.toMatchObject({status:409,code:'conflict'});
+});
+it('the training bridge translates streamed byte overflow into report_too_large without widening other reads',async()=>{
+  const f=setup({response:{padding:'x'.repeat(12_000_000)}});
+  await expect(f.run('x'.repeat(43),report)).rejects.toMatchObject({status:413,code:'report_too_large'});
+  expect(f.fetchImpl).toHaveBeenCalledOnce();
+  await expect(setup({response:{...result,padding:'x'.repeat(1_048_576)}}).run('x'.repeat(43),request)).rejects.toMatchObject({status:503,code:'upstream'});
 });
 it('cancellation during ticket issuance cannot start a late native mutation',async()=>{
   let resolve;const issue=vi.fn(()=>new Promise(done=>{resolve=done;})),fetchImpl=vi.fn(),controller=new AbortController();
