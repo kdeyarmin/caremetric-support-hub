@@ -55,6 +55,11 @@ it("requires a first viewing to reach the end before a video lesson can be compl
   video.currentTime = 4; fireEvent.timeUpdate(video);
   video.currentTime = 90; fireEvent.seeking(video);
   expect(video.currentTime).toBe(4);
+  // Small repeated seeks cannot creep forward either: each one returns to the furthest point played.
+  video.currentTime = 4.5; fireEvent.seeking(video); fireEvent.timeUpdate(video);
+  expect(video.currentTime).toBe(4);
+  video.currentTime = 2; fireEvent.seeking(video);
+  expect(video.currentTime).toBe(2);
   fireEvent.ended(video);
   expect(checkbox.disabled).toBe(false);
   expect(screen.queryByText("Watch the full video to continue.")).toBeNull();

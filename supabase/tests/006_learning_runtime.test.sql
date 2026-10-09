@@ -1,5 +1,5 @@
 begin;
-select plan(73);
+select plan(74);
 insert into auth.users(id,email,raw_user_meta_data,is_anonymous)
 values ('98000000-0000-4000-8000-000000000001','learning-editor@test.invalid','{"display_name":"Editor"}',false),
 ('98000000-0000-4000-8000-000000000002','learning-one@test.invalid','{"display_name":"Learner One"}',false),
@@ -56,6 +56,7 @@ set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000001","rol
 select lives_ok($$select hub.save_learning_draft(item_id,jsonb_set(doc,'{title}','"Revision two"'),1) from learning_fixture$$,'author can revise course');
 select lives_ok($$select hub.publish_learning_course(item_id,2,true) from learning_fixture$$,'new publication is immutable');
 select throws_ok($$select hub.publish_learning_course((hub.save_learning_draft(null,jsonb_set(doc,'{units}',jsonb_build_array(doc->'units'->0)),0)->>'itemId')::uuid,1,true) from learning_fixture$$,'22023','End the course with a graded post-test after the last lesson.','a course without a post-test cannot publish');
+select throws_ok($$select hub.publish_learning_course((hub.save_learning_draft(null,jsonb_set(doc,'{units}',jsonb_build_array(doc->'units'->1)),0)->>'itemId')::uuid,1,true) from learning_fixture$$,'22023','End the course with a graded post-test after the last lesson.','a quiz-only course has no lesson to test and cannot publish');
 select throws_ok($$select hub.publish_learning_course((hub.save_learning_draft(null,jsonb_set(doc,'{units}',jsonb_build_array(doc->'units'->1,doc->'units'->0)),0)->>'itemId')::uuid,1,true) from learning_fixture$$,'22023','End the course with a graded post-test after the last lesson.','a lesson after the post-test blocks publication');
 select lives_ok($$select hub.publish_learning_course((hub.save_learning_draft(null,jsonb_set(doc,'{units}',(doc->'units')||'[{"id":"98100000-0000-4000-8000-000000000003","type":"attestation","title":"Attestation","body":"I completed this course myself."}]'::jsonb),0)->>'itemId')::uuid,1,true) from learning_fixture$$,'a closing attestation may follow the post-test');
 set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}';

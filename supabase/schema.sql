@@ -2737,7 +2737,8 @@ begin
       max(u.position) filter (where u.value->>'type' in ('text','video'))
       into last_quiz, last_lesson
       from jsonb_array_elements(p_doc->'units') with ordinality u(value, position);
-    if last_quiz is null or last_lesson > last_quiz then
+    -- A quiz-only course has no lesson to test, and NULL > x is not true, so both are explicit.
+    if last_quiz is null or last_lesson is null or last_lesson > last_quiz then
       raise exception 'End the course with a graded post-test after the last lesson.' using errcode = '22023';
     end if;
   end if;
@@ -8522,6 +8523,30 @@ do $$ declare contract jsonb:=hub.get_backend_contract(); signature text; begin
   end if;
   if not (contract->'features' @> '["phone.accounts.v1"]'::jsonb) then
     contract:=jsonb_set(contract,'{features}',(contract->'features')||'["phone.accounts.v1"]'::jsonb);
+  end if;
+  execute format('create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='''' as %L','select '||quote_literal(contract::text)||'::jsonb');
+end $$;
+revoke all on function hub.get_backend_contract() from public;
+grant execute on function hub.get_backend_contract() to anon,authenticated;
+
+-- Additive deployment gate for ordered course delivery: units open in course order, a published
+-- course ends with a graded post-test after its last lesson, and the certificate reports the
+-- post-test score. A frontend that relies on these rules must not deploy against a backend
+-- that still accepts out-of-order units or publishes a course without a post-test.
+do $$ declare contract jsonb:=hub.get_backend_contract(); begin
+  if (contract @> '{"api_version":4,"features":["learning.runtime.v1"]}'::jsonb) is not true then
+    raise exception 'Apply the Hub learning runtime first' using errcode='55000';
+  end if;
+  if position('Complete the earlier lessons in order before continuing.'
+      in pg_get_functiondef('hub.submit_learning_unit(uuid,uuid,jsonb,boolean,uuid)'::regprocedure))=0
+    or position('last_lesson is null'
+      in pg_get_functiondef('private.validate_learning_document(jsonb,boolean)'::regprocedure))=0
+    or position('finalScore'
+      in pg_get_functiondef('hub.get_learning_certificate(uuid)'::regprocedure))=0 then
+    raise exception 'Apply the ordered course delivery migration first' using errcode='55000';
+  end if;
+  if not (contract->'features' @> '["learning.sequence.v1"]'::jsonb) then
+    contract:=jsonb_set(contract,'{features}',(contract->'features')||'["learning.sequence.v1"]'::jsonb);
   end if;
   execute format('create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='''' as %L','select '||quote_literal(contract::text)||'::jsonb');
 end $$;

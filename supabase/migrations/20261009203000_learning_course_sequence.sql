@@ -105,7 +105,8 @@ begin
       max(u.position) filter (where u.value->>'type' in ('text','video'))
       into last_quiz, last_lesson
       from jsonb_array_elements(p_doc->'units') with ordinality u(value, position);
-    if last_quiz is null or last_lesson > last_quiz then
+    -- A quiz-only course has no lesson to test, and NULL > x is not true, so both are explicit.
+    if last_quiz is null or last_lesson is null or last_lesson > last_quiz then
       raise exception 'End the course with a graded post-test after the last lesson.' using errcode = '22023';
     end if;
   end if;

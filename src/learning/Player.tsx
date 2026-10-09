@@ -95,7 +95,7 @@ function PrivateVideo({ assetId, enrollmentId, lockSeeking, onWatched }: { asset
   }, [assetId, enrollmentId, attempt]);
   return <div>{media && <video controls preload="metadata" crossOrigin="anonymous" src={media.video} onError={() => setError("Playback could not continue. Refresh access and resume the video.")}
     onTimeUpdate={event => { const time = event.currentTarget.currentTime; if (time > furthest.current && time - furthest.current < 2) furthest.current = time; }}
-    onSeeking={event => { const video = event.currentTarget; if (lockSeeking && video.currentTime > furthest.current + 1) video.currentTime = furthest.current; }}
+    onSeeking={event => { const video = event.currentTarget; if (lockSeeking && video.currentTime > furthest.current) video.currentTime = furthest.current; }}
     onEnded={onWatched}><track kind="captions" src={media.captions} srcLang="en" label="English" default /></video>}{error && <p role="alert">{error} <button onClick={() => setAttempt(attempt + 1)}>Refresh video access</button></p>}</div>;
 }
 

@@ -27,8 +27,10 @@ for the deployed release and remaining authenticated verification gates.
   video plays to the end. That browser check is not proof of elapsed viewing
   time. Quiz answers are graded server-side. Completion requires every lesson
   to be acknowledged and every quiz to pass.
-- Publishing requires a graded post-test after the last text or video lesson; a
-  closing attestation may follow it (`20261009203000_learning_course_sequence.sql`).
+- Publishing requires at least one text or video lesson followed by a graded
+  post-test; a closing attestation may follow it
+  (`20261009203000_learning_course_sequence.sql`). Connected frontends require
+  backend feature `learning.sequence.v1` before they deploy.
 - `/learn/my`: the current learner's enrollments and progress.
 - `/learn/certificates/:enrollmentId`: an authenticated, printable record of
   completion that shows the best post-test score and its passing score. These
