@@ -14,6 +14,13 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      # Docker Hub rate-limits anonymous pulls from shared runners (HTTP 429). Google's Docker Hub
+      # mirror serves the same official image; the build then resolves the local tag. If the
+      # mirror is unavailable, the build pulls from Docker Hub as before.
+      - name: Pull the Node base image through a registry mirror
+        run: |
+          docker pull mirror.gcr.io/library/node:24-alpine && docker tag mirror.gcr.io/library/node:24-alpine node:24-alpine \
+            || echo 'Mirror unavailable; the build will pull node:24-alpine from Docker Hub.'
       - name: Build the actual runtime image with synthetic frontend configuration
         run: docker build --build-arg VITE_DEMO_MODE=true --build-arg SUPPORT_HUB_ALLOW_DEMO_BUILD=true -t hub-runtime-check .
       - name: Resolve the complete startup module graph inside the production image
