@@ -25,7 +25,7 @@ export const courseSchema = z.object({ itemId: id, versionId: id, document: lear
 export type Course = z.infer<typeof courseSchema>;
 export const submissionSchema = z.object({ passed: z.boolean(), score: z.number().nullable(), attemptCount: z.number(), completedAt: z.string().nullable(), certificateId: id.nullable() });
 export const myLearningSchema = z.array(z.object({ enrollmentId: id, itemId: id, title: z.string(), versionId: id, startedAt: z.string(), completedAt: z.string().nullable(), certificateId: id.nullable(), durationMinutes: z.number(), completedUnits: z.number(), totalUnits: z.number() }));
-export const certificateSchema = z.object({ certificateId: id, learnerName: z.string(), courseTitle: z.string(), completedAt: z.string(), durationMinutes: z.number(), versionId: id });
+export const certificateSchema = z.object({ certificateId: id, learnerName: z.string(), courseTitle: z.string(), completedAt: z.string(), durationMinutes: z.number(), versionId: id, finalScore: z.number().nullish(), passingScore: z.number().nullish() });
 export function newUnit(type: DraftUnit["type"]): DraftUnit {
   const base = { id: crypto.randomUUID(), title: "New lesson" };
   if (type === "quiz") {
@@ -33,6 +33,13 @@ export function newUnit(type: DraftUnit["type"]): DraftUnit {
     return { ...base, title: "Knowledge check", type, body: "", passingScore: 80, maxAttempts: 3, questions: [{ id: crypto.randomUUID(), prompt: "", points: 1, correctOptionId: correct, options: [{ id: correct, text: "" }, { id: crypto.randomUUID(), text: "" }] }] };
   }
   return type === "video" ? { ...base, type, body: "", mediaAssetId: null } : { ...base, type, body: "" };
+}
+// Units open in course order, as the server enforces: everything through the
+// first incomplete unit is available, and the final quiz is the post-test.
+export function courseSteps(course: Course) {
+  const units = course.document.units;
+  const firstOpen = units.findIndex(unit => !course.progress.some(p => p.unitId === unit.id && p.completedAt));
+  return { lastOpen: firstOpen === -1 ? units.length - 1 : firstOpen, postTest: units.map(unit => unit.type).lastIndexOf("quiz") };
 }
 export function newDocument(products: string[]): DraftDocument {
   return { title: "", summary: "", overview: "", category: "", durationMinutes: 10, accessLevel: "customer", productIds: products, units: [newUnit("text")] };
