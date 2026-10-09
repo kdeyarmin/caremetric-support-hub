@@ -2641,6 +2641,7 @@ declare
   unit jsonb; question jsonb; option jsonb; unit_ids uuid[] := '{}'; question_ids uuid[];
   option_ids uuid[]; unit_id uuid; question_id uuid; option_id uuid; product_id uuid;
   products uuid[] := '{}'; unit_type text; media private.learning_media%rowtype;
+  last_quiz bigint; last_lesson bigint;
 begin
   if p_doc is null or jsonb_typeof(p_doc) <> 'object' or octet_length(p_doc::text) > 1500000 then
     raise exception 'Course document is invalid or too large.' using errcode = '22023';
@@ -2729,6 +2730,17 @@ begin
       end loop;
     end if;
   end loop;
+  -- Learners read or watch every lesson, pass a graded post-test, then receive
+  -- the certificate. Drafts may be incomplete; a publication may not.
+  if p_publishing then
+    select max(u.position) filter (where u.value->>'type' = 'quiz'),
+      max(u.position) filter (where u.value->>'type' in ('text','video'))
+      into last_quiz, last_lesson
+      from jsonb_array_elements(p_doc->'units') with ordinality u(value, position);
+    if last_quiz is null or last_lesson > last_quiz then
+      raise exception 'End the course with a graded post-test after the last lesson.' using errcode = '22023';
+    end if;
+  end if;
 end;
 $$;
 
@@ -2931,7 +2943,7 @@ declare
   learner uuid; enrollment private.learning_enrollments%rowtype; version private.learning_versions%rowtype;
   progress private.learning_unit_progress%rowtype; prior private.learning_submissions%rowtype;
   unit jsonb; question jsonb; request_hash text; score integer; correct integer:=0; count_questions integer; total_points integer := 0; question_points integer;
-  passed boolean; result jsonb; pending integer;
+  passed boolean; result jsonb; pending integer; unit_position bigint;
 begin
   learner := private.require_learning_user();
   if p_request_key is null or p_unit_id is null or p_answers is null
@@ -2955,6 +2967,14 @@ begin
   if enrollment.completed_at is not null then raise exception 'Course is already completed.' using errcode='22023'; end if;
   select * into progress from private.learning_unit_progress where enrollment_id=p_enrollment_id and unit_id=p_unit_id;
   if progress.completed_at is not null then raise exception 'Learning unit is already completed.' using errcode='22023'; end if;
+  -- Units open in course order, so the post-test follows every lesson.
+  select u.position into unit_position from jsonb_array_elements(version.document->'units') with ordinality u(value,position)
+    where u.value->>'id'=p_unit_id::text;
+  if exists(select 1 from jsonb_array_elements(version.document->'units') with ordinality u(value,position)
+    where u.position<unit_position and not exists(select 1 from private.learning_unit_progress p
+      where p.enrollment_id=p_enrollment_id and p.unit_id=(u.value->>'id')::uuid and p.completed_at is not null)) then
+    raise exception 'Complete the earlier lessons in order before continuing.' using errcode='22023';
+  end if;
   if unit->>'type'='quiz' then
     if coalesce(progress.attempt_count,0)>=(unit->>'maxAttempts')::integer then
       raise exception 'Quiz attempt limit reached. Contact your educator.' using errcode='22023';
@@ -3027,8 +3047,13 @@ begin
   learner := private.require_learning_user();
   select jsonb_build_object('certificateId',e.certificate_id,'enrollmentId',e.id,
     'learnerName',e.certificate_name,'courseTitle',v.document->>'title','completedAt',e.completed_at,
-    'durationMinutes',v.document->'durationMinutes','versionId',v.id)
+    'durationMinutes',v.document->'durationMinutes','versionId',v.id,
+    'finalScore',post_test.best_score,'passingScore',(post_test.unit->>'passingScore')::integer)
     into result from private.learning_enrollments e join private.learning_versions v on v.id=e.version_id
+    -- The certificate reports the best score on the course's final post-test.
+    left join lateral (select u.value as unit,p.best_score from jsonb_array_elements(v.document->'units') with ordinality u(value,position)
+      left join private.learning_unit_progress p on p.enrollment_id=e.id and p.unit_id=(u.value->>'id')::uuid
+      where u.value->>'type'='quiz' order by u.position desc limit 1) post_test on true
     where e.id=p_enrollment_id and e.user_id=learner and e.completed_at is not null;
   if result is null then raise exception 'Certificate unavailable.' using errcode='42501'; end if;
   return result;

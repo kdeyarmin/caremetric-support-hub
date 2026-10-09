@@ -1,5 +1,5 @@
 begin;
-select plan(67);
+select plan(73);
 insert into auth.users(id,email,raw_user_meta_data,is_anonymous)
 values ('98000000-0000-4000-8000-000000000001','learning-editor@test.invalid','{"display_name":"Editor"}',false),
 ('98000000-0000-4000-8000-000000000002','learning-one@test.invalid','{"display_name":"Learner One"}',false),
@@ -33,25 +33,31 @@ select ok((hub.get_learning_course((select item_id from learning_fixture))::text
 update learning_fixture set enrollment_id=hub.enroll_learning_course(item_id);
 select is(hub.enroll_learning_course((select item_id from learning_fixture)),(select enrollment_id from learning_fixture),'enrollment is idempotent');
 select throws_ok($$select hub.get_learning_certificate(enrollment_id) from learning_fixture$$,'42501','Certificate unavailable.','unfinished courses cannot receive certificates');
+select throws_ok($$select hub.submit_learning_unit(enrollment_id,'98100000-0000-4000-8000-000000000002','{"98200000-0000-4000-8000-000000000001":"98300000-0000-4000-8000-000000000001"}',false,gen_random_uuid()) from learning_fixture$$,'22023','Complete the earlier lessons in order before continuing.','the post-test stays locked until earlier lessons are complete');
+select lives_ok($$select hub.submit_learning_unit(enrollment_id,'98100000-0000-4000-8000-000000000001','{}',true,gen_random_uuid()) from learning_fixture$$,'the first lesson opens immediately');
+select is((select completed_at from private.learning_enrollments where id=(select enrollment_id from learning_fixture)),null::timestamptz,'completing lessons alone does not complete the course');
 select throws_ok($$select hub.submit_learning_unit(enrollment_id,'98100000-0000-4000-8000-000000000002','{"score":100}',false,gen_random_uuid()) from learning_fixture$$,'22023','Quiz answer is not a valid option.','client cannot supply its own grade');
 update learning_fixture set result=hub.submit_learning_unit(enrollment_id,'98100000-0000-4000-8000-000000000002','{"98200000-0000-4000-8000-000000000001":"98300000-0000-4000-8000-000000000002"}',false,'98400000-0000-4000-8000-000000000001');
 select is((select (result->>'score')::integer from learning_fixture),0,'wrong answer is graded on server');
 select is(hub.submit_learning_unit((select enrollment_id from learning_fixture),'98100000-0000-4000-8000-000000000002','{"98200000-0000-4000-8000-000000000001":"98300000-0000-4000-8000-000000000002"}',false,'98400000-0000-4000-8000-000000000001'),(select result from learning_fixture),'network retry reuses attempt');
 select throws_ok($$select hub.submit_learning_unit(enrollment_id,'98100000-0000-4000-8000-000000000002','{}',false,'98400000-0000-4000-8000-000000000001') from learning_fixture$$,'22023','Submission key already used for different content.','request-key reuse cannot change answers');
 select is((hub.submit_learning_unit((select enrollment_id from learning_fixture),'98100000-0000-4000-8000-000000000002','{"98200000-0000-4000-8000-000000000001":"98300000-0000-4000-8000-000000000001"}',false,gen_random_uuid())->>'score')::integer,100,'correct answer passes');
-select is((select completed_at from private.learning_enrollments where id=(select enrollment_id from learning_fixture)),null::timestamptz,'passing quiz alone does not complete other lessons');
+select isnt((select completed_at from private.learning_enrollments where id=(select enrollment_id from learning_fixture)),null::timestamptz,'passing the post-test after every lesson completes the course');
 set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}';
 select throws_ok($$select hub.get_learning_course(item_id,enrollment_id) from learning_fixture$$,'42501','Enrollment unavailable.','another learner cannot read progress');
 select throws_ok($$select hub.submit_learning_unit(enrollment_id,'98100000-0000-4000-8000-000000000001','{}',true,gen_random_uuid()) from learning_fixture$$,'42501','Enrollment unavailable.','another learner cannot modify progress');
 select is(hub.list_my_learning(),'[]'::jsonb,'another learner cannot list private enrollments');
 set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}';
-select lives_ok($$select hub.submit_learning_unit(enrollment_id,'98100000-0000-4000-8000-000000000001','{}',true,gen_random_uuid()) from learning_fixture$$,'last lesson completes enrollment');
+select is((hub.get_learning_certificate((select enrollment_id from learning_fixture))->>'finalScore')::integer,100,'certificate reports the post-test score');
 select is(hub.get_learning_certificate((select enrollment_id from learning_fixture))->>'learnerName','Learner One','certificate uses authenticated learner identity');
 update hub.profiles set display_name='Renamed learner' where id='98000000-0000-4000-8000-000000000002';
 select is(hub.get_learning_certificate((select enrollment_id from learning_fixture))->>'learnerName','Learner One','later profile edits cannot rewrite certificate identity');
 set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}';
 select lives_ok($$select hub.save_learning_draft(item_id,jsonb_set(doc,'{title}','"Revision two"'),1) from learning_fixture$$,'author can revise course');
 select lives_ok($$select hub.publish_learning_course(item_id,2,true) from learning_fixture$$,'new publication is immutable');
+select throws_ok($$select hub.publish_learning_course((hub.save_learning_draft(null,jsonb_set(doc,'{units}',jsonb_build_array(doc->'units'->0)),0)->>'itemId')::uuid,1,true) from learning_fixture$$,'22023','End the course with a graded post-test after the last lesson.','a course without a post-test cannot publish');
+select throws_ok($$select hub.publish_learning_course((hub.save_learning_draft(null,jsonb_set(doc,'{units}',jsonb_build_array(doc->'units'->1,doc->'units'->0)),0)->>'itemId')::uuid,1,true) from learning_fixture$$,'22023','End the course with a graded post-test after the last lesson.','a lesson after the post-test blocks publication');
+select lives_ok($$select hub.publish_learning_course((hub.save_learning_draft(null,jsonb_set(doc,'{units}',(doc->'units')||'[{"id":"98100000-0000-4000-8000-000000000003","type":"attestation","title":"Attestation","body":"I completed this course myself."}]'::jsonb),0)->>'itemId')::uuid,1,true) from learning_fixture$$,'a closing attestation may follow the post-test');
 set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}';
 select is(hub.get_learning_certificate((select enrollment_id from learning_fixture))->>'courseTitle','Learning test','new publication preserves historical completion title');
 select is(hub.get_learning_course((select item_id from learning_fixture),(select enrollment_id from learning_fixture))->'document'->>'title','Learning test','existing enrollment pins its original revision');
@@ -102,7 +108,9 @@ select lives_ok($$select hub.register_learning_media('98700000-0000-4000-8000-00
 create temporary table learning_access_fixture(doc jsonb,item_id uuid,enrollment_id uuid);
 insert into learning_access_fixture(doc)
 select jsonb_build_object('title','Customer learning','summary','Entitlement fixture','category','Testing','accessLevel','customer','durationMinutes',10,
-  'productIds',jsonb_build_array(id),'units','[{"id":"98700000-0000-4000-8000-000000000002","type":"video","title":"Private lesson","body":"Reviewed transcript","mediaAssetId":"98700000-0000-4000-8000-000000000001"}]'::jsonb)
+  'productIds',jsonb_build_array(id),'units','[{"id":"98700000-0000-4000-8000-000000000002","type":"video","title":"Private lesson","body":"Reviewed transcript","mediaAssetId":"98700000-0000-4000-8000-000000000001"},
+  {"id":"98700000-0000-4000-8000-000000000003","type":"quiz","title":"Post-test","passingScore":80,"maxAttempts":null,
+  "questions":[{"id":"98700000-0000-4000-8000-000000000004","prompt":"Choose the correct option","points":1,"correctOptionId":"98700000-0000-4000-8000-000000000005","options":[{"id":"98700000-0000-4000-8000-000000000005","text":"Correct"},{"id":"98700000-0000-4000-8000-000000000006","text":"Incorrect"}]}]}]'::jsonb)
 from hub.products where slug='pennsync';
 update learning_access_fixture set item_id=(hub.save_learning_draft(null,doc,0)->>'itemId')::uuid;
 select lives_ok($$select hub.publish_learning_course(item_id,1,true) from learning_access_fixture$$,'new Hub-authored customer course can publish');

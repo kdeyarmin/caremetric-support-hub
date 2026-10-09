@@ -20,12 +20,19 @@ for the deployed release and remaining authenticated verification gates.
 - `/learn`: public metadata. New courses published in the Hub open here. Existing
   CareBase courses retain source launches; their imported drafts cannot publish
   until the source runtime and reporting bridge is verified.
-- `/learn/courses/:itemId`: authenticated enrollment and delivery. Quiz answers
-  are graded server-side. Completion requires every lesson to be acknowledged
-  and every quiz to pass; it is not proof of elapsed viewing time.
+- `/learn/courses/:itemId`: authenticated enrollment and delivery. Lessons open
+  in course order, and the server refuses a submission until every earlier unit
+  is complete, so the post-test follows the lessons. A video lesson's first
+  viewing cannot skip ahead, and the lesson cannot be marked complete until the
+  video plays to the end. That browser check is not proof of elapsed viewing
+  time. Quiz answers are graded server-side. Completion requires every lesson
+  to be acknowledged and every quiz to pass.
+- Publishing requires a graded post-test after the last text or video lesson; a
+  closing attestation may follow it (`20261009203000_learning_course_sequence.sql`).
 - `/learn/my`: the current learner's enrollments and progress.
 - `/learn/certificates/:enrollmentId`: an authenticated, printable record of
-  completion. These certificates do not claim accredited CE credit.
+  completion that shows the best post-test score and its passing score. These
+  certificates do not claim accredited CE credit.
 
 Hub users must already be provisioned; existing passwordless sign-in does not
 create accounts. Staff and customers enrolled in TOTP must complete AAL2.

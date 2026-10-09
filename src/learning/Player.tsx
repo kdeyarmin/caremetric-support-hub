@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { learningApi } from "./api";
-import type { Course, LearnerUnit } from "./model";
+import { courseSteps, type Course, type LearnerUnit } from "./model";
 
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : "The request did not complete. Please retry."; }
 
@@ -12,7 +12,9 @@ export function CoursePlayer() {
   const [course, setCourse] = useState<Course | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [selected, setSelected] = useState(0);
+  const [selected, setSelected] = useState<number | null>(null);
+  const steps = course ? courseSteps(course) : null;
+  const current = steps ? Math.min(selected ?? steps.lastOpen, steps.lastOpen) : 0;
   useEffect(() => {
     let active = true;
     void learningApi.course(itemId, enrollment).then(value => { if (active) { setCourse(value); setError(""); } }, caught => { if (active) setError(errorMessage(caught)); });
@@ -32,8 +34,8 @@ export function CoursePlayer() {
       {course.document.overview && <div className="lesson-body">{course.document.overview}</div>}
       {course.completedAt && <div className="panel learning-notice"><strong>Course completed</strong><Link to={`/learn/certificates/${course.enrollmentId}`}>View completion certificate</Link></div>}
       {!course.enrollmentId ? <button className="button button-primary" disabled={busy} onClick={() => void start()}>Start course</button> :
-        <div className="learning-player"><aside className="panel"><ol>{course.document.units.map((unit, index) => <li key={unit.id}><button aria-current={index === selected ? "step" : undefined} onClick={() => setSelected(index)}>{course.progress.some(p => p.unitId === unit.id && p.completedAt) ? "✓ " : ""}{unit.title}</button></li>)}</ol></aside>
-          <Lesson key={`${course.enrollmentId}:${course.document.units[selected].id}`} course={course} unit={course.document.units[selected]} onRefresh={async () => setCourse(await learningApi.course(itemId, course.enrollmentId))} onNext={() => setSelected(Math.min(selected + 1, course.document.units.length - 1))} />
+        <div className="learning-player"><aside className="panel"><ol>{course.document.units.map((unit, index) => <li key={unit.id}><button aria-current={index === current ? "step" : undefined} disabled={index > steps!.lastOpen} title={index > steps!.lastOpen ? "Complete the earlier lessons first" : undefined} onClick={() => setSelected(index)}>{course.progress.some(p => p.unitId === unit.id && p.completedAt) ? "✓ " : ""}{unit.title}{index === steps!.postTest ? " · Post-test" : ""}</button></li>)}</ol></aside>
+          <Lesson key={`${course.enrollmentId}:${course.document.units[current].id}`} course={course} unit={course.document.units[current]} onRefresh={async () => { setSelected(current); setCourse(await learningApi.course(itemId, course.enrollmentId)); }} onNext={() => setSelected(Math.min(current + 1, course.document.units.length - 1))} />
         </div>}
     </>}
   </div>;
@@ -46,8 +48,11 @@ function Lesson({ course, unit, onRefresh, onNext }: { course: Course; unit: Lea
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [watched, setWatched] = useState(false);
   const pending = useRef<{ serialized: string; key: string } | null>(null);
   const exhausted = unit.type === "quiz" && unit.maxAttempts !== null && (progress?.attemptCount ?? 0) >= unit.maxAttempts;
+  // A first viewing must reach the end before the lesson can be marked complete.
+  const mustWatch = unit.type === "video" && Boolean(unit.mediaAssetId) && !progress?.completedAt && !watched;
   async function submit() {
     setBusy(true); setError("");
     const serialized = JSON.stringify({ answers, attested });
@@ -61,7 +66,7 @@ function Lesson({ course, unit, onRefresh, onNext }: { course: Course; unit: Lea
     finally { setBusy(false); }
   }
   return <section className="panel lesson-panel"><h2>{unit.title}</h2>
-    {unit.type === "video" && unit.mediaAssetId && <PrivateVideo assetId={unit.mediaAssetId} enrollmentId={course.enrollmentId!} />}
+    {unit.type === "video" && unit.mediaAssetId && <PrivateVideo assetId={unit.mediaAssetId} enrollmentId={course.enrollmentId!} lockSeeking={!progress?.completedAt} onWatched={() => setWatched(true)} />}
     {unit.type !== "quiz" ? <div className="lesson-body">{unit.body}</div> : <>
       {unit.body && <div className="lesson-body">{unit.body}</div>}
       <p>Passing score: {unit.passingScore}%. Attempts used: {progress?.attemptCount ?? 0}{unit.maxAttempts === null ? " (unlimited)" : ` of ${unit.maxAttempts}`}.</p>
@@ -70,22 +75,28 @@ function Lesson({ course, unit, onRefresh, onNext }: { course: Course; unit: Lea
     {error && <p className="learning-error" role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}
     {progress?.completedAt ? <button className="button button-primary" onClick={onNext}>Continue</button> : exhausted ? <p role="status">Attempt limit reached. Contact your educator for help.</p> : <>
-      {unit.type !== "quiz" && <label className="learning-check"><input type="checkbox" checked={attested} disabled={busy} onChange={event => setAttested(event.target.checked)} />{unit.type === "attestation" ? "I agree to the attestation above." : "I have completed this lesson."}</label>}
+      {mustWatch && <p role="status">Watch the full video to continue.</p>}
+      {unit.type !== "quiz" && <label className="learning-check"><input type="checkbox" checked={attested} disabled={busy || mustWatch} onChange={event => setAttested(event.target.checked)} />{unit.type === "attestation" ? "I agree to the attestation above." : "I have completed this lesson."}</label>}
       <button className="button button-primary" disabled={busy || (unit.type === "quiz" ? unit.questions.some(q => !answers[q.id]) : !attested)} onClick={() => void submit()}>{busy ? "Saving…" : unit.type === "quiz" ? "Submit answers" : "Complete lesson"}</button>
     </>}
   </section>;
 }
 
-function PrivateVideo({ assetId, enrollmentId }: { assetId: string; enrollmentId: string }) {
+function PrivateVideo({ assetId, enrollmentId, lockSeeking, onWatched }: { assetId: string; enrollmentId: string; lockSeeking: boolean; onWatched: () => void }) {
   const [media, setMedia] = useState<{ video: string; captions: string } | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
+  // Furthest point reached by playback; a seek past it returns there until the video has been watched.
+  const furthest = useRef(0);
   useEffect(() => {
     let active = true;
     void learningApi.media(assetId, enrollmentId).then(value => { if (active) { setMedia(value); setError(""); } }, caught => { if (active) setError(errorMessage(caught)); });
     return () => { active = false; };
   }, [assetId, enrollmentId, attempt]);
-  return <div>{media && <video controls preload="metadata" crossOrigin="anonymous" src={media.video} onError={() => setError("Playback could not continue. Refresh access and resume the video.")}><track kind="captions" src={media.captions} srcLang="en" label="English" default /></video>}{error && <p role="alert">{error} <button onClick={() => setAttempt(attempt + 1)}>Refresh video access</button></p>}</div>;
+  return <div>{media && <video controls preload="metadata" crossOrigin="anonymous" src={media.video} onError={() => setError("Playback could not continue. Refresh access and resume the video.")}
+    onTimeUpdate={event => { const time = event.currentTarget.currentTime; if (time > furthest.current && time - furthest.current < 2) furthest.current = time; }}
+    onSeeking={event => { const video = event.currentTarget; if (lockSeeking && video.currentTime > furthest.current + 1) video.currentTime = furthest.current; }}
+    onEnded={onWatched}><track kind="captions" src={media.captions} srcLang="en" label="English" default /></video>}{error && <p role="alert">{error} <button onClick={() => setAttempt(attempt + 1)}>Refresh video access</button></p>}</div>;
 }
 
 export function MyLearning() {
@@ -101,5 +112,5 @@ export function LearningCertificate() {
   const [certificate, setCertificate] = useState<Awaited<ReturnType<typeof learningApi.certificate>> | null>(null);
   const [error, setError] = useState("");
   useEffect(() => { let active = true; void learningApi.certificate(enrollmentId).then(value => { if (active) setCertificate(value); }, caught => { if (active) setError(errorMessage(caught)); }); return () => { active = false; }; }, [enrollmentId]);
-  return <div className="learning-workspace"><nav className="learning-links"><Link to="/learn/my">My learning</Link><button onClick={() => window.print()}>Print certificate</button></nav>{error && <p role="alert">{error}</p>}{certificate && <section className="panel learning-certificate"><p>CareMetric Learning</p><h1>Certificate of completion</h1><h2>{certificate.learnerName}</h2><p>completed</p><h2>{certificate.courseTitle}</h2><p>{new Date(certificate.completedAt).toLocaleDateString()} · Estimated learning time: {certificate.durationMinutes} minutes</p><p>This certificate records course completion. It does not confer accredited continuing education credit.</p><small>Certificate {certificate.certificateId}<br />Course revision {certificate.versionId}</small></section>}</div>;
+  return <div className="learning-workspace"><nav className="learning-links"><Link to="/learn/my">My learning</Link><button onClick={() => window.print()}>Print certificate</button></nav>{error && <p role="alert">{error}</p>}{certificate && <section className="panel learning-certificate"><p>CareMetric Learning</p><h1>Certificate of completion</h1><h2>{certificate.learnerName}</h2><p>completed</p><h2>{certificate.courseTitle}</h2><p>{new Date(certificate.completedAt).toLocaleDateString()} · Estimated learning time: {certificate.durationMinutes} minutes</p>{certificate.finalScore != null && <p>Post-test score: {certificate.finalScore}%{certificate.passingScore != null && ` (passing score ${certificate.passingScore}%)`}</p>}<p>This certificate records course completion. It does not confer accredited continuing education credit.</p><small>Certificate {certificate.certificateId}<br />Course revision {certificate.versionId}</small></section>}</div>;
 }
