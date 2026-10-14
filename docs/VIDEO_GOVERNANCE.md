@@ -91,6 +91,25 @@ Problems that need action before these courses are assigned:
 | No video has captions; there are 0 sidecar files. | All 7 video courses | Request SRT captions from HeyGen v3 (`caption.file_format`) and store them as WebVTT |
 | Four annual HeyGen courses (Emergency Preparedness, Falls, Medication Self-Administration, Safe Management) have no compliance-credit rows and no training type. Completion issues a certificate but records no annual hours. Diabetes records its credit through its renewal training type. | Those four | Map training types or retire the courses |
 
+**Follow-up, October 14, 2026** (kdeyarmin/PennTrain#598, BACKLOG REG41):
+
+- **Falls transcripts restored.** The three renders were transcribed and read
+  against the audio. Their text replaces the title-only scripts
+  (`20261014180000`).
+- **Captions added.** 64 of the 65 videos now carry English WebVTT captions
+  (`course_video_captions`, `20261014180200`). The cue text is each lesson's
+  approved script, timed against its render's audio, and `CourseVideoPlayer`
+  turns it on by default. Timing is machine-aligned, so a person should still
+  spot-check a few lessons, as step 6 of the publishing workflow below
+  requires.
+- **Credits mapped.** Emergency Preparedness, Falls and Medication
+  Self-Administration now credit 1.00 verified-only hour each toward the PCH
+  and ALF direct-care annual requirements. They use the same topic codes as the
+  `PA-DHS-ANNUAL-*` course on each subject (`20261014180100`).
+- **Safe Management is still open.** It is uncaptioned and uncredited until
+  lesson 9 is re-rendered and a new version is published. The re-render needs
+  an MFA-verified platform admin.
+
 **Overlapping courses.** The eight `PA-DHS-STANDALONE-*` annual courses, six of
 them with video, teach the same audience and topics as eight
 `PA-DHS-ANNUAL-*` courses. Those carry PCH and ALF hour credits.
@@ -108,8 +127,18 @@ them with video, teach the same audience and topics as eight
 
 No assignment references any of these 16 courses. Choose one course per topic,
 or label the standalone courses as optional refreshers, before facilities start
-assigning annual training. The aide series (home health, hospice, nursing home)
-and Chapter 6400 repeat topics for different roles and are not duplicates.
+assigning annual training. **Decision (October 14, 2026):** keep both sets
+and assign one course per topic. The Emergency Preparedness, Falls and
+Medication Self-Administration video courses now credit the same annual topic
+as their `PA-DHS-ANNUAL-*` counterparts, so either course satisfies the topic;
+prefer the video edition. The Infection Control, Fire Safety, Abuse Reporting
+and Resident Rights standalone courses credit through their own training
+types, as before. **Do not assign the Safe Management standalone course** until
+lesson 9 is re-rendered and a new version is published: it carries no credit,
+and its lesson 9 narrates superseded restraint guidance. Use the
+`PA-DHS-ANNUAL-SAFE-MANAGEMENT` course instead. The aide series (home health,
+hospice, nursing home) and Chapter 6400 repeat topics for different roles and
+are not duplicates.
 
 **Rendering engine.** CareBase calls HeyGen `POST /v3/videos` and its v3 status
 endpoint, so the October 31, 2026 retirement of v1/v2 does not affect it. The
@@ -120,7 +149,9 @@ $0.60/min respectively. These lessons are narrated by a single presenter and do
 not use Avatar IV's gesture controls. Render one sample lesson on
 `avatar_iii` and compare it with the current renders. If it is acceptable, set
 CareBase's `HEYGEN_AVATAR_ENGINE=avatar_iii` (kdeyarmin/PennTrain
-`generate-course-video`).
+`generate-course-video`). **Set in production on October 14, 2026.** The next
+render, Safe Management lesson 9, is the sample. If it looks wrong, unset the
+secret and every later render returns to Avatar IV.
 
 ## Required publishing workflow
 
