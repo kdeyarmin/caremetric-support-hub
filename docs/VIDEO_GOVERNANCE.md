@@ -127,11 +127,18 @@ them with video, teach the same audience and topics as eight
 
 No assignment references any of these 16 courses. Choose one course per topic,
 or label the standalone courses as optional refreshers, before facilities start
-assigning annual training. **Decision (October 14, 2026):** keep both sets.
-Each standalone course now credits the same annual topic as its
-`PA-DHS-ANNUAL-*` counterpart, so either one satisfies the topic. Facilities
-should assign one per topic, preferring the video edition where one exists. The aide series (home health, hospice, nursing home)
-and Chapter 6400 repeat topics for different roles and are not duplicates.
+assigning annual training. **Decision (October 14, 2026):** keep both sets
+and assign one course per topic. The Emergency Preparedness, Falls and
+Medication Self-Administration video courses now credit the same annual topic
+as their `PA-DHS-ANNUAL-*` counterparts, so either course satisfies the topic;
+prefer the video edition. The Infection Control, Fire Safety, Abuse Reporting
+and Resident Rights standalone courses credit through their own training
+types, as before. **Do not assign the Safe Management standalone course** until
+lesson 9 is re-rendered and a new version is published: it carries no credit,
+and its lesson 9 narrates superseded restraint guidance. Use the
+`PA-DHS-ANNUAL-SAFE-MANAGEMENT` course instead. The aide series (home health,
+hospice, nursing home) and Chapter 6400 repeat topics for different roles and
+are not duplicates.
 
 **Rendering engine.** CareBase calls HeyGen `POST /v3/videos` and its v3 status
 endpoint, so the October 31, 2026 retirement of v1/v2 does not affect it. The
