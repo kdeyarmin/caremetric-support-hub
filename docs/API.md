@@ -25,7 +25,7 @@ Version `0.1.0` uses RLS-governed reads and narrow atomic RPCs in the `hub` sche
   older clients.
 - `hub.get_support_case_thread(case_id)`: customer correspondence plus internal notes only for authorized staff.
 
-The actor bootstrap is intentionally callable at AAL1 so a usable staff user can enroll or challenge TOTP. Deleted, banned, and anonymous Auth principals are rejected even if an older JWT remains unexpired. For staff and customers with a verified TOTP factor, tenant context and every protected data path remain unavailable until the current JWT is AAL2.
+The actor bootstrap is intentionally callable before verification and reveals only the minimum identity and role. Deleted, banned, and anonymous Auth principals are rejected even if an older JWT remains unexpired. For staff, tenant context and every protected data path remain unavailable until the request carries a verified session: the Hub server's SMS app session ([details](APP_SMS_SIGNIN.md)) or, for existing integrations, a legacy AAL2 JWT. Customers without a verified second factor keep their tenant memberships at AAL1. Authenticator apps (TOTP) are turned off, so no new factor can be enrolled.
 
 ## Commands
 
@@ -39,7 +39,7 @@ projected counts/course metadata. See [the request and deployment contract](CENT
 - `hub.reply_to_support_case(..., p_request_key uuid)`: validates `case.write` independently from requester/participant/tenant-scoped membership authority, keeps staff notes private, derives the stored author role from the path that authorized the write, updates case state, and appends metadata-only audit history. A repeated identical key returns the original message or note.
 - `hub.update_support_case(...)`: requires `case.write`, verifies assignee product authorization plus a currently usable non-anonymous Auth account and provisioned profile, and changes only operational fields.
 
-The original nine-argument create and three-argument reply signatures remain as compatibility wrappers. They generate a server-side request key for each call, so only the keyed overloads provide caller-stable retry replay; new clients must use those keyed overloads and supply a non-null UUID. The private idempotency ledger contains a request digest and identifiers only; it has RLS enabled and no browser-role grants. New case intake defaults off per tenant/product and requires an active entitlement plus a currently usable staff route with verified TOTP. Disabling intake does not strand already-created cases or prevent an authorized replay from returning a previously committed create result.
+The original nine-argument create and three-argument reply signatures remain as compatibility wrappers. They generate a server-side request key for each call, so only the keyed overloads provide caller-stable retry replay; new clients must use those keyed overloads and supply a non-null UUID. The private idempotency ledger contains a request digest and identifiers only; it has RLS enabled and no browser-role grants. New case intake defaults off per tenant/product and requires an active entitlement plus a currently usable staff route with a verified SMS sign-in number. Disabling intake does not strand already-created cases or prevent an authorized replay from returning a previously committed create result.
 
 Every command derives the actor from `auth.uid()`. No caller may set requester identity, requester display name, staff role, data classification, or audit actor.
 

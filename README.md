@@ -70,14 +70,14 @@ Version `0.1.0` now runs as the first production vertical slice:
   playback, quizzes, and completion continue through controlled CareBase launches.
 - Native authoring and delivery for new Hub courses, including reviewed private
   media, server-graded quizzes, revision-pinned progress, and completion records.
-- An MFA-protected `/admin` workspace with the app-function inventory and a
+- An SMS-verified `/admin` workspace with the app-function inventory and a
   CareBase connection for aggregate counts, shared course metadata, and lesson
   titles. Live authenticated adapter operations remain unverified.
 - A governed import of 70 published CareBase help articles; no learner, employee, resident, organization, assignment, progress, or ticket records were copied.
 - An owner-approved product/contact registry that publishes only approved contact values; mailbox delivery readiness is tracked separately.
 - A framework-neutral `@caremetric/help-sdk` that opens Help or the shared Learning Library while passing only an allowlisted product and safe, static context.
 - A dedicated `hub`/`private` Supabase schema design, RLS policies, narrow grants, atomic case RPCs, physically separate internal notes, and metadata-only audit records.
-- A live TOTP enrollment/challenge flow with database-enforced AAL2 for every staff principal and for customers who opt into TOTP; the AAL1 bootstrap reveals only the minimum identity and role needed to complete enrollment.
+- [SMS sign-in](docs/APP_SMS_SIGNIN.md): a registered mobile number receives a six-digit code and the server issues an app session that every protected database path rechecks. Authenticator apps (TOTP) are turned off; the database keeps its legacy AAL2 checks only for existing integrations.
 - Fail-closed, per-tenant/product case-intake settings plus UUID request keys that make case creation and replies safely retryable without putting support text in the idempotency ledger. Runtime checks immediately reject deleted, banned, or anonymous principals and keep dual-role staff/customer authority paths separate.
 - A credential-free DocStudio publication preview plus an SMS-authorized [publication import executor](docs/PUBLICATION_IMPORTS.md): exact streamed asset checks, immutable catalog revisions, explicit placement confirmations, private media, and bounded staging cleanup.
 - Pull-request CI for both the application and a clean local Supabase migration/pgTAP stack.
@@ -170,8 +170,8 @@ Do not connect this application to `CM Train`, PennFit, CMbackup, or any other e
 4. Run database/security advisors and the pgTAP tests.
 5. Keep every production change represented by a reviewed, idempotent migration.
 6. Configure `VITE_SUPABASE_URL` and the publishable key. Never put a secret or service-role key in a browser variable.
-7. Enroll every staff account in TOTP (with a second authenticator for recovery), then provision product entitlements, tenant memberships, and explicit staff permissions.
-8. Explicitly activate case intake for each approved tenant/product only after a non-banned support writer with `case.write` or `platform.admin` has verified TOTP. A missing setting remains disabled.
+7. Register each staff account's mobile number for [SMS sign-in](docs/APP_SMS_SIGNIN.md), then provision product entitlements, tenant memberships, and explicit staff permissions.
+8. Explicitly activate case intake for each approved tenant/product only after a non-banned support writer with `case.write` or `platform.admin` has a verified SMS sign-in number. A missing setting remains disabled.
 9. Verify the published central routing remains `(877) 521-2890` and `support@caremetric.ai`.
 10. Set `VITE_DEMO_MODE=false`, build, and deploy.
 
@@ -186,7 +186,7 @@ The initial release is deliberately non-PHI:
 - No ticket text is sent to HeyGen, analytics, AI retrieval, logs, or search indexing.
 - Inbound free text is still conservatively classified `possible_phi` in the database.
 
-Production case intake is now also gated in the database and defaults off. Do not create an activation row until the exact project is approved for the intended data class, tenant/product membership is provisioned, a TOTP-ready staff route exists, and the controls in [SECURITY.md](SECURITY.md) are operational.
+Production case intake is now also gated in the database and defaults off. Do not create an activation row until the exact project is approved for the intended data class, tenant/product membership is provisioned, an SMS-verified staff route exists, and the controls in [SECURITY.md](SECURITY.md) are operational.
 
 ## Repository structure
 
