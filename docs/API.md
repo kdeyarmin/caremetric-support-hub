@@ -25,7 +25,7 @@ Version `0.1.0` uses RLS-governed reads and narrow atomic RPCs in the `hub` sche
   older clients.
 - `hub.get_support_case_thread(case_id)`: customer correspondence plus internal notes only for authorized staff.
 
-The actor bootstrap is intentionally callable before verification and reveals only the minimum identity and role. Deleted, banned, and anonymous Auth principals are rejected even if an older JWT remains unexpired. Tenant context and every protected data path remain unavailable until the request carries a verified SMS app session ([details](APP_SMS_SIGNIN.md)). Authenticator apps (TOTP) are turned off.
+The actor bootstrap is intentionally callable before verification and reveals only the minimum identity and role. Deleted, banned, and anonymous Auth principals are rejected even if an older JWT remains unexpired. For staff, tenant context and every protected data path remain unavailable until the request carries a verified session: the Hub server's SMS app session ([details](APP_SMS_SIGNIN.md)) or, for existing integrations, a legacy AAL2 JWT. Customers without a verified second factor keep their tenant memberships at AAL1. Authenticator apps (TOTP) are turned off, so no new factor can be enrolled.
 
 ## Commands
 
