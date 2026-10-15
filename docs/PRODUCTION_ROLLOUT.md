@@ -49,7 +49,7 @@ also succeeded. These probes establish deployed behavior, not a successful
 privileged Hub-to-CareBase session.
 The [CareBase main-branch CI run 34612563342](https://github.com/kdeyarmin/PennTrain/actions/runs/34612563342)
 passed for that merge; CI success alone does not establish production readiness.
-The owner must complete Hub TOTP enrollment and verify the authorized connection
+The owner must complete Hub SMS sign-in and verify the authorized connection
 before live counts, course metadata, and privileged learning workflows can be
 certified end to end. Case intake remains subject to its existing activation
 gate. Customer SSO, consolidated billing, remaining app adapters, and CareBase
@@ -88,11 +88,11 @@ not evidence that the current authenticated backend has been deployed.
 | Product registry | CareMetric CareBase, CareMetric Breathe, PennSync, CareMetric EMR, CareMetric Go, and CareMetric Intel. |
 | Shared learning | 80 imported public CareBase courses plus one customer-only onboarding course. Every registered product has all 81 governed placements; anonymous visitors see the same 80 public courses across 22 categories, including searchable metadata for 65 current video lessons. |
 | Shared knowledge | 70 published CareBase articles plus the reviewed Support Hub core guidance. |
-| Case operations | The first-party case/message queue, staff controls, RLS, atomic RPCs, tenant/product activation gate, and request-key replay protection are deployed and tested. Intake defaults off, and production has zero activation rows, tenants, cases, or retry records. A tenant/product can accept cases only after provisioning and an active, usable, verified-TOTP support writer exist. |
+| Case operations | The first-party case/message queue, staff controls, RLS, atomic RPCs, tenant/product activation gate, and request-key replay protection are deployed and tested. Intake defaults off, and production has zero activation rows, tenants, cases, or retry records. A tenant/product can accept cases only after provisioning and an active, usable support writer with a verified SMS sign-in number exist. |
 | Publication preview | The Hub contains a deterministic, credential-free DocStudio publication preview for a closed manifest/assets/snapshot package. It validates six-product targeting, immutable monotonic revisions, SHA-256 assets, captions/transcripts, safe text, placement changes, retirement, and reactivation without fetching, uploading, writing, or deleting anything. A reviewed first-party apply transport remains deliberately absent. |
 | Video delivery | Metadata for 65 current lesson videos is searchable in the Hub and shared across all six products. The Hub has no copied media assets or public video bucket; playback continues through the authenticated CareBase course runtime until captions, checksums, and an entitlement-aware asset broker are approved. |
 | Inbound channels | The central phone and email values are registered in one owner-controlled contact registry. Phone-call disposition and inbound-email ingestion are not connected yet; any future transport must write into the Hub rather than become a separate help-desk system of record. |
-| Administration | `kdeyarmin@comcast.net` is the sole active, confirmed platform administrator; bootstrap provisioning is permanently closed. TOTP/AAL2 is enforced in the UI and database. The account currently has no verified factor and will be required to enroll at its next Hub sign-in before privileged data loads. |
+| Administration | `kdeyarmin@comcast.net` is the sole active, confirmed platform administrator; bootstrap provisioning is permanently closed. SMS sign-in is enforced in the UI and database, and the account's registered mobile number is verified. Authenticator apps (TOTP) are turned off in the Hub project. |
 | Customer data boundary | No learner progress, quiz results, certificates, patient data, tenant data, private media URL, HeyGen job credential, or application ticket database was copied into the catalog. |
 
 ## Application rollout
@@ -103,7 +103,7 @@ not evidence that the current authenticated backend has been deployed.
 | CareMetric Breathe | `kdeyarmin/PennFit@0e2409c` plus rollout documentation at `c92b0b2` | Live at `https://cmbreathe.com`; admin support opens the Hub with `product=breathe`. Patient/tenant service contacts intentionally remain separate. |
 | PennSite | `kdeyarmin/PennSite@f7aa91f` | Live at `https://penn.up.railway.app`; the site-wide Software Help Center opens the Hub while healthcare-service phone numbers remain distinct. |
 | PennSync | `kdeyarmin/CareMetric-Pennsync@feca891` | Published through Base44 at `https://app.caremetricai.com`; the production bundle and public site contain the contextual launcher, permanent Hub origin, correct phone/email fallback, and exact production app/environment gates. Local Help remains the rollback path. A fresh authenticated Help-button click remains unverified, so this row is not yet marked fully Live. |
-| CareMetric CareBase | `kdeyarmin/PennTrain@d332ddf` (PR #497), with ledger reconciliation at `dff5227` (PR #499) | The launcher is deployed successfully at the canonical `cmcarebase.com` / `caremetrictrain.com` Railway service and remains dark behind the default-off `support.central_hub` release flag. The shared course/help catalog is live in the Hub. Enroll the sole administrator in TOTP before the approved AAL2-protected flag change; do not bypass that release gate with direct SQL. |
+| CareMetric CareBase | `kdeyarmin/PennTrain@d332ddf` (PR #497), with ledger reconciliation at `dff5227` (PR #499) | The launcher is deployed successfully at the canonical `cmcarebase.com` / `caremetrictrain.com` Railway service and remains dark behind the default-off `support.central_hub` release flag. The shared course/help catalog is live in the Hub. Verify the sole administrator by SMS before the approved flag change; do not bypass that release gate with direct SQL. |
 | CareMetric Go | `kdeyarmin/CM-Go@a30a49c` | Source-ready for provider and patient menus with a central launcher and offline phone/email fallback. Native release is blocked by the placeholder EAS project ID, missing verified release credentials/workflow, and source/store version drift. |
 | CareMetric Intel | `kdeyarmin/intel@c57776d` (PR #65) | The privacy-safe launcher, exact production/app identity gate, permanent Hub origin, always-available phone/email fallback, and deterministic guide inventory are merged and CI is green. `caremetricintel.com` remains healthy on its preceding release; the new launcher is source-ready but not published because the Base44 sandbox/bridge is returning server-side errors. Its product guide has not been auto-published without content review. |
 | DocStudio | `kdeyarmin/DocStudio@d02d0a2` | A tested, PHI-free, hash-addressed export contract and exact six-product allowlist are merged. The Hub now has a read-only publication preview for that contract. It is not part of the current CareMetric EMR deployment; actual publishing remains blocked until the first-party apply and asset-ingest boundary is implemented and approved. |
@@ -131,10 +131,10 @@ not evidence that the current authenticated backend has been deployed.
    SPF, or DMARC record for `caremetric.ai`; configure the chosen mailbox and
    sending service's exact records before treating `support@caremetric.ai` as
    an operational inbound queue.
-3. On the sole administrator's next Hub sign-in, complete the mandatory TOTP
-   enrollment and then add a second verified authenticator from **Security**.
-   AAL2 enforcement is already active in the UI and database; the minimal AAL1
-   actor bootstrap remains available specifically so enrollment is recoverable.
+3. The sole administrator signs in to the Hub with the registered mobile number
+   and a six-digit SMS code. Verified-session enforcement is already active in
+   the UI and database; authenticator apps (TOTP) are turned off. Number recovery
+   is an operator action described in [APP_SMS_SIGNIN.md](APP_SMS_SIGNIN.md).
 4. Provision each customer tenant, product entitlement, and membership before
    expecting that customer to open or view cases. Anonymous case intake stays
    disabled.
