@@ -76,3 +76,32 @@ POST /internal/v1/video-renders
 ```
 
 The HTTP layer will be added as authenticated Supabase Edge Functions after the dedicated project exists. It will never proxy a browser service-role key.
+
+## AI case assistance (server endpoints)
+
+Implemented in the app server (`server/ai-assistance.mjs`, `server/ai-case-assistance.mjs`,
+`server/ai-automation.mjs`); the Anthropic key is server-only (`ANTHROPIC_API_KEY`) and never
+reaches the browser. Without the key, every AI endpoint refuses with
+`503 {"error":{"code":"AI_NOT_CONFIGURED"}}` and the rest of the Hub is unaffected.
+
+Staff actions (SMS session required; the caller must hold a staff role in
+`get_support_actor_context` and see the case in their queue). All three are advisory:
+none of them posts, sends, or updates anything.
+
+- `POST /api/ai/cases/{caseId}/summary` — `{}` → `{ summary }` for the case thread.
+- `POST /api/ai/cases/{caseId}/draft-reply` — `{ qualityTier?: "draft" | "quality" }` →
+  `{ draft }`, generated from the thread plus published knowledge articles the caller
+  may read. The draft is returned for the staffer's reply box; sending stays manual.
+- `POST /api/ai/cases/{caseId}/triage-suggestion` — `{}` → `{ category, priority }`,
+  validated against the case enums. Applying it is the staffer's action through the
+  normal `update_support_case` path.
+
+Customer auto-resolution (portal cases only) runs as an in-server sweep when
+`HUB_AI_AUTOMATION_ENABLED=true`: up to two automated attempts authored by the
+CareMetric AI Assistant identity, a follow-up nudge after
+`HUB_AI_FOLLOW_UP_DELAY_HOURS` (default 24), then permanent escalation to staff.
+The customer's explicit answer goes through the gateway RPC
+`hub.record_ai_resolution_response(p_case_id, p_fixed, p_request_key)` (idempotent,
+customer-side only); free-text replies are classified by the sweep as a fallback.
+Loop state lives in `hub.case_ai_automation`; the queue view exposes `ai_stage` /
+`ai_attempts` (backend features `support.ai-assistance.v1`, `support.ai-automation.v1`).

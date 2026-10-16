@@ -27,7 +27,8 @@ export function sameOrigin(req,origins) {
   return origins.includes(req.headers.origin) && (!req.headers['sec-fetch-site'] || req.headers['sec-fetch-site']==='same-origin');
 }
 const mime={'.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.webp':'image/webp','.woff2':'font/woff2','.html':'text/html'};
-export function appServer({auth,gateway,delegations,publications,docstudio,origins,dist=resolve('dist')}) {
+const aiCaseActions=new Set(['summary','draft-reply','triage-suggestion']);
+export function appServer({auth,gateway,delegations,publications,docstudio,aiCases,origins,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -203,6 +204,12 @@ export function appServer({auth,gateway,delegations,publications,docstudio,origi
         if(path==='/api/auth/logout' && req.method==='POST') {
           await jsonBody(req,2048); await auth.logout(session);
           return json({authenticated:false},200,[cookie(sessionCookie,'',0),cookie(challengeCookie,'',0)]);
+        }
+        const aiCaseRoute=/^\/api\/ai\/cases\/([0-9a-f-]{36})\/([a-z-]+)$/.exec(path);
+        if(aiCaseRoute && req.method==='POST') {
+          if(!aiCaseActions.has(aiCaseRoute[2])) throw new HttpError(404,'This resource is unavailable.');
+          if(!aiCases) throw new HttpError(503,'AI assistance is not configured.','AI_NOT_CONFIGURED');
+          return json(await aiCases.handle(session,aiCaseRoute[2],aiCaseRoute[1],await jsonBody(req,4096)));
         }
         if(path.startsWith('/api/rpc/') && req.method==='POST') return json(await gateway.rpc(path.slice(9),await jsonBody(req),session));
         if(path.startsWith('/api/rows/') && req.method==='GET') return json(await gateway.rows(path.slice(10),session));

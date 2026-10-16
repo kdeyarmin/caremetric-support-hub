@@ -9,6 +9,9 @@ import { databaseConfig } from './database-config.mjs';
 import { publications } from './publications.mjs';
 import { docstudio } from './docstudio.mjs';
 import { distributionObserver } from './distribution-observer.mjs';
+import { aiAssistance } from './ai-assistance.mjs';
+import { aiCaseAssistance } from './ai-case-assistance.mjs';
+import { aiAutomation, sqlAutomationStore } from './ai-automation.mjs';
 
 const storageUrl='https://xgauehtwksmnoqhgqegm.supabase.co';
 const pool=new pg.Pool(databaseConfig());
@@ -20,7 +23,11 @@ const observer=distributionObserver({pool,token:process.env.CAREBASE_DISTRIBUTIO
 const capabilities=delegations({pool,storageUrl,provider,observer,legacyDistributionOptIn:process.env.HUB_LEGACY_DISTRIBUTION_OPT_IN==='true'});
 const publicationService=publications({pool,delegations:capabilities,storageUrl});
 const studio=docstudio({pool,publications:publicationService,workerToken:process.env.DOCSTUDIO_WORKER_TOKEN});
-const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:capabilities,publications:publicationService,docstudio:studio,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
+const ai=aiAssistance({apiKey:process.env.ANTHROPIC_API_KEY});
+const aiCases=aiCaseAssistance({ai,rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken),rows:(name,sessionToken)=>api.rows(name,sessionToken)});
+const followUpHours=Number(process.env.HUB_AI_FOLLOW_UP_DELAY_HOURS);
+const automation=aiAutomation({ai,store:sqlAutomationStore(pool),enabled:process.env.HUB_AI_AUTOMATION_ENABLED==='true',draftTier:process.env.HUB_AI_DRAFT_TIER==='quality'?'quality':'draft',followUpDelayMs:(Number.isFinite(followUpHours)&&followUpHours>0?followUpHours:24)*60*60*1000});
+const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:capabilities,publications:publicationService,docstudio:studio,aiCases,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
 let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;
@@ -32,6 +39,8 @@ const cleanupTimer=setInterval(()=>void cleanup(),15*60*1000); cleanupTimer.unre
 void cleanup();
 const checkCourses=async()=>{try{await observer.tick();}catch{console.warn('Course availability observation could not complete; it will retry.');}};
 const courseTimer=setInterval(()=>void checkCourses(),5*60*1000);courseTimer.unref();void checkCourses();
+const sweepAi=async()=>{try{await automation.tick();}catch{console.warn('AI case automation could not complete; it will retry.');}};
+const aiTimer=setInterval(()=>void sweepAi(),60*1000);aiTimer.unref();void sweepAi();
 server.requestTimeout=130000; server.headersTimeout=15000;
 server.listen(Number(process.env.PORT || 8080),'0.0.0.0');
-for(const signal of ['SIGTERM','SIGINT']) process.on(signal,() => { clearInterval(cleanupTimer); clearInterval(courseTimer); server.close(() => { void pool.end(); }); });
+for(const signal of ['SIGTERM','SIGINT']) process.on(signal,() => { clearInterval(cleanupTimer); clearInterval(courseTimer); clearInterval(aiTimer); server.close(() => { void pool.end(); }); });
