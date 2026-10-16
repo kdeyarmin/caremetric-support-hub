@@ -3,6 +3,7 @@ import {
   AlertCircle,
   ArrowRight,
   BookOpen,
+  Bot,
   Boxes,
   Check,
   CheckCircle2,
@@ -56,6 +57,8 @@ import {
 import { CourseLibrary, CourseEditor } from "./learning/Editor";
 import { CoursePlayer, MyLearning, LearningCertificate } from "./learning/Player";
 import { LearningCatalog } from "./learning/Catalog";
+import { AiCaseTools } from "./support/AiCaseTools";
+import { AiResolutionPrompt } from "./support/AiResolutionPrompt";
 import { PhoneInbox } from "./support/PhoneInbox";
 import { PhoneRegistry } from "./support/PhoneRegistry";
 import { AdminWorkspace } from "./admin/AdminWorkspace";
@@ -526,7 +529,7 @@ function CasesPage({ data }: CasesPageProps) {
                   <div className="case-list-top"><span>{caseCode(supportCase.caseNumber)}</span><time>{formatDate(supportCase.lastMessageAt)}</time></div>
                   <strong>{supportCase.subject}</strong>
                   <p>{supportCase.tenantName} · {product?.name}</p>
-                  <div className="case-list-bottom"><StatusBadge status={supportCase.status} /><PriorityBadge priority={supportCase.priority} /></div>
+                  <div className="case-list-bottom"><StatusBadge status={supportCase.status} /><PriorityBadge priority={supportCase.priority} />{supportCase.aiStage === "exhausted" && <span className="ai-escalated-badge">AI escalated</span>}</div>
                 </button>
               );
             })}
@@ -700,7 +703,18 @@ function CaseDetail({ supportCase, thread, threadStatus, threadError, threadStal
         <div className="case-title-line"><span>{caseCode(supportCase.caseNumber)}</span><StatusBadge status={supportCase.status} /><PriorityBadge priority={supportCase.priority} /></div>
         <h2>{supportCase.subject}</h2>
         <div className="case-context"><span className="product-dot" style={{ background: product?.color }} /> {product?.name}<span>•</span>{supportCase.tenantName}<span>•</span>{categoryLabels[supportCase.category]}</div>
+        {supportCase.aiStage === "exhausted" && (
+          <div className="ai-escalation-banner" role="alert"><Bot size={16} /><span><strong>Escalated — AI attempts exhausted.</strong> Automated help tried {supportCase.aiAttempts ?? 2} suggestions without resolving this case. It needs a human support agent.</span></div>
+        )}
       </header>
+      {staff && (
+        <AiCaseTools
+          caseId={supportCase.id}
+          disabled={threadStatus !== "ready"}
+          onDraft={(text) => { setBody(text); setVisibility("customer"); }}
+          onApplyPriority={(priority) => void update({ priority })}
+        />
+      )}
       {staff && (
         <div className="case-controls">
           <label><span>Status</span><select value={supportCase.status} onChange={(event) => void update({ status: event.target.value as CaseStatus })} disabled={saving}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
@@ -726,15 +740,19 @@ function CaseDetail({ supportCase, thread, threadStatus, threadError, threadStal
           </div>
         )}
         {thread.map((message) => {
-          const fromStaff = isSupportStaff(message.authorRole);
+          const fromAi = message.authorRole === "ai_assistant";
+          const fromStaff = !fromAi && isSupportStaff(message.authorRole as Parameters<typeof isSupportStaff>[0]);
           return (
-            <article key={message.id} className={`message ${fromStaff ? "message-staff" : ""} ${message.visibility === "internal" ? "message-internal" : ""}`}>
-              <span className="message-avatar">{fromStaff ? <Headphones size={17} /> : message.authorName.charAt(0)}</span>
-              <div className="message-card"><div className="message-meta"><strong>{message.authorName}</strong>{message.visibility === "internal" && <span>Internal note</span>}<time>{formatDate(message.createdAt)}</time></div><p>{message.body}</p></div>
+            <article key={message.id} className={`message ${fromStaff ? "message-staff" : ""} ${fromAi ? "message-ai" : ""} ${message.visibility === "internal" ? "message-internal" : ""}`}>
+              <span className="message-avatar">{fromAi ? <Bot size={17} /> : fromStaff ? <Headphones size={17} /> : message.authorName.charAt(0)}</span>
+              <div className="message-card"><div className="message-meta"><strong>{message.authorName}</strong>{fromAi && <span>Automated</span>}{message.visibility === "internal" && <span>Internal note</span>}<time>{formatDate(message.createdAt)}</time></div><p>{message.body}</p></div>
             </article>
           );
         })}
       </div>
+      {!staff && supportCase.aiStage === "awaiting_response" && (
+        <AiResolutionPrompt caseId={supportCase.id} onChanged={onChanged} />
+      )}
       <div className="reply-box">
         {staff && <div className="reply-tabs"><button className={visibility === "customer" ? "active" : ""} onClick={() => setVisibility("customer")}><MessageSquareText size={14} /> Reply to customer</button><button className={visibility === "internal" ? "active" : ""} onClick={() => setVisibility("internal")}><LockKeyhole size={14} /> Internal note</button></div>}
         <textarea rows={4} value={body} onChange={(event) => setBody(event.target.value)} maxLength={5000} disabled={threadStatus !== "ready"} placeholder={visibility === "internal" ? "Add a note visible only to support staff…" : "Write a reply…"} />

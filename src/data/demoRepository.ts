@@ -1,6 +1,8 @@
 import type {
   ActorContext,
+  CaseCategory,
   CaseMessage,
+  CasePriority,
   ContentItem,
   CreateCaseInput,
   HubRepository,
@@ -9,6 +11,7 @@ import type {
   SupportContact,
   UpdateCaseInput,
 } from "../domain";
+import { AiNotConfiguredError } from "./supabaseRepository";
 
 const products: Product[] = [
   {
@@ -112,6 +115,8 @@ let cases: SupportCase[] = [
     createdAt: "2026-09-06T13:20:00.000Z",
     updatedAt: "2026-09-06T14:12:00.000Z",
     lastMessageAt: "2026-09-06T14:12:00.000Z",
+    aiStage: null,
+    aiAttempts: null,
   },
   {
     id: "case-1041",
@@ -133,6 +138,8 @@ let cases: SupportCase[] = [
     createdAt: "2026-09-05T15:04:00.000Z",
     updatedAt: "2026-09-06T11:30:00.000Z",
     lastMessageAt: "2026-09-06T11:30:00.000Z",
+    aiStage: null,
+    aiAttempts: null,
   },
   {
     id: "case-1040",
@@ -154,6 +161,8 @@ let cases: SupportCase[] = [
     createdAt: "2026-09-06T15:08:00.000Z",
     updatedAt: "2026-09-06T15:08:00.000Z",
     lastMessageAt: "2026-09-06T15:08:00.000Z",
+    aiStage: null,
+    aiAttempts: null,
   },
   {
     id: "case-1039",
@@ -175,6 +184,8 @@ let cases: SupportCase[] = [
     createdAt: "2026-09-03T09:14:00.000Z",
     updatedAt: "2026-09-04T16:42:00.000Z",
     lastMessageAt: "2026-09-04T16:42:00.000Z",
+    aiStage: null,
+    aiAttempts: null,
   },
 ];
 
@@ -420,6 +431,8 @@ export class DemoSupportRepository implements HubRepository {
       createdAt: now,
       updatedAt: now,
       lastMessageAt: now,
+      aiStage: null,
+      aiAttempts: null,
     };
     cases = [nextCase, ...cases];
     messages = [
@@ -491,6 +504,41 @@ export class DemoSupportRepository implements HubRepository {
     };
     cases = cases.map((item) => (item.id === caseId ? updated : item));
     return { ...updated };
+  }
+
+  async summarizeCase(_caseId: string): Promise<string> {
+    void _caseId;
+    throw new AiNotConfiguredError();
+  }
+
+  async draftCaseReply(_caseId: string, _qualityTier?: "draft" | "quality"): Promise<string> {
+    void _caseId;
+    void _qualityTier;
+    throw new AiNotConfiguredError();
+  }
+
+  async suggestCaseTriage(_caseId: string): Promise<{ category: CaseCategory; priority: CasePriority }> {
+    void _caseId;
+    throw new AiNotConfiguredError();
+  }
+
+  async respondToAiResolution(caseId: string, fixed: boolean, _requestKey: string): Promise<{ stage: string | null }> {
+    void _requestKey;
+    const current = cases.find((item) => item.id === caseId);
+    if (!current) throw new Error("Support case not found.");
+    if (current.aiStage !== "awaiting_response") {
+      throw new Error("No AI resolution is waiting for an answer on this case.");
+    }
+    const now = new Date().toISOString();
+    if (fixed) {
+      cases = cases.map((item) => (item.id === caseId ? { ...item, status: "resolved", aiStage: "resolved", updatedAt: now } : item));
+      return { stage: "resolved" };
+    }
+    const exhausted = (current.aiAttempts ?? 0) >= 2;
+    cases = cases.map((item) => (item.id === caseId
+      ? { ...item, aiStage: exhausted ? "exhausted" : "attempt_due", ...(exhausted ? { status: "in_progress" as const, priority: "high" as const } : {}), updatedAt: now }
+      : item));
+    return { stage: exhausted ? "exhausted" : "attempt_due" };
   }
 }
 

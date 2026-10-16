@@ -128,7 +128,36 @@ function mapCase(value: unknown): SupportCase {
     createdAt: asString(row.created_at, "created timestamp"),
     updatedAt: asString(row.updated_at, "updated timestamp"),
     lastMessageAt: asString(row.last_message_at, "last message timestamp"),
+    aiStage: nullableString(row.ai_stage) as SupportCase["aiStage"],
+    aiAttempts: nullableNumber(row.ai_attempts),
   };
+}
+
+/** Raised when the server has no Anthropic key configured, so the UI can show a
+ * calm "not set up yet" state instead of an error. */
+export class AiNotConfiguredError extends Error {
+  constructor() {
+    super("AI assistance isn't set up yet. An administrator needs to add the Anthropic API key to the Support Hub server.");
+    this.name = "AiNotConfiguredError";
+  }
+}
+
+async function aiCaseRequest<T>(caseId: string, action: string, body?: unknown): Promise<T> {
+  const response = await fetch(`/api/ai/cases/${caseId}/${action}`, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    redirect: "error",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+  const data = (await response.json().catch(() => ({}))) as { error?: string | { code?: string } } & T;
+  if (!response.ok) {
+    const code = typeof data.error === "object" && data.error ? data.error.code : undefined;
+    if (code === "AI_NOT_CONFIGURED") throw new AiNotConfiguredError();
+    throw new Error(typeof data.error === "string" ? data.error : "The AI request could not be completed.");
+  }
+  return data;
 }
 
 function mapMessage(value: unknown): CaseMessage {
@@ -251,5 +280,34 @@ export class SupabaseSupportRepository implements HubRepository {
     });
     if (error) throw error;
     return mapCase(data);
+  }
+
+  async summarizeCase(caseId: string): Promise<string> {
+    const data = await aiCaseRequest<{ summary?: unknown }>(caseId, "summary");
+    return asString(data.summary, "case summary");
+  }
+
+  async draftCaseReply(caseId: string, qualityTier: "draft" | "quality" = "draft"): Promise<string> {
+    const data = await aiCaseRequest<{ draft?: unknown }>(caseId, "draft-reply", { qualityTier });
+    return asString(data.draft, "case draft");
+  }
+
+  async suggestCaseTriage(caseId: string): Promise<{ category: SupportCase["category"]; priority: SupportCase["priority"] }> {
+    const data = await aiCaseRequest<{ category?: unknown; priority?: unknown }>(caseId, "triage-suggestion");
+    return {
+      category: asString(data.category, "triage category") as SupportCase["category"],
+      priority: asString(data.priority, "triage priority") as SupportCase["priority"],
+    };
+  }
+
+  async respondToAiResolution(caseId: string, fixed: boolean, requestKey: string): Promise<{ stage: string | null }> {
+    const { data, error } = await hub().rpc("record_ai_resolution_response", {
+      p_case_id: caseId,
+      p_fixed: fixed,
+      p_request_key: requestKey,
+    });
+    if (error) throw error;
+    const row = asObject(data);
+    return { stage: nullableString(row.stage) };
   }
 }
