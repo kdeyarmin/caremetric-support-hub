@@ -43,6 +43,10 @@ const safeAssigneesMigration = readFileSync(
   new URL("../../supabase/migrations/20260908004500_restrict_case_assignees_to_usable_staff.sql", import.meta.url),
   "utf8",
 );
+const courseCreationAdminMigration = readFileSync(
+  new URL("../../supabase/migrations/20261015130000_course_creation_super_admin_only.sql", import.meta.url),
+  "utf8",
+);
 const productionRollout = readFileSync(
   new URL("../../docs/PRODUCTION_ROLLOUT.md", import.meta.url),
   "utf8",
@@ -169,6 +173,20 @@ describe("Support Hub schema contract", () => {
     expect(actorContext).toContain("if not v_requires_aal2 or private.current_session_is_aal2() then");
     expect(actorContext.indexOf("if not v_requires_aal2")).toBeLessThan(actorContext.indexOf("select * into v_membership"));
     expect(actorContext).toMatch(/if v_is_staff then\s+v_role := private\.actor_role_label\(v_user_id, null\);/);
+  });
+
+  it("reserves course creation and authoring to the platform administrator", () => {
+    expect(courseCreationAdminMigration).toContain("create or replace function private.require_learning_editor()");
+    expect(courseCreationAdminMigration).toContain("create or replace function hub.get_learning_editor_access()");
+    expect(courseCreationAdminMigration).toContain("private.has_staff_permission('platform.admin', null)");
+    expect(courseCreationAdminMigration).not.toContain("has_staff_permission('content.write'");
+    expect(courseCreationAdminMigration).toContain("'Shared-course editor access required.'");
+    // The owner authored the entire existing catalog, so this change must
+    // not hide any existing course: it touches no learner read path.
+    expect(courseCreationAdminMigration).not.toContain("can_view_content_item");
+    expect(courseCreationAdminMigration).not.toContain("list_learning_catalog");
+    expect(courseCreationAdminMigration).not.toContain("enroll_learning_course");
+    expect(schema).toContain("-- Appended migration: 20261015130000_course_creation_super_admin_only.sql");
   });
 
   it("keeps case intake disabled until an MFA-ready support route is explicitly activated", () => {
