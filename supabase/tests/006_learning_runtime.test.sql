@@ -86,11 +86,14 @@ select is((select revision_id from hub.content_publications where item_id='98500
 select is((select count(*) from private.learning_versions where item_id='98500000-0000-4000-8000-000000000001'),0::bigint,'denied source publication creates no central revision');
 select is((hub.import_learning_draft('98500000-0000-4000-8000-000000000003','98500000-0000-4000-8000-000000000004',(select doc from learning_fixture))->'document'->>'title'),'Edited source draft','retrying a source import preserves later draft edits');
 -- The owner authored the imported catalog: tightening who may create courses
--- must not hide any existing course from learners.
-set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}';
+-- must not hide any existing course from learners. Visibility is exercised
+-- through hub.list_published_content(), the public catalog read path -- the
+-- authenticated role holds no direct table privileges by design. (Learner
+-- Two is the caller: Learner One is inside a ban window at this point.)
+set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}';
 set local role authenticated;
-select is((select count(*) from hub.content_items where id='98500000-0000-4000-8000-000000000001'),1::bigint,'imported catalog course remains visible to learners');
-select is((select count(*) from hub.course_links where content_item_id='98500000-0000-4000-8000-000000000001'),1::bigint,'imported catalog launch link remains visible to learners');
+select is((select count(*) from hub.list_published_content() where id='98500000-0000-4000-8000-000000000001'),1::bigint,'imported catalog course remains visible to learners');
+select is((select course_launch_path from hub.list_published_content() where id='98500000-0000-4000-8000-000000000001'),'/app/courses/98500000-0000-4000-8000-000000000003','imported catalog launch link remains visible to learners');
 reset role;
 set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}';
 
