@@ -3,11 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
   schema: vi.fn(),
+  appRequest: vi.fn(),
 }));
 
-vi.mock("../lib/appSession", () => ({ hubClient: { rpc: mocks.rpc }, appRequest: vi.fn() }));
+vi.mock("../lib/appSession", () => ({ hubClient: { rpc: mocks.rpc }, appRequest: mocks.appRequest }));
 
-import { SupabaseSupportRepository } from "./supabaseRepository";
+import { AiNotConfiguredError, SupabaseSupportRepository } from "./supabaseRepository";
 
 const caseRow = {
   id: "10000000-0000-4000-8000-000000000001",
@@ -59,6 +60,7 @@ describe("SupabaseSupportRepository request keys", () => {
   beforeEach(() => {
     mocks.rpc.mockReset();
     mocks.schema.mockReset();
+    mocks.appRequest.mockReset();
     mocks.schema.mockReturnValue({ rpc: mocks.rpc });
   });
 
@@ -162,5 +164,71 @@ describe("SupabaseSupportRepository request keys", () => {
       "reply_to_support_case",
       expect.objectContaining({ p_request_key: requestKey }),
     );
+  });
+
+  it("maps the AI automation stage from queue rows", async () => {
+    mocks.appRequest.mockResolvedValue([{ ...caseRow, ai_stage: "exhausted", ai_attempts: 2 }]);
+    const repository = new SupabaseSupportRepository();
+    const [mapped] = await repository.listCases();
+    expect(mapped.aiStage).toBe("exhausted");
+    expect(mapped.aiAttempts).toBe(2);
+  });
+
+  it("maps a missing AI stage to null", async () => {
+    mocks.appRequest.mockResolvedValue([caseRow]);
+    const [mapped] = await new SupabaseSupportRepository().listCases();
+    expect(mapped.aiStage).toBeNull();
+    expect(mapped.aiAttempts).toBeNull();
+  });
+});
+
+describe("SupabaseSupportRepository AI assistance", () => {
+  beforeEach(() => {
+    mocks.rpc.mockReset();
+    vi.unstubAllGlobals();
+  });
+
+  function stubFetch(response: { ok: boolean; status?: number; body: unknown }) {
+    const fetchMock = vi.fn(async () => ({
+      ok: response.ok,
+      status: response.status ?? (response.ok ? 200 : 500),
+      json: async () => response.body,
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("summarizes through the server AI endpoint", async () => {
+    const fetchMock = stubFetch({ ok: true, body: { summary: "A concise summary." } });
+    const repository = new SupabaseSupportRepository();
+    await expect(repository.summarizeCase(caseRow.id)).resolves.toBe("A concise summary.");
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(`/api/ai/cases/${caseRow.id}/summary`);
+    expect(init.credentials).toBe("same-origin");
+  });
+
+  it("drafts with the requested quality tier", async () => {
+    const fetchMock = stubFetch({ ok: true, body: { draft: "Draft text." } });
+    const repository = new SupabaseSupportRepository();
+    await expect(repository.draftCaseReply(caseRow.id, "quality")).resolves.toBe("Draft text.");
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({ qualityTier: "quality" });
+  });
+
+  it("surfaces AI_NOT_CONFIGURED as the friendly typed error", async () => {
+    stubFetch({ ok: false, status: 503, body: { error: { code: "AI_NOT_CONFIGURED" } } });
+    const repository = new SupabaseSupportRepository();
+    await expect(repository.suggestCaseTriage(caseRow.id)).rejects.toBeInstanceOf(AiNotConfiguredError);
+  });
+
+  it("records an AI resolution answer through the gateway RPC", async () => {
+    mocks.rpc.mockResolvedValue({ data: { case_id: caseRow.id, stage: "resolved", replayed: false }, error: null });
+    const repository = new SupabaseSupportRepository();
+    await expect(repository.respondToAiResolution(caseRow.id, true, "50000000-0000-4000-8000-000000000009")).resolves.toEqual({ stage: "resolved" });
+    expect(mocks.rpc).toHaveBeenCalledWith("record_ai_resolution_response", {
+      p_case_id: caseRow.id,
+      p_fixed: true,
+      p_request_key: "50000000-0000-4000-8000-000000000009",
+    });
   });
 });

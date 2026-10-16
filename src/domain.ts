@@ -51,6 +51,14 @@ export interface SupportContact {
   verified: boolean;
 }
 
+export type AiAutomationStage =
+  | "attempt_due"
+  | "awaiting_response"
+  | "escalate_due"
+  | "exhausted"
+  | "resolved"
+  | "halted";
+
 export interface SupportCase {
   id: string;
   caseNumber: number;
@@ -71,6 +79,8 @@ export interface SupportCase {
   createdAt: string;
   updatedAt: string;
   lastMessageAt: string;
+  aiStage: AiAutomationStage | null;
+  aiAttempts: number | null;
 }
 
 export interface CaseMessage {
@@ -78,7 +88,7 @@ export interface CaseMessage {
   caseId: string;
   authorId: string;
   authorName: string;
-  authorRole: ActorRole;
+  authorRole: ActorRole | "ai_assistant";
   visibility: "customer" | "internal";
   body: string;
   createdAt: string;
@@ -155,6 +165,10 @@ export interface HubRepository {
     requestKey: string,
   ): Promise<CaseMessage>;
   updateCase(caseId: string, input: UpdateCaseInput): Promise<SupportCase>;
+  summarizeCase(caseId: string): Promise<string>;
+  draftCaseReply(caseId: string, qualityTier?: "draft" | "quality"): Promise<string>;
+  suggestCaseTriage(caseId: string): Promise<{ category: CaseCategory; priority: CasePriority }>;
+  respondToAiResolution(caseId: string, fixed: boolean, requestKey: string): Promise<{ stage: string | null }>;
 }
 
 export const categoryLabels: Record<CaseCategory, string> = {
