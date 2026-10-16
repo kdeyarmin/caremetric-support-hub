@@ -1,11 +1,11 @@
 begin;
-select plan(74);
+select plan(79);
 insert into auth.users(id,email,raw_user_meta_data,is_anonymous)
 values ('98000000-0000-4000-8000-000000000001','learning-editor@test.invalid','{"display_name":"Editor"}',false),
 ('98000000-0000-4000-8000-000000000002','learning-one@test.invalid','{"display_name":"Learner One"}',false),
 ('98000000-0000-4000-8000-000000000003','learning-two@test.invalid','{"display_name":"Learner Two"}',false);
 insert into private.staff_permissions(user_id,permission,granted_by)
-values('98000000-0000-4000-8000-000000000001','content.write','98000000-0000-4000-8000-000000000001');
+values('98000000-0000-4000-8000-000000000001','platform.admin','98000000-0000-4000-8000-000000000001');
 create temporary table learning_fixture(doc jsonb,item_id uuid,enrollment_id uuid,result jsonb);
 insert into learning_fixture(doc) values(jsonb_build_object('title','Learning test','summary','Test only','category','Test','accessLevel','public','durationMinutes',10,
   'productIds',jsonb_build_array((select id from hub.products where slug='pennsync')),
@@ -85,6 +85,14 @@ select is((select launch_path from hub.course_links where content_item_id='98500
 select is((select revision_id from hub.content_publications where item_id='98500000-0000-4000-8000-000000000001'),'98500000-0000-4000-8000-000000000002'::uuid,'existing source publication is preserved');
 select is((select count(*) from private.learning_versions where item_id='98500000-0000-4000-8000-000000000001'),0::bigint,'denied source publication creates no central revision');
 select is((hub.import_learning_draft('98500000-0000-4000-8000-000000000003','98500000-0000-4000-8000-000000000004',(select doc from learning_fixture))->'document'->>'title'),'Edited source draft','retrying a source import preserves later draft edits');
+-- The owner authored the imported catalog: tightening who may create courses
+-- must not hide any existing course from learners.
+set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}';
+set local role authenticated;
+select is((select count(*) from hub.content_items where id='98500000-0000-4000-8000-000000000001'),1::bigint,'imported catalog course remains visible to learners');
+select is((select count(*) from hub.course_links where content_item_id='98500000-0000-4000-8000-000000000001'),1::bigint,'imported catalog launch link remains visible to learners');
+reset role;
+set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}';
 
 -- Exercise customer visibility and Storage SELECT authorization as actual
 -- authenticated callers. Fixture objects contain metadata only, not real files.
@@ -116,6 +124,19 @@ from hub.products where slug='pennsync';
 update learning_access_fixture set item_id=(hub.save_learning_draft(null,doc,0)->>'itemId')::uuid;
 select lives_ok($$select hub.publish_learning_course(item_id,1,true) from learning_access_fixture$$,'new Hub-authored customer course can publish');
 grant select on learning_fixture,learning_access_fixture to authenticated;
+
+-- A portfolio-wide content writer who is not the platform administrator can
+-- no longer create or publish courses (owner rule, 2026-10-15).
+insert into auth.users(id,email,raw_user_meta_data,is_anonymous)
+values('98000000-0000-4000-8000-000000000005','learning-portfolio-writer@test.invalid','{"display_name":"Portfolio Writer"}',false);
+insert into private.staff_permissions(user_id,permission,granted_by)
+values('98000000-0000-4000-8000-000000000005','content.write','98000000-0000-4000-8000-000000000001');
+set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000005","role":"authenticated","aal":"aal2"}';
+set local role authenticated;
+select is(hub.get_learning_editor_access(),false,'portfolio content permission alone no longer grants course editing');
+select throws_ok($$select hub.save_learning_draft(null,doc,0) from learning_access_fixture$$,'42501','Shared-course editor access required.','portfolio content writer cannot create courses');
+select throws_ok($$select hub.publish_learning_course(item_id,1,true) from learning_access_fixture$$,'42501','Shared-course editor access required.','portfolio content writer cannot publish courses');
+reset role;
 
 set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000004","role":"authenticated","aal":"aal2"}';
 set local role authenticated;
