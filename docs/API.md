@@ -7,7 +7,7 @@ Version `0.1.0` uses RLS-governed reads and narrow atomic RPCs in the `hub` sche
 ## Reads
 
 - `hub.get_backend_contract()`: anonymous/authenticated, security-invoker
-  release metadata, currently exactly `{ "api_version": 2 }`. It reads no
+  release metadata, currently `{ "api_version": 4 }` (the frontend requires exactly this via `REQUIRED_BACKEND_CONTRACT` in `src/lib/backendContract.ts`). It reads no
   application tables and grants no actor access. Connected production builds
   check it before bundling. Required migrations must precede frontend rollout;
   increment the required contract when a future frontend requires a new
