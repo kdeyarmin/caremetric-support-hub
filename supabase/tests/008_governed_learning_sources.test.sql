@@ -1,11 +1,11 @@
 begin;
-select plan(38);
+select plan(39);
 insert into auth.users(id,email,raw_user_meta_data,is_anonymous) values
 ('99000000-0000-4000-8000-000000000001','source-editor@test.invalid','{"display_name":"Source editor"}',false),
 ('99000000-0000-4000-8000-000000000002','source-learner@test.invalid','{}',false),
 ('99000000-0000-4000-8000-000000000003','source-scoped@test.invalid','{}',false);
 insert into private.staff_permissions(user_id,permission,granted_by) values
-('99000000-0000-4000-8000-000000000001','content.write','99000000-0000-4000-8000-000000000001');
+('99000000-0000-4000-8000-000000000001','platform.admin','99000000-0000-4000-8000-000000000001');
 insert into private.staff_permissions(user_id,product_id,permission,granted_by)
 select '99000000-0000-4000-8000-000000000003',id,'content.write','99000000-0000-4000-8000-000000000001' from hub.products where slug='pennsync';
 create temporary table source_fixture(document jsonb, original_payload text, original_revision text, result jsonb, latest_result jsonb);
@@ -81,5 +81,8 @@ select throws_ok($$select hub.list_learning_source_heads()$$,'42501','Sign in wi
 update auth.users set banned_until=null where id='99000000-0000-4000-8000-000000000001';
 delete from private.staff_permissions where user_id='99000000-0000-4000-8000-000000000001';
 select throws_ok($$select pg_temp.stage_source(document,latest_result->>'sourceRevision') from source_fixture$$,'42501','Shared-course editor access required.','revocation applies before even an idempotent replay');
+insert into private.staff_permissions(user_id,permission,granted_by) values
+('99000000-0000-4000-8000-000000000001','content.write','99000000-0000-4000-8000-000000000001');
+select throws_ok($$select pg_temp.stage_source(document,latest_result->>'sourceRevision') from source_fixture$$,'42501','Shared-course editor access required.','portfolio content permission alone no longer stages course sources');
 select * from finish();
 rollback;
