@@ -28,7 +28,7 @@ export function sameOrigin(req,origins) {
 }
 const mime={'.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.webp':'image/webp','.woff2':'font/woff2','.html':'text/html'};
 const aiCaseActions=new Set(['summary','draft-reply','triage-suggestion']);
-export function appServer({auth,gateway,delegations,publications,docstudio,aiCases,origins,dist=resolve('dist')}) {
+export function appServer({auth,gateway,delegations,publications,docstudio,aiCases,readiness,origins,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -204,6 +204,12 @@ export function appServer({auth,gateway,delegations,publications,docstudio,aiCas
         if(path==='/api/auth/logout' && req.method==='POST') {
           await jsonBody(req,2048); await auth.logout(session);
           return json({authenticated:false},200,[cookie(sessionCookie,'',0),cookie(challengeCookie,'',0)]);
+        }
+        if(path==='/api/admin/go-live-readiness' && req.method==='POST') {
+          if(url.search) throw new HttpError(400,'Readiness query parameters are not supported.');
+          const input=await jsonBody(req,2048); if(Object.keys(input).length) throw new HttpError(400,'Invalid readiness request.');
+          if(!readiness) throw new HttpError(503,'Go-live readiness is not configured.');
+          return json(await readiness.handle(session));
         }
         const aiCaseRoute=/^\/api\/ai\/cases\/([0-9a-f-]{36})\/([a-z-]+)$/.exec(path);
         if(aiCaseRoute && req.method==='POST') {

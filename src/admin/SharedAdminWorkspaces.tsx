@@ -14,6 +14,7 @@ const workspaces = [
   {to:'/security',label:'Account security'},
   {to:'/overview',label:'Support overview'},
   {to:'/admin/portfolio',label:'Portfolio rollup'},
+  {to:'/admin/go-live-readiness',label:'AI go-live readiness'},
 ] as const;
 
 export function SharedAdminWorkspaces(){

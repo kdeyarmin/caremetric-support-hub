@@ -26,6 +26,7 @@ import {
   MonitorPlay,
   Phone,
   Plus,
+  Rocket,
   Search,
   Send,
   Settings2,
@@ -63,6 +64,7 @@ import { PhoneInbox } from "./support/PhoneInbox";
 import { PhoneRegistry } from "./support/PhoneRegistry";
 import { AdminWorkspace } from "./admin/AdminWorkspace";
 import { PortfolioRollup } from "./admin/PortfolioRollup";
+import { GoLiveReadiness } from "./admin/GoLiveReadiness";
 import { SupportReadiness } from "./support/SupportReadiness";
 import { adminClient } from "./admin/client";
 import { safeLearningPath } from "./learning/model";
@@ -110,6 +112,7 @@ const navItems = [
   { to: "/phone", label: "Phone messages", icon: Phone },
   { to: "/admin", label: "Platform admin", icon: Boxes },
   { to: "/admin/portfolio", label: "Portfolio rollup", icon: Activity },
+  { to: "/admin/go-live-readiness", label: "AI go-live readiness", icon: Rocket },
   { to: "/overview", label: "Overview", icon: LayoutDashboard },
   { to: "/cases", label: "Support cases", icon: Inbox },
   { to: "/knowledge", label: "Knowledge", icon: BookOpen },
@@ -259,7 +262,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
         </div>
         <nav className="primary-nav" aria-label="Main navigation">
           <p className="nav-label">Workspace</p>
-          {navItems.filter(item => (!["/admin", "/admin/portfolio", "/phone", "/phone-numbers"].includes(item.to) || data.actor.role === "platform_admin") && (item.to !== "/docstudio" || staff)).map(({ to, label, icon: Icon }) => (
+          {navItems.filter(item => (!["/admin", "/admin/portfolio", "/admin/go-live-readiness", "/phone", "/phone-numbers"].includes(item.to) || data.actor.role === "platform_admin") && (item.to !== "/docstudio" || staff)).map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} onClick={() => setMobileOpen(false)}>
               <Icon size={18} /> <span>{label}</span>
             </NavLink>
@@ -307,6 +310,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/phone-numbers" element={data.actor.role === "platform_admin" ? <PhoneRegistry key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin" element={data.actor.role === "platform_admin" ? <AdminWorkspace key={data.actor.id} actorId={data.actor.id} client={adminClient} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/portfolio" element={data.actor.role === "platform_admin" ? <PortfolioRollup key={data.actor.id} /> : <Navigate to="/overview" replace />} />
+            <Route path="/admin/go-live-readiness" element={data.actor.role === "platform_admin" ? <GoLiveReadiness key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/overview" element={<OverviewPage data={data} />} />
             <Route path="/cases" element={<CasesPage key={`${data.actor.id}:${data.actor.role}`} data={data} />} />
             <Route path="/knowledge" element={<KnowledgePage data={data} />} />
