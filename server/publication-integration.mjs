@@ -37,7 +37,7 @@ const edge=createPublicationMediaHandler({serviceKey:'synthetic-storage-only',fe
   assert.ok(url.startsWith(base),'only fixed Hub authority or Storage may be called');
   const headers=new Headers(options.headers);
   assert.equal(headers.get('Authorization'),'Bearer synthetic-storage-only');
-  assert.equal(options.redirect,'error');
+  assert.equal(options.redirect,'manual');
   if(options.method==='DELETE') {
     assert.equal(url,base+'hub-publications');
     for(const path of JSON.parse(options.body).prefixes) objects.delete(path);
