@@ -12,6 +12,7 @@ import { distributionObserver } from './distribution-observer.mjs';
 import { aiAssistance } from './ai-assistance.mjs';
 import { aiCaseAssistance } from './ai-case-assistance.mjs';
 import { aiAutomation, sqlAutomationStore } from './ai-automation.mjs';
+import { goLiveReadiness } from './go-live-readiness.mjs';
 
 const storageUrl='https://xgauehtwksmnoqhgqegm.supabase.co';
 const pool=new pg.Pool(databaseConfig());
@@ -27,7 +28,8 @@ const ai=aiAssistance({apiKey:process.env.ANTHROPIC_API_KEY});
 const aiCases=aiCaseAssistance({ai,rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken),rows:(name,sessionToken)=>api.rows(name,sessionToken)});
 const followUpHours=Number(process.env.HUB_AI_FOLLOW_UP_DELAY_HOURS);
 const automation=aiAutomation({ai,store:sqlAutomationStore(pool),enabled:process.env.HUB_AI_AUTOMATION_ENABLED==='true',draftTier:process.env.HUB_AI_DRAFT_TIER==='quality'?'quality':'draft',followUpDelayMs:(Number.isFinite(followUpHours)&&followUpHours>0?followUpHours:24)*60*60*1000});
-const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:capabilities,publications:publicationService,docstudio:studio,aiCases,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
+const readiness=goLiveReadiness({pool,rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
+const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:capabilities,publications:publicationService,docstudio:studio,aiCases,readiness,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
 let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;

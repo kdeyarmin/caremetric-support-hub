@@ -16,6 +16,7 @@ describe('shared owner workspaces',()=>{
       ['Review material imports','/imports/docstudio'],['Products and support contacts','/products'],
       ['Connections and customer onboarding','/integration'],['Account security','/security'],
       ['Support overview','/overview'],['Portfolio rollup','/admin/portfolio'],
+      ['AI go-live readiness','/admin/go-live-readiness'],
     ];
     expect(within(navigation).getAllByRole('link')).toHaveLength(expected.length);
     for(const [name,path] of expected){

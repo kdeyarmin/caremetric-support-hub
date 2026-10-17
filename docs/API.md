@@ -105,3 +105,20 @@ The customer's explicit answer goes through the gateway RPC
 customer-side only); free-text replies are classified by the sweep as a fallback.
 Loop state lives in `hub.case_ai_automation`; the queue view exposes `ai_stage` /
 `ai_attempts` (backend features `support.ai-assistance.v1`, `support.ai-automation.v1`).
+
+## AI go-live readiness (server endpoint)
+
+Implemented in the app server (`server/go-live-readiness.mjs`) for the admin
+panel at `/admin/go-live-readiness` (backend feature `support.go-live-readiness.v1`).
+
+- `POST /api/admin/go-live-readiness` — `{}` → the four go-live prerequisites,
+  each evaluated during the request, never stored: the two AI migrations
+  (`20261015120000` proven by the objects it creates in the connected
+  database, `20261015120100` by the backend contract features it registers),
+  Anthropic key presence on this service (a boolean only — the key's value,
+  length, and prefix are never returned or logged), the
+  `HUB_AI_AUTOMATION_ENABLED === "true"` toggle state, and a live DNS lookup
+  for `help.caremetric.ai` including what it resolves to. SMS session
+  required; the caller must be the platform administrator
+  (`get_support_actor_context` role `platform_admin`), everyone else gets 403.
+  The endpoint reports only: it applies nothing and changes nothing.
