@@ -17,10 +17,11 @@ describe('publication Edge transport',()=>{
       if(calls.length===1) {
         expect(url).toBe('https://support-hub-web-production.up.railway.app/api/internal/publications/authorize');
         expect(options.body).toBe('{}'); expect(options.headers.Authorization).toBe(capabilityToken);
+        expect(options.redirect).toBe('manual');
         return Response.json(base);
       }
       expect(url).toBe(`https://xgauehtwksmnoqhgqegm.supabase.co/storage/v1/object/hub-publications/${base.path}`);
-      expect(options.headers['x-upsert']).toBe('false'); expect(options.redirect).toBe('error');
+      expect(options.headers['x-upsert']).toBe('false'); expect(options.redirect).toBe('manual');
       expect(new Uint8Array(await new Response(options.body).arrayBuffer())).toEqual(bytes);
       return new Response('{}',{status:200});
     }});
@@ -55,7 +56,7 @@ describe('publication Edge transport',()=>{
         ?{statusCode:'409',error:'Duplicate',message:'The resource already exists'}:{code:'ResourceAlreadyExists',message:'exists'},{status:400});
       expect(url).toBe(`https://xgauehtwksmnoqhgqegm.supabase.co/storage/v1/object/authenticated/hub-publications/${base.path}`);
       expect(options.method).toBeUndefined(); expect(options.headers.Authorization).toBe('Bearer synthetic-only');
-      expect(options.signal).toBeInstanceOf(AbortSignal); expect(options.redirect).toBe('error');
+      expect(options.signal).toBeInstanceOf(AbortSignal); expect(options.redirect).toBe('manual');
       return new Response(bytes,{headers:{'Content-Type':'text/markdown','Content-Length':String(bytes.length)}});
     }});
     const response=await handler(request()); expect(response.status).toBe(200);
@@ -117,7 +118,7 @@ describe('publication Edge transport',()=>{
       let calls=0;
       const handler=createPublicationMediaHandler({serviceKey:'synthetic-only',fetchImpl:async(_url,options)=>{
         if(++calls===1) return Response.json({...base,operation:'download',range:'bytes=1-3'});
-        expect(options.headers.Range).toBe('bytes=1-3');
+        expect(options.headers.Range).toBe('bytes=1-3'); expect(options.redirect).toBe('manual');
         return new Response(bytes.slice(1,4),{status:206,headers:{'Content-Type':'text/markdown','Content-Length':'3','Content-Range':malformed?'bytes 0-2/15':`bytes 1-3/${bytes.length}`}});
       }});
       const response=await handler(request()); expect(response.status).toBe(malformed?503:206);
@@ -131,10 +132,35 @@ describe('publication Edge transport',()=>{
       if(++calls===1) { expect(url).toContain('/publications/cleanup/authorize'); return Response.json({operation:'cleanup',paths}); }
       expect(url).toBe('https://xgauehtwksmnoqhgqegm.supabase.co/storage/v1/object/hub-publications');
       expect(options.method).toBe('DELETE'); expect(JSON.parse(options.body)).toEqual({prefixes:paths});
+      expect(options.redirect).toBe('manual');
       return new Response('[]');
     }});
     expect(await (await handler(request({'X-CareMetric-Publication-Mode':'cleanup'}))).json()).toEqual({cleaned:true});
     const invalid=createPublicationMediaHandler({serviceKey:'synthetic-only',fetchImpl:async()=>Response.json({operation:'cleanup',paths:[base.path,`publications/${randomUUID()}/primary`]})});
     expect((await invalid(request({'X-CareMetric-Publication-Mode':'cleanup'}))).status).toBe(403);
+  });
+  it('never follows a redirect from the gate or storage, and never serves redirect content',async()=>{
+    // Every fetch in the handler runs with redirect 'manual': a 3xx comes
+    // back as a response and is refused by the ordinary status checks, so
+    // the credentialed request is never re-sent to a redirect target and a
+    // redirect body is never treated as the capability or the media.
+    const redirect=()=>new Response('redirected content',{status:302,headers:{Location:'https://attacker.invalid/media'}});
+    const gateFetcher=vi.fn(async()=>redirect());
+    const gated=createPublicationMediaHandler({serviceKey:'synthetic-only',fetchImpl:gateFetcher});
+    expect((await gated(request())).status).toBe(401); expect(gateFetcher).toHaveBeenCalledOnce();
+    let uploadCalls=0;
+    const uploading=createPublicationMediaHandler({serviceKey:'synthetic-only',fetchImpl:async()=>{
+      if(++uploadCalls===1) return Response.json(base);
+      return redirect();
+    }});
+    expect((await uploading(request())).status).toBe(503); expect(uploadCalls).toBe(2);
+    let downloadCalls=0;
+    const downloading=createPublicationMediaHandler({serviceKey:'synthetic-only',fetchImpl:async()=>{
+      if(++downloadCalls===1) return Response.json({...base,operation:'download'});
+      return redirect();
+    }});
+    const response=await downloading(request());
+    expect(response.status).toBe(503); expect(await response.text()).not.toContain('redirected content');
+    expect(downloadCalls).toBe(2);
   });
 });

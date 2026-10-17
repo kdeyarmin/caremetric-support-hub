@@ -27,7 +27,7 @@ const objects=new Map();let baseUrl,loseResponse=false,writeCount=0,pausedUpload
 const storageFetch=async(url,options)=>{
  if(url.startsWith('https://support-hub-web-production.up.railway.app/api/internal/'))return fetch(baseUrl+new URL(url).pathname,options);
  const prefix='https://xgauehtwksmnoqhgqegm.supabase.co/storage/v1/object/';assert.ok(url.startsWith(prefix));
- const headers=new Headers(options.headers);assert.equal(headers.get('Authorization'),'Bearer synthetic-storage-only');assert.equal(options.redirect,'error');
+ const headers=new Headers(options.headers);assert.equal(headers.get('Authorization'),'Bearer synthetic-storage-only');assert.equal(options.redirect,'manual');
  if(options.method==='DELETE') {assert.equal(url,prefix+'hub-docstudio');for(const path of JSON.parse(options.body).prefixes)objects.delete('hub-docstudio/'+path);return Response.json([]);}
  if(options.method==='POST') {
   const key=url.slice(prefix.length);assert.equal(headers.get('x-upsert'),'false');
