@@ -90,9 +90,29 @@ describe("portfolio proxy routing", () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(actor)).mockResolvedValueOnce(Response.json(envelope("users.list", { ...page, items: [staff] })));
     const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product: "breathe", operation: "users.list" }));
     expect(response.status).toBe(200);
-    expect(fetcher.mock.calls[1]).toMatchObject(["https://cmbreathe.com/resupply-api/central-admin/read", { body: '{"operation":"users.list","limit":20,"offset":0}', redirect: "error", headers: { Authorization: "Bearer header.payload.signature", "Content-Type": "application/json" } }]);
+    expect(fetcher.mock.calls[0][1]).toMatchObject({ redirect: "manual" });
+    expect(fetcher.mock.calls[1]).toMatchObject(["https://cmbreathe.com/resupply-api/central-admin/read", { body: '{"operation":"users.list","limit":20,"offset":0}', redirect: "manual", headers: { Authorization: "Bearer header.payload.signature", "Content-Type": "application/json" } }]);
     expect(fetcher.mock.calls[1][1]?.headers).not.toHaveProperty("apikey");
     expect(await response.json()).toEqual(envelope("users.list", { ...page, items: [staff] }));
+  });
+  it("never follows an upstream redirect or projects its body", async () => {
+    // Both gateway fetches run with redirect "manual": a 3xx returns as a
+    // response and fails the ordinary ok check, so the caller's JWT is
+    // never re-sent to a redirect target and the redirect body is never
+    // projected as product data.
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(actor))
+      .mockResolvedValueOnce(new Response(JSON.stringify(envelope("users.list", { ...page, items: [staff] })), { status: 302, headers: { "content-type": "application/json", location: "https://attacker.invalid/read" } }));
+    const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product: "breathe", operation: "users.list" }));
+    expect(response.status).toBe(503);
+    expect(await response.text()).not.toContain(staff.email);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+  it("treats an authorization redirect as unconfigured and never calls the product", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 302, headers: { location: "https://attacker.invalid/" } }));
+    const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product: "breathe", operation: "users.list" }));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: { code: "unconfigured" } });
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
   it.each(["intel"])("never sends a legacy JWT to the SMS-only %s connection", async product => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(actor));

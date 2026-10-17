@@ -48,7 +48,8 @@ describe("privileged command gateway", () => {
     const response = await createCommandProxy({ publishableKey: "sb_publishable_fixture", fetcher })(http());
     expect(response.status).toBe(200);
     expect(fetcher.mock.calls[0][0]).toBe("https://xgauehtwksmnoqhgqegm.supabase.co/rest/v1/rpc/authorize_platform_command");
-    expect(fetcher.mock.calls[1]).toMatchObject(["https://cmcarebase.com/api/platform-admin/command", { body: JSON.stringify(request.command), redirect: "error", headers: { Authorization: "Bearer header.payload.signature", "Content-Type": "application/json" } }]);
+    expect(fetcher.mock.calls[0][1]).toMatchObject({ redirect: "manual" });
+    expect(fetcher.mock.calls[1]).toMatchObject(["https://cmcarebase.com/api/platform-admin/command", { body: JSON.stringify(request.command), redirect: "manual", headers: { Authorization: "Bearer header.payload.signature", "Content-Type": "application/json" } }]);
     expect(fetcher.mock.calls[1][1]?.headers).not.toHaveProperty("apikey");
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(await response.json()).toEqual(envelope());

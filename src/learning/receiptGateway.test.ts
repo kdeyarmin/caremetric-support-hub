@@ -43,7 +43,7 @@ describe("receipt coordinator",()=>{
   const fixture=(respond:(name:string,body:Record<string,unknown>)=>Response|Promise<Response>)=>{
     const calls:Array<{name:string,body:Record<string,unknown>}>=[];
     const fetcher=vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
-      expect(init?.redirect).toBe("error"); expect(init?.signal).toBeInstanceOf(AbortSignal);
+      expect(init?.redirect).toBe("manual"); expect(init?.signal).toBeInstanceOf(AbortSignal);
       const url=new URL(String(input)); const name=url.pathname.split("/").at(-1)!; const body=JSON.parse(String(init?.body));
       calls.push({name,body});
       if(name==="authorize_platform_command") return json(actor());

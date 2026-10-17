@@ -66,7 +66,7 @@ export function createImmutableMediaHandler({profile,serviceKey,fetchImpl=fetch}
       if(studio && mode!==null && mode!=='cleanup') return json({error:"Invalid operation"},400);
       if(mode!==null && mode!=="cleanup" && mode!=="public") return json({error:"Invalid operation"},400);
       const gate=await fetchImpl(`${hubOrigin}/api/internal/${studio?'docstudio/media':`publications/${mode?mode+"/":""}`}${studio?'/':''}authorize`,{
-        method:"POST",headers:{Authorization:authorization,"Content-Type":"application/json"},body:"{}",redirect:"error",signal:AbortSignal.timeout(10000),
+        method:"POST",headers:{Authorization:authorization,"Content-Type":"application/json"},body:"{}",redirect:"manual",signal:AbortSignal.timeout(10000),
       });
       if(!gate.ok) return json({error:"Unauthorized"},gate.status===403?403:401);
       const capability=await boundedJson(gate);
@@ -78,7 +78,7 @@ export function createImmutableMediaHandler({profile,serviceKey,fetchImpl=fetch}
           || capability.paths.some(path=>typeof path!=="string" || !objectPath.test(path))
           || new Set(capability.paths.map(path=>(path as string).split("/")[1])).size!==1) return json({error:"Invalid cleanup capability"},403);
         const removed=await fetchImpl(`${storageOrigin}/storage/v1/object/${bucket}`,{
-          method:"DELETE",headers:{...serviceHeaders,"Content-Type":"application/json"},body:JSON.stringify({prefixes:capability.paths}),redirect:"error",signal:AbortSignal.timeout(25000),
+          method:"DELETE",headers:{...serviceHeaders,"Content-Type":"application/json"},body:JSON.stringify({prefixes:capability.paths}),redirect:"manual",signal:AbortSignal.timeout(25000),
         });
         return removed.ok?json({cleaned:true}):json({error:"Cleanup unavailable"},503);
       }
@@ -116,7 +116,7 @@ export function createImmutableMediaHandler({profile,serviceKey,fetchImpl=fetch}
         }));
         const deadline=AbortSignal.timeout(110000);
         const result=await fetchImpl(`${storageOrigin}/storage/v1/object/${bucket}/${encoded}`,{
-          method:"POST",headers:{...serviceHeaders,"Content-Type":String(capability.contentType),"x-upsert":"false"},body:stream,redirect:"error",signal:deadline,
+          method:"POST",headers:{...serviceHeaders,"Content-Type":String(capability.contentType),"x-upsert":"false"},body:stream,redirect:"manual",signal:deadline,
           // Node integration tests require this flag; Deno accepts it as a fetch extension.
           ...{duplex:"half"},
         });
@@ -127,7 +127,7 @@ export function createImmutableMediaHandler({profile,serviceKey,fetchImpl=fetch}
           // SQL verification was lost. Reconcile only this authorized fixed key;
           // never replace or delete the immutable object to repair a retry.
           const existing=await fetchImpl(`${storageOrigin}/storage/v1/object/authenticated/${bucket}/${encoded}`,{
-            headers:serviceHeaders,redirect:"error",signal:deadline,
+            headers:serviceHeaders,redirect:"manual",signal:deadline,
           });
           const storedBytes=await verifiedExisting(existing,capability);
           return json({uploaded:true,sha256:capability.sha256,byteLength:storedBytes});
@@ -146,7 +146,7 @@ export function createImmutableMediaHandler({profile,serviceKey,fetchImpl=fetch}
         contentRange=`bytes ${range[1]}-${range[2]}/${capability.byteLength}`;
       }
       const result=await fetchImpl(`${storageOrigin}/storage/v1/object/authenticated/${bucket}/${encoded}`,{
-        headers:{...serviceHeaders,...(capability.range?{Range:String(capability.range)}:{})},redirect:"error",signal:AbortSignal.timeout(110000),
+        headers:{...serviceHeaders,...(capability.range?{Range:String(capability.range)}:{})},redirect:"manual",signal:AbortSignal.timeout(110000),
       });
       if(result.status!==(capability.range?206:200) || result.headers.get("Content-Length")!==String(expectedLength)
         || result.headers.get("Content-Type")?.split(";")[0]!==capability.contentType

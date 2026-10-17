@@ -92,7 +92,7 @@ export function createAdminGateway<T>({ publishableKey, fetcher = fetch }: Admin
     try {
       const authResponse = await fetcher(`${hubOrigin}/rest/v1/rpc/${contract.authorizationRpc}`, {
         method: "POST", headers: { apikey: publishableKey, Authorization: authorization, "Content-Type": "application/json", "Content-Profile": "hub" },
-        body: "{}", redirect: "error", signal,
+        body: "{}", redirect: "manual", signal,
       });
       if (!authResponse.ok) return reply(authResponse.status === 401 ? 401 : authResponse.status === 403 ? 403 : 503,
         authResponse.status === 401 ? "unauthenticated" : authResponse.status === 403 ? "forbidden" : "unconfigured");
@@ -102,7 +102,7 @@ export function createAdminGateway<T>({ publishableKey, fetcher = fetch }: Admin
       try { parsed = contract.parse(await readJson(request, 4096, signal)); }
       catch { return reply(400, "invalid_request"); }
       const fetchJson = async (endpoint: string, init: RequestInit): Promise<unknown> => {
-        const response = await withinSignal(fetcher(endpoint, { ...init, redirect: "error", signal }), signal);
+        const response = await withinSignal(fetcher(endpoint, { ...init, redirect: "manual", signal }), signal);
         if (!response.ok) {
         let code = response.status === 401 ? "unauthenticated" : response.status === 403 ? "forbidden" : response.status === 404 ? "unconfigured" : "upstream";
         try {

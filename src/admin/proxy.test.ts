@@ -20,7 +20,8 @@ describe("central administrator boundary", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe(origin);
     expect(fetcher.mock.calls[0][0]).toBe("https://xgauehtwksmnoqhgqegm.supabase.co/rest/v1/rpc/authorize_platform_admin");
-    expect(fetcher.mock.calls[1]).toMatchObject(["https://cmcarebase.com/api/platform-admin/read", { method: "POST", redirect: "error", body: '{"operation":"overview"}', headers: { Authorization: token, "Content-Type": "application/json" } }]);
+    expect(fetcher.mock.calls[0][1]).toMatchObject({ redirect: "manual" });
+    expect(fetcher.mock.calls[1]).toMatchObject(["https://cmcarebase.com/api/platform-admin/read", { method: "POST", redirect: "manual", body: '{"operation":"overview"}', headers: { Authorization: token, "Content-Type": "application/json" } }]);
     expect(fetcher.mock.calls[1][1]?.headers).not.toHaveProperty("apikey");
   });
   it.each([401, 403, 404, 503])("denies failed authority check %s without reaching CareBase", async status => {
