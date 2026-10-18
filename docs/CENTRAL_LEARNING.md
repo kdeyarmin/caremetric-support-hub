@@ -18,8 +18,8 @@ for the deployed release and remaining authenticated verification gates.
   and attestation lessons; choose product placements; save with revision conflict
   detection; review and publish. Changes do not alter existing enrollments.
 - `/learn`: public metadata. New courses published in the Hub open here. Existing
-  CareBase courses retain source launches; their imported drafts cannot publish
-  until the source runtime and reporting bridge is verified.
+  CareBase courses retain source launches until an imported draft is published
+  here; publication is the cutover described under Existing course transfer.
 - `/learn/courses/:itemId`: authenticated enrollment and delivery. Lessons open
   in course order, and the server refuses a submission until every earlier unit
   is complete, so the post-test follows the lessons. A video lesson's first
@@ -78,10 +78,23 @@ frontend, source exports, or SDK.
 4. Copy each source MP4 through the reviewed upload flow, supply its matching
    captions/transcript, choose the approved video in the imported draft, then save.
    Source storage and temporary HeyGen URLs are never used as Hub playback URLs.
-5. Imported CareBase courses currently remain drafts. The database rejects their
-   publication until quiz behavior, provider/credit/renewal metadata, and completion
-   reporting are preserved. Existing catalog launches continue into CareBase.
-   Newly authored generic Hub courses can be reviewed and published. Validate enrollment, a failed and passing quiz,
+5. Imported CareBase courses publish through the publication bridge
+   (`20261017140000_carebase_course_publication_bridge.sql`). The import records
+   the exact imported document beside its hash. A linked course may publish only
+   while the draft still carries that document's lessons, quiz questions, answers,
+   points, passing score, and attempt limits, and its credited duration unchanged;
+   the one permitted edit is attaching reviewed central media to a video lesson.
+   Any other difference keeps the course a draft with the specific reason shown
+   (lessons, quiz, or credit changed; imported content not preserved), and the
+   usual publishing checks still apply, so a course whose videos have not
+   transferred or whose lessons do not end with a graded post-test also stays a
+   draft with that reason. Until publication the catalog launches continue into
+   CareBase. On publication the item becomes Hub-owned, learners launch the Hub
+   revision, and completions — quiz result, credited duration, completion state,
+   and certificate — are recorded in the Hub. The governed source snapshots keep
+   preserving full provider, credit-rule, and renewal policy as review evidence;
+   assignments and renewal tracking remain in CareBase. Newly authored generic
+   Hub courses can be reviewed and published. Validate enrollment, a failed and passing quiz,
    a resumed session, playback/captions, completion, and a second learner's isolation.
 6. Migrate legacy assignments/history separately using verified user, tenant,
    product, and immutable source-version mappings. Do not assign history based

@@ -1,5 +1,5 @@
 begin;
-select plan(77);
+select plan(100);
 insert into auth.users(id,email,raw_user_meta_data,is_anonymous)
 values ('98000000-0000-4000-8000-000000000001','learning-editor@test.invalid','{"display_name":"Editor"}',false),
 ('98000000-0000-4000-8000-000000000002','learning-one@test.invalid','{"display_name":"Learner One"}',false),
@@ -66,7 +66,12 @@ update auth.users set banned_until=now()+interval '1 day' where id='98000000-000
 select throws_ok($$select hub.list_my_learning()$$,'42501','Sign in with the required verification to continue.','banned users are rejected despite stale tokens');
 select ok(not exists(select 1 from storage.buckets where id='hub-learning' and public),'central media bucket stays private');
 
--- Imported content must retain its existing runtime even after a draft is edited.
+-- Publication bridge: an imported CareBase course publishes in the Hub only
+-- while its lessons, quiz, and credit still match the imported document
+-- exactly. Publishing is the cutover — the item becomes Hub-owned, learners
+-- launch the Hub revision, and completions are recorded here. Altered
+-- carried content, or a video whose central media has not transferred,
+-- keeps the course on its CareBase runtime with a visible reason.
 set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}';
 insert into hub.content_items(id,content_key,kind,status,access_level,source_system)
 values('98500000-0000-4000-8000-000000000001','learning.test.source','course','published','public','penntrain');
@@ -78,20 +83,60 @@ from hub.products where slug='pennsync';
 insert into hub.course_links(content_item_id,penntrain_course_id,source_version,launch_path)
 values('98500000-0000-4000-8000-000000000001','98500000-0000-4000-8000-000000000003','98500000-0000-4000-8000-000000000004','/app/courses/98500000-0000-4000-8000-000000000003');
 select lives_ok($$select hub.import_learning_draft('98500000-0000-4000-8000-000000000003','98500000-0000-4000-8000-000000000004',doc) from learning_fixture$$,'source course can be imported for draft review');
+select is((select source_document->>'title' from private.learning_imports where item_id='98500000-0000-4000-8000-000000000001'),'Learning test','import preserves the exact imported document for publication checks');
 select lives_ok($$select hub.save_learning_draft('98500000-0000-4000-8000-000000000001',jsonb_set(doc,'{title}','"Edited source draft"'),1) from learning_fixture$$,'source draft remains editable without changing its live course');
-select throws_ok($$select hub.publish_learning_course('98500000-0000-4000-8000-000000000001',2,true)$$,'55000','Imported CareBase courses remain drafts until quiz, credit, and completion reporting are connected. Continue using the existing CareBase course.','review does not bypass the source runtime migration gate');
-select is((select source_system::text from hub.content_items where id='98500000-0000-4000-8000-000000000001'),'penntrain','source ownership survives import, editing, and denied publication');
+select throws_ok($$select hub.import_learning_draft('98500000-0000-4000-8000-000000000099','98500000-0000-4000-8000-000000000098',doc) from learning_fixture$$,'22023','Source course is not registered in the central catalog.','the bridge adds no creation path for unregistered courses');
+select lives_ok($$select hub.publish_learning_course('98500000-0000-4000-8000-000000000001',2,true)$$,'an imported course whose lessons, quiz, and credit are unchanged can publish in the Hub');
+select is((select source_system::text from hub.content_items where id='98500000-0000-4000-8000-000000000001'),'support_hub','publication hands the catalog identity to the Hub');
 select is((select launch_path from hub.course_links where content_item_id='98500000-0000-4000-8000-000000000001'),'/app/courses/98500000-0000-4000-8000-000000000003','existing CareBase launch is preserved');
-select is((select revision_id from hub.content_publications where item_id='98500000-0000-4000-8000-000000000001'),'98500000-0000-4000-8000-000000000002'::uuid,'existing source publication is preserved');
-select is((select count(*) from private.learning_versions where item_id='98500000-0000-4000-8000-000000000001'),0::bigint,'denied source publication creates no central revision');
+select is((select count(*) from private.learning_versions where item_id='98500000-0000-4000-8000-000000000001'),1::bigint,'publication creates exactly one central version');
+select is((select revision_id from hub.content_publications where item_id='98500000-0000-4000-8000-000000000001'),(select revision_id from private.learning_versions where item_id='98500000-0000-4000-8000-000000000001'),'the existing placement now serves the Hub revision');
 select is((hub.import_learning_draft('98500000-0000-4000-8000-000000000003','98500000-0000-4000-8000-000000000004',(select doc from learning_fixture))->'document'->>'title'),'Edited source draft','retrying a source import preserves later draft edits');
--- The owner authored the imported catalog: this migration gates course
--- CREATION only and touches no read path. Learner catalog visibility of
--- imported PennTrain courses is governed by course distribution
--- (private.can_access_content_publication requires distribution
--- availability and a matching audience), which this change does not
--- alter; the imported item's record, launch link, and publication are
--- pinned intact by the assertions above.
+update auth.users set banned_until=null where id='98000000-0000-4000-8000-000000000002';
+set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}';
+select throws_ok($$select hub.publish_learning_course('98500000-0000-4000-8000-000000000001',2,true)$$,'42501','Shared-course editor access required.','the bridge gives learners no publication path');
+update learning_fixture set enrollment_id=hub.enroll_learning_course('98500000-0000-4000-8000-000000000001');
+select lives_ok($$select hub.submit_learning_unit(enrollment_id,'98100000-0000-4000-8000-000000000001','{}',true,gen_random_uuid()) from learning_fixture$$,'a learner can complete an imported course lesson in the Hub');
+update learning_fixture set result=hub.submit_learning_unit(enrollment_id,'98100000-0000-4000-8000-000000000002','{"98200000-0000-4000-8000-000000000001":"98300000-0000-4000-8000-000000000001"}',false,gen_random_uuid());
+select is((select (result->>'score')::integer from learning_fixture),100,'the imported quiz is graded on the server');
+select isnt((select completed_at from private.learning_enrollments where id=(select enrollment_id from learning_fixture)),null::timestamptz,'passing the imported post-test completes the course in the Hub');
+select is((select best_score from private.learning_unit_progress where enrollment_id=(select enrollment_id from learning_fixture) and unit_id='98100000-0000-4000-8000-000000000002'),100,'the completion records the imported quiz result');
+select is((hub.get_learning_certificate((select enrollment_id from learning_fixture))->>'finalScore')::integer,100,'certificate reports the imported post-test score');
+select is((hub.get_learning_certificate((select enrollment_id from learning_fixture))->>'durationMinutes')::integer,10,'certificate reports the imported credit duration');
+set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}';
+insert into hub.content_items(id,content_key,kind,status,access_level,source_system)
+values('98500000-0000-4000-8000-000000000011','learning.test.altered-source','course','published','public','penntrain');
+insert into hub.course_links(content_item_id,penntrain_course_id,source_version,launch_path)
+values('98500000-0000-4000-8000-000000000011','98500000-0000-4000-8000-000000000013','98500000-0000-4000-8000-000000000014','/app/courses/98500000-0000-4000-8000-000000000013');
+select lives_ok($$select hub.import_learning_draft('98500000-0000-4000-8000-000000000013','98500000-0000-4000-8000-000000000014',doc) from learning_fixture$$,'a second source course can be imported for draft review');
+select lives_ok($$select hub.save_learning_draft('98500000-0000-4000-8000-000000000011',jsonb_set(doc,'{units,1,questions,0,correctOptionId}','"98300000-0000-4000-8000-000000000002"'),1) from learning_fixture$$,'an editor can stage a changed quiz answer for review');
+select throws_ok($$select hub.publish_learning_course('98500000-0000-4000-8000-000000000011',2,true)$$,'55000','This imported CareBase course cannot publish: quiz questions, answers, points, passing score, or attempt limits differ from the imported source. Restore the imported quiz to publish it here, or keep delivering it from CareBase.','an altered quiz answer blocks imported publication');
+select lives_ok($$select hub.save_learning_draft('98500000-0000-4000-8000-000000000011',jsonb_set(doc,'{durationMinutes}','25'),2) from learning_fixture$$,'an editor can stage a changed duration for review');
+select throws_ok($$select hub.publish_learning_course('98500000-0000-4000-8000-000000000011',3,true)$$,'55000','This imported CareBase course cannot publish: its credited duration differs from the imported source. Restore the imported duration to publish it here, or keep delivering it from CareBase.','an altered credit duration blocks imported publication');
+select lives_ok($$select hub.save_learning_draft('98500000-0000-4000-8000-000000000011',jsonb_set(doc,'{units,0,body}','"Rewritten lesson."'),3) from learning_fixture$$,'an editor can stage a rewritten lesson for review');
+select throws_ok($$select hub.publish_learning_course('98500000-0000-4000-8000-000000000011',4,true)$$,'55000','This imported CareBase course cannot publish: a lesson was added, removed, reordered, or rewritten after import. Restore the imported lessons to publish it here, or keep delivering it from CareBase.','a rewritten lesson blocks imported publication');
+select is((select count(*) from private.learning_versions where item_id='98500000-0000-4000-8000-000000000011'),0::bigint,'altered imported content creates no central version');
+select is((select source_system::text from hub.content_items where id='98500000-0000-4000-8000-000000000011'),'penntrain','a blocked imported course keeps its CareBase runtime');
+insert into hub.content_items(id,content_key,kind,status,access_level,source_system)
+values('98500000-0000-4000-8000-000000000021','learning.test.video-source','course','published','public','penntrain');
+insert into hub.course_links(content_item_id,penntrain_course_id,source_version,launch_path)
+values('98500000-0000-4000-8000-000000000021','98500000-0000-4000-8000-000000000023','98500000-0000-4000-8000-000000000024','/app/courses/98500000-0000-4000-8000-000000000023');
+create temporary table learning_bridge_video(doc jsonb);
+insert into learning_bridge_video select jsonb_set(doc,'{units}','[{"id":"98510000-0000-4000-8000-000000000001","type":"video","title":"Video lesson","body":"Reviewed transcript","mediaAssetId":null},{"id":"98510000-0000-4000-8000-000000000002","type":"quiz","title":"Assessment","passingScore":100,"maxAttempts":2,"questions":[{"id":"98510000-0000-4000-8000-000000000003","prompt":"Choose the correct option","points":1,"correctOptionId":"98510000-0000-4000-8000-000000000004","options":[{"id":"98510000-0000-4000-8000-000000000004","text":"Correct"},{"id":"98510000-0000-4000-8000-000000000005","text":"Incorrect"}]}]}]'::jsonb) from learning_fixture;
+select lives_ok($$select hub.import_learning_draft('98500000-0000-4000-8000-000000000023','98500000-0000-4000-8000-000000000024',doc) from learning_bridge_video$$,'a video course can be imported for draft review');
+select throws_ok($$select hub.publish_learning_course('98500000-0000-4000-8000-000000000021',1,true)$$,'22023','Video requires approved central media, checksum, captions, and transcript.','an imported video course without central media stays a draft with the media reason');
+insert into storage.objects(bucket_id,name,metadata)
+values('hub-learning','learning/98520000-0000-4000-8000-000000000001/video.mp4','{"size":6,"mimetype":"video/mp4"}'),
+('hub-learning','learning/98520000-0000-4000-8000-000000000001/captions.vtt','{"size":6,"mimetype":"text/vtt"}'),
+('hub-learning','learning/98520000-0000-4000-8000-000000000001/transcript.txt','{"size":6,"mimetype":"text/plain"}');
+select lives_ok($$select hub.register_learning_media('98520000-0000-4000-8000-000000000001','Imported fixture video',repeat('b',64),true)$$,'the transferred video can be registered centrally');
+select lives_ok($$select hub.save_learning_draft('98500000-0000-4000-8000-000000000021',jsonb_set(doc,'{units,0,mediaAssetId}','"98520000-0000-4000-8000-000000000001"'),1) from learning_bridge_video$$,'the imported draft can attach the reviewed central media');
+select lives_ok($$select hub.publish_learning_course('98500000-0000-4000-8000-000000000021',2,true)$$,'attaching the reviewed central media lets the imported video course publish');
+-- The bridge changes only publication of imported drafts. The course
+-- CREATION gate is untouched (the end of this file pins it), learner
+-- catalog visibility still flows through content publications and
+-- distribution availability, and course_links provenance rows are never
+-- rewritten by import, editing, or publication.
 set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}';
 
 -- Exercise customer visibility and Storage SELECT authorization as actual
