@@ -67,7 +67,7 @@ select is((select source_system::text from hub.content_items where id='99010000-
 select is((select launch_path from hub.course_links where content_item_id='99010000-0000-4000-8000-000000000001'),'/app/courses/99100000-0000-0000-0000-000000000001','snapshot imports preserve native launch');
 select is((select revision_id from hub.content_publications where item_id='99010000-0000-4000-8000-000000000001'),'99010000-0000-4000-8000-000000000002'::uuid,'source retirement review does not silently retire the live Hub catalog');
 select is((select draft->>'title' from private.learning_courses where item_id='99010000-0000-4000-8000-000000000001'),'An independently edited draft','source snapshots cannot overwrite independent author edits');
-select throws_ok($$select hub.publish_learning_course('99010000-0000-4000-8000-000000000001',1,true)$$,'55000','Imported CareBase courses remain drafts until quiz, credit, and completion reporting are connected. Continue using the existing CareBase course.','staging does not remove the publication parity gate');
+select throws_ok($$select hub.publish_learning_course('99010000-0000-4000-8000-000000000001',1,true)$$,'55000','This imported CareBase course cannot publish yet: the imported content was not preserved for verification. Re-import the same course export, then publish the unchanged draft.','staging a source snapshot does not satisfy the publication bridge');
 select ok(hub.list_learning_source_heads()::text not like '%Synthetic Provider%' and hub.list_learning_source_heads()::text not like '%explanation%','head discovery returns metadata only');
 set local request.jwt.claims='{"sub":"99000000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}';
 set local role authenticated;
