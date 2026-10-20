@@ -51,12 +51,12 @@ describe("portfolio rollup", () => {
     });
     renderRollup(portfolio);
     const health = await screen.findByRole("region", { name: "Application health" });
-    expect(within(health).getByText(/Connections verified for 1 of 6 applications/)).toBeTruthy();
+    expect(within(health).getByText(/Connections verified for 1 of 7 applications/)).toBeTruthy();
     const carebase = within(health).getByRole("region", { name: "CareBase health" });
     expect(within(carebase).getByText("Connection verified")).toBeTruthy();
     expect(within(carebase).getByText("Deployed source: abc1234")).toBeTruthy();
     expect(within(carebase).getByText("Organizations")).toBeTruthy();
-    expect(within(health).getAllByText("Unavailable")).toHaveLength(5);
+    expect(within(health).getAllByText("Unavailable")).toHaveLength(6);
     const financials = screen.getByRole("region", { name: "Subscription financials" });
     expect(totalsText(financials)).toContain("5 recorded subscriptions across CareBase");
     expect(document.body.textContent).not.toContain("0 recorded subscriptions");
@@ -104,17 +104,44 @@ describe("portfolio rollup", () => {
     expect(document.body.textContent).not.toContain("8 recorded subscriptions");
   });
 
+  it("shows Healthcare Advisors consultation totals and explains that it has no subscriptions", async () => {
+    const portfolio = fakePortfolio({
+      advisors: {
+        capabilities: { apiVersion: 1, operations: ["overview", "inquiries.list"], sourceRevision: "37afa7a" },
+        overview: { organizationCount: null, activeUserCount: null, inquiryCount: 12, openInquiryCount: 3 },
+      },
+    });
+    renderRollup(portfolio);
+    const health = await screen.findByRole("region", { name: "CareMetric Healthcare Advisors health" });
+    expect(within(health).getByText("Open consultation requests")).toBeTruthy();
+    expect(within(health).getByText("3")).toBeTruthy();
+    expect(within(health).queryByText("Organizations")).toBeNull();
+    const financials = screen.getByRole("region", { name: "Subscription financials" });
+    expect(within(financials).getByText(/consulting practice\. It has no software subscriptions/)).toBeTruthy();
+    expect(totalsText(financials)).not.toContain("Healthcare Advisors");
+  });
+
+  it("names each application with its source repository so the owner can recognize it", async () => {
+    const silent: ProductReads = { capabilities: { apiVersion: 1, operations: [], sourceRevision: null } };
+    renderRollup(fakePortfolio({ carebase: silent, breathe: silent, pennsync: silent }));
+    const health = await screen.findByRole("region", { name: "Application health" });
+    expect(within(health).getByRole("heading", { name: "CareBase (PennTrain)" })).toBeTruthy();
+    expect(within(health).getByRole("heading", { name: "Breathe (PennFit)" })).toBeTruthy();
+    expect(within(health).getByRole("heading", { name: "PennSync (CareMetric-Pennsync)" })).toBeTruthy();
+    expect(within(health).getByRole("heading", { name: "CareMetric Intel" })).toBeTruthy();
+  });
+
   it("shows no portfolio total when no application reports billing", async () => {
     const silent: ProductReads = { capabilities: { apiVersion: 1, operations: [], sourceRevision: null } };
     const portfolio = fakePortfolio({
       carebase: silent, breathe: silent, "caremetric-emr": silent,
-      pennsync: silent, intel: silent, "caremetric-go": silent,
+      pennsync: silent, intel: silent, "caremetric-go": silent, advisors: silent,
     });
     renderRollup(portfolio);
     const financials = await screen.findByRole("region", { name: "Subscription financials" });
     expect(within(financials).getByText("No application reported billing totals, so no portfolio total is shown.")).toBeTruthy();
     expect(document.body.textContent).not.toContain("0 recorded subscriptions");
     const health = screen.getByRole("region", { name: "Application health" });
-    expect(within(health).getByText(/Connections verified for 6 of 6 applications/)).toBeTruthy();
+    expect(within(health).getByText(/Connections verified for 7 of 7 applications/)).toBeTruthy();
   });
 });

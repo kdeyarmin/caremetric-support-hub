@@ -8,4 +8,10 @@ export const adminRegistry: Record<PortfolioProduct, { name: string; endpoint: s
   pennsync: { name: "PennSync", endpoint: "https://caremetricai.base44.app/functions/centralAdminRead", authorizationHeader: "X-CareMetric-Hub-Authorization", userScope: "Registered administrators and agency members · individual subscriptions" },
   intel: { name: "CareMetric Intel", endpoint: "https://caremetricintel.com/functions/centralAdminRead", authorizationHeader: "X-CareMetric-Hub-Authorization", userScope: "Registered application users · organization and billing sources not configured" },
   "caremetric-go": { name: "CareMetric Go", endpoint: "https://ubbtgcaosuebrlwcvihw.supabase.co/functions/v1/central-go-admin-read", userScope: "Organizations, staff and application entitlements shared with CareMetric EMR" },
+  advisors: { name: "CareMetric Healthcare Advisors", endpoint: "https://caremetricadvisors.com/api/hub/admin-read", authorizationHeader: "X-CareMetric-Hub-Authorization", userScope: "Consultation requests from caremetricadvisors.com · no software accounts or subscriptions" },
+};
+
+/** Source repository names the owner uses for each application, shown beside the product name. */
+export const sourceRepositoryNames: Partial<Record<PortfolioProduct, string>> = {
+  carebase: "PennTrain", breathe: "PennFit", pennsync: "CareMetric-Pennsync", "caremetric-emr": "CMbackup", "caremetric-go": "CM-Go",
 };

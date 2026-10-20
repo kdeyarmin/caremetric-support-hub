@@ -114,7 +114,7 @@ describe("portfolio proxy routing", () => {
     expect(await response.json()).toEqual({ error: { code: "unconfigured" } });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
-  it.each(["intel"])("never sends a legacy JWT to the SMS-only %s connection", async product => {
+  it.each(["intel", "advisors"])("never sends a legacy JWT to the SMS-only %s connection", async product => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(actor));
     const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product, operation: "capabilities" }));
     expect(response.status).toBe(503);
@@ -204,5 +204,35 @@ describe("shared phone message contract", () => {
     expect(() => parsePortfolioRequest({ product: "intel", operation: "phone.messages.list" })).toThrow();
     expect(() => parse("phone.messages.list", { ...page, items: [{ ...message, message: "x".repeat(2001) }] })).toThrow();
     expect(() => parse("phone.messages.list", { ...page, offset: 20, items: [message] })).toThrow();
+  });
+});
+
+describe("Healthcare Advisors consultation boundaries", () => {
+  const inquiry = { id: "CM-0A1B2C3D4E5F", createdAt: now, name: "Requester", email: "requester@example.invalid", organization: "Fixture agency", phone: "", sector: "Home Health", service: "strategy", message: "Please contact us about an operations review.", status: "new", notes: "" };
+  it("exposes only the consultation inbox, overview and capabilities", () => {
+    expect(parsePortfolioRequest({ product: "advisors", operation: "inquiries.list", search: "agency" })).toEqual({ product: "advisors", operation: { operation: "inquiries.list", search: "agency", limit: 20, offset: 0 } });
+    for (const operation of ["users.list", "organizations.list", "billing.overview", "billing.subscriptions.list", "phone.messages.list", "courses.list"]) {
+      expect(() => parsePortfolioRequest({ product: "advisors", operation })).toThrow();
+    }
+    expect(() => parsePortfolioRequest({ product: "breathe", operation: "inquiries.list" })).toThrow();
+    expect(parse("capabilities", { apiVersion: 1, operations: ["overview", "inquiries.list", "users.list", "billing.overview"], sourceRevision: null }, "advisors").data)
+      .toEqual({ apiVersion: 1, operations: ["overview", "inquiries.list"], sourceRevision: null });
+    expect(parse("capabilities", { apiVersion: 1, operations: ["overview", "inquiries.list"], sourceRevision: null }, "breathe").data)
+      .toEqual({ apiVersion: 1, operations: ["overview"], sourceRevision: null });
+  });
+  it("reports consultation totals without inventing organizations, accounts or subscriptions", () => {
+    const data = { organizationCount: null, activeUserCount: null, inquiryCount: 4, openInquiryCount: 2 };
+    expect(parse("overview", data, "advisors").data).toEqual(data);
+    expect(() => parse("overview", { ...data, organizationCount: 0 }, "advisors")).toThrow();
+    expect(() => parse("overview", { ...data, subscriptionCount: 0 }, "advisors")).toThrow();
+    expect(() => parse("overview", { ...data, openInquiryCount: 5 }, "advisors")).toThrow();
+  });
+  it("keeps bounded request fields and strips anything else", () => {
+    expect(parse("inquiries.list", { ...page, items: [{ ...inquiry, form_digest: "private", consent: 1 }] }, "advisors").data)
+      .toEqual({ ...page, items: [{ ...inquiry, phone: null }] });
+    for (const changed of [{ id: "CM-0a1b2c3d4e5f" }, { id: "../CM-0A1B2C3D4E5F" }, { status: "deleted" }, { message: "x".repeat(1801) }, { createdAt: null }, { notes: null }]) {
+      expect(() => parse("inquiries.list", { ...page, items: [{ ...inquiry, ...changed }] }, "advisors")).toThrow();
+    }
+    expect(() => parsePortfolioEnvelope(envelope("inquiries.list", { ...page, items: [inquiry] }, "breathe"), parsePortfolioRequest({ product: "advisors", operation: "inquiries.list" }))).toThrow();
   });
 });

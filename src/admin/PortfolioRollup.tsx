@@ -8,6 +8,7 @@ import { formatBillingMoney } from "./billingMoney";
 import { portfolioClient } from "./portfolioClient";
 import type { PortfolioClient } from "./portfolioClient";
 import { buildPortfolioRollup, loadPortfolioRollup, sharedWithProduct } from "./portfolioRollup";
+import { applicationLabel, overviewMetrics } from "./overviewMetrics";
 import type { RollupAppSnapshot } from "./portfolioRollup";
 import { timeLabel } from "./readState";
 import { useAdminRead } from "./useAdminRead";
@@ -23,14 +24,7 @@ function OverviewMetrics({ app }: { app: RollupAppSnapshot }) {
   const product = app.product;
   if (app.overview.state === "not-advertised") return <p className="admin-explanation">This connection does not provide an application overview.</p>;
   if (app.overview.state === "unavailable") return <p className="admin-explanation">The application overview could not be loaded from this connection.</p>;
-  const data = app.overview.data;
-  const metrics = [
-    { label: "Organizations", value: data.organizationCount },
-    { label: product === "breathe" || product === "caremetric-emr" || product === "caremetric-go" ? "Active staff accounts" : "Active application profiles", value: data.activeUserCount },
-    ...(data.registeredUserCount === undefined ? [] : [{ label: product === "intel" ? "Registered application profiles" : "Registered staff profiles", value: data.registeredUserCount }]),
-    ...(data.globalCourseCount === undefined ? [] : [{ label: "Shared courses · all publication states", value: data.globalCourseCount }]),
-    ...(data.subscriptionCount === undefined ? [] : [{ label: "Recorded subscriptions", value: data.subscriptionCount }]),
-  ];
+  const metrics = overviewMetrics(product, app.overview.data);
   return <div className="metric-grid admin-metric-grid">{metrics.map(metric => <div className="metric-card metric-teal" key={metric.label}><div><p>{metric.label}</p><strong>{metric.value === null ? "Not reported" : formatNumber.format(metric.value)}</strong><small>{productName(product)}</small></div></div>)}</div>;
 }
 
@@ -40,7 +34,7 @@ function HealthCard({ app }: { app: RollupAppSnapshot }) {
   const verified = capabilities !== null;
   const sharedWith = sharedWithProduct(app.product);
   return <section className="panel rollup-app-panel" aria-label={`${registry.name} health`}>
-    <div className="admin-section-title"><div><h2>{registry.name}</h2><p>{registry.userScope}</p></div><span className={`admin-status ${verified ? "admin-status-connected" : "admin-status-muted"}`}>{verified ? "Connection verified" : "Unavailable"}</span></div>
+    <div className="admin-section-title"><div><h2>{applicationLabel(app.product)}</h2><p>{registry.userScope}</p></div><span className={`admin-status ${verified ? "admin-status-connected" : "admin-status-muted"}`}>{verified ? "Connection verified" : "Unavailable"}</span></div>
     {verified ? <>
       <OverviewMetrics app={app} />
       {sharedWith && <p className="admin-read-time">These records are shared with {productName(sharedWith)} and must not be counted as additional organizations or subscriptions.</p>}
@@ -51,10 +45,11 @@ function HealthCard({ app }: { app: RollupAppSnapshot }) {
 
 function BillingRow({ app }: { app: RollupAppSnapshot }) {
   return <div className="rollup-billing-row">
-    <h3>{productName(app.product)}</h3>
+    <h3>{applicationLabel(app.product)}</h3>
     {app.product === "caremetric-emr" && <p>EMR records shown here are application entitlements. Chargebee subscription records are excluded until their organization mappings are verified.</p>}
     {app.product === "pennsync" && <p>PennSync subscriptions belong to individual accounts.</p>}
-    {app.billing.state === "not-advertised" && <p>This connection does not provide a billing overview.</p>}
+    {app.product === "advisors" && <p>Healthcare Advisors is a consulting practice. It has no software subscriptions; engagement fees are set by written proposal outside the website.</p>}
+    {app.billing.state === "not-advertised" && app.product !== "advisors" && <p>This connection does not provide a billing overview.</p>}
     {app.billing.state === "unavailable" && <p>Unavailable — billing records could not be loaded from this connection.</p>}
     {app.billing.state === "ready" && <><p><strong>{formatNumber.format(app.billing.data.subscriptionCount)}</strong> recorded subscriptions</p><div className="portfolio-status-counts">{app.billing.data.statusCounts.map(item => <span key={item.status}>{item.status}: <strong>{formatNumber.format(item.count)}</strong></span>)}</div></>}
   </div>;

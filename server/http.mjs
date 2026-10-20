@@ -88,6 +88,7 @@ export function appServer({auth,gateway,delegations,publications,docstudio,aiCas
             '/api/internal/admin/pennsync/authorize':'pennsync', '/api/internal/command/carebase/authorize':'carebase.command',
             '/api/internal/admin/go/authorize':'caremetric-go',
             '/api/internal/admin/intel/authorize':'intel',
+            '/api/internal/admin/advisors/authorize':'advisors',
             '/api/internal/learning/carebase/authorize':'carebase.learning',
           }[path];
           if(!audience) throw new HttpError(404,'Unavailable.');
