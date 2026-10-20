@@ -1,5 +1,5 @@
 begin;
-select plan(8);
+select plan(10);
 
 create temporary table automation_operations(signature text primary key) on commit drop;
 insert into automation_operations values
@@ -39,6 +39,12 @@ select throws_ok('select * from private.ai_automation_eligible_cases()', '42501'
   'Automation operations refuse every session user other than the Hub server');
 select throws_ok($$select private.ai_automation_post_message('00000000-0000-4000-8000-000000000000', 'Synthetic reply')$$,
   '42501', 'Application server required.', 'Only the Hub server can post an automated reply');
+
+-- The failure policy's state: a streak that starts at zero and a backoff time.
+select col_default_is('hub', 'case_ai_automation', 'consecutive_failures', '0',
+  'A case under automation starts without a failure streak');
+select col_type_is('hub', 'case_ai_automation', 'retry_at', 'timestamp with time zone',
+  'A failing case records when the sweep may retry it');
 
 set local role authenticated;
 select throws_ok($$select private.ai_automation_claim('00000000-0000-4000-8000-000000000000')$$,
