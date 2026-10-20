@@ -98,8 +98,11 @@ export function aiAssistance({ apiKey, fetchImpl = fetch, log = (line) => consol
     } catch {
       throw providerError({ transient: true });
     }
-    const raw = await response.text().catch(() => '');
+    // A body that cannot be read (the timeout fired or the connection dropped after
+    // the headers) is an outage too, unless the status already says what went wrong.
+    const raw = await response.text().catch(() => null);
     if (!response.ok) throw providerError({ transient: isOutageStatus(response.status) });
+    if (raw === null) throw providerError({ transient: true });
     if (raw.length > maxResponseCharacters) throw providerError();
     let parsed;
     try { parsed = JSON.parse(raw); } catch {

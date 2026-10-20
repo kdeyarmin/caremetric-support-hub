@@ -87,6 +87,10 @@ describe('AI assistance provider', () => {
       expect(await failure(reply(status, { type: 'error' }))).toMatchObject({ status: 502, code: 'AI_PROVIDER_ERROR', transient: true });
     }
     expect(await failure(async () => { throw new Error('network down'); })).toMatchObject({ transient: true });
+    // Headers arrived but the body never did (timeout or dropped connection).
+    const unreadable = (status) => async () => ({ ok: status === 200, status, async text() { throw new Error('body read aborted'); } });
+    expect(await failure(unreadable(200))).toMatchObject({ status: 502, code: 'AI_PROVIDER_ERROR', transient: true });
+    expect((await failure(unreadable(400))).transient).toBeUndefined();
     for (const fetchImpl of [reply(400, { type: 'error' }), reply(200, { content: [], stop_reason: 'refusal' })]) {
       const error = await failure(fetchImpl);
       expect(error).toMatchObject({ status: 502, code: 'AI_PROVIDER_ERROR' });

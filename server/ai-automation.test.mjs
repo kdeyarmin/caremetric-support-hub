@@ -152,8 +152,6 @@ describe('AI auto-resolution loop', () => {
     await loop.tick();
     expect(ai.draftReply).toHaveBeenCalledTimes(maxAiAttempts);
     expect(aiMessages(entry)).toHaveLength(2);
-    // Without a failure the loop never writes the failure fields.
-    expect(store.patches.some((patch) => 'consecutiveFailures' in patch || 'retryAt' in patch)).toBe(false);
   });
 
   it('sends exactly one follow-up nudge after the configured delay with no reply', async () => {
@@ -268,6 +266,10 @@ describe('AI auto-resolution loop', () => {
     advance(10 * MINUTE);
     await loop.tick();
     expect(ai.draftReply).toHaveBeenCalledTimes(maxConsecutiveFailures);
+    expect(entry.state).toMatchObject({ stage: 'escalate_due', consecutiveFailures: maxConsecutiveFailures, retryAt: null });
+    expect(logs.at(-1)).toEqual({ event: 'hub_ai_automation_escalation_due_after_failures', case_id: 'case-11', consecutive_failures: maxConsecutiveFailures });
+    // The next sweep escalates it like any other escalate_due case.
+    await loop.tick();
     expect(entry.state).toMatchObject({ stage: 'exhausted', consecutiveFailures: maxConsecutiveFailures });
     expect(entry).toMatchObject({ escalated: true, status: 'in_progress', priority: 'high' });
     expect(entry.notes).toHaveLength(1);
@@ -276,7 +278,6 @@ describe('AI auto-resolution loop', () => {
     expect(ai.summarizeForEscalation).not.toHaveBeenCalled();
     expect(aiMessages(entry)).toHaveLength(0);
     expect(logs.filter((line) => line.event === 'hub_ai_automation_error')).toHaveLength(maxConsecutiveFailures);
-    expect(logs.at(-1)).toEqual({ event: 'hub_ai_automation_escalated_after_failures', case_id: 'case-11', consecutive_failures: maxConsecutiveFailures });
     advance(24 * HOUR);
     await loop.tick();
     expect(ai.draftReply).toHaveBeenCalledTimes(maxConsecutiveFailures);
@@ -322,6 +323,8 @@ describe('AI auto-resolution loop', () => {
       advance(HOUR);
     }
     expect(ai.classifyResolution).toHaveBeenCalledTimes(maxConsecutiveFailures);
+    expect(entry.state.stage).toBe('escalate_due');
+    await loop.tick();
     expect(entry.state.stage).toBe('exhausted');
     expect(entry.escalated).toBe(true);
     expect(entry.notes[0].body).toContain('It had sent 1 automated attempt(s) to the customer.');
@@ -350,6 +353,60 @@ describe('AI auto-resolution loop', () => {
     expect(entry.state.stage).toBe('exhausted');
     expect(entry.notes[0].body).toMatch(/^ESCALATED — AI automation could not complete\./);
     expect(ai.summarizeForEscalation).toHaveBeenCalledTimes(maxConsecutiveFailures);
+  });
+  it('clears a failure another process recorded meanwhile once its own attempt posts', async () => {
+    const store = memoryStore();
+    const entry = store.addCase({ id: 'case-15', messages: ['Export broken.'] });
+    const ai = fakeAi();
+    const working = ai.draftReply;
+    const { loop } = buildLoop(store, ai);
+    // A second Hub process (deploy overlap) records a failure on the same attempt
+    // while this one is still drafting it.
+    ai.draftReply = vi.fn(async (input) => {
+      Object.assign(entry.state, { consecutiveFailures: 1, retryAt: new Date(T0.getTime() + 5 * MINUTE) });
+      return working(input);
+    });
+    await loop.tick();
+    expect(aiMessages(entry)).toHaveLength(1);
+    expect(entry.state).toMatchObject({ stage: 'awaiting_response', consecutiveFailures: 0, retryAt: null });
+    // So a prompt customer answer is classified on the next sweep, not after the backoff.
+    store.customerSays('case-15', 'Still broken.');
+    await loop.tick();
+    expect(ai.classifyResolution).toHaveBeenCalledTimes(1);
+  });
+
+  it('backs off a handoff whose escalation fails, and never posts the staff note twice', async () => {
+    const store = memoryStore();
+    const entry = store.addCase({ id: 'case-16', messages: ['Export broken.'] });
+    const ai = fakeAi();
+    ai.draftReply = vi.fn(async () => { throw new Error('draft refused'); });
+    const escalateCase = store.escalateCase;
+    let escalationFails = true;
+    store.escalateCase = async (caseId) => {
+      if (escalationFails) throw new Error('escalation refused');
+      return escalateCase(caseId);
+    };
+    const { loop, advance } = buildLoop(store, ai);
+    for (let sweep = 0; sweep < maxConsecutiveFailures; sweep += 1) {
+      await loop.tick();
+      advance(HOUR);
+    }
+    expect(entry.state).toMatchObject({ stage: 'escalate_due', retryAt: null });
+    // The note posts, then the escalation fails: the handoff backs off like any step.
+    const sweptAt = store.now().getTime();
+    await loop.tick();
+    expect(entry.notes).toHaveLength(1);
+    expect(entry.state).toMatchObject({ stage: 'escalate_due', consecutiveFailures: maxConsecutiveFailures + 1 });
+    expect(new Date(entry.state.retryAt).getTime()).toBeGreaterThan(sweptAt);
+    await loop.tick();
+    expect(entry.escalated).toBe(false);
+    escalationFails = false;
+    advance(HOUR);
+    await loop.tick();
+    expect(entry).toMatchObject({ escalated: true, status: 'in_progress', priority: 'high' });
+    expect(entry.state.stage).toBe('exhausted');
+    expect(entry.notes).toHaveLength(1);
+    expect(ai.summarizeForEscalation).not.toHaveBeenCalled();
   });
 });
 

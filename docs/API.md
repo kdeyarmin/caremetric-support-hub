@@ -128,11 +128,12 @@ posted. A step that fails for a case leaves it at its stage and records the
 failure (`hub.case_ai_automation.consecutive_failures`, `retry_at`); the active
 batch skips the case until `retry_at`, with the backoff doubling from 5 to at
 most 30 minutes. A provider outage (no response, timeout, 408/409/429/5xx) is
-retried for as long as it lasts. Any other failure hands the case to staff on
-the third in a row through the normal escalation step (internal note,
-`in_progress`, high priority) without a further provider call, so a failing
-case never costs a provider call on every sweep. Any step that goes through
-clears the streak (backend feature `support.ai-automation-failure-policy.v1`,
+retried for as long as it lasts. On the third other failure in a row the case
+becomes due for escalation, and the next sweep hands it to staff through the
+normal escalation step (internal note, `in_progress`, high priority) without a
+further provider call; a handoff that fails backs off like any other step and
+never posts the staff note twice. A failing case therefore never costs a
+provider call on every sweep. Any step that goes through clears the streak (backend feature `support.ai-automation-failure-policy.v1`,
 migrations `20261020160000` / `20261020160100`; the Hub server does not start
 without it).
 

@@ -234,8 +234,13 @@ try {
   assert.equal(state.stage,'attempt_due');assert.equal(state.consecutive_failures,2);
   assert.equal(state.retry_at.getTime(),clock+10*60*1000);
   await retryNow(caseH);
-  assert.deepEqual((await failingTick()).map(line=>line.event),['hub_ai_automation_error','hub_ai_automation_escalated_after_failures']);
+  assert.deepEqual((await failingTick()).map(line=>line.event),['hub_ai_automation_error','hub_ai_automation_escalation_due_after_failures']);
   assert.equal(refusals(),3);
+  state=await automation(caseH);
+  assert.equal(state.stage,'escalate_due');assert.equal(state.consecutive_failures,3);assert.equal(state.retry_at,null);
+  // The next sweep hands it over like any other escalate_due case.
+  assert.ok((await store.findActiveCaseIds()).includes(caseH));
+  await tick();
   state=await automation(caseH);
   assert.equal(state.stage,'exhausted');assert.equal(state.consecutive_failures,3);assert.ok(state.escalated_at);
   assert.deepEqual(await supportCase(caseH),{status:'in_progress',priority:'high',resolved_at:null});

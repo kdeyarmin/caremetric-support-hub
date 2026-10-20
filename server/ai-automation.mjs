@@ -179,9 +179,10 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
   let running = false;
   const active = () => enabled === true && Boolean(ai?.configured);
 
-  // A step that went through ends a failure streak and its backoff (written only
-  // when there was one).
-  const recovered = (state) => (state.consecutiveFailures > 0 ? { consecutiveFailures: 0, retryAt: null } : {});
+  // A step that went through ends any failure streak and its backoff. Always
+  // written, never inferred from the state this process loaded: during a deploy
+  // overlap another process may have recorded a failure since.
+  const recovered = { consecutiveFailures: 0, retryAt: null };
 
   async function runAttempt(work) {
     const { state } = work;
@@ -208,7 +209,7 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
       followUpDueAt: new Date(attemptedAt.getTime() + followUpDelayMs),
       followUpSentAt: null,
       respondedAt: null,
-      ...recovered(state),
+      ...recovered,
     });
   }
 
@@ -242,17 +243,24 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
     ].join('\n');
   }
 
+  // Each store call is its own transaction, so a retried escalation finds the note
+  // an earlier try already posted and does not post (or pay for) another.
   async function escalate(work) {
-    const note = work.state.consecutiveFailures >= maxConsecutiveFailures ? failureNote(work.state) : await exhaustedNote(work);
-    await store.postAiNote(work.caseId, note);
+    const noted = work.notes.some((note) => note.authorRole === 'ai_assistant' && note.body.startsWith('ESCALATED — '));
+    if (!noted) {
+      const note = work.state.consecutiveFailures >= maxConsecutiveFailures ? failureNote(work.state) : await exhaustedNote(work);
+      await store.postAiNote(work.caseId, note);
+    }
     await store.escalateCase(work.caseId);
     await store.saveState(work.caseId, { stage: 'exhausted', escalatedAt: now() });
   }
 
   // Records a failed step. The case stays at its stage and waits out a doubling
   // backoff; after maxConsecutiveFailures failures that are not provider outages it
-  // goes to staff through the escalation step instead. An escalation that itself
-  // fails only backs off: it needs no provider call once the streak is that long.
+  // is due for escalation instead, which the next sweep carries out like any other
+  // escalate_due case (so a failing handoff backs off too). An escalation that
+  // itself fails only backs off: it needs no provider call once the streak is that
+  // long.
   async function recordFailure(caseId, error) {
     const work = await store.loadWork(caseId);
     if (!work || !work.state || terminalStages.has(work.state.stage)) return;
@@ -263,8 +271,7 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
       return;
     }
     await store.saveState(caseId, { stage: 'escalate_due', consecutiveFailures: failures, retryAt: null });
-    log(JSON.stringify({ event: 'hub_ai_automation_escalated_after_failures', case_id: caseId, consecutive_failures: failures }));
-    await escalate({ ...work, state: { ...work.state, stage: 'escalate_due', consecutiveFailures: failures } });
+    log(JSON.stringify({ event: 'hub_ai_automation_escalation_due_after_failures', case_id: caseId, consecutive_failures: failures }));
   }
 
   async function processCase(caseId) {
@@ -301,7 +308,7 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
         await store.saveState(caseId, {
           stage: nextStage, respondedAt: now(), responseSource: 'classification',
           lastSeenCustomerMessageId: latest.id, lastCustomerResponse: clip(latest.body, 5000),
-          ...recovered(state),
+          ...recovered,
         });
         const refreshed = await store.loadWork(caseId);
         if (!refreshed) return;
@@ -309,13 +316,13 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
       }
       // Unclear: record that the message was seen so it is not reclassified, and
       // keep waiting for a clearer answer or the portal buttons.
-      await store.saveState(caseId, { lastSeenCustomerMessageId: latest.id, ...recovered(state) });
+      await store.saveState(caseId, { lastSeenCustomerMessageId: latest.id, ...recovered });
       return;
     }
 
     if (state.followUpDueAt && !state.followUpSentAt && new Date(state.followUpDueAt).getTime() <= now().getTime()) {
       await store.postAiMessage(caseId, followUpNudge);
-      await store.saveState(caseId, { followUpSentAt: now(), ...recovered(state) });
+      await store.saveState(caseId, { followUpSentAt: now(), ...recovered });
     }
   }
 
