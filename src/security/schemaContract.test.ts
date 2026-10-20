@@ -23,6 +23,14 @@ const careMetricIntelMigration = readFileSync(
   new URL("../../supabase/migrations/20260907180410_register_caremetric_intel.sql", import.meta.url),
   "utf8",
 );
+const advisorsMigration = readFileSync(
+  new URL("../../supabase/migrations/20261020150000_advisors_application.sql", import.meta.url),
+  "utf8",
+);
+const knowledgeAuthoringMigration = readFileSync(
+  new URL("../../supabase/migrations/20261020150200_advisors_knowledge_authoring.sql", import.meta.url),
+  "utf8",
+);
 const sharedCourseAlignmentMigration = readFileSync(
   new URL("../../supabase/migrations/20260907182246_align_shared_course_placements.sql", import.meta.url),
   "utf8",
@@ -82,6 +90,9 @@ const privateTables = [
   "federated_principals",
   "federated_tenants",
   "context_nonces",
+  "communications",
+  "communication_messages",
+  "communication_rate_events",
 ];
 
 describe("Support Hub schema contract", () => {
@@ -372,6 +383,24 @@ describe("Support Hub schema contract", () => {
     expect(careMetricIntelMigration).toContain("'support.protect-patient-information'");
     expect(careMetricIntelMigration).not.toContain("GUIDE_SECTIONS");
     expect(careMetricIntelMigration).not.toContain("provider_id");
+  });
+
+  it("registers Healthcare Advisors with its published FAQ and no client or course data", () => {
+    expect(advisorsMigration).toContain("'advisors'");
+    expect(advisorsMigration).toContain("advisors@37afa7a884dc70f52d1134a7a27927ffee847373:site-content.mjs#faqs");
+    expect(advisorsMigration).toContain("'support.protect-patient-information'");
+    expect(advisorsMigration).not.toContain("item.kind = 'course'");
+    expect(advisorsMigration).not.toContain("'account.invite-user'");
+    for (const field of ["form_digest", "inquiries.sqlite", '"email":', '"phone":', '"notes":']) expect(advisorsMigration).not.toContain(field);
+    expect(schema).toContain(advisorsMigration.trim());
+  });
+
+  it("lets articles reach all seven applications without loosening other publication checks", () => {
+    expect(knowledgeAuthoringMigration).toContain("jsonb_array_length(p_manifest->'placements')>7");
+    expect(knowledgeAuthoringMigration).toContain("jsonb_array_length(p_body->'products') not between 1 and 7");
+    expect(knowledgeAuthoringMigration).toContain("coalesce(p_manifest#>>'{governance,phi_review}','')<>'passed'");
+    expect(knowledgeAuthoringMigration).not.toMatch(/grant |security invoker/i);
+    expect(schema).toContain(knowledgeAuthoringMigration.trim());
   });
 
   it("aligns the approved onboarding course across every registered product", () => {

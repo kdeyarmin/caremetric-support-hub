@@ -75,7 +75,7 @@ const video={...article,kind:'video',title:'Synthetic tutorial',markdown:'',scen
 try {
  assert.equal((await call('docstudio')).status,401);
  const ownerJar=await login('+12025550210');
- const ready=await call('docstudio');assert.equal(ready.status,200,JSON.stringify(ready.body));assert.equal(ready.body.products.length,6);assert.equal(ready.body.workerReady,false);
+ const ready=await call('docstudio');assert.equal(ready.status,200,JSON.stringify(ready.body));assert.equal(ready.body.products.length,PUBLICATION_PRODUCT_SLUGS.length);assert.equal(ready.body.workerReady,false);
  assert.equal((await call('docstudio/preview',{},{Origin:'https://evil.test'})).status,403);
  assert.equal((await call('docstudio/preview',{...article,sql:'select 1'})).status,400);
  for(const table of ['projects','revisions','approvals','intents','assets','workers','jobs','outputs','media_tokens','exports'])await assert.rejects(pool.query(`select * from private.docstudio_${table}`),/permission denied/);

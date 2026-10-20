@@ -7,6 +7,7 @@ import { pipeline } from 'node:stream/promises';
 import { cookie,readCookie,sessionCookie,challengeCookie,HttpError } from './sms-auth.mjs';
 import { parseMediaUploadHeader } from './learning-media.mjs';
 import { parsePackageUploadHeader } from './learning-packages.mjs';
+import { chatCookie } from './communications.mjs';
 
 export const securityHeaders = {
   'X-Content-Type-Options':'nosniff','X-Frame-Options':'SAMEORIGIN',
@@ -28,7 +29,10 @@ export function sameOrigin(req,origins) {
 }
 const mime={'.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.webp':'image/webp','.woff2':'font/woff2','.html':'text/html'};
 const aiCaseActions=new Set(['summary','draft-reply','triage-suggestion']);
-export function appServer({auth,gateway,delegations,publications,docstudio,aiCases,readiness,origins,dist=resolve('dist')}) {
+const staffCommunicationActions=new Set(['list','get','update','note','reply','sync']);
+// Railway's edge appends the visitor address last; rate limits use it only as a hashed bucket.
+const visitorAddress=req=>String(req.headers['x-forwarded-for']||'').split(',').at(-1).trim()||req.socket.remoteAddress||'unknown';
+export function appServer({auth,gateway,delegations,publications,docstudio,aiCases,readiness,communications,origins,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -88,6 +92,7 @@ export function appServer({auth,gateway,delegations,publications,docstudio,aiCas
             '/api/internal/admin/pennsync/authorize':'pennsync', '/api/internal/command/carebase/authorize':'carebase.command',
             '/api/internal/admin/go/authorize':'caremetric-go',
             '/api/internal/admin/intel/authorize':'intel',
+            '/api/internal/admin/advisors/authorize':'advisors',
             '/api/internal/learning/carebase/authorize':'carebase.learning',
           }[path];
           if(!audience) throw new HttpError(404,'Unavailable.');
@@ -96,8 +101,39 @@ export function appServer({auth,gateway,delegations,publications,docstudio,aiCas
           await jsonBody(req,2048);
           return json(await delegations.consume(authorization.slice(7),audience));
         }
+        // Provider webhooks: authenticated by their own signatures, never by browser state.
+        if(path.startsWith('/api/channels/')) {
+          if(req.method!=='POST' || req.headers.origin || req.headers.cookie || url.search) throw new HttpError(403,'Forbidden.');
+          if(!communications) throw new HttpError(503,'Communications are not configured.');
+          if(path==='/api/channels/sms/twilio') {
+            const twiml=await communications.smsWebhook(req);
+            res.statusCode=200; res.setHeader('Content-Type','text/xml'); return res.end(twiml);
+          }
+          if(path==='/api/channels/email/inbound') return json(await communications.emailWebhook(req));
+          throw new HttpError(404,'Unavailable.');
+        }
         if (!['GET','POST','HEAD'].includes(req.method)) throw new HttpError(405,'Method not allowed.');
         if(req.method==='POST' && !sameOrigin(req,origins)) throw new HttpError(403,'Open this action in CareMetric.');
+        if(path.startsWith('/api/chat/') && communications) {
+          if(url.search) throw new HttpError(400,'Chat query parameters are not supported.');
+          const chat=readCookie(req.headers.cookie,chatCookie);
+          if(path==='/api/chat/start' && req.method==='POST') {
+            const started=await communications.startChat(await jsonBody(req,8192),visitorAddress(req));
+            return json({reference:started.reference},200,[cookie(chatCookie,started.token,2592000)]);
+          }
+          if(path==='/api/chat/availability' && req.method==='GET') return json(communications.availability());
+          if(path==='/api/chat/thread' && req.method==='GET') return json(await communications.readChat(chat));
+          if(path==='/api/chat/message' && req.method==='POST') return json(await communications.postChat(chat,await jsonBody(req,8192),visitorAddress(req)));
+          if(path==='/api/chat/end' && req.method==='POST') { await jsonBody(req,2048); return json({ended:true},200,[cookie(chatCookie,'',0)]); }
+          throw new HttpError(404,'Chat resource unavailable.');
+        }
+        if(path.startsWith('/api/communications/') && communications) {
+          if(url.search) throw new HttpError(400,'Communication query parameters are not supported.');
+          const action=path.slice('/api/communications/'.length);
+          if(action==='channels' && req.method==='GET') return json(await communications.channels(session));
+          if(staffCommunicationActions.has(action) && req.method==='POST') return json(await communications[action](session,await jsonBody(req,16384)));
+          throw new HttpError(404,'Communication resource unavailable.');
+        }
         if(path.startsWith('/api/course-media')) {
           if(url.search)throw new HttpError(400,'Media query parameters are not supported.');
           const controller=new AbortController();

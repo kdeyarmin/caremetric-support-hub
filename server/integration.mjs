@@ -22,8 +22,23 @@ const provider={send:async phone=>{sent.push(phone);return randomUUID();},verify
 const auth=smsAuth({pool,provider}), api=gateway(pool);
 const nativeCalls=[];
 const intelCalls=[];
+const advisorsCalls=[];
 const nativeCommandId=randomUUID();
 const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(url,options)=>{
+  if(url==='https://caremetricadvisors.com/api/hub/admin-read') {
+    const operation=JSON.parse(options.body);
+    assert.equal(options.redirect,'error');
+    assert.equal(Object.keys(options.headers).length,2);
+    assert.equal(options.headers.Authorization,undefined);
+    const ticket=options.headers['X-CareMetric-Hub-Authorization'].slice(7);
+    const authority=await caps.consume(ticket,'advisors');
+    assert.equal(authority.user_id,editor);assert.equal(authority.method,'sms');
+    assert.deepEqual(authority.operation,operation);await assert.rejects(caps.consume(ticket,'advisors'));
+    advisorsCalls.push(operation);
+    const data=operation.operation==='overview'?{organizationCount:null,activeUserCount:null,inquiryCount:3,openInquiryCount:1}
+      :{items:[{id:'CM-0A1B2C3D4E5F',createdAt:new Date().toISOString(),name:'Synthetic requester',email:'requester@test.invalid',organization:'Synthetic agency',phone:'',sector:'Home Health',service:'strategy',message:'Synthetic consultation request.',status:'new',notes:'',form_digest:'private'}],total:1,limit:operation.limit,offset:operation.offset};
+    return Response.json({contractVersion:1,product:'advisors',operation:operation.operation,generatedAt:new Date().toISOString(),data});
+  }
   if(url==='https://caremetricintel.com/functions/centralAdminRead') {
     const operation=JSON.parse(options.body);
     assert.equal(options.redirect,'error');
@@ -116,6 +131,17 @@ try {
   await assert.rejects(caps.consume(intelCapability,'intel'));
   const intelOverview=await caps.admin(editorToken,{product:'intel',operation:'overview'});
   assert.deepEqual(intelOverview.data,{organizationCount:null,activeUserCount:null,registeredUserCount:2});assert.equal(intelCalls.length,1);
+  const advisorsCapability='cmh_'+'v'.repeat(43);
+  await admin.query("insert into private.app_delegations(token_hash,session_id,audience,payload,expires_at) values($1,$2,'advisors','{\"operation\":\"overview\"}',now()+interval '30 seconds')",[digest(advisorsCapability),session]);
+  for(const audience of ['intel','breathe','carebase','media'])await assert.rejects(caps.consume(advisorsCapability,audience));
+  assert.deepEqual(await caps.consume(advisorsCapability,'advisors'),{user_id:editor,role:'platform_admin',method:'sms',operation:{operation:'overview'}});
+  await assert.rejects(caps.consume(advisorsCapability,'advisors'));
+  assert.deepEqual((await caps.admin(editorToken,{product:'advisors',operation:'overview'})).data,{organizationCount:null,activeUserCount:null,inquiryCount:3,openInquiryCount:1});
+  const advisorsPage=await caps.admin(editorToken,{product:'advisors',operation:'inquiries.list',limit:20,offset:0});
+  assert.equal(advisorsPage.data.items[0].form_digest,undefined,'unreviewed Advisors fields never reach the browser');
+  assert.equal(advisorsPage.data.items[0].phone,null);
+  await assert.rejects(caps.admin(editorToken,{product:'advisors',operation:'users.list'}),'Advisors exposes only its consultation inbox');
+  assert.equal(advisorsCalls.length,2);
   assert.equal((await call('admin/command',{product:'carebase',...commandOperation},{Origin:'https://evil.test'})).status,403);
   assert.equal(nativeCalls.length,0);
   const httpPreview=await call('admin/command',{product:'carebase',...commandOperation});

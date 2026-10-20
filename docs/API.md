@@ -155,3 +155,45 @@ panel at `/admin/go-live-readiness` (backend feature `support.go-live-readiness.
   required; the caller must be the platform administrator
   (`get_support_actor_context` role `platform_admin`), everyone else gets 403.
   The endpoint reports only: it applies nothing and changes nothing.
+
+## Unified communications (server endpoints)
+
+Implemented in `server/communications.mjs` (backend feature
+`support.communications.v1`). See [UNIFIED_COMMUNICATIONS.md](UNIFIED_COMMUNICATIONS.md).
+
+Provider webhooks (POST only; any `Origin`, `Cookie` or query string is refused):
+
+- `POST /api/channels/sms/twilio` — Twilio form post, verified with
+  `X-Twilio-Signature` against `HUB_PUBLIC_ORIGIN`. Returns empty TwiML.
+- `POST /api/channels/email/inbound` — SendGrid Inbound Parse (parsed mode,
+  signed webhook, at most 10 MiB), verified with
+  `X-Twilio-Email-Event-Webhook-Signature` and `-Timestamp` (ten-minute window).
+
+Website chat (same-origin; the visitor's token is the `__Host-caremetric_chat` cookie):
+
+- `GET /api/chat/availability` — `{ chat: boolean }`.
+- `POST /api/chat/start` — `{ name, email, product?, message, noPhi: true }` →
+  `{ reference }` and the chat cookie. 503 unless `HUB_CHAT_ENABLED=true`.
+- `GET /api/chat/thread` — the visitor's messages and staff replies; never notes.
+- `POST /api/chat/message` — `{ message }`.
+- `POST /api/chat/end` — `{}`; clears the cookie.
+
+Staff (same-origin, SMS session, `case.read`/`case.write` for the application):
+
+- `POST /api/communications/list` — `{ status?, channel?, productId?, search?, offset, limit ≤ 50 }`.
+- `POST /api/communications/get` — `{ id }` → conversation with messages and notes.
+- `POST /api/communications/update` — `{ id, expectedUpdatedAt, status?, inquiryType?, changeProduct?, productId?, changeAssignment?, assignedTo? }`; a stale `expectedUpdatedAt` returns 409.
+- `POST /api/communications/note` — `{ id, body, requestKey }`.
+- `POST /api/communications/reply` — `{ id, body, requestKey }` → `{ delivery, deliveryChannel, replay }`.
+  A `requestKey` replays only the exact text it first carried; reusing it with different text returns 400.
+- `POST /api/communications/sync` — `{ source: "breathe.phone" | "advisors.web", offset? }` →
+  `{ source, read, created, skipped, nextOffset }`; platform administrator only. Reads up to 200 messages from
+  `offset` (default 0); `nextOffset` is where the next batch starts, or `null` when none remain.
+- `GET /api/communications/channels` — which channels are configured, as booleans only.
+
+## Healthcare Advisors administration reads
+
+`POST /api/admin/read` with `product: "advisors"` accepts only `capabilities`,
+`overview` and `inquiries.list` (`{ search?, limit ≤ 50, offset }`). See
+[ADVISORS_ADMIN_CONNECTION.md](ADVISORS_ADMIN_CONNECTION.md) (backend feature
+`platform.admin.advisors.v1`).

@@ -52,7 +52,7 @@ async function authorize(db,audience,payload) {
     const range=payload.operation==='download'?publicationRange(payload.range,asset.byteLength):null;
     return {...asset,range:range?.header ?? null};
   }
-  if (['carebase','breathe','caremetric-emr','pennsync','caremetric-go','intel'].includes(audience)) {
+  if (['carebase','breathe','caremetric-emr','pennsync','caremetric-go','intel','advisors'].includes(audience)) {
     if(payload?.operation==='learning.source.snapshot') {
       if(audience!=='pennsync')throw new HttpError(403,'Unsupported learning source.');
       pennsyncNativeOperation.parse(payload);
@@ -135,7 +135,7 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
       let request;
       try { request=parsePortfolioRequest(input); } catch { throw new HttpError(400,'Invalid administrator request.'); }
       const entry=adminRegistry[request.product];
-      if (!entry.endpoint || !['carebase','breathe','caremetric-emr','pennsync','caremetric-go','intel'].includes(request.product)) throw new HttpError(503,'This application has not connected its administrator session.','unconfigured');
+      if (!entry.endpoint || !['carebase','breathe','caremetric-emr','pennsync','caremetric-go','intel','advisors'].includes(request.product)) throw new HttpError(503,'This application has not connected its administrator session.','unconfigured');
       const operation=request.operation;
       const capability=await issue(sessionToken,request.product,operation);
       const result=await callNativeAdmin(fetchImpl,entry.endpoint,entry.authorizationHeader ?? 'Authorization',capability,operation,value=>parsePortfolioEnvelope(value,request));

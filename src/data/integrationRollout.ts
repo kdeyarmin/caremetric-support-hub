@@ -44,6 +44,13 @@ export const integrationRolloutBySlug: Record<string, IntegrationRollout> = {
     state: "source_ready",
     stateLabel: "Source ready",
   },
+  // A plain website: it links to /help?product=advisors directly and never embeds the Help SDK.
+  advisors: {
+    previousHelp: "Website FAQ and consultation form",
+    integration: "Hub knowledge base and consultation inbox bridge",
+    state: "source_ready",
+    stateLabel: "Source ready",
+  },
 };
 
 export const defaultIntegrationRollout: IntegrationRollout = {

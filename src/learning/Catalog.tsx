@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import type { ContentItem, Product } from "../domain";
+import { resolveProductSlug, type ContentItem, type Product } from "../domain";
 import { config } from "../lib/config";
 import { courseLaunchUrl } from "../security/courseLaunch";
 import { learningApi } from "./api";
@@ -13,7 +13,7 @@ export function LearningCatalog({ products, legacyContent }: { products: Product
   const [category, setCategory] = useState("");
   useEffect(() => { let active = true; void learningApi.catalog().then(rows => { if (active) setCentral(rows); }, caught => { if (active) setError(caught instanceof Error ? caught.message : "Course catalog could not load."); }); return () => { active = false; }; }, []);
   const requested = params.get("product")?.toLowerCase();
-  const product = products.find(p => p.slug === (requested === "pennfit" ? "breathe" : requested));
+  const product = products.find(p => p.slug === resolveProductSlug(requested));
   const courses = useMemo(() => [
     ...central.map(c => ({ id: c.itemId, title: c.title, summary: c.summary ?? "", category: c.category ?? "", duration: c.durationMinutes, productIds: c.productIds, central: true, legacyUrl: null as string | null })),
     ...legacyContent.filter(c => c.kind === "course" && c.status === "published" && !central.some(row => row.itemId === c.id)).map(c => ({ id: c.id, title: c.title, summary: c.summary, category: c.contentCategory ?? "", duration: c.courseDurationMinutes, productIds: c.productIds, central: c.sourceSystem === "support_hub" && courseLaunchUrl(c, undefined) !== null, legacyUrl: courseLaunchUrl(c, config.pennTrainBaseUrl) })),

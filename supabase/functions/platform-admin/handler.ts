@@ -7,8 +7,8 @@ export function createAdminProxy(options: AdminProxyOptions) {
   return createAdminGateway(options, {
     authorizationRpc: "authorize_platform_admin",
     parse: parsePortfolioRequest,
-    // Intel's hosted bridge accepts only first-party one-use SMS capabilities.
-    target: parsed => ({ endpoint: parsed.product === "intel" ? null : adminRegistry[parsed.product].endpoint, authorizationHeader: adminRegistry[parsed.product].authorizationHeader, body: parsed.operation }),
+    // Intel's and Advisors' bridges accept only first-party one-use SMS capabilities.
+    target: parsed => ({ endpoint: parsed.product === "intel" || parsed.product === "advisors" ? null : adminRegistry[parsed.product].endpoint, authorizationHeader: adminRegistry[parsed.product].authorizationHeader, body: parsed.operation }),
     project: parsePortfolioEnvelope,
   });
 }

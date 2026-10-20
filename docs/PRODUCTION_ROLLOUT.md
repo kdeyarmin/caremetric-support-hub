@@ -150,7 +150,15 @@ not evidence that the current authenticated backend has been deployed.
    after the chosen transport accounts, credentials, webhook signatures, and
    retention rules are approved. Email/telephone providers may transport
    messages, but must never become the case system of record.
-7. Enable Supabase Auth leaked-password protection before inviting external
+7. Before enabling text, email or chat in the Communications inbox, complete
+   the channel steps in [UNIFIED_COMMUNICATIONS.md](UNIFIED_COMMUNICATIONS.md):
+   decide whether texts to (877) 521-2890 are answered by Breathe or the Hub
+   (its Twilio webhook currently points at Breathe), configure SendGrid Inbound
+   Parse with signed webhooks, set a retention period, and set
+   `HUB_CHAT_ENABLED=true` only when chat should go live.
+8. Deploy the Advisors bridge and set `HUB_ADMIN_USER_IDS` on the Advisors
+   service, as described in [ADVISORS_ADMIN_CONNECTION.md](ADVISORS_ADMIN_CONNECTION.md).
+9. Enable Supabase Auth leaked-password protection before inviting external
    users. The post-migration security advisor reports this single warning; the
    RLS-without-policy notices on `private` tables are informational and
    intentional because client roles have no access to that schema.

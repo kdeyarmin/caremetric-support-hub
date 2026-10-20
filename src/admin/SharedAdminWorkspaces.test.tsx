@@ -11,7 +11,7 @@ describe('shared owner workspaces',()=>{
     const navigation=screen.getByRole('navigation',{name:'Shared owner workspaces'});
     const expected=[
       ['Phone numbers and routing','/phone-numbers'],['AI phone inbox','/phone'],
-      ['Support cases','/cases'],['Knowledge articles','/knowledge'],
+      ['Communications: phone, text, email, chat','/communications'],['Support cases','/cases'],['Knowledge articles','/knowledge'],
       ['Courses, creation and distribution','/library'],['Create learning videos','/docstudio'],
       ['Review material imports','/imports/docstudio'],['Products and support contacts','/products'],
       ['Connections and customer onboarding','/integration'],['Account security','/security'],

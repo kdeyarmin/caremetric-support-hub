@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Activity, BookOpen, Building2, CreditCard, Flag, GraduationCap, History, Layers3, RefreshCw, Users } from "lucide-react";
+import { Activity, BookOpen, Building2, CreditCard, Flag, GraduationCap, History, Inbox, Layers3, RefreshCw, Users } from "lucide-react";
 import { adminRegistry } from "../../supabase/functions/_shared/adminRegistry";
 import { portfolioProducts } from "../../supabase/functions/_shared/portfolioProtocol";
 import type { AdminDirectoryUser, AdminOrganization, AdminSubscription, PortfolioCapabilities, PortfolioOperationName, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
@@ -25,19 +25,22 @@ import { BillingPortal } from "./BillingPortal";
 import { BillingCheckout } from "./BillingCheckout";
 import { TrainingWorkspace } from "./TrainingWorkspace";
 import { SharedAdminWorkspaces } from "./SharedAdminWorkspaces";
+import { ConsultationRequests } from "./ConsultationRequests";
+import { applicationLabel, overviewMetrics } from "./overviewMetrics";
 import type { BillingPortalTarget } from "./BillingPortal";
 import "./admin.css";
 
-type View = "overview" | "organizations" | "users" | "billing" | "training" | "courses" | "jobs" | "releases" | "audit" | "inventory";
+type View = "overview" | "organizations" | "users" | "billing" | "inquiries" | "training" | "courses" | "jobs" | "releases" | "audit" | "inventory";
 const viewOperations: Record<Exclude<View, "inventory">, PortfolioOperationName[]> = {
   overview: ["overview"], organizations: ["organizations.list"], users: ["users.list"],
-  billing: ["billing.overview", "billing.subscriptions.list"], courses: ["courses.list", "courses.get"],
+  billing: ["billing.overview", "billing.subscriptions.list"], inquiries: ["inquiries.list"], courses: ["courses.list", "courses.get"],
   training: ["training.v1", "organizations.list"],
   jobs: ["operations.jobs.list"], releases: ["operations.releases.list"], audit: ["operations.audit.list"],
 };
 const views = [
   { id: "overview", name: "Overview", icon: Layers3 }, { id: "organizations", name: "Organizations", icon: Building2 },
   { id: "users", name: "Users", icon: Users }, { id: "billing", name: "Billing", icon: CreditCard },
+  { id: "inquiries", name: "Consultation requests", icon: Inbox },
   { id: "training", name: "Facility training", icon: GraduationCap },
   { id: "courses", name: "CareBase courses", icon: BookOpen },
   { id: "jobs", name: "Jobs", icon: Activity }, { id: "releases", name: "Releases", icon: Flag }, { id: "audit", name: "Audit", icon: History },
@@ -51,7 +54,7 @@ export function AdminWorkspace({ client, actorId, portfolio = portfolioClient }:
   return <div className="admin-workspace">
     <div className="page-heading"><div><span className="eyebrow">CareMetric Admin</span><h1>Your apps, in one workspace</h1><p>Manage connected applications, facility training, courses, billing and support with your Hub sign-in.</p></div><button className="button button-secondary" type="button" onClick={() => setRefresh(value => value + 1)}><RefreshCw size={15} aria-hidden="true" />Refresh connection</button></div>
     <SharedAdminWorkspaces />
-    <section className="panel portfolio-selector" aria-label="Application selection"><label><span>Application</span><select value={product} onChange={event => setParams({ product: event.target.value })}>{portfolioProducts.map(id => <option key={id} value={id}>{adminRegistry[id].name}{adminRegistry[id].endpoint ? "" : " — connection pending"}</option>)}</select></label><p>Application controls below appear when the connected service supports them.</p></section>
+    <section className="panel portfolio-selector" aria-label="Application selection"><label><span>Application</span><select value={product} onChange={event => setParams({ product: event.target.value })}>{portfolioProducts.map(id => <option key={id} value={id}>{applicationLabel(id)}{adminRegistry[id].endpoint ? "" : " — connection pending"}</option>)}</select></label><p>Application controls below appear when the connected service supports them.</p></section>
     <ApplicationWorkspace key={`${product}:${refresh}`} product={product} actorId={actorId} client={client} portfolio={portfolio} />
   </div>;
 }
@@ -73,7 +76,7 @@ function ApplicationWorkspace({ product, client, portfolio, actorId }: { product
   const allowCommands = product === "carebase" && capabilities?.operations.includes("commands.preview") === true && capabilities.operations.includes("commands.apply");
   const allowPortal = product === "carebase" && capabilities?.operations.includes("billing.commands.preview") === true && capabilities.operations.includes("billing.commands.apply");
   return <>
-    <div className="admin-section-title"><div><h2>{app.name}</h2><p>{app.userScope}</p></div><span className={`admin-status ${state.status === "ready" ? "admin-status-connected" : "admin-status-muted"}`}>{state.status === "ready" ? "Connection verified" : state.status === "loading" ? "Checking connection" : "Unavailable"}</span></div>
+    <div className="admin-section-title"><div><h2>{applicationLabel(product)}</h2><p>{app.userScope}</p></div><span className={`admin-status ${state.status === "ready" ? "admin-status-connected" : "admin-status-muted"}`}>{state.status === "ready" ? "Connection verified" : state.status === "loading" ? "Checking connection" : "Unavailable"}</span></div>
     <nav className="admin-view-nav" aria-label="Administration workspace views">{views.filter(item => supports(item.id)).map(({ id, name, icon: Icon }) => <button key={id} type="button" className={view === id ? "active" : ""} aria-pressed={view === id} onClick={() => setView(id)}><Icon size={16} aria-hidden="true" />{name}</button>)}<button type="button" className={view === "inventory" ? "active" : ""} aria-pressed={view === "inventory"} onClick={() => setView("inventory")}><Layers3 size={16} aria-hidden="true" />All app functions <span>{adminFunctions.length}</span></button></nav>
     {view === "inventory" ? <><AdminFunctionCatalog product={product} capabilities={capabilities} onNavigate={setView}/><details><summary>View the original audit of {adminInventory.length} source surfaces</summary><AdminInventory /></details></> : <>
       {state.status === "loading" && <Loading label={`Checking ${app.name} capabilities`} app={app.name} />}
@@ -84,6 +87,7 @@ function ApplicationWorkspace({ product, client, portfolio, actorId }: { product
         {view === "organizations" && <Directory product={product} portfolio={portfolio} kind="organizations" allowCommands={allowCommands} allowPortal={allowPortal} allowCheckout={supportsCheckout(product, capabilities)} />}
         {view === "users" && <Directory product={product} portfolio={portfolio} kind="users" allowCommands={allowCommands} allowPortal={false} allowCheckout={false} />}
         {view === "billing" && <Billing product={product} portfolio={portfolio} retry={retry} allowCommands={allowCommands} capabilities={capabilities} />}
+        {view === "inquiries" && product === "advisors" && <ConsultationRequests />}
         {view === "courses" && product === "carebase" && <CourseCatalog client={client} />}
         {view === "training" && product === "carebase" && (actorId ? <TrainingWorkspace actorId={actorId} portfolio={portfolio} /> : <p role="alert">Your administrator identity could not be verified. Refresh your Hub session before managing facility training.</p>)}
         {(view === "jobs"||view === "releases") && product === "carebase" && <OperationalWorkspace view={view} canConfigure={capabilities.operations.includes('operations.config.v1')}/>}
@@ -99,13 +103,7 @@ function Overview({ product, portfolio, capabilities, retry }: { product: Portfo
   const app = adminRegistry[product];
   if (state.status === "loading") return <Loading label="Loading application overview" app={app.name} />;
   if (state.status === "error") return <ReadFailure error={state.error} retry={retry} />;
-  const metrics = [
-    { label: "Organizations", value: state.data.organizationCount },
-    { label: product === "breathe" || product === "caremetric-emr" || product === "caremetric-go" ? "Active staff accounts" : "Active application profiles", value: state.data.activeUserCount },
-    ...(state.data.registeredUserCount === undefined ? [] : [{ label: product === "intel" ? "Registered application profiles" : "Registered staff profiles", value: state.data.registeredUserCount }]),
-    ...(state.data.globalCourseCount === undefined ? [] : [{ label: "Shared courses · all publication states", value: state.data.globalCourseCount }]),
-    ...(state.data.subscriptionCount === undefined ? [] : [{ label: "Recorded subscriptions", value: state.data.subscriptionCount }]),
-  ];
+  const metrics = overviewMetrics(product, state.data);
   return <section><div className="metric-grid admin-metric-grid">{metrics.map(metric => <div className="metric-card metric-teal" key={metric.label}><div><p>{metric.label}</p><strong>{metric.value === null ? "Not reported" : formatNumber.format(metric.value)}</strong><small>{app.name}</small></div></div>)}</div><p className="admin-read-time">Last loaded {timeLabel(state.receivedAt)}. {product === "caremetric-go" ? "These records are shared with CareMetric EMR and must not be counted as additional organizations or subscriptions." : `These totals include only ${app.name}.`}</p><details className="portfolio-connection-details"><summary>Connection details</summary><p>Supported reads: {capabilities.operations.join(", ")}</p><p>Deployed source: {capabilities.sourceRevision ?? "Not reported"}</p></details></section>;
 }
 

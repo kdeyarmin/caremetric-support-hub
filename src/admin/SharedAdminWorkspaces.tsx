@@ -4,6 +4,7 @@ import {Link} from 'react-router-dom';
 const workspaces = [
   {to:'/phone-numbers',label:'Phone numbers and routing'},
   {to:'/phone',label:'AI phone inbox'},
+  {to:'/communications',label:'Communications: phone, text, email, chat'},
   {to:'/cases',label:'Support cases'},
   {to:'/knowledge',label:'Knowledge articles'},
   {to:'/library',label:'Courses, creation and distribution'},

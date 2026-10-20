@@ -23,6 +23,7 @@ import {
   Mail,
   Menu,
   MessageSquareText,
+  MessagesSquare,
   MonitorPlay,
   Phone,
   Plus,
@@ -44,6 +45,7 @@ import {
   categoryLabels,
   isSupportStaff,
   priorityLabels,
+  resolveProductSlug,
   statusLabels,
   type ActorContext,
   type CaseCategory,
@@ -61,6 +63,10 @@ import { LearningCatalog } from "./learning/Catalog";
 import { AiCaseTools } from "./support/AiCaseTools";
 import { AiResolutionPrompt } from "./support/AiResolutionPrompt";
 import { PhoneInbox } from "./support/PhoneInbox";
+import { Communications } from "./support/Communications";
+import { ChatPanel } from "./support/ChatPanel";
+import { KnowledgeCoverage } from "./support/KnowledgeCoverage";
+import { demoCommunicationsClient } from "./support/demoCommunications";
 import { PhoneRegistry } from "./support/PhoneRegistry";
 import { AdminWorkspace } from "./admin/AdminWorkspace";
 import { PortfolioRollup } from "./admin/PortfolioRollup";
@@ -114,6 +120,7 @@ const navItems = [
   { to: "/admin/portfolio", label: "Portfolio rollup", icon: Activity },
   { to: "/admin/go-live-readiness", label: "AI go-live readiness", icon: Rocket },
   { to: "/overview", label: "Overview", icon: LayoutDashboard },
+  { to: "/communications", label: "Communications", icon: MessagesSquare },
   { to: "/cases", label: "Support cases", icon: Inbox },
   { to: "/knowledge", label: "Knowledge", icon: BookOpen },
   { to: "/docstudio", label: "DocStudio", icon: FileText },
@@ -262,7 +269,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
         </div>
         <nav className="primary-nav" aria-label="Main navigation">
           <p className="nav-label">Workspace</p>
-          {navItems.filter(item => (!["/admin", "/admin/portfolio", "/admin/go-live-readiness", "/phone", "/phone-numbers"].includes(item.to) || data.actor.role === "platform_admin") && (item.to !== "/docstudio" || staff)).map(({ to, label, icon: Icon }) => (
+          {navItems.filter(item => (!["/admin", "/admin/portfolio", "/admin/go-live-readiness", "/phone", "/phone-numbers"].includes(item.to) || data.actor.role === "platform_admin") && (!["/docstudio", "/communications"].includes(item.to) || staff)).map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} onClick={() => setMobileOpen(false)}>
               <Icon size={18} /> <span>{label}</span>
             </NavLink>
@@ -311,6 +318,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/admin" element={data.actor.role === "platform_admin" ? <AdminWorkspace key={data.actor.id} actorId={data.actor.id} client={adminClient} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/portfolio" element={data.actor.role === "platform_admin" ? <PortfolioRollup key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/go-live-readiness" element={data.actor.role === "platform_admin" ? <GoLiveReadiness key={data.actor.id} /> : <Navigate to="/overview" replace />} />
+            <Route path="/communications" element={staff ? <Communications key={data.actor.id} products={data.products} actor={data.actor} {...(config.demoMode ? { client: demoCommunicationsClient({ breathe: data.products.find(product => product.slug === "breathe")?.id, advisors: data.products.find(product => product.slug === "advisors")?.id, pennsync: data.products.find(product => product.slug === "pennsync")?.id }) } : {})} /> : <Navigate to="/overview" replace />} />
             <Route path="/overview" element={<OverviewPage data={data} />} />
             <Route path="/cases" element={<CasesPage key={`${data.actor.id}:${data.actor.role}`} data={data} />} />
             <Route path="/knowledge" element={<KnowledgePage data={data} />} />
@@ -781,6 +789,7 @@ function KnowledgePage({ data }: { data: HubData }) {
   return (
     <>
       <PageHeading eyebrow="Canonical knowledge" title="One answer, wherever customers need it." description="Publish shared core guidance once, then add small product or industry overlays only when the workflow truly differs." />
+      {isSupportStaff(data.actor.role) && <KnowledgeCoverage products={data.products} content={data.content} selectedProductId={productId} onSelect={setProductId} canWrite />}
       <section className="library-toolbar panel">
         <label className="search-box large"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search articles, workflows, and questions" /></label>
         <select value={productId} onChange={(event) => setProductId(event.target.value)}><option value="all">All products</option>{data.products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select>
@@ -827,7 +836,7 @@ function ContextualHelpPage({ data }: { data: HubData }) {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const requestedSlug = (params.get("product") ?? "").trim().toLowerCase();
-  const productSlug = requestedSlug === "pennfit" ? "breathe" : requestedSlug;
+  const productSlug = resolveProductSlug(requestedSlug);
   const product = data.products.find((item) => item.slug === productSlug);
   const route = (params.get("route") ?? "").split(/[?#]/, 1)[0];
   const feature = (params.get("feature") ?? "").slice(0, 96);
@@ -905,6 +914,7 @@ function ContextualHelpPage({ data }: { data: HubData }) {
           })}
           {!verifiedContacts.length && <p className="contact-unavailable">Owner-approved contact values are temporarily unavailable. Use the support case form and do not include patient information.</p>}
           <div className="privacy-note"><ShieldCheck size={16} /> Do not send patient names, identifiers, clinical notes, or screenshots containing patient information.</div>
+          <ChatPanel productSlug={product?.slug} productName={product?.name} available={!config.demoMode} />
         </aside>
       </div>
     </>

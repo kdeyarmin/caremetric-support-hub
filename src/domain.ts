@@ -195,6 +195,16 @@ export const priorityLabels: Record<CasePriority, string> = {
   urgent: "Urgent",
 };
 
+/** Source-repository and short names the owner uses, mapped to registered product slugs. */
+const productSlugAliases: Record<string, string> = {
+  pennfit: "breathe", penntrain: "carebase", "caremetric-pennsync": "pennsync", intel: "caremetric-intel",
+  emr: "caremetric-emr", go: "caremetric-go", "healthcare-advisors": "advisors",
+};
+export function resolveProductSlug(value: string | null | undefined): string {
+  const slug = (value ?? "").trim().toLowerCase();
+  return productSlugAliases[slug] ?? slug;
+}
+
 export function isSupportStaff(role: ActorRole): boolean {
   return role === "support_agent" || role === "support_manager" || role === "platform_admin";
 }

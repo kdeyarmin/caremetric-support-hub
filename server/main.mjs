@@ -13,6 +13,7 @@ import { aiAssistance } from './ai-assistance.mjs';
 import { aiCaseAssistance } from './ai-case-assistance.mjs';
 import { aiAutomation, sqlAutomationStore } from './ai-automation.mjs';
 import { goLiveReadiness } from './go-live-readiness.mjs';
+import { communications, defaultPublicOrigin, sendgridMail, twilioMessaging } from './communications.mjs';
 
 const storageUrl='https://xgauehtwksmnoqhgqegm.supabase.co';
 const pool=new pg.Pool(databaseConfig());
@@ -28,8 +29,13 @@ const ai=aiAssistance({apiKey:process.env.ANTHROPIC_API_KEY});
 const aiCases=aiCaseAssistance({ai,rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken),rows:(name,sessionToken)=>api.rows(name,sessionToken)});
 const followUpHours=Number(process.env.HUB_AI_FOLLOW_UP_DELAY_HOURS);
 const automation=aiAutomation({ai,store:sqlAutomationStore(pool),enabled:process.env.HUB_AI_AUTOMATION_ENABLED==='true',draftTier:process.env.HUB_AI_DRAFT_TIER==='quality'?'quality':'draft',followUpDelayMs:(Number.isFinite(followUpHours)&&followUpHours>0?followUpHours:24)*60*60*1000});
+const messaging=communications({pool,delegations:capabilities,publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin,
+  twilioAuthToken:process.env.HUB_TWILIO_AUTH_TOKEN,sendgridInboundPublicKey:process.env.HUB_SENDGRID_INBOUND_PUBLIC_KEY,
+  sms:twilioMessaging({accountSid:process.env.HUB_TWILIO_ACCOUNT_SID,authToken:process.env.HUB_TWILIO_AUTH_TOKEN,messagingServiceSid:process.env.HUB_TWILIO_MESSAGING_SERVICE_SID,from:process.env.HUB_TWILIO_FROM_NUMBER}),
+  email:sendgridMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai'}),
+  chatEnabled:process.env.HUB_CHAT_ENABLED==='true'});
 const readiness=goLiveReadiness({pool,rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
-const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:capabilities,publications:publicationService,docstudio:studio,aiCases,readiness,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
+const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:capabilities,publications:publicationService,docstudio:studio,aiCases,readiness,communications:messaging,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
 let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;

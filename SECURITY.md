@@ -16,7 +16,9 @@
 
 ## Current release restrictions
 
-Version `0.1.0` may serve the public non-PHI Help and Learning pages. It must not accept production customer cases or PHI. It intentionally omits attachments, inbound email, telephone recording, AI case processing, search indexing of case bodies, and federated login exchange.
+Version `0.1.0` may serve the public non-PHI Help and Learning pages. It must not accept production customer cases or PHI. It intentionally omits attachments, telephone recording, search indexing of case bodies, and federated login exchange.
+
+[Unified communications](docs/UNIFIED_COMMUNICATIONS.md) can receive inbound text messages, email and website chat, but each stays off until its provider credentials or `HUB_CHAT_ENABLED` are set. Do not enable them for production traffic until the controls above are operationally verified. Inbound bodies are stored as `possible_phi` in private tables reachable only through reviewed functions; webhooks require the provider's signature (Twilio HMAC, SendGrid ECDSA); attachments are never stored; and message text never enters logs or audit metadata.
 
 The production web client signs staff in with a registered mobile number and a six-digit SMS code, and provides safe sign-out ([details](docs/APP_SMS_SIGNIN.md)). Authenticator apps (TOTP) are turned off in the Supabase project, so no authenticator factor can be enrolled or used. Migration `20260907202818_require_aal2_for_authenticated_support.sql` enforces a verified session below the UI for staff and for any customer with a verified second factor, redacts their tenant context before verification, and prevents dual-role staff from falling through customer membership policies; migration `20260911160622_app_sms_sessions.sql` lets the server-issued SMS session satisfy those checks, and legacy AAL2 sessions are still accepted for existing integrations. Number recovery is an operator action: verify the account holder through the established support process before changing a registered number.
 

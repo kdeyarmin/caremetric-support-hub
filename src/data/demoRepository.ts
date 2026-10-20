@@ -62,6 +62,14 @@ const products: Product[] = [
     status: "pilot",
     color: "#0891b2",
   },
+  {
+    id: "prod-advisors",
+    slug: "advisors",
+    name: "CareMetric Healthcare Advisors",
+    description: "Healthcare and senior-care advisory consultations, acquisition support, and staff education.",
+    status: "active",
+    color: "#07356F",
+  },
 ];
 
 const contacts: SupportContact[] = [
@@ -308,7 +316,7 @@ const content: ContentItem[] = [
     body: "Describe the workflow, product, page, expected behavior, and error wording. Do not include patient names, dates of birth, medical record numbers, diagnoses, screenshots with patient data, or attachments containing clinical information.",
     status: "published",
     accessLevel: "public",
-    productIds: ["prod-carebase", "prod-breathe", "prod-pennsync", "prod-emr", "prod-go", "prod-intel"],
+    productIds: ["prod-carebase", "prod-breathe", "prod-pennsync", "prod-emr", "prod-go", "prod-intel", "prod-advisors"],
     audience: ["all"],
     locale: "en-US",
     revision: 1,
@@ -330,6 +338,22 @@ const content: ContentItem[] = [
     revision: 5,
     sourceSystem: "support_hub",
     routePattern: "/admin/resupply/**",
+  },
+  {
+    id: "content-6",
+    contentKey: "advisors.faq.how-does-an-engagement-begin",
+    kind: "article",
+    title: "How does an engagement begin?",
+    summary: "It starts with a conversation about the decision, problem, or opportunity you are working through.",
+    body: "It starts with a conversation about the decision, problem, or opportunity you are working through. CareMetric then outlines a proposed scope, approach, deliverables, and timeline so expectations are clear before any work begins.",
+    status: "published",
+    accessLevel: "public",
+    productIds: ["prod-advisors"],
+    audience: ["all"],
+    locale: "en-US",
+    revision: 1,
+    sourceSystem: "legacy",
+    routePattern: null,
   },
 ];
 
