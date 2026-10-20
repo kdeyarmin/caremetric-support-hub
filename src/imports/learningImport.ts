@@ -8,6 +8,26 @@ const sourceUnit = z.object({ id: z.uuid(), type: z.enum(["text", "quiz", "video
 export const sourceCoursesSchema = z.array(z.object({ id: z.uuid(), versionId: z.uuid(), versionNumber: z.number().int(), title: z.string(), description: z.string().nullable(), category: z.string().nullable(), durationMinutes: z.number().int().positive(), units: z.array(sourceUnit).min(1) }));
 export interface LearningImport { sourceCourseId: string; sourceVersionId: string; document: DraftDocument; pendingVideoIds: string[] }
 
+// Mirrors the product-slug allowlist in private.validate_learning_document
+// (supabase/schema.sql), which is the authority on course placements: the
+// server rejects any imported document placed on a product outside this set,
+// including products that are registered but not course-placement eligible.
+// Change this list only together with that validator.
+export const COURSE_PLACEMENT_PRODUCT_SLUGS: readonly string[] = [
+  "carebase",
+  "pennsync",
+  "breathe",
+  "caremetric-emr",
+  "caremetric-go",
+  "caremetric-intel",
+];
+
+export function coursePlacementProductIds(products: ReadonlyArray<{ id: string; slug: string; status: string }>): string[] {
+  return products
+    .filter(product => product.status !== "retired" && COURSE_PLACEMENT_PRODUCT_SLUGS.includes(product.slug))
+    .map(product => product.id);
+}
+
 export function prepareLearningImport(snapshot: unknown, productIds: string[], approvedMedia: Readonly<Record<string, string>> = {}): LearningImport[] {
   return sourceCoursesSchema.parse(snapshot).map(course => {
     const pendingVideoIds: string[] = [];
