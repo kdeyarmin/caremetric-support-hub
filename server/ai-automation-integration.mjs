@@ -20,6 +20,8 @@ await admin.query("alter role hub_app_server login password 'ephemeral-test-only
 const appUrl=new URL(databaseUrl);appUrl.username='hub_app_server';appUrl.password='ephemeral-test-only';
 const pool=new pg.Pool({connectionString:appUrl.href});const api=gateway(pool);
 const contractMigration=await readFile(new URL('../supabase/migrations/20261020120100_ai_automation_server_contract.sql',import.meta.url),'utf8');
+const failurePolicyContractMigration=await readFile(new URL('../supabase/migrations/20261020160100_ai_automation_failure_policy_contract.sql',import.meta.url),'utf8');
+const sweepSafetyMigration=await readFile(new URL('../supabase/migrations/20261020140000_ai_automation_sweep_safety.sql',import.meta.url),'utf8');
 
 const owner=randomUUID(),customer=randomUUID(),tenant=randomUUID();
 const ownerToken='automation-owner-'+randomUUID(),customerToken='automation-customer-'+randomUUID();
@@ -332,6 +334,21 @@ try {
       try {
         await client.query(sql);
         await assert.rejects(client.query(contractMigration),rejection=>rejection.code==='55000' && error.test(rejection.message));
+      } finally { await client.query('rollback'); }
+    }
+    // The failure policy's gate: its columns, the operations that read, write and
+    // honor them, and the same server-only boundary.
+    for(const [sql,error] of [
+      ['alter table hub.case_ai_automation drop column retry_at',/missing hub.case_ai_automation failure columns/],
+      ['alter function private.ai_automation_save_state(uuid,jsonb) rename to fixture_missing_save_state',/missing private.ai_automation_save_state/],
+      [sweepSafetyMigration,/the active batch does not wait out retry_at/],
+      ['grant execute on function private.ai_automation_work(uuid) to authenticated',/exposed beyond the Hub server/],
+      ['alter function private.ai_automation_save_state(uuid,jsonb) security invoker',/pinned security definer/],
+    ]) {
+      await client.query('begin');
+      try {
+        await client.query(sql);
+        await assert.rejects(client.query(failurePolicyContractMigration),rejection=>rejection.code==='55000' && error.test(rejection.message));
       } finally { await client.query('rollback'); }
     }
   } finally { client.release(); }

@@ -169,7 +169,8 @@ function latestCustomerMessage(work) {
  * explicitly enabled AND the AI provider is configured.
  *
  * A step that fails leaves its case where it was and is retried after a backoff
- * (consecutive_failures / retry_at, migration 20261020160000). A provider outage is
+ * (consecutive_failures / retry_at, backend feature
+ * support.ai-automation-failure-policy.v1). A provider outage is
  * retried for as long as it lasts; any other failure hands the case to staff once
  * maxConsecutiveFailures steps in a row have failed, so a case can never cost a
  * provider call every sweep while the customer gets neither a reply nor a human.
@@ -178,8 +179,8 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
   let running = false;
   const active = () => enabled === true && Boolean(ai?.configured);
 
-  // A step that went through ends a failure streak and its backoff. Sent only when
-  // there is a streak, so the loop runs unchanged on a backend without the columns.
+  // A step that went through ends a failure streak and its backoff (written only
+  // when there was one).
   const recovered = (state) => (state.consecutiveFailures > 0 ? { consecutiveFailures: 0, retryAt: null } : {});
 
   async function runAttempt(work) {

@@ -15,8 +15,8 @@
 --
 -- The loop (server/ai-automation.mjs) retries a provider outage for as long as it
 -- lasts and hands any other repeated failure to staff through the existing escalation
--- step. It sends the new fields only around a failure, so a server running against a
--- backend without this migration behaves exactly as before.
+-- step. The Hub server requires backend feature support.ai-automation-failure-policy.v1,
+-- which 20261020160100 declares once this migration is in place.
 --
 -- Signatures, security definer, the pinned search path and the hub_app_server-only
 -- grants are unchanged.

@@ -152,8 +152,7 @@ describe('AI auto-resolution loop', () => {
     await loop.tick();
     expect(ai.draftReply).toHaveBeenCalledTimes(maxAiAttempts);
     expect(aiMessages(entry)).toHaveLength(2);
-    // Without a failure the loop never sends the failure fields, so it runs the same
-    // against a backend that predates them.
+    // Without a failure the loop never writes the failure fields.
     expect(store.patches.some((patch) => 'consecutiveFailures' in patch || 'retryAt' in patch)).toBe(false);
   });
 

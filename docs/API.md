@@ -132,7 +132,9 @@ retried for as long as it lasts. Any other failure hands the case to staff on
 the third in a row through the normal escalation step (internal note,
 `in_progress`, high priority) without a further provider call, so a failing
 case never costs a provider call on every sweep. Any step that goes through
-clears the streak (`20261020160000`).
+clears the streak (backend feature `support.ai-automation-failure-policy.v1`,
+migrations `20261020160000` / `20261020160100`; the Hub server does not start
+without it).
 
 ## AI go-live readiness (server endpoint)
 
