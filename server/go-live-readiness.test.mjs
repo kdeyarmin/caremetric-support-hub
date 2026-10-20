@@ -1,23 +1,25 @@
 import { describe, expect, it, vi } from 'vitest';
-import { goLiveReadiness } from './go-live-readiness.mjs';
+import { automationServerOperations, goLiveReadiness } from './go-live-readiness.mjs';
 
-const fullContract = { api_version: 4, features: ['support.ai-assistance.v1', 'support.ai-automation.v1'] };
+const fullContract = { api_version: 4, features: ['support.ai-assistance.v1', 'support.ai-automation.v1', 'support.ai-automation-server.v1'] };
 const appliedEvidence = {
   automation_table: true,
   resolution_function: true,
   queue_ai_stage: true,
   author_role_ai_assistant: true,
-  backend_contract: fullContract,
+  automation_server_operations: true,
 };
 
 function harness({
   role = 'platform_admin',
   evidence = appliedEvidence,
+  contract = fullContract,
   env = { ANTHROPIC_API_KEY: 'sk-ant-fixture-value', HUB_AI_AUTOMATION_ENABLED: 'true' },
   targets = ['support-hub-web-production.up.railway.app'],
 } = {}) {
   const rpc = vi.fn(async (name) => {
     if (name === 'get_support_actor_context') return { role, id: 'admin-1' };
+    if (name === 'get_backend_contract') return contract;
     throw new Error(`Unexpected RPC ${name}`);
   });
   const pool = { query: vi.fn(async () => ({ rows: [evidence] })) };
@@ -37,6 +39,8 @@ describe('go-live readiness evaluation', () => {
         items: [
           { version: '20261015120000', name: 'AI case assistance', applied: true },
           { version: '20261015120100', name: 'AI case assistance contract', applied: true },
+          { version: '20261020120000', name: 'AI automation server boundary', applied: true },
+          { version: '20261020120100', name: 'AI automation server contract', applied: true },
         ],
       },
       anthropicKey: { present: true },
@@ -49,14 +53,38 @@ describe('go-live readiness evaluation', () => {
   });
 
   it('reports each migration separately from the database evidence', async () => {
-    const { handlers } = harness({
-      evidence: { ...appliedEvidence, backend_contract: { api_version: 4, features: [] } },
-    });
+    const { handlers } = harness({ contract: { api_version: 4, features: [] } });
     const report = await handlers.handle('token');
     expect(report.migrations.items).toEqual([
       { version: '20261015120000', name: 'AI case assistance', applied: true },
       { version: '20261015120100', name: 'AI case assistance contract', applied: false },
+      { version: '20261020120000', name: 'AI automation server boundary', applied: true },
+      { version: '20261020120100', name: 'AI automation server contract', applied: false },
     ]);
+    expect(report.migrations.complete).toBe(false);
+  });
+
+  it('reads the backend contract through the gateway, never with the server role directly', async () => {
+    const { handlers, rpc, pool } = harness();
+    await handlers.handle('token');
+    // hub.get_backend_contract() is executable by anon/authenticated only; the
+    // gateway runs public calls as anon, as the startup contract check does.
+    expect(rpc).toHaveBeenCalledWith('get_backend_contract', {});
+    expect(pool.query.mock.calls[0][0]).not.toContain('get_backend_contract');
+    expect(pool.query.mock.calls[0][1]).toEqual([automationServerOperations]);
+  });
+
+  it('reports the automation server boundary separately from its contract', async () => {
+    const { handlers } = harness({
+      evidence: { ...appliedEvidence, automation_server_operations: false },
+      contract: { api_version: 4, features: ['support.ai-assistance.v1', 'support.ai-automation.v1'] },
+    });
+    const report = await handlers.handle('token');
+    expect(report.migrations.items.slice(2)).toEqual([
+      { version: '20261020120000', name: 'AI automation server boundary', applied: false },
+      { version: '20261020120100', name: 'AI automation server contract', applied: false },
+    ]);
+    expect(report.migrations.items.slice(0, 2).every((item) => item.applied)).toBe(true);
     expect(report.migrations.complete).toBe(false);
   });
 

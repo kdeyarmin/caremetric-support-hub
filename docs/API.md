@@ -106,15 +106,28 @@ customer-side only); free-text replies are classified by the sweep as a fallback
 Loop state lives in `hub.case_ai_automation`; the queue view exposes `ai_stage` /
 `ai_attempts` (backend features `support.ai-assistance.v1`, `support.ai-automation.v1`).
 
+The sweep runs on the Hub server pool, which connects as `hub_app_server` (no
+`BYPASSRLS`, no privilege on case, content, or audit tables). Each store step is a
+narrow `private.ai_automation_*` security definer function executable by
+`hub_app_server` only, refusing any other session user: find eligible cases,
+claim, list active cases, read the case thread, read customer-safe knowledge,
+post the AI reply, post the internal escalation note, escalate, resolve, and save
+loop state. They act only on cases under automation at the stage each step belongs
+to, write only as the AI assistant identity, keep finished stages final, and never
+let the attempt count decrease (backend feature `support.ai-automation-server.v1`,
+migrations `20261020120000` / `20261020120100`).
+
 ## AI go-live readiness (server endpoint)
 
 Implemented in the app server (`server/go-live-readiness.mjs`) for the admin
 panel at `/admin/go-live-readiness` (backend feature `support.go-live-readiness.v1`).
 
 - `POST /api/admin/go-live-readiness` — `{}` → the four go-live prerequisites,
-  each evaluated during the request, never stored: the two AI migrations
+  each evaluated during the request, never stored: the AI migrations
   (`20261015120000` proven by the objects it creates in the connected
-  database, `20261015120100` by the backend contract features it registers),
+  database, `20261020120000` by its automation operations being executable by
+  the Hub server role, and `20261015120100` / `20261020120100` by the backend
+  contract features they register, read through the gateway as `anon`),
   Anthropic key presence on this service (a boolean only — the key's value,
   length, and prefix are never returned or logged), the
   `HUB_AI_AUTOMATION_ENABLED === "true"` toggle state, and a live DNS lookup
