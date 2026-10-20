@@ -15,6 +15,16 @@ describe("learning input contracts", () => {
     expect(draftSchema.safeParse(draft).success).toBe(true);
     expect(draftSchema.safeParse({ ...draft, itemId: "not-a-uuid" }).success).toBe(false);
   });
+  it("accepts a draft document placed on all seven registered products", () => {
+    const unit = newUnit("text");
+    if (unit.type !== "text") throw new Error("Fixture type");
+    unit.body = "Lesson body";
+    // The registry grew to seven products after the schema capped placements
+    // at six, which made the import panel reject every imported course.
+    const productIds = Array.from({ length: 7 }, () => crypto.randomUUID());
+    const document = { ...newDocument(productIds), title: "Imported course", units: [unit] };
+    expect(draftDocumentSchema.safeParse(document).success).toBe(true);
+  });
   it("does not propagate author-only fields into learner state", () => {
     const unit = newUnit("quiz");
     if (unit.type !== "quiz") throw new Error("Fixture type");
