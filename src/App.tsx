@@ -23,6 +23,7 @@ import {
   Mail,
   Menu,
   MessageSquareText,
+  MessagesSquare,
   MonitorPlay,
   Phone,
   Plus,
@@ -61,6 +62,9 @@ import { LearningCatalog } from "./learning/Catalog";
 import { AiCaseTools } from "./support/AiCaseTools";
 import { AiResolutionPrompt } from "./support/AiResolutionPrompt";
 import { PhoneInbox } from "./support/PhoneInbox";
+import { Communications } from "./support/Communications";
+import { ChatPanel } from "./support/ChatPanel";
+import { demoCommunicationsClient } from "./support/demoCommunications";
 import { PhoneRegistry } from "./support/PhoneRegistry";
 import { AdminWorkspace } from "./admin/AdminWorkspace";
 import { PortfolioRollup } from "./admin/PortfolioRollup";
@@ -114,6 +118,7 @@ const navItems = [
   { to: "/admin/portfolio", label: "Portfolio rollup", icon: Activity },
   { to: "/admin/go-live-readiness", label: "AI go-live readiness", icon: Rocket },
   { to: "/overview", label: "Overview", icon: LayoutDashboard },
+  { to: "/communications", label: "Communications", icon: MessagesSquare },
   { to: "/cases", label: "Support cases", icon: Inbox },
   { to: "/knowledge", label: "Knowledge", icon: BookOpen },
   { to: "/docstudio", label: "DocStudio", icon: FileText },
@@ -262,7 +267,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
         </div>
         <nav className="primary-nav" aria-label="Main navigation">
           <p className="nav-label">Workspace</p>
-          {navItems.filter(item => (!["/admin", "/admin/portfolio", "/admin/go-live-readiness", "/phone", "/phone-numbers"].includes(item.to) || data.actor.role === "platform_admin") && (item.to !== "/docstudio" || staff)).map(({ to, label, icon: Icon }) => (
+          {navItems.filter(item => (!["/admin", "/admin/portfolio", "/admin/go-live-readiness", "/phone", "/phone-numbers"].includes(item.to) || data.actor.role === "platform_admin") && (!["/docstudio", "/communications"].includes(item.to) || staff)).map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} onClick={() => setMobileOpen(false)}>
               <Icon size={18} /> <span>{label}</span>
             </NavLink>
@@ -311,6 +316,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/admin" element={data.actor.role === "platform_admin" ? <AdminWorkspace key={data.actor.id} actorId={data.actor.id} client={adminClient} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/portfolio" element={data.actor.role === "platform_admin" ? <PortfolioRollup key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/go-live-readiness" element={data.actor.role === "platform_admin" ? <GoLiveReadiness key={data.actor.id} /> : <Navigate to="/overview" replace />} />
+            <Route path="/communications" element={staff ? <Communications key={data.actor.id} products={data.products} actor={data.actor} {...(config.demoMode ? { client: demoCommunicationsClient({ breathe: data.products.find(product => product.slug === "breathe")?.id, advisors: data.products.find(product => product.slug === "advisors")?.id, pennsync: data.products.find(product => product.slug === "pennsync")?.id }) } : {})} /> : <Navigate to="/overview" replace />} />
             <Route path="/overview" element={<OverviewPage data={data} />} />
             <Route path="/cases" element={<CasesPage key={`${data.actor.id}:${data.actor.role}`} data={data} />} />
             <Route path="/knowledge" element={<KnowledgePage data={data} />} />
@@ -905,6 +911,7 @@ function ContextualHelpPage({ data }: { data: HubData }) {
           })}
           {!verifiedContacts.length && <p className="contact-unavailable">Owner-approved contact values are temporarily unavailable. Use the support case form and do not include patient information.</p>}
           <div className="privacy-note"><ShieldCheck size={16} /> Do not send patient names, identifiers, clinical notes, or screenshots containing patient information.</div>
+          <ChatPanel productSlug={product?.slug} productName={product?.name} available={!config.demoMode} />
         </aside>
       </div>
     </>

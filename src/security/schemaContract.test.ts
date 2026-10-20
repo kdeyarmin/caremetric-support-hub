@@ -86,6 +86,9 @@ const privateTables = [
   "federated_principals",
   "federated_tenants",
   "context_nonces",
+  "communications",
+  "communication_messages",
+  "communication_rate_events",
 ];
 
 describe("Support Hub schema contract", () => {

@@ -7,6 +7,7 @@ export const REQUIRED_BACKEND_FEATURES = [
   "billing.portal.v1", "support.customer-onboarding.v1", "learning.structure.v1", "support.customer-registration.v1", "billing.checkout.v1", "learning.course-creation.v1", "learning.credit-policy.v1", "knowledge.docstudio.v1", "learning.distribution.v1","learning.pennsync-source.v1", "learning.media.v1", "learning.sequence.v1",
   "support.ai-assistance.v1", "support.ai-automation.v1", "support.go-live-readiness.v1",
   "platform.admin.advisors.v1",
+  "support.communications.v1",
 ] as const;
 
 /** Additive features share the API version; the integer alone never proves readiness. */

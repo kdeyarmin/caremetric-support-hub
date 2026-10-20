@@ -21,8 +21,9 @@ try{
   for(const change of [
     "update hub.products set status='retired' where slug='advisors'",
     "update hub.products set support_enabled=false where slug='advisors'",
+    // NOT VALID keeps existing Advisors rows; the gate must still refuse the narrower constraint.
     `alter table private.app_delegations drop constraint app_delegations_audience_check;
-     alter table private.app_delegations add constraint app_delegations_audience_check check(audience in ('carebase','breathe','caremetric-emr','pennsync','caremetric-go','intel','carebase.command','carebase.learning','publication','media'))`,
+     alter table private.app_delegations add constraint app_delegations_audience_check check(audience in ('carebase','breathe','caremetric-emr','pennsync','caremetric-go','intel','carebase.command','carebase.learning','publication','media')) not valid`,
     "alter function hub.authorize_app_admin() rename to fixture_missing_admin_authority",
   ]){
     await client.query('begin');
