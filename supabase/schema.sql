@@ -9081,7 +9081,678 @@ end;
 $$;
 revoke all on function hub.publish_learning_course(uuid,integer,boolean) from public,anon,authenticated;
 grant execute on function hub.publish_learning_course(uuid,integer,boolean) to authenticated;
+-- Appended migration: 20261020120000_ai_automation_server_boundary.sql
+-- The AI auto-resolution loop through the Hub server role.
+--
+-- The loop (server/ai-automation.mjs) runs on the Hub server pool, which connects as
+-- hub_app_server: noinherit, nobypassrls, and granted only the SMS and delegation
+-- tables. It holds no privilege on support cases, messages, notes, the automation
+-- state, published content or the audit log, so every raw query the loop issued
+-- failed with "permission denied" and the sweep only logged that it would retry.
+--
+-- The server role's table privileges stay exactly as they are. Instead the loop gets
+-- one narrow security definer operation per store step, executable by hub_app_server
+-- only and refusing every other session user:
+--   * eligible_cases / claim apply the eligibility rules themselves (recent portal
+--     case, still open, no staff reply yet, never automated before);
+--   * every later step acts only on a case that is already under automation, at the
+--     stage where that step belongs in the loop;
+--   * every write is authored by the AI assistant identity, never a human staffer;
+--   * automation state keeps its rules here: finished stages are final and the
+--     attempt count never decreases (the two-attempt cap is the table constraint).
+--
+-- Automation stays OFF after this migration: the server loop only runs when
+-- HUB_AI_AUTOMATION_ENABLED=true and ANTHROPIC_API_KEY is configured.
 
+create function private.ai_automation_case_eligible(p_case_id uuid)
+returns boolean
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from hub.support_cases support_case
+    where support_case.id = p_case_id
+      and support_case.source = 'portal'
+      and support_case.status in ('open', 'in_progress')
+      and support_case.created_at > now() - interval '7 days'
+      and not exists (select 1 from hub.case_ai_automation automation where automation.case_id = support_case.id)
+      and not exists (
+        select 1 from hub.case_messages message
+        where message.case_id = support_case.id
+          and message.author_role in ('support_agent', 'support_manager', 'platform_admin')
+      )
+  );
+$$;
+
+-- Locks and returns the automation state of a case, or raises when the case is not
+-- under automation or not at one of the stages where the calling step belongs.
+create function private.ai_automation_state_for_step(p_case_id uuid, p_stages text[])
+returns hub.case_ai_automation
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_state hub.case_ai_automation%rowtype;
+begin
+  select * into v_state
+  from hub.case_ai_automation
+  where case_id = p_case_id
+  for update;
+  if not found then
+    raise exception 'This support case is not under AI automation.' using errcode = 'P0001';
+  end if;
+  if not (v_state.stage = any (p_stages)) then
+    raise exception 'AI automation on this case is not at a stage that allows this step.' using errcode = 'P0001';
+  end if;
+  return v_state;
+end;
+$$;
+
+create function private.ai_automation_eligible_cases()
+returns setof uuid
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if session_user <> 'hub_app_server' then
+    raise exception 'Application server required.' using errcode = '42501';
+  end if;
+  return query
+  select support_case.id
+  from hub.support_cases support_case
+  where support_case.source = 'portal'
+    and support_case.status in ('open', 'in_progress')
+    and support_case.created_at > now() - interval '7 days'
+    and private.ai_automation_case_eligible(support_case.id)
+  order by support_case.created_at asc, support_case.id asc
+  limit 10;
+end;
+$$;
+
+create function private.ai_automation_claim(p_case_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_claimed integer;
+begin
+  if session_user <> 'hub_app_server' then
+    raise exception 'Application server required.' using errcode = '42501';
+  end if;
+  if not private.ai_automation_case_eligible(p_case_id) then
+    return false;
+  end if;
+  insert into hub.case_ai_automation (case_id)
+  values (p_case_id)
+  on conflict (case_id) do nothing;
+  get diagnostics v_claimed = row_count;
+  return v_claimed > 0;
+end;
+$$;
+
+create function private.ai_automation_active_cases()
+returns setof uuid
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if session_user <> 'hub_app_server' then
+    raise exception 'Application server required.' using errcode = '42501';
+  end if;
+  return query
+  select automation.case_id
+  from hub.case_ai_automation automation
+  where automation.stage in ('attempt_due', 'awaiting_response', 'escalate_due')
+  order by automation.updated_at asc, automation.case_id asc
+  limit 25;
+end;
+$$;
+
+-- The case, its loop state and its full thread (customer messages and internal
+-- notes), for a case under automation only. Null for any other case.
+create function private.ai_automation_work(p_case_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_state hub.case_ai_automation%rowtype;
+  v_case hub.support_cases%rowtype;
+begin
+  if session_user <> 'hub_app_server' then
+    raise exception 'Application server required.' using errcode = '42501';
+  end if;
+  select * into v_state from hub.case_ai_automation where case_id = p_case_id;
+  if not found then
+    return null;
+  end if;
+  select * into v_case from hub.support_cases where id = p_case_id;
+  if not found then
+    return null;
+  end if;
+  return jsonb_build_object(
+    'caseId', v_case.id,
+    'subject', v_case.subject,
+    'productId', v_case.product_id,
+    'status', v_case.status,
+    'priority', v_case.priority,
+    'state', jsonb_build_object(
+      'stage', v_state.stage,
+      'attempts', v_state.attempts,
+      'lastSeenCustomerMessageId', v_state.last_seen_customer_message_id,
+      'lastCustomerResponse', v_state.last_customer_response,
+      'followUpDueAt', v_state.follow_up_due_at,
+      'followUpSentAt', v_state.follow_up_sent_at
+    ),
+    'messages', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', message.id,
+        'authorId', message.author_id,
+        'authorName', message.author_display_name,
+        'authorRole', message.author_role,
+        'body', message.body,
+        'createdAt', message.created_at
+      ) order by message.created_at, message.id)
+      from hub.case_messages message
+      where message.case_id = p_case_id
+    ), '[]'::jsonb),
+    'notes', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', note.id,
+        'authorName', note.author_display_name,
+        'authorRole', note.author_role,
+        'body', note.body,
+        'createdAt', note.created_at
+      ) order by note.created_at, note.id)
+      from private.case_notes note
+      where note.case_id = p_case_id
+    ), '[]'::jsonb)
+  );
+end;
+$$;
+
+-- The list_published_content publication filters for the case's product, restricted
+-- to customer-safe articles: automated replies must never draw on staff-only content,
+-- and there is no caller session to scope access with here.
+create function private.ai_automation_knowledge(p_case_id uuid)
+returns table (title text, summary text, body text)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if session_user <> 'hub_app_server' then
+    raise exception 'Application server required.' using errcode = '42501';
+  end if;
+  return query
+  select revision.title, revision.summary, revision.body_markdown
+  from hub.case_ai_automation automation
+  join hub.support_cases support_case on support_case.id = automation.case_id
+  join hub.content_publications publication on publication.product_id = support_case.product_id
+  join hub.content_items item on item.id = publication.item_id
+  join hub.content_revisions revision on revision.id = publication.revision_id and revision.item_id = publication.item_id
+  join hub.products product on product.id = publication.product_id
+  where automation.case_id = p_case_id
+    and item.status = 'published'
+    and revision.review_state = 'approved'
+    and product.status <> 'retired' and product.support_enabled
+    and (revision.product_overlay_id is null or revision.product_overlay_id = publication.product_id)
+    and publication.published_at <= now()
+    and (publication.expires_at is null or publication.expires_at > now())
+    and item.access_level in ('public', 'customer')
+    and item.kind = 'article'
+  order by publication.published_at desc
+  limit 12;
+end;
+$$;
+
+-- An automated attempt or follow-up nudge, posted to the customer as the AI
+-- assistant. Never on a resolved or closed case.
+create function private.ai_automation_post_message(p_case_id uuid, p_body text)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_status hub.case_status;
+  v_message_id uuid;
+begin
+  if session_user <> 'hub_app_server' then
+    raise exception 'Application server required.' using errcode = '42501';
+  end if;
+  if p_body is null or char_length(btrim(p_body)) = 0 or char_length(p_body) > 5000 then
+    raise exception 'An automated reply of 1 to 5000 characters is required.' using errcode = '22023';
+  end if;
+  perform private.ai_automation_state_for_step(p_case_id, array['attempt_due', 'awaiting_response']);
+  select status into v_status from hub.support_cases where id = p_case_id for update;
+  if v_status in ('resolved', 'closed') then
+    raise exception 'Automated replies are never posted on a resolved or closed case.' using errcode = 'P0001';
+  end if;
+
+  insert into hub.case_messages (case_id, author_id, author_display_name, author_role, body)
+  values (p_case_id, 'a1a00000-a1a0-4000-8000-000000000001', 'CareMetric AI Assistant', 'ai_assistant', p_body)
+  returning id into v_message_id;
+
+  update hub.support_cases
+  set last_message_at = now(),
+      status = case when status in ('open', 'in_progress') then 'waiting_on_customer'::hub.case_status else status end
+  where id = p_case_id;
+
+  return v_message_id;
+end;
+$$;
+
+-- The internal escalation note for staff, posted as the AI assistant.
+create function private.ai_automation_post_note(p_case_id uuid, p_body text)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_note_id uuid;
+begin
+  if session_user <> 'hub_app_server' then
+    raise exception 'Application server required.' using errcode = '42501';
+  end if;
+  if p_body is null or char_length(btrim(p_body)) = 0 or char_length(p_body) > 5000 then
+    raise exception 'An escalation note of 1 to 5000 characters is required.' using errcode = '22023';
+  end if;
+  perform private.ai_automation_state_for_step(p_case_id, array['attempt_due', 'escalate_due']);
+
+  insert into private.case_notes (case_id, author_id, author_display_name, author_role, body)
+  values (p_case_id, 'a1a00000-a1a0-4000-8000-000000000001', 'CareMetric AI Assistant', 'ai_assistant', p_body)
+  returning id into v_note_id;
+
+  return v_note_id;
+end;
+$$;
+
+-- Hands the case to staff: back in progress at high priority, audited as the AI
+-- assistant. A resolved or closed case is left as it is.
+create function private.ai_automation_escalate(p_case_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_case hub.support_cases%rowtype;
+begin
+  if session_user <> 'hub_app_server' then
+    raise exception 'Application server required.' using errcode = '42501';
+  end if;
+  perform private.ai_automation_state_for_step(p_case_id, array['attempt_due', 'escalate_due']);
+
+  update hub.support_cases
+  set status = 'in_progress'::hub.case_status,
+      priority = 'high'::hub.case_priority,
+      resolved_at = null
+  where id = p_case_id
+    and status not in ('resolved', 'closed')
+  returning * into v_case;
+  if not found then
+    return;
+  end if;
+
+  insert into private.audit_events (actor_id, action, entity_type, entity_id, tenant_id, product_id, case_id, changed_columns)
+  values ('a1a00000-a1a0-4000-8000-000000000001', 'case.updated', 'support_case', v_case.id,
+          v_case.tenant_id, v_case.product_id, v_case.id, array['status', 'priority']);
+end;
+$$;
+
+-- Resolves the case after the customer's reply was classified as fixed, audited as
+-- the AI assistant. A resolved or closed case is left as it is.
+create function private.ai_automation_resolve(p_case_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_case hub.support_cases%rowtype;
+begin
+  if session_user <> 'hub_app_server' then
+    raise exception 'Application server required.' using errcode = '42501';
+  end if;
+  perform private.ai_automation_state_for_step(p_case_id, array['awaiting_response']);
+
+  update hub.support_cases
+  set status = 'resolved'::hub.case_status,
+      resolved_at = coalesce(resolved_at, now())
+  where id = p_case_id
+    and status not in ('resolved', 'closed')
+  returning * into v_case;
+  if not found then
+    return;
+  end if;
+
+  insert into private.audit_events (actor_id, action, entity_type, entity_id, tenant_id, product_id, case_id, changed_columns)
+  values ('a1a00000-a1a0-4000-8000-000000000001', 'case.ai_auto_resolved', 'support_case', v_case.id,
+          v_case.tenant_id, v_case.product_id, v_case.id, array['status']);
+end;
+$$;
+
+-- Records a loop transition: the classification outcome, an attempt, a follow-up, an
+-- escalation or a halt. Only the named loop fields can change, a finished stage is
+-- final, the attempt count never decreases, and referenced messages must belong to
+-- this case.
+create function private.ai_automation_save_state(p_case_id uuid, p_patch jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_state hub.case_ai_automation%rowtype;
+  v_next hub.case_ai_automation%rowtype;
+  v_field text;
+begin
+  if session_user <> 'hub_app_server' then
+    raise exception 'Application server required.' using errcode = '42501';
+  end if;
+  if p_patch is null or jsonb_typeof(p_patch) <> 'object' then
+    raise exception 'An automation state change is required.' using errcode = '22023';
+  end if;
+  for v_field in select jsonb_object_keys(p_patch) loop
+    if v_field <> all (array[
+      'stage', 'attempts', 'lastAttemptAt', 'lastAiMessageId', 'lastSeenCustomerMessageId',
+      'lastCustomerResponse', 'followUpDueAt', 'followUpSentAt', 'respondedAt', 'responseSource',
+      'escalatedAt', 'haltReason'
+    ]) then
+      raise exception 'Unsupported automation state field.' using errcode = '22023';
+    end if;
+  end loop;
+
+  v_state := private.ai_automation_state_for_step(p_case_id, array['attempt_due', 'awaiting_response', 'escalate_due']);
+  v_next := v_state;
+  if p_patch ? 'stage' then v_next.stage := p_patch ->> 'stage'; end if;
+  if p_patch ? 'attempts' then v_next.attempts := (p_patch ->> 'attempts')::integer; end if;
+  if p_patch ? 'lastAttemptAt' then v_next.last_attempt_at := (p_patch ->> 'lastAttemptAt')::timestamptz; end if;
+  if p_patch ? 'lastAiMessageId' then v_next.last_ai_message_id := (p_patch ->> 'lastAiMessageId')::uuid; end if;
+  if p_patch ? 'lastSeenCustomerMessageId' then v_next.last_seen_customer_message_id := (p_patch ->> 'lastSeenCustomerMessageId')::uuid; end if;
+  if p_patch ? 'lastCustomerResponse' then v_next.last_customer_response := p_patch ->> 'lastCustomerResponse'; end if;
+  if p_patch ? 'followUpDueAt' then v_next.follow_up_due_at := (p_patch ->> 'followUpDueAt')::timestamptz; end if;
+  if p_patch ? 'followUpSentAt' then v_next.follow_up_sent_at := (p_patch ->> 'followUpSentAt')::timestamptz; end if;
+  if p_patch ? 'respondedAt' then v_next.responded_at := (p_patch ->> 'respondedAt')::timestamptz; end if;
+  if p_patch ? 'responseSource' then v_next.response_source := p_patch ->> 'responseSource'; end if;
+  if p_patch ? 'escalatedAt' then v_next.escalated_at := (p_patch ->> 'escalatedAt')::timestamptz; end if;
+  if p_patch ? 'haltReason' then v_next.halt_reason := p_patch ->> 'haltReason'; end if;
+
+  if v_next.attempts is null or v_next.attempts < v_state.attempts then
+    raise exception 'Automated attempts never decrease.' using errcode = '22023';
+  end if;
+  if v_next.last_ai_message_id is distinct from v_state.last_ai_message_id
+     and v_next.last_ai_message_id is not null
+     and not exists (
+       select 1 from hub.case_messages message
+       where message.id = v_next.last_ai_message_id
+         and message.case_id = p_case_id
+         and message.author_role = 'ai_assistant'
+     ) then
+    raise exception 'The automated reply must belong to this case.' using errcode = '22023';
+  end if;
+  if v_next.last_seen_customer_message_id is distinct from v_state.last_seen_customer_message_id
+     and v_next.last_seen_customer_message_id is not null
+     and not exists (
+       select 1 from hub.case_messages message
+       where message.id = v_next.last_seen_customer_message_id
+         and message.case_id = p_case_id
+     ) then
+    raise exception 'The customer message must belong to this case.' using errcode = '22023';
+  end if;
+
+  update hub.case_ai_automation
+  set stage = v_next.stage,
+      attempts = v_next.attempts,
+      last_attempt_at = v_next.last_attempt_at,
+      last_ai_message_id = v_next.last_ai_message_id,
+      last_seen_customer_message_id = v_next.last_seen_customer_message_id,
+      last_customer_response = v_next.last_customer_response,
+      follow_up_due_at = v_next.follow_up_due_at,
+      follow_up_sent_at = v_next.follow_up_sent_at,
+      responded_at = v_next.responded_at,
+      response_source = v_next.response_source,
+      escalated_at = v_next.escalated_at,
+      halt_reason = v_next.halt_reason
+  where case_id = p_case_id;
+end;
+$$;
+
+revoke all on function
+  private.ai_automation_case_eligible(uuid),
+  private.ai_automation_state_for_step(uuid, text[]),
+  private.ai_automation_eligible_cases(),
+  private.ai_automation_claim(uuid),
+  private.ai_automation_active_cases(),
+  private.ai_automation_work(uuid),
+  private.ai_automation_knowledge(uuid),
+  private.ai_automation_post_message(uuid, text),
+  private.ai_automation_post_note(uuid, text),
+  private.ai_automation_escalate(uuid),
+  private.ai_automation_resolve(uuid),
+  private.ai_automation_save_state(uuid, jsonb)
+from public, anon, authenticated, service_role, hub_app_server;
+
+grant execute on function
+  private.ai_automation_eligible_cases(),
+  private.ai_automation_claim(uuid),
+  private.ai_automation_active_cases(),
+  private.ai_automation_work(uuid),
+  private.ai_automation_knowledge(uuid),
+  private.ai_automation_post_message(uuid, text),
+  private.ai_automation_post_note(uuid, text),
+  private.ai_automation_escalate(uuid),
+  private.ai_automation_resolve(uuid),
+  private.ai_automation_save_state(uuid, jsonb)
+to hub_app_server;
+-- Appended migration: 20261020120100_ai_automation_server_contract.sql
+-- Additive deployment gate for the AI auto-resolution loop running through the Hub
+-- server role: every store step is a private.ai_automation_* operation that only
+-- hub_app_server may execute, and the server role still holds no direct privilege on
+-- the case, content or audit tables. A Hub server that runs the loop through these
+-- operations must not deploy against a backend that predates them, where the sweep
+-- would fail on its first query.
+do $$
+declare
+  contract jsonb := hub.get_backend_contract();
+  signature text;
+  role_name text;
+  relation text;
+begin
+  if (contract @> '{"api_version":4,"features":["support.ai-automation.v1","support.go-live-readiness.v1"]}'::jsonb) is not true then
+    raise exception 'Apply the AI go-live readiness contract first' using errcode='55000';
+  end if;
+  foreach signature in array array[
+    'private.ai_automation_eligible_cases()', 'private.ai_automation_claim(uuid)',
+    'private.ai_automation_active_cases()', 'private.ai_automation_work(uuid)',
+    'private.ai_automation_knowledge(uuid)', 'private.ai_automation_post_message(uuid,text)',
+    'private.ai_automation_post_note(uuid,text)', 'private.ai_automation_escalate(uuid)',
+    'private.ai_automation_resolve(uuid)', 'private.ai_automation_save_state(uuid,jsonb)'
+  ] loop
+    if to_regprocedure(signature) is null or not has_function_privilege('hub_app_server', signature, 'execute') then
+      raise exception 'Apply the AI automation server boundary first: missing %', signature using errcode='55000';
+    end if;
+    if not exists (
+      select 1 from pg_proc p
+      where p.oid = to_regprocedure(signature) and p.prosecdef and p.proconfig @> array['search_path=""']
+    ) then
+      raise exception 'AI automation server operation % must be a pinned security definer', signature using errcode='55000';
+    end if;
+    foreach role_name in array array['anon', 'authenticated', 'service_role'] loop
+      if has_function_privilege(role_name, signature, 'execute') then
+        raise exception 'AI automation server operation % is exposed beyond the Hub server', signature using errcode='55000';
+      end if;
+    end loop;
+  end loop;
+  foreach signature in array array['private.ai_automation_case_eligible(uuid)', 'private.ai_automation_state_for_step(uuid,text[])'] loop
+    if to_regprocedure(signature) is null then
+      raise exception 'Apply the AI automation server boundary first: missing %', signature using errcode='55000';
+    end if;
+    foreach role_name in array array['anon', 'authenticated', 'service_role', 'hub_app_server'] loop
+      if has_function_privilege(role_name, signature, 'execute') then
+        raise exception 'AI automation helper % must stay internal', signature using errcode='55000';
+      end if;
+    end loop;
+  end loop;
+  foreach relation in array array[
+    'hub.support_cases', 'hub.case_messages', 'private.case_notes', 'hub.case_ai_automation',
+    'private.audit_events', 'hub.content_publications', 'hub.content_items', 'hub.content_revisions'
+  ] loop
+    if has_table_privilege('hub_app_server', relation, 'select,insert,update,delete,truncate')
+       or has_any_column_privilege('hub_app_server', relation, 'select,insert,update') then
+      raise exception 'The Hub server role must not hold direct privileges on %', relation using errcode='55000';
+    end if;
+  end loop;
+  if not (contract->'features' @> '["support.ai-automation-server.v1"]'::jsonb) then
+    contract:=jsonb_set(contract,'{features}',(contract->'features')||'["support.ai-automation-server.v1"]'::jsonb);
+  end if;
+  execute format('create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='''' as %L','select '||quote_literal(contract::text)||'::jsonb');
+end $$;
+revoke all on function hub.get_backend_contract() from public;
+grant execute on function hub.get_backend_contract() to anon,authenticated;
+-- Appended migration: 20261020140000_ai_automation_sweep_safety.sql
+-- Sweep safety for the AI auto-resolution loop's server-role operations.
+--
+-- * The active batch returns only cases with something to do. Before, it returned the
+--   25 least recently updated automation rows; a case waiting on a customer who never
+--   answers (follow-up already sent) never changes its row, so 25 of them would hold
+--   that batch forever and later replies would never be classified or escalated.
+-- * Posting a reply consumes the step it belongs to in the same transaction. An
+--   attempt moves the case from attempt_due to awaiting_response and counts the
+--   attempt; a follow-up nudge must be due and is marked sent. A second Hub process
+--   sweeping concurrently (deploy overlap), or a retry after a crash between posting
+--   and saving state, can no longer post the same attempt or nudge twice, so the
+--   two-attempt cap holds for customer-facing replies too.
+-- * Posting locks the case FOR NO KEY UPDATE rather than FOR UPDATE, so it cannot
+--   deadlock with a customer's concurrent resolution answer.
+--
+-- Signatures, security definer, the pinned search path and the hub_app_server-only
+-- grants are unchanged.
+
+create or replace function private.ai_automation_active_cases()
+returns setof uuid
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if session_user <> 'hub_app_server' then
+    raise exception 'Application server required.' using errcode = '42501';
+  end if;
+  return query
+  select automation.case_id
+  from hub.case_ai_automation automation
+  join hub.support_cases support_case on support_case.id = automation.case_id
+  where automation.stage in ('attempt_due', 'escalate_due')
+     or (automation.stage = 'awaiting_response' and (
+       -- Halts: the case was closed, or staff took it over.
+       support_case.status in ('resolved', 'closed')
+       or exists (
+         select 1 from hub.case_messages message
+         where message.case_id = automation.case_id
+           and message.author_role in ('support_agent', 'support_manager', 'platform_admin')
+       )
+       -- A customer reply the loop has not classified yet.
+       or (
+         select message.id from hub.case_messages message
+         where message.case_id = automation.case_id
+           and message.author_role in ('customer', 'tenant_admin')
+         order by message.created_at desc, message.id desc
+         limit 1
+       ) is distinct from automation.last_seen_customer_message_id
+       -- A follow-up nudge that is due and not yet sent.
+       or (automation.follow_up_due_at <= now() and automation.follow_up_sent_at is null)
+     ))
+  order by automation.updated_at asc, automation.case_id asc
+  limit 25;
+end;
+$$;
+
+create or replace function private.ai_automation_post_message(p_case_id uuid, p_body text)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_state hub.case_ai_automation%rowtype;
+  v_status hub.case_status;
+  v_message_id uuid;
+begin
+  if session_user <> 'hub_app_server' then
+    raise exception 'Application server required.' using errcode = '42501';
+  end if;
+  if p_body is null or char_length(btrim(p_body)) = 0 or char_length(p_body) > 5000 then
+    raise exception 'An automated reply of 1 to 5000 characters is required.' using errcode = '22023';
+  end if;
+  v_state := private.ai_automation_state_for_step(p_case_id, array['attempt_due', 'awaiting_response']);
+  -- While awaiting the customer, the only automated reply is the one follow-up nudge.
+  if v_state.stage = 'awaiting_response'
+     and (v_state.follow_up_due_at is null or v_state.follow_up_due_at > now() or v_state.follow_up_sent_at is not null) then
+    raise exception 'No automated reply is due on this case.' using errcode = 'P0001';
+  end if;
+  -- NO KEY UPDATE: a customer's resolution answer holds a foreign-key KEY SHARE lock
+  -- on the case (its request-key insert) while it waits for the automation row this
+  -- transaction holds; FOR UPDATE would conflict with that lock and deadlock.
+  select status into v_status from hub.support_cases where id = p_case_id for no key update;
+  if v_status in ('resolved', 'closed') then
+    raise exception 'Automated replies are never posted on a resolved or closed case.' using errcode = 'P0001';
+  end if;
+
+  insert into hub.case_messages (case_id, author_id, author_display_name, author_role, body)
+  values (p_case_id, 'a1a00000-a1a0-4000-8000-000000000001', 'CareMetric AI Assistant', 'ai_assistant', p_body)
+  returning id into v_message_id;
+
+  update hub.support_cases
+  set last_message_at = now(),
+      status = case when status in ('open', 'in_progress') then 'waiting_on_customer'::hub.case_status else status end
+  where id = p_case_id;
+
+  if v_state.stage = 'attempt_due' then
+    -- The attempt is counted with the reply; the loop then records the follow-up
+    -- schedule it chose.
+    update hub.case_ai_automation
+    set stage = 'awaiting_response',
+        attempts = v_state.attempts + 1,
+        last_attempt_at = now(),
+        last_ai_message_id = v_message_id,
+        last_seen_customer_message_id = (
+          select message.id from hub.case_messages message
+          where message.case_id = p_case_id
+            and message.author_role in ('customer', 'tenant_admin')
+          order by message.created_at desc, message.id desc
+          limit 1
+        ),
+        follow_up_due_at = null,
+        follow_up_sent_at = null,
+        responded_at = null
+    where case_id = p_case_id;
+  else
+    update hub.case_ai_automation
+    set follow_up_sent_at = now()
+    where case_id = p_case_id;
+  end if;
+
+  return v_message_id;
+end;
+$$;
+-- Appended migration: 20261020150000_advisors_application.sql
 -- CareMetric Healthcare Advisors joins central administration and support.
 -- Advisors is a consulting practice: a public website plus a private
 -- consultation inbox. It has no software subscriptions, customer accounts,
@@ -9199,7 +9870,7 @@ select
 from source_rows
 join hub.products advisors on advisors.slug = 'advisors'
 on conflict (item_id, product_id) do nothing;
-
+-- Appended migration: 20261020150100_advisors_application_contract.sql
 -- Additive deployment gate for the Healthcare Advisors administration bridge.
 -- Registering the feature grants nothing: every read still requires the
 -- current SMS administrator session, a one-use 'advisors' capability, and the
@@ -9225,7 +9896,7 @@ do $$ declare contract jsonb:=hub.get_backend_contract(); begin
 end $$;
 revoke all on function hub.get_backend_contract() from public;
 grant execute on function hub.get_backend_contract() to anon,authenticated;
-
+-- Appended migration: 20261020150200_advisors_knowledge_authoring.sql
 -- Knowledge articles for every connected application, including Healthcare
 -- Advisors. DocStudio drafts and publication imports previously allowed at most
 -- six product placements, matching the six products registered at the time.
@@ -9321,7 +9992,7 @@ begin
   if total>33554432 then raise exception 'Assets too large' using errcode='P4130'; end if;
  end if;
 end $function$;
-
+-- Appended migration: 20261020160000_unified_communications.sql
 -- Unified communications. Every customer-service and technical-support inquiry
 -- that arrives by phone, text message, email, chat or web form becomes one
 -- conversation in the Hub, for every connected application. Inbound text is
@@ -9848,7 +10519,7 @@ grant execute on function hub.list_communications(text,text,uuid,text,integer,in
   hub.update_communication(uuid,text,text,uuid,boolean,uuid,boolean,timestamptz), hub.add_communication_note(uuid,text,uuid),
   hub.begin_communication_reply(uuid,text,uuid,text[]), hub.import_communications(text,jsonb)
   to authenticated;
-
+-- Appended migration: 20261020160100_unified_communications_contract.sql
 -- Additive deployment gate for unified communications. Declaring the feature
 -- changes no behavior: inbound webhooks still require their provider signature
 -- or secret, chat still requires its opaque token, and every staff read or

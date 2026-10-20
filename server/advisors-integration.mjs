@@ -5,8 +5,8 @@ import pg from 'pg';
 const databaseUrl=process.env.HUB_TEST_DATABASE_URL;
 const local=new URL(databaseUrl);assert.equal(local.hostname,'127.0.0.1');assert.equal(local.port,'54322');
 const client=new pg.Client({connectionString:databaseUrl});await client.connect();
-const contractMigration=await readFile(new URL('../supabase/migrations/20261020120100_advisors_application_contract.sql',import.meta.url),'utf8');
-const registration=await readFile(new URL('../supabase/migrations/20261020120000_advisors_application.sql',import.meta.url),'utf8');
+const contractMigration=await readFile(new URL('../supabase/migrations/20261020150100_advisors_application_contract.sql',import.meta.url),'utf8');
+const registration=await readFile(new URL('../supabase/migrations/20261020150000_advisors_application.sql',import.meta.url),'utf8');
 const readContract=async()=>(await client.query('select hub.get_backend_contract() as data')).rows[0].data;
 try{
   const current=await readContract();

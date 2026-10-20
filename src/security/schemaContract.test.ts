@@ -24,11 +24,11 @@ const careMetricIntelMigration = readFileSync(
   "utf8",
 );
 const advisorsMigration = readFileSync(
-  new URL("../../supabase/migrations/20261020120000_advisors_application.sql", import.meta.url),
+  new URL("../../supabase/migrations/20261020150000_advisors_application.sql", import.meta.url),
   "utf8",
 );
 const knowledgeAuthoringMigration = readFileSync(
-  new URL("../../supabase/migrations/20261020120200_advisors_knowledge_authoring.sql", import.meta.url),
+  new URL("../../supabase/migrations/20261020150200_advisors_knowledge_authoring.sql", import.meta.url),
   "utf8",
 );
 const sharedCourseAlignmentMigration = readFileSync(

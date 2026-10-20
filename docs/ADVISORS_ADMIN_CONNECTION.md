@@ -43,10 +43,10 @@ bridge. The Hub then keeps only the reviewed fields from the response.
 
 ## Deployment order
 
-1. Apply `20261020120000_advisors_application.sql`,
-   `20261020120100_advisors_application_contract.sql` (declares
+1. Apply `20261020150000_advisors_application.sql`,
+   `20261020150100_advisors_application_contract.sql` (declares
    `platform.admin.advisors.v1`) and
-   `20261020120200_advisors_knowledge_authoring.sql`, then deploy the Hub.
+   `20261020150200_advisors_knowledge_authoring.sql`, then deploy the Hub.
 2. Merge the Advisors bridge pull request in `kdeyarmin/advisors`. Railway
    deploys it.
 3. On the Advisors Railway service, set `HUB_ADMIN_USER_IDS` to the platform
