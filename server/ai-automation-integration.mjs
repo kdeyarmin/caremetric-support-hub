@@ -60,7 +60,7 @@ const scoped={
   findActiveCaseIds:async()=>(await store.findActiveCaseIds()).filter(id=>fixtureCases.has(id)),
 };
 const failures=[];
-let clock=Date.now();
+const clock=Date.now();
 const loop=aiAutomation({ai,store:scoped,enabled:env.HUB_AI_AUTOMATION_ENABLED==='true',followUpDelayMs:24*hour,now:()=>new Date(clock),log:line=>failures.push(line)});
 const tick=async()=>{const result=await loop.tick();assert.deepEqual(failures,[],'every automation step succeeds through the server role');return result;};
 
@@ -105,8 +105,9 @@ try {
   const caseA=await createCase('Synthetic export never finishes');
   const [original]=await messages(caseA);
   assert.ok((await store.findNewEligibleCaseIds()).includes(caseA));
-  // The tick claims the case, then revisits it in the same sweep's active pass.
-  assert.deepEqual(await tick(),{processed:2,skipped:false});
+  // The tick claims and answers the case; it then waits on the customer, so the
+  // same sweep's active pass has nothing to do for it.
+  assert.deepEqual(await tick(),{processed:1,skipped:false});
   const [reply]=await aiMessages(caseA);
   assert.equal(reply.author_id,aiAssistantUserId);
   assert.equal(reply.author_display_name,'CareMetric AI Assistant');
@@ -123,18 +124,25 @@ try {
   assert.ok(customerThread.some(entry=>entry.id===reply.id && entry.author_role==='ai_assistant' && entry.visibility==='customer'),'the customer sees the AI reply');
   assert.equal((await admin.query('select ai_stage from hub.support_case_queue where id=$1',[caseA])).rows[0].ai_stage,'awaiting_response');
 
-  // Nothing new and the follow-up not yet due: the tick posts nothing.
+  // Nothing new and the follow-up not yet due: the case stays out of the active
+  // batch, so cases waiting on silent customers can never crowd out the rest.
+  assert.ok(!(await store.findActiveCaseIds()).includes(caseA));
   await tick();
   assert.equal((await aiMessages(caseA)).length,1);
-  // A day later with no answer: one follow-up nudge, then nothing more.
-  clock+=25*hour;
+  // No answer by the time the follow-up is due (its due time moved into the
+  // past): one follow-up nudge, then nothing more.
+  await admin.query("update hub.case_ai_automation set follow_up_due_at=now()-interval '1 hour' where case_id=$1",[caseA]);
+  assert.ok((await store.findActiveCaseIds()).includes(caseA));
   await tick();await tick();
   const afterNudge=await aiMessages(caseA);
   assert.equal(afterNudge.length,2);assert.match(afterNudge[1].body,/^Just checking in/);
   assert.ok((await automation(caseA)).follow_up_sent_at);
+  assert.ok(!(await store.findActiveCaseIds()).includes(caseA));
+  await assert.rejects(store.postAiMessage(caseA,'A second nudge'),error=>error.code==='P0001','the nudge is sent once');
 
   // "Still failing": classified not fixed, so the second and final attempt follows.
   await customerReply(caseA,'I tried that and it is still failing on the export.');
+  assert.ok((await store.findActiveCaseIds()).includes(caseA),'an unclassified customer reply is due');
   await tick();
   const secondAttempt=await aiMessages(caseA);
   assert.equal(secondAttempt.length,3);assert.match(secondAttempt[2].body,/^Synthetic automated attempt 2:/);
@@ -189,6 +197,17 @@ try {
   await assert.rejects(store.saveState(caseD,{attempts:0}),error=>error.code==='22023');
   await assert.rejects(store.saveState(caseD,{lastAiMessageId:reply.id}),error=>error.code==='22023','a message from another case is refused');
   await assert.rejects(store.resolveCase(caseD),error=>error.code==='P0001','resolution needs an awaited answer');
+  // Two Hub processes posting the same due attempt (a deploy overlap): posting
+  // consumes the attempt, so exactly one reply lands and it is counted.
+  const caseE=await createCase('Synthetic export concurrent sweeps');
+  assert.equal(await store.claimCase(caseE),true);
+  const posts=await Promise.allSettled([store.postAiMessage(caseE,'Synthetic concurrent attempt one'),store.postAiMessage(caseE,'Synthetic concurrent attempt two')]);
+  assert.deepEqual(posts.map(post=>post.status).sort(),['fulfilled','rejected']);
+  assert.equal(posts.find(post=>post.status==='rejected').reason.code,'P0001');
+  assert.equal((await aiMessages(caseE)).length,1);
+  state=await automation(caseE);
+  assert.equal(state.stage,'awaiting_response');assert.equal(state.attempts,1);
+  assert.equal(state.last_ai_message_id,posts.find(post=>post.status==='fulfilled').value);
 
   // The go-live readiness panel evaluates through the same server role.
   const readiness=goLiveReadiness({pool,rpc,env,lookup:async()=>['fixture.invalid']});

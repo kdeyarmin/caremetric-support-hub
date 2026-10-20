@@ -115,7 +115,11 @@ post the AI reply, post the internal escalation note, escalate, resolve, and sav
 loop state. They act only on cases under automation at the stage each step belongs
 to, write only as the AI assistant identity, keep finished stages final, and never
 let the attempt count decrease (backend feature `support.ai-automation-server.v1`,
-migrations `20261020120000` / `20261020120100`).
+migrations `20261020120000` / `20261020120100`). The active batch returns only cases
+with something to do (a due attempt or escalation, an unclassified customer reply, a
+due follow-up, or a halt), and posting a reply consumes its attempt or follow-up in
+the same transaction, so concurrent Hub processes cannot double-post
+(`20261020140000`).
 
 ## AI go-live readiness (server endpoint)
 
