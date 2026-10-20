@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Product } from "../domain";
-import { prepareLearningImport, type LearningImport } from "../imports/learningImport";
+import { coursePlacementProductIds, prepareLearningImport, type LearningImport } from "../imports/learningImport";
 import { learningApi } from "./api";
 import { prepareGovernedImport, governedImportSummary, type GovernedImport } from "../imports/governedLearningImport";
 
@@ -10,6 +10,7 @@ export function ImportPanel({ products, onImported }: { products: Product[]; onI
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const placementProductIds = coursePlacementProductIds(products);
   async function read(file: File | undefined) {
     setPreview([]); setGoverned([]); setError(""); setStatus("");
     if (!file) return;
@@ -18,7 +19,7 @@ export function ImportPanel({ products, onImported }: { products: Product[]; onI
       if (file.size > 25000000) throw new Error("The source export exceeds 25 MB.");
       const parsed: unknown = JSON.parse(await file.text());
       if (Array.isArray(parsed)) {
-        setPreview(prepareLearningImport(parsed, products.filter(p => p.status !== "retired").map(p => p.id)));
+        setPreview(prepareLearningImport(parsed, placementProductIds));
       } else {
         const imports = await prepareGovernedImport(parsed);
         const heads = await learningApi.sourceHeads();
@@ -52,5 +53,5 @@ export function ImportPanel({ products, onImported }: { products: Product[]; onI
     } catch (caught) { setError(`${caught instanceof Error ? caught.message : "Import did not complete."} Completed imports are retained; retrying the same export will not overwrite edits.`); }
     finally { setBusy(false); }
   }
-  return <section className="panel lesson-panel"><h2>Prepare CareBase course drafts</h2><p>Use the field-limited course export for drafts, or the governed export to preserve complete source course content and policy for migration review. Imported courses keep their existing catalog IDs and continue to open in CareBase until published here. Publication checks that the imported lessons, quiz answers and scoring, and credited duration are unchanged, so the Hub records the same completions CareBase would.</p><label>Course export (JSON)<input type="file" accept=".json" disabled={busy} onChange={event => void read(event.target.files?.[0])} /></label>{governed.length > 0 && <><p>{counts.courses} source snapshots · {counts.blocks} lessons · {counts.quizzes} quizzes · {counts.creditRules} credit rules · {counts.providers} provider profiles · {counts.archived} archived courses. Each snapshot preserves its source policy and revision; media remain in CareBase. This action preserves review copies and does not publish or retire courses.</p><button className="button button-secondary" disabled={busy} onClick={() => void stage()}>Preserve source snapshots</button></>}{preview.length > 0 && <><p>{preview.length} course drafts · {preview.reduce((n,c) => n+c.pendingVideoIds.length,0)} videos require central uploads with captions. Proposed placements cover {products.filter(p => p.status !== "retired").length} registered products; importing does not change the live courses.</p><button className="button button-secondary" disabled={busy} onClick={() => void apply()}>Import course drafts</button></>}{status && <p role="status">{status}</p>}{error && <p role="alert" className="learning-error">{error}</p>}</section>;
+  return <section className="panel lesson-panel"><h2>Prepare CareBase course drafts</h2><p>Use the field-limited course export for drafts, or the governed export to preserve complete source course content and policy for migration review. Imported courses keep their existing catalog IDs and continue to open in CareBase until published here. Publication checks that the imported lessons, quiz answers and scoring, and credited duration are unchanged, so the Hub records the same completions CareBase would.</p><label>Course export (JSON)<input type="file" accept=".json" disabled={busy} onChange={event => void read(event.target.files?.[0])} /></label>{governed.length > 0 && <><p>{counts.courses} source snapshots · {counts.blocks} lessons · {counts.quizzes} quizzes · {counts.creditRules} credit rules · {counts.providers} provider profiles · {counts.archived} archived courses. Each snapshot preserves its source policy and revision; media remain in CareBase. This action preserves review copies and does not publish or retire courses.</p><button className="button button-secondary" disabled={busy} onClick={() => void stage()}>Preserve source snapshots</button></>}{preview.length > 0 && <><p>{preview.length} course drafts · {preview.reduce((n,c) => n+c.pendingVideoIds.length,0)} videos require central uploads with captions. Proposed placements cover {placementProductIds.length} registered products; importing does not change the live courses.</p><button className="button button-secondary" disabled={busy} onClick={() => void apply()}>Import course drafts</button></>}{status && <p role="status">{status}</p>}{error && <p role="alert" className="learning-error">{error}</p>}</section>;
 }
