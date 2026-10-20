@@ -27,4 +27,15 @@ describe('DocStudio authoring review',()=>{
   await waitFor(()=>expect(writes).toHaveLength(2));expect(writes[1]).toEqual(writes[0]);
   expect(screen.getByRole('button',{name:'Back to draft'}).hasAttribute('disabled')).toBe(true);
  });
+ it('opens a new article targeted to the application named in the link',async()=>{
+  vi.stubGlobal('fetch',vi.fn(async(url:string)=>{
+   if(url==='/api/docstudio')return Response.json({products:[{slug:'carebase',name:'CareBase'},{slug:'advisors',name:'Healthcare Advisors'}],projects:[],workerReady:false,maxVideoBytes:26214400});
+   throw new Error('Unexpected request');
+  }));
+  render(<MemoryRouter initialEntries={['/docstudio?product=advisors']}><DocStudioWorkspace/></MemoryRouter>);
+  const advisors=await screen.findByLabelText('Healthcare Advisors') as HTMLInputElement;
+  expect(advisors.checked).toBe(true);
+  expect((screen.getByLabelText('CareBase') as HTMLInputElement).checked).toBe(false);
+  expect(screen.getByLabelText('Article (Markdown)')).toBeTruthy();
+ });
 });

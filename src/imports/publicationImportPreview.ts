@@ -8,6 +8,7 @@ export const PUBLICATION_MANIFEST_SCHEMA = "caremetric.support-hub.publication.v
 export const PUBLICATION_IMPORT_PLAN_SCHEMA = "caremetric.support-hub.import-plan.v1";
 
 export const PUBLICATION_PRODUCT_SLUGS = Object.freeze([
+  "advisors",
   "breathe",
   "carebase",
   "caremetric-emr",

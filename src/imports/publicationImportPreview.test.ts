@@ -106,8 +106,9 @@ function matchingSnapshot(
 }
 
 describe("publication import preview", () => {
-  it("uses exactly the six registered CareMetric product slugs", () => {
+  it("uses exactly the seven registered CareMetric product slugs", () => {
     expect(PUBLICATION_PRODUCT_SLUGS).toEqual([
+      "advisors",
       "breathe",
       "carebase",
       "caremetric-emr",
@@ -347,7 +348,7 @@ describe("publication import preview", () => {
     ]);
   });
 
-  it("accepts all registered placements but rejects any seventh or unknown product", async () => {
+  it("accepts all registered placements but rejects an unknown product", async () => {
     const allProducts = await articleInput();
     allProducts.manifest.placements = PUBLICATION_PRODUCT_SLUGS.map((product_slug) => ({
       product_slug,
@@ -355,7 +356,7 @@ describe("publication import preview", () => {
       route_pattern: null,
     }));
     const plan = await previewPublicationImport(allProducts);
-    expect(plan.actions.filter((action) => action.type === "place")).toHaveLength(6);
+    expect(plan.actions.filter((action) => action.type === "place")).toHaveLength(7);
 
     const unknown = await articleInput();
     Object.assign(unknown.manifest.placements[0] ?? {}, { product_slug: "docstudio" });

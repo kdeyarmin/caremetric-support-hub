@@ -45,6 +45,7 @@ import {
   categoryLabels,
   isSupportStaff,
   priorityLabels,
+  resolveProductSlug,
   statusLabels,
   type ActorContext,
   type CaseCategory,
@@ -64,6 +65,7 @@ import { AiResolutionPrompt } from "./support/AiResolutionPrompt";
 import { PhoneInbox } from "./support/PhoneInbox";
 import { Communications } from "./support/Communications";
 import { ChatPanel } from "./support/ChatPanel";
+import { KnowledgeCoverage } from "./support/KnowledgeCoverage";
 import { demoCommunicationsClient } from "./support/demoCommunications";
 import { PhoneRegistry } from "./support/PhoneRegistry";
 import { AdminWorkspace } from "./admin/AdminWorkspace";
@@ -787,6 +789,7 @@ function KnowledgePage({ data }: { data: HubData }) {
   return (
     <>
       <PageHeading eyebrow="Canonical knowledge" title="One answer, wherever customers need it." description="Publish shared core guidance once, then add small product or industry overlays only when the workflow truly differs." />
+      {isSupportStaff(data.actor.role) && <KnowledgeCoverage products={data.products} content={data.content} selectedProductId={productId} onSelect={setProductId} canWrite />}
       <section className="library-toolbar panel">
         <label className="search-box large"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search articles, workflows, and questions" /></label>
         <select value={productId} onChange={(event) => setProductId(event.target.value)}><option value="all">All products</option>{data.products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select>
@@ -833,7 +836,7 @@ function ContextualHelpPage({ data }: { data: HubData }) {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const requestedSlug = (params.get("product") ?? "").trim().toLowerCase();
-  const productSlug = requestedSlug === "pennfit" ? "breathe" : requestedSlug;
+  const productSlug = resolveProductSlug(requestedSlug);
   const product = data.products.find((item) => item.slug === productSlug);
   const route = (params.get("route") ?? "").split(/[?#]/, 1)[0];
   const feature = (params.get("feature") ?? "").slice(0, 96);

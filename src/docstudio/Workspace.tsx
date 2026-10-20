@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
-import {Link} from 'react-router-dom';
+import {Link,useSearchParams} from 'react-router-dom';
 import {appRequest} from '../lib/appSession';
 import {commandSchema,type Command,type Draft,type Intent,type Project,type Readiness,type Receipt} from './protocol';
 import {publicationClient} from '../imports/publicationClient';
@@ -35,8 +35,10 @@ export function DocStudioWorkspace() {
  const [intent,setIntent]=useState<Intent|null>(null),[reviewed,setReviewed]=useState(false),[phi,setPhi]=useState(false),[busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [stage,setStage]=useState<PublicationStage|null>(null),[conflict,setConflict]=useState(false),[attempted,setAttempted]=useState(false);
  const alive=useRef(true),generation=useRef(0),exportKey=useRef<string|null>(null);
+ // ?product=<slug> opens a new article already targeted to that application.
+ const [params]=useSearchParams();const requestedProduct=useRef(params.get('product'));
  const saved=project?.draft;const dirty=!!draft && JSON.stringify(draft)!==JSON.stringify(saved);
- useEffect(()=>{alive.current=true;const controller=new AbortController();const currentGeneration=generation;appRequest<Readiness>('docstudio',undefined,controller.signal).then(setReady).catch(error=>{if(!controller.signal.aborted)setError(message(error));});return()=>{alive.current=false;controller.abort();currentGeneration.current++;};},[]);
+ useEffect(()=>{alive.current=true;const controller=new AbortController();const currentGeneration=generation;appRequest<Readiness>('docstudio',undefined,controller.signal).then(data=>{setReady(data);const match=data.products.find(product=>product.slug===requestedProduct.current);if(match)setDraft(current=>current??{...blank('article'),products:[match.slug]});}).catch(error=>{if(!controller.signal.aborted)setError(message(error));});return()=>{alive.current=false;controller.abort();currentGeneration.current++;};},[]);
  useEffect(()=>{
   if(!project || !project.jobs.some(job=>job.status==='queued'||job.status==='running'))return;
   const controller=new AbortController(),current=project.id;

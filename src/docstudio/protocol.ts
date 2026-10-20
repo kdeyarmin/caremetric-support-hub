@@ -8,7 +8,7 @@ export const sceneSchema = z.object({order:z.number().int().min(1).max(120),titl
 export const assetSchema = z.object({id,sha256:sha,byteLength:z.number().int().min(1).max(32*1024*1024),mediaType:z.enum(['image/png','image/jpeg','audio/mpeg','audio/wav'])}).strict();
 export const draftSchema = z.object({
   kind:z.enum(['article','video']),title:text(180).min(2),summary:text(500),locale:z.literal('en-US'),accessLevel:z.enum(['public','customer','staff']),
-  products:z.array(z.enum(PUBLICATION_PRODUCT_SLUGS)).min(1).max(6),
+  products:z.array(z.enum(PUBLICATION_PRODUCT_SLUGS)).min(1).max(PUBLICATION_PRODUCT_SLUGS.length),
   markdown:z.string().max(120000),scenes:z.array(sceneSchema).max(120),assets:z.array(assetSchema).max(40),narrationAssetId:id.optional(),
 }).strict().superRefine((value,ctx)=>{
   const fail=(message:string)=>ctx.addIssue({code:'custom',message});
