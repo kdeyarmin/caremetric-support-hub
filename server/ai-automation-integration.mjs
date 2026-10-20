@@ -208,6 +208,20 @@ try {
   state=await automation(caseE);
   assert.equal(state.stage,'awaiting_response');assert.equal(state.attempts,1);
   assert.equal(state.last_ai_message_id,posts.find(post=>post.status==='fulfilled').value);
+  // A customer's resolution answer holds a foreign-key KEY SHARE lock on the case
+  // (its request-key insert) while it waits for the automation row; posting must
+  // not wait on that lock, or the two would deadlock.
+  const caseF=await createCase('Synthetic export answer racing a post');
+  assert.equal(await store.claimCase(caseF),true);
+  const answer=await admin.connect();
+  try {
+    await answer.query('begin');
+    await answer.query('select 1 from hub.support_cases where id=$1 for key share',[caseF]);
+    let timer;
+    const posted=await Promise.race([store.postAiMessage(caseF,'Synthetic attempt beside an answer'),new Promise(resolve=>{timer=setTimeout(()=>resolve('blocked'),5000);})]);
+    clearTimeout(timer);
+    assert.notEqual(posted,'blocked','posting does not wait on the foreign-key lock of a concurrent answer');
+  } finally { await answer.query('rollback');answer.release(); }
 
   // The go-live readiness panel evaluates through the same server role.
   const readiness=goLiveReadiness({pool,rpc,env,lookup:async()=>['fixture.invalid']});

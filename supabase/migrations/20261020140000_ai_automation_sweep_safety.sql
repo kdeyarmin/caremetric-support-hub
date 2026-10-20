@@ -10,6 +10,8 @@
 --   sweeping concurrently (deploy overlap), or a retry after a crash between posting
 --   and saving state, can no longer post the same attempt or nudge twice, so the
 --   two-attempt cap holds for customer-facing replies too.
+-- * Posting locks the case FOR NO KEY UPDATE rather than FOR UPDATE, so it cannot
+--   deadlock with a customer's concurrent resolution answer.
 --
 -- Signatures, security definer, the pinned search path and the hub_app_server-only
 -- grants are unchanged.
@@ -77,7 +79,10 @@ begin
      and (v_state.follow_up_due_at is null or v_state.follow_up_due_at > now() or v_state.follow_up_sent_at is not null) then
     raise exception 'No automated reply is due on this case.' using errcode = 'P0001';
   end if;
-  select status into v_status from hub.support_cases where id = p_case_id for update;
+  -- NO KEY UPDATE: a customer's resolution answer holds a foreign-key KEY SHARE lock
+  -- on the case (its request-key insert) while it waits for the automation row this
+  -- transaction holds; FOR UPDATE would conflict with that lock and deadlock.
+  select status into v_status from hub.support_cases where id = p_case_id for no key update;
   if v_status in ('resolved', 'closed') then
     raise exception 'Automated replies are never posted on a resolved or closed case.' using errcode = 'P0001';
   end if;
