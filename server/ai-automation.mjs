@@ -1,7 +1,8 @@
 import { transaction } from './sms-auth.mjs';
 
 // The durable system identity created by the AI case assistance migration. AI
-// messages and notes are authored by this user, never by a human staffer.
+// messages and notes are authored by this user, never by a human staffer; the
+// private.ai_automation_* database operations write as it.
 export const aiAssistantUserId = 'a1a00000-a1a0-4000-8000-000000000001';
 export const aiAssistantDisplayName = 'CareMetric AI Assistant';
 
@@ -37,191 +38,59 @@ function rankKnowledge(items, sourceText) {
     .map(({ item }) => ({ title: item.title, summary: item.summary ?? '', body: stripHtml(item.body) }));
 }
 
-/** Postgres-backed automation store. The server role bypasses RLS by design (the
- * same trust level as the other in-server workers); every write is parameterized and
- * attributed to the AI assistant identity. */
+/** Postgres-backed automation store. The Hub server pool connects as hub_app_server,
+ * which does not bypass RLS and holds no privilege on the case, content or audit
+ * tables. Each step is a narrow private.ai_automation_* operation that only the server
+ * role may execute (supabase/migrations/20261020120000_ai_automation_server_boundary.sql):
+ * it acts only on cases under automation, at the stage the step belongs to, and
+ * writes only as the AI assistant identity. */
 export function sqlAutomationStore(pool) {
+  const query = (text, values = []) => transaction(pool, (client) => client.query(text, values));
   return {
     async findNewEligibleCaseIds() {
-      return transaction(pool, async (client) => {
-        const result = await client.query(`
-          select support_case.id
-          from hub.support_cases support_case
-          where support_case.source = 'portal'
-            and support_case.status in ('open', 'in_progress')
-            and support_case.created_at > now() - interval '7 days'
-            and not exists (select 1 from hub.case_ai_automation automation where automation.case_id = support_case.id)
-            and not exists (
-              select 1 from hub.case_messages message
-              where message.case_id = support_case.id
-                and message.author_role in ('support_agent', 'support_manager', 'platform_admin')
-            )
-          order by support_case.created_at asc
-          limit 10
-        `);
-        return result.rows.map((row) => row.id);
-      });
+      const result = await query('select case_id from private.ai_automation_eligible_cases() as case_id');
+      return result.rows.map((row) => row.case_id);
     },
 
     async claimCase(caseId) {
-      return transaction(pool, async (client) => {
-        const result = await client.query(
-          'insert into hub.case_ai_automation (case_id) values ($1) on conflict (case_id) do nothing returning case_id',
-          [caseId],
-        );
-        return result.rowCount > 0;
-      });
+      const result = await query('select private.ai_automation_claim($1) as claimed', [caseId]);
+      return result.rows[0].claimed === true;
     },
 
     async findActiveCaseIds() {
-      return transaction(pool, async (client) => {
-        const result = await client.query(`
-          select automation.case_id
-          from hub.case_ai_automation automation
-          where automation.stage in ('attempt_due', 'awaiting_response', 'escalate_due')
-          order by automation.updated_at asc
-          limit 25
-        `);
-        return result.rows.map((row) => row.case_id);
-      });
+      const result = await query('select case_id from private.ai_automation_active_cases() as case_id');
+      return result.rows.map((row) => row.case_id);
     },
 
     async loadWork(caseId) {
-      return transaction(pool, async (client) => {
-        const supportCase = await client.query(
-          'select id, subject, product_id as "productId", status, priority from hub.support_cases where id = $1',
-          [caseId],
-        );
-        if (!supportCase.rows[0]) return null;
-        const state = await client.query('select * from hub.case_ai_automation where case_id = $1', [caseId]);
-        const messages = await client.query(`
-          select id, author_id as "authorId", author_display_name as "authorName", author_role as "authorRole",
-                 body, created_at as "createdAt"
-          from hub.case_messages where case_id = $1 order by created_at asc, id asc
-        `, [caseId]);
-        const notes = await client.query(`
-          select id, author_display_name as "authorName", author_role as "authorRole", body, created_at as "createdAt"
-          from private.case_notes where case_id = $1 order by created_at asc, id asc
-        `, [caseId]);
-        const row = state.rows[0];
-        return {
-          caseId,
-          subject: supportCase.rows[0].subject,
-          productId: supportCase.rows[0].productId,
-          status: supportCase.rows[0].status,
-          priority: supportCase.rows[0].priority,
-          state: row ? {
-            stage: row.stage,
-            attempts: row.attempts,
-            lastSeenCustomerMessageId: row.last_seen_customer_message_id,
-            lastCustomerResponse: row.last_customer_response,
-            followUpDueAt: row.follow_up_due_at,
-            followUpSentAt: row.follow_up_sent_at,
-          } : null,
-          messages: messages.rows,
-          notes: notes.rows,
-        };
-      });
+      const result = await query('select private.ai_automation_work($1) as work', [caseId]);
+      return result.rows[0].work ?? null;
     },
 
-    async knowledgeForCase({ productId, subject, latestCustomerBody }) {
-      return transaction(pool, async (client) => {
-        // The list_published_content publication filters, restricted to
-        // customer-safe articles: automated replies must never draw on staff-only
-        // content, and there is no caller session to scope access with here.
-        const result = await client.query(`
-          select revision.title, revision.summary, revision.body_markdown as body
-          from hub.content_publications publication
-          join hub.content_items item on item.id = publication.item_id
-          join hub.content_revisions revision on revision.id = publication.revision_id and revision.item_id = publication.item_id
-          join hub.products product on product.id = publication.product_id
-          where publication.product_id = $1
-            and item.status = 'published'
-            and revision.review_state = 'approved'
-            and product.status <> 'retired' and product.support_enabled
-            and (revision.product_overlay_id is null or revision.product_overlay_id = publication.product_id)
-            and publication.published_at <= now()
-            and (publication.expires_at is null or publication.expires_at > now())
-            and item.access_level in ('public', 'customer')
-            and item.kind = 'article'
-          order by publication.published_at desc
-          limit 12
-        `, [productId]);
-        return rankKnowledge(result.rows, `${subject ?? ''} ${latestCustomerBody ?? ''}`);
-      });
+    async knowledgeForCase({ caseId, subject, latestCustomerBody }) {
+      const result = await query('select title, summary, body from private.ai_automation_knowledge($1)', [caseId]);
+      return rankKnowledge(result.rows, `${subject ?? ''} ${latestCustomerBody ?? ''}`);
     },
 
     async postAiMessage(caseId, body) {
-      return transaction(pool, async (client) => {
-        const inserted = await client.query(`
-          insert into hub.case_messages (case_id, author_id, author_display_name, author_role, body)
-          values ($1, $2, $3, 'ai_assistant', $4) returning id
-        `, [caseId, aiAssistantUserId, aiAssistantDisplayName, body]);
-        await client.query(`
-          update hub.support_cases
-          set last_message_at = now(),
-              status = case when status in ('open', 'in_progress') then 'waiting_on_customer'::hub.case_status else status end
-          where id = $1
-        `, [caseId]);
-        return inserted.rows[0].id;
-      });
+      const result = await query('select private.ai_automation_post_message($1, $2) as id', [caseId, body]);
+      return result.rows[0].id;
     },
 
     async postAiNote(caseId, body) {
-      return transaction(pool, async (client) => {
-        await client.query(`
-          insert into private.case_notes (case_id, author_id, author_display_name, author_role, body)
-          values ($1, $2, $3, 'ai_assistant', $4)
-        `, [caseId, aiAssistantUserId, aiAssistantDisplayName, body]);
-      });
+      await query('select private.ai_automation_post_note($1, $2)', [caseId, body]);
     },
 
     async escalateCase(caseId) {
-      return transaction(pool, async (client) => {
-        await client.query(`
-          update hub.support_cases
-          set status = 'in_progress'::hub.case_status, priority = 'high'::hub.case_priority, resolved_at = null
-          where id = $1 and status not in ('resolved', 'closed')
-        `, [caseId]);
-        await client.query(`
-          insert into private.audit_events (actor_id, action, entity_type, entity_id, tenant_id, product_id, case_id, changed_columns)
-          select $2, 'case.updated', 'support_case', support_case.id, support_case.tenant_id, support_case.product_id, support_case.id,
-                 array['status', 'priority']
-          from hub.support_cases support_case where support_case.id = $1
-        `, [caseId, aiAssistantUserId]);
-      });
+      await query('select private.ai_automation_escalate($1)', [caseId]);
     },
 
     async resolveCase(caseId) {
-      return transaction(pool, async (client) => {
-        await client.query(`
-          update hub.support_cases
-          set status = 'resolved'::hub.case_status, resolved_at = coalesce(resolved_at, now())
-          where id = $1
-        `, [caseId]);
-        await client.query(`
-          insert into private.audit_events (actor_id, action, entity_type, entity_id, tenant_id, product_id, case_id, changed_columns)
-          select $2, 'case.ai_auto_resolved', 'support_case', support_case.id, support_case.tenant_id, support_case.product_id, support_case.id,
-                 array['status']
-          from hub.support_cases support_case where support_case.id = $1
-        `, [caseId, aiAssistantUserId]);
-      });
+      await query('select private.ai_automation_resolve($1)', [caseId]);
     },
 
     async saveState(caseId, patch) {
-      const columns = {
-        stage: 'stage', attempts: 'attempts', lastAttemptAt: 'last_attempt_at', lastAiMessageId: 'last_ai_message_id',
-        lastSeenCustomerMessageId: 'last_seen_customer_message_id', lastCustomerResponse: 'last_customer_response',
-        followUpDueAt: 'follow_up_due_at', followUpSentAt: 'follow_up_sent_at', respondedAt: 'responded_at',
-        responseSource: 'response_source', escalatedAt: 'escalated_at', haltReason: 'halt_reason',
-      };
-      const entries = Object.entries(patch).filter(([key]) => columns[key]);
-      if (!entries.length) return;
-      const assignments = entries.map(([key], index) => `${columns[key]} = $${index + 2}`).join(', ');
-      await transaction(pool, async (client) => {
-        await client.query(`update hub.case_ai_automation set ${assignments} where case_id = $1`,
-          [caseId, ...entries.map(([, value]) => value)]);
-      });
+      await query('select private.ai_automation_save_state($1, $2::jsonb)', [caseId, JSON.stringify(patch)]);
     },
   };
 }
@@ -256,7 +125,7 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
     const { state } = work;
     if (state.attempts >= maxAiAttempts) return escalate(work);
     const latest = latestCustomerMessage(work);
-    const knowledge = await store.knowledgeForCase({ productId: work.productId, subject: work.subject, latestCustomerBody: latest?.body });
+    const knowledge = await store.knowledgeForCase({ caseId: work.caseId, subject: work.subject, latestCustomerBody: latest?.body });
     const draft = await ai.draftReply({
       subject: work.subject,
       messages: threadForAi(work).filter((entry) => entry.visibility === 'customer'),
