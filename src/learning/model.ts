@@ -12,9 +12,11 @@ const unitBase = { id, title: z.string().min(2).max(180) };
 const lesson = z.object({ ...unitBase, type: z.enum(["text", "attestation"]), body: z.string().min(1).max(60000) });
 const video = z.object({ ...unitBase, type: z.literal("video"), body: z.string().min(1).max(60000), mediaAssetId: id.nullable() });
 const quizBase = { ...unitBase, type: z.literal("quiz"), body: z.string().max(60000).default(""), passingScore: z.number().int().min(1).max(100), maxAttempts: z.number().int().min(1).max(10).nullable() };
+// productIds carries no count cap: the registry decides how many products
+// exist (seven today), so a hardcoded maximum rejects valid documents.
 const meta = {
   title: z.string().min(2).max(180), summary: z.string().max(500), overview: z.string().max(60000).default(""), category: z.string().max(100),
-  durationMinutes: z.number().int().min(1).max(1440), accessLevel: z.enum(["public", "customer", "staff"]), productIds: z.array(id).min(1).max(6),
+  durationMinutes: z.number().int().min(1).max(1440), accessLevel: z.enum(["public", "customer", "staff"]), productIds: z.array(id).min(1),
 };
 export const draftDocumentSchema = z.object({ ...meta, units: z.array(z.discriminatedUnion("type", [lesson, video, z.object({ ...quizBase, questions: z.array(question.extend({ correctOptionId: id })).min(1).max(100) })])).min(1).max(150) });
 export const learnerDocumentSchema = z.object({ ...meta, units: z.array(z.discriminatedUnion("type", [lesson, video, z.object({ ...quizBase, questions: z.array(question).min(1) })])) });
