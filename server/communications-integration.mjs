@@ -40,7 +40,7 @@ async function email(fields){
 }
 const list=(token=ownerToken,input={})=>service.list(token,input);
 const find=async(predicate,token=ownerToken)=>(await list(token,{limit:50})).items.find(predicate);
-const contractMigration=await readFile(new URL('../supabase/migrations/20261020160100_unified_communications_contract.sql',import.meta.url),'utf8');
+const contractMigration=await readFile(new URL('../supabase/migrations/20261020163100_unified_communications_contract.sql',import.meta.url),'utf8');
 let created=[];
 try {
   const contract=await admin.connect();

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { appRequest, hubRpc } from "../lib/appSession";
 import { config } from "../lib/config";
-import { catalogSchema, certificateSchema, courseSchema, draftListSchema, draftSchema, myLearningSchema, submissionSchema, type DraftDocument } from "./model";
+import { catalogSchema, certificateSchema, courseSchema, draftListSchema, draftSchema, id as learningId, myLearningSchema, submissionSchema, type DraftDocument } from "./model";
 import { governedStageResultSchema } from "../imports/governedLearningImport";
 
 async function rpc<T>(name: string, schema: z.ZodType<T>, args?: Record<string, unknown>): Promise<T> {
@@ -14,7 +14,7 @@ export const learningApi = {
   stageSource: (payload: string, sourceRevision: string, expectedRevision: string | null) => rpc("stage_learning_source", governedStageResultSchema,
     { p_payload: payload, p_source_revision: sourceRevision, p_expected_revision: expectedRevision }),
   importDraft: (sourceCourseId: string, sourceVersionId: string, document: DraftDocument) => rpc("import_learning_draft", draftSchema, { p_source_course_id: sourceCourseId, p_source_version_id: sourceVersionId, p_document: document }),
-  mediaList: () => rpc("list_learning_media", z.array(z.object({ id: z.uuid(), title: z.string() }))),
+  mediaList: () => rpc("list_learning_media", z.array(z.object({ id: learningId, title: z.string() }))),
   async uploadMedia(title: string, video: File, captions: File, transcript: File, reviewed: boolean) {
     if (config.demoMode || !reviewed) throw new Error("Review all media files before uploading.");
     if (video.size === 0 || video.size > 268435456 || video.type !== "video/mp4") throw new Error("Choose an MP4 video under 256 MB.");
@@ -33,16 +33,16 @@ export const learningApi = {
     const storedDigest = await crypto.subtle.digest("SHA-256", await stored.arrayBuffer());
     const storedHash = Array.from(new Uint8Array(storedDigest), byte => byte.toString(16).padStart(2, "0")).join("");
     if (storedHash !== sha256) throw new Error("Stored video checksum does not match the source. The video was not approved.");
-    return rpc("register_learning_media", z.uuid(), { p_id: id, p_title: title, p_sha256: sha256, p_reviewed: reviewed });
+    return rpc("register_learning_media", learningId, { p_id: id, p_title: title, p_sha256: sha256, p_reviewed: reviewed });
   },
   catalog: () => !config.demoMode ? rpc("list_learning_catalog", catalogSchema) : Promise.resolve([]),
   editorAccess: () => !config.demoMode ? rpc("get_learning_editor_access", z.boolean()) : Promise.resolve(false),
   drafts: () => rpc("list_learning_drafts", draftListSchema),
   draft: (itemId: string) => rpc("get_learning_draft", draftSchema, { p_item_id: itemId }),
   save: (itemId: string | null, document: DraftDocument, version: number) => rpc("save_learning_draft", draftSchema, { p_item_id: itemId, p_document: document, p_expected_version: version }),
-  publish: (itemId: string, version: number, reviewed: boolean) => rpc("publish_learning_course", z.object({ itemId: z.uuid(), versionId: z.uuid() }), { p_item_id: itemId, p_expected_version: version, p_reviewed: reviewed }),
+  publish: (itemId: string, version: number, reviewed: boolean) => rpc("publish_learning_course", z.object({ itemId: learningId, versionId: learningId }), { p_item_id: itemId, p_expected_version: version, p_reviewed: reviewed }),
   course: (itemId: string, enrollmentId: string | null = null) => rpc("get_learning_course", courseSchema, { p_item_id: itemId, p_enrollment_id: enrollmentId }),
-  enroll: (itemId: string) => rpc("enroll_learning_course", z.uuid(), { p_item_id: itemId }),
+  enroll: (itemId: string) => rpc("enroll_learning_course", learningId, { p_item_id: itemId }),
   submit: (enrollmentId: string, unitId: string, answers: Record<string, string>, attested: boolean, requestKey: string) => rpc("submit_learning_unit", submissionSchema, { p_enrollment_id: enrollmentId, p_unit_id: unitId, p_answers: answers, p_attested: attested, p_request_key: requestKey }),
   mine: () => rpc("list_my_learning", myLearningSchema),
   certificate: (enrollmentId: string) => rpc("get_learning_certificate", certificateSchema, { p_enrollment_id: enrollmentId }),

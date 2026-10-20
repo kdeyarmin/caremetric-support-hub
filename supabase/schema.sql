@@ -9992,7 +9992,294 @@ begin
   if total>33554432 then raise exception 'Assets too large' using errcode='P4130'; end if;
  end if;
 end $function$;
--- Appended migration: 20261020160000_unified_communications.sql
+-- Appended migration: 20261020160000_ai_automation_failure_policy.sql
+-- A bounded failure policy for the AI auto-resolution loop.
+--
+-- A step that failed for one case (for example a draft longer than the 5000-character
+-- reply limit, which post_message refuses with 22023) left the case at its stage, and
+-- the active batch returned it on every sweep: a new provider call each minute, for
+-- ever, while the customer got neither a reply nor a human.
+--
+-- * hub.case_ai_automation.consecutive_failures counts the case's failed steps in a
+--   row; any step that goes through sets it back to 0.
+-- * hub.case_ai_automation.retry_at is the backoff the loop chose after a failure.
+--   The active batch leaves a case out until then, so failing cases neither retry
+--   every sweep nor crowd the batch.
+-- * private.ai_automation_work returns both, and private.ai_automation_save_state
+--   accepts both (consecutiveFailures, retryAt).
+--
+-- The loop (server/ai-automation.mjs) retries a provider outage for as long as it
+-- lasts and hands any other repeated failure to staff through the existing escalation
+-- step. The Hub server requires backend feature support.ai-automation-failure-policy.v1,
+-- which 20261020160100 declares once this migration is in place.
+--
+-- Signatures, security definer, the pinned search path and the hub_app_server-only
+-- grants are unchanged.
+
+alter table hub.case_ai_automation
+  add column consecutive_failures integer not null default 0 check (consecutive_failures >= 0),
+  add column retry_at timestamptz;
+
+create or replace function private.ai_automation_active_cases()
+returns setof uuid
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if session_user <> 'hub_app_server' then
+    raise exception 'Application server required.' using errcode = '42501';
+  end if;
+  return query
+  select automation.case_id
+  from hub.case_ai_automation automation
+  join hub.support_cases support_case on support_case.id = automation.case_id
+  -- A case backing off after a failed step waits until its retry time.
+  where (automation.retry_at is null or automation.retry_at <= now())
+    and (automation.stage in ('attempt_due', 'escalate_due')
+     or (automation.stage = 'awaiting_response' and (
+       -- Halts: the case was closed, or staff took it over.
+       support_case.status in ('resolved', 'closed')
+       or exists (
+         select 1 from hub.case_messages message
+         where message.case_id = automation.case_id
+           and message.author_role in ('support_agent', 'support_manager', 'platform_admin')
+       )
+       -- A customer reply the loop has not classified yet.
+       or (
+         select message.id from hub.case_messages message
+         where message.case_id = automation.case_id
+           and message.author_role in ('customer', 'tenant_admin')
+         order by message.created_at desc, message.id desc
+         limit 1
+       ) is distinct from automation.last_seen_customer_message_id
+       -- A follow-up nudge that is due and not yet sent.
+       or (automation.follow_up_due_at <= now() and automation.follow_up_sent_at is null)
+     )))
+  order by automation.updated_at asc, automation.case_id asc
+  limit 25;
+end;
+$$;
+
+create or replace function private.ai_automation_work(p_case_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_state hub.case_ai_automation%rowtype;
+  v_case hub.support_cases%rowtype;
+begin
+  if session_user <> 'hub_app_server' then
+    raise exception 'Application server required.' using errcode = '42501';
+  end if;
+  select * into v_state from hub.case_ai_automation where case_id = p_case_id;
+  if not found then
+    return null;
+  end if;
+  select * into v_case from hub.support_cases where id = p_case_id;
+  if not found then
+    return null;
+  end if;
+  return jsonb_build_object(
+    'caseId', v_case.id,
+    'subject', v_case.subject,
+    'productId', v_case.product_id,
+    'status', v_case.status,
+    'priority', v_case.priority,
+    'state', jsonb_build_object(
+      'stage', v_state.stage,
+      'attempts', v_state.attempts,
+      'lastSeenCustomerMessageId', v_state.last_seen_customer_message_id,
+      'lastCustomerResponse', v_state.last_customer_response,
+      'followUpDueAt', v_state.follow_up_due_at,
+      'followUpSentAt', v_state.follow_up_sent_at,
+      'consecutiveFailures', v_state.consecutive_failures,
+      'retryAt', v_state.retry_at
+    ),
+    'messages', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', message.id,
+        'authorId', message.author_id,
+        'authorName', message.author_display_name,
+        'authorRole', message.author_role,
+        'body', message.body,
+        'createdAt', message.created_at
+      ) order by message.created_at, message.id)
+      from hub.case_messages message
+      where message.case_id = p_case_id
+    ), '[]'::jsonb),
+    'notes', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', note.id,
+        'authorName', note.author_display_name,
+        'authorRole', note.author_role,
+        'body', note.body,
+        'createdAt', note.created_at
+      ) order by note.created_at, note.id)
+      from private.case_notes note
+      where note.case_id = p_case_id
+    ), '[]'::jsonb)
+  );
+end;
+$$;
+
+create or replace function private.ai_automation_save_state(p_case_id uuid, p_patch jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_state hub.case_ai_automation%rowtype;
+  v_next hub.case_ai_automation%rowtype;
+  v_field text;
+begin
+  if session_user <> 'hub_app_server' then
+    raise exception 'Application server required.' using errcode = '42501';
+  end if;
+  if p_patch is null or jsonb_typeof(p_patch) <> 'object' then
+    raise exception 'An automation state change is required.' using errcode = '22023';
+  end if;
+  for v_field in select jsonb_object_keys(p_patch) loop
+    if v_field <> all (array[
+      'stage', 'attempts', 'lastAttemptAt', 'lastAiMessageId', 'lastSeenCustomerMessageId',
+      'lastCustomerResponse', 'followUpDueAt', 'followUpSentAt', 'respondedAt', 'responseSource',
+      'escalatedAt', 'haltReason', 'consecutiveFailures', 'retryAt'
+    ]) then
+      raise exception 'Unsupported automation state field.' using errcode = '22023';
+    end if;
+  end loop;
+
+  v_state := private.ai_automation_state_for_step(p_case_id, array['attempt_due', 'awaiting_response', 'escalate_due']);
+  v_next := v_state;
+  if p_patch ? 'stage' then v_next.stage := p_patch ->> 'stage'; end if;
+  if p_patch ? 'attempts' then v_next.attempts := (p_patch ->> 'attempts')::integer; end if;
+  if p_patch ? 'lastAttemptAt' then v_next.last_attempt_at := (p_patch ->> 'lastAttemptAt')::timestamptz; end if;
+  if p_patch ? 'lastAiMessageId' then v_next.last_ai_message_id := (p_patch ->> 'lastAiMessageId')::uuid; end if;
+  if p_patch ? 'lastSeenCustomerMessageId' then v_next.last_seen_customer_message_id := (p_patch ->> 'lastSeenCustomerMessageId')::uuid; end if;
+  if p_patch ? 'lastCustomerResponse' then v_next.last_customer_response := p_patch ->> 'lastCustomerResponse'; end if;
+  if p_patch ? 'followUpDueAt' then v_next.follow_up_due_at := (p_patch ->> 'followUpDueAt')::timestamptz; end if;
+  if p_patch ? 'followUpSentAt' then v_next.follow_up_sent_at := (p_patch ->> 'followUpSentAt')::timestamptz; end if;
+  if p_patch ? 'respondedAt' then v_next.responded_at := (p_patch ->> 'respondedAt')::timestamptz; end if;
+  if p_patch ? 'responseSource' then v_next.response_source := p_patch ->> 'responseSource'; end if;
+  if p_patch ? 'escalatedAt' then v_next.escalated_at := (p_patch ->> 'escalatedAt')::timestamptz; end if;
+  if p_patch ? 'haltReason' then v_next.halt_reason := p_patch ->> 'haltReason'; end if;
+  if p_patch ? 'consecutiveFailures' then v_next.consecutive_failures := (p_patch ->> 'consecutiveFailures')::integer; end if;
+  if p_patch ? 'retryAt' then v_next.retry_at := (p_patch ->> 'retryAt')::timestamptz; end if;
+
+  if v_next.attempts is null or v_next.attempts < v_state.attempts then
+    raise exception 'Automated attempts never decrease.' using errcode = '22023';
+  end if;
+  if v_next.consecutive_failures is null or v_next.consecutive_failures < 0 then
+    raise exception 'A failure count of zero or more is required.' using errcode = '22023';
+  end if;
+  if v_next.last_ai_message_id is distinct from v_state.last_ai_message_id
+     and v_next.last_ai_message_id is not null
+     and not exists (
+       select 1 from hub.case_messages message
+       where message.id = v_next.last_ai_message_id
+         and message.case_id = p_case_id
+         and message.author_role = 'ai_assistant'
+     ) then
+    raise exception 'The automated reply must belong to this case.' using errcode = '22023';
+  end if;
+  if v_next.last_seen_customer_message_id is distinct from v_state.last_seen_customer_message_id
+     and v_next.last_seen_customer_message_id is not null
+     and not exists (
+       select 1 from hub.case_messages message
+       where message.id = v_next.last_seen_customer_message_id
+         and message.case_id = p_case_id
+     ) then
+    raise exception 'The customer message must belong to this case.' using errcode = '22023';
+  end if;
+
+  update hub.case_ai_automation
+  set stage = v_next.stage,
+      attempts = v_next.attempts,
+      last_attempt_at = v_next.last_attempt_at,
+      last_ai_message_id = v_next.last_ai_message_id,
+      last_seen_customer_message_id = v_next.last_seen_customer_message_id,
+      last_customer_response = v_next.last_customer_response,
+      follow_up_due_at = v_next.follow_up_due_at,
+      follow_up_sent_at = v_next.follow_up_sent_at,
+      responded_at = v_next.responded_at,
+      response_source = v_next.response_source,
+      escalated_at = v_next.escalated_at,
+      halt_reason = v_next.halt_reason,
+      consecutive_failures = v_next.consecutive_failures,
+      retry_at = v_next.retry_at
+  where case_id = p_case_id;
+end;
+$$;
+-- Appended migration: 20261020160100_ai_automation_failure_policy_contract.sql
+-- Additive deployment gate for the AI automation failure policy (20261020160000).
+-- The Hub server records a failed step and its backoff through
+-- private.ai_automation_save_state (consecutiveFailures, retryAt), reads them back
+-- from private.ai_automation_work, and relies on the active batch waiting out
+-- retry_at. It must not deploy against a backend that predates them, where every
+-- recorded failure would be refused and a failing case would again cost a provider
+-- call on every sweep.
+do $$
+declare
+  contract jsonb := hub.get_backend_contract();
+  signature text;
+  role_name text;
+begin
+  if (contract @> '{"api_version":4,"features":["support.ai-automation-server.v1"]}'::jsonb) is not true then
+    raise exception 'Apply the AI automation server contract first' using errcode='55000';
+  end if;
+  if not exists (
+    select 1 from pg_attribute a
+    where a.attrelid = 'hub.case_ai_automation'::regclass and a.attname = 'consecutive_failures'
+      and not a.attisdropped and a.attnotnull and a.atttypid = 'integer'::regtype
+  ) or not exists (
+    select 1 from pg_attribute a
+    where a.attrelid = 'hub.case_ai_automation'::regclass and a.attname = 'retry_at'
+      and not a.attisdropped and a.atttypid = 'timestamptz'::regtype
+  ) then
+    raise exception 'Apply the AI automation failure policy first: missing hub.case_ai_automation failure columns' using errcode='55000';
+  end if;
+  foreach signature in array array[
+    'private.ai_automation_active_cases()', 'private.ai_automation_work(uuid)', 'private.ai_automation_save_state(uuid,jsonb)'
+  ] loop
+    if to_regprocedure(signature) is null or not has_function_privilege('hub_app_server', signature, 'execute') then
+      raise exception 'Apply the AI automation failure policy first: missing %', signature using errcode='55000';
+    end if;
+    if not exists (
+      select 1 from pg_proc p
+      where p.oid = to_regprocedure(signature) and p.prosecdef and p.proconfig @> array['search_path=""']
+    ) then
+      raise exception 'AI automation server operation % must be a pinned security definer', signature using errcode='55000';
+    end if;
+    foreach role_name in array array['anon', 'authenticated', 'service_role'] loop
+      if has_function_privilege(role_name, signature, 'execute') then
+        raise exception 'AI automation server operation % is exposed beyond the Hub server', signature using errcode='55000';
+      end if;
+    end loop;
+  end loop;
+  if position('automation.retry_at' in pg_get_functiondef('private.ai_automation_active_cases()'::regprocedure)) = 0 then
+    raise exception 'Apply the AI automation failure policy first: the active batch does not wait out retry_at' using errcode='55000';
+  end if;
+  if position('''consecutiveFailures''' in pg_get_functiondef('private.ai_automation_work(uuid)'::regprocedure)) = 0
+     or position('''retryAt''' in pg_get_functiondef('private.ai_automation_work(uuid)'::regprocedure)) = 0 then
+    raise exception 'Apply the AI automation failure policy first: private.ai_automation_work does not return the failure fields' using errcode='55000';
+  end if;
+  if position('''consecutiveFailures''' in pg_get_functiondef('private.ai_automation_save_state(uuid,jsonb)'::regprocedure)) = 0
+     or position('''retryAt''' in pg_get_functiondef('private.ai_automation_save_state(uuid,jsonb)'::regprocedure)) = 0 then
+    raise exception 'Apply the AI automation failure policy first: private.ai_automation_save_state does not accept the failure fields' using errcode='55000';
+  end if;
+  if not (contract->'features' @> '["support.ai-automation-failure-policy.v1"]'::jsonb) then
+    contract:=jsonb_set(contract,'{features}',(contract->'features')||'["support.ai-automation-failure-policy.v1"]'::jsonb);
+  end if;
+  execute format('create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='''' as %L','select '||quote_literal(contract::text)||'::jsonb');
+end $$;
+revoke all on function hub.get_backend_contract() from public;
+grant execute on function hub.get_backend_contract() to anon,authenticated;
+-- Appended migration: 20261020163000_unified_communications.sql
 -- Unified communications. Every customer-service and technical-support inquiry
 -- that arrives by phone, text message, email, chat or web form becomes one
 -- conversation in the Hub, for every connected application. Inbound text is
@@ -10519,7 +10806,7 @@ grant execute on function hub.list_communications(text,text,uuid,text,integer,in
   hub.update_communication(uuid,text,text,uuid,boolean,uuid,boolean,timestamptz), hub.add_communication_note(uuid,text,uuid),
   hub.begin_communication_reply(uuid,text,uuid,text[]), hub.import_communications(text,jsonb)
   to authenticated;
--- Appended migration: 20261020160100_unified_communications_contract.sql
+-- Appended migration: 20261020163100_unified_communications_contract.sql
 -- Additive deployment gate for unified communications. Declaring the feature
 -- changes no behavior: inbound webhooks still require their provider signature
 -- or secret, chat still requires its opaque token, and every staff read or

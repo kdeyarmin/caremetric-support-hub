@@ -1,14 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
-import { aiAutomation, maxAiAttempts } from './ai-automation.mjs';
+import { aiAutomation, automatedSignature, fitAutomatedReply, maxAiAttempts, maxAiMessageCharacters, maxConsecutiveFailures } from './ai-automation.mjs';
 
 const T0 = new Date('2026-10-15T12:00:00Z');
-const HOUR = 60 * 60 * 1000;
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
 
 function memoryStore() {
   const cases = new Map();
   let sequence = 0;
+  // Mirrors the database limit on automated message and note bodies.
+  const checkBody = (body) => {
+    if (body.length > maxAiMessageCharacters) throw Object.assign(new Error('An automated reply of 1 to 5000 characters is required.'), { code: '22023' });
+  };
   const store = {
     cases,
+    patches: [],
+    now: () => T0,
     addCase({ id, subject = 'Export never finishes', status = 'open', source = 'portal', messages = [] }) {
       cases.set(id, {
         caseId: id, subject, productId: 'breathe', status, priority: 'normal', source,
@@ -35,11 +42,12 @@ function memoryStore() {
     async claimCase(caseId) {
       const entry = cases.get(caseId);
       if (!entry || entry.state) return false;
-      entry.state = { stage: 'attempt_due', attempts: 0, lastSeenCustomerMessageId: null, lastCustomerResponse: null, followUpDueAt: null, followUpSentAt: null };
+      entry.state = { stage: 'attempt_due', attempts: 0, lastSeenCustomerMessageId: null, lastCustomerResponse: null, followUpDueAt: null, followUpSentAt: null, consecutiveFailures: 0, retryAt: null };
       return true;
     },
     async findActiveCaseIds() {
-      return [...cases.values()].filter((entry) => entry.state && ['attempt_due', 'awaiting_response', 'escalate_due'].includes(entry.state.stage)).map((entry) => entry.caseId);
+      return [...cases.values()].filter((entry) => entry.state && ['attempt_due', 'awaiting_response', 'escalate_due'].includes(entry.state.stage)
+        && (!entry.state.retryAt || new Date(entry.state.retryAt).getTime() <= store.now().getTime())).map((entry) => entry.caseId);
     },
     async loadWork(caseId) {
       const entry = cases.get(caseId);
@@ -48,6 +56,7 @@ function memoryStore() {
     },
     async knowledgeForCase() { return [{ title: 'Exports guide', summary: 'Split large exports by month.', body: 'Open Reports and choose a month.' }]; },
     async postAiMessage(caseId, body) {
+      checkBody(body);
       const entry = cases.get(caseId);
       sequence += 1;
       const id = `${caseId}-ai${sequence}`;
@@ -56,11 +65,12 @@ function memoryStore() {
       return id;
     },
     async postAiNote(caseId, body) {
+      checkBody(body);
       cases.get(caseId).notes.push({ id: `${caseId}-note`, authorName: 'CareMetric AI Assistant', authorRole: 'ai_assistant', body, createdAt: new Date().toISOString() });
     },
     async escalateCase(caseId) { const entry = cases.get(caseId); entry.escalated = true; entry.status = 'in_progress'; entry.priority = 'high'; },
     async resolveCase(caseId) { const entry = cases.get(caseId); entry.resolved = true; entry.status = 'resolved'; },
-    async saveState(caseId, patch) { Object.assign(cases.get(caseId).state, patch); },
+    async saveState(caseId, patch) { store.patches.push(patch); Object.assign(cases.get(caseId).state, patch); },
   };
   return store;
 }
@@ -76,8 +86,10 @@ function fakeAi({ classify = 'unclear' } = {}) {
 
 function buildLoop(store, ai, overrides = {}) {
   let clock = T0;
-  const loop = aiAutomation({ ai, store, enabled: true, followUpDelayMs: 24 * HOUR, now: () => clock, log: () => {}, ...overrides });
-  return { loop, advance: (ms) => { clock = new Date(clock.getTime() + ms); } };
+  const logs = [];
+  store.now = () => clock;
+  const loop = aiAutomation({ ai, store, enabled: true, followUpDelayMs: 24 * HOUR, now: () => clock, log: (line) => logs.push(JSON.parse(line)), ...overrides });
+  return { loop, logs, advance: (ms) => { clock = new Date(clock.getTime() + ms); } };
 }
 
 const aiMessages = (entry) => entry.messages.filter((message) => message.authorRole === 'ai_assistant');
@@ -216,5 +228,229 @@ describe('AI auto-resolution loop', () => {
     await loop.tick();
     expect(entry.state.stage).toBe('exhausted');
     expect(entry.notes[0].body).toContain('Still broken.');
+  });
+
+  it('posts an oversize draft cut to the limit instead of failing on every sweep', async () => {
+    const store = memoryStore();
+    const entry = store.addCase({ id: 'case-10', messages: ['Export broken.'] });
+    const ai = fakeAi();
+    const steps = Array.from({ length: 60 }, (_, index) => `Step ${index + 1}: open Reports, choose one month, and export it again before you try the next month.`);
+    ai.draftReply = vi.fn(async () => `${steps.join('\n\n')}\n\nDid that fix it?\n\n${automatedSignature}`);
+    const { loop, logs } = buildLoop(store, ai);
+    await loop.tick();
+    const [reply] = aiMessages(entry);
+    expect(reply.body.length).toBeLessThanOrEqual(maxAiMessageCharacters);
+    expect(reply.body.endsWith(`\n\nDid these steps fix the problem? Reply here and let us know.\n\n${automatedSignature}`)).toBe(true);
+    expect(entry.state).toMatchObject({ stage: 'awaiting_response', attempts: 1 });
+    expect(logs).toEqual([]);
+    await loop.tick();
+    expect(ai.draftReply).toHaveBeenCalledTimes(1);
+  });
+
+  it('backs off a persistently failing case, then hands it to staff instead of retrying for ever', async () => {
+    const store = memoryStore();
+    const entry = store.addCase({ id: 'case-11', messages: ['Export broken.'] });
+    const ai = fakeAi();
+    ai.draftReply = vi.fn(async () => { throw Object.assign(new Error('AI assistance is temporarily unavailable.'), { status: 502, code: 'AI_PROVIDER_ERROR' }); });
+    const { loop, logs, advance } = buildLoop(store, ai);
+    await loop.tick();
+    expect(entry.state).toMatchObject({ stage: 'attempt_due', attempts: 0, consecutiveFailures: 1, retryAt: new Date(T0.getTime() + 5 * MINUTE) });
+    // Backing off: sweeps before the retry time leave the case alone.
+    await loop.tick();
+    advance(4 * MINUTE);
+    await loop.tick();
+    expect(ai.draftReply).toHaveBeenCalledTimes(1);
+    advance(MINUTE);
+    await loop.tick();
+    expect(entry.state).toMatchObject({ stage: 'attempt_due', consecutiveFailures: 2, retryAt: new Date(T0.getTime() + 15 * MINUTE) });
+    advance(10 * MINUTE);
+    await loop.tick();
+    expect(ai.draftReply).toHaveBeenCalledTimes(maxConsecutiveFailures);
+    expect(entry.state).toMatchObject({ stage: 'escalate_due', consecutiveFailures: maxConsecutiveFailures, retryAt: null });
+    expect(logs.at(-1)).toEqual({ event: 'hub_ai_automation_escalation_due_after_failures', case_id: 'case-11', consecutive_failures: maxConsecutiveFailures });
+    // The next sweep escalates it like any other escalate_due case.
+    await loop.tick();
+    expect(entry.state).toMatchObject({ stage: 'exhausted', consecutiveFailures: maxConsecutiveFailures });
+    expect(entry).toMatchObject({ escalated: true, status: 'in_progress', priority: 'high' });
+    expect(entry.notes).toHaveLength(1);
+    expect(entry.notes[0].body).toMatch(/^ESCALATED — AI automation could not complete\./);
+    expect(entry.notes[0].body).toContain('The customer has not received an automated reply.');
+    expect(ai.summarizeForEscalation).not.toHaveBeenCalled();
+    expect(aiMessages(entry)).toHaveLength(0);
+    expect(logs.filter((line) => line.event === 'hub_ai_automation_error')).toHaveLength(maxConsecutiveFailures);
+    advance(24 * HOUR);
+    await loop.tick();
+    expect(ai.draftReply).toHaveBeenCalledTimes(maxConsecutiveFailures);
+  });
+
+  it('keeps retrying a provider outage with growing backoff, then answers once the provider recovers', async () => {
+    const store = memoryStore();
+    const entry = store.addCase({ id: 'case-12', messages: ['Export broken.'] });
+    const ai = fakeAi();
+    const working = ai.draftReply;
+    let outage = true;
+    ai.draftReply = vi.fn(async (input) => {
+      if (outage) throw Object.assign(new Error('AI assistance is temporarily unavailable.'), { transient: true });
+      return working(input);
+    });
+    const { loop, advance } = buildLoop(store, ai);
+    const delays = [];
+    for (let failure = 1; failure <= 6; failure += 1) {
+      const sweptAt = store.now().getTime();
+      await loop.tick();
+      expect(entry.state).toMatchObject({ stage: 'attempt_due', consecutiveFailures: failure });
+      delays.push((new Date(entry.state.retryAt).getTime() - sweptAt) / MINUTE);
+      advance(new Date(entry.state.retryAt).getTime() - sweptAt);
+    }
+    expect(delays).toEqual([5, 10, 20, 30, 30, 30]);
+    expect(entry.escalated).toBe(false);
+    outage = false;
+    await loop.tick();
+    expect(aiMessages(entry)).toHaveLength(1);
+    expect(entry.state).toMatchObject({ stage: 'awaiting_response', attempts: 1, consecutiveFailures: 0, retryAt: null });
+  });
+
+  it('applies the same policy while awaiting the customer', async () => {
+    const store = memoryStore();
+    const entry = store.addCase({ id: 'case-13', messages: ['Export broken.'] });
+    const ai = fakeAi();
+    ai.classifyResolution = vi.fn(async () => { throw new Error('classification failed'); });
+    const { loop, advance } = buildLoop(store, ai);
+    await loop.tick();
+    store.customerSays('case-13', 'Something else happened this time.');
+    for (let sweep = 0; sweep < maxConsecutiveFailures; sweep += 1) {
+      await loop.tick();
+      advance(HOUR);
+    }
+    expect(ai.classifyResolution).toHaveBeenCalledTimes(maxConsecutiveFailures);
+    expect(entry.state.stage).toBe('escalate_due');
+    await loop.tick();
+    expect(entry.state.stage).toBe('exhausted');
+    expect(entry.escalated).toBe(true);
+    expect(entry.notes[0].body).toContain('It had sent 1 automated attempt(s) to the customer.');
+  });
+
+  it('only backs off a failing escalation, and stops paying for its summary once the streak is long', async () => {
+    const store = memoryStore();
+    const entry = store.addCase({ id: 'case-14', messages: ['Export broken.'] });
+    entry.state = { stage: 'escalate_due', attempts: 2, lastSeenCustomerMessageId: null, lastCustomerResponse: 'Still broken.', followUpDueAt: null, followUpSentAt: null, consecutiveFailures: 0, retryAt: null };
+    const ai = fakeAi();
+    const postAiNote = store.postAiNote;
+    let notesFail = true;
+    store.postAiNote = async (caseId, body) => {
+      if (notesFail) throw new Error('note refused');
+      return postAiNote(caseId, body);
+    };
+    const { loop, advance } = buildLoop(store, ai);
+    for (let sweep = 0; sweep < maxConsecutiveFailures + 1; sweep += 1) {
+      await loop.tick();
+      advance(HOUR);
+    }
+    expect(entry.state).toMatchObject({ stage: 'escalate_due', consecutiveFailures: maxConsecutiveFailures + 1 });
+    expect(ai.summarizeForEscalation).toHaveBeenCalledTimes(maxConsecutiveFailures);
+    notesFail = false;
+    await loop.tick();
+    expect(entry.state.stage).toBe('exhausted');
+    expect(entry.notes[0].body).toMatch(/^ESCALATED — AI automation could not complete\./);
+    expect(ai.summarizeForEscalation).toHaveBeenCalledTimes(maxConsecutiveFailures);
+  });
+  it('clears a failure another process recorded meanwhile once its own attempt posts', async () => {
+    const store = memoryStore();
+    const entry = store.addCase({ id: 'case-15', messages: ['Export broken.'] });
+    const ai = fakeAi();
+    const working = ai.draftReply;
+    const { loop } = buildLoop(store, ai);
+    // A second Hub process (deploy overlap) records a failure on the same attempt
+    // while this one is still drafting it.
+    ai.draftReply = vi.fn(async (input) => {
+      Object.assign(entry.state, { consecutiveFailures: 1, retryAt: new Date(T0.getTime() + 5 * MINUTE) });
+      return working(input);
+    });
+    await loop.tick();
+    expect(aiMessages(entry)).toHaveLength(1);
+    expect(entry.state).toMatchObject({ stage: 'awaiting_response', consecutiveFailures: 0, retryAt: null });
+    // So a prompt customer answer is classified on the next sweep, not after the backoff.
+    store.customerSays('case-15', 'Still broken.');
+    await loop.tick();
+    expect(ai.classifyResolution).toHaveBeenCalledTimes(1);
+  });
+
+  it('backs off a handoff whose escalation fails, and never posts the staff note twice', async () => {
+    const store = memoryStore();
+    const entry = store.addCase({ id: 'case-16', messages: ['Export broken.'] });
+    const ai = fakeAi();
+    ai.draftReply = vi.fn(async () => { throw new Error('draft refused'); });
+    const escalateCase = store.escalateCase;
+    let escalationFails = true;
+    store.escalateCase = async (caseId) => {
+      if (escalationFails) throw new Error('escalation refused');
+      return escalateCase(caseId);
+    };
+    const { loop, advance } = buildLoop(store, ai);
+    for (let sweep = 0; sweep < maxConsecutiveFailures; sweep += 1) {
+      await loop.tick();
+      advance(HOUR);
+    }
+    expect(entry.state).toMatchObject({ stage: 'escalate_due', retryAt: null });
+    // The note posts, then the escalation fails: the handoff backs off like any step.
+    const sweptAt = store.now().getTime();
+    await loop.tick();
+    expect(entry.notes).toHaveLength(1);
+    expect(entry.state).toMatchObject({ stage: 'escalate_due', consecutiveFailures: maxConsecutiveFailures + 1 });
+    expect(new Date(entry.state.retryAt).getTime()).toBeGreaterThan(sweptAt);
+    await loop.tick();
+    expect(entry.escalated).toBe(false);
+    escalationFails = false;
+    advance(HOUR);
+    await loop.tick();
+    expect(entry).toMatchObject({ escalated: true, status: 'in_progress', priority: 'high' });
+    expect(entry.state.stage).toBe('exhausted');
+    expect(entry.notes).toHaveLength(1);
+    expect(ai.summarizeForEscalation).not.toHaveBeenCalled();
+  });
+});
+
+describe('fitting automated drafts to the reply limit', () => {
+  const closing = `\n\nDid these steps fix the problem? Reply here and let us know.\n\n${automatedSignature}`;
+
+  it('leaves a draft within the limit exactly as written', () => {
+    const draft = `Open Reports and choose one month.\n\nDid that fix it?\n\n${automatedSignature}`;
+    expect(fitAutomatedReply(draft)).toBe(draft);
+    const atLimit = 'a'.repeat(maxAiMessageCharacters);
+    expect(fitAutomatedReply(atLimit)).toBe(atLimit);
+    // Over the limit only through padding before the signature: nothing is cut.
+    const padded = `Open Reports.\n\nChoose one month.${' '.repeat(maxAiMessageCharacters)}${automatedSignature}`;
+    expect(fitAutomatedReply(padded)).toBe(`Open Reports.\n\nChoose one month.\n\nDid these steps fix the problem? Reply here and let us know.\n\n${automatedSignature}`);
+  });
+
+  it('cuts at the last whole paragraph and keeps one closing signature', () => {
+    const paragraphs = Array.from({ length: 80 }, (_, index) => `Step ${index + 1}: open Reports, choose a single month and export again. Wait for it to finish.`);
+    const fitted = fitAutomatedReply(`${paragraphs.join('\n\n')}\n\nDid that fix it?\n\n${automatedSignature}`);
+    expect(fitted.length).toBeLessThanOrEqual(maxAiMessageCharacters);
+    expect(fitted.endsWith(closing)).toBe(true);
+    expect(fitted.split(automatedSignature)).toHaveLength(2);
+    const body = fitted.slice(0, -closing.length);
+    expect(body.endsWith('Wait for it to finish.')).toBe(true);
+    expect(paragraphs.join('\n\n').startsWith(body)).toBe(true);
+    expect(body.length).toBeGreaterThan(maxAiMessageCharacters - closing.length - 200);
+  });
+
+  it('falls back to a sentence end, never a list number, then a word break', () => {
+    const sentences = Array.from({ length: 200 }, (_, index) => `Sentence ${index + 1} adds one more detail about the export.`).join(' ');
+    const bySentence = fitAutomatedReply(sentences);
+    expect(bySentence.length).toBeLessThanOrEqual(maxAiMessageCharacters);
+    expect(bySentence.slice(0, -closing.length)).toMatch(/about the export\.$/);
+    const list = Array.from({ length: 200 }, (_, index) => `${index + 1}. Open Reports and export month ${index + 1} on its own`).join('\n');
+    expect(fitAutomatedReply(list).slice(0, -closing.length)).toMatch(/on its own$/);
+    const byWord = fitAutomatedReply('export '.repeat(1000));
+    expect(byWord.length).toBeLessThanOrEqual(maxAiMessageCharacters);
+    expect(byWord.endsWith(`export…${closing}`)).toBe(true);
+  });
+
+  it('never splits a character when nothing else breaks the text', () => {
+    const fitted = fitAutomatedReply(`x${'🙂'.repeat(3000)}`);
+    expect(fitted.length).toBeLessThanOrEqual(maxAiMessageCharacters);
+    expect(fitted).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+    expect(fitted.endsWith(`🙂…${closing}`)).toBe(true);
   });
 });

@@ -10,6 +10,18 @@ export const aiAssistantDisplayName = 'CareMetric AI Assistant';
 // the attempts check constraint on hub.case_ai_automation.
 export const maxAiAttempts = 2;
 
+// A case whose automated step fails this many times in a row is handed to staff,
+// unless the failure is a provider outage, which is retried with backoff for as long
+// as it lasts. Each failure waits retryDelayMs doubled per failure, up to
+// maxRetryDelayMs, before the case is picked up again.
+export const maxConsecutiveFailures = 3;
+
+// The private.ai_automation_post_message / post_note body limit (and the
+// hub.case_messages.body check). JavaScript counts UTF-16 code units, never fewer
+// than the code points Postgres counts, so a body within it here is within it there.
+export const maxAiMessageCharacters = 5000;
+export const automatedSignature = '— CareMetric AI Assistant (automated reply)';
+
 const staffRoles = new Set(['support_agent', 'support_manager', 'platform_admin']);
 const terminalStages = new Set(['exhausted', 'resolved', 'halted']);
 
@@ -17,12 +29,51 @@ const followUpNudge = [
   'Just checking in — did the steps in our last message fix the problem?',
   'If it did, you can mark this case resolved with the "That fixed it" button on the case. If you are still seeing the problem, reply here and tell us what happened, and we will keep working on it.',
   '',
-  '— CareMetric AI Assistant (automated reply)',
+  automatedSignature,
 ].join('\n');
+
+// Replaces the closing question a shortened draft loses with its tail.
+const shortenedDraftClosing = 'Did these steps fix the problem? Reply here and let us know.';
 
 function clip(value, limit) {
   const text = typeof value === 'string' ? value : '';
   return text.length > limit ? text.slice(0, limit) : text;
+}
+
+// Cuts text to at most limit characters: at the last paragraph break within it, else
+// the last line break or sentence end, as long as the cut keeps at least half of the
+// limit; otherwise at the last word break, marked with an ellipsis.
+function cutAtBoundary(text, limit) {
+  if (text.length <= limit) return text;
+  const floor = Math.floor(limit / 2);
+  // One character past the limit shows whether a sentence ends exactly at it.
+  const head = text.slice(0, limit + 1);
+  const paragraph = head.lastIndexOf('\n\n');
+  if (paragraph >= floor) return head.slice(0, paragraph).trimEnd();
+  let sentence = -1;
+  // A period after a digit is usually a list number ("2. Open Reports"), not an end.
+  for (const match of head.matchAll(/(?<!\d)[.!?](?=\s)|\n/g)) {
+    const end = match[0] === '\n' ? match.index : match.index + 1;
+    if (end <= limit) sentence = end;
+  }
+  if (sentence >= floor) return head.slice(0, sentence).trimEnd();
+  // The ellipsis takes the last character, so cut strictly inside the limit.
+  let cut = head.slice(0, limit).search(/\s\S*$/);
+  if (cut < floor) cut = limit - 1;
+  // Never split a surrogate pair.
+  if (/[\uD800-\uDBFF]/.test(head[cut - 1] ?? '')) cut -= 1;
+  return `${head.slice(0, cut).trimEnd()}…`;
+}
+
+/** A draft that fits the post limit is posted exactly as written. A longer one would
+ * be refused on every sweep, so it is cut back to a paragraph or sentence boundary
+ * and closed with the question it lost and the required automated-reply signature. */
+export function fitAutomatedReply(draft) {
+  const text = String(draft ?? '').trim();
+  if (text.length <= maxAiMessageCharacters) return text;
+  const body = text.endsWith(automatedSignature) ? text.slice(0, -automatedSignature.length).trimEnd() : text;
+  const ending = `\n\n${shortenedDraftClosing}\n\n${automatedSignature}`;
+  return `${cutAtBoundary(body, maxAiMessageCharacters - ending.length)}${ending}`;
 }
 
 function stripHtml(value) {
@@ -116,10 +167,22 @@ function latestCustomerMessage(work) {
  * every transition is persisted in hub.case_ai_automation, so a restart resumes
  * exactly where the loop left off. Fail-closed: the sweep does nothing unless it is
  * explicitly enabled AND the AI provider is configured.
+ *
+ * A step that fails leaves its case where it was and is retried after a backoff
+ * (consecutive_failures / retry_at, backend feature
+ * support.ai-automation-failure-policy.v1). A provider outage is
+ * retried for as long as it lasts; any other failure hands the case to staff once
+ * maxConsecutiveFailures steps in a row have failed, so a case can never cost a
+ * provider call every sweep while the customer gets neither a reply nor a human.
  */
-export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 * 60 * 60 * 1000, draftTier = 'draft', now = () => new Date(), log = (line) => console.log(line) }) {
+export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 * 60 * 60 * 1000, retryDelayMs = 5 * 60 * 1000, maxRetryDelayMs = 30 * 60 * 1000, draftTier = 'draft', now = () => new Date(), log = (line) => console.log(line) }) {
   let running = false;
   const active = () => enabled === true && Boolean(ai?.configured);
+
+  // A step that went through ends any failure streak and its backoff. Always
+  // written, never inferred from the state this process loaded: during a deploy
+  // overlap another process may have recorded a failure since.
+  const recovered = { consecutiveFailures: 0, retryAt: null };
 
   async function runAttempt(work) {
     const { state } = work;
@@ -135,7 +198,7 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
       attempt: state.attempts + 1,
       failureContext: state.lastCustomerResponse,
     });
-    const messageId = await store.postAiMessage(work.caseId, draft);
+    const messageId = await store.postAiMessage(work.caseId, fitAutomatedReply(draft));
     const attemptedAt = now();
     await store.saveState(work.caseId, {
       stage: 'awaiting_response',
@@ -146,26 +209,69 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
       followUpDueAt: new Date(attemptedAt.getTime() + followUpDelayMs),
       followUpSentAt: null,
       respondedAt: null,
+      ...recovered,
     });
   }
 
-  async function escalate(work) {
+  async function exhaustedNote(work) {
     let summary;
     try {
-      summary = await ai.summarizeForEscalation({ subject: work.subject, messages: threadForAi(work) });
+      summary = clip(await ai.summarizeForEscalation({ subject: work.subject, messages: threadForAi(work) }), 3000);
     } catch {
       summary = `Automated help was attempted ${work.state.attempts} time(s) without resolving this case.`
         + (work.state.lastCustomerResponse ? ` The customer's latest response: "${clip(work.state.lastCustomerResponse, 500)}"` : '');
     }
-    await store.postAiNote(work.caseId, [
+    return [
       'ESCALATED — AI attempts exhausted.',
       '',
       summary,
       '',
       `The customer still reports the problem is not fixed after ${work.state.attempts} automated attempt(s). A support team member needs to take over this case.`,
-    ].join('\n'));
+    ].join('\n');
+  }
+
+  // No provider call: whatever kept failing may well be the provider.
+  function failureNote(state) {
+    return [
+      'ESCALATED — AI automation could not complete.',
+      '',
+      `The AI assistant's last ${state.consecutiveFailures} automated steps on this case failed, so it stopped retrying. `
+        + (state.attempts > 0 ? `It had sent ${state.attempts} automated attempt(s) to the customer.` : 'The customer has not received an automated reply.')
+        + (state.lastCustomerResponse ? ` The customer's latest response: "${clip(state.lastCustomerResponse, 500)}"` : ''),
+      '',
+      'A support team member needs to take over this case.',
+    ].join('\n');
+  }
+
+  // Each store call is its own transaction, so a retried escalation finds the note
+  // an earlier try already posted and does not post (or pay for) another.
+  async function escalate(work) {
+    const noted = work.notes.some((note) => note.authorRole === 'ai_assistant' && note.body.startsWith('ESCALATED — '));
+    if (!noted) {
+      const note = work.state.consecutiveFailures >= maxConsecutiveFailures ? failureNote(work.state) : await exhaustedNote(work);
+      await store.postAiNote(work.caseId, note);
+    }
     await store.escalateCase(work.caseId);
     await store.saveState(work.caseId, { stage: 'exhausted', escalatedAt: now() });
+  }
+
+  // Records a failed step. The case stays at its stage and waits out a doubling
+  // backoff; after maxConsecutiveFailures failures that are not provider outages it
+  // is due for escalation instead, which the next sweep carries out like any other
+  // escalate_due case (so a failing handoff backs off too). An escalation that
+  // itself fails only backs off: it needs no provider call once the streak is that
+  // long.
+  async function recordFailure(caseId, error) {
+    const work = await store.loadWork(caseId);
+    if (!work || !work.state || terminalStages.has(work.state.stage)) return;
+    const failures = (work.state.consecutiveFailures ?? 0) + 1;
+    if (error?.transient === true || failures < maxConsecutiveFailures || work.state.stage === 'escalate_due') {
+      const delay = Math.min(retryDelayMs * 2 ** (failures - 1), maxRetryDelayMs);
+      await store.saveState(caseId, { consecutiveFailures: failures, retryAt: new Date(now().getTime() + delay) });
+      return;
+    }
+    await store.saveState(caseId, { stage: 'escalate_due', consecutiveFailures: failures, retryAt: null });
+    log(JSON.stringify({ event: 'hub_ai_automation_escalation_due_after_failures', case_id: caseId, consecutive_failures: failures }));
   }
 
   async function processCase(caseId) {
@@ -202,6 +308,7 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
         await store.saveState(caseId, {
           stage: nextStage, respondedAt: now(), responseSource: 'classification',
           lastSeenCustomerMessageId: latest.id, lastCustomerResponse: clip(latest.body, 5000),
+          ...recovered,
         });
         const refreshed = await store.loadWork(caseId);
         if (!refreshed) return;
@@ -209,13 +316,24 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
       }
       // Unclear: record that the message was seen so it is not reclassified, and
       // keep waiting for a clearer answer or the portal buttons.
-      await store.saveState(caseId, { lastSeenCustomerMessageId: latest.id });
+      await store.saveState(caseId, { lastSeenCustomerMessageId: latest.id, ...recovered });
       return;
     }
 
     if (state.followUpDueAt && !state.followUpSentAt && new Date(state.followUpDueAt).getTime() <= now().getTime()) {
       await store.postAiMessage(caseId, followUpNudge);
-      await store.saveState(caseId, { followUpSentAt: now() });
+      await store.saveState(caseId, { followUpSentAt: now(), ...recovered });
+    }
+  }
+
+  const errorMessage = (error) => (error instanceof Error ? error.message : 'unknown');
+
+  async function sweepCase(caseId) {
+    try {
+      await processCase(caseId);
+    } catch (error) {
+      log(JSON.stringify({ event: 'hub_ai_automation_error', case_id: caseId, message: errorMessage(error), transient: error?.transient === true }));
+      await recordFailure(caseId, error).catch((failure) => log(JSON.stringify({ event: 'hub_ai_automation_failure_handling_error', case_id: caseId, message: errorMessage(failure) })));
     }
   }
 
@@ -226,12 +344,12 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
     try {
       for (const caseId of await store.findNewEligibleCaseIds()) {
         if (await store.claimCase(caseId)) {
-          await processCase(caseId).catch((error) => log(JSON.stringify({ event: 'hub_ai_automation_error', case_id: caseId, message: error instanceof Error ? error.message : 'unknown' })));
+          await sweepCase(caseId);
           processed += 1;
         }
       }
       for (const caseId of await store.findActiveCaseIds()) {
-        await processCase(caseId).catch((error) => log(JSON.stringify({ event: 'hub_ai_automation_error', case_id: caseId, message: error instanceof Error ? error.message : 'unknown' })));
+        await sweepCase(caseId);
         processed += 1;
       }
     } finally {

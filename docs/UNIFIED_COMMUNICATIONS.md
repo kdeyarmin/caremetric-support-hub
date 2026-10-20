@@ -130,8 +130,8 @@ session; there is no unattended background sync.
 
 ## Deployment
 
-Apply `20261020160000_unified_communications.sql` and its gate
-`20261020160100_unified_communications_contract.sql`, which declares
+Apply `20261020163000_unified_communications.sql` and its gate
+`20261020163100_unified_communications_contract.sql`, which declares
 `support.communications.v1`. The gate refuses to declare the feature if any
 communication table loses row level security or gains a direct grant, or if a
 webhook or chat function becomes executable by a browser role.
