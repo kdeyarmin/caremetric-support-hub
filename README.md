@@ -1,5 +1,43 @@
 # CareMetric Support Hub
 
+## One hub for every application
+
+The Hub is the super-admin, support and knowledge center for seven applications:
+CareBase (PennTrain), Breathe (PennFit), PennSync (CareMetric-Pennsync),
+CareMetric Intel, CareMetric EMR, CareMetric Go and CareMetric Healthcare Advisors.
+Product names appear with their repository names so each app is easy to find.
+
+- **Communications** (`/communications`): customer service and technical
+  support from the (877) 521-2890 phone line, text messages, email, website chat
+  and the Advisors web form land in one queue with triage, internal notes and
+  replies on the original channel. Text, email and chat stay off until their
+  provider settings (or `HUB_CHAT_ENABLED`) are set. See
+  [unified communications](docs/UNIFIED_COMMUNICATIONS.md).
+- **Knowledge** (`/knowledge`): shared and app-specific articles for every
+  application, with per-app coverage and a direct "Write an article" path into
+  DocStudio. Healthcare Advisors' published FAQ is included.
+- **Portfolio rollup** (`/admin/portfolio`): health, subscriber and subscription
+  figures, and a live **super-admin coverage** matrix showing, per application,
+  what the Hub holds now and what app-side work each gap needs.
+- **Healthcare Advisors**: consultation requests are read through a one-use,
+  SMS-authorized bridge. See [the Advisors connection](docs/ADVISORS_ADMIN_CONNECTION.md).
+
+What the Hub can show depends on what each application's administration
+connection provides. As documented for each connection today:
+
+| Application | Directory | Subscribers | Invoices & payments | Other |
+| --- | --- | --- | --- | --- |
+| CareBase (PennTrain) | Organizations, users | Subscriptions, status totals | Invoices, Stripe verification | Courses, facility training, jobs, releases, audit |
+| Breathe (PennFit) | Organizations, staff | Subscriptions, status totals | Not provided yet | Shared phone-line messages |
+| PennSync | Organizations, users | Individual subscriptions | Not provided yet | |
+| CareMetric Intel | Registered users only | Not provided yet | Not provided yet | |
+| CareMetric EMR | Organizations, staff | Application entitlements | Not provided yet | |
+| CareMetric Go | Shared with EMR | Shared with EMR (never double-counted) | Not provided yet | |
+| Healthcare Advisors | Not applicable | Not applicable | Not applicable | Consultation requests |
+
+"Not provided yet" items need a read added to that application's
+administration connection; the coverage matrix lists them live.
+
 The Super Admin workspace now includes [facility training management](docs/FACILITY_TRAINING.md): create training-only facilities, invite administrators and students, manage enrollment and progress, open issued certificates, run complete printable/CSV reports and manage module access terms through the Hub session. Shared support, phone routing, course, onboarding and security workspaces are reachable from the same Admin page. The native CareBase `training.v1` capability gates these controls; deploy its migrations and adapter before this Hub update. Live owner verification remains separate from fixture testing.
 
 CareBase organizations now have a reviewed [Stripe billing portal workflow](docs/BILLING_PORTAL.md)
