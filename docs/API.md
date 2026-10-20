@@ -121,6 +121,19 @@ due follow-up, or a halt), and posting a reply consumes its attempt or follow-up
 the same transaction, so concurrent Hub processes cannot double-post
 (`20261020140000`).
 
+A draft longer than the 5,000-character reply limit is cut back to a paragraph
+or sentence boundary and closed with the "did this fix it" question and the
+required "— CareMetric AI Assistant (automated reply)" signature before it is
+posted. A step that fails for a case leaves it at its stage and records the
+failure (`hub.case_ai_automation.consecutive_failures`, `retry_at`); the active
+batch skips the case until `retry_at`, with the backoff doubling from 5 to at
+most 30 minutes. A provider outage (no response, timeout, 408/409/429/5xx) is
+retried for as long as it lasts. Any other failure hands the case to staff on
+the third in a row through the normal escalation step (internal note,
+`in_progress`, high priority) without a further provider call, so a failing
+case never costs a provider call on every sweep. Any step that goes through
+clears the streak (`20261020160000`).
+
 ## AI go-live readiness (server endpoint)
 
 Implemented in the app server (`server/go-live-readiness.mjs`) for the admin

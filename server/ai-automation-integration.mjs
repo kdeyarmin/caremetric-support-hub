@@ -30,14 +30,28 @@ const fixtureCases=new Set();
 const hour=60*60*1000;
 
 // Synthetic Anthropic Messages API: answers by request kind and records each prompt.
+// Drafts for fixture subjects marked oversize, refused or outage stand in for a
+// reply over the 5000-character limit, a refusal on every request, and an overloaded
+// provider while providerDown is set.
 const requests=[];
+let providerDown=false;
+const oversizeDraft=Array.from({length:60},(_,index)=>`Step ${index+1}: open Reports, choose one month, and export it again before you try the next month.`).join('\n\n')
+  +'\n\nDid that fix it?\n\n— CareMetric AI Assistant (automated reply)';
 const anthropic=async(url,init)=>{
   assert.equal(url,'https://api.anthropic.com/v1/messages');
   assert.equal(init.headers['x-api-key'],'sk-ant-integration-fixture');
   const request=JSON.parse(init.body);
   const prompt=request.messages[0].content;
   let kind,text;
-  if(request.system.includes('Draft a support reply')) {
+  if(request.system.includes('Draft a support reply') && prompt.includes('Synthetic refused draft')) {
+    requests.push({kind:'draft-refused',prompt});
+    return new Response(JSON.stringify({content:[],stop_reason:'refusal',usage:{input_tokens:1,output_tokens:0}}),{status:200});
+  } else if(request.system.includes('Draft a support reply') && prompt.includes('Synthetic provider outage') && providerDown) {
+    requests.push({kind:'draft-outage',prompt});
+    return new Response(JSON.stringify({type:'error',error:{type:'overloaded_error',message:'Overloaded'}}),{status:529});
+  } else if(request.system.includes('Draft a support reply') && prompt.includes('Synthetic oversize draft')) {
+    kind='draft-oversize';text=oversizeDraft;
+  } else if(request.system.includes('Draft a support reply')) {
     kind='draft';text=`Synthetic automated attempt ${requests.filter(entry=>entry.kind==='draft').length+1}: open Reports, choose a single month, then export again. Did that fix the problem? — CareMetric AI Assistant (automated reply)`;
   } else if(request.system.includes('Classify their reply')) {
     kind='classify';text=JSON.stringify({outcome:/works now/i.test(prompt)?'fixed':/still/i.test(prompt)?'not_fixed':'unclear'});
@@ -181,6 +195,80 @@ try {
   assert.equal(resolved.status,'resolved');assert.ok(resolved.resolved_at);
   assert.equal((await admin.query("select count(*)::int as count from private.audit_events where case_id=$1 and actor_id=$2 and action='case.ai_auto_resolved'",[caseB,aiAssistantUserId])).rows[0].count,1);
 
+  // A draft over the 5000-character reply limit was refused on every sweep. It is
+  // now cut back to a whole paragraph, closed with the question and signature, and
+  // posted on the first try.
+  assert.ok(oversizeDraft.length>5000);
+  const caseG=await createCase('Synthetic oversize draft');
+  await tick();
+  const [oversizeReply]=await aiMessages(caseG);
+  assert.ok(oversizeReply.body.length<=5000);
+  assert.ok(oversizeDraft.startsWith(oversizeReply.body.slice(0,oversizeReply.body.indexOf('\n\nDid these steps'))));
+  assert.match(oversizeReply.body,/before you try the next month\.\n\nDid these steps fix the problem\? Reply here and let us know\.\n\n— CareMetric AI Assistant \(automated reply\)$/);
+  state=await automation(caseG);
+  assert.equal(state.stage,'awaiting_response');assert.equal(state.attempts,1);assert.equal(state.consecutive_failures,0);
+  assert.equal(requests.filter(entry=>entry.kind==='draft-oversize').length,1);
+
+  // A failure that will not go away (the provider refuses this case's draft every
+  // time) backs off between retries and, on the third failure in a row, hands the
+  // case to staff instead of paying for a provider call on every sweep for ever.
+  const failingTick=async()=>{await loop.tick();return failures.splice(0).map(line=>JSON.parse(line));};
+  const retryNow=caseId=>admin.query("update hub.case_ai_automation set retry_at=now()-interval '1 second' where case_id=$1",[caseId]);
+  const refusals=()=>requests.filter(entry=>entry.kind==='draft-refused').length;
+  const summaries=requests.filter(entry=>entry.kind==='summary').length;
+  const caseH=await createCase('Synthetic refused draft');
+  assert.deepEqual((await failingTick()).map(line=>[line.event,line.case_id,line.transient]),[['hub_ai_automation_error',caseH,false]]);
+  state=await automation(caseH);
+  assert.equal(state.stage,'attempt_due');assert.equal(state.attempts,0);assert.equal(state.consecutive_failures,1);
+  assert.equal(state.retry_at.getTime(),clock+5*60*1000);
+  // Backing off: the active batch leaves the case out until its retry time.
+  assert.ok(!(await store.findActiveCaseIds()).includes(caseH));
+  assert.deepEqual(await failingTick(),[]);
+  assert.equal(refusals(),1);
+  await retryNow(caseH);
+  assert.ok((await store.findActiveCaseIds()).includes(caseH));
+  assert.equal((await failingTick()).length,1);
+  state=await automation(caseH);
+  assert.equal(state.stage,'attempt_due');assert.equal(state.consecutive_failures,2);
+  assert.equal(state.retry_at.getTime(),clock+10*60*1000);
+  await retryNow(caseH);
+  assert.deepEqual((await failingTick()).map(line=>line.event),['hub_ai_automation_error','hub_ai_automation_escalated_after_failures']);
+  assert.equal(refusals(),3);
+  state=await automation(caseH);
+  assert.equal(state.stage,'exhausted');assert.equal(state.consecutive_failures,3);assert.ok(state.escalated_at);
+  assert.deepEqual(await supportCase(caseH),{status:'in_progress',priority:'high',resolved_at:null});
+  const failureNotes=(await admin.query('select author_id,author_role,body from private.case_notes where case_id=$1',[caseH])).rows;
+  assert.equal(failureNotes.length,1);assert.equal(failureNotes[0].author_id,aiAssistantUserId);assert.equal(failureNotes[0].author_role,'ai_assistant');
+  assert.match(failureNotes[0].body,/^ESCALATED — AI automation could not complete\.[\s\S]*The customer has not received an automated reply\./);
+  assert.equal(requests.filter(entry=>entry.kind==='summary').length,summaries,'escalating a failing case makes no provider call');
+  assert.equal((await aiMessages(caseH)).length,0);
+  assert.equal((await admin.query('select ai_stage from hub.support_case_queue where id=$1',[caseH])).rows[0].ai_stage,'exhausted');
+  // Handed over for good: later sweeps never retry it.
+  assert.ok(!(await store.findActiveCaseIds()).includes(caseH));
+  await tick();
+  assert.equal(refusals(),3);
+
+  // A provider outage is transient: the case keeps backing off and retrying past the
+  // failure limit, never escalated, and is answered once the provider is back.
+  providerDown=true;
+  const caseI=await createCase('Synthetic provider outage');
+  for(let failure=1;failure<=4;failure+=1) {
+    assert.deepEqual((await failingTick()).map(line=>[line.event,line.transient]),[['hub_ai_automation_error',true]]);
+    state=await automation(caseI);
+    assert.equal(state.stage,'attempt_due');assert.equal(state.consecutive_failures,failure);
+    assert.equal(state.retry_at.getTime(),clock+Math.min(5*2**(failure-1),30)*60*1000);
+    await retryNow(caseI);
+  }
+  assert.equal(requests.filter(entry=>entry.kind==='draft-outage').length,4);
+  providerDown=false;
+  await tick();
+  const [afterOutage]=await aiMessages(caseI);
+  assert.match(afterOutage.body,/^Synthetic automated attempt \d+: /);
+  state=await automation(caseI);
+  assert.equal(state.stage,'awaiting_response');assert.equal(state.attempts,1);
+  assert.equal(state.consecutive_failures,0);assert.equal(state.retry_at,null);
+  assert.deepEqual(await supportCase(caseI),{status:'waiting_on_customer',priority:'normal',resolved_at:null});
+
   // A case staff already answered is never claimed, even when the server asks directly.
   const caseC=await createCase('Synthetic export already answered by staff');
   await admin.query("insert into hub.case_messages(case_id,author_id,author_display_name,author_role,body) values($1,$2,'Synthetic Staff','support_agent','Staff reply fixture')",[caseC,owner]);
@@ -195,6 +283,7 @@ try {
   await assert.rejects(store.saveState(caseD,{stage:'awaiting_response',createdAt:new Date()}),error=>error.code==='22023');
   await store.saveState(caseD,{attempts:1});
   await assert.rejects(store.saveState(caseD,{attempts:0}),error=>error.code==='22023');
+  await assert.rejects(store.saveState(caseD,{consecutiveFailures:-1}),error=>error.code==='22023');
   await assert.rejects(store.saveState(caseD,{lastAiMessageId:reply.id}),error=>error.code==='22023','a message from another case is refused');
   await assert.rejects(store.resolveCase(caseD),error=>error.code==='P0001','resolution needs an awaited answer');
   // Two Hub processes posting the same due attempt (a deploy overlap): posting
@@ -246,7 +335,7 @@ try {
       } finally { await client.query('rollback'); }
     }
   } finally { client.release(); }
-  console.log('AI automation: a new portal case received the AI reply through hub_app_server; follow-up, second attempt, escalation, classified resolution, eligibility, state rules, readiness and the contract gate passed.');
+  console.log('AI automation: a new portal case received the AI reply through hub_app_server; follow-up, second attempt, escalation, classified resolution, oversize drafts, the failure policy, eligibility, state rules, readiness and the contract gate passed.');
 } finally {
   await admin.query('delete from hub.content_publications where item_id in ($1,$2)',[guideItem,staffItem]);
   await admin.query('delete from hub.content_items where id in ($1,$2)',[guideItem,staffItem]);

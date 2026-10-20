@@ -52,6 +52,20 @@ export function formatKnowledge(items) {
   }).join('\n\n');
 }
 
+// Every provider failure reaches callers as the same 502. An outage (no response,
+// a timeout, rate limiting or a provider-side error) is also marked transient: the
+// same request can succeed later, so the automation loop keeps retrying it with
+// backoff instead of counting it against the case.
+function providerError({ transient = false } = {}) {
+  const error = new HttpError(502, 'AI assistance is temporarily unavailable.', 'AI_PROVIDER_ERROR');
+  if (transient) error.transient = true;
+  return error;
+}
+
+function isOutageStatus(status) {
+  return status === 408 || status === 409 || status === 429 || status >= 500;
+}
+
 function parseJsonObject(text) {
   const trimmed = String(text ?? '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   try {
@@ -82,21 +96,20 @@ export function aiAssistance({ apiKey, fetchImpl = fetch, log = (line) => consol
         redirect: 'error',
       });
     } catch {
-      throw new HttpError(502, 'AI assistance is temporarily unavailable.', 'AI_PROVIDER_ERROR');
+      throw providerError({ transient: true });
     }
     const raw = await response.text().catch(() => '');
-    if (!response.ok || raw.length > maxResponseCharacters) {
-      throw new HttpError(502, 'AI assistance is temporarily unavailable.', 'AI_PROVIDER_ERROR');
-    }
+    if (!response.ok) throw providerError({ transient: isOutageStatus(response.status) });
+    if (raw.length > maxResponseCharacters) throw providerError();
     let parsed;
     try { parsed = JSON.parse(raw); } catch {
-      throw new HttpError(502, 'AI assistance is temporarily unavailable.', 'AI_PROVIDER_ERROR');
+      throw providerError();
     }
     const text = Array.isArray(parsed?.content)
       ? parsed.content.filter((block) => block?.type === 'text' && typeof block.text === 'string').map((block) => block.text).join('')
       : '';
     if (!text.trim() || (parsed?.stop_reason !== 'end_turn' && parsed?.stop_reason !== 'max_tokens')) {
-      throw new HttpError(502, 'AI assistance is temporarily unavailable.', 'AI_PROVIDER_ERROR');
+      throw providerError();
     }
     // Provenance only: feature, model and token counts. Never prompt or reply content.
     log(JSON.stringify({

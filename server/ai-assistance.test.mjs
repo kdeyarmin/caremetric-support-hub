@@ -80,6 +80,20 @@ describe('AI assistance provider', () => {
     await expect(unreachable.summarize(thread)).rejects.toMatchObject({ status: 502 });
   });
 
+  it('marks provider outages transient and per-request rejections not', async () => {
+    const reply = (status, body) => async () => ({ ok: status === 200, status, async text() { return JSON.stringify(body); } });
+    const failure = async (fetchImpl) => aiAssistance({ apiKey: 'test-key', fetchImpl, log: () => {} }).summarize(thread).catch((error) => error);
+    for (const status of [408, 429, 500, 529]) {
+      expect(await failure(reply(status, { type: 'error' }))).toMatchObject({ status: 502, code: 'AI_PROVIDER_ERROR', transient: true });
+    }
+    expect(await failure(async () => { throw new Error('network down'); })).toMatchObject({ transient: true });
+    for (const fetchImpl of [reply(400, { type: 'error' }), reply(200, { content: [], stop_reason: 'refusal' })]) {
+      const error = await failure(fetchImpl);
+      expect(error).toMatchObject({ status: 502, code: 'AI_PROVIDER_ERROR' });
+      expect(error.transient).toBeUndefined();
+    }
+  });
+
   it('renders threads with staff notes marked internal', () => {
     const text = formatThread(thread);
     expect(text).toContain('Internal note by Sam Agent');
