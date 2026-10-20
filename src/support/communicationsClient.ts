@@ -82,6 +82,7 @@ const chatSchema = z.object({
 });
 export type ChatThread = z.infer<typeof chatSchema>;
 export const chatClient = {
+  async availability(signal?: AbortSignal) { return z.object({ chat: z.boolean() }).parse(await appRequest("chat/availability", undefined, signal)); },
   async start(input: { name: string; email: string; product?: string; message: string; noPhi: true }) {
     return z.object({ reference: z.number().int().positive() }).parse(await appRequest("chat/start", input));
   },

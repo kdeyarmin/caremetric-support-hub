@@ -108,7 +108,7 @@ function ChannelStrip({ status }: { status: ChannelStatus | null }) {
     { label: "Phone line (877) 521-2890", detail: "Imported from the AI phone assistant", ready: status.phone.sync },
     { label: "Text messages", detail: status.sms.inbound ? status.sms.replies ? "Receiving and replying" : "Receiving · replies not configured" : "Not connected", ready: status.sms.inbound },
     { label: "Email", detail: status.email.inbound ? status.email.replies ? "Receiving and replying" : "Receiving · replies not configured" : "Not connected", ready: status.email.inbound },
-    { label: "Website chat", detail: "On every Help page", ready: status.chat.enabled },
+    { label: "Website chat", detail: status.chat.enabled ? "On every Help page" : "Off until the owner enables it", ready: status.chat.enabled },
     { label: "Advisors web form", detail: "Imported from caremetricadvisors.com", ready: status.webForm.sync },
   ] : [];
   return <section className="communications-channels" aria-label="Channel status">{items.map(item => <div key={item.label} className={item.ready ? "ready" : "pending"}><strong>{item.label}</strong><span>{item.detail}</span></div>)}</section>;

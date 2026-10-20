@@ -11,10 +11,13 @@ export function ChatPanel({ productSlug, productName, client = chatClient, avail
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [enabled, setEnabled] = useState(true);
 
   useEffect(() => {
     if (!available) return;
     const controller = new AbortController();
+    // An open chat stays readable; new chats start only when the owner has enabled chat.
+    void client.availability(controller.signal).then(value => setEnabled(value.chat)).catch(() => { if (!controller.signal.aborted) setEnabled(false); });
     const load = () => client.thread(controller.signal).then(setThread).catch(() => { if (!controller.signal.aborted) setThread(null); }).finally(() => { if (!controller.signal.aborted) setChecked(true); });
     void load();
     const timer = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, 10000);
@@ -53,6 +56,7 @@ export function ChatPanel({ productSlug, productName, client = chatClient, avail
             <textarea id="chat-message" maxLength={4000} value={message} onChange={event => setMessage(event.target.value)} />
             <button className="button button-primary" type="submit" disabled={busy || !message.trim()}><Send size={15} aria-hidden="true" />Send</button></form>}
       </>
+      : !enabled ? <p>Chat is not available yet. Call (877) 521-2890, email support@caremetric.ai, or open a support request.</p>
       : <form className="chat-start" onSubmit={start}>
         <p>Ask about {productName ?? "any CareMetric application"}. Business hours replies usually arrive the same day.</p>
         <label>Name<input required maxLength={160} autoComplete="name" value={form.name} onChange={event => setForm(value => ({ ...value, name: event.target.value }))} /></label>

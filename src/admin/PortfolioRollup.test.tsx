@@ -121,6 +121,22 @@ describe("portfolio rollup", () => {
     expect(totalsText(financials)).not.toContain("Healthcare Advisors");
   });
 
+  it("shows super-admin coverage for every application without counting failed connections", async () => {
+    const portfolio = fakePortfolio({
+      carebase: { capabilities: { apiVersion: 1, operations: ["organizations.list", "users.list", "billing.overview", "billing.subscriptions.list", "billing.invoices.list"], sourceRevision: null } },
+      advisors: { capabilities: { apiVersion: 1, operations: ["overview", "inquiries.list"], sourceRevision: null }, overview: { organizationCount: null, activeUserCount: null, inquiryCount: 0, openInquiryCount: 0 } },
+    });
+    renderRollup(portfolio);
+    const coverage = await screen.findByRole("region", { name: "Super-admin coverage" });
+    expect(within(coverage).getAllByRole("row")).toHaveLength(8);
+    const carebase = within(coverage).getByRole("row", { name: /CareBase \(PennTrain\)/ });
+    expect(within(carebase).getAllByText("In the Hub")).toHaveLength(4);
+    const breathe = within(coverage).getByRole("row", { name: /Breathe \(PennFit\)/ });
+    expect(within(breathe).getAllByText("Unavailable")).toHaveLength(3);
+    expect(within(coverage).getAllByText(/Restore the application's administration connection/)).toHaveLength(5);
+    expect(within(coverage).getByText(/of \d+ applicable areas are in the Hub now/)).toBeTruthy();
+  });
+
   it("names each application with its source repository so the owner can recognize it", async () => {
     const silent: ProductReads = { capabilities: { apiVersion: 1, operations: [], sourceRevision: null } };
     renderRollup(fakePortfolio({ carebase: silent, breathe: silent, pennsync: silent }));

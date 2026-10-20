@@ -11,6 +11,7 @@ const service = {
   readChat: vi.fn(async chat => ({ reference: 1002, status: 'new', messages: [], chat })),
   postChat: vi.fn(async () => ({ reference: 1002, status: 'new', messages: [] })),
   channels: vi.fn(async () => ({ chat: { enabled: true } })),
+  availability: vi.fn(() => ({ chat: false })),
   list: vi.fn(async () => ({ items: [], total: 0 })),
 };
 let server, base;
@@ -47,6 +48,7 @@ describe('communication routes', () => {
     expect(setCookie).toContain(`__Host-caremetric_chat=${chatToken}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`);
     const thread = await fetch(base + '/api/chat/thread', { headers: { Cookie: `__Host-caremetric_chat=${chatToken}` } });
     expect((await thread.json()).chat).toBe(chatToken);
+    expect(await (await fetch(base + '/api/chat/availability')).json()).toEqual({ chat: false });
     const ended = await post('/api/chat/end', {}, { Origin: origin });
     expect(ended.headers.get('set-cookie')).toContain('__Host-caremetric_chat=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
   });

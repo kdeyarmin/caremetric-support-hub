@@ -126,7 +126,7 @@ export function sendgridMail({ apiKey, from = 'support@caremetric.ai', fetchImpl
   };
 }
 
-export function communications({ pool, delegations, publicOrigin = defaultPublicOrigin, twilioAuthToken, sendgridInboundPublicKey, sms, email, now = () => new Date() }) {
+export function communications({ pool, delegations, publicOrigin = defaultPublicOrigin, twilioAuthToken, sendgridInboundPublicKey, sms, email, chatEnabled = false, now = () => new Date() }) {
   let inboundKey = null;
   // A malformed key disables inbound email rather than stopping the whole Hub.
   try { if (sendgridInboundPublicKey) inboundKey = createPublicKey({ key: Buffer.from(sendgridInboundPublicKey, 'base64'), format: 'der', type: 'spki' }); }
@@ -190,7 +190,10 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
         ['email', messageId, messageId, reference, product, subject || null, text || '[Empty email]', sender.name, sender.address]);
       return { received: true, reference: result.reference };
     },
+    /** Public: whether website chat accepts new conversations. Off until the owner enables it. */
+    availability() { return { chat: chatEnabled }; },
     async startChat(input, clientAddress) {
+      if (!chatEnabled) throw new HttpError(503, 'Chat is not available yet. Call (877) 521-2890 or email support@caremetric.ai.');
       only(input, ['name', 'email', 'product', 'message', 'noPhi']);
       if (input.noPhi !== true) throw new HttpError(400, 'Confirm that your message contains no patient information.');
       for (const key of ['name', 'email', 'message']) if (typeof input[key] !== 'string') throw new HttpError(400, 'Enter your name, email address and question.');
@@ -204,6 +207,7 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
       return server('select private.read_chat($1) as result', [digest(chat)]);
     },
     async postChat(chat, input, clientAddress) {
+      if (!chatEnabled) throw new HttpError(503, 'Chat is not available yet. Call (877) 521-2890 or email support@caremetric.ai.');
       if (!chat) throw new HttpError(404, 'No chat is open in this browser.');
       only(input, ['message']);
       if (typeof input.message !== 'string') throw new HttpError(400, 'Write a message.');
@@ -211,7 +215,7 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
     },
     async channels(sessionToken) {
       await staff(sessionToken, 'select hub.list_communications(null,null,null,null,0,1) as result', []);
-      return { sms: { inbound: !!twilioAuthToken, replies: !!sms?.configured }, email: { inbound: !!inboundKey, replies: !!email?.configured }, chat: { enabled: true }, phone: { sync: true }, webForm: { sync: true } };
+      return { sms: { inbound: !!twilioAuthToken, replies: !!sms?.configured }, email: { inbound: !!inboundKey, replies: !!email?.configured }, chat: { enabled: chatEnabled }, phone: { sync: true }, webForm: { sync: true } };
     },
     async list(sessionToken, input) {
       only(input, ['status', 'channel', 'productId', 'search', 'offset', 'limit']);

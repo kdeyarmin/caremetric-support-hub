@@ -32,7 +32,8 @@ const automation=aiAutomation({ai,store:sqlAutomationStore(pool),enabled:process
 const messaging=communications({pool,delegations:capabilities,publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin,
   twilioAuthToken:process.env.HUB_TWILIO_AUTH_TOKEN,sendgridInboundPublicKey:process.env.HUB_SENDGRID_INBOUND_PUBLIC_KEY,
   sms:twilioMessaging({accountSid:process.env.HUB_TWILIO_ACCOUNT_SID,authToken:process.env.HUB_TWILIO_AUTH_TOKEN,messagingServiceSid:process.env.HUB_TWILIO_MESSAGING_SERVICE_SID,from:process.env.HUB_TWILIO_FROM_NUMBER}),
-  email:sendgridMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai'})});
+  email:sendgridMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai'}),
+  chatEnabled:process.env.HUB_CHAT_ENABLED==='true'});
 const readiness=goLiveReadiness({pool,rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
 const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:capabilities,publications:publicationService,docstudio:studio,aiCases,readiness,communications:messaging,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
 let cleanupRunning=false;

@@ -121,6 +121,7 @@ export function appServer({auth,gateway,delegations,publications,docstudio,aiCas
             const started=await communications.startChat(await jsonBody(req,8192),visitorAddress(req));
             return json({reference:started.reference},200,[cookie(chatCookie,started.token,2592000)]);
           }
+          if(path==='/api/chat/availability' && req.method==='GET') return json(communications.availability());
           if(path==='/api/chat/thread' && req.method==='GET') return json(await communications.readChat(chat));
           if(path==='/api/chat/message' && req.method==='POST') return json(await communications.postChat(chat,await jsonBody(req,8192),visitorAddress(req)));
           if(path==='/api/chat/end' && req.method==='POST') { await jsonBody(req,2048); return json({ended:true},200,[cookie(chatCookie,'',0)]); }

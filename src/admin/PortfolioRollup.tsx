@@ -9,6 +9,7 @@ import { portfolioClient } from "./portfolioClient";
 import type { PortfolioClient } from "./portfolioClient";
 import { buildPortfolioRollup, loadPortfolioRollup, sharedWithProduct } from "./portfolioRollup";
 import { applicationLabel, overviewMetrics } from "./overviewMetrics";
+import { coverageAreas, coverageMatrix, coverageSummary } from "./coverageMatrix";
 import type { RollupAppSnapshot } from "./portfolioRollup";
 import { timeLabel } from "./readState";
 import { useAdminRead } from "./useAdminRead";
@@ -43,6 +44,19 @@ function HealthCard({ app }: { app: RollupAppSnapshot }) {
   </section>;
 }
 
+const coverageLabels = { available: "In the Hub", partial: "Partly in the Hub", missing: "Needs app-side work", "not-applicable": "Not applicable", unavailable: "Unavailable" } as const;
+
+function CoverageMatrix({ apps }: { apps: RollupAppSnapshot[] }) {
+  const rows = coverageMatrix(apps);
+  const summary = coverageSummary(rows);
+  return <section aria-label="Super-admin coverage">
+    <div className="admin-section-title"><div><h2>Super-admin coverage</h2><p>{summary.available} of {summary.applicable} applicable areas are in the Hub now. Each cell reflects what the application’s live connection provides; gaps are listed with the app-side work they need.</p></div></div>
+    <div className="panel portfolio-table-wrap"><table className="coverage-matrix"><thead><tr><th scope="col">Application</th>{coverageAreas.map(area => <th key={area.id} scope="col">{area.label}</th>)}</tr></thead>
+      <tbody>{rows.map(row => <tr key={row.product}><th scope="row">{applicationLabel(row.product)}</th>{coverageAreas.map(area => { const cell = row.cells[area.id]; return <td key={area.id} className={`coverage-${cell.state}`}><strong>{coverageLabels[cell.state]}</strong><small>{cell.label}</small></td>; })}</tr>)}</tbody></table></div>
+    {rows.some(row => row.nextSteps.length) && <div className="panel coverage-next-steps"><h3>What each gap needs</h3><ul>{rows.filter(row => row.nextSteps.length).map(row => <li key={row.product}><strong>{applicationLabel(row.product)}:</strong> {row.nextSteps.join(" ")}</li>)}</ul></div>}
+  </section>;
+}
+
 function BillingRow({ app }: { app: RollupAppSnapshot }) {
   return <div className="rollup-billing-row">
     <h3>{applicationLabel(app.product)}</h3>
@@ -66,6 +80,7 @@ export function PortfolioRollup({ portfolio = portfolioClient }: { portfolio?: P
     {state.status === "loading" && <Loading label="Loading portfolio rollup" app="portfolio" />}
     {state.status === "error" && <ReadFailure error={state.error} retry={retry} />}
     {state.status === "ready" && totals && <>
+      <CoverageMatrix apps={state.data} />
       <section aria-label="Application health">
         <div className="admin-section-title"><div><h2>Application health</h2><p>Connections verified for {totals.connectionsVerified} of {totals.connectionsTotal} applications · last loaded {timeLabel(state.receivedAt)}</p></div></div>
         <div className="rollup-app-grid">{state.data.map(app => <HealthCard key={app.product} app={app} />)}</div>
@@ -85,7 +100,7 @@ export function PortfolioRollup({ portfolio = portfolioClient }: { portfolio?: P
           </div>
         </div>
       </section>
-      <p className="admin-explanation">Support cases are handled in the Hub’s shared <Link to="/cases">support case queue</Link>. Case counts are recorded by the Hub itself and are not reported by the application connections, so they are not repeated here.</p>
+      <p className="admin-explanation">Support inquiries from every application are handled in the Hub’s <Link to="/communications">Communications inbox</Link> (phone, text, email, chat and web forms) and its <Link to="/cases">support case queue</Link>. Those records belong to the Hub itself and are not reported by the application connections, so they are not repeated here.</p>
     </>}
   </div>;
 }

@@ -22,7 +22,7 @@ const sent={sms:[],email:[]};let smsOutcome='sent';
 const phonePage={items:[{id:'99000000-0000-4000-8000-0000000000a1',contactName:'Caller One',companyName:'Agency One',phone:'(202) 555-0171',email:'caller@agency.test',message:'Please call about billing.',status:'new',createdAt:'2026-10-18T12:00:00.000Z',product:'pennfit',requestType:'customer_service'}],total:1,limit:50,offset:0};
 const inquiryPage={items:[{id:'CM-0A1B2C3D4E5F',createdAt:'2026-10-17T12:00:00.000Z',name:'Requester',email:'requester@agency.test',organization:'Agency Two',phone:null,sector:'Hospice',service:'Strategic Planning & Operations',message:'Operations review.',status:'closed',notes:''}],total:1,limit:50,offset:0};
 const adminReads=[];
-const service=communications({pool,publicOrigin:origin,twilioAuthToken:'twilio-test-token',sendgridInboundPublicKey:publicKey.export({format:'der',type:'spki'}).toString('base64'),
+const service=communications({pool,publicOrigin:origin,chatEnabled:true,twilioAuthToken:'twilio-test-token',sendgridInboundPublicKey:publicKey.export({format:'der',type:'spki'}).toString('base64'),
   delegations:{admin:async(token,input)=>{adminReads.push(input);await pool.query('select 1');return {data:input.product==='breathe'?phonePage:inquiryPage};}},
   sms:{configured:true,send:async(to,body)=>{sent.sms.push({to,body});return {delivery:smsOutcome,id:smsOutcome==='sent'?'SM'+'c'.repeat(32):null};}},
   email:{configured:true,send:async(to,subject,body)=>{sent.email.push({to,subject,body});return {delivery:'sent',id:'sg-'+sent.email.length};}}});
@@ -115,6 +115,7 @@ try {
   // Chat: an opaque token, internal notes hidden, staff replies visible, abuse limits.
   const chat=await service.startChat({name:'Visitor',email:'visitor@agency.test',product:'caremetric-pennsync',message:'How do I export OASIS data?',noPhi:true},'203.0.113.10');
   await assert.rejects(service.startChat({name:'Visitor',email:'visitor@agency.test',message:'Hi',noPhi:false},'203.0.113.10'),error=>error.status===400);
+  await assert.rejects(communications({pool,delegations:{}}).startChat({name:'Visitor',email:'visitor@agency.test',message:'Hi',noPhi:true},'203.0.113.12'),error=>error.status===503,'chat stays off unless enabled');
   const chatRow=await find(item=>item.channel==='chat'&&item.contactEmail==='visitor@agency.test');created.push(chatRow.id);
   assert.equal(chatRow.productId,(await admin.query("select id from hub.products where slug='pennsync'")).rows[0].id);
   await service.note(ownerToken,{id:chatRow.id,body:'Internal: route to PennSync team.',requestKey:randomUUID()});
@@ -152,7 +153,7 @@ try {
   // Configuration: replies fail closed when a channel has no provider.
   const unconfigured=communications({pool,delegations:{},sms:{configured:false},email:{configured:false}});
   await assert.rejects(unconfigured.reply(ownerToken,{id:sms.id,body:'Hello',requestKey:randomUUID()}),error=>error.status===409&&/not configured/.test(error.message));
-  assert.deepEqual(await unconfigured.channels(ownerToken),{sms:{inbound:false,replies:false},email:{inbound:false,replies:false},chat:{enabled:true},phone:{sync:true},webForm:{sync:true}});
+  assert.deepEqual(await unconfigured.channels(ownerToken),{sms:{inbound:false,replies:false},email:{inbound:false,replies:false},chat:{enabled:false},phone:{sync:true},webForm:{sync:true}});
 
   // Audit metadata never contains message text.
   const audit=(await admin.query("select action,metadata::text as metadata from private.audit_events where entity_type in ('communication','communication_source') and actor_id in ($1,$2)",[owner,agent])).rows;
