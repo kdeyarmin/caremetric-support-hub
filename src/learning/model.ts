@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-const id = z.uuid();
+// Postgres uuid columns accept any version/variant nibbles, but z.uuid()
+// enforces the RFC 4122 bits; seeded catalog ids such as
+// afff6e38-7c82-2cd7-2a8b-cc1eb91289c7 (variant nibble "2") fail it, so RPC
+// responses carrying those ids were rejected after the server had succeeded.
+// Validate the 8-4-4-4-12 hex shape only, matching what the database returns.
+export const id = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "Expected a UUID");
 const option = z.object({ id, text: z.string().min(1).max(2000) });
 const question = z.object({ id, prompt: z.string().min(2).max(3000), options: z.array(option).min(2).max(8), points: z.number().int().min(1).max(100).default(1) });
 const unitBase = { id, title: z.string().min(2).max(180) };

@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { draftDocumentSchema, learnerDocumentSchema, newDocument, newUnit, safeLearningPath } from "./model";
+import { draftDocumentSchema, draftSchema, learnerDocumentSchema, newDocument, newUnit, safeLearningPath } from "./model";
 describe("learning input contracts", () => {
   it("requires completed course fields before save", () => {
     expect(draftDocumentSchema.safeParse(newDocument([])).success).toBe(false);
+  });
+  it("accepts seeded catalog ids whose UUID variant nibble is not RFC 4122", () => {
+    const unit = newUnit("text");
+    if (unit.type !== "text") throw new Error("Fixture type");
+    unit.body = "Lesson body";
+    const document = { ...newDocument([crypto.randomUUID()]), title: "Imported course", units: [unit] };
+    // Postgres returns this id happily; z.uuid() rejected it, which made the
+    // import loop report 0 imported after the server had already succeeded.
+    const draft = { itemId: "afff6e38-7c82-2cd7-2a8b-cc1eb91289c7", draftVersion: 1, document, published: false };
+    expect(draftSchema.safeParse(draft).success).toBe(true);
+    expect(draftSchema.safeParse({ ...draft, itemId: "not-a-uuid" }).success).toBe(false);
   });
   it("does not propagate author-only fields into learner state", () => {
     const unit = newUnit("quiz");
