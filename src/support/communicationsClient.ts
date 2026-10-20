@@ -46,7 +46,8 @@ const channelStatusSchema = z.object({
 });
 export type ChannelStatus = z.infer<typeof channelStatusSchema>;
 const replySchema = z.object({ delivery: text, deliveryChannel: z.enum(["sms", "email", "chat"]), replay: z.boolean() });
-const syncSchema = z.object({ source: z.enum(["breathe.phone", "advisors.web"]), read: z.number().int(), created: z.number().int(), skipped: z.number().int() });
+export type SyncSource = "breathe.phone" | "advisors.web";
+const syncSchema = z.object({ source: z.enum(["breathe.phone", "advisors.web"]), read: z.number().int(), created: z.number().int(), skipped: z.number().int(), nextOffset: z.number().int().nonnegative().nullable() });
 
 export interface ConversationFilter { status?: ConversationStatus | "active"; channel?: Channel; productId?: string; search?: string; offset: number; limit: number }
 export interface ConversationUpdate {
@@ -71,7 +72,8 @@ export const communicationsClient = {
   async update(update: ConversationUpdate) { return conversationSchema.parse(await appRequest("communications/update", update)); },
   async note(id: string, body: string, requestKey: string) { return threadSchema.parse(await appRequest("communications/note", { id, body, requestKey })); },
   async reply(id: string, body: string, requestKey: string) { return replySchema.parse(await appRequest("communications/reply", { id, body, requestKey })); },
-  async sync(source: "breathe.phone" | "advisors.web") { return syncSchema.parse(await appRequest("communications/sync", { source })); },
+  /** Imports up to 200 messages starting at offset; nextOffset is where the next batch starts, or null when none remain. */
+  async sync(source: SyncSource, offset = 0) { return syncSchema.parse(await appRequest("communications/sync", offset ? { source, offset } : { source })); },
   async channels(signal?: AbortSignal) { return channelStatusSchema.parse(await appRequest("communications/channels", undefined, signal)); },
 };
 export type CommunicationsClient = typeof communicationsClient;

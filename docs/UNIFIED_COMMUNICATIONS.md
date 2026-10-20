@@ -35,15 +35,24 @@ A reply goes back on the original channel: text to text, email to email, chat
 to chat. Phone and web-form inquiries are answered by email when an address was
 left, otherwise by text. If neither exists, call back and record a note.
 
-Each reply is written to the database under a request key **before** it is
-sent. Retrying the same send never records or sends twice. If the provider's
-answer is lost, the message shows "Send outcome unknown — confirm with the
-customer before resending" instead of being resent automatically. Replies are
-refused when the channel's provider is not configured.
+Each reply and note is written to the database under a request key **before**
+a reply is sent. A key is bound to the exact text it first carried: retrying the
+same text never records or sends twice, and the database refuses the key with
+different text. If an attempt's outcome is unknown and staff then edit the text,
+the inbox asks them to restore the original text (a safe retry) or to send the
+edit explicitly as a new message. If the provider's answer is lost, the message
+shows "Send outcome unknown — confirm with the customer before resending"
+instead of being resent automatically. Replies are refused when the channel's
+provider is not configured.
 
-Outbound email subjects carry `[CM-<reference>]`. A customer's reply joins the
-same conversation only when it comes from the address on that conversation;
-anything else starts a new one.
+Outbound email subjects carry exactly one `[CM-<reference>]`, at the end: any
+other reference in the customer's subject is removed. Inbound mail is threaded
+by the last reference in its subject. A customer's reply joins the same
+conversation only when it comes from the address on that conversation; anything
+else starts a new one.
+
+Chat replies appear only in the chat panel. They are not emailed, so the panel
+tells visitors to keep the page open or return to Help in the same browser.
 
 ## Data boundary
 
@@ -110,8 +119,11 @@ email and support form instead.
 ## Imports
 
 **Import phone-line messages** and **Import Advisors requests** read up to 200
-messages (four pages, in the order the source returns them) through the application's administration connection with the
-platform administrator's current SMS session, and add each source message once.
+messages (four pages, in the order the source returns them) through the
+application's administration connection with the platform administrator's
+current SMS session, and add each source message once. When more remain, an
+**Import the next … batch** button continues from where the last import stopped
+(up to the applications' 10,000-record paging limit).
 Re-importing never changes a conversation staff have already worked. Imports
 are manual because every application read requires a live administrator
 session; there is no unattended background sync.

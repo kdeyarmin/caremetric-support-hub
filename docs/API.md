@@ -152,7 +152,10 @@ Staff (same-origin, SMS session, `case.read`/`case.write` for the application):
 - `POST /api/communications/update` — `{ id, expectedUpdatedAt, status?, inquiryType?, changeProduct?, productId?, changeAssignment?, assignedTo? }`; a stale `expectedUpdatedAt` returns 409.
 - `POST /api/communications/note` — `{ id, body, requestKey }`.
 - `POST /api/communications/reply` — `{ id, body, requestKey }` → `{ delivery, deliveryChannel, replay }`.
-- `POST /api/communications/sync` — `{ source: "breathe.phone" | "advisors.web" }`; platform administrator only.
+  A `requestKey` replays only the exact text it first carried; reusing it with different text returns 400.
+- `POST /api/communications/sync` — `{ source: "breathe.phone" | "advisors.web", offset? }` →
+  `{ source, read, created, skipped, nextOffset }`; platform administrator only. Reads up to 200 messages from
+  `offset` (default 0); `nextOffset` is where the next batch starts, or `null` when none remain.
 - `GET /api/communications/channels` — which channels are configured, as booleans only.
 
 ## Healthcare Advisors administration reads

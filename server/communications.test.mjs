@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { Readable } from 'node:stream';
-import { communications, htmlToText, inquiryImportItem, parseMailbox, phoneImportItem, productFromAddresses, sendgridMail, sendgridSignatureValid, twilioMessaging, twilioSignature } from './communications.mjs';
+import { communications, htmlToText, inquiryImportItem, parseMailbox, phoneImportItem, productFromAddresses, replySubject, sendgridMail, sendgridSignatureValid, twilioMessaging, twilioSignature } from './communications.mjs';
 
 const origin = 'https://support-hub-web-production.up.railway.app';
 const request = (body, headers) => Object.assign(Readable.from([Buffer.from(body)]), { headers });
@@ -44,6 +44,12 @@ describe('message parsing', () => {
     expect(parseMailbox('not an address')).toBeNull();
     expect(productFromAddresses(['support@caremetric.ai', 'support+PennFit@caremetric.ai'])).toBe('pennfit');
     expect(productFromAddresses(['support@caremetric.ai'])).toBeNull();
+  });
+  it('keeps one Re: and only the current conversation reference in reply subjects', () => {
+    expect(replySubject('Login help', 1007)).toBe('Re: Login help [CM-1007]');
+    expect(replySubject('RE: re: Login help [CM-1001]', 1007)).toBe('Re: Login help [CM-1007]');
+    expect(replySubject('[CM-1001] Login [CM-1002] help', 1007)).toBe('Re: Login help [CM-1007]');
+    expect(replySubject('[CM-1001]', 1007)).toBe('Re: Your CareMetric support request [CM-1007]');
   });
   it('reduces HTML mail to readable text without markup or scripts', () => {
     expect(htmlToText('<p>Hello &amp; welcome</p><script>alert(1)</script><div>Line two<br>Line three</div>')).toBe('Hello & welcome\n Line two\nLine three');
@@ -117,5 +123,36 @@ describe('inbound webhooks', () => {
     await expect(service.emailWebhook(request(stale.payload, stale.headers))).rejects.toMatchObject({ status: 403 });
     expect(calls).toHaveLength(1);
     expect(communications({ pool, delegations: {}, sendgridInboundPublicKey: '!!!' }).emailWebhook).toBeTypeOf('function');
+  });
+  it('threads email by the last reference in the subject, which is the one the Hub appended', async () => {
+    const { pool, calls } = fakePool();
+    const service = communications({ pool, delegations: {}, sendgridInboundPublicKey: publicKeyBase64 });
+    const { payload, headers } = await signedEmail({ from: 'pat@agency.test', to: 'support@caremetric.ai', subject: 'Re: Fwd [CM-1001] question [CM-1007]', text: 'Thanks.', headers: 'Message-ID: <last@mail.test>' });
+    await service.emailWebhook(request(payload, headers));
+    expect(calls[0].values[3]).toBe('1007');
+  });
+});
+
+describe('imports', () => {
+  const source = total => Array.from({ length: total }, (_, index) => ({ id: `CM-${String(index).padStart(12, '0')}`, createdAt: '2026-10-01T00:00:00.000Z', name: 'Requester', email: 'r@agency.test', organization: 'Agency', phone: null, sector: 'Hospice', service: 'Strategic Planning & Operations', message: 'Help.', status: 'new', notes: '' }));
+  function service(total) {
+    const items = source(total), reads = [];
+    const delegations = { admin: vi.fn(async (_token, input) => { reads.push(input.offset); return { data: { items: items.slice(input.offset, input.offset + input.limit), total, limit: input.limit, offset: input.offset } }; }) };
+    return { reads, service: communications({ pool: fakePool({ created: 50, skipped: 0 }).pool, delegations }) };
+  }
+  it('reads at most 200 messages per import and returns where to resume', async () => {
+    const first = service(260);
+    expect(await first.service.sync('session', { source: 'advisors.web' })).toMatchObject({ read: 200, nextOffset: 200 });
+    expect(first.reads).toEqual([0, 50, 100, 150]);
+    const rest = service(260);
+    expect(await rest.service.sync('session', { source: 'advisors.web', offset: 200 })).toMatchObject({ read: 60, nextOffset: null });
+    expect(rest.reads).toEqual([200, 250]);
+    const exact = service(200);
+    expect(await exact.service.sync('session', { source: 'advisors.web' })).toMatchObject({ read: 200, nextOffset: null });
+  });
+  it('rejects a resume position outside the application contract before reading', async () => {
+    const bad = service(10);
+    for (const offset of [-1, 1.5, '50', 10001]) await expect(bad.service.sync('session', { source: 'advisors.web', offset })).rejects.toMatchObject({ status: 400 });
+    expect(bad.reads).toEqual([]);
   });
 });

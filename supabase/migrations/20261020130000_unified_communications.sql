@@ -237,6 +237,7 @@ $$;
 create or replace function hub.add_communication_note(p_id uuid, p_body text, p_request_key uuid) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare v_actor uuid := private.require_communication_staff(); v_product uuid; v_body text := private.communication_body(p_body); v_message uuid;
+  existing private.communication_messages;
 begin
   select c.product_id into v_product from private.communications c where c.id = p_id for update;
   if not found or not private.has_staff_permission('case.write', v_product) then
@@ -245,8 +246,12 @@ begin
   if p_request_key is null or v_body is null or char_length(v_body) > 5000 then
     raise exception 'Write a note of up to 5,000 characters.' using errcode = '22023';
   end if;
-  select m.id into v_message from private.communication_messages m where m.communication_id = p_id and m.request_key = p_request_key;
-  if v_message is null then
+  select * into existing from private.communication_messages m where m.communication_id = p_id and m.request_key = p_request_key;
+  -- A request key replays only the exact note it first recorded.
+  if found and (existing.direction <> 'note' or existing.body is distinct from v_body) then
+    raise exception 'This request key was already used for a different message.' using errcode = '22023';
+  end if;
+  if not found then
     insert into private.communication_messages(communication_id, direction, body, author_id, author_name, delivery, request_key)
       values (p_id, 'note', v_body, v_actor, (select display_name from hub.profiles where id = v_actor), 'recorded', p_request_key)
       returning id into v_message;
@@ -277,7 +282,10 @@ begin
   end if;
   select * into existing from private.communication_messages m where m.communication_id = p_id and m.request_key = p_request_key;
   if found then
-    if existing.direction <> 'outbound' then raise exception 'This request key was already used.' using errcode = '22023'; end if;
+    -- A request key replays only the exact reply it first recorded; changed text needs a new key.
+    if existing.direction <> 'outbound' or existing.body is distinct from v_body then
+      raise exception 'This request key was already used for a different message.' using errcode = '22023';
+    end if;
     return jsonb_build_object('messageId', existing.id, 'replay', true, 'delivery', existing.delivery, 'deliveryChannel', existing.delivery_channel);
   end if;
   v_route := case

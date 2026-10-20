@@ -37,6 +37,13 @@ describe("super-admin coverage matrix", () => {
     expect(offline.cells.requests.state).toBe("unavailable");
     expect(offline.nextSteps).toEqual(["Deploy the Advisors bridge and list Hub administrators in HUB_ADMIN_USER_IDS."]);
   });
+  it("never reports subscriptions as held when the billing read failed", () => {
+    const [breathe] = coverageMatrix([{ ...app("breathe", ["organizations.list", "users.list", "billing.overview", "billing.subscriptions.list"]), billing: { state: "unavailable" } }]);
+    expect(breathe.cells.subscribers).toEqual({ state: "unavailable", label: "Billing read failed" });
+    expect(breathe.cells.directory.state).toBe("available");
+    expect(breathe.nextSteps).toContain("Check the application's billing read; subscription figures are unavailable until it answers.");
+    expect(coverageSummary([breathe]).available).toBe(2);
+  });
   it("labels Go's subscriptions as shared with EMR", () => {
     const [go] = coverageMatrix([app("caremetric-go", ["billing.overview", "billing.subscriptions.list"])]);
     expect(go.cells.subscribers.label).toBe("Shared with CareMetric EMR · not double-counted");

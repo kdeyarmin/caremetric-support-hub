@@ -3,13 +3,33 @@ import { Mail, MessageCircle, MessageSquareText, Phone, RefreshCw, Search, Send,
 import type { Product } from "../domain";
 import {
   channelLabels, channels, communicationsClient, conversationStatuses, deliveryLabels, inquiryLabels, inquiryTypes, replyRoute, statusLabels,
-  type Channel, type ChannelStatus, type CommunicationsClient, type ConversationPage, type ConversationStatus, type ConversationThread, type InquiryType,
+  type Channel, type ChannelStatus, type CommunicationsClient, type ConversationPage, type ConversationStatus, type ConversationThread, type InquiryType, type SyncSource,
 } from "./communicationsClient";
 import "./communications.css";
 
 const channelIcons: Record<Channel, typeof Phone> = { phone: Phone, sms: MessageSquareText, email: Mail, chat: MessageCircle, web_form: Globe2 };
 const when = (value: string) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value));
 const pageSize = 25;
+const sourceLabels: Record<SyncSource, string> = { "breathe.phone": "Phone line", "advisors.web": "Advisors consultation form" };
+
+/**
+ * A request key bound to the exact text it was first sent with. Retrying the same
+ * text reuses the key, so a lost response never records or sends twice. Changed
+ * text after an unconfirmed attempt is sent only as an explicit new message.
+ */
+function useRequestKey() {
+  const [attempt, setAttempt] = useState<{ key: string; body: string } | null>(null);
+  return {
+    pending: attempt,
+    changed: (body: string) => attempt !== null && attempt.body !== body,
+    keyFor(body: string, asNew: boolean) {
+      const next = !asNew && attempt?.body === body ? attempt : { key: crypto.randomUUID(), body };
+      setAttempt(next);
+      return next.key;
+    },
+    settle: () => setAttempt(null),
+  };
+}
 
 export function Communications({ products, actor, client = communicationsClient }: { products: Product[]; actor: { id: string; role: string }; client?: CommunicationsClient }) {
   const [filter, setFilter] = useState<{ status: ConversationStatus | "active" | ""; channel: Channel | ""; productId: string; search: string }>({ status: "active", channel: "", productId: "", search: "" });
@@ -23,6 +43,7 @@ export function Communications({ products, actor, client = communicationsClient 
   const [notice, setNotice] = useState("");
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [resume, setResume] = useState<Partial<Record<SyncSource, number>>>({});
   const refresh = useCallback(() => setRevision(value => value + 1), []);
   const productName = useMemo(() => new Map(products.map(product => [product.id, product.name])), [products]);
   const admin = actor.role === "platform_admin";
@@ -36,7 +57,11 @@ export function Communications({ products, actor, client = communicationsClient 
     const controller = new AbortController();
     client.list({ ...(filter.status ? { status: filter.status } : {}), ...(filter.channel ? { channel: filter.channel } : {}), ...(filter.productId ? { productId: filter.productId } : {}),
       ...(filter.search ? { search: filter.search } : {}), offset, limit: pageSize }, controller.signal)
-      .then(result => { setPage(result); setError(""); })
+      .then(result => {
+        setPage(result); setError("");
+        // A refreshed total can end before this page (for example after closing its last conversation): move to the last page.
+        if (result.items.length === 0 && offset > 0) setOffset(Math.max(0, Math.floor((result.total - 1) / pageSize) * pageSize));
+      })
       .catch(() => { if (!controller.signal.aborted) setError("Conversations could not be loaded. Check your sign-in and try again."); });
     return () => controller.abort();
   }, [client, filter, offset, revision]);
@@ -58,9 +83,10 @@ export function Communications({ products, actor, client = communicationsClient 
     catch (cause) { setError(cause instanceof Error ? cause.message : "The action could not be completed."); }
     finally { setBusy(false); }
   }
-  const sync = (source: "breathe.phone" | "advisors.web") => act(async () => {
-    const result = await client.sync(source);
-    return `${source === "breathe.phone" ? "Phone line" : "Advisors consultation form"}: ${result.created} new, ${result.skipped} already in the Hub.`;
+  const sync = (source: SyncSource, from = 0) => act(async () => {
+    const result = await client.sync(source, from);
+    setResume(value => ({ ...value, [source]: result.nextOffset ?? undefined }));
+    return `${sourceLabels[source]}: ${result.created} new, ${result.skipped} already in the Hub.${result.nextOffset === null ? "" : " More remain: import the next batch."}`;
   });
   function search(event: FormEvent) { event.preventDefault(); setOffset(0); setFilter(value => ({ ...value, search: searchInput.trim() })); }
 
@@ -69,7 +95,9 @@ export function Communications({ products, actor, client = communicationsClient 
       <p>Customer service and technical support from phone, text message, email, chat and web forms for every CareMetric application, in one queue.</p></div>
       <div className="communications-actions">
         {admin && <><button className="button button-secondary" type="button" disabled={busy} onClick={() => void sync("breathe.phone")}><Phone size={15} aria-hidden="true" />Import phone-line messages</button>
-          <button className="button button-secondary" type="button" disabled={busy} onClick={() => void sync("advisors.web")}><Globe2 size={15} aria-hidden="true" />Import Advisors requests</button></>}
+          {resume["breathe.phone"] !== undefined && <button className="button button-secondary" type="button" disabled={busy} onClick={() => void sync("breathe.phone", resume["breathe.phone"])}>Import the next phone-line batch</button>}
+          <button className="button button-secondary" type="button" disabled={busy} onClick={() => void sync("advisors.web")}><Globe2 size={15} aria-hidden="true" />Import Advisors requests</button>
+          {resume["advisors.web"] !== undefined && <button className="button button-secondary" type="button" disabled={busy} onClick={() => void sync("advisors.web", resume["advisors.web"])}>Import the next Advisors batch</button>}</>}
         <button className="button button-secondary" type="button" onClick={refresh}><RefreshCw size={15} aria-hidden="true" />Refresh</button>
       </div></div>
     <ChannelStrip status={status} />
@@ -117,12 +145,17 @@ function ChannelStrip({ status }: { status: ChannelStatus | null }) {
 function ThreadView({ thread, products, actorId, status, busy, client, act }: { thread: ConversationThread; products: Product[]; actorId: string; status: ChannelStatus | null; busy: boolean; client: CommunicationsClient; act: (work: () => Promise<string>) => Promise<void> }) {
   const [reply, setReply] = useState("");
   const [note, setNote] = useState("");
-  // One request key per message; a retried send reuses it so the server never records or sends twice.
-  const [replyKey, setReplyKey] = useState(() => crypto.randomUUID());
-  const [noteKey, setNoteKey] = useState(() => crypto.randomUUID());
+  const replyKey = useRequestKey(), noteKey = useRequestKey();
   const route = replyRoute(thread, status);
   const update = (change: Partial<Parameters<CommunicationsClient["update"]>[0]>) => act(async () => { await client.update({ id: thread.id, expectedUpdatedAt: thread.updatedAt, ...change }); return "Conversation updated."; });
   const ChannelIcon = channelIcons[thread.channel];
+  const replyAsNew = replyKey.changed(reply), noteAsNew = noteKey.changed(note);
+  const sendReply = () => act(async () => {
+    const result = await client.reply(thread.id, reply, replyKey.keyFor(reply, replyAsNew));
+    replyKey.settle(); setReply("");
+    return result.delivery === "sent" ? "Reply sent." : result.delivery === "failed" ? "The provider rejected this reply. Check the contact details." : "The reply was recorded but delivery is not confirmed. Do not resend automatically.";
+  });
+  const saveNote = () => act(async () => { await client.note(thread.id, note, noteKey.keyFor(note, noteAsNew)); noteKey.settle(); setNote(""); return "Internal note saved."; });
   return <>
     <header className="communications-thread-header">
       <div><span className="eyebrow"><ChannelIcon size={14} aria-hidden="true" /> {channelLabels[thread.channel]} · CM-{thread.reference}</span><h2>{thread.subject}</h2>
@@ -140,15 +173,25 @@ function ThreadView({ thread, products, actorId, status, busy, client, act }: { 
     <ol className="communications-messages">{thread.messages.map(message => <li key={message.id} className={`message-${message.direction}`}>
       <div><strong>{message.direction === "inbound" ? thread.contactName ?? "Customer" : message.authorName ?? "CareMetric Support"}</strong>{message.direction === "note" && <span className="communications-tag">Internal note</span>}<time dateTime={message.createdAt}>{when(message.createdAt)}</time></div>
       <p>{message.body}</p>{message.direction === "outbound" && <small>{message.deliveryChannel ? `${channelLabels[message.deliveryChannel]} · ` : ""}{deliveryLabels[message.delivery] ?? message.delivery}</small>}</li>)}</ol>
-    <form className="communications-compose" onSubmit={event => { event.preventDefault(); if (reply.trim()) void act(async () => { const result = await client.reply(thread.id, reply, replyKey); setReply(""); setReplyKey(crypto.randomUUID()); return result.delivery === "sent" ? "Reply sent." : result.delivery === "failed" ? "The provider rejected this reply. Check the contact details." : "The reply was recorded but delivery is not confirmed. Do not resend automatically."; }); }}>
+    <form className="communications-compose" onSubmit={event => { event.preventDefault(); if (reply.trim()) void sendReply(); }}>
       <label htmlFor="communication-reply">{route.label}</label>
       <textarea id="communication-reply" maxLength={5000} value={reply} disabled={!route.available || busy} onChange={event => setReply(event.target.value)} placeholder="Write a reply without patient information." />
-      <button className="button button-primary" type="submit" disabled={!route.available || busy || !reply.trim()}><Send size={15} aria-hidden="true" />Send reply</button>
+      {replyAsNew && <UnconfirmedAttempt kind="reply" disabled={busy} onRestore={() => setReply(replyKey.pending?.body ?? "")} />}
+      <button className="button button-primary" type="submit" disabled={!route.available || busy || !reply.trim()}><Send size={15} aria-hidden="true" />{replyAsNew ? "Send as a new message" : "Send reply"}</button>
     </form>
-    <form className="communications-compose" onSubmit={event => { event.preventDefault(); if (note.trim()) void act(async () => { await client.note(thread.id, note, noteKey); setNote(""); setNoteKey(crypto.randomUUID()); return "Internal note saved."; }); }}>
+    <form className="communications-compose" onSubmit={event => { event.preventDefault(); if (note.trim()) void saveNote(); }}>
       <label htmlFor="communication-note">Internal note — never shown to the customer</label>
       <textarea id="communication-note" maxLength={5000} value={note} disabled={busy} onChange={event => setNote(event.target.value)} placeholder="Record a callback, a decision, or a handoff." />
-      <button className="button button-secondary" type="submit" disabled={busy || !note.trim()}><StickyNote size={15} aria-hidden="true" />Save note</button>
+      {noteAsNew && <UnconfirmedAttempt kind="note" disabled={busy} onRestore={() => setNote(noteKey.pending?.body ?? "")} />}
+      <button className="button button-secondary" type="submit" disabled={busy || !note.trim()}><StickyNote size={15} aria-hidden="true" />{noteAsNew ? "Save as a new note" : "Save note"}</button>
     </form>
   </>;
+}
+
+/** Shown when the text changed after an attempt whose outcome was not confirmed. */
+function UnconfirmedAttempt({ kind, disabled, onRestore }: { kind: "reply" | "note"; disabled: boolean; onRestore: () => void }) {
+  return <p className="communications-warning" role="status">
+    The last {kind} may already have been saved{kind === "reply" ? " or sent" : ""}. Check the conversation above. To retry it safely, restore the original text; otherwise this text is saved as a separate {kind === "reply" ? "message" : "note"}.
+    <button className="button button-secondary button-small" type="button" disabled={disabled} onClick={onRestore}>Restore the original text</button>
+  </p>;
 }

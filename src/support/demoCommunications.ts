@@ -56,7 +56,7 @@ export function demoCommunicationsClient(productIds: { breathe?: string; advisor
       thread.status = "waiting";
       return { delivery: route === "chat" ? "sent" : "unknown", deliveryChannel: route, replay: false };
     },
-    async sync(source) { return { source, read: 0, created: 0, skipped: 0 }; },
+    async sync(source) { return { source, read: 0, created: 0, skipped: 0, nextOffset: null }; },
     async channels(): Promise<ChannelStatus> { return { sms: { inbound: false, replies: false }, email: { inbound: false, replies: false }, chat: { enabled: true }, phone: { sync: true }, webForm: { sync: true } }; },
   };
 }

@@ -11,6 +11,8 @@ const e164 = /^\+[1-9][0-9]{7,14}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 const clean = value => value.replace(/\r\n/g, '\n').replace(/[\x01-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim();
+// The application administration contracts accept page offsets up to 10,000.
+const maxImportOffset = 10000;
 const reviewedErrors = { '22023': 400, '22007': 400, P0001: 409, '40001': 409, '42501': 403, '53400': 429, '28000': 401 };
 
 /** Database messages for these codes are authored in the reviewed migrations; anything else stays generic. */
@@ -52,6 +54,11 @@ export function productFromAddresses(addresses) {
     if (tag) return tag.toLowerCase();
   }
   return null;
+}
+/** One "Re:" and only this conversation's reference, even when the customer's subject carried another. */
+export function replySubject(subject, reference) {
+  const base = String(subject || '').replace(/\s*\[CM-\d+\]/g, '').replace(/^(\s*re\s*:\s*)+/i, '').trim();
+  return `Re: ${base || 'Your CareMetric support request'} [CM-${reference}]`;
 }
 export function htmlToText(html) {
   return String(html || '').replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|tr|h[1-6])>/gi, '\n')
@@ -142,7 +149,7 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
     if (started.replay || started.deliveryChannel === 'chat') return { delivery: started.delivery, deliveryChannel: started.deliveryChannel, replay: started.replay };
     const outcome = started.deliveryChannel === 'sms'
       ? await sms.send(started.to, body)
-      : await email.send(started.to, `Re: ${started.subject} [CM-${started.reference}]`, `${body}\n\n— CareMetric Support\nReference CM-${started.reference}. Reply to this email to continue the conversation.`);
+      : await email.send(started.to, replySubject(started.subject, started.reference), `${body}\n\n— CareMetric Support\nReference CM-${started.reference}. Reply to this email to continue the conversation.`);
     await server('select private.finish_communication_delivery($1,$2,$3) as result', [started.messageId, outcome.delivery, outcome.id]);
     return { delivery: outcome.delivery, deliveryChannel: started.deliveryChannel, replay: false };
   }
@@ -182,7 +189,8 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
       const headers = field('headers');
       const messageId = /^Message-ID:\s*(<[^>\r\n]{1,290}>)/im.exec(headers)?.[1] ?? digest([sender.address, field('subject'), field('text'), /^Date:.*$/im.exec(headers)?.[0] ?? ''].join('\n'));
       const subject = field('subject').trim();
-      const reference = /\[CM-(\d{4,12})\]/.exec(subject)?.[1] ?? null;
+      // Outbound subjects end with the conversation's reference, so the last one is ours.
+      const reference = [...subject.matchAll(/\[CM-(\d{4,12})\]/g)].at(-1)?.[1] ?? null;
       const attachments = Number(field('attachments') || '0');
       const text = [(field('text') || htmlToText(field('html'))).trim(), attachments > 0 ? `[${attachments} attachment(s) were not stored. Ask the sender to describe them without patient information.]` : ''].filter(Boolean).join('\n\n');
       const product = productFromAddresses([...(Array.isArray(envelope.to) ? envelope.to : []), ...field('to').split(',')]);
@@ -243,25 +251,29 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
       const started = await staff(sessionToken, 'select hub.begin_communication_reply($1,$2,$3,$4) as result', [id(input.id), input.body, requestKey(input.requestKey), available()]);
       return deliver(started, clean(input.body));
     },
-    /** Copy the newest messages another application received into the Hub. Requires the platform administrator session. */
+    /** Copy up to 200 messages another application received into the Hub, resuming at offset. Requires the platform administrator session. */
     async sync(sessionToken, input) {
-      only(input, ['source']);
+      only(input, ['source', 'offset']);
       const source = { 'breathe.phone': { product: 'breathe', operation: 'phone.messages.list', item: phoneImportItem },
         'advisors.web': { product: 'advisors', operation: 'inquiries.list', item: inquiryImportItem } }[input.source];
       if (!source) throw new HttpError(400, 'Choose a message source.');
+      const start = input.offset ?? 0;
+      if (!Number.isSafeInteger(start) || start < 0 || start > maxImportOffset) throw new HttpError(400, 'Choose where to resume the import.');
       // Fail before any application read when the caller is not the platform administrator.
       await staff(sessionToken, 'select hub.authorize_app_admin() as result', []);
-      let read = 0, created = 0, skipped = 0;
-      for (let offset = 0; offset < 200; offset += 50) {
+      let read = 0, created = 0, skipped = 0, nextOffset = null;
+      for (let offset = start; ; offset += 50) {
         const page = (await delegations.admin(sessionToken, { product: source.product, operation: source.operation, limit: 50, offset })).data;
         read += page.items.length;
         if (page.items.length) {
           const result = await staff(sessionToken, 'select hub.import_communications($1,$2::jsonb) as result', [input.source, JSON.stringify(page.items.map(item => source.item(item)))]);
           created += result.created; skipped += result.skipped;
         }
-        if (offset + 50 >= page.total || page.items.length < 50) break;
+        if (offset + 50 >= page.total || page.items.length < 50 || offset + 50 > maxImportOffset) break;
+        // Each request stays bounded; the administrator resumes from nextOffset.
+        if (offset + 50 >= start + 200) { nextOffset = offset + 50; break; }
       }
-      return { source: input.source, read, created, skipped };
+      return { source: input.source, read, created, skipped, nextOffset };
     },
   };
 }

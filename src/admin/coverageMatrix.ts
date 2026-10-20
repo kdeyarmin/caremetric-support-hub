@@ -43,6 +43,8 @@ export function coverageMatrix(apps: RollupAppSnapshot[]): CoverageRow[] {
     const sharedWith = sharedWithProduct(app.product);
     const subscribers: CoverageCell = advisors ? notApplicable("Consulting practice · no subscriptions")
       : !connected ? unavailable
+      // The connection answered but its billing read failed: never show subscriptions as held.
+      : app.billing.state === "unavailable" ? (nextSteps.push("Check the application's billing read; subscription figures are unavailable until it answers."), { state: "unavailable", label: "Billing read failed" })
       : has(app, "billing.overview") && has(app, "billing.subscriptions.list")
         ? { state: "available", label: sharedWith ? "Shared with CareMetric EMR · not double-counted" : "Subscription records and status totals" }
       : missing("Not provided yet", "Add billing overview and subscription reads to the application's administration connection.");

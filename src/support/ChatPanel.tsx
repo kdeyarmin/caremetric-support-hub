@@ -48,7 +48,7 @@ export function ChatPanel({ productSlug, productName, client = chatClient, avail
     {!available ? <p>Chat opens here in the connected Hub. In this preview, use the phone number or support form.</p>
       : !checked ? <p role="status">Checking for an open chat…</p>
       : thread ? <>
-        <p className="chat-reference">Reference CM-{thread.reference}{thread.status === "closed" ? " · closed" : ""}. A team member will answer here; we will also email you if you leave.</p>
+        <p className="chat-reference">Reference CM-{thread.reference}{thread.status === "closed" ? " · closed" : ""}. A team member will answer here. Replies are not emailed: keep this page open, or come back to Help in this browser to read them.</p>
         <ol className="chat-messages" aria-live="polite">{thread.messages.map(item => <li key={item.id} className={`chat-${item.from}`}><strong>{item.from === "visitor" ? "You" : "CareMetric Support"}</strong><p>{item.body}</p></li>)}</ol>
         {thread.status === "closed"
           ? <button className="button button-secondary" type="button" disabled={busy} onClick={() => void run(async () => { await client.end(); setThread(null); })}>Start a new chat</button>

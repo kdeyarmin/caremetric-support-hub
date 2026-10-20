@@ -46,6 +46,7 @@
 .communications-empty{color:#526173;padding:1rem}
 .communications-notice{color:#0a5c55}
 .communications-error{color:#a3260d}
+.communications-warning{display:flex;flex-direction:column;align-items:flex-start;gap:.45rem;margin:0;padding:.6rem .75rem;border-radius:8px;background:#fdf3dc;color:#5c4200;font-size:.88rem}
 .chat-panel{padding:1.25rem;margin-top:1rem}
 .chat-panel h2{display:flex;align-items:center;gap:.45rem;margin-top:0}
 .chat-start,.chat-compose{display:flex;flex-direction:column;gap:.6rem}

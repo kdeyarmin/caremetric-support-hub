@@ -21,7 +21,7 @@ const conversation = (change: Partial<Conversation>): Conversation => ({
 });
 function client() {
   const demo = demoCommunicationsClient({ breathe: products[0].id, advisors: products[1].id });
-  return { ...demo, channels: vi.fn(async () => configured), sync: vi.fn(async (source: "breathe.phone" | "advisors.web") => ({ source, read: 3, created: 2, skipped: 1 })),
+  return { ...demo, channels: vi.fn(async () => configured), sync: vi.fn(async (source: "breathe.phone" | "advisors.web", offset = 0) => ({ source, read: 3, created: 2, skipped: 1, nextOffset: source === "breathe.phone" && offset === 0 ? 200 : null })),
     reply: vi.fn(demo.reply), update: vi.fn(demo.update), note: vi.fn(demo.note) };
 }
 
@@ -56,13 +56,71 @@ describe("unified communications inbox", () => {
     const fake = client();
     render(<Communications products={products} actor={actor} client={fake} />);
     fireEvent.click(await screen.findByRole("button", { name: "Import phone-line messages" }));
+    expect(await screen.findByText("Phone line: 2 new, 1 already in the Hub. More remain: import the next batch.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Import the next phone-line batch" }));
+    await waitFor(() => expect(fake.sync).toHaveBeenLastCalledWith("breathe.phone", 200));
     expect(await screen.findByText("Phone line: 2 new, 1 already in the Hub.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Import the next phone-line batch" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Import Advisors requests" }));
-    await waitFor(() => expect(fake.sync).toHaveBeenCalledWith("advisors.web"));
+    await waitFor(() => expect(fake.sync).toHaveBeenLastCalledWith("advisors.web", 0));
     cleanup();
     render(<Communications products={products} actor={{ ...actor, role: "support_agent" }} client={client()} />);
     await screen.findByRole("region", { name: "Conversations" });
     expect(screen.queryByRole("button", { name: "Import phone-line messages" })).toBeNull();
+  });
+});
+
+describe("inbox safety", () => {
+  it("retries an unconfirmed reply with the same key and sends changed text only as an explicit new message", async () => {
+    const fake = client();
+    fake.reply.mockRejectedValueOnce(new Error("The connection was lost."));
+    render(<Communications products={products} actor={actor} client={fake} />);
+    fireEvent.click(within(await screen.findByRole("region", { name: "Conversations" })).getByText("Text message from +1 (202) 555-0144"));
+    const thread = await screen.findByRole("region", { name: "Conversation" });
+    const reply = await within(thread).findByLabelText("Reply by text message");
+    fireEvent.change(reply, { target: { value: "First answer." } });
+    fireEvent.click(within(thread).getByRole("button", { name: "Send reply" }));
+    expect(await screen.findByText("The connection was lost.")).toBeTruthy();
+    const firstKey = fake.reply.mock.calls[0][2];
+    fireEvent.change(reply, { target: { value: "Edited answer." } });
+    expect(within(thread).getByText(/The last reply may already have been saved or sent/)).toBeTruthy();
+    fireEvent.click(within(thread).getByRole("button", { name: "Restore the original text" }));
+    expect((reply as HTMLTextAreaElement).value).toBe("First answer.");
+    fireEvent.click(within(thread).getByRole("button", { name: "Send reply" }));
+    await waitFor(() => expect(fake.reply).toHaveBeenCalledTimes(2));
+    expect(fake.reply.mock.calls[1]).toEqual([expect.any(String), "First answer.", firstKey]);
+    await screen.findByText(/delivery is not confirmed/);
+    fireEvent.change(reply, { target: { value: "A separate follow-up." } });
+    fireEvent.click(within(thread).getByRole("button", { name: "Send reply" }));
+    await waitFor(() => expect(fake.reply).toHaveBeenCalledTimes(3));
+    expect(fake.reply.mock.calls[2][2]).not.toBe(firstKey);
+  });
+  it("saves changed note text after an unconfirmed attempt only as a new note", async () => {
+    const fake = client();
+    fake.note.mockRejectedValueOnce(new Error("The connection was lost."));
+    render(<Communications products={products} actor={actor} client={fake} />);
+    fireEvent.click(within(await screen.findByRole("region", { name: "Conversations" })).getByText("Text message from +1 (202) 555-0144"));
+    const thread = await screen.findByRole("region", { name: "Conversation" });
+    const note = await within(thread).findByLabelText("Internal note — never shown to the customer");
+    fireEvent.change(note, { target: { value: "Called back." } });
+    fireEvent.click(within(thread).getByRole("button", { name: "Save note" }));
+    expect(await screen.findByText("The connection was lost.")).toBeTruthy();
+    fireEvent.change(note, { target: { value: "Called back twice." } });
+    fireEvent.click(within(thread).getByRole("button", { name: "Save as a new note" }));
+    await waitFor(() => expect(fake.note).toHaveBeenCalledTimes(2));
+    expect(fake.note.mock.calls[1][2]).not.toBe(fake.note.mock.calls[0][2]);
+  });
+  it("moves to the last page when a refresh leaves the current page empty", async () => {
+    let total = 26;
+    const rows = Array.from({ length: 26 }, (_, index) => conversation({ id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`, reference: 1001 + index, subject: `Conversation ${index + 1}` }));
+    const fake = { ...client(), list: vi.fn(async (filter: { offset: number; limit: number }) => ({ items: rows.slice(0, total).slice(filter.offset, filter.offset + filter.limit), total, limit: filter.limit, offset: filter.offset, statusCounts: {} })) };
+    render(<Communications products={products} actor={actor} client={fake} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Conversation 26")).toBeTruthy();
+    total = 25;
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(await screen.findByText("Conversation 1")).toBeTruthy();
+    expect(fake.list).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 0 }), expect.anything());
   });
 });
 

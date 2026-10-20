@@ -88,9 +88,13 @@ try {
   await service.note(agentToken,{id:sms.id,body:'Checked: account is active.',requestKey:noteKey});
   const noted=await service.note(agentToken,{id:sms.id,body:'Checked: account is active.',requestKey:noteKey});
   assert.equal(noted.messages.filter(message=>message.direction==='note').length,1);
+  // A key replays only the exact text it first carried; edited text after an uncertain outcome needs a new key.
+  await assert.rejects(service.note(agentToken,{id:sms.id,body:'Checked: account is locked.',requestKey:noteKey}),error=>error.status===400&&/different message/.test(error.message));
   const replyKey=randomUUID();
   assert.deepEqual(await service.reply(agentToken,{id:sms.id,body:'Please request a new code.',requestKey:replyKey}),{delivery:'sent',deliveryChannel:'sms',replay:false});
   assert.deepEqual(await service.reply(agentToken,{id:sms.id,body:'Please request a new code.',requestKey:replyKey}),{delivery:'sent',deliveryChannel:'sms',replay:true});
+  await assert.rejects(service.reply(agentToken,{id:sms.id,body:'Please call us instead.',requestKey:replyKey}),error=>error.status===400&&/different message/.test(error.message));
+  await assert.rejects(service.reply(agentToken,{id:sms.id,body:'Checked: account is active.',requestKey:noteKey}),error=>error.status===400&&/different message/.test(error.message));
   assert.deepEqual(sent.sms,[{to:'+12025550144',body:'Please request a new code.'}]);
   smsOutcome='unknown';
   assert.equal((await service.reply(agentToken,{id:sms.id,body:'Following up.',requestKey:randomUUID()})).delivery,'unknown');
@@ -136,14 +140,14 @@ try {
 
   // Imports from the Breathe phone line and the Advisors form: once each, administrator only.
   await assert.rejects(service.sync(agentToken,{source:'breathe.phone'}),error=>error.status===401||error.status===403);
-  assert.deepEqual(await service.sync(ownerToken,{source:'breathe.phone'}),{source:'breathe.phone',read:1,created:1,skipped:0});
-  assert.deepEqual(await service.sync(ownerToken,{source:'advisors.web'}),{source:'advisors.web',read:1,created:1,skipped:0});
+  assert.deepEqual(await service.sync(ownerToken,{source:'breathe.phone'}),{source:'breathe.phone',read:1,created:1,skipped:0,nextOffset:null});
+  assert.deepEqual(await service.sync(ownerToken,{source:'advisors.web'}),{source:'advisors.web',read:1,created:1,skipped:0,nextOffset:null});
   const call=await find(item=>item.channel==='phone');created.push(call.id);
   const consult=await find(item=>item.channel==='web_form');created.push(consult.id);
   assert.equal(call.productId,breathe,'PennFit calls route to Breathe');assert.equal(call.contactPhone,'+12025550171');assert.equal(call.inquiryType,'customer_service');
   assert.equal(consult.productId,advisors);assert.equal(consult.status,'closed','a request already closed in Advisors does not reopen');
   await service.update(ownerToken,{id:call.id,status:'closed',expectedUpdatedAt:call.updatedAt});
-  assert.deepEqual(await service.sync(ownerToken,{source:'breathe.phone'}),{source:'breathe.phone',read:1,created:0,skipped:1});
+  assert.deepEqual(await service.sync(ownerToken,{source:'breathe.phone'}),{source:'breathe.phone',read:1,created:0,skipped:1,nextOffset:null});
   assert.equal((await service.get(ownerToken,{id:call.id})).status,'closed','re-syncing never overwrites staff work');
   assert.deepEqual(adminReads.map(read=>read.operation),['phone.messages.list','inquiries.list','phone.messages.list']);
   assert.equal((await service.reply(ownerToken,{id:call.id,body:'Called back and resolved.',requestKey:randomUUID()})).deliveryChannel,'email','phone messages with an email reply by email');

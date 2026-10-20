@@ -123,7 +123,10 @@ describe("portfolio rollup", () => {
 
   it("shows super-admin coverage for every application without counting failed connections", async () => {
     const portfolio = fakePortfolio({
-      carebase: { capabilities: { apiVersion: 1, operations: ["organizations.list", "users.list", "billing.overview", "billing.subscriptions.list", "billing.invoices.list"], sourceRevision: null } },
+      carebase: { capabilities: { apiVersion: 1, operations: ["organizations.list", "users.list", "billing.overview", "billing.subscriptions.list", "billing.invoices.list"], sourceRevision: null },
+        billing: { source: "application_database", subscriptionCount: 5, statusCounts: [{ status: "active", count: 5 }] } },
+      // Connected, but its billing read fails: subscriptions must not show as held.
+      pennsync: { capabilities: { apiVersion: 1, operations: ["organizations.list", "users.list", "billing.overview", "billing.subscriptions.list"], sourceRevision: null } },
       advisors: { capabilities: { apiVersion: 1, operations: ["overview", "inquiries.list"], sourceRevision: null }, overview: { organizationCount: null, activeUserCount: null, inquiryCount: 0, openInquiryCount: 0 } },
     });
     renderRollup(portfolio);
@@ -131,9 +134,12 @@ describe("portfolio rollup", () => {
     expect(within(coverage).getAllByRole("row")).toHaveLength(8);
     const carebase = within(coverage).getByRole("row", { name: /CareBase \(PennTrain\)/ });
     expect(within(carebase).getAllByText("In the Hub")).toHaveLength(4);
+    const pennsync = within(coverage).getByRole("row", { name: /PennSync \(CareMetric-Pennsync\)/ });
+    expect(within(pennsync).getByText("Billing read failed")).toBeTruthy();
+    expect(within(pennsync).getAllByText("In the Hub")).toHaveLength(2);
     const breathe = within(coverage).getByRole("row", { name: /Breathe \(PennFit\)/ });
     expect(within(breathe).getAllByText("Unavailable")).toHaveLength(3);
-    expect(within(coverage).getAllByText(/Restore the application's administration connection/)).toHaveLength(5);
+    expect(within(coverage).getAllByText(/Restore the application's administration connection/)).toHaveLength(4);
     expect(within(coverage).getByText(/of \d+ applicable areas are in the Hub now/)).toBeTruthy();
   });
 
