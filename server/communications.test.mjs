@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { Readable } from 'node:stream';
-import { communications, htmlToText, inquiryImportItem, parseMailbox, phoneImportItem, productFromAddresses, replySubject, sendgridMail, sendgridSignatureValid, twilioMessaging, twilioSignature } from './communications.mjs';
+import { communications, htmlToText, inquiryImportItem, parseMailbox, phoneImportItem, productFromAddresses, replySubject, sendgridMail, sendgridSignatureValid, supportReplyEmail, twilioMessaging, twilioSignature } from './communications.mjs';
 
 const origin = 'https://support-hub-web-production.up.railway.app';
 const request = (body, headers) => Object.assign(Readable.from([Buffer.from(body)]), { headers });
@@ -53,6 +53,7 @@ describe('message parsing', () => {
   });
   it('reduces HTML mail to readable text without markup or scripts', () => {
     expect(htmlToText('<p>Hello &amp; welcome</p><script>alert(1)</script><div>Line two<br>Line three</div>')).toBe('Hello & welcome\n Line two\nLine three');
+    expect(htmlToText('<html><head><title>Re: Login [CM-1]</title><style>p{color:red}</style></head><body><!--[if mso]><table><![endif]--><p>Thanks</p><header>Kept</header></body></html>')).toBe('Thanks\n Kept');
   });
   it('maps Breathe phone messages and Advisors requests to import items with the reviewed eleven fields', () => {
     const phone = phoneImportItem({ id: '99000000-0000-4000-8000-000000000001', contactName: 'Caller', companyName: 'Agency', phone: '(202) 555-0111', email: null, message: 'Please call back.', status: 'new', createdAt: '2026-10-01T00:00:00.000Z', product: 'advisors', requestType: 'healthcare_advisors', sms: { status: 'delivered', resources: ['advisors'], errorCode: null } });
@@ -91,6 +92,37 @@ describe('reply providers', () => {
     expect(body.content).toEqual([{ type: 'text/plain', value: 'Body' }]);
     expect(sendgridMail({ apiKey: 'not-a-key' }).configured).toBe(false);
   });
+  it('sends the text part first and the HTML part second when both are given', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response('', { status: 202 }));
+    const mail = sendgridMail({ apiKey: 'SG.fixture', from: 'help@caremetric.test', fetchImpl });
+    expect(await mail.send('pat@agency.test', 'Re: Help [CM-1001]', { text: 'Body', html: '<p>Body</p>' })).toEqual({ delivery: 'sent', id: null });
+    const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
+    expect(body.personalizations).toEqual([{ to: [{ email: 'pat@agency.test' }] }]);
+    expect(body.from).toEqual({ email: 'help@caremetric.test', name: 'CareMetric Support' });
+    expect(body.subject).toBe('Re: Help [CM-1001]');
+    expect(body.content).toEqual([{ type: 'text/plain', value: 'Body' }, { type: 'text/html', value: '<p>Body</p>' }]);
+    expect(body).not.toHaveProperty('reply_to');
+  });
+  it('emails a staff reply once, with the reference subject, the agent text and an HTML part', async () => {
+    const started = { messageId: 'm1', replay: false, delivery: 'pending', deliveryChannel: 'email', to: 'pat@agency.test', reference: 1042, subject: 'Login help [CM-1001]' };
+    const { pool, calls } = fakePool(started);
+    const send = vi.fn(async () => ({ delivery: 'sent', id: 'sg-1' }));
+    const service = communications({ pool, delegations: {}, email: { configured: true, send }, sms: { configured: false } });
+    const body = 'Hi Pat,\r\n\r\nWe reset your access. <b>Try again</b>.';
+    expect(await service.reply('session', { id: '99000000-0000-4000-8000-000000000001', body, requestKey: '99000000-0000-4000-8000-000000000002' }))
+      .toEqual({ delivery: 'sent', deliveryChannel: 'email', replay: false });
+    expect(send).toHaveBeenCalledTimes(1);
+    const [to, subject, message] = send.mock.calls[0];
+    expect(to).toBe('pat@agency.test');
+    expect(subject).toBe('Re: Login help [CM-1042]');
+    expect(message).toEqual(supportReplyEmail({ subject: 'Login help [CM-1001]', reference: 1042, body: 'Hi Pat,\n\nWe reset your access. <b>Try again</b>.' }));
+    expect(message.text.startsWith('Hi Pat,\n\nWe reset your access. <b>Try again</b>.\n\n— CareMetric Support\nReference CM-1042')).toBe(true);
+    expect(message.html).toContain('We reset your access. &lt;b&gt;Try again&lt;/b&gt;.');
+    expect(calls.at(-1).values).toEqual(['m1', 'sent', 'sg-1']);
+    const replayed = communications({ pool: fakePool({ ...started, replay: true, delivery: 'sent' }).pool, delegations: {}, email: { configured: true, send } });
+    expect((await replayed.reply('session', { id: '99000000-0000-4000-8000-000000000001', body, requestKey: '99000000-0000-4000-8000-000000000002' })).replay).toBe(true);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('inbound webhooks', () => {
@@ -123,6 +155,19 @@ describe('inbound webhooks', () => {
     await expect(service.emailWebhook(request(stale.payload, stale.headers))).rejects.toMatchObject({ status: 403 });
     expect(calls).toHaveLength(1);
     expect(communications({ pool, delegations: {}, sendgridInboundPublicKey: '!!!' }).emailWebhook).toBeTypeOf('function');
+  });
+  it('threads an HTML-only customer reply that quotes the Hub reply and stores only readable text', async () => {
+    const { pool, calls } = fakePool();
+    const service = communications({ pool, delegations: {}, sendgridInboundPublicKey: publicKeyBase64 });
+    const sent = supportReplyEmail({ subject: 'Login help', reference: 1042, body: 'Hi Pat,\n\nWe reset your access.' });
+    const html = `<html><head><style>p{margin:0}</style></head><body><p>That worked, thanks!</p><blockquote>${sent.html}</blockquote></body></html>`;
+    const { payload, headers } = await signedEmail({ from: 'pat@agency.test', to: 'support@caremetric.ai', subject: `RE: ${sent.subject}`, html, headers: 'Message-ID: <html-only@mail.test>' });
+    await service.emailWebhook(request(payload, headers));
+    expect(calls[0].values[3]).toBe('1042');
+    const stored = calls[0].values[6];
+    expect(stored.startsWith('That worked, thanks!')).toBe(true);
+    expect(stored).toContain('We reset your access.');
+    expect(stored).not.toMatch(/<\/?(p|div|table|td|tr|br|html|head|body|style|title)\b|font-family|&[a-z#0-9]+;/i);
   });
   it('threads email by the last reference in the subject, which is the one the Hub appended', async () => {
     const { pool, calls } = fakePool();
