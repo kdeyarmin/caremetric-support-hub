@@ -1,4 +1,5 @@
 import { HttpError, digest, transaction, withSession } from './sms-auth.mjs';
+import { renderEmail } from './email-layout.mjs';
 
 /* Bulk email from the platform administrator to the users of each application,
    narrowed by role and account status. Audiences are read from each
@@ -22,23 +23,39 @@ function reviewed(error) {
   return status ? new HttpError(status, error.message) : error;
 }
 
-/** The plain-text message every recipient receives: the administrator's text, then why they received it and how to stop. */
-export function composeBulkEmail({ body, applications, unsubscribeUrl, postalAddress }) {
-  const footer = [
-    '--',
+const unsubscribeLabel = 'Unsubscribe from CareMetric announcements';
+/** Why they received it, how to stop and the mailing address. The unsubscribe line is a link wherever the layout can link it (https). */
+function footerLines({ applications, unsubscribeUrl, postalAddress }) {
+  return [
     `You are receiving this email because you have a ${applications} account with CareMetric.`,
-    unsubscribeUrl ? `Unsubscribe from CareMetric announcements: ${unsubscribeUrl}` : 'Unsubscribe link: included in each real message.',
+    !unsubscribeUrl ? 'Unsubscribe link: included in each real message.'
+      : /^https:\/\//i.test(unsubscribeUrl) ? { label: unsubscribeLabel, url: unsubscribeUrl } : `${unsubscribeLabel}: ${unsubscribeUrl}`,
     ...(postalAddress ? [postalAddress] : []),
   ];
-  return `${body.replace(/\r\n/g, '\n').trimEnd()}\n\n${footer.join('\n')}\n`;
+}
+const announcementText = body => body.replace(/\r\n/g, '\n').trimEnd();
+
+/** The plain-text message every recipient receives: the administrator's text, then why they received it and how to stop. */
+export function composeBulkEmail({ body, applications, unsubscribeUrl, postalAddress }) {
+  const footer = ['--', ...footerLines({ applications, unsubscribeUrl, postalAddress }).map(line => (typeof line === 'string' ? line : `${line.label}: ${line.url}`))];
+  return `${announcementText(body)}\n\n${footer.join('\n')}\n`;
 }
 
-/** SendGrid Mail Send for bulk email: one recipient per request, one-click unsubscribe headers, no tracking. */
+/** The same message as HTML in the shared CareMetric email layout: the administrator's words exactly as written (personal layout, no product header), then the same footer. */
+export function bulkEmailHtml({ subject, body, applications, unsubscribeUrl, postalAddress }) {
+  return renderEmail({
+    layout: 'personal', title: subject, signature: [],
+    blocks: [{ type: 'message', text: announcementText(body) }],
+    footer: footerLines({ applications, unsubscribeUrl, postalAddress }),
+  }).html;
+}
+
+/** SendGrid Mail Send for bulk email: one recipient per request, text then HTML, one-click unsubscribe headers, no tracking. */
 export function sendgridBulkMail({ apiKey, from = 'support@caremetric.ai', replyTo = from, fetchImpl = fetch }) {
   const configured = typeof apiKey === 'string' && apiKey.startsWith('SG.') && emailAddress.test(from) && emailAddress.test(replyTo);
   return {
     configured,
-    async send({ to, subject, text, unsubscribeUrl }) {
+    async send({ to, subject, text, html, unsubscribeUrl }) {
       const personalization = { to: [{ email: to }], ...(unsubscribeUrl ? { headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' } } : {}) };
       let response;
       try {
@@ -46,7 +63,7 @@ export function sendgridBulkMail({ apiKey, from = 'support@caremetric.ai', reply
           method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(15000),
           body: JSON.stringify({
             personalizations: [personalization], from: { email: from, name: 'CareMetric' }, reply_to: { email: replyTo }, subject,
-            content: [{ type: 'text/plain', value: text }], categories: ['hub-bulk-email'],
+            content: [{ type: 'text/plain', value: text }, ...(html ? [{ type: 'text/html', value: html }] : [])], categories: ['hub-bulk-email'],
             tracking_settings: { click_tracking: { enable: false }, open_tracking: { enable: false }, subscription_tracking: { enable: false } },
           }),
         });
@@ -78,7 +95,8 @@ export function bulkEmail({ pool, delegations, mail, publicOrigin, postalAddress
 
   async function deliver(item) {
     const url = unsubscribeUrl(item.token);
-    const outcome = await mail.send({ to: item.to, subject: item.subject, text: composeBulkEmail({ body: item.body, applications: item.applications, unsubscribeUrl: url, postalAddress }), unsubscribeUrl: url });
+    const message = { subject: item.subject, body: item.body, applications: item.applications, unsubscribeUrl: url, postalAddress };
+    const outcome = await mail.send({ to: item.to, subject: item.subject, text: composeBulkEmail(message), html: bulkEmailHtml(message), unsubscribeUrl: url });
     await server('select private.finish_email_delivery($1,$2,$3) as result', [item.id, outcome.delivery, outcome.id]);
   }
 
@@ -116,7 +134,8 @@ export function bulkEmail({ pool, delegations, mail, publicOrigin, postalAddress
       const to = typeof input.to === 'string' ? input.to.trim() : '';
       if (!emailAddress.test(to) || to.length > 320) throw new HttpError(400, 'Enter the email address for the test.');
       const message = await admin(sessionToken, 'select hub.authorize_email_test($1) as result', [id(input.id)]);
-      const outcome = await mail.send({ to, subject: `[Test] ${message.subject}`, text: composeBulkEmail({ body: message.body, applications: message.applications, unsubscribeUrl: null, postalAddress }), unsubscribeUrl: null });
+      const test = { subject: `[Test] ${message.subject}`, body: message.body, applications: message.applications, unsubscribeUrl: null, postalAddress };
+      const outcome = await mail.send({ to, subject: test.subject, text: composeBulkEmail(test), html: bulkEmailHtml(test), unsubscribeUrl: null });
       return { delivery: outcome.delivery };
     },
     async send(sessionToken, input) {

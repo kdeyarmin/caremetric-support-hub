@@ -101,6 +101,7 @@ ${rows.map(([label, value]) => `<tr><td valign="top" style="padding:4px 12px 4px
     text: ({ title, text }) => (title ? `${title} ${text}` : String(text)),
   },
 };
+const footerHtml = line => (typeof line === 'string' ? escapeHtml(line) : `<a href="${href(line.url)}" target="_blank" style="${linkStyle}">${escapeHtml(line.label)}</a>`);
 function renderBlock(block, kind) {
   const renderer = blocks[block?.type];
   if (!renderer) throw new TypeError(`Unknown email block: ${block?.type}`);
@@ -117,7 +118,8 @@ function renderBlock(block, kind) {
  * @param {string|null} [email.recipientName] greets "Hi <name>," or "Hello," (branded layout)
  * @param {Array<object>} email.blocks paragraph | message | button | details | callout
  * @param {string[]} [email.signature] sign-off lines; the first is the signer
- * @param {string[]} email.footer why they received it, how to get help
+ * @param {Array<string|{label: string, url: string}>} email.footer why they received it, how to get help;
+ *   a { label, url } line is a link (an unsubscribe link, say)
  */
 export function renderEmail({ layout = 'branded', title, preheader, heading, recipientName, blocks: content, signature = [`— The ${SUPPORT_TEAM_NAME} team`], footer }) {
   const branded = layout !== 'personal';
@@ -159,7 +161,7 @@ ${branded ? `<tr><td bgcolor="${palette.brand}" style="padding:20px 32px;backgro
 ${body}
 </td></tr>
 <tr><td class="cm-footer" align="center" style="padding:20px 32px 24px;border-top:1px solid ${palette.hairline};">
-${footer.map(line => `<p style="${smallStyle}text-align:center;">${escapeHtml(line)}</p>`).join('\n')}
+${footer.map(line => `<p style="${smallStyle}text-align:center;">${footerHtml(line)}</p>`).join('\n')}
 </td></tr>
 </table>
 <!--[if mso]></td></tr></table><![endif]-->
@@ -174,7 +176,7 @@ ${footer.map(line => `<p style="${smallStyle}text-align:center;">${escapeHtml(li
     greeting,
     ...content.map(block => renderBlock(block, 'text')),
     signature.length ? signature.join('\n') : null,
-    footer.join('\n'),
+    footer.map(line => (typeof line === 'string' ? line : `${line.label}: ${line.url}`)).join('\n'),
   ].filter(part => part !== null && part !== '').join('\n\n');
 
   return { html, text };

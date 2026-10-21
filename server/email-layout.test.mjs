@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LAYOUT_MARKER, PRODUCT_WORDMARK, calloutTones, escapeHtml, palette, renderEmail } from './email-layout.mjs';
 import { htmlToText, replySubject, supportReplyEmail } from './communications.mjs';
+import { bulkEmailHtml, composeBulkEmail } from './bulk-email.mjs';
 
 const hostile = '<script>alert(1)</script>';
 const allowedColors = new Set([...Object.values(palette), ...Object.values(calloutTones).flatMap(tone => Object.values(tone))].map(color => color.toUpperCase()));
@@ -8,6 +9,10 @@ const allowedColors = new Set([...Object.values(palette), ...Object.values(callo
 /** Every email the Hub sends, plus the branded layout every future notification will use. */
 const emails = {
   'support reply': () => supportReplyEmail({ subject: `Login help ${hostile}`, reference: 1042, body: `Hi ${hostile},\n\nWe reset your access.\n\nThanks,\nSam` }),
+  'bulk announcement': () => {
+    const message = { subject: `Maintenance ${hostile}`, body: `Hello ${hostile},\n\nWe will be down Saturday.`, applications: `PennSync ${hostile}`, unsubscribeUrl: `https://hub.example/api/email/unsubscribe/${'a'.repeat(64)}`, postalAddress: `1 Main St ${hostile}` };
+    return { html: bulkEmailHtml(message), text: composeBulkEmail(message) };
+  },
   'branded notification layout': () => renderEmail({
     title: `Update for ${hostile}`, preheader: `A summary for ${hostile}.`, heading: `Your request ${hostile}`, recipientName: hostile,
     blocks: [
@@ -69,6 +74,13 @@ describe('layout behavior', () => {
     for (const url of ['javascript:alert(1)', 'http://hub.example.com', '/relative', 'https://hub.example.com/"onmouseover="x']) {
       expect(() => renderEmail({ title: 't', blocks: [{ type: 'button', label: 'Go', url }], footer: [] }), url).toThrow(TypeError);
     }
+  });
+  it('links a footer line given as { label, url }, and writes it out in the text part', () => {
+    const email = renderEmail({ layout: 'personal', title: 't', blocks: [], signature: [], footer: ['Why.', { label: 'Unsubscribe', url: 'https://hub.example/u?a=1&b=2' }] });
+    expect(email.html).toContain('<a href="https://hub.example/u?a=1&amp;b=2" target="_blank"');
+    expect(email.html).toContain('>Unsubscribe</a>');
+    expect(email.text.endsWith('Why.\nUnsubscribe: https://hub.example/u?a=1&b=2')).toBe(true);
+    expect(() => renderEmail({ title: 't', blocks: [], footer: [{ label: 'x', url: 'javascript:alert(1)' }] })).toThrow(TypeError);
   });
   it('refuses unknown blocks instead of dropping content', () => {
     expect(() => renderEmail({ title: 't', blocks: [{ type: 'raw', html: '<b>x</b>' }], footer: [] })).toThrow(TypeError);
