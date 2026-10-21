@@ -25,6 +25,11 @@ Product names appear with their repository names so each app is easy to find.
 - **Knowledge** (`/knowledge`): shared and app-specific articles for every
   application, with per-app coverage and a direct "Write an article" path into
   DocStudio. Healthcare Advisors' published FAQ is included.
+- **Tenants & pricing** (`/admin/tenants`): set up customer tenants by hand,
+  choose their applications and record each subscription's price per month or
+  per year, or make it complimentary (free) with a reason and an optional end
+  date. This is the Hub's subscription record; it never charges a card or
+  changes an application's own billing. See [tenant setup](docs/TENANT_SETUP.md).
 - **Portfolio rollup** (`/admin/portfolio`): health, subscriber and subscription
   figures, and a live **super-admin coverage** matrix showing, per application,
   what the Hub holds now and what app-side work each gap needs.
@@ -52,6 +57,11 @@ Apply `20261021120000_ai_usage_ledger.sql` and
 center release: it records every Anthropic call in a private ledger attributed
 to the application and customer, and connected builds require the
 `support.ai-usage.v1` contract feature.
+
+Apply `20261021140000_tenant_subscriptions.sql` and
+`20261021140100_tenant_subscriptions_contract.sql` before deploying the tenant
+setup release: pricing is a private, administrator-only record, and connected
+builds require the `platform.admin.tenants.v1` contract feature.
 
 The Super Admin workspace now includes [facility training management](docs/FACILITY_TRAINING.md): create training-only facilities, invite administrators and students, manage enrollment and progress, open issued certificates, run complete printable/CSV reports and manage module access terms through the Hub session. Shared support, phone routing, course, onboarding and security workspaces are reachable from the same Admin page. The native CareBase `training.v1` capability gates these controls; deploy its migrations and adapter before this Hub update. Live owner verification remains separate from fixture testing.
 
