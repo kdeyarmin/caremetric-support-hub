@@ -16,6 +16,7 @@ import { goLiveReadiness } from './go-live-readiness.mjs';
 import { integrationSetup } from './integration-setup.mjs';
 import { sqlAiUsageRecorder } from './ai-usage.mjs';
 import { communications, defaultPublicOrigin, sendgridMail, twilioMessaging } from './communications.mjs';
+import { bulkEmail, sendgridBulkMail } from './bulk-email.mjs';
 
 const storageUrl='https://xgauehtwksmnoqhgqegm.supabase.co';
 const pool=new pg.Pool(databaseConfig());
@@ -36,9 +37,11 @@ const messaging=communications({pool,delegations:capabilities,publicOrigin:proce
   sms:twilioMessaging({accountSid:process.env.HUB_TWILIO_ACCOUNT_SID,authToken:process.env.HUB_TWILIO_AUTH_TOKEN,messagingServiceSid:process.env.HUB_TWILIO_MESSAGING_SERVICE_SID,from:process.env.HUB_TWILIO_FROM_NUMBER}),
   email:sendgridMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai'}),
   chatEnabled:process.env.HUB_CHAT_ENABLED==='true'});
+const announcements=bulkEmail({pool,delegations:capabilities,publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin,postalAddress:(process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS||'').trim(),
+  mail:sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_BULK_EMAIL_FROM||process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai',replyTo:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai'})});
 const readiness=goLiveReadiness({pool,rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
 const setup=integrationSetup({rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
-const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:capabilities,publications:publicationService,docstudio:studio,aiCases,readiness,integrationSetup:setup,communications:messaging,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
+const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:capabilities,publications:publicationService,docstudio:studio,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
 let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;
@@ -52,6 +55,8 @@ const checkCourses=async()=>{try{await observer.tick();}catch{console.warn('Cour
 const courseTimer=setInterval(()=>void checkCourses(),5*60*1000);courseTimer.unref();void checkCourses();
 const sweepAi=async()=>{try{await automation.tick();}catch{console.warn('AI case automation could not complete; it will retry.');}};
 const aiTimer=setInterval(()=>void sweepAi(),60*1000);aiTimer.unref();void sweepAi();
+const deliverEmail=async()=>{try{await announcements.tick();}catch{console.warn('Bulk email delivery could not complete; it will retry.');}};
+const emailTimer=setInterval(()=>void deliverEmail(),60*1000);emailTimer.unref();void deliverEmail();
 server.requestTimeout=130000; server.headersTimeout=15000;
 server.listen(Number(process.env.PORT || 8080),'0.0.0.0');
-for(const signal of ['SIGTERM','SIGINT']) process.on(signal,() => { clearInterval(cleanupTimer); clearInterval(courseTimer); clearInterval(aiTimer); server.close(() => { void pool.end(); }); });
+for(const signal of ['SIGTERM','SIGINT']) process.on(signal,() => { clearInterval(cleanupTimer); clearInterval(courseTimer); clearInterval(aiTimer); clearInterval(emailTimer); server.close(() => { void pool.end(); }); });

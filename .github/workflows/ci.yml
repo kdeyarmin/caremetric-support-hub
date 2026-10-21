@@ -101,6 +101,9 @@ jobs:
           node server/communications-integration.mjs
           # Repeat with the same fixtures to prove complete teardown.
           node server/communications-integration.mjs
+          node server/bulk-email-integration.mjs
+          # Repeat with fresh fixtures to prove complete teardown.
+          node server/bulk-email-integration.mjs
           node server/operations-integration.mjs
           node server/configuration-integration.mjs
           node server/training-integration.mjs
