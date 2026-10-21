@@ -1,5 +1,5 @@
 begin;
-select plan(12);
+select plan(13);
 
 select ok((select bool_and(relrowsecurity) from pg_class where oid in
   ('private.communications'::regclass,'private.communication_messages'::regclass,'private.communication_rate_events'::regclass)),
@@ -32,6 +32,8 @@ select is(private.communication_product('intel'),(select id from hub.products wh
 select is(private.communication_product('unknown-app'),null::uuid,'unknown applications stay unassigned for triage');
 select is(private.communication_line(E'Subject\r\nwith\tcontrols','200'),'Subject with controls','single-line fields drop control characters');
 select ok(hub.get_backend_contract()->'features' @> '["support.communications.v1"]'::jsonb,'unified communications are declared in release metadata');
+select ok(position($q$'channel', c.channel$q$ in pg_get_functiondef('hub.begin_communication_reply(uuid,text,uuid,text[])'::regprocedure))>0,
+  'a started reply tells the server which channel the conversation came from');
 
 select * from finish();
 rollback;

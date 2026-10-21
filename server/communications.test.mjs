@@ -123,6 +123,27 @@ describe('reply providers', () => {
     expect((await replayed.reply('session', { id: '99000000-0000-4000-8000-000000000001', body, requestKey: '99000000-0000-4000-8000-000000000002' })).replay).toBe(true);
     expect(send).toHaveBeenCalledTimes(1);
   });
+  it('names an emailed reply to a phone-line message for the caller, not with the staff import title', async () => {
+    const started = { messageId: 'm2', replay: false, delivery: 'pending', deliveryChannel: 'email', to: 'jordan@example.com', reference: 1043,
+      subject: 'Customer service call from Jordan Rivera', channel: 'phone' };
+    const send = vi.fn(async () => ({ delivery: 'sent', id: 'sg-2' }));
+    const service = communications({ pool: fakePool(started).pool, delegations: {}, email: { configured: true, send }, sms: { configured: false } });
+    await service.reply('session', { id: '99000000-0000-4000-8000-000000000003', body: 'Hi Jordan,\n\nThanks for calling.', requestKey: '99000000-0000-4000-8000-000000000004' });
+    expect(send.mock.calls[0][1]).toBe('Re: Your phone message to CareMetric [CM-1043]');
+    expect(send.mock.calls[0][2].subject).toBe(send.mock.calls[0][1]);
+    expect(send.mock.calls[0][2].html).not.toContain('Jordan Rivera');
+    // A database from before the channel field keeps the stored subject.
+    const older = { ...started };
+    delete older.channel;
+    await communications({ pool: fakePool(older).pool, delegations: {}, email: { configured: true, send }, sms: { configured: false } })
+      .reply('session', { id: '99000000-0000-4000-8000-000000000003', body: 'Hi Jordan,', requestKey: '99000000-0000-4000-8000-000000000005' });
+    expect(send.mock.calls[1][1]).toBe('Re: Customer service call from Jordan Rivera [CM-1043]');
+  });
+  it('keeps the subject of a reply to an email or web-form conversation', () => {
+    expect(supportReplyEmail({ subject: 'Login help', reference: 1007, body: 'Hi', channel: 'email' }).subject).toBe('Re: Login help [CM-1007]');
+    expect(supportReplyEmail({ subject: 'Consultation request from Riverside Home Health', reference: 1044, body: 'Hi', channel: 'web_form' }).subject)
+      .toBe('Re: Consultation request from Riverside Home Health [CM-1044]');
+  });
 });
 
 describe('inbound webhooks', () => {

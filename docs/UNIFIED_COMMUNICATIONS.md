@@ -46,8 +46,10 @@ instead of being resent automatically. Replies are refused when the channel's
 provider is not configured.
 
 Outbound email subjects carry exactly one `[CM-<reference>]`, at the end: any
-other reference in the customer's subject is removed. Inbound mail is threaded
-by the last reference in its subject. A customer's reply joins the same
+other reference in the customer's subject is removed. A reply to an imported
+phone-line message is titled "Your phone message to CareMetric", because the
+conversation's own title ("Billing call from Jordan Rivera") is written for staff.
+Inbound mail is threaded by the last reference in its subject. A customer's reply joins the same
 conversation only when it comes from the address on that conversation; anything
 else starts a new one.
 
@@ -135,3 +137,7 @@ Apply `20261020163000_unified_communications.sql` and its gate
 `support.communications.v1`. The gate refuses to declare the feature if any
 communication table loses row level security or gains a direct grant, or if a
 webhook or chat function becomes executable by a browser role.
+
+`20261021130000_communication_reply_channel.sql` makes a started reply also
+return the conversation's channel, which the phone-message subject above needs.
+It is additive: a Hub deployed before it is applied keeps the stored subject.
