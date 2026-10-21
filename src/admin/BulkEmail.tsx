@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { Product } from '../domain';
 import { config } from '../lib/config';
 import {
@@ -85,7 +85,9 @@ function CampaignEditor({id,initial,client,pollMs,onClose}:{id:string;initial?:C
   const [testTo,setTestTo]=useState('');
   const [confirmed,setConfirmed]=useState(false);
   const [confirmCancel,setConfirmCancel]=useState(false);
-  const adopt=(next:Campaign)=>{setCampaign(next);setSubject(next.subject);setBody(next.body);setSelection(selectionOf(next));setConfirmed(false);};
+  // Bumped whenever a newer campaign state arrives, so a slower status refresh never overwrites it.
+  const generation=useRef(0);
+  const adopt=(next:Campaign)=>{generation.current++;setCampaign(next);setSubject(next.subject);setBody(next.body);setSelection(selectionOf(next));setConfirmed(false);};
   useEffect(()=>{
     if(initial) return;
     const controller=new AbortController();
@@ -114,7 +116,7 @@ function CampaignEditor({id,initial,client,pollMs,onClose}:{id:string;initial?:C
   useEffect(()=>{
     if(status!=='sending') return;
     const controller=new AbortController();
-    const timer=setInterval(()=>{client.get(id,controller.signal).then(next=>{if(!controller.signal.aborted)setCampaign(next);}).catch(()=>{});},pollMs);
+    const timer=setInterval(()=>{const seen=generation.current;client.get(id,controller.signal).then(next=>{if(!controller.signal.aborted&&generation.current===seen)setCampaign(next);}).catch(()=>{});},pollMs);
     return ()=>{clearInterval(timer);controller.abort();};
   },[client,id,status,pollMs]);
   if(!campaign) return <section className="panel bulk-panel" aria-label="Email">{error?<p role="alert">{error}</p>:<p role="status">Loading email…</p>}<div className="bulk-actions"><button className="button button-secondary" onClick={onClose}>Close</button></div></section>;

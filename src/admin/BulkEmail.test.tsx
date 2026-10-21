@@ -122,15 +122,21 @@ describe('bulk email workspace', () => {
   it('follows delivery while sending and can stop the rest', async () => {
     const sending = campaign({ status: 'sending', subject: 'Update', body: 'Text', queuedAt: '2026-10-21T01:00:00Z', recipientCount: 10, audience: null, delivery: { queued: 6, sending: 1, sent: 3, failed: 0, unknown: 0, cancelled: 0 } });
     const later = { ...sending, delivery: { queued: 2, sending: 0, sent: 7, failed: 1, unknown: 0, cancelled: 0 } };
-    const get = vi.fn().mockResolvedValueOnce(sending).mockResolvedValue(later);
-    const client = setup({ get });
+    const cancelled = { ...later, status: 'cancelled' as const, version: 5, completedAt: '2026-10-21T01:05:00Z', delivery: { queued: 0, sending: 0, sent: 7, failed: 1, unknown: 0, cancelled: 2 } };
+    // Like the server: a read after the cancellation commits sees it.
+    let stopped = false;
+    const get = vi.fn().mockResolvedValueOnce(sending).mockImplementation(async () => stopped ? cancelled : later);
+    const client = setup({ get, cancel: vi.fn(async () => { stopped = true; return cancelled; }) });
     const editor = await openDraft(client, 'Update');
     await waitFor(() => expect(get.mock.calls.length).toBeGreaterThan(1));
     await waitFor(() => expect(editor.getByText('Sent').nextSibling?.textContent).toBe('7'));
     fireEvent.click(editor.getByRole('button', { name: 'Stop sending…' }));
     fireEvent.click(editor.getByRole('button', { name: 'Stop sending' }));
     await waitFor(() => expect(client.cancel).toHaveBeenCalled());
-    await editor.findByText('Cancelled');
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(editor.getByText('Cancelled', { selector: '.bulk-chip' })).toBeTruthy();
+    expect(editor.queryByRole('button', { name: 'Stop sending…' })).toBeNull();
+    expect(editor.getByText('Cancelled', { selector: 'dt' }).nextSibling?.textContent).toBe('2');
   });
   it('lists earlier emails with honest delivery counts', async () => {
     setup({ list: vi.fn(async () => ({ campaigns: [{ id: campaignId, status: 'sent', subject: 'October update', recipientCount: 812, createdAt: '2026-10-01T00:00:00Z', queuedAt: '2026-10-01T01:00:00Z', completedAt: '2026-10-01T01:20:00Z', applications: ['CareMetric CareBase', 'PennSync'], delivery: { outstanding: 0, sent: 809, failed: 2, unknown: 1, cancelled: 0 }, unsubscribed: 4 }], loadedAt: '' })) });
