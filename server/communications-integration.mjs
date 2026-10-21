@@ -151,6 +151,7 @@ try {
   assert.equal((await service.get(ownerToken,{id:call.id})).status,'closed','re-syncing never overwrites staff work');
   assert.deepEqual(adminReads.map(read=>read.operation),['phone.messages.list','inquiries.list','phone.messages.list']);
   assert.equal((await service.reply(ownerToken,{id:call.id,body:'Called back and resolved.',requestKey:randomUUID()})).deliveryChannel,'email','phone messages with an email reply by email');
+  assert.equal(sent.email.at(-1).subject,`Re: Your phone message to CareMetric [CM-${call.reference}]`,'the caller sees a subject written for them');
   smsOutcome='sent';
   assert.equal((await list(ownerToken,{status:'active',search:'agency one',limit:50})).items[0]?.id,call.id,'search covers organizations');
 

@@ -1,6 +1,7 @@
 import { createHmac, createPublicKey, timingSafeEqual, verify } from 'node:crypto';
 import { HttpError, digest, token, transaction, withSession } from './sms-auth.mjs';
 import { normalizePhone } from './sms-provider.mjs';
+import { SUPPORT_PHONE_DISPLAY, SUPPORT_TEAM_NAME, renderEmail } from './email-layout.mjs';
 
 /* Unified communications: inbound SMS and email webhooks, website chat, staff
    replies, and imports from the Breathe phone line and the Advisors consultation
@@ -60,8 +61,31 @@ export function replySubject(subject, reference) {
   const base = String(subject || '').replace(/\s*\[CM-\d+\]/g, '').replace(/^(\s*re\s*:\s*)+/i, '').trim();
   return `Re: ${base || 'Your CareMetric support request'} [CM-${reference}]`;
 }
+/** Imported phone-line conversations are titled for staff ("Billing call from Jordan
+    Rivera"), so the caller's emailed reply is named for what they did instead. */
+export const PHONE_REPLY_SUBJECT = 'Your phone message to CareMetric';
+/** The email a staff reply sends: the agent's words exactly as written, signed by
+    CareMetric Support, in the shared person-to-person layout with a matching text part.
+    `channel` is where the conversation started; a database without it keeps the stored subject. */
+export function supportReplyEmail({ subject, reference, body, channel }) {
+  const title = replySubject(channel === 'phone' ? PHONE_REPLY_SUBJECT : subject, reference);
+  const { html, text } = renderEmail({
+    layout: 'personal',
+    title,
+    blocks: [{ type: 'message', text: body }],
+    signature: [`— ${SUPPORT_TEAM_NAME}`, `Reference CM-${reference}`],
+    footer: [
+      "You're receiving this because you contacted CareMetric.",
+      `Reply to this email to continue the conversation, or call ${SUPPORT_PHONE_DISPLAY}.`,
+      "Please don't include patient information in your reply.",
+    ],
+  });
+  return { subject: title, text, html };
+}
+/** Reduces an HTML-only email to text. Head, title, style, script and comment content
+    (including a quoted copy of a Hub reply's own markup) never reach the stored message. */
 export function htmlToText(html) {
-  return String(html || '').replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|tr|h[1-6])>/gi, '\n')
+  return String(html || '').replace(/<!--[\s\S]*?-->/g, ' ').replace(/<(script|style|head|title)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|tr|h[1-6])>/gi, '\n')
     .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
     .replace(/[ \t]+/g, ' ').replace(/\n\s*\n\s*\n+/g, '\n\n').trim();
 }
@@ -112,17 +136,20 @@ export function twilioMessaging({ accountSid, authToken, messagingServiceSid, fr
     },
   };
 }
-/** SendGrid Mail Send for staff replies by email. */
+/** SendGrid Mail Send for staff replies by email. `content` is the text body, or
+    { text, html } to send both parts (text/plain first, as SendGrid requires). */
 export function sendgridMail({ apiKey, from = 'support@caremetric.ai', fetchImpl = fetch }) {
   const configured = typeof apiKey === 'string' && apiKey.startsWith('SG.') && emailAddress.test(from);
   return {
     configured,
-    async send(to, subject, body) {
+    async send(to, subject, content) {
+      const { text, html } = typeof content === 'string' ? { text: content, html: null } : content;
       let response;
       try {
         response = await fetchImpl('https://api.sendgrid.com/v3/mail/send', {
           method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(15000),
-          body: JSON.stringify({ personalizations: [{ to: [{ email: to }] }], from: { email: from, name: 'CareMetric Support' }, subject, content: [{ type: 'text/plain', value: body }] }),
+          body: JSON.stringify({ personalizations: [{ to: [{ email: to }] }], from: { email: from, name: 'CareMetric Support' }, subject,
+            content: [{ type: 'text/plain', value: text }, ...(html ? [{ type: 'text/html', value: html }] : [])] }),
         });
       } catch { return { delivery: 'unknown', id: null }; }
       if (response.status >= 400 && response.status < 500) return { delivery: 'failed', id: null };
@@ -147,9 +174,12 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
 
   async function deliver(started, body) {
     if (started.replay || started.deliveryChannel === 'chat') return { delivery: started.delivery, deliveryChannel: started.deliveryChannel, replay: started.replay };
-    const outcome = started.deliveryChannel === 'sms'
-      ? await sms.send(started.to, body)
-      : await email.send(started.to, replySubject(started.subject, started.reference), `${body}\n\n— CareMetric Support\nReference CM-${started.reference}. Reply to this email to continue the conversation.`);
+    let outcome;
+    if (started.deliveryChannel === 'sms') outcome = await sms.send(started.to, body);
+    else {
+      const message = supportReplyEmail({ subject: started.subject, reference: started.reference, body, channel: started.channel });
+      outcome = await email.send(started.to, message.subject, message);
+    }
     await server('select private.finish_communication_delivery($1,$2,$3) as result', [started.messageId, outcome.delivery, outcome.id]);
     return { delivery: outcome.delivery, deliveryChannel: started.deliveryChannel, replay: false };
   }
