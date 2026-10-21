@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { Mail, MessageCircle, MessageSquareText, Phone, RefreshCw, Search, Send, StickyNote, Globe2 } from "lucide-react";
 import type { Product } from "../domain";
 import {
-  channelLabels, channels, communicationsClient, conversationStatuses, deliveryLabels, inquiryLabels, inquiryTypes, replyRoute, statusLabels,
+  channelLabels, channels, communicationsClient, conversationStatuses, deliveryLabels, describeChannels, inquiryLabels, inquiryTypes, replyRoute, statusLabels,
   type Channel, type ChannelStatus, type CommunicationsClient, type ConversationPage, type ConversationStatus, type ConversationThread, type InquiryType, type SyncSource,
 } from "./communicationsClient";
 import "./communications.css";
@@ -31,8 +31,11 @@ function useRequestKey() {
   };
 }
 
-export function Communications({ products, actor, client = communicationsClient }: { products: Product[]; actor: { id: string; role: string }; client?: CommunicationsClient }) {
-  const [filter, setFilter] = useState<{ status: ConversationStatus | "active" | ""; channel: Channel | ""; productId: string; search: string }>({ status: "active", channel: "", productId: "", search: "" });
+/** Filters a link can open the inbox with, for example the control center's "3 texts waiting" link. */
+export interface CommunicationsFilter { status?: ConversationStatus | "active" | ""; channel?: Channel | ""; productId?: string }
+
+export function Communications({ products, actor, client = communicationsClient, initialFilter }: { products: Product[]; actor: { id: string; role: string }; client?: CommunicationsClient; initialFilter?: CommunicationsFilter }) {
+  const [filter, setFilter] = useState<{ status: ConversationStatus | "active" | ""; channel: Channel | ""; productId: string; search: string }>({ status: initialFilter?.status ?? "active", channel: initialFilter?.channel ?? "", productId: initialFilter?.productId ?? "", search: "" });
   const [searchInput, setSearchInput] = useState("");
   const [offset, setOffset] = useState(0);
   const [page, setPage] = useState<ConversationPage | null>(null);
@@ -132,14 +135,8 @@ export function Communications({ products, actor, client = communicationsClient 
 }
 
 function ChannelStrip({ status }: { status: ChannelStatus | null }) {
-  const items = status ? [
-    { label: "Phone line (877) 521-2890", detail: "Imported from the AI phone assistant", ready: status.phone.sync },
-    { label: "Text messages", detail: status.sms.inbound ? status.sms.replies ? "Receiving and replying" : "Receiving · replies not configured" : "Not connected", ready: status.sms.inbound },
-    { label: "Email", detail: status.email.inbound ? status.email.replies ? "Receiving and replying" : "Receiving · replies not configured" : "Not connected", ready: status.email.inbound },
-    { label: "Website chat", detail: status.chat.enabled ? "On every Help page" : "Off until the owner enables it", ready: status.chat.enabled },
-    { label: "Advisors web form", detail: "Imported from caremetricadvisors.com", ready: status.webForm.sync },
-  ] : [];
-  return <section className="communications-channels" aria-label="Channel status">{items.map(item => <div key={item.label} className={item.ready ? "ready" : "pending"}><strong>{item.label}</strong><span>{item.detail}</span></div>)}</section>;
+  const items = status ? describeChannels(status) : [];
+  return <section className="communications-channels" aria-label="Channel status">{items.map(item => <div key={item.channel} className={item.ready ? "ready" : "pending"}><strong>{item.label}</strong><span>{item.detail}</span></div>)}</section>;
 }
 
 function ThreadView({ thread, products, actorId, status, busy, client, act }: { thread: ConversationThread; products: Product[]; actorId: string; status: ChannelStatus | null; busy: boolean; client: CommunicationsClient; act: (work: () => Promise<string>) => Promise<void> }) {

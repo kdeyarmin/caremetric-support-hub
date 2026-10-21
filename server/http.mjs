@@ -32,7 +32,7 @@ const aiCaseActions=new Set(['summary','draft-reply','triage-suggestion']);
 const staffCommunicationActions=new Set(['list','get','update','note','reply','sync']);
 // Railway's edge appends the visitor address last; rate limits use it only as a hashed bucket.
 const visitorAddress=req=>String(req.headers['x-forwarded-for']||'').split(',').at(-1).trim()||req.socket.remoteAddress||'unknown';
-export function appServer({auth,gateway,delegations,publications,docstudio,aiCases,readiness,communications,origins,dist=resolve('dist')}) {
+export function appServer({auth,gateway,delegations,publications,docstudio,aiCases,readiness,integrationSetup,communications,origins,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -246,6 +246,12 @@ export function appServer({auth,gateway,delegations,publications,docstudio,aiCas
           const input=await jsonBody(req,2048); if(Object.keys(input).length) throw new HttpError(400,'Invalid readiness request.');
           if(!readiness) throw new HttpError(503,'Go-live readiness is not configured.');
           return json(await readiness.handle(session));
+        }
+        if(path==='/api/admin/integration-setup' && req.method==='POST') {
+          if(url.search) throw new HttpError(400,'Integration setup query parameters are not supported.');
+          const input=await jsonBody(req,2048); if(Object.keys(input).length) throw new HttpError(400,'Invalid integration setup request.');
+          if(!integrationSetup) throw new HttpError(503,'Integration setup is not configured.');
+          return json(await integrationSetup.handle(session));
         }
         const aiCaseRoute=/^\/api\/ai\/cases\/([0-9a-f-]{36})\/([a-z-]+)$/.exec(path);
         if(aiCaseRoute && req.method==='POST') {

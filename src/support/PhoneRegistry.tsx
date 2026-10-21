@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { config } from '../lib/config';
-import { blankPhoneRecord, displayPhone, phoneLabels, phoneRecordSchema, phoneRegistryClient, type PhoneRecord, type PhoneRegistryClient, type PhoneRow } from './phoneRegistryModel';
+import { blankPhoneRecord, displayPhone, phoneLabels, phoneNeedsReview, phoneRecordSchema, phoneRegistryClient, phoneTextingNeedsAttention, type PhoneRecord, type PhoneRegistryClient, type PhoneRow } from './phoneRegistryModel';
 import './phoneRegistry.css';
 
 export function PhoneRegistry({client=phoneRegistryClient,demo=config.demoMode}:{client?:PhoneRegistryClient;demo?:boolean}) {
@@ -23,7 +23,7 @@ export function PhoneRegistry({client=phoneRegistryClient,demo=config.demoMode}:
   const refresh=()=>{setLoading(true);setError('');setRevision(value=>value+1);};
   const query=search.trim().toLowerCase();
   const digits=query.replace(/\D/g,'');
-  const shown=rows.filter(row=>(filter==='all'||(filter==='review' ? row.usage_status==='unknown'||row.lifecycle==='unknown'||row.voice_status==='unknown'||row.sms_status==='unknown'||row.sms_status==='pending'||row.sms_status==='rejected'||row.business_profile_status==='rejected'||row.business_profile_status==='pending'||row.migration_status==='planned'||row.migration_status==='staged' : row.lifecycle===filter))
+  const shown=rows.filter(row=>(filter==='all'||(filter==='review' ? phoneNeedsReview(row) : row.lifecycle===filter))
     && (!query || [row.number,displayPhone(row.number),row.label,row.provider,row.account,row.tenant,row.account_sid,row.parent_account_sid,row.messaging_registration,row.purpose,row.apps,row.owner,row.notes].some(value=>value.toLowerCase().includes(query)) || (digits.length>=3 && row.number.includes(digits))));
   return <>
     <div className="page-heading"><div><span className="eyebrow">Super admin</span><h1>Phone numbers</h1><p>Keep every business number, its purpose, and the evidence of its use in one place.</p></div>
@@ -35,7 +35,7 @@ export function PhoneRegistry({client=phoneRegistryClient,demo=config.demoMode}:
       {error && <p role="alert">{error}</p>}
       {loading && <p role="status">Loading phone numbers…</p>}
       {!loading&&!error&&<>
-        <div className="phone-registry-counts" aria-label="Inventory summary"><div><strong>{rows.length}</strong><span>Total numbers</span></div><div><strong>{rows.filter(row=>row.lifecycle==='active').length}</strong><span>Marked active</span></div><div><strong>{rows.filter(row=>row.usage_status==='unknown').length}</strong><span>Usage needs review</span></div><div><strong>{rows.filter(row=>row.sms_status==='pending'||row.sms_status==='rejected'||row.sms_status==='unknown').length}</strong><span>Texting needs attention</span></div></div>
+        <div className="phone-registry-counts" aria-label="Inventory summary"><div><strong>{rows.length}</strong><span>Total numbers</span></div><div><strong>{rows.filter(row=>row.lifecycle==='active').length}</strong><span>Marked active</span></div><div><strong>{rows.filter(row=>row.usage_status==='unknown').length}</strong><span>Usage needs review</span></div><div><strong>{rows.filter(phoneTextingNeedsAttention).length}</strong><span>Texting needs attention</span></div></div>
         <div className="phone-registry-filters"><label>Search numbers<input type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="Number, app, provider, purpose…" /></label><label>Show<select value={filter} onChange={event=>setFilter(event.target.value)}><option value="all">All numbers</option><option value="review">Needs review</option>{Object.entries(phoneLabels.lifecycle).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label></div>
         {!shown.length && <p>{rows.length?'No numbers match your search.':'No numbers recorded yet. Add a number to begin.'}</p>}
         <div className="phone-registry-list">{shown.map(row=><article className="panel phone-number-card" key={row.id}>

@@ -4,6 +4,7 @@ import { HttpError, withSession } from './sms-auth.mjs';
 export const rpcArguments = Object.freeze({
   get_support_actor_context: [], list_published_content: [], get_backend_contract: [],
   get_support_readiness: [],
+  get_ai_usage_summary: ['p_days'],
   list_phone_numbers: [],
   save_phone_number: ['p_id','p_record','p_expected_version'],
   list_support_intake_tenants: ['p_product_id','p_offset','p_limit'],

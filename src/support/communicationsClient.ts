@@ -66,6 +66,19 @@ export function replyRoute(conversation: Conversation, status: ChannelStatus | n
   return { label: `${route === "sms" ? "Reply by text message" : "Reply by email"}${configured ? "" : " — not configured in the Hub yet"}`, available: configured };
 }
 
+/** One reviewed description of each customer channel, shared by the inbox strip and the control center so they never disagree. */
+export interface ChannelSummary { channel: Channel; label: string; detail: string; ready: boolean }
+export function describeChannels(status: ChannelStatus): ChannelSummary[] {
+  const receiving = (item: { inbound: boolean; replies: boolean }) => item.inbound ? item.replies ? "Receiving and replying" : "Receiving · replies not configured" : "Not connected";
+  return [
+    { channel: "phone", label: "Phone line (877) 521-2890", detail: "Imported from the AI phone assistant", ready: status.phone.sync },
+    { channel: "sms", label: "Text messages", detail: receiving(status.sms), ready: status.sms.inbound },
+    { channel: "email", label: "Email", detail: receiving(status.email), ready: status.email.inbound },
+    { channel: "chat", label: "Website chat", detail: status.chat.enabled ? "On every Help page" : "Off until the owner enables it", ready: status.chat.enabled },
+    { channel: "web_form", label: "Advisors web form", detail: "Imported from caremetricadvisors.com", ready: status.webForm.sync },
+  ];
+}
+
 export const communicationsClient = {
   async list(filter: ConversationFilter, signal?: AbortSignal) { return pageSchema.parse(await appRequest("communications/list", filter, signal)); },
   async get(id: string, signal?: AbortSignal) { return threadSchema.parse(await appRequest("communications/get", { id }, signal)); },

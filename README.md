@@ -7,6 +7,15 @@ CareBase (PennTrain), Breathe (PennFit), PennSync (CareMetric-Pennsync),
 CareMetric Intel, CareMetric EMR, CareMetric Go and CareMetric Healthcare Advisors.
 Product names appear with their repository names so each app is easy to find.
 
+- **Control center** (`/admin`): the administrator's home. Every application's
+  connection health, subscriptions, users and organizations, Help SDK and
+  administration-connection status, open cases, waiting conversations, published
+  articles, customer intake and AI usage on one page, beside the five customer
+  channels, the Hub service checks, AI usage by application and by customer, and
+  an integration setup panel that shows which service variables are set
+  (secrets by presence only). Every figure is read live and links into the
+  workspace that manages it. The per-application workspace moved to
+  `/admin/apps`. See [the control center](docs/CONTROL_CENTER.md).
 - **Communications** (`/communications`): customer service and technical
   support from the (877) 521-2890 phone line, text messages, email, website chat
   and the Advisors web form land in one queue with triage, internal notes and
@@ -37,6 +46,12 @@ connection provides. As documented for each connection today:
 
 "Not provided yet" items need a read added to that application's
 administration connection; the coverage matrix lists them live.
+
+Apply `20261021120000_ai_usage_ledger.sql` and
+`20261021120100_ai_usage_ledger_contract.sql` before deploying the control
+center release: it records every Anthropic call in a private ledger attributed
+to the application and customer, and connected builds require the
+`support.ai-usage.v1` contract feature.
 
 The Super Admin workspace now includes [facility training management](docs/FACILITY_TRAINING.md): create training-only facilities, invite administrators and students, manage enrollment and progress, open issued certificates, run complete printable/CSV reports and manage module access terms through the Hub session. Shared support, phone routing, course, onboarding and security workspaces are reachable from the same Admin page. The native CareBase `training.v1` capability gates these controls; deploy its migrations and adapter before this Hub update. Live owner verification remains separate from fixture testing.
 

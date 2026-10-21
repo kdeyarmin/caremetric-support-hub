@@ -9,6 +9,7 @@ export const REQUIRED_BACKEND_FEATURES = [
   "platform.admin.advisors.v1",
   "support.ai-automation-failure-policy.v1",
   "support.communications.v1",
+  "support.ai-usage.v1",
 ] as const;
 
 /** Additive features share the API version; the integer alone never proves readiness. */

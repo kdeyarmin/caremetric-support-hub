@@ -53,7 +53,8 @@ export function aiCaseAssistance({ ai, rpc, rows }) {
         createdAt: message.created_at,
         visibility: message.visibility,
       }));
-      const input = { subject: supportCase.subject, messages };
+      // The ledger attributes this call to the case (and through it the application and tenant); the staffer is the actor.
+      const input = { subject: supportCase.subject, messages, context: { caseId, actor: 'staff' } };
       if (action === 'summary') return { summary: await ai.summarize(input) };
       if (action === 'triage-suggestion') return ai.suggestTriage(input);
       const tier = body?.qualityTier === 'quality' ? 'quality' : 'draft';
