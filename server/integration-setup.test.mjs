@@ -3,14 +3,14 @@ import { integrationCatalog, integrationSetup } from './integration-setup.mjs';
 
 const env = {
   ANTHROPIC_API_KEY: 'sk-ant-secret-value', HUB_AI_AUTOMATION_ENABLED: 'false',
-  HUB_TWILIO_AUTH_TOKEN: 'twilio-secret-value', HUB_SUPPORT_FROM_EMAIL: 'support@caremetric.ai', HUB_CHAT_ENABLED: '  ',
+  HUB_TWILIO_AUTH_TOKEN: 'twilio-secret-value', HUB_SUPPORT_FROM_EMAIL: 'support@caremetric.ai', HUB_CHAT_ENABLED: 'false',
 };
-function harness(role = 'platform_admin') {
+function harness(role = 'platform_admin', environment = env) {
   const rpc = vi.fn(async (name) => {
     if (name === 'get_support_actor_context') return { role, id: 'admin-1' };
     throw new Error(`Unexpected RPC ${name}`);
   });
-  return integrationSetup({ rpc, env, now: () => new Date('2026-10-21T12:00:00.000Z') });
+  return integrationSetup({ rpc, env: environment, now: () => new Date('2026-10-21T12:00:00.000Z') });
 }
 
 describe('integration setup report', () => {
@@ -22,15 +22,20 @@ describe('integration setup report', () => {
     expect(anthropic.ready).toBe(true);
     expect(anthropic.complete).toBe(false);
     expect(anthropic.variables.find((variable) => variable.name === 'ANTHROPIC_API_KEY'))
-      .toEqual({ name: 'ANTHROPIC_API_KEY', secret: true, required: true, purpose: expect.any(String), set: true });
-    expect(anthropic.variables.find((variable) => variable.name === 'HUB_AI_AUTOMATION_ENABLED')).toMatchObject({ secret: false, set: true, value: 'false' });
+      .toEqual({ name: 'ANTHROPIC_API_KEY', secret: true, required: true, purpose: expect.any(String), set: true, satisfied: true });
+    expect(anthropic.variables.find((variable) => variable.name === 'HUB_AI_AUTOMATION_ENABLED')).toMatchObject({ secret: false, set: true, value: 'false', satisfied: false });
     expect(anthropic.variables.find((variable) => variable.name === 'HUB_AI_DRAFT_TIER')).toMatchObject({ secret: false, set: false, value: null });
     const twilio = report.integrations.find((integration) => integration.id === 'twilio-sms');
     expect(twilio.ready).toBe(true);
     expect(twilio.complete).toBe(false);
+    // A flag that is present but not exactly "true" is set, not satisfied: the runtime keeps that integration off.
     const chat = report.integrations.find((integration) => integration.id === 'chat');
     expect(chat.ready).toBe(false);
-    expect(chat.variables[0]).toMatchObject({ name: 'HUB_CHAT_ENABLED', set: false, value: null });
+    expect(chat.variables[0]).toMatchObject({ name: 'HUB_CHAT_ENABLED', set: true, value: 'false', satisfied: false });
+    const chatOn = (await harness('platform_admin', { ...env, HUB_CHAT_ENABLED: 'true' }).handle('token')).integrations.find((integration) => integration.id === 'chat');
+    expect(chatOn).toMatchObject({ ready: true, complete: true });
+    const chatBlank = (await harness('platform_admin', { ...env, HUB_CHAT_ENABLED: '  ' }).handle('token')).integrations.find((integration) => integration.id === 'chat');
+    expect(chatBlank.variables[0]).toMatchObject({ set: false, value: null, satisfied: false });
     // Secrets contribute a boolean only; their values appear nowhere in the report.
     const serialized = JSON.stringify(report);
     expect(serialized).not.toContain('sk-ant-secret-value');

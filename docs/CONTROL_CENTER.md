@@ -73,7 +73,9 @@ and a link to the setup steps:
 | DocStudio render worker | `DOCSTUDIO_WORKER_TOKEN` |
 | CareBase course distribution observer | `CAREBASE_DISTRIBUTION_OBSERVER_TOKEN` |
 
-A secret is reported as **set** or **missing** only. The server returns a boolean
+A flag such as `HUB_CHAT_ENABLED` satisfies its integration only when it is exactly
+`true`, the same test the Hub service applies; a present but false flag shows its
+value and leaves the integration at **Needs setup**. A secret is reported as **set** or **missing** only. The server returns a boolean
 for it, and the browser client's schema refuses any value sent for a secret, so
 no part of a secret can reach the browser through this panel. Non-secret
 settings (a flag, an address, a tier, an identifier) are shown so they can be

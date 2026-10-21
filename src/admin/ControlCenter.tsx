@@ -2,7 +2,8 @@ import { useCallback, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Activity, ArrowRight, Bot, Boxes, CreditCard, Globe2, Headphones, Inbox, Link2, Mail, MessageCircle, MessageSquareText, Phone, Plug, Radio, RefreshCw, ShieldCheck, Users } from "lucide-react";
-import type { ContentItem, Product, SupportCase } from "../domain";
+import { repository } from "../data";
+import type { ContentItem, HubRepository, Product, SupportCase } from "../domain";
 import { config } from "../lib/config";
 import { communicationsClient } from "../support/communicationsClient";
 import type { Channel } from "../support/communicationsClient";
@@ -41,6 +42,8 @@ export interface ControlCenterClients {
   phones?: PhoneRegistryClient;
   aiUsage?: AiUsageClient;
   integrationSetup?: IntegrationSetupClient;
+  /** The Hub's own case and article records, re-read on refresh so the counts never go stale while the page stays open. */
+  hub?: Pick<HubRepository, "listCases" | "listContent">;
   /** The credential-free preview has no live Hub services to read; those blocks say so instead of failing. */
   demo?: boolean;
 }
@@ -59,7 +62,7 @@ function Row({ icon: Icon, label, children }: { icon: typeof Activity; label: st
   return <div><dt><Icon size={14} aria-hidden="true" />{label}</dt><dd>{children}</dd></div>;
 }
 
-function ApplicationPanel({ card, communicationsLoading, intakeLoading, preview }: { card: ApplicationCard; communicationsLoading: boolean; intakeLoading: boolean; preview: boolean }) {
+function ApplicationPanel({ card, communicationsLoading, intakeLoading, usageLoading, preview }: { card: ApplicationCard; communicationsLoading: boolean; intakeLoading: boolean; usageLoading: boolean; preview: boolean }) {
   const connection = card.connection.state;
   const { support, intake, directory, integration, subscriptions, health, links } = card;
   return <article className="panel control-app" aria-label={`${card.name} controls`}>
@@ -92,7 +95,7 @@ function ApplicationPanel({ card, communicationsLoading, intakeLoading, preview 
       </Row>
       <Row icon={Headphones} label="Support">
         {support ? <>
-          <div>{support.conversations === null ? <span className="control-muted">{communicationsLoading ? "Loading conversations…" : "Conversations unavailable"}</span> : <><strong>{formatNumber.format(support.conversations)}</strong> conversations waiting</>} · <strong>{formatNumber.format(support.openCases)}</strong> open cases{support.urgentCases > 0 && <> (<strong>{formatNumber.format(support.urgentCases)}</strong> urgent)</>} · <strong>{formatNumber.format(support.publishedArticles)}</strong> published articles <small>({support.appSpecificArticles} app-specific)</small>{support.aiCalls !== null && <> · <strong>{formatNumber.format(support.aiCalls)}</strong> AI calls</>}</div>
+          <div>{support.conversations === null ? <span className="control-muted">{communicationsLoading ? "Loading conversations…" : "Conversations unavailable"}</span> : <><strong>{formatNumber.format(support.conversations)}</strong> conversations waiting</>} · <strong>{formatNumber.format(support.openCases)}</strong> open cases{support.urgentCases > 0 && <> (<strong>{formatNumber.format(support.urgentCases)}</strong> urgent)</>} · <strong>{formatNumber.format(support.publishedArticles)}</strong> published articles <small>({support.appSpecificArticles} app-specific)</small>{" · "}{support.aiCalls === null ? <span className="control-muted">{preview ? "AI usage not available in the preview" : usageLoading ? "Loading AI usage…" : "AI usage unavailable"}</span> : <><strong>{formatNumber.format(support.aiCalls)}</strong> AI calls</>}</div>
           <div className="control-links">{links.communications && <Link to={links.communications}>Communications</Link>}{links.cases && <Link to={links.cases}>Support cases</Link>}{links.knowledge && <Link to={links.knowledge}>Knowledge</Link>}{card.product === "advisors" && connection === "verified" && <Link to={links.inquiries}>Consultation requests</Link>}</div>
         </> : <span className="control-muted">No Hub product is registered for this connection, so no cases, conversations or articles can belong to it.</span>}
       </Row>
@@ -132,14 +135,14 @@ function IntegrationSetupPanel({ state, retry }: { state: AdminReadState<Integra
     {state.status === "error" && <ReadFailure error={state.error} retry={retry} />}
     {state.status === "ready" && state.data === null && <p className="control-panel-note">{previewNote}</p>}
     {state.status === "ready" && state.data && <ul className="control-list control-integrations">{state.data.integrations.map(integration => <li key={integration.id}><Plug size={16} aria-hidden="true" /><div><strong>{integration.name}</strong><span className="control-detail">{integration.purpose}{integration.ready && !integration.complete ? " Optional settings are not set." : ""}</span>
-      <div className="control-chips control-variables">{integration.variables.map(variable => <span key={variable.name} className={variable.set ? "is-set" : variable.required ? "is-missing" : "is-optional"} title={variable.purpose}><code>{variable.name}</code> {variable.set ? variable.secret ? "set" : variable.value : variable.required ? "missing" : "not set"}</span>)}</div>
+      <div className="control-chips control-variables">{integration.variables.map(variable => <span key={variable.name} className={variable.satisfied ? "is-set" : variable.required ? "is-missing" : "is-optional"} title={variable.purpose}><code>{variable.name}</code> {variable.set ? variable.secret ? "set" : variable.value : variable.required ? "missing" : "not set"}</span>)}</div>
       <div className="control-links"><a href={docsUrl(integration.docs)} target="_blank" rel="noreferrer">Setup steps</a></div></div>
       <Status done={integration.ready} yes="Ready" no="Needs setup" /></li>)}</ul>}
     <div className="control-panel-footer"><p className="control-panel-note">To add or change a secret, open the Hub service in Railway, choose Variables, set the exact name shown here and let the service redeploy, then refresh this page. The Hub never stores or sends a secret from the browser.</p></div>
   </section>;
 }
 
-export function ControlCenter({ data, portfolio = portfolioClient, communications = communicationsClient, supportReadiness = supportReadinessClient, goLive = goLiveClient, phones = phoneRegistryClient, aiUsage = aiUsageClient, integrationSetup = integrationSetupClient, demo = config.demoMode }: { data: ControlCenterData } & ControlCenterClients) {
+export function ControlCenter({ data, portfolio = portfolioClient, communications = communicationsClient, supportReadiness = supportReadinessClient, goLive = goLiveClient, phones = phoneRegistryClient, aiUsage = aiUsageClient, integrationSetup = integrationSetupClient, hub = repository, demo = config.demoMode }: { data: ControlCenterData } & ControlCenterClients) {
   const [refresh, setRefresh] = useState(0);
   const [period, setPeriod] = useState<AiUsagePeriod>(30);
   const retry = () => setRefresh(value => value + 1);
@@ -151,6 +154,7 @@ export function ControlCenter({ data, portfolio = portfolioClient, communication
   const readPhones = useCallback(async (signal: AbortSignal): Promise<PhoneRow[] | null> => { void refresh; return demo ? null : (await phones.list(signal)).rows; }, [demo, phones, refresh]);
   const readUsage = useCallback(async (signal: AbortSignal): Promise<AiUsageSummary | null> => { void refresh; return demo ? null : aiUsage.summary(period, signal); }, [aiUsage, demo, period, refresh]);
   const readSetup = useCallback(async (signal: AbortSignal): Promise<IntegrationSetupReport | null> => { void refresh; return demo ? null : integrationSetup.report({ signal }); }, [demo, integrationSetup, refresh]);
+  const readHub = useCallback(async () => { void refresh; const [cases, content] = await Promise.all([hub.listCases(), hub.listContent()]); return { cases, content }; }, [hub, refresh]);
   const apps = useAdminRead(readApps);
   const inbox = useAdminRead(readCommunications);
   const intake = useAdminRead(readIntake);
@@ -158,9 +162,13 @@ export function ControlCenter({ data, portfolio = portfolioClient, communication
   const numbers = useAdminRead(readPhones);
   const usage = useAdminRead(readUsage);
   const setup = useAdminRead(readSetup);
+  // Until the first re-read answers, the records the app loaded on sign-in stand in.
+  const records = useAdminRead(readHub);
+  const cases = records.status === "ready" ? records.data.cases : data.cases;
+  const content = records.status === "ready" ? records.data.content : data.content;
 
   const input: ControlCenterInput = {
-    apps: apps.status === "ready" ? apps.data : [], products, cases: data.cases, content: data.content,
+    apps: apps.status === "ready" ? apps.data : [], products, cases, content,
     communications: inbox.status === "ready" ? inbox.data : null, readiness: intake.status === "ready" ? intake.data : null,
     aiUsage: usage.status === "ready" ? usage.data : null,
   };
@@ -222,7 +230,7 @@ export function ControlCenter({ data, portfolio = portfolioClient, communication
       <div className="admin-section-title"><div><h2>Applications</h2><p>Each card is read through that application's administration connection and the Hub's own records{apps.status === "ready" ? ` · loaded ${timeLabel(apps.receivedAt)}` : ""}. Open a workspace to manage users, organizations, billing, courses and more.</p></div><Link className="text-link" to="/admin/apps">Per-application workspace <ArrowRight size={14} aria-hidden="true" /></Link></div>
       {apps.status === "loading" && <Loading label="Checking every application connection" app="portfolio" />}
       {apps.status === "error" && <ReadFailure error={apps.error} retry={retry} />}
-      {apps.status === "ready" && <div className="control-app-grid">{cards.map(card => <ApplicationPanel key={card.product} card={card} communicationsLoading={inbox.status === "loading"} intakeLoading={intake.status === "loading"} preview={demo} />)}</div>}
+      {apps.status === "ready" && <div className="control-app-grid">{cards.map(card => <ApplicationPanel key={card.product} card={card} communicationsLoading={inbox.status === "loading"} intakeLoading={intake.status === "loading"} usageLoading={usage.status === "loading"} preview={demo} />)}</div>}
     </section>
   </div>;
 }

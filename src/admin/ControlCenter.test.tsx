@@ -60,13 +60,14 @@ const usageSummary: AiUsageSummary = {
 };
 const setupReport: IntegrationSetupReport = { checkedAt: "2026-10-21T00:00:00Z", integrations: [
   { id: "anthropic", name: "AI assistance (Anthropic)", purpose: "Staff summaries, drafts and the auto-resolution loop.", docs: "docs/CONTROL_CENTER.md", ready: true, complete: false, variables: [
-    { name: "ANTHROPIC_API_KEY", secret: true, required: true, purpose: "Key", set: true },
-    { name: "HUB_AI_AUTOMATION_ENABLED", secret: false, required: false, purpose: "Flag", set: true, value: "false" },
-    { name: "HUB_AI_DRAFT_TIER", secret: false, required: false, purpose: "Tier", set: false, value: null } ] },
+    { name: "ANTHROPIC_API_KEY", secret: true, required: true, purpose: "Key", set: true, satisfied: true },
+    { name: "HUB_AI_AUTOMATION_ENABLED", secret: false, required: false, purpose: "Flag", set: true, satisfied: false, value: "false" },
+    { name: "HUB_AI_DRAFT_TIER", secret: false, required: false, purpose: "Tier", set: false, satisfied: false, value: null } ] },
   { id: "chat", name: "Website chat", purpose: "The chat panel on every Help page.", docs: "docs/UNIFIED_COMMUNICATIONS.md", ready: false, complete: false, variables: [
-    { name: "HUB_CHAT_ENABLED", secret: false, required: true, purpose: "Flag", set: false, value: null } ] },
+    { name: "HUB_CHAT_ENABLED", secret: false, required: true, purpose: "Flag", set: true, satisfied: false, value: "false" } ] },
 ] };
 const connectedClients = () => ({
+  hub: { listCases: vi.fn(async () => data.cases), listContent: vi.fn(async () => data.content) },
   aiUsage: { summary: vi.fn(async (days: number) => ({ ...usageSummary, days })) } as AiUsageClient,
   integrationSetup: { report: vi.fn(async () => setupReport) } as IntegrationSetupClient,
   portfolio: fakePortfolio({
@@ -204,8 +205,29 @@ describe("control center", () => {
     expect(within(rows[0]).getByText("HUB_AI_DRAFT_TIER").parentElement!.textContent).toBe("HUB_AI_DRAFT_TIER not set");
     expect(href(within(rows[0]).getByRole("link", { name: "Setup steps" }))).toBe("https://github.com/kdeyarmin/caremetric-support-hub/blob/main/docs/CONTROL_CENTER.md");
     expect(within(rows[1]).getByText("Needs setup")).toBeTruthy();
-    expect(within(rows[1]).getByText("HUB_CHAT_ENABLED").parentElement!.textContent).toBe("HUB_CHAT_ENABLED missing");
+    // A required flag that is present but false is shown with its value and still needs setup.
+    expect(within(rows[1]).getByText("HUB_CHAT_ENABLED").parentElement!.textContent).toBe("HUB_CHAT_ENABLED false");
+    expect(within(rows[1]).getByText("HUB_CHAT_ENABLED").parentElement!.className).toBe("is-missing");
     expect(setup.textContent).toContain("The Hub never stores or sends a secret from the browser.");
+  });
+
+  it("labels AI usage that could not be loaded on every card instead of hiding it", async () => {
+    const clients = connectedClients();
+    clients.aiUsage = { summary: vi.fn(async () => { throw new Error("ledger down"); }) };
+    renderCenter({ ...clients, communications: fakeCommunications() });
+    const carebase = await screen.findByRole("article", { name: "CareBase (PennTrain) controls" });
+    expect(await within(carebase).findByText("AI usage unavailable")).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "AI usage" })).getByRole("alert")).toBeTruthy();
+  });
+
+  it("re-reads the Hub's own cases and articles when everything is refreshed", async () => {
+    const clients = connectedClients();
+    renderCenter({ ...clients, communications: fakeCommunications() });
+    await screen.findByRole("article", { name: "CareBase (PennTrain) controls" });
+    await waitFor(() => expect(clients.hub.listCases).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh everything" }));
+    await waitFor(() => expect(clients.hub.listCases).toHaveBeenCalledTimes(2));
+    expect(clients.hub.listContent).toHaveBeenCalledTimes(2);
   });
 
   it("keeps the inbox failure isolated and marks only its figures unavailable", async () => {
@@ -222,7 +244,7 @@ describe("control center", () => {
 
   it("explains that live Hub services are not part of the implementation preview", async () => {
     const connected = connectedClients();
-    render(<MemoryRouter><ControlCenter data={data} demo portfolio={fakePortfolio({})} communications={fakeCommunications()} supportReadiness={connected.supportReadiness} goLive={connected.goLive} phones={connected.phones} aiUsage={connected.aiUsage} integrationSetup={connected.integrationSetup} /></MemoryRouter>);
+    render(<MemoryRouter><ControlCenter data={data} demo portfolio={fakePortfolio({})} communications={fakeCommunications()} supportReadiness={connected.supportReadiness} goLive={connected.goLive} phones={connected.phones} aiUsage={connected.aiUsage} integrationSetup={connected.integrationSetup} hub={connected.hub} /></MemoryRouter>);
     const services = screen.getByRole("region", { name: "Hub services" });
     expect(await within(services).findAllByText("Not available in the implementation preview. Sign in to the live Hub to see it.")).toHaveLength(3);
     expect(within(screen.getByRole("region", { name: "AI usage" })).getByText("Not available in the implementation preview. Sign in to the live Hub to see it.")).toBeTruthy();

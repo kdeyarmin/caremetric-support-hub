@@ -486,12 +486,12 @@ function CasesPage({ data }: CasesPageProps) {
   const staff = isSupportStaff(data.actor.role);
   const params = new URLSearchParams(location.search);
   const requestedProduct = data.products.find((product) => product.slug === params.get("product"));
-  const [selectedId, setSelectedId] = useState<string | null>(data.cases[0]?.id ?? null);
+  // A link can open the queue for one application: /cases?product=<slug>. The detail pane then starts on that application's first case.
+  const [productFilter, setProductFilter] = useState(requestedProduct?.id ?? "all");
+  const [selectedId, setSelectedId] = useState<string | null>((requestedProduct ? data.cases.find((item) => item.productId === requestedProduct.id) : data.cases[0])?.id ?? null);
   const [thread, setThread] = useState(emptyCaseThread);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<CaseStatus | "all">("all");
-  // A link can open the queue for one application: /cases?product=<slug>.
-  const [productFilter, setProductFilter] = useState(requestedProduct?.id ?? "all");
   const [showCreate, setShowCreate] = useState(!staff && (data.cases.length === 0 || params.get("new") === "1"));
   const [refresh, setRefresh] = useState(0);
   const [caseRows, setCaseRows] = useState(data.cases);
@@ -560,7 +560,7 @@ function CasesPage({ data }: CasesPageProps) {
               <option value="all">All statuses</option>
               {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
-            <select aria-label="Filter by application" value={productFilter} onChange={(event) => setProductFilter(event.target.value)}>
+            <select className="case-application-filter" aria-label="Filter by application" value={productFilter} onChange={(event) => { const next = event.target.value; setProductFilter(next); setSelectedId((current) => reconcileCaseSelection(caseRows.filter((item) => next === "all" || item.productId === next), current)); }}>
               <option value="all">All applications</option>
               {data.products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
             </select>
