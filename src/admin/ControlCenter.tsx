@@ -198,7 +198,7 @@ export function ControlCenter({ data, portfolio = portfolioClient, communication
           <Icon size={16} aria-hidden="true" /><div><strong>{card.label}</strong><span className="control-detail">{card.detail}</span></div>
           <Status done={card.ready} yes="Live" no="Not live" />
           <Link className="control-count" to={card.href} aria-label={`Open ${card.label} conversations`}>{formatNumber.format(card.waiting)} waiting</Link></li>; })}</ul>}
-        <div className="control-panel-footer"><Link className="text-link" to="/phone-numbers">Phone numbers and routing</Link><Link className="text-link" to="/phone">AI phone inbox</Link><Link className="text-link" to="/cases">Support case queue</Link><Link className="text-link" to="/knowledge">Knowledge articles</Link></div>
+        <div className="control-panel-footer"><Link className="text-link" to="/admin/email">Bulk email to application users</Link><Link className="text-link" to="/phone-numbers">Phone numbers and routing</Link><Link className="text-link" to="/phone">AI phone inbox</Link><Link className="text-link" to="/cases">Support case queue</Link><Link className="text-link" to="/knowledge">Knowledge articles</Link></div>
       </section>
 
       <section className="panel control-panel" aria-label="Hub services">

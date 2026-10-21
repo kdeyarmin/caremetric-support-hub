@@ -22,6 +22,7 @@ import {
   LoaderCircle,
   LockKeyhole,
   Mail,
+  MailPlus,
   Menu,
   MessageSquareText,
   MessagesSquare,
@@ -74,6 +75,7 @@ import { AdminWorkspace } from "./admin/AdminWorkspace";
 import { ControlCenter } from "./admin/ControlCenter";
 import { PortfolioRollup } from "./admin/PortfolioRollup";
 import { GoLiveReadiness } from "./admin/GoLiveReadiness";
+import { BulkEmail } from "./admin/BulkEmail";
 import { SupportReadiness } from "./support/SupportReadiness";
 import { adminClient } from "./admin/client";
 import { safeLearningPath } from "./learning/model";
@@ -119,6 +121,7 @@ const registeredProductSlugs = new Set(Object.keys(integrationRolloutBySlug));
 const navItems = [
   { to: "/admin", label: "Control center", icon: Gauge },
   { to: "/admin/apps", label: "Applications", icon: Boxes },
+  { to: "/admin/email", label: "Bulk email", icon: MailPlus },
   { to: "/phone-numbers", label: "Phone numbers", icon: Phone },
   { to: "/phone", label: "Phone messages", icon: Phone },
   { to: "/admin/portfolio", label: "Portfolio rollup", icon: Activity },
@@ -300,7 +303,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
         </div>
         <nav className="primary-nav" aria-label="Main navigation">
           <p className="nav-label">Workspace</p>
-          {navItems.filter(item => (!["/admin", "/admin/apps", "/admin/portfolio", "/admin/go-live-readiness", "/phone", "/phone-numbers"].includes(item.to) || data.actor.role === "platform_admin") && (!["/docstudio", "/communications"].includes(item.to) || staff)).map(({ to, label, icon: Icon }) => (
+          {navItems.filter(item => (!["/admin", "/admin/apps", "/admin/email", "/admin/portfolio", "/admin/go-live-readiness", "/phone", "/phone-numbers"].includes(item.to) || data.actor.role === "platform_admin") && (!["/docstudio", "/communications"].includes(item.to) || staff)).map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} onClick={() => setMobileOpen(false)}>
               <Icon size={18} /> <span>{label}</span>
             </NavLink>
@@ -348,6 +351,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/phone-numbers" element={data.actor.role === "platform_admin" ? <PhoneRegistry key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin" element={data.actor.role === "platform_admin" ? <AdminHome data={data} communications={demoCommunications} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/apps" element={data.actor.role === "platform_admin" ? <AdminWorkspace key={data.actor.id} actorId={data.actor.id} client={adminClient} /> : <Navigate to="/overview" replace />} />
+            <Route path="/admin/email" element={data.actor.role === "platform_admin" ? <BulkEmail key={data.actor.id} products={data.products} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/portfolio" element={data.actor.role === "platform_admin" ? <PortfolioRollup key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/go-live-readiness" element={data.actor.role === "platform_admin" ? <GoLiveReadiness key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/communications" element={staff ? <CommunicationsRoute data={data} communications={demoCommunications} /> : <Navigate to="/overview" replace />} />

@@ -25,6 +25,11 @@ Product names appear with their repository names so each app is easy to find.
 - **Knowledge** (`/knowledge`): shared and app-specific articles for every
   application, with per-app coverage and a direct "Write an article" path into
   DocStudio. Healthcare Advisors' published FAQ is included.
+- **Bulk email** (`/admin/email`): email the users of one or more applications,
+  narrowed by role and account status read from each application's own user
+  directory. Duplicates across applications and unsubscribed addresses are
+  left out, every message has a one-click unsubscribe link, and delivery runs
+  on the Hub through SendGrid. See [bulk email](docs/BULK_EMAIL.md).
 - **Portfolio rollup** (`/admin/portfolio`): health, subscriber and subscription
   figures, and a live **super-admin coverage** matrix showing, per application,
   what the Hub holds now and what app-side work each gap needs.
@@ -52,6 +57,10 @@ Apply `20261021120000_ai_usage_ledger.sql` and
 center release: it records every Anthropic call in a private ledger attributed
 to the application and customer, and connected builds require the
 `support.ai-usage.v1` contract feature.
+
+Apply `20261021160000_bulk_email.sql` and `20261021160100_bulk_email_contract.sql`
+before deploying the bulk email release; connected builds require the
+`support.bulk-email.v1` contract feature. Sending needs `HUB_SENDGRID_API_KEY`.
 
 The Super Admin workspace now includes [facility training management](docs/FACILITY_TRAINING.md): create training-only facilities, invite administrators and students, manage enrollment and progress, open issued certificates, run complete printable/CSV reports and manage module access terms through the Hub session. Shared support, phone routing, course, onboarding and security workspaces are reachable from the same Admin page. The native CareBase `training.v1` capability gates these controls; deploy its migrations and adapter before this Hub update. Live owner verification remains separate from fixture testing.
 
