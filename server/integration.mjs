@@ -39,7 +39,7 @@ const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(u
       :{items:[{id:'CM-0A1B2C3D4E5F',createdAt:new Date().toISOString(),name:'Synthetic requester',email:'requester@test.invalid',organization:'Synthetic agency',phone:'',sector:'Home Health',service:'strategy',message:'Synthetic consultation request.',status:'new',notes:'',form_digest:'private'}],total:1,limit:operation.limit,offset:operation.offset};
     return Response.json({contractVersion:1,product:'advisors',operation:operation.operation,generatedAt:new Date().toISOString(),data});
   }
-  if(url==='https://caremetricintel.com/functions/centralAdminRead') {
+  if(url==='https://www.caremetricintel.com/functions/centralAdminRead') {
     const operation=JSON.parse(options.body);
     assert.equal(options.redirect,'error');
     assert.equal(Object.keys(options.headers).length,2);
