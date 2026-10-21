@@ -8,6 +8,7 @@ import { cookie,readCookie,sessionCookie,challengeCookie,HttpError } from './sms
 import { parseMediaUploadHeader } from './learning-media.mjs';
 import { parsePackageUploadHeader } from './learning-packages.mjs';
 import { chatCookie } from './communications.mjs';
+import { bulkEmailActions } from './bulk-email.mjs';
 
 export const securityHeaders = {
   'X-Content-Type-Options':'nosniff','X-Frame-Options':'SAMEORIGIN',
@@ -32,7 +33,7 @@ const aiCaseActions=new Set(['summary','draft-reply','triage-suggestion']);
 const staffCommunicationActions=new Set(['list','get','update','note','reply','sync']);
 // Railway's edge appends the visitor address last; rate limits use it only as a hashed bucket.
 const visitorAddress=req=>String(req.headers['x-forwarded-for']||'').split(',').at(-1).trim()||req.socket.remoteAddress||'unknown';
-export function appServer({auth,gateway,delegations,publications,docstudio,aiCases,readiness,integrationSetup,communications,origins,dist=resolve('dist')}) {
+export function appServer({auth,gateway,delegations,publications,docstudio,aiCases,readiness,integrationSetup,communications,bulkEmail,origins,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -111,6 +112,16 @@ export function appServer({auth,gateway,delegations,publications,docstudio,aiCas
           }
           if(path==='/api/channels/email/inbound') return json(await communications.emailWebhook(req));
           throw new HttpError(404,'Unavailable.');
+        }
+        // Unsubscribe links in bulk email: the secret token in the path is the only authority,
+        // so a mail client's one-click POST (RFC 8058) works without a session or origin.
+        const unsubscribe=/^\/api\/email\/unsubscribe\/([0-9a-f]{64})$/.exec(path);
+        if(unsubscribe) {
+          if(!bulkEmail) throw new HttpError(503,'Email is not configured.');
+          if(!['GET','POST'].includes(req.method)) throw new HttpError(405,'Method not allowed.');
+          if(req.method==='POST') { let size=0; for await (const chunk of req) { size+=chunk.length; if(size>4096) throw new HttpError(413,'Request is too large.'); } }
+          const html=await bulkEmail.unsubscribePage(unsubscribe[1],req.method==='POST');
+          res.statusCode=200; res.setHeader('Content-Type','text/html; charset=utf-8'); return res.end(html);
         }
         if (!['GET','POST','HEAD'].includes(req.method)) throw new HttpError(405,'Method not allowed.');
         if(req.method==='POST' && !sameOrigin(req,origins)) throw new HttpError(403,'Open this action in CareMetric.');
@@ -252,6 +263,13 @@ export function appServer({auth,gateway,delegations,publications,docstudio,aiCas
           const input=await jsonBody(req,2048); if(Object.keys(input).length) throw new HttpError(400,'Invalid integration setup request.');
           if(!integrationSetup) throw new HttpError(503,'Integration setup is not configured.');
           return json(await integrationSetup.handle(session));
+        }
+        if(path.startsWith('/api/admin/bulk-email/')) {
+          if(url.search) throw new HttpError(400,'Bulk email query parameters are not supported.');
+          if(!bulkEmail) throw new HttpError(503,'Bulk email is not configured.');
+          const action=path.slice('/api/admin/bulk-email/'.length);
+          if(!bulkEmailActions.has(action) || req.method!=='POST') throw new HttpError(404,'Bulk email resource unavailable.');
+          return json(await bulkEmail[action](session,await jsonBody(req,131072)));
         }
         const aiCaseRoute=/^\/api\/ai\/cases\/([0-9a-f-]{36})\/([a-z-]+)$/.exec(path);
         if(aiCaseRoute && req.method==='POST') {
