@@ -6,8 +6,10 @@ The reviewed hosted bridge lives in `kdeyarmin/intel` and provides capabilities,
 registered-user overview and directory only. Organizations and active-account
 totals are explicitly unavailable; no billing operation is advertised.
 
-The Hub uses the fixed `https://caremetricintel.com/functions/centralAdminRead`
-destination and `X-CareMetric-Hub-Authorization`. Only the current app-owned SMS
+The Hub uses the fixed `https://www.caremetricintel.com/functions/centralAdminRead`
+destination and `X-CareMetric-Hub-Authorization`. The bare `caremetricintel.com`
+host answers with a redirect to `www`, which the Hub's `redirect: 'error'` call
+refuses, so the destination names the `www` host directly. Only the current app-owned SMS
 session can issue a one-use `intel` capability. Legacy JWT proxy requests stop
 before forwarding. The native bridge rechecks its separately reviewed native
 administrator map and current protected Base44 role.
