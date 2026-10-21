@@ -1,7 +1,7 @@
 import { createHmac, createPublicKey, timingSafeEqual, verify } from 'node:crypto';
 import { HttpError, digest, token, transaction, withSession } from './sms-auth.mjs';
 import { normalizePhone } from './sms-provider.mjs';
-import { SUPPORT_TEAM_NAME, renderEmail } from './email-layout.mjs';
+import { SUPPORT_PHONE_DISPLAY, SUPPORT_TEAM_NAME, renderEmail } from './email-layout.mjs';
 
 /* Unified communications: inbound SMS and email webhooks, website chat, staff
    replies, and imports from the Breathe phone line and the Advisors consultation
@@ -70,7 +70,11 @@ export function supportReplyEmail({ subject, reference, body }) {
     title,
     blocks: [{ type: 'message', text: body }],
     signature: [`— ${SUPPORT_TEAM_NAME}`, `Reference CM-${reference}`],
-    footer: ['Reply to this email to continue the conversation.'],
+    footer: [
+      "You're receiving this because you contacted CareMetric.",
+      `Reply to this email to continue the conversation, or call ${SUPPORT_PHONE_DISPLAY}.`,
+      "Please don't include patient information in your reply.",
+    ],
   });
   return { subject: title, text, html };
 }
