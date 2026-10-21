@@ -38,8 +38,13 @@ handed to SendGrid; messages already in flight finish.
 
 ## What every message contains
 
-Messages are plain text from `CareMetric <HUB_BULK_EMAIL_FROM>` with replies to
-the support address. After the administrator's text, the Hub adds:
+Messages come from `CareMetric <HUB_BULK_EMAIL_FROM>` with replies to the
+support address. Each one has two parts that say the same thing: plain text,
+and HTML in the shared CareMetric email layout (`server/email-layout.mjs`, the
+personal style also used for support replies). The HTML shows the
+administrator's words exactly as written, with no product header, then the same
+footer with the unsubscribe line as a link. After the administrator's text, the
+Hub adds:
 
 ```
 --
@@ -109,5 +114,6 @@ directory reads, role and status selection, duplicate and unsubscribed
 addresses, confirmed counts, one-time delivery, unconfirmed outcomes that are
 never resent, unsubscribe, cancellation, housekeeping, bounded audit and
 complete teardown. `supabase/tests/032_bulk_email.test.sql` checks grants and
-constraints; `server/bulk-email.test.mjs` covers the routes and the SendGrid
-request.
+constraints; `server/bulk-email.test.mjs` covers the routes, the HTML part and
+the SendGrid request, and `server/email-layout.test.mjs` holds it to the shared
+layout with every other Hub email.

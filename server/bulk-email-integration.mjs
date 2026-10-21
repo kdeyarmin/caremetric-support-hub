@@ -122,6 +122,7 @@ try{
   assert.deepEqual(await service.test(ownerToken,{id:created.id,to:`owner@${domain}`}),{delivery:'sent'});
   assert.equal(sent.length,1);assert.equal(sent[0].subject,'[Test] Scheduled maintenance');assert.equal(sent[0].unsubscribeUrl,null);
   assert.match(sent[0].text,/CareMetric CareBase, CareMetric Go account/);
+  assert.ok(sent[0].html.includes('data-caremetric-email="personal"')&&sent[0].html.includes('Unsubscribe link: included in each real message.')&&!/<a\s/i.test(sent[0].html),'a test copy has the layout and no unsubscribe link');
 
   // Sending: the reviewed count must match, the command session is required, and the audience copy is deleted.
   await assert.rejects(service.send(ownerToken,{id:created.id,version:saved.version,recipients:expected.size}),error=>error.status===409);
@@ -146,6 +147,7 @@ try{
     assert.equal(message.subject,'Scheduled maintenance');
     assert.match(message.unsubscribeUrl,/^https:\/\/hub\.example\/api\/email\/unsubscribe\/[0-9a-f]{64}$/);
     assert.ok(message.text.startsWith('CareMetric will be unavailable')&&message.text.includes(message.unsubscribeUrl)&&message.text.includes('1 Main St, Altoona, PA'));
+    assert.ok(message.html.includes('data-caremetric-email="personal"')&&message.html.includes(`href="${message.unsubscribeUrl}"`)&&message.html.includes('1 Main St, Altoona, PA'),'the HTML part is on the shared layout with the same footer');
   }
   assert.equal((await admin.query('select count(*)::int as n from private.email_recipients where campaign_id=$1 and (email is not null or unsubscribe_token is not null)',[created.id])).rows[0].n,0,'addresses and tokens are cleared after delivery');
   const sentAgain=sent.length;await service.tick();assert.equal(sent.length,sentAgain,'unknown and failed deliveries are never resent');
