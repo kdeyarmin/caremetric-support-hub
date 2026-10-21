@@ -10,6 +10,8 @@ import './bulkEmail.css';
 const number = new Intl.NumberFormat('en-US');
 const when = (value: string) => new Date(value).toLocaleString();
 const message = (error: unknown, fallback: string) => error instanceof Error && error.message ? error.message : fallback;
+/** "A", "A or B", "A, B or C", as the footer the server adds lists them (server/bulk-email.mjs applicationList). */
+const listApplications = (names: string[]) => names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`;
 
 export function BulkEmail({products,client=bulkEmailClient,demo=config.demoMode,pollMs=5000}:{products:Product[];client?:BulkEmailClient;demo?:boolean;pollMs?:number}) {
   const apps=products.filter(product=>(directorySlugs as readonly string[]).includes(product.slug)&&product.status!=='retired');
@@ -159,7 +161,7 @@ function CampaignEditor({id,initial,client,pollMs,onClose}:{id:string;initial?:C
       <div className="bulk-fields">
         <label>Subject<input maxLength={maxSubject} value={subject} disabled={!!busy} onChange={event=>setSubject(event.target.value.replace(/[\r\n]+/g,' '))} /></label>
         <label>Message (plain text)<textarea rows={10} maxLength={maxBody} value={body} disabled={!!busy} onChange={event=>setBody(event.target.value)} /><small>{number.format(body.length)} of {number.format(maxBody)} characters</small></label>
-        <div className="bulk-footer-preview"><span>Added to every email</span><pre>{`--\nYou are receiving this email because you have a ${campaign.sources.map(source=>source.productName).join(', ')} account with CareMetric.\nUnsubscribe from CareMetric announcements: (personal link)`}</pre></div>
+        <div className="bulk-footer-preview"><span>Added to every email</span><pre>{`--\nYou are receiving this email because you have an account in ${listApplications(campaign.sources.map(source=>source.productName))}.\nUnsubscribe from CareMetric announcements: (personal link)`}</pre></div>
       </div>
       <div className="bulk-actions"><button className="button button-primary" disabled={!!busy||!dirty} onClick={()=>void save()}>{busy==='save'?'Saving…':'Save draft'}</button>{dirty&&<span className="bulk-hint">Unsaved changes</span>}</div>
       <h3>3. Test and send</h3>

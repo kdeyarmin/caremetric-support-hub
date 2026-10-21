@@ -24,10 +24,18 @@ function reviewed(error) {
 }
 
 const unsubscribeLabel = 'Unsubscribe from CareMetric announcements';
+/** The applications as a reader would list them: "A", "A or B", "A, B or C". The database
+    joins each recipient's application names with ", " (product names hold no comma). */
+export function applicationList(applications) {
+  const names = String(applications ?? '').split(', ').map(name => name.trim()).filter(Boolean);
+  return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} or ${names.at(-1)}`;
+}
 /** Why they received it, how to stop and the mailing address. The unsubscribe line is a link wherever the layout can link it (https). */
 function footerLines({ applications, unsubscribeUrl, postalAddress }) {
   return [
-    `You are receiving this email because you have a ${applications} account with CareMetric.`,
+    applicationList(applications)
+      ? `You are receiving this email because you have an account in ${applicationList(applications)}.`
+      : 'You are receiving this email because you have a CareMetric account.',
     !unsubscribeUrl ? 'Unsubscribe link: included in each real message.'
       : /^https:\/\//i.test(unsubscribeUrl) ? { label: unsubscribeLabel, url: unsubscribeUrl } : `${unsubscribeLabel}: ${unsubscribeUrl}`,
     ...(postalAddress ? [postalAddress] : []),

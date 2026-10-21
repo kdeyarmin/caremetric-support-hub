@@ -121,7 +121,7 @@ try{
   await assert.rejects(service.test(ownerToken,{id:created.id,to:'not an address'}));
   assert.deepEqual(await service.test(ownerToken,{id:created.id,to:`owner@${domain}`}),{delivery:'sent'});
   assert.equal(sent.length,1);assert.equal(sent[0].subject,'[Test] Scheduled maintenance');assert.equal(sent[0].unsubscribeUrl,null);
-  assert.match(sent[0].text,/CareMetric CareBase, CareMetric Go account/);
+  assert.match(sent[0].text,/an account in CareMetric CareBase or CareMetric Go\./);
   assert.ok(sent[0].html.includes('data-caremetric-email="personal"')&&sent[0].html.includes('Unsubscribe link: included in each real message.')&&!/<a\s/i.test(sent[0].html),'a test copy has the layout and no unsubscribe link');
 
   // Sending: the reviewed count must match, the command session is required, and the audience copy is deleted.
@@ -142,7 +142,7 @@ try{
   assert.equal(new Set(bulk.map(message=>message.to.toLowerCase())).size,bulk.length,'one message per address');
   assert.ok(!bulk.some(message=>message.to===unsubscribedEarlier));
   const shared=bulk.find(message=>message.to.toLowerCase()===`user4@${domain}`);
-  assert.match(shared.text,/a CareMetric CareBase, CareMetric Go account/);
+  assert.match(shared.text,/an account in CareMetric CareBase or CareMetric Go\./);
   for(const message of bulk){
     assert.equal(message.subject,'Scheduled maintenance');
     assert.match(message.unsubscribeUrl,/^https:\/\/hub\.example\/api\/email\/unsubscribe\/[0-9a-f]{64}$/);
