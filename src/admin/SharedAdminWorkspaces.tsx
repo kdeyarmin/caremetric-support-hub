@@ -2,6 +2,8 @@ import {useId} from 'react';
 import {Link} from 'react-router-dom';
 
 const workspaces = [
+  {to:'/admin',label:'Control center: every app, channel and service'},
+  {to:'/admin/apps',label:'Applications: users, billing, courses, training'},
   {to:'/phone-numbers',label:'Phone numbers and routing'},
   {to:'/phone',label:'AI phone inbox'},
   {to:'/communications',label:'Communications: phone, text, email, chat'},

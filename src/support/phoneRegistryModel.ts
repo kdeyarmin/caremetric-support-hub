@@ -39,6 +39,15 @@ export const blankPhoneRecord: PhoneRecord = {
   usage_status:'unknown',voice_status:'unknown',voice_routing:'',sms_status:'unknown',sms_routing:'',
   last_used_on:'',reviewed_on:'',evidence:'',notes:'',
 };
+/** A number whose routing, registration or usage is unknown or still pending, so it needs an owner's review. */
+export function phoneNeedsReview(row:PhoneRow) {
+  return row.usage_status==='unknown'||row.lifecycle==='unknown'||row.voice_status==='unknown'||row.sms_status==='unknown'||row.sms_status==='pending'||row.sms_status==='rejected'
+    ||row.business_profile_status==='rejected'||row.business_profile_status==='pending'||row.migration_status==='planned'||row.migration_status==='staged';
+}
+/** Texting is configured only when its registration is approved; pending, rejected and unknown states need attention. */
+export function phoneTextingNeedsAttention(row:PhoneRow) {
+  return row.sms_status==='pending'||row.sms_status==='rejected'||row.sms_status==='unknown';
+}
 export function displayPhone(number:string) {
   return /^\+1\d{10}$/.test(number) ? '('+number.slice(2,5)+') '+number.slice(5,8)+'-'+number.slice(8) : number;
 }

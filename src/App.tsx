@@ -12,6 +12,7 @@ import {
   Clock3,
   ExternalLink,
   FileText,
+  Gauge,
   GraduationCap,
   Headphones,
   Inbox,
@@ -64,11 +65,13 @@ import { AiCaseTools } from "./support/AiCaseTools";
 import { AiResolutionPrompt } from "./support/AiResolutionPrompt";
 import { PhoneInbox } from "./support/PhoneInbox";
 import { Communications } from "./support/Communications";
+import { channels, conversationStatuses, type Channel, type CommunicationsClient, type ConversationStatus } from "./support/communicationsClient";
 import { ChatPanel } from "./support/ChatPanel";
 import { KnowledgeCoverage } from "./support/KnowledgeCoverage";
 import { demoCommunicationsClient } from "./support/demoCommunications";
 import { PhoneRegistry } from "./support/PhoneRegistry";
 import { AdminWorkspace } from "./admin/AdminWorkspace";
+import { ControlCenter } from "./admin/ControlCenter";
 import { PortfolioRollup } from "./admin/PortfolioRollup";
 import { GoLiveReadiness } from "./admin/GoLiveReadiness";
 import { SupportReadiness } from "./support/SupportReadiness";
@@ -114,9 +117,10 @@ const pendingHelpPathKey = "caremetric.pendingHelpPath";
 const registeredProductSlugs = new Set(Object.keys(integrationRolloutBySlug));
 
 const navItems = [
+  { to: "/admin", label: "Control center", icon: Gauge },
+  { to: "/admin/apps", label: "Applications", icon: Boxes },
   { to: "/phone-numbers", label: "Phone numbers", icon: Phone },
   { to: "/phone", label: "Phone messages", icon: Phone },
-  { to: "/admin", label: "Platform admin", icon: Boxes },
   { to: "/admin/portfolio", label: "Portfolio rollup", icon: Activity },
   { to: "/admin/go-live-readiness", label: "AI go-live readiness", icon: Rocket },
   { to: "/overview", label: "Overview", icon: LayoutDashboard },
@@ -256,9 +260,36 @@ function SecurityPage({ actor }: { actor: ActorContext }) {
     {!config.demoMode && <button className="button button-secondary" onClick={() => void appSession.signOut()}>Sign out</button>}</section></>;
 }
 
+/** The control center is the administrator's home. Links from before it existed carried the per-application workspace's query and still open that workspace. */
+function AdminHome({ data, communications }: { data: HubData; communications?: CommunicationsClient }) {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  if (params.has("product") || params.has("view")) return <Navigate to={`/admin/apps${location.search}`} replace />;
+  return <ControlCenter key={data.actor.id} data={data} {...(communications ? { communications } : {})} />;
+}
+
+/** The inbox opens with the filters a link carries: a channel, a status, and an application by slug (or repository name) or id. */
+function CommunicationsRoute({ data, communications }: { data: HubData; communications?: CommunicationsClient }) {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const channel = params.get("channel"), status = params.get("status"), requested = params.get("product");
+  const product = requested ? data.products.find((item) => item.slug === resolveProductSlug(requested) || item.id === requested) : undefined;
+  const initialFilter = {
+    ...(channel && channels.includes(channel as Channel) ? { channel: channel as Channel } : {}),
+    ...(status && (status === "active" || conversationStatuses.includes(status as ConversationStatus)) ? { status: status as ConversationStatus | "active" } : {}),
+    ...(product ? { productId: product.id } : {}),
+  };
+  return <Communications key={`${data.actor.id}:${location.search}`} products={data.products} actor={data.actor} initialFilter={initialFilter} {...(communications ? { client: communications } : {})} />;
+}
+
 function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (mode: "staff" | "customer" | "admin") => void }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const location = useLocation();
   const staff = isSupportStaff(data.actor.role);
+  // The preview's in-memory inbox is created once per data load so replies and notes survive navigation within the session.
+  const demoCommunications = useMemo(() => config.demoMode ? demoCommunicationsClient({
+    breathe: data.products.find((product) => product.slug === "breathe")?.id, advisors: data.products.find((product) => product.slug === "advisors")?.id, pennsync: data.products.find((product) => product.slug === "pennsync")?.id,
+  }) : undefined, [data.products]);
 
   return (
     <div className="app-shell">
@@ -269,7 +300,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
         </div>
         <nav className="primary-nav" aria-label="Main navigation">
           <p className="nav-label">Workspace</p>
-          {navItems.filter(item => (!["/admin", "/admin/portfolio", "/admin/go-live-readiness", "/phone", "/phone-numbers"].includes(item.to) || data.actor.role === "platform_admin") && (!["/docstudio", "/communications"].includes(item.to) || staff)).map(({ to, label, icon: Icon }) => (
+          {navItems.filter(item => (!["/admin", "/admin/apps", "/admin/portfolio", "/admin/go-live-readiness", "/phone", "/phone-numbers"].includes(item.to) || data.actor.role === "platform_admin") && (!["/docstudio", "/communications"].includes(item.to) || staff)).map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} onClick={() => setMobileOpen(false)}>
               <Icon size={18} /> <span>{label}</span>
             </NavLink>
@@ -315,13 +346,14 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
           <Routes>
             <Route path="/phone" element={data.actor.role === "platform_admin" ? <PhoneInbox key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/phone-numbers" element={data.actor.role === "platform_admin" ? <PhoneRegistry key={data.actor.id} /> : <Navigate to="/overview" replace />} />
-            <Route path="/admin" element={data.actor.role === "platform_admin" ? <AdminWorkspace key={data.actor.id} actorId={data.actor.id} client={adminClient} /> : <Navigate to="/overview" replace />} />
+            <Route path="/admin" element={data.actor.role === "platform_admin" ? <AdminHome data={data} communications={demoCommunications} /> : <Navigate to="/overview" replace />} />
+            <Route path="/admin/apps" element={data.actor.role === "platform_admin" ? <AdminWorkspace key={data.actor.id} actorId={data.actor.id} client={adminClient} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/portfolio" element={data.actor.role === "platform_admin" ? <PortfolioRollup key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/go-live-readiness" element={data.actor.role === "platform_admin" ? <GoLiveReadiness key={data.actor.id} /> : <Navigate to="/overview" replace />} />
-            <Route path="/communications" element={staff ? <Communications key={data.actor.id} products={data.products} actor={data.actor} {...(config.demoMode ? { client: demoCommunicationsClient({ breathe: data.products.find(product => product.slug === "breathe")?.id, advisors: data.products.find(product => product.slug === "advisors")?.id, pennsync: data.products.find(product => product.slug === "pennsync")?.id }) } : {})} /> : <Navigate to="/overview" replace />} />
+            <Route path="/communications" element={staff ? <CommunicationsRoute data={data} communications={demoCommunications} /> : <Navigate to="/overview" replace />} />
             <Route path="/overview" element={<OverviewPage data={data} />} />
-            <Route path="/cases" element={<CasesPage key={`${data.actor.id}:${data.actor.role}`} data={data} />} />
-            <Route path="/knowledge" element={<KnowledgePage data={data} />} />
+            <Route path="/cases" element={<CasesPage key={`${data.actor.id}:${data.actor.role}:${location.search}`} data={data} />} />
+            <Route path="/knowledge" element={<KnowledgePage key={location.search} data={data} />} />
             <Route path="/imports/docstudio" element={staff ? <PublicationImport key={data.actor.id} /> : <Navigate to="/knowledge" replace />} />
             <Route path="/docstudio" element={staff ? <DocStudioWorkspace key={data.actor.id} /> : <Navigate to="/knowledge" replace />} />
             <Route path="/library/courses/:itemId" element={<CourseEditor key={window.location.pathname} products={data.products} />} />
@@ -458,6 +490,8 @@ function CasesPage({ data }: CasesPageProps) {
   const [thread, setThread] = useState(emptyCaseThread);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<CaseStatus | "all">("all");
+  // A link can open the queue for one application: /cases?product=<slug>.
+  const [productFilter, setProductFilter] = useState(requestedProduct?.id ?? "all");
   const [showCreate, setShowCreate] = useState(!staff && (data.cases.length === 0 || params.get("new") === "1"));
   const [refresh, setRefresh] = useState(0);
   const [caseRows, setCaseRows] = useState(data.cases);
@@ -501,9 +535,10 @@ function CasesPage({ data }: CasesPageProps) {
     const needle = search.trim().toLowerCase();
     return caseRows.filter((item) =>
       (statusFilter === "all" || item.status === statusFilter) &&
+      (productFilter === "all" || item.productId === productFilter) &&
       (!needle || item.subject.toLowerCase().includes(needle) || caseCode(item.caseNumber).toLowerCase().includes(needle) || item.tenantName.toLowerCase().includes(needle)),
     );
-  }, [caseRows, search, statusFilter]);
+  }, [caseRows, productFilter, search, statusFilter]);
   const selected = caseRows.find((item) => item.id === selectedId) ?? null;
 
   return (
@@ -524,6 +559,10 @@ function CasesPage({ data }: CasesPageProps) {
             <select aria-label="Filter by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as CaseStatus | "all")}>
               <option value="all">All statuses</option>
               {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+            <select aria-label="Filter by application" value={productFilter} onChange={(event) => setProductFilter(event.target.value)}>
+              <option value="all">All applications</option>
+              {data.products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
             </select>
           </div>
           <div className="case-count">{visibleCases.length} case{visibleCases.length === 1 ? "" : "s"}</div>
@@ -776,8 +815,10 @@ function CaseDetail({ supportCase, thread, threadStatus, threadError, threadStal
 }
 
 function KnowledgePage({ data }: { data: HubData }) {
+  const location = useLocation();
   const [search, setSearch] = useState("");
-  const [productId, setProductId] = useState("all");
+  // A link can open the catalog filtered to one application: /knowledge?product=<slug>.
+  const [productId, setProductId] = useState(() => data.products.find((product) => product.slug === resolveProductSlug(new URLSearchParams(location.search).get("product")))?.id ?? "all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const articles = useMemo(() => data.content.filter((item) => {
     if (item.kind !== "article") return false;

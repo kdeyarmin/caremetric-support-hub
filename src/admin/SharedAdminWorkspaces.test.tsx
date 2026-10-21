@@ -10,6 +10,7 @@ describe('shared owner workspaces',()=>{
     render(<MemoryRouter><SharedAdminWorkspaces/></MemoryRouter>);
     const navigation=screen.getByRole('navigation',{name:'Shared owner workspaces'});
     const expected=[
+      ['Control center: every app, channel and service','/admin'],['Applications: users, billing, courses, training','/admin/apps'],
       ['Phone numbers and routing','/phone-numbers'],['AI phone inbox','/phone'],
       ['Communications: phone, text, email, chat','/communications'],['Support cases','/cases'],['Knowledge articles','/knowledge'],
       ['Courses, creation and distribution','/library'],['Create learning videos','/docstudio'],
@@ -27,8 +28,8 @@ describe('shared owner workspaces',()=>{
     expect(screen.getByText(/Each workspace checks its current permissions and configuration/)).toBeTruthy();
   });
   it('uses the existing Hub router when the owner opens a workspace',()=>{
-    render(<MemoryRouter initialEntries={['/admin']}><Routes>
-      <Route path="/admin" element={<SharedAdminWorkspaces/>}/>
+    render(<MemoryRouter initialEntries={['/admin/apps']}><Routes>
+      <Route path="/admin/apps" element={<SharedAdminWorkspaces/>}/>
       <Route path="/phone-numbers" element={<h1>Phone registry workspace</h1>}/>
     </Routes></MemoryRouter>);
     fireEvent.click(screen.getByRole('link',{name:'Phone numbers and routing'}));

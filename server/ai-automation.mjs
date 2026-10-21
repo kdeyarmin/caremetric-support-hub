@@ -191,6 +191,7 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
     const knowledge = await store.knowledgeForCase({ caseId: work.caseId, subject: work.subject, latestCustomerBody: latest?.body });
     const draft = await ai.draftReply({
       subject: work.subject,
+      context: { caseId: work.caseId, actor: 'automation' },
       messages: threadForAi(work).filter((entry) => entry.visibility === 'customer'),
       knowledge,
       tier: draftTier,
@@ -216,7 +217,7 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
   async function exhaustedNote(work) {
     let summary;
     try {
-      summary = clip(await ai.summarizeForEscalation({ subject: work.subject, messages: threadForAi(work) }), 3000);
+      summary = clip(await ai.summarizeForEscalation({ subject: work.subject, messages: threadForAi(work), context: { caseId: work.caseId, actor: 'automation' } }), 3000);
     } catch {
       summary = `Automated help was attempted ${work.state.attempts} time(s) without resolving this case.`
         + (work.state.lastCustomerResponse ? ` The customer's latest response: "${clip(work.state.lastCustomerResponse, 500)}"` : '');
@@ -294,7 +295,7 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
 
     const latest = latestCustomerMessage(work);
     if (latest && latest.id !== state.lastSeenCustomerMessageId) {
-      const outcome = await ai.classifyResolution({ text: latest.body });
+      const outcome = await ai.classifyResolution({ text: latest.body, context: { caseId, actor: 'automation' } });
       if (outcome === 'fixed') {
         await store.resolveCase(caseId);
         await store.saveState(caseId, {

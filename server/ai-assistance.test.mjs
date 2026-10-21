@@ -98,6 +98,30 @@ describe('AI assistance provider', () => {
     }
   });
 
+  it('records every call in the usage ledger with provenance only, including failures, never when unconfigured', async () => {
+    const caseId = '44444444-4444-4444-8444-444444444444';
+    const record = vi.fn(async () => {});
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const ai = aiAssistance({ apiKey: 'test-key', fetchImpl: providerFetch('A summary.'), log: () => {}, now: () => 1000, record });
+    await ai.summarize({ ...thread, context: { caseId, actor: 'staff' } });
+    await settle();
+    expect(record).toHaveBeenCalledWith({ caseId, actor: 'staff', feature: 'case_summary', model: aiModels.fast, outcome: 'completed', inputTokens: 120, outputTokens: 45, latencyMs: 0 });
+    // Case text never reaches the ledger.
+    expect(JSON.stringify(record.mock.calls)).not.toContain('export');
+    const failing = aiAssistance({ apiKey: 'test-key', fetchImpl: providerFetch('x', { ok: false }), log: () => {}, now: () => 1000, record });
+    await expect(failing.classifyResolution({ text: 'Still broken', context: { caseId, actor: 'automation' } })).rejects.toBeTruthy();
+    await settle();
+    expect(record).toHaveBeenLastCalledWith({ caseId, actor: 'automation', feature: 'automation_resolution_classification', model: aiModels.fast, outcome: 'failed', inputTokens: null, outputTokens: null, latencyMs: 0 });
+    // A ledger failure never surfaces to the caller.
+    const broken = aiAssistance({ apiKey: 'test-key', fetchImpl: providerFetch('Fine.'), log: () => {}, record: vi.fn(async () => { throw new Error('ledger down'); }) });
+    await expect(broken.summarize(thread)).resolves.toBe('Fine.');
+    await settle();
+    const unconfigured = aiAssistance({ apiKey: undefined, fetchImpl: providerFetch('never'), record });
+    await expect(unconfigured.summarize(thread)).rejects.toBeTruthy();
+    await settle();
+    expect(record).toHaveBeenCalledTimes(2);
+  });
+
   it('renders threads with staff notes marked internal', () => {
     const text = formatThread(thread);
     expect(text).toContain('Internal note by Sam Agent');

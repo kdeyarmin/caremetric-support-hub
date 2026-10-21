@@ -254,7 +254,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .case-workspace { min-height: 660px; display: grid; grid-template-columns: 350px minmax(0,1fr); border: 1px solid var(--line); border-radius: 15px; overflow: hidden; background: white; box-shadow: var(--shadow); }
 .case-list-panel { min-width: 0; border-right: 1px solid var(--line); background: #f8fafc; }
-.case-tools { padding: 14px; display: grid; grid-template-columns: minmax(0,1fr) 128px; gap: 8px; border-bottom: 1px solid var(--line); }
+.case-tools { padding: 14px; display: grid; grid-template-columns: minmax(0,1fr) 128px 150px; gap: 8px; border-bottom: 1px solid var(--line); }
 .case-tools select { min-height: 38px; font-size: 10px; }
 .search-box { min-height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border: 1px solid #cbd5e1; border-radius: 9px; background: white; color: #64748b; }
 .search-box:focus-within { border-color: #264491; box-shadow: 0 0 0 3px rgba(31,50,97,.11); }
