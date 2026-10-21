@@ -112,6 +112,9 @@ jobs:
           node server/learning-integration.mjs
           node server/support-integration.mjs
           node server/phone-registry-integration.mjs
+          node server/tenant-integration.mjs
+          # Repeat with fresh fixtures to prove complete teardown.
+          node server/tenant-integration.mjs
           node server/onboarding-integration.mjs
           node server/registration-integration.mjs
           node server/authoring-integration.mjs

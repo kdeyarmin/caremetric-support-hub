@@ -219,7 +219,7 @@ export function ControlCenter({ data, portfolio = portfolioClient, communication
             ? <li><Users size={16} aria-hidden="true" /><div><strong>Customer intake</strong><span className="control-detail">{previewNote}</span></div></li>
             : <li><Users size={16} aria-hidden="true" /><div><strong>Customer intake</strong><span className="control-detail">{formatNumber.format(intakeReady.reduce((sum, item) => sum + item.readyTenantCount, 0))} ready customers across {formatNumber.format(intakeReady.filter(item => item.supportEnabled).length)} applications with support enabled</span></div><Link className="control-count" to="/integration">Review access</Link></li>)}
         </ul>
-        <div className="control-panel-footer"><Link className="text-link" to="/admin/go-live-readiness">AI go-live readiness</Link><Link className="text-link" to="/integration">Connections and customer onboarding</Link><Link className="text-link" to="/admin/portfolio">Portfolio rollup and coverage matrix</Link><Link className="text-link" to="/security">Account security</Link></div>
+        <div className="control-panel-footer"><Link className="text-link" to="/admin/tenants">Tenants and subscription pricing</Link><Link className="text-link" to="/admin/go-live-readiness">AI go-live readiness</Link><Link className="text-link" to="/integration">Connections and customer onboarding</Link><Link className="text-link" to="/admin/portfolio">Portfolio rollup and coverage matrix</Link><Link className="text-link" to="/security">Account security</Link></div>
       </section>
 
       <AiUsagePanel state={usage} period={period} onPeriod={setPeriod} retry={retry} />

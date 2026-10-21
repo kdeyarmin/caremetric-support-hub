@@ -25,6 +25,11 @@ Product names appear with their repository names so each app is easy to find.
 - **Knowledge** (`/knowledge`): shared and app-specific articles for every
   application, with per-app coverage and a direct "Write an article" path into
   DocStudio. Healthcare Advisors' published FAQ is included.
+- **Tenants & pricing** (`/admin/tenants`): set up customer tenants by hand,
+  choose their applications and record each subscription's price per month or
+  per year, or make it complimentary (free) with a reason and an optional end
+  date. This is the Hub's subscription record; it never charges a card or
+  changes an application's own billing. See [tenant setup](docs/TENANT_SETUP.md).
 - **Bulk email** (`/admin/email`): email the users of one or more applications,
   narrowed by role and account status read from each application's own user
   directory. Duplicates across applications and unsubscribed addresses are
@@ -57,6 +62,11 @@ Apply `20261021120000_ai_usage_ledger.sql` and
 center release: it records every Anthropic call in a private ledger attributed
 to the application and customer, and connected builds require the
 `support.ai-usage.v1` contract feature.
+
+Apply `20261021140000_tenant_subscriptions.sql` and
+`20261021140100_tenant_subscriptions_contract.sql` before deploying the tenant
+setup release: pricing is a private, administrator-only record, and connected
+builds require the `platform.admin.tenants.v1` contract feature.
 
 Apply `20261021160000_bulk_email.sql` and `20261021160100_bulk_email_contract.sql`
 before deploying the bulk email release; connected builds require the
