@@ -48,10 +48,15 @@ Hub adds:
 
 ```
 --
-You are receiving this email because you have a <applications> account with CareMetric.
+You are receiving this email because you have an account in <applications>.
 Unsubscribe from CareMetric announcements: <personal link>
 <HUB_BULK_EMAIL_POSTAL_ADDRESS, when set>
 ```
+
+`<applications>` names the applications that recipient has an account in, listed
+as a reader would: "CareMetric PennSync", "CareMetric Go or CareMetric PennSync",
+"CareMetric CareBase, CareMetric Go or CareMetric PennSync". A test copy lists
+every application the email was written for.
 
 Each message also carries `List-Unsubscribe` and
 `List-Unsubscribe-Post: List-Unsubscribe=One-Click` headers (RFC 8058), which

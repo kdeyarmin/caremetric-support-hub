@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { once } from 'node:events';
 import { appServer } from './http.mjs';
-import { bulkEmailHtml, composeBulkEmail, sendgridBulkMail } from './bulk-email.mjs';
+import { applicationList, bulkEmailHtml, composeBulkEmail, sendgridBulkMail } from './bulk-email.mjs';
 import { LAYOUT_MARKER, PRODUCT_WORDMARK } from './email-layout.mjs';
 
 const origin = 'https://support-hub-web-production.up.railway.app';
@@ -50,8 +50,16 @@ describe('bulk email routes', () => {
 describe('bulk email messages', () => {
   it('ends every message with why it was sent, the unsubscribe link and the mailing address', () => {
     const text = composeBulkEmail({ body: 'Hello\r\nAll users  \n\n', applications: 'CareMetric CareBase, CareMetric Go', unsubscribeUrl: 'https://hub.example/api/email/unsubscribe/' + token, postalAddress: '1 Main St, Altoona, PA' });
-    expect(text).toBe(`Hello\nAll users\n\n--\nYou are receiving this email because you have a CareMetric CareBase, CareMetric Go account with CareMetric.\nUnsubscribe from CareMetric announcements: https://hub.example/api/email/unsubscribe/${token}\n1 Main St, Altoona, PA\n`);
+    expect(text).toBe(`Hello\nAll users\n\n--\nYou are receiving this email because you have an account in CareMetric CareBase or CareMetric Go.\nUnsubscribe from CareMetric announcements: https://hub.example/api/email/unsubscribe/${token}\n1 Main St, Altoona, PA\n`);
     expect(composeBulkEmail({ body: 'Hi', applications: 'PennSync', unsubscribeUrl: null, postalAddress: '' })).toContain('Unsubscribe link: included in each real message.');
+  });
+  it('lists the applications the way a reader would', () => {
+    expect(applicationList('CareMetric PennSync')).toBe('CareMetric PennSync');
+    expect(applicationList('CareMetric Go, CareMetric PennSync')).toBe('CareMetric Go or CareMetric PennSync');
+    expect(applicationList('CareMetric CareBase, CareMetric Go, CareMetric PennSync')).toBe('CareMetric CareBase, CareMetric Go or CareMetric PennSync');
+    for (const none of ['', null, undefined]) expect(applicationList(none)).toBe('');
+    expect(composeBulkEmail({ body: 'Hi', applications: '', unsubscribeUrl: null, postalAddress: '' }))
+      .toContain('You are receiving this email because you have a CareMetric account.');
   });
   it('carries the same message as HTML in the shared layout: the words as written, then the same footer with a real unsubscribe link', () => {
     const unsubscribeUrl = 'https://hub.example/api/email/unsubscribe/' + token;
@@ -61,7 +69,7 @@ describe('bulk email messages', () => {
     expect(html).toContain('<title>Update</title>');
     expect(html).toContain('>Hello all,</p>');
     expect(html).toContain('>We will be down<br>&nbsp;&nbsp;Saturday 9 PM.</p>');
-    expect(html).toContain('You are receiving this email because you have a PennSync account with CareMetric.');
+    expect(html).toContain('You are receiving this email because you have an account in PennSync.');
     expect(html).toContain(`<a href="${unsubscribeUrl}" target="_blank"`);
     expect(html).toContain('>Unsubscribe from CareMetric announcements</a>');
     expect(html).toContain('1 Main St, Altoona, PA');
