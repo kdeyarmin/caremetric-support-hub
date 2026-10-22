@@ -19,7 +19,12 @@ const context = z.object({ operation: z.literal("context"), versionId: id.nullab
   .refine(value => (value.versionId === null) !== (value.packageId === null));
 const status = z.object({ operation: z.literal("status"), requestId: id }).strict();
 const finish = z.object({ operation: z.literal("finish"), operationId: id }).strict();
-export const nativePackageOperationSchema = z.union([upload, accept, context, status, finish]);
+// A cloned draft lists the source packages it still depends on, then names the separately
+// accepted artifact in the same draft that replaces each one.
+const dependencies = z.object({ operation: z.literal("dependencies"), versionId: id }).strict();
+const resolveFields = z.object({ operation: z.literal("resolve"), versionId: id, sourcePackageId: id, replacementPackageId: id }).strict();
+const separate = (value: { sourcePackageId: string; replacementPackageId: string }) => value.sourcePackageId !== value.replacementPackageId;
+export const nativePackageOperationSchema = z.union([upload, accept, context, status, finish, dependencies, resolveFields.refine(separate)]);
 export type NativePackageOperation = z.infer<typeof nativePackageOperationSchema>;
 export const packageOperationSchema = z.union([
   upload.extend({ courseId: id }).strict(),
@@ -27,6 +32,8 @@ export const packageOperationSchema = z.union([
   z.object({ operation: z.literal("context"), courseId: id, versionId: id, packageId: id.nullable() }).strict(),
   status.extend({ courseId: id, versionId: id }).strict(),
   finish.extend({ courseId: id, versionId: id, requestId: id }).strict(),
+  dependencies.extend({ courseId: id }).strict(),
+  resolveFields.extend({ courseId: id }).strict().refine(separate),
 ]);
 export type PackageOperation = z.infer<typeof packageOperationSchema>;
 export type PackageUpload = Extract<PackageOperation, { operation: "upload" }>;
@@ -77,8 +84,15 @@ const statusResult = z.object({ requestId: id, operation: z.enum(["upload", "acc
     && value.result.versionId === value.versionId && value.result.status === (value.operation === "upload" ? "pending" : "accepted")));
 export const packageStatusSchema = statusResult.nullable();
 export type PackageStatus = z.infer<typeof packageStatusSchema>;
-const envelope = z.object({ contractVersion: z.literal(1), product: z.literal("carebase"), operation: z.enum(["context", "status", "finish", "upload", "accept"]), generatedAt: timestamp, data: z.unknown() }).strict();
-export function projectPackageResponse(input: unknown, operation: NativePackageOperation): PackageContext | PackageStatus | PackageResult | PackageStage {
+export const packageDependenciesSchema = z.array(z.object({ sourcePackageId: id, sourceSha256: sha, standard: z.string().max(50).nullable(),
+  replacementPackageId: id.nullable(), resolved: z.boolean() }).strict()).max(100)
+  .refine(rows => new Set(rows.map(row => row.sourcePackageId)).size === rows.length && rows.every(row => !row.resolved || row.replacementPackageId !== null));
+export type PackageDependency = z.infer<typeof packageDependenciesSchema>[number];
+export const packageResolutionSchema = z.object({ versionId: id, sourcePackageId: id, replacementPackageId: id, replacementSha256: sha }).strict();
+export type PackageResolution = z.infer<typeof packageResolutionSchema>;
+const envelope = z.object({ contractVersion: z.literal(1), product: z.literal("carebase"), operation: z.enum(["context", "status", "finish", "upload", "accept", "dependencies", "resolve"]),
+  generatedAt: timestamp, data: z.unknown() }).strict();
+export function projectPackageResponse(input: unknown, operation: NativePackageOperation): PackageContext | PackageStatus | PackageResult | PackageStage | PackageDependency[] | PackageResolution {
   const value = envelope.parse(input);
   if (value.operation !== operation.operation) throw new Error("Mismatched package operation");
   if (operation.operation === "context") {
@@ -89,6 +103,12 @@ export function projectPackageResponse(input: unknown, operation: NativePackageO
   if (operation.operation === "status") {
     const result = packageStatusSchema.parse(value.data);
     if (result && result.requestId !== operation.requestId) throw new Error("Mismatched package status");
+    return result;
+  }
+  if (operation.operation === "dependencies") return packageDependenciesSchema.parse(value.data);
+  if (operation.operation === "resolve") {
+    const result = packageResolutionSchema.parse(value.data);
+    if (result.versionId !== operation.versionId || result.sourcePackageId !== operation.sourcePackageId || result.replacementPackageId !== operation.replacementPackageId) throw new Error("Mismatched package resolution");
     return result;
   }
   if (operation.operation === "finish") {

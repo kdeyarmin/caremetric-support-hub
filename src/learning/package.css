@@ -5,3 +5,5 @@
 .package-panel button { justify-self: start; max-width: 100%; white-space: normal; }
 .package-saved { display: grid; min-width: 0; gap: 12px; }
 .package-card { background: var(--brand-light, #f4f7fb); }
+.learning-dependency-list { list-style: none; margin: 12px 0 0; padding: 0; }
+.learning-dependency-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--line); }

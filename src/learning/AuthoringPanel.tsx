@@ -16,6 +16,7 @@ import { CreditPolicyReview } from "./CreditPolicyReview";
 import type { CreditPolicyChanges } from "./creditPolicyProtocol";
 import { PackagePanel } from "./PackagePanel";
 import { DistributionPanel } from "./DistributionPanel";
+import { PackageDependencyPanel } from "./PackageDependencyPanel";
 
 async function run(operation: AuthoringOperation) {
   const op = authoringOperationSchema.parse(operation);
@@ -133,6 +134,9 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
               disabled={working || mediaBusy || Boolean(result) || (editing !== null && editing !== "packages")}
               onEditing={() => { clearPreview(); setEditing("packages"); }} onBusy={setPackageBusy}
               onChanged={receipt => { clearSource(); setMessage(`CareBase confirmed package ${receipt.packageId} as ${receipt.status}. Load course versions and preserve the new exact material before another change.`); }} />
+            {version.unresolvedPackages > 0 && <PackageDependencyPanel key={"dependencies" + source.sourceRevision + editorGeneration} courseId={courseId} versionId={versionId}
+              material={material} disabled={busy || Boolean(result) || editing !== null}
+              onResolved={() => setMessage("Every package dependency is resolved. Load the course versions and preserve the material before previewing publication.")} />}
             {editing && !result && <><p>Finish this group of edits before starting another group or approving the draft.</p>
               <button type="button" disabled={busy} onClick={() => { clearPreview(); setEditing(null); setEditorGeneration(value => value + 1); }}>Discard unsaved edits</button></>}
           </>}
