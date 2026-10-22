@@ -65,3 +65,62 @@ it("retains uncertain preview identity but explicit refresh obtains a new previe
   calls = vi.mocked(requestAdmin).mock.calls.filter(c => (c[1] as { operation: string }).operation === "preview");
   expect((calls.at(-1)![1] as { requestId: string }).requestId).not.toBe(old);
 });
+async function setupCatalog() {
+  vi.mocked(requestAdmin).mockClear();
+  Object.defineProperty(globalThis.crypto, "subtle", { value: webcrypto.subtle, configurable: true });
+  const payload = JSON.stringify(fixture), revision = await sourceDigest(payload);
+  const version = { versionId: fixture.sourceVersionId, sourceRevision: revision, governed: true, aiReviewRequired: false,
+    unresolvedPackages: 0, status: "published", title: fixture.version.title, versionNumber: fixture.sourceVersionNumber };
+  const previews: { action: string; parameters: unknown }[] = [];
+  vi.mocked(requestAdmin).mockImplementation(async (_name, value) => {
+    const op = value as { operation: string; action: string; reason: string; parameters: unknown };
+    if (op.operation === "inspect") return { courseId: fixture.sourceCourseId, currentVersionId: version.versionId, title: fixture.course.title, versions: [version] };
+    if (op.operation === "source") return { courseId: fixture.sourceCourseId, versionId: version.versionId, payload, sourceRevision: revision, headRevision: null, snapshotId: null };
+    if (op.operation === "preserve_source") return { snapshotId: id, sourceRevision: revision, headRevision: revision, sequence: 1, replayed: false };
+    const status = (previews.at(-1)?.action ?? op.action) === "learning.unpublishCourse" ? "archived" : "published";
+    const identity = { courseId: fixture.sourceCourseId, versionId: version.versionId, versionNumber: version.versionNumber, title: version.title, currentVersionId: version.versionId };
+    if (op.operation === "preview") {
+      previews.push({ action: op.action, parameters: op.parameters });
+      return { commandId: id, courseId: fixture.sourceCourseId, action: op.action, reason: op.reason, previewDigest: "a".repeat(64), expiresAt: new Date(Date.now() + 240000).toISOString(),
+        before: { ...identity, status: "published", sourceRevision: revision }, after: { ...identity, status } };
+    }
+    return { commandId: id, courseId: fixture.sourceCourseId, action: previews.at(-1)!.action, versionId: version.versionId, versionNumber: version.versionNumber,
+      status, sourceRevision: "b".repeat(64), appliedAt: new Date().toISOString(), replayed: false };
+  });
+  render(<AuthoringPanel courseId={fixture.sourceCourseId} />);
+  fireEvent.click(screen.getByRole("button", { name: "Load course versions" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Load exact course material" }));
+  fireEvent.click(await screen.findByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "Preserve reviewed source" }));
+  await screen.findByRole("button", { name: "Preview unpublishing" });
+  return { revision, previews };
+}
+it("corrects one lesson of the current published version after an exact before and after review", async () => {
+  const { revision, previews } = await setupCatalog();
+  const lesson = fixture.blocks.find(block => block.type === "text")!;
+  fireEvent.change(screen.getByLabelText("Lesson to correct"), { target: { value: lesson.id } });
+  const correct = screen.getByRole("button", { name: "Preview correction" }) as HTMLButtonElement;
+  expect(correct.disabled).toBe(true);
+  fireEvent.change(screen.getByLabelText("Lesson text"), { target: { value: "Give 5 mg, not 50 mg." } });
+  expect(screen.getByText("Review the exact correction")).not.toBeNull();
+  expect(correct.disabled).toBe(true);
+  fireEvent.change(screen.getByLabelText("Reason for change"), { target: { value: "Dose typo reported by facility nurse" } });
+  fireEvent.click(correct);
+  fireEvent.click(await screen.findByRole("button", { name: "Confirm and apply this change" }));
+  await screen.findByText(/CareBase corrected the lesson/);
+  expect(previews).toEqual([{ action: "learning.correctPublishedBlock",
+    parameters: { versionId: fixture.sourceVersionId, sourceRevision: revision, blockId: lesson.id, correction: { content: "Give 5 mg, not 50 mg." } } }]);
+  expect(vi.mocked(requestAdmin).mock.calls.filter(call => (call[1] as { operation: string }).operation === "apply")).toHaveLength(1);
+});
+it("unpublishes the course only after a preview of the status change", async () => {
+  const { revision, previews } = await setupCatalog();
+  const unpublish = screen.getByRole("button", { name: "Preview unpublishing" }) as HTMLButtonElement;
+  expect(unpublish.disabled).toBe(true);
+  fireEvent.change(screen.getByLabelText("Reason for change"), { target: { value: "Superseded by the 2027 fire safety course" } });
+  fireEvent.click(unpublish);
+  await screen.findByText("Course status: published to archived.");
+  expect(vi.mocked(requestAdmin).mock.calls.some(call => (call[1] as { operation: string }).operation === "apply")).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "Confirm and apply this change" }));
+  await screen.findByText("CareBase archived this course.");
+  expect(previews).toEqual([{ action: "learning.unpublishCourse", parameters: { versionId: fixture.sourceVersionId, sourceRevision: revision } }]);
+});
