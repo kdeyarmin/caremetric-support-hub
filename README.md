@@ -78,6 +78,14 @@ Apply `20261022120000_learning_catalog_authoring_intents.sql` and
 version controls can unpublish a course and correct a lesson of its live version,
 and connected builds require the `learning.catalog-authoring.v1` contract feature.
 
+The CareBase courses view includes the [training library](docs/TRAINING_LIBRARY.md):
+elective collections, refresher lessons, course discovery details and starter kits,
+saved through CareBase's catalog route. It needs no Hub migration.
+
+CareBase courses can be [drafted with AI, and draft lessons regenerated or given an
+avatar video](docs/AI_COURSE_GENERATION.md), through CareBase's generation route. It
+needs no Hub migration.
+
 A cloned CareBase draft's copied packages are [replaced from the course version
 controls](docs/COURSE_PACKAGE_INGESTION.md#replacing-packages-in-a-cloned-draft). It needs
 no Hub migration.

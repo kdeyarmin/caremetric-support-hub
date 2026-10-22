@@ -17,6 +17,7 @@ import type { CreditPolicyChanges } from "./creditPolicyProtocol";
 import { PackagePanel } from "./PackagePanel";
 import { DistributionPanel } from "./DistributionPanel";
 import { PublishedCorrectionEditor, type BlockCorrection } from "./PublishedCorrectionEditor";
+import { AvatarVideoPanel, BlockRegenerationPanel } from "./GenerationPanels";
 import { PackageDependencyPanel } from "./PackageDependencyPanel";
 
 async function run(operation: AuthoringOperation) {
@@ -47,7 +48,8 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
   const [editing, setEditing] = useState<"fields" | "structure" | "credit-policy" | "packages" | null>(null);
   const [editorGeneration, setEditorGeneration] = useState(0);
   const [working, setBusy] = useState(false); const [packageBusy, setPackageBusy] = useState(false);
-  const [mediaBusy, setMediaBusy] = useState(false); const busy = working || packageBusy || mediaBusy;
+  const [mediaBusy, setMediaBusy] = useState(false); const [generationBusy, setGenerationBusy] = useState(false);
+  const busy = working || packageBusy || mediaBusy || generationBusy;
   const [error, setError] = useState(""); const [message, setMessage] = useState("");
   const intents = useRef(new Map<string, string>());
   const actionPending = useRef(false);
@@ -153,6 +155,10 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
               disabled={working || mediaBusy || Boolean(result) || (editing !== null && editing !== "packages")}
               onEditing={() => { clearPreview(); setEditing("packages"); }} onBusy={setPackageBusy}
               onChanged={receipt => { clearSource(); setMessage(`CareBase confirmed package ${receipt.packageId} as ${receipt.status}. Load course versions and preserve the new exact material before another change.`); }} />
+            <BlockRegenerationPanel key={"regenerate" + source.sourceRevision + editorGeneration} material={material} busy={busy || Boolean(result) || editing !== null}
+              onBusy={setGenerationBusy} onRegenerated={() => { clearSource(); setMessage("CareBase regenerated the lesson and cleared the draft’s AI review. Load the course material, preserve it and review it again before publishing."); }} />
+            <AvatarVideoPanel key={"video" + source.sourceRevision + editorGeneration} material={material} busy={busy || Boolean(result) || editing !== null}
+              onBusy={setGenerationBusy} onAttached={() => { clearSource(); setMessage("The video is attached to the lesson. Load the course material and preserve it again before another change."); }} />
             {version.unresolvedPackages > 0 && <PackageDependencyPanel key={"dependencies" + source.sourceRevision + editorGeneration} courseId={courseId} versionId={versionId}
               material={material} disabled={busy || Boolean(result) || editing !== null}
               onResolved={() => setMessage("Every package dependency is resolved. Load the course versions and preserve the material before previewing publication.")} />}

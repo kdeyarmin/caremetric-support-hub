@@ -9,6 +9,7 @@ import { AdminFunctionCatalog } from "./AdminFunctionCatalog";
 import { adminFunctions } from "./functionCatalog";
 import { adminInventory } from "./inventory";
 import { CourseCatalog } from "./CareBaseCourses";
+import { TrainingLibrary } from "../learning/TrainingLibrary";
 import { AccessCommand } from "./AccessCommand";
 import type { AccessTarget } from "./AccessCommand";
 import { Loading, ReadFailure } from "./AdminReads";
@@ -88,7 +89,7 @@ function ApplicationWorkspace({ product, client, portfolio, actorId }: { product
         {view === "users" && <Directory product={product} portfolio={portfolio} kind="users" allowCommands={allowCommands} allowPortal={false} allowCheckout={false} />}
         {view === "billing" && <Billing product={product} portfolio={portfolio} retry={retry} allowCommands={allowCommands} capabilities={capabilities} />}
         {view === "inquiries" && product === "advisors" && <ConsultationRequests />}
-        {view === "courses" && product === "carebase" && <CourseCatalog client={client} />}
+        {view === "courses" && product === "carebase" && <><CourseCatalog client={client} /><TrainingLibrary client={client} /></>}
         {view === "training" && product === "carebase" && (actorId ? <TrainingWorkspace actorId={actorId} portfolio={portfolio} /> : <p role="alert">Your administrator identity could not be verified. Refresh your Hub session before managing facility training.</p>)}
         {(view === "jobs"||view === "releases") && product === "carebase" && <OperationalWorkspace view={view} canConfigure={capabilities.operations.includes('operations.config.v1')}/>}
         {view === "audit" && product === "carebase" && <AuditRecords />}
