@@ -7,7 +7,6 @@ import { appServer } from './http.mjs';
 import { assertBackendContract } from '../src/lib/backendContract.ts';
 import { databaseConfig } from './database-config.mjs';
 import { publications } from './publications.mjs';
-import { docstudio } from './docstudio.mjs';
 import { distributionObserver } from './distribution-observer.mjs';
 import { aiAssistance } from './ai-assistance.mjs';
 import { aiCaseAssistance } from './ai-case-assistance.mjs';
@@ -27,7 +26,6 @@ assertBackendContract(contract);
 const observer=distributionObserver({pool,token:process.env.CAREBASE_DISTRIBUTION_OBSERVER_TOKEN});
 const capabilities=delegations({pool,storageUrl,provider,observer,legacyDistributionOptIn:process.env.HUB_LEGACY_DISTRIBUTION_OPT_IN==='true'});
 const publicationService=publications({pool,delegations:capabilities,storageUrl});
-const studio=docstudio({pool,publications:publicationService,workerToken:process.env.DOCSTUDIO_WORKER_TOKEN});
 const ai=aiAssistance({apiKey:process.env.ANTHROPIC_API_KEY,record:sqlAiUsageRecorder(pool).record});
 const aiCases=aiCaseAssistance({ai,rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken),rows:(name,sessionToken)=>api.rows(name,sessionToken)});
 const followUpHours=Number(process.env.HUB_AI_FOLLOW_UP_DELAY_HOURS);
@@ -41,12 +39,12 @@ const announcements=bulkEmail({pool,delegations:capabilities,publicOrigin:proces
   mail:sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_BULK_EMAIL_FROM||process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai',replyTo:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai'})});
 const readiness=goLiveReadiness({pool,rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
 const setup=integrationSetup({rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
-const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:capabilities,publications:publicationService,docstudio:studio,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
+const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
 let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;
   cleanupRunning=true;
-  try { await publicationService.cleanupExpired(); await studio.cleanupExpired(); } catch { console.warn('Private media cleanup could not complete; it will retry.'); }
+  try { await publicationService.cleanupExpired(); } catch { console.warn('Private media cleanup could not complete; it will retry.'); }
   finally { cleanupRunning=false; }
 };
 const cleanupTimer=setInterval(()=>void cleanup(),15*60*1000); cleanupTimer.unref();
