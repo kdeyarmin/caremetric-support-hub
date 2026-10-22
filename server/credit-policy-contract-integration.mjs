@@ -7,6 +7,8 @@ const databaseUrl=process.env.HUB_TEST_DATABASE_URL,local=new URL(databaseUrl);
 assert.equal(local.hostname,'127.0.0.1');assert.equal(local.port,'54322');
 const client=new pg.Client({connectionString:databaseUrl});
 const migration=await readFile(new URL('../supabase/migrations/20260911215751_learning_credit_policy_contract.sql',import.meta.url),'utf8');
+// The declaration requires its exact historical six-action shape; later migrations add catalog actions.
+const historicalIntents=await readFile(new URL('../supabase/migrations/20260911215749_learning_credit_policy_intents.sql',import.meta.url),'utf8');
 const readContract=async()=> (await client.query('select hub.get_backend_contract() as contract')).rows[0].contract;
 const fixtures=[
   'alter function private.learning_authoring_actions() rename to test_missing_policy_actions',
@@ -25,14 +27,14 @@ try {
   for(const fixture of fixtures) {
     await client.query('begin');
     try {
-      await client.query(fixture);const before=await readContract();await client.query('savepoint before_credit_declaration');
+      await client.query(historicalIntents);await client.query(fixture);const before=await readContract();await client.query('savepoint before_credit_declaration');
       await assert.rejects(()=>client.query(migration),error=>error.code==='55000');
       await client.query('rollback to savepoint before_credit_declaration');assert.deepEqual(await readContract(),before);
     } finally {await client.query('rollback');}
   }
   await client.query('begin');
   try {
-    const before=await readContract();await client.query(migration);assert.deepEqual(await readContract(),before);
+    await client.query(historicalIntents);const before=await readContract();await client.query(migration);assert.deepEqual(await readContract(),before);
     const withLater={...before,features:[...before.features,'fixture.independent-credit.v1']};
     const sql=(await client.query("select format('create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='''' as %L','select '||quote_literal($1::text)||'::jsonb') as sql",[JSON.stringify(withLater)])).rows[0].sql;
     await client.query(sql);await client.query(migration);assert.deepEqual(await readContract(),withLater);assertBackendContract(await readContract());

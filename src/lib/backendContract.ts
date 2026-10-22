@@ -12,6 +12,7 @@ export const REQUIRED_BACKEND_FEATURES = [
   "support.ai-usage.v1",
   "platform.admin.tenants.v1",
   "support.bulk-email.v1",
+  "learning.catalog-authoring.v1",
 ] as const;
 
 /** Additive features share the API version; the integer alone never proves readiness. */

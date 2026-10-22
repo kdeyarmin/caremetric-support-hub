@@ -1,8 +1,8 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { requestAdmin } from "../admin/transport";
 import { authoringOperationSchema, authoringInspectSchema, authoringPreviewSchema, authoringSourceViewSchema,
-  projectAuthoringResult, verifyAuthoringOutcome, governedStageResultSchema, type AuthoringOperation, type AuthoringPreview,
+  projectAuthoringResult, verifyAuthoringOutcome, governedStageResultSchema, correctionLabels, type AuthoringOperation, type AuthoringPreview,
   type AuthoringResult, type AuthoringSourceView, type DraftPatch } from "./authoringProtocol";
 import { validateGovernedCourse } from "../imports/governedLearningImport";
 import { DraftEditor } from "./DraftEditor";
@@ -16,6 +16,7 @@ import { CreditPolicyReview } from "./CreditPolicyReview";
 import type { CreditPolicyChanges } from "./creditPolicyProtocol";
 import { PackagePanel } from "./PackagePanel";
 import { DistributionPanel } from "./DistributionPanel";
+import { PublishedCorrectionEditor, type BlockCorrection } from "./PublishedCorrectionEditor";
 
 async function run(operation: AuthoringOperation) {
   const op = authoringOperationSchema.parse(operation);
@@ -23,6 +24,12 @@ async function run(operation: AuthoringOperation) {
   if (op.operation === "preserve_source") return governedStageResultSchema.parse(result);
   const projected = await projectAuthoringResult(result, op);
   return op.operation === "source" ? authoringSourceViewSchema.parse({ ...authoringSourceViewSchema.parse(result), ...projected }) : projected;
+}
+function PreviewExpiry({ expiresAt }: { expiresAt: string }) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
+  const seconds = Math.max(0, Math.ceil((Date.parse(expiresAt) - now) / 1000));
+  return <p>{seconds ? `Preview expires in ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}.` : "This preview expired. Start a new preview."}</p>;
 }
 export function AuthoringPanel({ courseId }: { courseId: string }) {
   const [catalog, setCatalog] = useState<z.infer<typeof authoringInspectSchema> | null>(null);
@@ -35,6 +42,7 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
   const [previewPatch, setPreviewPatch] = useState<DraftPatch | null>(null);
   const [previewStructure, setPreviewStructure] = useState<StructureChange[] | null>(null);
   const [previewPolicy, setPreviewPolicy] = useState<CreditPolicyChanges | null>(null);
+  const [previewCorrection, setPreviewCorrection] = useState<BlockCorrection | null>(null);
   const [editing, setEditing] = useState<"fields" | "structure" | "credit-policy" | "packages" | null>(null);
   const [editorGeneration, setEditorGeneration] = useState(0);
   const [working, setBusy] = useState(false); const [packageBusy, setPackageBusy] = useState(false);
@@ -44,7 +52,7 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
   const actionPending = useRef(false);
   const version = catalog?.versions.find(v => v.versionId === versionId);
   const material = source ? validateGovernedCourse(JSON.parse(source.payload)) : null;
-  const clearPreview = () => { setPreview(null); setResult(null); setPreviewPatch(null); setPreviewStructure(null); setPreviewPolicy(null); };
+  const clearPreview = () => { setPreview(null); setResult(null); setPreviewPatch(null); setPreviewStructure(null); setPreviewPolicy(null); setPreviewCorrection(null); };
   const clearSource = () => { setSource(null); setReviewed(false); setEditing(null); clearPreview(); };
   async function action(work: () => Promise<void>) {
     if (actionPending.current) return;
@@ -54,9 +62,9 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
     catch (caught) {
       const code = caught && typeof caught === "object" && "code" in caught ? caught.code : "upstream";
       if (code === "conflict" || code === "expired") { intents.current.clear(); setPreview(null); }
-      setError(code === "conflict" ? "The reviewed source or preview changed. Load the current material and review it again." :
-        code === "invalid_request" ? "Check the form. Source preservation also requires this CareBase course to be registered in the Hub catalog." :
-        code === "401" || code === "403" ? "A current administrator session in the Hub and CareBase is required." :
+      setError(code === "conflict" ? "The reviewed source or preview changed, or a video for the corrected lesson is still generating. Load the current material and review it again." :
+        code === "invalid_request" ? "Check the form. A correction must change the published text and cannot contain anything that looks like a credential. Source preservation also requires this CareBase course to be registered in the Hub catalog." :
+        code === "401" || code === "403" ? "A current administrator session in the Hub and CareBase is required. Unpublishing and corrections also need the current published version of an active global course." :
         "The request did not finish. Check the connection, then retry the same action. A completed native command will return its original result.");
     } finally { actionPending.current = false; setBusy(false); }
   }
@@ -64,7 +72,7 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
     const value = authoringInspectSchema.parse(await run({ operation: "inspect", courseId }));
     setCatalog(value); setVersionId(value.currentVersionId ?? value.versions[0]?.versionId ?? ""); clearSource(); intents.current.clear();
   }
-  async function prepare(action: AuthoringPreview["action"], patch?: DraftPatch, changes?: StructureChange[], creditPolicy?: CreditPolicyChanges) {
+  async function prepare(action: AuthoringPreview["action"], patch?: DraftPatch, changes?: StructureChange[], creditPolicy?: CreditPolicyChanges, correction?: BlockCorrection) {
     if (!source || !source.snapshotId || source.headRevision !== source.sourceRevision) throw new Error("Source review required");
     const parameters = { versionId, sourceRevision: source.sourceRevision };
     const common = { operation: "preview" as const, courseId, reason: reason.trim() };
@@ -73,6 +81,7 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
       : action === "learning.reviewDraft" ? { ...common, action, parameters: { ...parameters, reviewed: true as const } }
       : action === "learning.editStructure" ? { ...common, action, parameters: { ...parameters, changes: changes! } }
       : action === "learning.editCreditPolicy" ? { ...common, action, parameters: { ...parameters, ...creditPolicy! } }
+      : action === "learning.correctPublishedBlock" ? { ...common, action, parameters: { ...parameters, ...correction! } }
       : { ...common, action, parameters };
     const key = JSON.stringify(intent); let requestId = intents.current.get(key);
     if (!requestId) { requestId = crypto.randomUUID(); intents.current.set(key, requestId); }
@@ -80,7 +89,8 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
     if ((action === "learning.patchDraft" || action === "learning.editStructure" || action === "learning.editCreditPolicy") && nextPreview.after.aiReviewRequired !== material?.version.aiGenerated) throw new Error("Draft approval state mismatch");
     setPreview(nextPreview); setPreviewPatch(action === "learning.patchDraft" ? patch! : null);
     setPreviewStructure(action === "learning.editStructure" ? changes! : null);
-    setPreviewPolicy(action === "learning.editCreditPolicy" ? creditPolicy! : null); setResult(null);
+    setPreviewPolicy(action === "learning.editCreditPolicy" ? creditPolicy! : null);
+    setPreviewCorrection(action === "learning.correctPublishedBlock" ? correction! : null); setResult(null);
   }
   return <section className="admin-authoring" aria-label="CareBase course material and version controls">
     <h3>Course material and version controls</h3>
@@ -118,6 +128,15 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
         <label>Reason for change<textarea disabled={busy} value={reason} minLength={10} maxLength={500} onChange={event => { setReason(event.target.value); clearPreview(); }} /></label>
         {material.sourceVersionState === "published" && <><label>New draft title<input disabled={busy} value={title} maxLength={300} onChange={event => { setTitle(event.target.value); clearPreview(); }} /></label>
           <button type="button" className="button button-secondary" disabled={busy || reason.trim().length < 10 || !title.trim()} onClick={() => void action(() => prepare("learning.cloneVersion"))}>Preview new draft from this version</button></>}
+        {material.sourceVersionState === "published" && version?.status === "published" && catalog?.currentVersionId === versionId && <>
+          <PublishedCorrectionEditor key={"correction" + source.sourceRevision + editorGeneration} material={material} busy={busy || Boolean(result)}
+            reasonReady={reason.trim().length >= 10} onChange={clearPreview}
+            onPreview={correction => void action(() => prepare("learning.correctPublishedBlock", undefined, undefined, undefined, correction))} />
+          <div aria-label="Unpublish course"><h4>Unpublish this course</h4>
+            <p>Unpublishing archives the course so CareBase stops offering it. Only the course status changes: the published version, enrollments, completions and certificates stay as they are.</p>
+            <button type="button" className="button button-secondary" disabled={busy || Boolean(result) || reason.trim().length < 10}
+              onClick={() => void action(() => prepare("learning.unpublishCourse"))}>Preview unpublishing</button></div>
+        </>}
         {material.sourceVersionState === "draft" && <>
           {version?.governed && <><DraftEditor key={source.sourceRevision + editorGeneration} material={material} busy={busy || Boolean(result) || (editing !== null && editing !== "fields")} reasonReady={reason.trim().length >= 10}
             onChange={() => { clearPreview(); setEditing("fields"); }} onPreview={patch => void action(() => prepare("learning.patchDraft", patch))}
@@ -141,21 +160,28 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
       </div>}
     </>}
     {preview && <div className="learning-notice"><h4>Review the native change</h4>
-      <p>{{ "learning.cloneVersion": "Create a new draft", "learning.publishVersion": "Publish this version", "learning.patchDraft": "Save draft edits", "learning.reviewDraft": "Approve reviewed material", "learning.editStructure": "Save lesson and assessment changes", "learning.editCreditPolicy": "Save training credit policy" }[preview.action]}: {preview.after.title}, version {preview.after.versionNumber}.</p>
+      <p>{{ "learning.cloneVersion": "Create a new draft", "learning.publishVersion": "Publish this version", "learning.patchDraft": "Save draft edits", "learning.reviewDraft": "Approve reviewed material", "learning.editStructure": "Save lesson and assessment changes", "learning.editCreditPolicy": "Save training credit policy",
+        "learning.unpublishCourse": "Unpublish this course", "learning.correctPublishedBlock": "Correct a published lesson" }[preview.action]}: {preview.after.title}, version {preview.after.versionNumber}.</p>
+      {preview.action === "learning.unpublishCourse" && <p>Course status: {preview.before.status} to {preview.after.status}.</p>}
       {previewPatch && <details open><summary>Review the exact field changes</summary><pre>{JSON.stringify(previewPatch, null, 2)}</pre></details>}
       {previewStructure && material && <StructureReview material={material} changes={previewStructure} />}
       {previewPolicy && material && <CreditPolicyReview material={material} changes={previewPolicy} />}
-      <p>{preview.reason}</p><p>Preview expires {new Date(preview.expiresAt).toLocaleString()}.</p>
+      {previewCorrection && <details open><summary>Review the exact correction to {material?.blocks.find(block => block.id === previewCorrection.blockId)?.title || "the lesson"}</summary>
+        {Object.entries(previewCorrection.correction).map(([key, value]) => <div key={key}><strong>{correctionLabels[key as keyof typeof correctionLabels]}</strong><pre>{value}</pre></div>)}</details>}
+      <p>{preview.reason}</p><PreviewExpiry key={preview.commandId} expiresAt={preview.expiresAt} />
       <p>{preview.action === "learning.cloneVersion" ? "The published source stays intact. AI review and package acceptance must be completed for the new draft." :
         preview.action === "learning.publishVersion" ? "Publishing changes the version CareBase offers for new course activity." :
         preview.action === "learning.patchDraft" || preview.action === "learning.editStructure" || preview.action === "learning.editCreditPolicy" ? "These edits apply to the reviewed draft and clear its prior content approval." :
+        preview.action === "learning.unpublishCourse" ? "CareBase stops offering this course. The published version, enrollments, completions and certificates do not change." :
+        preview.action === "learning.correctPublishedBlock" ? "Every learner sees the corrected lesson right away. CareBase saves the old and new text with your reason in its audit log." :
         "This records your approval of the exact saved material. Later material changes invalidate this approval."}</p>
       <button type="button" className="button button-primary" disabled={busy || Boolean(result)} onClick={() => void action(async () => {
         setResult(verifyAuthoringOutcome(await run({ operation: "apply", commandId: preview.commandId, expectedDigest: preview.previewDigest }), preview));
-        setMessage("CareBase confirmed the change. Load course versions to review the result.");
+        setMessage(preview.action === "learning.correctPublishedBlock" ? "CareBase corrected the lesson. Load the course material and preserve it again before another correction."
+          : "CareBase confirmed the change. Load course versions to review the result.");
       })}>Confirm and apply this change</button>
     </div>}
-    {result && <p role="status">CareBase confirmed version {result.versionNumber} as {result.status}{result.replayed ? " (previously completed)" : ""}.</p>}
+    {result && <p role="status">{result.action === "learning.unpublishCourse" ? "CareBase archived this course" : `CareBase confirmed version ${result.versionNumber} as ${result.status}`}{result.replayed ? " (previously completed)" : ""}.</p>}
     {versionId && <CourseMediaReceiptRecovery key={courseId + versionId} courseId={courseId} versionId={versionId} disabled={busy || editing !== null} />}
     <details><summary>Provider details for all course versions</summary><ProviderPolicyPanel key={courseId} courseId={courseId} onApplied={()=>{clearSource();setCatalog(null);intents.current.clear();}}/></details>
     <DistributionPanel courseId={courseId} disabled={busy} />
