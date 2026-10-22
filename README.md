@@ -72,6 +72,12 @@ Apply `20261021160000_bulk_email.sql` and `20261021160100_bulk_email_contract.sq
 before deploying the bulk email release; connected builds require the
 `support.bulk-email.v1` contract feature. Sending needs `HUB_SENDGRID_API_KEY`.
 
+Apply `20261022120000_learning_catalog_authoring_intents.sql` and
+`20261022120100_learning_catalog_authoring_contract.sql` before deploying the
+[central course authoring](docs/CENTRAL_COURSE_AUTHORING.md) release: the course
+version controls can unpublish a course and correct a lesson of its live version,
+and connected builds require the `learning.catalog-authoring.v1` contract feature.
+
 CareBase courses can be [drafted with AI, and draft lessons regenerated or given an
 avatar video](docs/AI_COURSE_GENERATION.md), through CareBase's generation route. It
 needs no Hub migration.
