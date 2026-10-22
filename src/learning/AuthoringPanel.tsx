@@ -18,6 +18,7 @@ import { PackagePanel } from "./PackagePanel";
 import { DistributionPanel } from "./DistributionPanel";
 import { PublishedCorrectionEditor, type BlockCorrection } from "./PublishedCorrectionEditor";
 import { AvatarVideoPanel, BlockRegenerationPanel } from "./GenerationPanels";
+import { PackageDependencyPanel } from "./PackageDependencyPanel";
 
 async function run(operation: AuthoringOperation) {
   const op = authoringOperationSchema.parse(operation);
@@ -158,6 +159,9 @@ export function AuthoringPanel({ courseId }: { courseId: string }) {
               onBusy={setGenerationBusy} onRegenerated={() => { clearSource(); setMessage("CareBase regenerated the lesson and cleared the draft’s AI review. Load the course material, preserve it and review it again before publishing."); }} />
             <AvatarVideoPanel key={"video" + source.sourceRevision + editorGeneration} material={material} busy={busy || Boolean(result) || editing !== null}
               onBusy={setGenerationBusy} onAttached={() => { clearSource(); setMessage("The video is attached to the lesson. Load the course material and preserve it again before another change."); }} />
+            {version.unresolvedPackages > 0 && <PackageDependencyPanel key={"dependencies" + source.sourceRevision + editorGeneration} courseId={courseId} versionId={versionId}
+              material={material} disabled={busy || Boolean(result) || editing !== null}
+              onResolved={() => setMessage("Every package dependency is resolved. Load the course versions and preserve the material before previewing publication.")} />}
             {editing && !result && <><p>Finish this group of edits before starting another group or approving the draft.</p>
               <button type="button" disabled={busy} onClick={() => { clearPreview(); setEditing(null); setEditorGeneration(value => value + 1); }}>Discard unsaved edits</button></>}
           </>}

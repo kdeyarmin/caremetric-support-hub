@@ -2,7 +2,8 @@ import { AdminApiError } from "../admin/transport";
 import { portfolioClient } from "../admin/portfolioClient";
 import { config } from "../lib/config";
 import { packageCapabilities, packageContextViewSchema, packageOperationSchema, packageResultSchema, packageStageSchema, packageStatusSchema,
-  PACKAGE_MAX_BYTES, PACKAGE_RESPONSE_BYTES, type PackageOperation, type PackageContextView, type PackageStatus, type PackageResult, type PackageStage } from "./packageProtocol";
+  packageDependenciesSchema, packageResolutionSchema, PACKAGE_MAX_BYTES, PACKAGE_RESPONSE_BYTES, type PackageOperation, type PackageContextView,
+  type PackageStatus, type PackageResult, type PackageStage, type PackageDependency, type PackageResolution } from "./packageProtocol";
 
 export interface PackageClient {
   available(signal: AbortSignal): Promise<boolean>;
@@ -10,6 +11,8 @@ export interface PackageClient {
   status(operation: Extract<PackageOperation, { operation: "status" }>, signal: AbortSignal): Promise<PackageStatus>;
   stage(operation: Extract<PackageOperation, { operation: "upload" | "accept" }>, file: File | null, signal: AbortSignal): Promise<PackageStage>;
   finish(operation: Extract<PackageOperation, { operation: "finish" }>, signal: AbortSignal): Promise<PackageResult>;
+  dependencies(operation: Extract<PackageOperation, { operation: "dependencies" }>, signal: AbortSignal): Promise<PackageDependency[]>;
+  resolve(operation: Extract<PackageOperation, { operation: "resolve" }>, signal: AbortSignal): Promise<PackageResolution>;
 }
 export function encodePackageHeader(operation: PackageOperation): string {
   const bytes = new TextEncoder().encode(JSON.stringify(packageOperationSchema.parse(operation)));
@@ -59,4 +62,6 @@ export const packageClient: PackageClient = {
   status: async (operation, signal) => packageStatusSchema.parse(await request(operation, signal)),
   stage: async (operation, file, signal) => packageStageSchema.parse(await request(operation, signal, file)),
   finish: async (operation, signal) => packageResultSchema.parse(await request(operation, signal)),
+  dependencies: async (operation, signal) => packageDependenciesSchema.parse(await request(operation, signal)),
+  resolve: async (operation, signal) => packageResolutionSchema.parse(await request(operation, signal)),
 };

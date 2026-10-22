@@ -74,3 +74,28 @@ describe("closed package transport", () => {
     expect(() => parsePortfolioRequest({ product: "carebase", operation: "learning.packages.upload" })).toThrow();
   });
 });
+describe("package dependency resolution", () => {
+  const draft = "c2000000-0000-4000-8000-0000000000aa", source = "c2000000-0000-4000-8000-0000000000bb", replacement = "c2000000-0000-4000-8000-0000000000cc";
+  const course = "c2000000-0000-4000-8000-0000000000dd";
+  const envelope = (operation: string, data: unknown) => ({ contractVersion: 1, product: "carebase", operation, generatedAt: "2026-10-22T12:00:00Z", data });
+  it("accepts only a distinct replacement for a draft of this course", () => {
+    expect(packageOperationSchema.parse({ operation: "dependencies", courseId: course, versionId: draft })).toEqual({ operation: "dependencies", courseId: course, versionId: draft });
+    const resolve = { operation: "resolve", courseId: course, versionId: draft, sourcePackageId: source, replacementPackageId: replacement };
+    expect(packageOperationSchema.parse({ ...resolve, sourcePackageId: source.toUpperCase() })).toEqual(resolve);
+    for (const value of [{ ...resolve, replacementPackageId: source.toUpperCase() }, { ...resolve, courseId: undefined }, { ...resolve, reason: "not asked" },
+      { operation: "dependencies", versionId: draft }]) expect(packageOperationSchema.safeParse(value).success).toBe(false);
+    expect(nativePackageOperationSchema.safeParse({ operation: "resolve", versionId: draft, sourcePackageId: source, replacementPackageId: source }).success).toBe(false);
+  });
+  it("checks the dependency list and that a resolution names exactly what was sent", () => {
+    const row = { sourcePackageId: source, sourceSha256: "a".repeat(64), standard: "scorm_1_2", replacementPackageId: replacement, resolved: true };
+    const list = { operation: "dependencies" as const, versionId: draft };
+    expect(projectPackageResponse(envelope("dependencies", [row]), list)).toEqual([row]);
+    for (const data of [[row, row], [{ ...row, replacementPackageId: null }], [{ ...row, extra: true }], Array(101).fill(row)])
+      expect(() => projectPackageResponse(envelope("dependencies", data), list)).toThrow();
+    const op = { operation: "resolve" as const, versionId: draft, sourcePackageId: source, replacementPackageId: replacement };
+    const result = { versionId: draft, sourcePackageId: source, replacementPackageId: replacement, replacementSha256: "b".repeat(64) };
+    expect(projectPackageResponse(envelope("resolve", { ...result, replacementPackageId: replacement.toUpperCase() }), op)).toEqual(result);
+    expect(() => projectPackageResponse(envelope("resolve", { ...result, replacementPackageId: draft }), op)).toThrow();
+    expect(() => projectPackageResponse(envelope("dependencies", result), op)).toThrow();
+  });
+});

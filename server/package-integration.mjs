@@ -19,6 +19,8 @@ source.sourceCourseId=randomUUID();source.sourceVersionId=randomUUID();source.so
 const course=source.sourceCourseId,version=source.sourceVersionId;
 let payload=JSON.stringify(source),head=null,calls=0,stages=0,commits=0,lostStage=false,lostFinish=false,nativeRevoked=false,postAction=null,tamper=false;
 const revision=()=>digest(payload),rows=[],packages=new Map(),archive=Buffer.from('Synthetic archive fixture; real ZIP validation lives in native CI.');
+// The draft was cloned from a version with one package; native CI proves the real eligibility rules.
+const dependencyRows=[{sourcePackageId:randomUUID(),sourceSha256:digest('copied source package'),standard:'scorm_1_2',replacementPackageId:null,resolved:false}];
 await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'package-sms-owner@test.invalid',false)",[owner]);
 await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')",[owner]);
 await admin.query('insert into private.sms_identities(user_id,phone_e164) values($1,$2)',[owner,phone]);
@@ -64,6 +66,13 @@ const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(u
     }
     if(lostFinish){lostFinish=false;throw new Error('Synthetic response lost after native commit');}
     return done(tamper?{...row.result,sourceSha256:'f'.repeat(64)}:row.result);
+  }
+  if(op.operation==='dependencies')return op.versionId===version?done(dependencyRows):denied(404);
+  if(op.operation==='resolve'){
+    const dependency=dependencyRows.find(value=>value.sourcePackageId===op.sourcePackageId);if(op.versionId!==version||!dependency)return denied(404);
+    const replacement=packages.get(op.replacementPackageId);if(replacement?.status!=='accepted')return denied(409);
+    Object.assign(dependency,{replacementPackageId:replacement.id,resolved:true});
+    return done({versionId:version,sourcePackageId:op.sourcePackageId,replacementPackageId:replacement.id,replacementSha256:replacement.contentSha256});
   }
   assert.ok(['upload','accept'].includes(op.operation));
   let row=rows.find(value=>value.session===actor.session_id&&value.request.requestId===op.requestId);
@@ -128,6 +137,16 @@ try{
   const acceptedStage=await command(accept);expectStatus(acceptedStage,200);assert.equal(commits,1);
   const acceptRow=rows[1];tamper=true;expectStatus(await finish(acceptRow),503);tamper=false;assert.equal(commits,2);
   expectStatus(await finish(acceptRow),200);assert.equal(commits,2);await preserve();
+  // A cloned draft names a separately accepted package in this draft for each copied package.
+  const dependencies={operation:'dependencies',courseId:course,versionId:version};
+  const listed=await command(dependencies);expectStatus(listed,200);assert.deepEqual(listed.body.map(value=>value.resolved),[false]);
+  const resolve={operation:'resolve',courseId:course,versionId:version,sourcePackageId:dependencyRows[0].sourcePackageId,replacementPackageId:row.packageId};
+  const beforeSame=calls;expectStatus(await command({...resolve,replacementPackageId:resolve.sourcePackageId.toUpperCase()}),400);assert.equal(calls,beforeSame);
+  expectStatus(await command({...resolve,courseId:randomUUID()}),409); // the draft must belong to this course
+  expectStatus(await command({...resolve,replacementPackageId:randomUUID()}),409);
+  expectStatus(await command({...resolve,sourcePackageId:randomUUID()}),404);
+  const resolved=await command(resolve);expectStatus(resolved,200);assert.equal(resolved.body.replacementPackageId,row.packageId);
+  assert.deepEqual((await command(dependencies)).body.map(value=>value.resolved),[true]);
   // Current authority is re-entered after a successful remote response.
   postAction={operation:'context',run:()=>admin.query('update private.staff_permissions set revoked_at=now() where user_id=$1',[owner])};
   expectStatus(await command(ctx),401);await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
