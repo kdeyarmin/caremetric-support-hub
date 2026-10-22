@@ -252,3 +252,6 @@
 .control-variables span.is-missing { background: #fdecdc; color: #8a3d0a; }
 .control-variables span.is-optional { background: #f1f5f9; color: var(--muted); }
 .control-panel-footer.control-chips { margin-top: auto; }
+.admin-record-list { list-style: none; margin: 16px 0 0; padding: 0; }
+.admin-record-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.admin-record-list li button { margin-left: auto; }

@@ -1,5 +1,6 @@
 import { HttpError } from './sms-auth.mjs';
 
+const learningValidation=['https://cmcarebase.com/api/learning-admin/authoring','https://cmcarebase.com/api/learning-admin/catalog'];
 /** Fixed registry destinations only; callers never supply a URL or header name. */
 export async function callNativeAdmin(fetcher, target, authorizationHeader, capability, operation, project, command = false, parentSignal, maximumBytes = 1000000) {
   const trainingReport = target === 'https://cmcarebase.com/api/platform-admin/training'
@@ -17,6 +18,8 @@ export async function callNativeAdmin(fetcher, target, authorizationHeader, capa
       if (trainingReport && response.status===413) throw new HttpError(413,'Narrow the report filters before exporting.','report_too_large');
       if (target==='https://cmcarebase.com/api/platform-admin/training' && response.status===400) throw new HttpError(400,'Review the training request and try again.','invalid_request');
       if (command && response.status===409) throw new HttpError(409,'The preview changed or expired. Reload before creating another preview.','conflict');
+      // Learning commands validate records CareBase can see and the Hub cannot, such as an unavailable course.
+      if (learningValidation.includes(target) && response.status===400) throw new HttpError(400,'Review the request and try again.','invalid_request');
       throw new HttpError(503,'Administrator connection is unavailable.','upstream');
     }
     if (!response.body) throw new Error('Missing response');
