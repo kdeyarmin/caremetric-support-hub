@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import fixture from "../imports/fixtures/governedCourse.json";
 import { sourceDigest } from "../imports/governedLearningImport";
 import { authoringOperationSchema, draftPatchSchema, projectAuthoringResult, verifyAuthoringOutcome } from "./authoringProtocol";
@@ -81,4 +81,42 @@ it("accepts only an unchanged publication state with the intended version becomi
     await expect(projectAuthoringResult({ ...value, after }, op)).rejects.toThrow();
   await expect(projectAuthoringResult({ ...value, expiresAt: "September 11, 2099" }, op)).rejects.toThrow();
   await expect(projectAuthoringResult({ ...value, expiresAt: new Date(Date.now() + 600_000).toISOString() }, op)).rejects.toThrow();
+});
+describe("central catalog commands", () => {
+  const block = fixture.blocks.find(value => value.type === "text")!.id;
+  const parameters = { versionId: fixture.sourceVersionId, sourceRevision: sha };
+  const unpublish = { ...command, action: "learning.unpublishCourse" as const, parameters, reason: "Superseded by the 2027 fire safety course" };
+  const correct = { ...command, action: "learning.correctPublishedBlock" as const, reason: "Dose typo reported by facility nurse",
+    parameters: { ...parameters, blockId: block, correction: { content: "Give 5 mg, not 50 mg." } } };
+  const identity = { courseId: fixture.sourceCourseId, versionId: fixture.sourceVersionId, versionNumber: 2, title: "Original", currentVersionId: fixture.sourceVersionId };
+  const before = { ...identity, status: "published" as const, sourceRevision: sha };
+  const catalogPreview = (action: "learning.unpublishCourse" | "learning.correctPublishedBlock", status: "archived" | "published", reason: string) =>
+    ({ commandId: id, courseId: fixture.sourceCourseId, action, reason, previewDigest: sha, expiresAt: new Date(Date.now() + 240000).toISOString(), before, after: { ...identity, status } });
+  it("accepts only exact corrections a published lesson allows", () => {
+    expect(authoringOperationSchema.parse(unpublish)).toEqual(unpublish);
+    expect(authoringOperationSchema.parse(correct)).toEqual(correct);
+    expect(authoringOperationSchema.safeParse({ ...correct, parameters: { ...correct.parameters, correction: { title: "Fixed", transcript: "Line one\n\tLine two" } } }).success).toBe(true);
+    for (const correction of [{}, { content: "" }, { title: "" }, { title: "Two\nlines" }, { title: " padded" }, { content: "bad\u0007bell" },
+      { content: "x".repeat(12_001) }, { videoUrl: "https://asset.invalid" }, { quiz: [] }])
+      expect(authoringOperationSchema.safeParse({ ...correct, parameters: { ...correct.parameters, correction } }).success).toBe(false);
+    expect(authoringOperationSchema.safeParse({ ...unpublish, parameters: { ...parameters, blockId: block } }).success).toBe(false);
+    expect(authoringOperationSchema.safeParse({ ...correct, parameters: { ...correct.parameters, blockId: "not-a-block" } }).success).toBe(false);
+  });
+  it.each([["learning.unpublishCourse", "archived"], ["learning.correctPublishedBlock", "published"]] as const)("pins %s to the current published version", async (action, status) => {
+    const op = action === "learning.unpublishCourse" ? unpublish : correct;
+    const value = catalogPreview(action, status, op.reason);
+    expect(await projectAuthoringResult(value, op)).toEqual(value);
+    for (const after of [{ status: action === "learning.unpublishCourse" ? "published" : "archived" }, { versionNumber: 3 }, { sourceRevision: sha }, { currentVersionId: id }])
+      await expect(projectAuthoringResult({ ...value, after: { ...value.after, ...after } }, op)).rejects.toThrow();
+    for (const changed of [{ status: "archived" }, { status: "draft" }, { currentVersionId: id }])
+      await expect(projectAuthoringResult({ ...value, before: { ...before, ...changed } }, op)).rejects.toThrow();
+    const result = { commandId: id, action, courseId: fixture.sourceCourseId, versionId: fixture.sourceVersionId, versionNumber: 2, status,
+      appliedAt: new Date().toISOString(), replayed: false, sourceRevision: "b".repeat(64) };
+    expect(verifyAuthoringOutcome(result, value)).toEqual(result);
+    const { sourceRevision: digest, ...withoutDigest } = result;
+    expect(digest).toMatch(/^[0-9a-f]{64}$/);
+    expect(() => verifyAuthoringOutcome(withoutDigest, value)).toThrow();
+    expect(() => verifyAuthoringOutcome({ ...result, status: status === "archived" ? "published" : "archived" }, value)).toThrow();
+    expect(() => verifyAuthoringOutcome({ ...result, versionId: id }, value)).toThrow();
+  });
 });

@@ -19,7 +19,7 @@ const owner=randomUUID(),item=randomUUID(),phone='+12025550401';
 const source=JSON.parse(readFileSync(new URL('../src/imports/fixtures/governedCourse.json',import.meta.url)));
 source.sourceCourseId=randomUUID();source.sourceVersionId=randomUUID();
 const course=source.sourceCourseId,version=source.sourceVersionId;
-let payload=JSON.stringify(source),nativeRevoked=false,writes=0,calls=0,tamperOutcome=false,revokeAfterPolicy=false;
+let payload=JSON.stringify(source),nativeRevoked=false,writes=0,catalogWrites=0,calls=0,tamperOutcome=false,revokeAfterPolicy=false;
 const revision=()=>digest(payload),commands=new Map();
 await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'authoring-sms-owner@test.invalid',false)",[owner]);
 await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')",[owner]);
@@ -47,6 +47,13 @@ const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(u
       row={commandId:randomUUID(),courseId:course,action:op.action,reason:op.reason,previewDigest:digest(JSON.stringify(op)),expiresAt:new Date(Date.now()+240000).toISOString(),before,after};
       Object.defineProperty(row,'parameters',{value:op.parameters,enumerable:false});commands.set(op.requestId,row);
     }
+    if(!row && ['learning.unpublishCourse','learning.correctPublishedBlock'].includes(op.action)) {
+      // "status" is the course's publication state; neither command changes the version.
+      const before={courseId:course,versionId:version,versionNumber:2,status:'published',title:source.version.title,currentVersionId:version,sourceRevision:revision()};
+      const after={...before,status:op.action==='learning.unpublishCourse'?'archived':'published'};delete after.sourceRevision;
+      row={commandId:randomUUID(),courseId:course,action:op.action,reason:op.reason,previewDigest:digest(JSON.stringify(op)),expiresAt:new Date(Date.now()+240000).toISOString(),before,after};
+      Object.defineProperty(row,'parameters',{value:op.parameters,enumerable:false});commands.set(op.requestId,row);
+    }
     if(!row){row={commandId:randomUUID(),courseId:course,action:op.action,reason:op.reason,previewDigest:digest(JSON.stringify(op)),expiresAt:new Date(Date.now()+240000).toISOString(),
       before:{courseId:course,versionId:version,currentVersionId:version,sourceRevision:revision(),status:'published',versionNumber:2,title:source.version.title},
       after:{status:'draft',versionNumber:3,title:op.parameters.title,aiReviewRequired:false,sourceVersionId:version}};commands.set(op.requestId,row);}
@@ -56,6 +63,17 @@ const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(u
   if(!preview||preview.previewDigest!==op.expectedDigest)return Response.json({error:{code:'conflict'}},{status:409});
   if(preview.result)return Response.json({...preview.result,replayed:true});
   if(preview.before.sourceRevision!==revision())return Response.json({error:{code:'conflict'}},{status:409});
+  if(['learning.unpublishCourse','learning.correctPublishedBlock'].includes(preview.action)) {
+    if(preview.action==='learning.correctPublishedBlock') {
+      const block=source.blocks.find(b=>b.id===preview.parameters.blockId),correction=preview.parameters.correction;assert.ok(block);
+      if(Object.hasOwn(correction,'title'))block.title=correction.title;
+      for(const key of ['content','transcript'])if(Object.hasOwn(correction,key))block.body[key]=correction[key];
+      payload=JSON.stringify(source);
+    }
+    const result={commandId:preview.commandId,courseId:course,action:preview.action,versionId:version,versionNumber:2,
+      status:preview.after.status,sourceRevision:revision(),appliedAt:new Date().toISOString(),replayed:false};
+    catalogWrites++;Object.defineProperty(preview,'result',{value:result,enumerable:false});return Response.json(result);
+  }
   if(['learning.patchDraft','learning.reviewDraft','learning.editStructure','learning.editCreditPolicy'].includes(preview.action)) {
     if(preview.action==='learning.patchDraft') {
       const patch=preview.parameters.patch;
@@ -154,6 +172,39 @@ try {
   payload+=' ';assert.equal((await author({operation:'apply',commandId:driftPreview.body.commandId,expectedDigest:driftPreview.body.previewDigest})).status,409);
   const next=await author({...preserve,sourceRevision:revision(),expectedHeadRevision:preserve.sourceRevision});assert.equal(next.status,200,JSON.stringify(next.body));
   assert.equal((await author(apply)).status,200);assert.equal(writes,1); // preserved head advances without invalidating a completed native receipt
+  // Unpublish and published-lesson corrections bind to the preserved current published
+  // version exactly like the draft commands, through the same ticket, ledger and receipts.
+  const preserveCurrent=async()=>{
+    const loaded=await author(sourceOp);assert.equal(loaded.status,200,JSON.stringify(loaded.body));
+    assert.equal((await author({...preserve,sourceRevision:revision(),expectedHeadRevision:loaded.body.headRevision})).status,200);
+  };
+  await preserveCurrent();
+  const lesson=source.blocks.find(block=>block.type==='text');
+  const correctionOp={operation:'preview',requestId:randomUUID(),action:'learning.correctPublishedBlock',courseId:course,
+    parameters:{versionId:version,sourceRevision:revision(),blockId:lesson.id,correction:{content:'Give 5 mg, not 50 mg.'}},reason:'Dose typo reported by facility nurse'};
+  for(const correction of [{},{content:''},{videoUrl:'https://asset.invalid'},{title:'Two\nlines'}])
+    assert.equal((await author({...correctionOp,requestId:randomUUID(),parameters:{...correctionOp.parameters,correction}})).status,400);
+  const correctionPreview=await author(correctionOp);assert.equal(correctionPreview.status,200,JSON.stringify(correctionPreview.body));
+  assert.equal(correctionPreview.body.after.status,'published');assert.equal(correctionPreview.body.after.sourceRevision,undefined);
+  const correctionApply={operation:'apply',commandId:correctionPreview.body.commandId,expectedDigest:correctionPreview.body.previewDigest};
+  const corrected=await author(correctionApply);assert.equal(corrected.status,200,JSON.stringify(corrected.body));
+  assert.equal(corrected.body.sourceRevision,revision());assert.equal(lesson.body.content,'Give 5 mg, not 50 mg.');assert.equal(catalogWrites,1);
+  assert.equal((await author(correctionApply)).body.replayed,true);assert.equal(catalogWrites,1);
+  const unpublishOp=()=>({operation:'preview',requestId:randomUUID(),action:'learning.unpublishCourse',courseId:course,
+    parameters:{versionId:version,sourceRevision:revision()},reason:'Superseded by the 2027 fire safety course'});
+  const beforeStale=calls;assert.equal((await author(unpublishOp())).status,409);assert.equal(calls,beforeStale); // corrected source is not yet preserved
+  await preserveCurrent();
+  const unpublishPreview=await author(unpublishOp());assert.equal(unpublishPreview.status,200,JSON.stringify(unpublishPreview.body));
+  assert.equal(unpublishPreview.body.before.status,'published');assert.equal(unpublishPreview.body.after.status,'archived');
+  const unpublishApply={operation:'apply',commandId:unpublishPreview.body.commandId,expectedDigest:unpublishPreview.body.previewDigest};
+  const unpublished=await author(unpublishApply);assert.equal(unpublished.status,200,JSON.stringify(unpublished.body));
+  assert.equal(unpublished.body.status,'archived');assert.equal(catalogWrites,2);
+  const {sourceRevision:unpublishedDigest,...unpublishedWithoutDigest}=unpublished.body;assert.equal(unpublishedDigest,revision());
+  await assert.rejects(withSession(pool,jar[sessionCookie],db=>db.query('select hub.record_learning_authoring_result($1,$2,$3::jsonb)',
+    [unpublishApply.commandId,unpublishApply.expectedDigest,JSON.stringify(unpublishedWithoutDigest)])),error=>error.code==='22023');
+  await assert.rejects(withSession(pool,jar[sessionCookie],db=>db.query('select hub.record_learning_authoring_result($1,$2,$3::jsonb)',
+    [unpublishApply.commandId,unpublishApply.expectedDigest,JSON.stringify({...unpublished.body,status:'published'})])),error=>error.code==='22023');
+  await preserveCurrent();
   // Same real SMS/HTTP/delegation/SQL lane accepts bounded edits larger than
   // receipt requests, requires preservation after changes, and pins new receipts.
   source.sourceVersionState='draft';source.version.aiGenerated=true;source.version.aiReviewedAt=null;payload=JSON.stringify(source);
@@ -234,6 +285,6 @@ try {
   await admin.query('update private.staff_permissions set revoked_at=now() where user_id=$1',[owner]);assert.equal((await author(apply)).status,401);
   await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
   await admin.query('update private.sms_identities set revoked_at=now() where user_id=$1',[owner]);assert.equal((await author(apply)).status,401);
-  assert.equal(Number((await admin.query("select count(*) from private.audit_events where actor_id=$1 and action='learning.authoring.applied'",[owner])).rows[0].count),6);
-  console.log('Authoring PostgreSQL/HTTP integration passed: source preservation, clone/edit/review/structure/credit policy, explicit credit removals and lossless preservation, post-write revocation recovery, incomplete draft assessments, complete weighted answers, exact digest receipts, large bounded edits, native/Hub revocation and immutable replay.');
+  assert.equal(Number((await admin.query("select count(*) from private.audit_events where actor_id=$1 and action='learning.authoring.applied'",[owner])).rows[0].count),8);
+  console.log('Authoring PostgreSQL/HTTP integration passed: source preservation, unpublish and published-lesson correction, clone/edit/review/structure/credit policy, explicit credit removals and lossless preservation, post-write revocation recovery, incomplete draft assessments, complete weighted answers, exact digest receipts, large bounded edits, native/Hub revocation and immutable replay.');
 } finally {await new Promise(resolve=>server.close(resolve));await pool.end();await admin.end();}
