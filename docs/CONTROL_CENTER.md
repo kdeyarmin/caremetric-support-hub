@@ -70,7 +70,6 @@ and a link to the setup steps:
 | Website chat | `HUB_CHAT_ENABLED` |
 | Webhook origin | `HUB_PUBLIC_ORIGIN` |
 | SMS sign-in (Telnyx) | `HUB_TELNYX_API_KEY`, `HUB_TELNYX_VERIFY_PROFILE_ID` |
-| DocStudio render worker | `DOCSTUDIO_WORKER_TOKEN` |
 | CareBase course distribution observer | `CAREBASE_DISTRIBUTION_OBSERVER_TOKEN` |
 
 A flag such as `HUB_CHAT_ENABLED` satisfies its integration only when it is exactly
