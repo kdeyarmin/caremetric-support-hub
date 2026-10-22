@@ -23,8 +23,8 @@ Product names appear with their repository names so each app is easy to find.
   provider settings (or `HUB_CHAT_ENABLED`) are set. See
   [unified communications](docs/UNIFIED_COMMUNICATIONS.md).
 - **Knowledge** (`/knowledge`): shared and app-specific articles for every
-  application, with per-app coverage and a direct "Write an article" path into
-  DocStudio. Healthcare Advisors' published FAQ is included.
+  application, with per-app coverage. Healthcare Advisors' published FAQ is
+  included.
 - **Tenants & pricing** (`/admin/tenants`): set up customer tenants by hand,
   choose their applications and record each subscription's price per month or
   per year, or make it complimentary (free) with a reason and an optional end

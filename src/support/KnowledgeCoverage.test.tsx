@@ -22,13 +22,13 @@ describe("knowledge coverage", () => {
       { slug: "advisors", published: 1, appSpecific: 0, shared: 1 },
     ]);
   });
-  it("flags applications without their own articles, filters on click, and links to authoring", () => {
+  it("flags applications without their own articles and filters on click", () => {
     const onSelect = vi.fn();
-    render(<MemoryRouter><KnowledgeCoverage products={products} content={content} selectedProductId="all" onSelect={onSelect} canWrite /></MemoryRouter>);
+    render(<MemoryRouter><KnowledgeCoverage products={products} content={content} selectedProductId="all" onSelect={onSelect} /></MemoryRouter>);
     expect(screen.getAllByText("Needs app-specific articles")).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: /Healthcare Advisors/ }));
     expect(onSelect).toHaveBeenCalledWith("p-advisors");
-    expect(screen.getByRole("link", { name: "Write an article for Healthcare Advisors" }).getAttribute("href")).toBe("/docstudio?product=advisors");
+    expect(screen.queryByRole("link", { name: /Write an article/ })).toBeNull();
     expect(screen.queryByText("Retired app")).toBeNull();
   });
   it("accepts the repository names the owner uses for each application", () => {

@@ -50,7 +50,7 @@ describe('integration setup report', () => {
     const names = integrationCatalog.flatMap((integration) => integration.variables.map((variable) => variable.name));
     expect(new Set(names).size).toBe(names.length);
     for (const name of ['ANTHROPIC_API_KEY', 'HUB_TWILIO_AUTH_TOKEN', 'HUB_TWILIO_ACCOUNT_SID', 'HUB_SENDGRID_INBOUND_PUBLIC_KEY', 'HUB_SENDGRID_API_KEY',
-      'HUB_CHAT_ENABLED', 'HUB_PUBLIC_ORIGIN', 'HUB_TELNYX_API_KEY', 'HUB_TELNYX_VERIFY_PROFILE_ID', 'DOCSTUDIO_WORKER_TOKEN', 'CAREBASE_DISTRIBUTION_OBSERVER_TOKEN']) {
+      'HUB_CHAT_ENABLED', 'HUB_PUBLIC_ORIGIN', 'HUB_TELNYX_API_KEY', 'HUB_TELNYX_VERIFY_PROFILE_ID', 'CAREBASE_DISTRIBUTION_OBSERVER_TOKEN']) {
       expect(names).toContain(name);
     }
     for (const integration of integrationCatalog) expect(integration.docs).toMatch(/^docs\/[A-Z0-9_]+\.md$/);
