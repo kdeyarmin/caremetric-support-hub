@@ -46,8 +46,6 @@ export const integrationCatalog = Object.freeze([
       { name: 'HUB_TELNYX_API_KEY', secret: true, required: true, purpose: 'Telnyx API key.' },
       { name: 'HUB_TELNYX_VERIFY_PROFILE_ID', secret: false, required: true, purpose: 'Telnyx Verify profile that issues the codes.' },
     ] },
-  { id: 'docstudio', name: 'DocStudio render worker', purpose: 'Authorizes the worker that renders learning videos for DocStudio.', docs: 'docs/DOCSTUDIO_RUNTIME.md',
-    variables: [{ name: 'DOCSTUDIO_WORKER_TOKEN', secret: true, required: true, purpose: 'Shared token the worker presents.' }] },
   { id: 'carebase-distribution', name: 'CareBase course distribution observer', purpose: 'Lets the Hub observe shared course availability in CareBase.', docs: 'docs/SHARED_COURSE_DISTRIBUTION.md',
     variables: [{ name: 'CAREBASE_DISTRIBUTION_OBSERVER_TOKEN', secret: true, required: true, purpose: 'Token CareBase issued to the Hub observer.' }] },
 ]);
