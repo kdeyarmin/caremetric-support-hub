@@ -72,6 +72,10 @@ Apply `20261021160000_bulk_email.sql` and `20261021160100_bulk_email_contract.sq
 before deploying the bulk email release; connected builds require the
 `support.bulk-email.v1` contract feature. Sending needs `HUB_SENDGRID_API_KEY`.
 
+The CareBase courses view includes the [training library](docs/TRAINING_LIBRARY.md):
+elective collections, refresher lessons, course discovery details and starter kits,
+saved through CareBase's catalog route. It needs no Hub migration.
+
 The Super Admin workspace now includes [facility training management](docs/FACILITY_TRAINING.md): create training-only facilities, invite administrators and students, manage enrollment and progress, open issued certificates, run complete printable/CSV reports and manage module access terms through the Hub session. Shared support, phone routing, course, onboarding and security workspaces are reachable from the same Admin page. The native CareBase `training.v1` capability gates these controls; deploy its migrations and adapter before this Hub update. Live owner verification remains separate from fixture testing.
 
 CareBase organizations now have a reviewed [Stripe billing portal workflow](docs/BILLING_PORTAL.md)

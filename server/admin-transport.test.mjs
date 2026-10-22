@@ -33,6 +33,12 @@ describe('application server native transport',()=>{
   it.each([()=>Response.json({wrong:'contract'}),()=>new Response('private upstream error')])('hides malformed producer responses',async(makeResponse)=>{
     await expect(call(async()=>makeResponse(),()=>{throw new Error('private producer fields');})).rejects.toMatchObject({status:503,message:'Administrator connection is unavailable.'});
   });
+  it('reports CareBase validation only for the learning command routes',async()=>{
+    const refused=async()=>Response.json({error:{code:'invalid_request',detail:'private'}},{status:400});
+    for(const learning of ['https://cmcarebase.com/api/learning-admin/authoring','https://cmcarebase.com/api/learning-admin/catalog'])
+      await expect(callNativeAdmin(refused,learning,'Authorization',capability,operation,value=>value,true)).rejects.toMatchObject({status:400,code:'invalid_request'});
+    await expect(callNativeAdmin(refused,'https://cmcarebase.com/api/learning-admin/provider','Authorization',capability,operation,value=>value,true)).rejects.toMatchObject({status:503,code:'upstream'});
+  });
   it('preserves an ambiguous command conflict without automatically issuing another request',async()=>{
     const fetcher=vi.fn(async()=>new Response('private stale target state',{status:409}));
     await expect(call(fetcher,undefined,true)).rejects.toMatchObject({status:409,code:'conflict'});
