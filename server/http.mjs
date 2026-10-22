@@ -296,13 +296,13 @@ export function appServer({auth,gateway,delegations,publications,docstudio,aiCas
           if(url.search)throw new HttpError(400,'Invitation query parameters are not supported.');
           return json(await delegations.registration.admin(session,await jsonBody(req,4096)));
         }
-        if(['/api/admin/training','/api/admin/configuration','/api/admin/pennsync-migration','/api/admin/learning','/api/admin/authoring','/api/admin/provider','/api/admin/learning-catalog','/api/admin/course-creation','/api/admin/course-distribution','/api/admin/billing-command','/api/admin/checkout-command','/api/admin/onboarding'].includes(path) && req.method==='POST') {
+        if(['/api/admin/training','/api/admin/configuration','/api/admin/pennsync-migration','/api/admin/learning','/api/admin/authoring','/api/admin/provider','/api/admin/learning-catalog','/api/admin/learning-generation','/api/admin/course-creation','/api/admin/course-distribution','/api/admin/billing-command','/api/admin/checkout-command','/api/admin/onboarding'].includes(path) && req.method==='POST') {
           if(path==='/api/admin/training'&&url.search)throw new HttpError(400,'Training query parameters are not supported.','invalid_request');
           if(path==='/api/admin/course-distribution'&&url.search)throw new HttpError(400,'Distribution query parameters are not supported.');
-          const body=await jsonBody(req,path.endsWith('/learning-catalog')?65536:path.endsWith('/authoring')||path.endsWith('/provider')||path.endsWith('/course-creation')||path.endsWith('/course-distribution')?32768:4096);const controller=new AbortController();
+          const body=await jsonBody(req,path.endsWith('/learning-generation')?262144:path.endsWith('/learning-catalog')?65536:path.endsWith('/authoring')||path.endsWith('/provider')||path.endsWith('/course-creation')||path.endsWith('/course-distribution')?32768:4096);const controller=new AbortController();
           const abort=()=>{if(!res.writableEnded)controller.abort();};
           req.once('aborted',abort);res.once('close',abort);
-          try {return json(await delegations[path.endsWith('/training')?'training':path.endsWith('/configuration')?'configuration':path.endsWith('/pennsync-migration')?'pennsyncMigration':path.endsWith('/provider')?'provider':path.endsWith('/learning-catalog')?'catalog':path.endsWith('/course-distribution')?'distribution':path.endsWith('/course-creation')?'creation':path.endsWith('/onboarding')?'onboarding':path.endsWith('/checkout-command')?'checkoutCommand':path.endsWith('/billing-command')?'billingCommand':path.endsWith('/authoring')?'authoring':'learning'](session,body,controller.signal));}
+          try {return json(await delegations[path.endsWith('/training')?'training':path.endsWith('/configuration')?'configuration':path.endsWith('/pennsync-migration')?'pennsyncMigration':path.endsWith('/provider')?'provider':path.endsWith('/learning-catalog')?'catalog':path.endsWith('/learning-generation')?'generation':path.endsWith('/course-distribution')?'distribution':path.endsWith('/course-creation')?'creation':path.endsWith('/onboarding')?'onboarding':path.endsWith('/checkout-command')?'checkoutCommand':path.endsWith('/billing-command')?'billingCommand':path.endsWith('/authoring')?'authoring':'learning'](session,body,controller.signal));}
           finally {req.removeListener('aborted',abort);res.removeListener('close',abort);}
         }
         if(path==='/api/media/sign' && req.method==='POST') {
@@ -346,7 +346,7 @@ export function appServer({auth,gateway,delegations,publications,docstudio,aiCas
       if(res.headersSent) { res.destroy(); return; }
       const status=error instanceof HttpError?error.status:error?.code==='28000'?401:error?.code==='42501'?403:500;
       const message=error instanceof HttpError?error.message:error?.code==='P0001'?'The action could not be completed. Check the form and try again.':status===401?'Sign in with an SMS code to continue.':status===403?'You do not have access to this action.':'The service is temporarily unavailable.';
-      json({error:error instanceof HttpError && error.code ? {code:error.code} : message},status);
+      json({error:error instanceof HttpError && error.code ? {code:error.code,...(typeof error.publicMessage==='string'?{message:error.publicMessage}:{})} : message},status);
     }
   });
 }

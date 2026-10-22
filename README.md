@@ -82,6 +82,10 @@ The CareBase courses view includes the [training library](docs/TRAINING_LIBRARY.
 elective collections, refresher lessons, course discovery details and starter kits,
 saved through CareBase's catalog route. It needs no Hub migration.
 
+CareBase courses can be [drafted with AI, and draft lessons regenerated or given an
+avatar video](docs/AI_COURSE_GENERATION.md), through CareBase's generation route. It
+needs no Hub migration.
+
 The Super Admin workspace now includes [facility training management](docs/FACILITY_TRAINING.md): create training-only facilities, invite administrators and students, manage enrollment and progress, open issued certificates, run complete printable/CSV reports and manage module access terms through the Hub session. Shared support, phone routing, course, onboarding and security workspaces are reachable from the same Admin page. The native CareBase `training.v1` capability gates these controls; deploy its migrations and adapter before this Hub update. Live owner verification remains separate from fixture testing.
 
 CareBase organizations now have a reviewed [Stripe billing portal workflow](docs/BILLING_PORTAL.md)

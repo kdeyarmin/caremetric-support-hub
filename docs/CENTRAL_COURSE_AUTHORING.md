@@ -11,8 +11,8 @@ audit row.
 | `learning.unpublishCourse` | Course version controls: **Unpublish this course** | Shipped |
 | `learning.correctPublishedBlock` | Course version controls: **Correct a published lesson** | Shipped |
 | Training library curation (`/api/learning-admin/catalog`) | CareBase courses view: **Training library** ([details](TRAINING_LIBRARY.md)) | Shipped |
-| AI drafting and block regeneration (`/api/learning-generation/run`) | Draft with AI, Regenerate with AI | Not yet |
-| Avatar video generation (`/api/learning-generation/run`) | Generate video | Not yet |
+| AI drafting and block regeneration (`/api/learning-generation/run`) | **Draft a course with AI** and **Regenerate a lesson with AI** ([details](AI_COURSE_GENERATION.md)) | Shipped, single courses only |
+| Avatar video generation (`/api/learning-generation/run`) | **Generate an avatar video** ([details](AI_COURSE_GENERATION.md#avatar-video)) | Shipped |
 | Package dependency resolution (`/api/learning-admin/package`) | Replace packages | Not yet |
 
 ## Unpublish and published-lesson corrections
