@@ -124,6 +124,7 @@ jobs:
           node server/credit-policy-contract-integration.mjs
           node server/provider-integration.mjs
           node server/catalog-integration.mjs
+          node server/generation-integration.mjs
           node server/course-media-integration.mjs
           node server/media-contract-integration.mjs
           node server/creation-integration.mjs

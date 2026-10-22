@@ -12,7 +12,7 @@ const material = validateGovernedCourse({ ...fixture, sourceCourseId: packageCou
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 function setup(context: PackageContextView = structuredClone(packageContext)) {
   const client: PackageClient = { available: vi.fn().mockResolvedValue(true), context: vi.fn().mockResolvedValue(context),
-    status: vi.fn().mockResolvedValue(null), stage: vi.fn(), finish: vi.fn().mockResolvedValue(packageReceipt) };
+    status: vi.fn().mockResolvedValue(null), stage: vi.fn(), finish: vi.fn().mockResolvedValue(packageReceipt), dependencies: vi.fn(), resolve: vi.fn() };
   const changed = vi.fn(), busy = vi.fn();
   const view = render(<PackagePanel material={material} sourceRevision={packageSha} reason="Review this exact authored package" disabled={false}
     onEditing={vi.fn()} onBusy={busy} onChanged={changed} client={client} />);

@@ -18,6 +18,8 @@ import { nativeDistributionOperationSchema } from '../src/learning/distributionP
 import { learningDistribution } from './learning-distribution.mjs';
 import { catalogOperationSchema } from '../src/learning/catalogProtocol.ts';
 import { learningCatalog } from './learning-catalog.mjs';
+import { generationOperationSchema } from '../src/learning/generationProtocol.ts';
+import { learningGeneration } from './learning-generation.mjs';
 import { boundedSession } from './bounded-session.mjs';
 import { providerOperationSchema } from '../src/learning/providerPolicyProtocol.ts';
 import { learningProvider } from './learning-provider.mjs';
@@ -81,7 +83,7 @@ async function authorize(db,audience,payload) {
     return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
   }
   if (audience==='carebase.learning') {
-    nativeLearningOperationSchema.or(nativeAuthoringOperationSchema).or(nativeCreationOperationSchema).or(nativePackageOperationSchema).or(nativeDistributionOperationSchema).or(providerOperationSchema).or(nativeMediaOperationSchema).or(catalogOperationSchema).parse(payload);
+    nativeLearningOperationSchema.or(nativeAuthoringOperationSchema).or(nativeCreationOperationSchema).or(nativePackageOperationSchema).or(nativeDistributionOperationSchema).or(providerOperationSchema).or(nativeMediaOperationSchema).or(catalogOperationSchema).or(generationOperationSchema).parse(payload);
     return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
   }
   if (audience!=='media') throw new HttpError(403,'Unsupported authorization audience.');
@@ -112,6 +114,7 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
     distribution: learningDistribution({pool,issue,fetchImpl,observer,legacyOptInAllowed:legacyDistributionOptIn}),
     provider: learningProvider({pool,issue,fetchImpl}),
     catalog: learningCatalog({pool,issue,fetchImpl}),
+    generation: learningGeneration({pool,issue,fetchImpl}),
     courseMedia: learningMedia({pool,issue,fetchImpl}),
     onboarding: supportOnboarding({pool,issue,fetchImpl}),
     registration: supportRegistration({pool,issue,provider,fetchImpl}),

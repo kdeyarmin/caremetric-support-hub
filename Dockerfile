@@ -35,6 +35,7 @@ COPY --from=build /app/src/imports/publicationImportPreview.ts /app/src/imports/
 COPY --from=build /app/src/imports/pennsyncLearningSource.ts /app/src/imports/pennsyncSourceFields.json ./src/imports/
 COPY --from=build /app/src/imports/pennsyncCourseImport.ts /app/src/imports/pennsyncCourseReview.ts ./src/imports/
 COPY --from=build /app/src/learning/assessmentDocument.ts ./src/learning/assessmentDocument.ts
+COPY --from=build /app/src/learning/generationProtocol.ts ./src/learning/generationProtocol.ts
 USER node
 EXPOSE 8080
 CMD ["node", "server/main.mjs"]

@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { withSession, HttpError } from './sms-auth.mjs';
 import { PACKAGE_MAX_BYTES, PACKAGE_RESPONSE_BYTES, nativePackageOperationSchema, packageOperationSchema, packageContextSchema,
-  packageContextViewSchema, packageStatusSchema, packageStageSchema, projectPackageResponse, verifyPackageReceipt } from '../src/learning/packageProtocol.ts';
+  packageContextViewSchema, packageStatusSchema, packageStageSchema, packageDependenciesSchema, packageResolutionSchema, projectPackageResponse,
+  verifyPackageReceipt } from '../src/learning/packageProtocol.ts';
 
 const target='https://cmcarebase.com/api/learning-admin/package';
 const fail=(status,code)=>new HttpError(status,'Course package request could not be completed.',code);
@@ -116,6 +117,13 @@ export function learningPackages({pool,issue,fetchImpl=fetch}) {
         await context(null);
         const value=packageStatusSchema.parse(await native({operation:'status',requestId:op.requestId}));
         if(value&&value.versionId!==op.versionId)throw fail(409,'conflict');
+        await local(async()=>{});return value;
+      }
+      if(op.operation==='dependencies'||op.operation==='resolve'){
+        // Pin the draft to this course before reading or changing what it depends on.
+        await context(null);
+        if(op.operation==='dependencies')return packageDependenciesSchema.parse(await native({operation:'dependencies',versionId:op.versionId}));
+        const value=packageResolutionSchema.parse(await native({operation:'resolve',versionId:op.versionId,sourcePackageId:op.sourcePackageId,replacementPackageId:op.replacementPackageId}));
         await local(async()=>{});return value;
       }
       if(op.operation==='finish'){

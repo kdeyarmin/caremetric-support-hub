@@ -13,3 +13,27 @@ CareBase owns the durable intent ledger. Reloading retrieves current-actor conte
 Availability comes from all five native `learning.packages.*` capabilities (context/status/upload/accept/finish). Native rollout requires its reviewed ingestion SQL, private storage and explicit feature flag; Hub deployment alone does not establish readiness. No additional Hub migration, feature gate or browser key is required. Existing course review, package runtime access policy and learner completion writer remain the shared native implementations.
 
 Validation includes closed/adversarial protocol and client tests, explicit-confirmation/reload/uncertain-response UI tests, a stalled real HTTP upload cancellation test, and `server/package-integration.mjs` against disposable Hub PostgreSQL and actual SMS/HTTP delegation flows. The latter uses deterministic native responses; CareBase CI independently validates native SQL, Storage and real ZIP processing. Cross-repository composition tests exercise the actual native handler and Hub projector together. No production packages are uploaded by these tests.
+
+## Replacing packages in a cloned draft
+
+A draft cloned from a version with SCORM or xAPI packages starts with copies that it
+cannot publish. CareBase PR #612 moved the screen that resolves them to the Hub. When the
+course version controls show a draft with unresolved package dependencies, the
+**Replace packages** panel lists each source package the draft still depends on
+(`dependencies`, up to 100 rows) and lets the administrator name its replacement
+(`resolve`).
+
+A replacement must be an accepted package in the same draft with the same standard as the
+source, stored separately from it. The panel offers only the draft's accepted packages of
+that standard. CareBase checks the rest, including that the original file was not simply
+registered again. The administrator uploads each replacement with the package controls,
+finishes it until CareBase accepts it, and loads and preserves the material again so it
+appears as a choice. No reason is asked for: CareBase records each resolution in its
+audit log with the Hub user and session.
+
+Before both calls, the Hub confirms through `context` that the draft belongs to the course
+being edited. A replacement that is later withdrawn or quarantined reopens its
+dependency, and the list shows it as needing a replacement again. CareBase answers
+`conflict` for an ineligible replacement or a source package that is no longer
+available, and `notfound` when the version is not an editable draft or has no
+dependency on that source package.
