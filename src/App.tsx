@@ -85,9 +85,7 @@ import { config } from "./lib/config";
 import { appSession } from "./lib/appSession";
 import { SmsSignIn } from "./auth/SmsSignIn";
 import { JoinHub } from "./auth/JoinHub";
-import { PublicationImport } from "./imports/PublicationImport";
 import { PublicationVideo } from "./imports/PublicationVideo";
-import { DocStudioWorkspace } from "./docstudio/Workspace";
 import { courseLaunchUrl } from "./security/courseLaunch";
 import { reconcileCaseSelection } from "./security/caseListState";
 import { caseTargetByKey, eligibleCaseTargets, preferredCaseTarget } from "./security/caseTargets";
@@ -133,7 +131,6 @@ const navItems = [
   { to: "/communications", label: "Communications", icon: MessagesSquare },
   { to: "/cases", label: "Support cases", icon: Inbox },
   { to: "/knowledge", label: "Knowledge", icon: BookOpen },
-  { to: "/docstudio", label: "DocStudio", icon: FileText },
   { to: "/library", label: "Videos & courses", icon: Library },
   { to: "/products", label: "Products & contacts", icon: Boxes },
   { to: "/integration", label: "App integration", icon: Link2 },
@@ -306,7 +303,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
         </div>
         <nav className="primary-nav" aria-label="Main navigation">
           <p className="nav-label">Workspace</p>
-          {navItems.filter(item => (!["/admin", "/admin/apps", "/admin/tenants", "/admin/email", "/admin/portfolio", "/admin/go-live-readiness", "/phone", "/phone-numbers"].includes(item.to) || data.actor.role === "platform_admin") && (!["/docstudio", "/communications"].includes(item.to) || staff)).map(({ to, label, icon: Icon }) => (
+          {navItems.filter(item => (!["/admin", "/admin/apps", "/admin/tenants", "/admin/email", "/admin/portfolio", "/admin/go-live-readiness", "/phone", "/phone-numbers"].includes(item.to) || data.actor.role === "platform_admin") && (!["/communications"].includes(item.to) || staff)).map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} onClick={() => setMobileOpen(false)}>
               <Icon size={18} /> <span>{label}</span>
             </NavLink>
@@ -362,8 +359,6 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/overview" element={<OverviewPage data={data} />} />
             <Route path="/cases" element={<CasesPage key={`${data.actor.id}:${data.actor.role}:${location.search}`} data={data} />} />
             <Route path="/knowledge" element={<KnowledgePage key={location.search} data={data} />} />
-            <Route path="/imports/docstudio" element={staff ? <PublicationImport key={data.actor.id} /> : <Navigate to="/knowledge" replace />} />
-            <Route path="/docstudio" element={staff ? <DocStudioWorkspace key={data.actor.id} /> : <Navigate to="/knowledge" replace />} />
             <Route path="/library/courses/:itemId" element={<CourseEditor key={window.location.pathname} products={data.products} />} />
             <Route path="/learn/courses/:itemId" element={<CoursePlayer key={window.location.pathname} />} />
             <Route path="/learn/my" element={<MyLearning />} />

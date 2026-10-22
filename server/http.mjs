@@ -33,7 +33,7 @@ const aiCaseActions=new Set(['summary','draft-reply','triage-suggestion']);
 const staffCommunicationActions=new Set(['list','get','update','note','reply','sync']);
 // Railway's edge appends the visitor address last; rate limits use it only as a hashed bucket.
 const visitorAddress=req=>String(req.headers['x-forwarded-for']||'').split(',').at(-1).trim()||req.socket.remoteAddress||'unknown';
-export function appServer({auth,gateway,delegations,publications,docstudio,aiCases,readiness,integrationSetup,communications,bulkEmail,origins,dist=resolve('dist')}) {
+export function appServer({auth,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,origins,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -45,32 +45,9 @@ export function appServer({auth,gateway,delegations,publications,docstudio,aiCas
       const url=new URL(req.url,'http://internal');
       const path=url.pathname;
       const session=readCookie(req.headers.cookie,sessionCookie);
-      async function studioMedia(result) {
-        const {descriptor,response}=result;
-        res.setHeader('Content-Type',descriptor.contentType);res.setHeader('Content-Length',String(descriptor.byteLength));
-        let bytes=0;
-        async function* bounded() {for await(const chunk of Readable.fromWeb(response.body)){bytes+=chunk.length;if(bytes>descriptor.byteLength)throw new Error('Oversized private media');yield chunk;}if(bytes!==descriptor.byteLength)throw new Error('Incomplete private media');}
-        await pipeline(Readable.from(bounded()),res);
-      }
       if (path.startsWith('/api/')) {
         res.setHeader('Cache-Control','no-store');
         if (path.startsWith('/api/internal/')) {
-          if(path.startsWith('/api/internal/docstudio/') && docstudio) {
-            if(req.headers.origin || req.headers.cookie || url.search) throw new HttpError(403,'Forbidden.');
-            const authorization=req.headers.authorization;
-            if(path==='/api/internal/docstudio/media/authorize' && req.method==='POST') {
-              const input=await jsonBody(req,2048);if(Object.keys(input).length)throw new HttpError(400,'Invalid media authorization.');
-              return json(await docstudio.consumeMedia(typeof authorization==='string' && authorization.startsWith('Bearer ')?authorization.slice(7):null));
-            }
-            if(path==='/api/internal/docstudio/worker' && req.method==='POST') return json(await docstudio.worker(authorization,await jsonBody(req,4096)));
-            const workerMedia=/^\/api\/internal\/docstudio\/worker\/jobs\/([0-9a-f-]{36})\/(sources|outputs)\/([0-9a-f-]{36}|primary|captions|transcript)$/.exec(path);
-            if(workerMedia) {
-              const lease=req.headers['x-caremetric-job-lease'];
-              if(workerMedia[2]==='sources' && req.method==='GET') return await studioMedia(await docstudio.workerSource(authorization,workerMedia[1],workerMedia[3],lease));
-              if(workerMedia[2]==='outputs' && req.method==='POST') return json(await docstudio.workerOutput(authorization,workerMedia[1],workerMedia[3],lease,req,req.headers));
-            }
-            throw new HttpError(404,'DocStudio resource unavailable.');
-          }
           if(req.method!=='POST' || req.headers.origin || req.headers.cookie) throw new HttpError(403,'Forbidden.');
           if(path==='/api/internal/publications/public/authorize' && publications) {
             const authorization=req.headers.authorization;
@@ -170,24 +147,6 @@ export function appServer({auth,gateway,delegations,publications,docstudio,aiCas
             }
             throw new HttpError(404,'Media resource unavailable.');
           }finally{clearTimeout(deadline);req.removeListener('aborted',abort);res.removeListener('close',abort);}
-        }
-        if(path.startsWith('/api/docstudio') && docstudio) {
-          if(url.search)throw new HttpError(400,'DocStudio query parameters are not supported.');
-          if(path==='/api/docstudio' && req.method==='GET') return json(await docstudio.read(session));
-          if(path==='/api/docstudio/page' && req.method==='POST') return json(await docstudio.read(session,await jsonBody(req,2048)));
-          if(path==='/api/docstudio/preview' && req.method==='POST') return json(await docstudio.preview(session,await jsonBody(req,1048576)));
-          if(path==='/api/docstudio/apply' && req.method==='POST') return json(await docstudio.apply(session,await jsonBody(req,2048)));
-          if(path==='/api/docstudio/export' && req.method==='POST') return json(await docstudio.export(session,await jsonBody(req,2048)));
-          const project=/^\/api\/docstudio\/projects\/([0-9a-f-]{36})(?:\/assets(?:\/([0-9a-f-]{36}))?)?$/.exec(path);
-          if(project) {
-            if(!path.includes('/assets') && req.method==='GET')return json(await docstudio.get(session,project[1]));
-            if(path.endsWith('/assets') && req.method==='POST')return json(await docstudio.stageAsset(session,project[1],await jsonBody(req,2048)));
-            if(project[2] && req.method==='POST')return json(await docstudio.uploadAsset(session,project[1],project[2],req,req.headers['content-type']));
-            if(project[2] && req.method==='GET')return await studioMedia(await docstudio.media(session,{projectId:project[1],assetId:project[2]}));
-          }
-          const output=/^\/api\/docstudio\/jobs\/([0-9a-f-]{36})\/(primary|captions|transcript)$/.exec(path);
-          if(output && req.method==='GET')return await studioMedia(await docstudio.media(session,{jobId:output[1],part:output[2]}));
-          throw new HttpError(404,'DocStudio resource unavailable.');
         }
         if(path.startsWith('/api/publications/') && publications) {
           if(url.search) throw new HttpError(400,'Publication query parameters are not supported.');
