@@ -10,7 +10,7 @@ audit row.
 | --- | --- | --- |
 | `learning.unpublishCourse` | Course version controls: **Unpublish this course** | Shipped |
 | `learning.correctPublishedBlock` | Course version controls: **Correct a published lesson** | Shipped |
-| Training library curation (`/api/learning-admin/catalog`) | Training library | Not yet |
+| Training library curation (`/api/learning-admin/catalog`) | CareBase courses view: **Training library** ([details](TRAINING_LIBRARY.md)) | Shipped |
 | AI drafting and block regeneration (`/api/learning-generation/run`) | Draft with AI, Regenerate with AI | Not yet |
 | Avatar video generation (`/api/learning-generation/run`) | Generate video | Not yet |
 | Package dependency resolution (`/api/learning-admin/package`) | Replace packages | Not yet |
