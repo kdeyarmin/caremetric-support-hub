@@ -3,7 +3,7 @@
 The connected Vite build and Node startup share `assertBackendContract` in
 `src/lib/backendContract.ts`. API version 4 is stable for additive changes; the
 integer alone does not establish compatibility. Both entry points require these
-twelve distinct feature names:
+35 distinct feature names:
 
 | Feature | Backend boundary |
 | --- | --- |
@@ -19,6 +19,38 @@ twelve distinct feature names:
 | `platform.admin.intel.v1` | Intel's isolated delegation audience and current administrator authorization |
 | `learning.draft-editing.v1` | Reviewed native draft editing and review actions |
 | `billing.portal.v1` | Current-session portal reservation, preview, dispatch and redacted outcome recovery |
+| `support.customer-onboarding.v1` | Reviewed tenant and product onboarding settings |
+| `learning.structure.v1` | Source-bound course structure edits |
+| `support.customer-registration.v1` | Reviewed customer registration and membership |
+| `billing.checkout.v1` | Governed native checkout commands |
+| `learning.course-creation.v1` | Governed native course creation |
+| `learning.credit-policy.v1` | Reviewed course credit policy commands |
+| `learning.distribution.v1` | Governed course distribution and receipts |
+| `learning.pennsync-source.v1` | PennSync source snapshots and native learning mapping |
+| `learning.media.v1` | Governed course media uploads and delivery |
+| `phone.registry.v1` | Central phone number and routing registry |
+| `phone.accounts.v1` | Phone account and tenant assignments |
+| `learning.sequence.v1` | Reviewed course sequence commands |
+| `support.ai-assistance.v1` | Staff AI assistance and provider configuration gates |
+| `support.ai-automation.v1` | Governed automated case assistance |
+| `support.go-live-readiness.v1` | Current operational readiness checks |
+| `support.ai-automation-server.v1` | Server automation worker boundaries |
+| `platform.admin.advisors.v1` | SMS-authorized Healthcare Advisors administration reads |
+| `support.ai-automation-failure-policy.v1` | Bounded automation retry and failure handling |
+| `support.communications.v1` | Shared conversations, replies and channel configuration |
+| `support.ai-usage.v1` | Private AI usage ledger and administrator summaries |
+| `platform.admin.tenants.v1` | Administrator tenant and subscription records |
+| `support.bulk-email.v1` | Governed bulk email preparation and delivery |
+| `learning.catalog-authoring.v1` | Reviewed course unpublish and published-lesson corrections |
+
+`20261022210000_retire_docstudio.sql` removes the retired DocStudio tables,
+functions and triggers after PR #85 removed their application callers. It removes
+only `knowledge.docstudio.v1` from the latest 36-feature declaration, preserving
+API version 4, all 35 features above and the invoker-only RPC permissions. The
+shared publication tables/functions, `source_system: "docstudio"` provenance,
+`publication-media` transport and `hub-publications` bucket are retained. The
+separate deployed `docstudio-media` function and empty `hub-docstudio` bucket
+require their own cleanup; this migration does not delete Storage buckets.
 
 Apply the reviewed, ordered migration chain before deploying the matching image.
 The CLI-generated `20260911190819_combined_authoring_publication_support_contract.sql`
@@ -62,5 +94,7 @@ previous metadata. All synthetic schema changes are rolled back. The same test
 accepts the complete contract through the actual shared startup assertion.
 The portal gate additionally rejects missing reservation/result functions or its
 intent table, altered action enum/nullability/validator and missing foundation
-metadata. Replaying the declarations in order restores the exact twelve-feature
-contract; omitting either later feature prevents the matching image from starting.
+metadata. Historical declaration replays recreate the retired runtime only inside
+rolled-back disposable transactions, then replay its retirement to restore the
+exact current 35-feature contract. Missing any required feature prevents the
+matching image from starting.

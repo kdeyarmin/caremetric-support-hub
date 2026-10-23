@@ -5,6 +5,21 @@ owner-controlled prerequisites. A merged pull request is not labeled live
 until the corresponding production deployment and public link have both been
 checked.
 
+## DocStudio retirement
+
+The owner retired DocStudio, and PR [#85](https://github.com/kdeyarmin/caremetric-support-hub/pull/85)
+removed its application runtime. The follow-up migration
+`20261022210000_retire_docstudio.sql` removes only the private DocStudio runtime
+and its `knowledge.docstudio.v1` feature, preserving API version 4 and the other
+35 features. The shared publication importer, manifest provenance,
+`publication-media` and `hub-publications` remain in service.
+
+Production completion requires applying that migration after CI passes, verifying
+the contract and shared importer, and separately deleting the deployed
+`docstudio-media` function and empty `hub-docstudio` bucket. The historical
+DocStudio entries below describe earlier releases, not an active authoring service
+or evidence that this database cleanup has been applied.
+
 ## Central platform
 
 ### September 11 central administration and learning release

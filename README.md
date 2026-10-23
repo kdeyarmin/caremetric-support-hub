@@ -306,8 +306,10 @@ docs/                        API, integration, and rollout guidance
   authenticated production equivalence remains unverified. Current source uses
   an Express `/api` backend; reconcile the historical Base44 deployment record
   before connecting identity or delegated administration.
-- DocStudio remains a content-production source, not an independently verified
-  production application or the system of record for published media.
+- DocStudio is retired. PR #85 removed its application runtime;
+  `20261022210000_retire_docstudio.sql` removes its private database objects and
+  `knowledge.docstudio.v1` declaration. The shared publication importer,
+  `publication-media` transport and existing source provenance remain supported.
 
 The first CareBase snapshot now includes 80 published courses and 70 published help articles. The DocStudio preview remains pure; the separate publication executor applies reviewed changes through current Hub permissions and private immutable asset storage. Deployment requires the reviewed migration and protected Edge transport described in [Publication imports](docs/PUBLICATION_IMPORTS.md). Legacy source IDs are provenance only; stable Support Hub `content_key` values are canonical.
 

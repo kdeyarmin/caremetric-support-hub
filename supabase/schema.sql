@@ -1,5 +1,10 @@
 -- CareMetric Support Hub v0.1
 --
+-- Historical reference only: this snapshot ends at 20261021130000 and includes
+-- the retired DocStudio runtime. Use the full ordered supabase/migrations chain,
+-- including 20261022210000_retire_docstudio.sql, for the current schema. Do not
+-- apply this snapshot to production or treat its contract as the current one.
+--
 -- This file is the reviewed, migration-ready schema source for the initial
 -- vertical slice. It is intentionally not placed in supabase/migrations yet:
 -- the dedicated project must be selected first, then this schema is applied

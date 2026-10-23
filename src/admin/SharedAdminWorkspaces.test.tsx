@@ -13,13 +13,14 @@ describe('shared owner workspaces',()=>{
       ['Control center: every app, channel and service','/admin'],['Applications: users, billing, courses, training','/admin/apps'],
       ['Phone numbers and routing','/phone-numbers'],['AI phone inbox','/phone'],
       ['Communications: phone, text, email, chat','/communications'],['Support cases','/cases'],['Knowledge articles','/knowledge'],
-      ['Courses, creation and distribution','/library'],['Create learning videos','/docstudio'],
+      ['Courses, creation and distribution','/library'],
       ['Review material imports','/imports/docstudio'],['Products and support contacts','/products'],
       ['Connections and customer onboarding','/integration'],['Account security','/security'],
       ['Support overview','/overview'],['Portfolio rollup','/admin/portfolio'],
       ['AI go-live readiness','/admin/go-live-readiness'],
     ];
     expect(within(navigation).getAllByRole('link')).toHaveLength(expected.length);
+    expect(within(navigation).queryByRole('link',{name:'Create learning videos'})).toBeNull();
     for(const [name,path] of expected){
       const link=within(navigation).getByRole('link',{name});
       expect(link.getAttribute('href')).toBe(path);

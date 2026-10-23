@@ -7,7 +7,10 @@ Version `0.1.0` uses RLS-governed reads and narrow atomic RPCs in the `hub` sche
 ## Reads
 
 - `hub.get_backend_contract()`: anonymous/authenticated, security-invoker
-  release metadata, currently `{ "api_version": 4 }` (the frontend requires exactly this via `REQUIRED_BACKEND_CONTRACT` in `src/lib/backendContract.ts`). It reads no
+  release metadata with `api_version: 4` and the 35 distinct features listed in
+  [the release contract](BACKEND_RELEASE_CONTRACT.md), required by
+  `src/lib/backendContract.ts`. DocStudio retirement removes only
+  `knowledge.docstudio.v1`; the shared `knowledge.publications.v1` boundary remains. It reads no
   application tables and grants no actor access. Connected production builds
   check it before bundling. Required migrations must precede frontend rollout;
   increment the required contract when a future frontend requires a new

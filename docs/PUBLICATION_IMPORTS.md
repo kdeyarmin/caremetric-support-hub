@@ -2,16 +2,22 @@
 
 This change adds the reviewed executor for the existing `caremetric.support-hub.publication.v1` contract. It imports knowledge articles and videos into the existing Hub catalog. Course completion, enrollment, native billing, and canonical learner identity writers are untouched. Source code and passing tests do not establish that this feature is deployed; release requires the migration and protected Storage transport below.
 
+DocStudio authoring and rendering are retired. The shared importer and
+`publication-media` transport remain available for approved packages using the
+existing `source_system: "docstudio"` manifest contract and source-version rules.
+They do not require the retired DocStudio tables, worker or `docstudio-media`
+function; `hub-publications` is separate from the retired `hub-docstudio` bucket.
+
 ## Editor workflow
 
-1. Export the approved manifest and original assets from DocStudio. Open **DocStudio import** (`/imports/docstudio`) in the Hub using the current SMS session.
+1. Obtain an approved manifest package and its original assets in the existing DocStudio publication format. Open **Review material imports** (`/imports/docstudio`) in the Hub using the current SMS session.
 2. Select the manifest (at most 64 KiB) and its exact files. Articles require one Markdown file (2 MiB maximum). Videos require MP4, WebVTT captions, and a plain-text transcript; all three hashes must differ. Both sidecars are required and have a 10 MiB limit. Video duration is at most 24 hours.
 3. Approve the source version and human PHI-free review. The Hub verifies every byte count/hash and the existing text, MP4 header, and timed caption rules, then shows the current catalog changes.
 4. Explicitly confirm each placement replacement, retirement, and reactivation, then commit the exact reviewed plan. A lost response can be retried with the same request key. Changed request keys or stale previews require a new review.
 
 Names are display-only. The part names are `primary`, `captions`, and `transcript`; filenames never select a storage object. There is no archive parser, URL fetch, remote session handoff, or automatic publication when files are selected. Text is rendered using the existing escaped article renderer. Human review remains necessary: text checks cannot certify arbitrary prose or inspect video pixels for PHI.
 
-The initial application video limit is **25 MiB** and is read from `private.publication_import_settings`. This is a conservative configured application limit, **not a verified Supabase project maximum**. The project setting could be lower, in which case Storage rejects the transfer and no catalog commit occurs. Raising the setting (up to the protocol ceiling of 512 MiB) requires verifying project/runtime capacity. DocStudio's local export limit is independent.
+The initial application video limit is **25 MiB** and is read from `private.publication_import_settings`. This is a conservative configured application limit, **not a verified Supabase project maximum**. The project setting could be lower, in which case Storage rejects the transfer and no catalog commit occurs. Raising the setting (up to the protocol ceiling of 512 MiB) requires verifying project/runtime capacity. Exporter limits do not change this application limit.
 
 ## Boundaries and persistence
 

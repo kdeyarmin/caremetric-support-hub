@@ -17,7 +17,8 @@ its consultation requests.
 - **Knowledge:** the eleven answers published at caremetricadvisors.com/faq are
   public Hub articles for Advisors, pinned to
   `advisors@37afa7a884dc70f52d1134a7a27927ffee847373`, plus the shared safety
-  article. Staff can add more from DocStudio.
+  article. The shared [publication import workflow](PUBLICATION_IMPORTS.md) remains
+  available for approved manifest packages; the DocStudio authoring product is retired.
 - **Communications:** requests can be imported into the Communications inbox
   (see [UNIFIED_COMMUNICATIONS.md](UNIFIED_COMMUNICATIONS.md)). Advisors callers
   on (877) 521-2890 arrive through the phone-line import.
