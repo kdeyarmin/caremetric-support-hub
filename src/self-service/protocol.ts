@@ -18,7 +18,7 @@ export const profileRecord = z.object({
   kind: z.enum(['training', 'certificate', 'credential', 'assignment', 'outside_training']),
   completed_on: z.string().nullable(), expires_on: z.string().nullable(), warning_days: z.number().int().min(0).max(3650),
   status: z.enum(recordStatuses), href: z.string().max(2048).nullable(),
-  source_revision: z.string().max(128).optional(), verification_status: z.string().max(64).optional(),
+  source_revision: z.string().max(128).nullable().optional(), verification_status: z.string().max(64).nullable().optional(),
 }).strict();
 export type ProfileRecord = z.infer<typeof profileRecord>;
 export const profilePage = z.object({ records: z.array(profileRecord).max(500), next_cursor: z.number().int().min(0).nullable(), generated_at: z.string() }).strict();
