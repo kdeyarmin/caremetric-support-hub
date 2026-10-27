@@ -21,7 +21,7 @@ let nativeProof = { account, user: nativeUser, account_name: 'Disposable self-se
   role: 'facility_admin', facilities: [{ id: 'site-a', name: 'Synthetic site A', permissions: ['employee.recovery', 'billing.manage', 'support.manage'] }], capabilities: ['training.profile.v1', 'employee.recovery.v1'] };
 const provider = { send: async () => randomUUID(), verify: async (_id, _phone, code) => code === '123456' };
 const nativeCalls = [];
-let unavailable = false, tenant, customerId;
+let unavailable = false, tenant, customerId, ticket;
 const secret = 'temporary-test-secret-never-audited';
 const customer = selfService({ pool, provider, publicOrigin: 'https://hub.test', fetchImpl: async (url, options) => {
   if (unavailable) throw new Error('Synthetic source outage');
@@ -70,6 +70,16 @@ try {
   customerId = (await admin.query('select user_id from private.sms_sessions where token_hash=$1', [digest(jar[sessionCookie])])).rows[0].user_id;
   assert.equal((await admin.query('select count(*)::int as count from private.staff_permissions where user_id=$1', [customerId])).rows[0].count, 0, 'linking never grants operator authority');
   assert.equal((await call('self-service', { action: 'connect', token, confirmed: true })).status, 403, 'a handoff is consumed once');
+  const requestKey = randomUUID();
+  const support = { p_tenant_id: tenant, p_product_id: product, p_subject: 'Synthetic self-service request', p_category: 'general', p_priority: 'normal', p_body: 'Synthetic nonclinical customer request', p_app_version: null, p_route: null, p_contains_phi: false, p_request_key: requestKey, p_facility_id: 'site-a', p_shared: true };
+  const created = await call('rpc/create_facility_support_case', support);
+  assert.equal(created.status, 200, 'new verified customers can open support without operator onboarding'); ticket = created.body.id;
+  assert.ok(ticket);
+  assert.equal((await call('rpc/create_facility_support_case', { ...support, p_shared: false })).status, 400, 'a replay cannot change ticket privacy');
+  await admin.query('update private.case_intake_settings set enabled=false where tenant_id=$1 and product_id=$2', [tenant, product]);
+  const relink = await call('apps/connect', nativeProof, { Authorization: `Bearer ${key}` }, false);
+  assert.equal((await call('self-service', { action: 'connect', token: new URL(relink.body.url).hash.slice(1), confirmed: true })).status, 200);
+  assert.equal((await admin.query('select enabled from private.case_intake_settings where tenant_id=$1 and product_id=$2', [tenant, product])).rows[0].enabled, false, 'reconnecting cannot override an explicit support intake closure');
   const profile = await call('self-service', { action: 'native', connection_id: connection.id, operation: { action: 'profile.read', cursor: 0 } });
   assert.equal(profile.status, 200); assert.equal(profile.body.records[0].href, null, 'untrusted evidence links are removed');
   const recovery = { action: 'recovery.execute', target: 'employee-a', recovery_action: 'temporary_password', reason: 'Verified employee identity in person', request_id: randomUUID() };
@@ -106,6 +116,7 @@ try {
   assert.equal((await call('self-service', { action: 'workspace' })).body.connections[0].role, 'organization_admin');
   unavailable = true;
   assert.equal((await call('self-service', { action: 'workspace' })).body.connections[0].role, 'member', 'a source outage cannot keep granting cached administration');
+  assert.equal(await withSession(pool, jar[sessionCookie], async db => (await db.query('select count(*)::int as count from hub.support_case_queue where id=$1', [ticket])).rows[0].count), 1, 'requesters retain their own historical tickets during a source outage');
   await admin.query('update private.sms_sessions set revoked_at=now() where user_id=$1', [customerId]);
   assert.equal((await call('self-service', { action: 'workspace' })).status, 401);
   console.log('Customer self-service: app-key ingress, real SMS linking, one-use scope-bound capabilities, confirmation, safe evidence links, immutable quote intent/payment receipts, role revocation, source outages and secret-free audit passed.');
@@ -114,6 +125,8 @@ try {
   if (!customerId) customerId = (await admin.query("select user_id from private.sms_identities where phone_e164='+12025550851'")).rows[0]?.user_id;
   if (!tenant) tenant = (await admin.query('select c.tenant_id from private.self_service_connections c where c.source_account=$1', [account])).rows[0]?.tenant_id;
   if (customerId) {
+    await admin.query('delete from private.self_service_case_requests where actor_id=$1', [customerId]);
+    await admin.query('delete from hub.support_cases where requester_id=$1', [customerId]);
     await admin.query('delete from private.customer_billing_quotes where actor_id=$1', [customerId]);
     await admin.query('delete from private.self_service_operations where user_id=$1', [customerId]);
     await admin.query('delete from private.self_service_connections where user_id=$1', [customerId]);

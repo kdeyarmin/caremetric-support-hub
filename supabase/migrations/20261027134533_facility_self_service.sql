@@ -70,6 +70,10 @@ begin
    capabilities=excluded.capabilities,connected_at=now(),revoked_at=null
    where private.self_service_connections.user_id=auth.uid() returning id into connection;
  if connection is null then raise exception 'This account is linked elsewhere' using errcode='42501';end if;
+ -- Verified native customers can open their first support request without an
+ -- operator onboarding step. An explicit existing intake closure is preserved.
+ insert into private.case_intake_settings(tenant_id,product_id,enabled,activated_at,activated_by)
+  values(tenant,proof.product_id,true,now(),auth.uid()) on conflict(tenant_id,product_id) do nothing;
  update private.self_service_handoffs set consumed_at=now() where token_hash=p_token_hash;
  perform private.billing_audit(auth.uid(),'billing.selfservice.link',tenant,proof.product_id,jsonb_build_object('connection',connection));
  return jsonb_build_object('connection_id',connection);
