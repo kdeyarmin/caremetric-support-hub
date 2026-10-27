@@ -81,6 +81,9 @@ export interface SupportCase {
   lastMessageAt: string;
   aiStage: AiAutomationStage | null;
   aiAttempts: number | null;
+  facilityId?: string | null;
+  facilityName?: string | null;
+  facilityShared?: boolean;
 }
 
 export interface CaseMessage {
@@ -142,6 +145,8 @@ export interface CreateCaseInput {
   route?: string;
   containsPhi: boolean;
   requestKey: string;
+  facilityId?: string;
+  facilityShared?: boolean;
 }
 
 export interface UpdateCaseInput {

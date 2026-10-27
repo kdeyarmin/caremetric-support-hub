@@ -79,6 +79,13 @@ import { GoLiveReadiness } from "./admin/GoLiveReadiness";
 import { BillingWorkspace } from "./billing/BillingWorkspace";
 import { CustomerBilling } from "./billing/CustomerBilling";
 import { MyBilling } from "./billing/MyBilling";
+import { Subscriptions } from "./billing/Subscriptions";
+import { CustomerCenter } from "./self-service/CustomerCenter";
+import { TrainingProfile } from "./self-service/TrainingProfile";
+import { Connect } from "./self-service/Connect";
+import { Manuals } from "./self-service/Manuals";
+import { selfServiceClient } from "./self-service/client";
+import type { SelfServiceWorkspace } from "./self-service/protocol";
 import { BulkEmail } from "./admin/BulkEmail";
 import { SupportReadiness } from "./support/SupportReadiness";
 import { adminClient } from "./admin/client";
@@ -121,6 +128,9 @@ const pendingHelpPathKey = "caremetric.pendingHelpPath";
 const registeredProductSlugs = new Set(Object.keys(integrationRolloutBySlug));
 
 const navItems = [
+  { to: "/self-service", label: "Customer center", icon: Settings2 },
+  { to: "/account/profile", label: "My profile & training", icon: UserRound },
+  { to: "/manuals", label: "User manuals", icon: BookOpen },
   { to: "/admin", label: "Control center", icon: Gauge },
   { to: "/admin/apps", label: "Applications", icon: Boxes },
   { to: "/admin/billing", label: "Billing", icon: CreditCard },
@@ -352,6 +362,9 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             </div>
           )}
           <Routes>
+            <Route path="/self-service" element={<CustomerCenter key={data.actor.id} />} />
+            <Route path="/account/profile" element={<TrainingProfile key={data.actor.id} />} />
+            <Route path="/manuals" element={<Manuals products={data.products} content={data.content} />} />
             <Route path="/phone" element={data.actor.role === "platform_admin" ? <PhoneInbox key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/phone-numbers" element={data.actor.role === "platform_admin" ? <PhoneRegistry key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin" element={data.actor.role === "platform_admin" ? <AdminHome data={data} communications={demoCommunications} /> : <Navigate to="/overview" replace />} />
@@ -360,6 +373,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/admin/billing/customers/:tenantId" element={data.actor.role === "platform_admin" ? <CustomerBilling key={location.pathname} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/tenants" element={<Navigate to="/admin/billing?tab=customers" replace />} />
             <Route path="/billing" element={tenantAdmin ? <MyBilling key={data.actor.id} /> : <Navigate to="/overview" replace />} />
+            <Route path="/subscriptions" element={<Subscriptions key={data.actor.id} />} />
             <Route path="/admin/email" element={data.actor.role === "platform_admin" ? <BulkEmail key={data.actor.id} products={data.products} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/portfolio" element={data.actor.role === "platform_admin" ? <PortfolioRollup key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/go-live-readiness" element={data.actor.role === "platform_admin" ? <GoLiveReadiness key={data.actor.id} /> : <Navigate to="/overview" replace />} />
@@ -503,6 +517,7 @@ function CasesPage({ data }: CasesPageProps) {
   const [thread, setThread] = useState(emptyCaseThread);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<CaseStatus | "all">("all");
+  const [facilityFilter, setFacilityFilter] = useState("all");
   const [showCreate, setShowCreate] = useState(!staff && (data.cases.length === 0 || params.get("new") === "1"));
   const [refresh, setRefresh] = useState(0);
   const [caseRows, setCaseRows] = useState(data.cases);
@@ -547,9 +562,10 @@ function CasesPage({ data }: CasesPageProps) {
     return caseRows.filter((item) =>
       (statusFilter === "all" || item.status === statusFilter) &&
       (productFilter === "all" || item.productId === productFilter) &&
+      (facilityFilter === "all" || item.facilityId === facilityFilter) &&
       (!needle || item.subject.toLowerCase().includes(needle) || caseCode(item.caseNumber).toLowerCase().includes(needle) || item.tenantName.toLowerCase().includes(needle)),
     );
-  }, [caseRows, productFilter, search, statusFilter]);
+  }, [caseRows, productFilter, search, statusFilter, facilityFilter]);
   const selected = caseRows.find((item) => item.id === selectedId) ?? null;
 
   return (
@@ -577,6 +593,7 @@ function CasesPage({ data }: CasesPageProps) {
             </select>
           </div>
           <div className="case-count">{visibleCases.length} case{visibleCases.length === 1 ? "" : "s"}</div>
+          {caseRows.some(row => row.facilityId) && <label>Facility<select aria-label="Filter by facility" value={facilityFilter} onChange={event => { const id = event.target.value; setFacilityFilter(id); setSelectedId(current => reconcileCaseSelection(caseRows.filter(row => id === "all" || row.facilityId === id), current)); }}><option value="all">All authorized facilities</option>{caseRows.filter((row, index, all) => row.facilityId && all.findIndex(item => item.facilityId === row.facilityId) === index).map(row => <option key={row.facilityId} value={row.facilityId ?? ''}>{row.facilityName ?? row.facilityId}</option>)}</select></label>}
           {caseListError && (
             <div className="case-list-error" role="alert">
               <span>{caseListError}</span>
@@ -591,6 +608,7 @@ function CasesPage({ data }: CasesPageProps) {
                   <div className="case-list-top"><span>{caseCode(supportCase.caseNumber)}</span><time>{formatDate(supportCase.lastMessageAt)}</time></div>
                   <strong>{supportCase.subject}</strong>
                   <p>{supportCase.tenantName} · {product?.name}</p>
+                  {supportCase.facilityId && <p>{supportCase.facilityName ?? supportCase.facilityId} · {supportCase.facilityShared ? "Shared with facility administrators" : "Private request"}</p>}
                   <div className="case-list-bottom"><StatusBadge status={supportCase.status} /><PriorityBadge priority={supportCase.priority} />{supportCase.aiStage === "exhausted" && <span className="ai-escalated-badge">AI escalated</span>}</div>
                 </button>
               );
@@ -630,6 +648,14 @@ function CasesPage({ data }: CasesPageProps) {
 }
 
 function NewCasePanel({ data, preferredProductId, onCancel, onCreated }: { data: HubData; preferredProductId?: string; onCancel: () => void; onCreated: (id: string) => void }) {
+  const [connections, setConnections] = useState<SelfServiceWorkspace | null>(null);
+  const [facilityId, setFacilityId] = useState("");
+  const [facilityShared, setFacilityShared] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    if (!config.demoMode) void selfServiceClient.workspace(controller.signal).then(setConnections).catch(() => undefined);
+    return () => controller.abort();
+  }, []);
   const caseTargets = useMemo(
     () => eligibleCaseTargets(data.actor, data.products),
     [data.actor, data.products],
@@ -661,6 +687,8 @@ function NewCasePanel({ data, preferredProductId, onCancel, onCreated }: { data:
       "create-support-case",
       tenantId,
       productId,
+      facilityId,
+      facilityShared,
       subject,
       category,
       priority,
@@ -684,6 +712,7 @@ function NewCasePanel({ data, preferredProductId, onCancel, onCreated }: { data:
         route,
         containsPhi,
         requestKey: request.requestKey,
+        ...(facilityId ? { facilityId, facilityShared } : {}),
       });
       pendingRequest.current = null;
       onCreated(created.id);
@@ -700,7 +729,8 @@ function NewCasePanel({ data, preferredProductId, onCancel, onCreated }: { data:
       <div className="phi-warning"><ShieldCheck size={19} /><div><strong>Do not include protected health information.</strong><p>No patient names, dates of birth, MRNs, diagnoses, clinical notes, or screenshots with patient data.</p></div></div>
       <form className="case-form" onSubmit={submit}>
         <div className="form-grid">
-          <label><span>Organization and product</span><select value={targetKey} onChange={(event) => setTargetKey(event.target.value)} required disabled={caseTargets.length === 0}><option value="" disabled>{caseTargets.length === 0 ? "No active support intake" : "Choose an organization and product"}</option>{caseTargets.map((target) => <option key={target.key} value={target.key}>{target.product.name} · {target.tenantName}</option>)}</select></label>
+          <label><span>Organization and product</span><select value={targetKey} onChange={(event) => { setTargetKey(event.target.value); setFacilityId(""); setFacilityShared(false); }} required disabled={caseTargets.length === 0}><option value="" disabled>{caseTargets.length === 0 ? "No active support intake" : "Choose an organization and product"}</option>{caseTargets.map((target) => <option key={target.key} value={target.key}>{target.product.name} · {target.tenantName}</option>)}</select></label>
+          {connections && <label><span>Facility <small>optional</small></span><select value={facilityId} onChange={event => { setFacilityId(event.target.value); setFacilityShared(false); }}><option value="">Personal support request</option>{connections.connections.filter(connection => connection.tenant_id === selectedTarget?.tenantId && connection.app === selectedTarget?.product.slug).flatMap(connection => connection.facilities).filter((facility, index, all) => all.findIndex(item => item.id === facility.id) === index).map(facility => <option key={facility.id} value={facility.id}>{facility.name}</option>)}</select></label>}
           <label><span>Category</span><select value={category} onChange={(event) => setCategory(event.target.value as CaseCategory)}>{Object.entries(categoryLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <label><span>Priority</span><select value={priority} onChange={(event) => setPriority(event.target.value as CasePriority)}>{Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <label><span>App version <small>optional</small></span><input value={appVersion} onChange={(event) => setAppVersion(event.target.value)} maxLength={48} placeholder="e.g. 3.8.2" /></label>
@@ -708,6 +738,7 @@ function NewCasePanel({ data, preferredProductId, onCancel, onCreated }: { data:
         <label><span>Subject</span><input value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={160} placeholder="Briefly describe what is not working" required /></label>
         <label><span>Page or route <small>optional</small></span><input value={route} onChange={(event) => setRoute(event.target.value)} maxLength={256} placeholder="e.g. /training/assignments" /></label>
         <label><span>What happened?</span><textarea value={message} onChange={(event) => setMessage(event.target.value)} minLength={10} maxLength={5000} rows={5} placeholder="Include the steps you took, what you expected, and the exact non-sensitive error wording." required /></label>
+        {facilityId && <label className="check-row"><input type="checkbox" checked={facilityShared} onChange={event => setFacilityShared(event.target.checked)} /><span>Share this software issue with the facility’s authorized administrators.</span></label>}
         <label className={`check-row ${containsPhi ? "danger-check" : ""}`}><input type="checkbox" checked={containsPhi} onChange={(event) => setContainsPhi(event.target.checked)} /><span><strong>This request contains patient or clinical information.</strong><small>If checked, online submission is blocked. Remove the information before continuing.</small></span></label>
         <label className="check-row"><input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} /><span><strong>I confirm this request contains no patient information.</strong><small>The support team can request a compliant escalation if one is genuinely required.</small></span></label>
         {error && <p className="form-message form-error"><AlertCircle size={16} /> {error}</p>}
@@ -764,6 +795,7 @@ function CaseDetail({ supportCase, thread, threadStatus, threadError, threadStal
       <header className="case-detail-header">
         <div className="case-title-line"><span>{caseCode(supportCase.caseNumber)}</span><StatusBadge status={supportCase.status} /><PriorityBadge priority={supportCase.priority} /></div>
         <h2>{supportCase.subject}</h2>
+        {supportCase.facilityId && <p>{supportCase.facilityName ?? supportCase.facilityId} · {supportCase.facilityShared ? "Shared with authorized facility administrators" : "Private request"}</p>}
         <div className="case-context"><span className="product-dot" style={{ background: product?.color }} /> {product?.name}<span>•</span>{supportCase.tenantName}<span>•</span>{categoryLabels[supportCase.category]}</div>
         {supportCase.aiStage === "exhausted" && (
           <div className="ai-escalation-banner" role="alert"><Bot size={16} /><span><strong>Escalated — AI attempts exhausted.</strong> Automated help tried {supportCase.aiAttempts ?? 2} suggestions without resolving this case. It needs a human support agent.</span></div>
@@ -1087,6 +1119,7 @@ export default function App() {
   };
 
   const publicPortal = !authenticated && !config.demoMode && ["/help", "/learn"].includes(location.pathname);
+  if(location.pathname==='/connect'&&!config.demoMode)return <Connect authenticated={authenticated}/>;
   if(location.pathname==='/join'&&!config.demoMode)return <JoinHub authenticated={authenticated}/>;
   if (!authenticated && !config.demoMode && !publicPortal) return <SmsSignIn rememberPath={rememberPendingPortalPath} />;
   if (loading) return <LoadingScreen />;

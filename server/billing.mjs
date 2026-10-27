@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { HttpError, transaction, withSession } from './sms-auth.mjs';
 import { billingCommandSchema, localBillingActions, entitlementRequestSchema, usageReportSchema, trialRequestSchema } from '../src/billing/billingProtocol.ts';
 import { stripeClient, StripeError, STRIPE_ACCOUNT_ID, verifyStripeSignature, eventTarget, retrievePaths, normalizers } from './stripe.mjs';
+import { customerBillingService } from './customer-billing.mjs';
 
 /**
  * Platform billing for every CareMetric application. Stripe is the source of
@@ -37,7 +38,7 @@ function asHttpError(error) {
 }
 
 export function platformBilling({ pool, secretKey, webhookSecrets = [], accountId = STRIPE_ACCOUNT_ID, portalConfiguration,
-  publicOrigin, fetchImpl = fetch, apiBase, now = () => Date.now(), log = console }) {
+  publicOrigin, fetchImpl = fetch, apiBase, now = () => Date.now(), log = console, authorizeCustomerBilling, customerPurchasingEnabled = false }) {
   const client = stripeClient({ secretKey, fetchImpl, ...(apiBase ? { apiBase } : {}) });
   let state = client ? 'pending' : 'unconfigured';
   let verifying = null;
@@ -106,6 +107,11 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     return object;
   }
 
+  const customerSelfService = customerBillingService({ pool, stripe, now, purchasingEnabled: customerPurchasingEnabled,
+    authorize: authorizeCustomerBilling ?? (() => { throw new HttpError(503, 'Native purchasing verification is unavailable.'); }),
+    mirrorSubscription: subscription => transaction(pool, db => mirror(db, 'subscription', subscription, new Date(now()), { live: client })),
+  });
+
   // ---------------------------------------------------------------------------
   // Webhook: verified, applied once by event id, latest state from Stripe when
   // the key is available (so delivery order never matters), else the event's own
@@ -119,7 +125,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
       || !Number.isInteger(event.created) || !event.data?.object) throw new HttpError(400, 'Invalid event.');
     const live = client && (await verify()) ? client : null;
     try {
-      return await transaction(pool, async db => {
+      const receipt = await transaction(pool, async db => {
         await db.query("select pg_advisory_xact_lock(hashtextextended('billing_event:'||$1,0))", [event.id]);
         if ((await one(db, 'select private.billing_event_seen($1) as seen', [event.id])).seen) return { received: true, duplicate: true };
         const target = eventTarget(event);
@@ -131,6 +137,16 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         }
         return { received: true };
       });
+      // A duplicate receipt can retry reconciliation after a prior provider/database timeout.
+      if (live && event.data.object.metadata?.app !== 'caremetric-go' && normalizers.invoice(event.data.object).app !== 'caremetric-go') {
+        const target = eventTarget(event);
+        if (target?.kind === 'subscription') await customerSelfService.reconcileSubscription(await live.get(`/v1/subscriptions/${target.id}`, { expand: ['latest_invoice', 'discounts'] }));
+        if (target?.kind === 'invoice') {
+          const invoice = normalizers.invoice(event.data.object);
+          if (invoice.subscription) await customerSelfService.reconcileSubscription(await live.get(`/v1/subscriptions/${invoice.subscription}`, { expand: ['latest_invoice', 'discounts'] }));
+        }
+      }
+      return receipt;
     } catch (error) {
       // A failure rolls back and returns an error so Stripe retries the same event.
       log.warn(`Billing webhook ${event.type} could not be applied; Stripe will retry.`);
@@ -664,7 +680,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     let synced = 0, failed = 0;
     const each = async (kind, rows) => {
       for (const row of rows) {
-        try { await transaction(pool, db => mirror(db, kind, row, new Date(now()), { live })); synced++; }
+        try { await transaction(pool, db => mirror(db, kind, row, new Date(now()), { live })); if (kind === 'subscription') await customerSelfService.reconcileSubscription(row); synced++; }
         catch { failed++; }
       }
     };
@@ -690,5 +706,6 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     status: () => ({ configured: !!client, state, mode: client?.mode ?? null, account: state === 'ready' ? accountId : null,
       webhook: webhookSecrets.length > 0, portal_configuration: !!portalConfiguration }),
     webhook, command, customerPortal, entitlements, usage, trial,
+    customer: async (session, input) => { try { return await customerSelfService.handle(session, input); } catch (error) { throw asHttpError(error); } },
   };
 }

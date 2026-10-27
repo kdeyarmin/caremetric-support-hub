@@ -602,3 +602,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .mfa-setup { grid-template-columns: 1fr; justify-items: center; text-align: center; }
   .mfa-setup div { width: 100%; }
 }
+
+.recovery-secret { display: block; overflow-wrap: anywhere; padding: 1rem; border: 1px solid var(--border, #d6dbe4); user-select: all; }
+.manual-body { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+.manual-section { scroll-margin-top: 2rem; }
+@media print {
+  .sidebar, .topbar, .print-hidden, .preview-close { display: none !important; }
+  .app-shell { display: block !important; }
+  .manual-section { break-inside: avoid; box-shadow: none !important; }
+}
