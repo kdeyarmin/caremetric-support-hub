@@ -16,6 +16,7 @@ const appUrl = new URL(databaseUrl); appUrl.username = 'hub_app_server'; appUrl.
 const pool = new pg.Pool({ connectionString: appUrl.href });
 const product = (await admin.query("select id from hub.products where slug='carebase'")).rows[0].id;
 const keyId = randomUUID(), key = `cmb_${randomBytes(32).toString('base64url')}`;
+const supportOwner = randomUUID();
 const account = `selfservice_${randomUUID()}`, nativeUser = `user_${randomUUID()}`;
 let nativeProof = { account, user: nativeUser, account_name: 'Disposable self-service facility group', display_name: 'Synthetic customer',
   role: 'facility_admin', facilities: [{ id: 'site-a', name: 'Synthetic site A', permissions: ['employee.recovery', 'billing.manage', 'support.manage'] }], capabilities: ['training.profile.v1', 'employee.recovery.v1'] };
@@ -56,6 +57,11 @@ const privateRpc = (name, values) => withSession(pool, jar[sessionCookie], async
   return (await db.query(`select private.${name}(${values.map((_, index) => `$${index + 1}`).join(',')}) as result`, values)).rows[0].result;
 });
 try {
+  // Intake deliberately requires a usable support owner. Native customer
+  // linking must never grant those platform privileges to the customer.
+  await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'self-service-owner@test.invalid',false)", [supportOwner]);
+  await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')", [supportOwner]);
+  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550852',now())", [supportOwner]);
   await admin.query('insert into private.billing_app_keys(id,product_id,key_hash,key_hint) values($1,$2,$3,$4)', [keyId, product, digest(key), key.slice(-4)]);
   assert.equal((await call('apps/connect', nativeProof, { Authorization: `Bearer ${key}` })).status, 403, 'native proofs cannot come from a browser');
   assert.equal((await call('apps/connect', { ...nativeProof, role: 'platform_admin' }, { Authorization: `Bearer ${key}` }, false)).status, 400);
@@ -148,5 +154,8 @@ try {
     await admin.query('delete from hub.tenants where id=$1', [tenant]);
   }
   if (customerId) await admin.query('delete from auth.users where id=$1', [customerId]);
+  await admin.query('delete from private.staff_permissions where user_id=$1', [supportOwner]);
+  await admin.query('delete from private.sms_identities where user_id=$1', [supportOwner]);
+  await admin.query('delete from auth.users where id=$1', [supportOwner]);
   await pool.end(); await admin.end();
 }
