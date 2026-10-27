@@ -292,6 +292,21 @@ try {
   assert.equal(trialSubscription.trial_end - trialSubscription.trial_start, 14 * 86400);
   await assert.rejects(billing.trial('Bearer ' + breatheKey, { account: randomUUID(), name: 'No Plan', email: null, plan: 'missing-plan' }), error => error.status === 409);
 
+  // On boot the Hub catches up with what changed in Stripe without it: a product
+  // made in the Dashboard, and a customer created there for a Hub tenant.
+  const adopted = (await rpc('create_tenant', { p_record: { name: 'Adopted Agency ' + suffix, slug: 'adopted-billing-' + suffix, industry: '' } })).id;
+  tenantIds.push(adopted);
+  stripe.store.products.set('prod_dashboard_' + suffix, { id: 'prod_dashboard_' + suffix, object: 'product', name: 'Dashboard plan', description: null, active: true,
+    metadata: { app: 'caremetric-intel', kind: 'plan', entitlement: 'starter' }, unit_label: null, created: Math.floor(Date.now() / 1000), livemode: false });
+  stripe.store.customers.set('cus_dashboard' + suffix, { id: 'cus_dashboard' + suffix, object: 'customer', email: 'adopted@test.invalid', name: 'Adopted',
+    metadata: { hub_tenant_id: adopted }, delinquent: false, balance: 0, created: Math.floor(Date.now() / 1000), livemode: false });
+  const reconciled = await billing.reconcile();
+  assert.equal(reconciled.failed, 0);
+  assert.ok(reconciled.synced > 5);
+  assert.equal((await workspace()).products.find(item => item.id === 'prod_dashboard_' + suffix).app, 'caremetric-intel');
+  assert.equal((await customer(adopted)).customer.id, 'cus_dashboard' + suffix);
+  assert.equal((await customer(trial.tenant_id)).subscriptions.length, 1, 'reconciling never duplicates what the mirror has');
+
   // Suspending a tenant withdraws entitlements; canceling ends them.
   const suspendedFrom = (await customer(tenant)).updated_at;
   await rpc('save_tenant', { p_tenant_id: tenant, p_record: { name: 'Synthetic Billing Agency ' + suffix, industry: '', status: 'suspended' }, p_expected_updated_at: suspendedFrom });

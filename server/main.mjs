@@ -43,7 +43,7 @@ const billing=platformBilling({pool,secretKey:process.env.STRIPE_SECRET_KEY,
   webhookSecrets:(process.env.STRIPE_WEBHOOK_SECRET||'').split(',').map(value=>value.trim()).filter(Boolean),
   portalConfiguration:/^bpc_[A-Za-z0-9]+$/.test(process.env.STRIPE_PORTAL_CONFIGURATION_ID||'')?process.env.STRIPE_PORTAL_CONFIGURATION_ID:undefined,
   publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin});
-void billing.start();
+void billing.start().then(ready => ready && billing.reconcile()).catch(() => {});
 const readiness=goLiveReadiness({pool,rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
 const setup=integrationSetup({rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
 const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});

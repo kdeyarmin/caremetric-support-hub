@@ -655,8 +655,38 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     } catch (error) { throw asHttpError(error); }
   }
 
+  // After a verified start: bring the mirror up to date with Stripe, so a catalog
+  // edited in the Dashboard or a subscription changed while the Hub was down, or
+  // before its webhook existed, is never missing. Each object commits on its own.
+  async function reconcile() {
+    if (!(await verify())) return null;
+    const live = client;
+    let synced = 0, failed = 0;
+    const each = async (kind, rows) => {
+      for (const row of rows) {
+        try { await transaction(pool, db => mirror(db, kind, row, new Date(now()), { live })); synced++; }
+        catch { failed++; }
+      }
+    };
+    try {
+      await each('product', await live.list('/v1/products', {}, 1000));
+      await each('price', await live.list('/v1/prices', {}, 2000));
+      await each('coupon', await live.list('/v1/coupons', { expand: ['data.applies_to'] }, 1000));
+      await each('promotion_code', await live.list('/v1/promotion_codes', {}, 1000));
+      // Only customers the Hub created or adopted carry a Hub tenant.
+      const customers = (await live.list('/v1/customers', {}, 5000)).filter(customer => normalizers.customer(customer).tenant_id);
+      await each('customer', customers);
+      for (const customer of customers) {
+        await each('subscription', await live.list('/v1/subscriptions', { customer: customer.id, status: 'all', expand: ['data.discounts'] }, 200));
+        await each('invoice', await live.list('/v1/invoices', { customer: customer.id }, 200));
+      }
+    } catch { log.warn('Platform billing could not finish refreshing from Stripe; the webhook and Sync from Stripe keep it current.'); }
+    if (failed) log.warn(`Platform billing skipped ${failed} Stripe records it could not mirror.`);
+    return { synced, failed };
+  }
+
   return {
-    start: verify,
+    start: verify, reconcile,
     status: () => ({ configured: !!client, state, mode: client?.mode ?? null, account: state === 'ready' ? accountId : null,
       webhook: webhookSecrets.length > 0, portal_configuration: !!portalConfiguration }),
     webhook, command, customerPortal, entitlements, usage, trial,

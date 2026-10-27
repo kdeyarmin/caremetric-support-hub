@@ -51,6 +51,10 @@ answers never wait on Stripe.
   or out-of-order event can never overwrite newer state. Without a key it
   applies the event's own snapshot only when it is newer than what the mirror
   last saw.
+- On every start, once the key is verified, the Hub re-reads the catalog and
+  every customer that carries a Hub tenant (with their subscriptions and
+  invoices), so changes made in the Stripe Dashboard or while the Hub was down
+  are never missing.
 - **Refresh from Stripe** on a customer, and **Sync from Stripe** on the
   catalog, re-read everything for that customer or the whole catalog.
 - Every table is closed to browser, service and server roles; reads go through

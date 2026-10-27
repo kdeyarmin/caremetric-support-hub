@@ -86,6 +86,7 @@ export function fakeStripe({ accountId = 'acct_1SinLKB06O2UFlNz' } = {}) {
     const [resource, objectId, action] = parts;
     if (method === 'GET' && resource === 'account') return { status: 200, body: { id: accountId, object: 'account' } };
     if (resource === 'customers') {
+      if (method === 'GET' && !objectId) return { status: 200, body: { object: 'list', data: [...store.customers.values()], has_more: false } };
       if (method === 'POST' && !objectId) {
         const customer = { id: id('cus'), object: 'customer', email: params.email ?? null, name: params.name ?? null, metadata: params.metadata ?? {}, delinquent: false, balance: 0, created: now(), livemode: false };
         store.customers.set(customer.id, customer); emit('customer.created', customer); return { status: 200, body: customer };
