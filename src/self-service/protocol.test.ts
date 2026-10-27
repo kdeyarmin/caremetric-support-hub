@@ -7,7 +7,7 @@ describe('verified customer contracts', () => {
     expect(connectionProof.parse({ ...proof, role: 'member', facilities: [] }).facilities).toEqual([]);
   });
   it('refuses platform roles, invented permissions, and duplicated facilities', () => {
-    for (const value of [{ ...proof, role: 'platform_admin' }, { ...proof, facilities: [{ ...proof.facilities[0], permissions: ['account.admin'] }] }, { ...proof, facilities: [proof.facilities[0], proof.facilities[0]] }]) expect(connectionProof.safeParse(value).success).toBe(false);
+    for (const value of [{ ...proof, role: 'platform_admin' }, { ...proof, role: 'member' }, { ...proof, facilities: [{ ...proof.facilities[0], permissions: ['account.admin'] }] }, { ...proof, facilities: [proof.facilities[0], proof.facilities[0]] }]) expect(connectionProof.safeParse(value).success).toBe(false);
   });
   it('keeps targets and mutations inside a closed versioned operation', () => {
     expect(nativeOperation.safeParse({ action: 'recovery.execute', target: 'employee-a', recovery_action: 'unlock', request_id: crypto.randomUUID(), reason: 'Verified by the facility', endpoint: 'https://evil.invalid' }).success).toBe(false);

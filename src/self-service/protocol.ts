@@ -10,6 +10,7 @@ export const connectionProof = z.object({
   capabilities: z.array(z.enum(['training.profile.v1', 'employee.recovery.v1', 'facility.entitlements.v1'])).max(3),
 }).strict().superRefine((value, ctx) => {
   if (new Set(value.facilities.map(facility => facility.id)).size !== value.facilities.length) ctx.addIssue({ code: 'custom', message: 'Duplicate facility.' });
+  if (value.role === 'member' && value.facilities.some(facility => facility.permissions.length > 0)) ctx.addIssue({ code: 'custom', message: 'Members cannot hold delegated administrator permissions.' });
 });
 export type ConnectionProof = z.infer<typeof connectionProof>;
 export const recordStatuses = ['current', 'expiring', 'expired', 'pending_review', 'assigned', 'missing', 'historical', 'rejected', 'not_applicable'] as const;

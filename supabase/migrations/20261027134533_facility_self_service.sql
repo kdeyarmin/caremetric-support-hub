@@ -224,8 +224,8 @@ language sql stable security definer set search_path='' as $$
     and m.product_id=p_product_id and m.status='active' and m.revoked_at is null and m.case_scope='tenant')
    or exists(select 1 from hub.support_cases s join private.self_service_connections c on c.tenant_id=s.tenant_id and c.product_id=s.product_id
     where s.id=p_case_id and s.facility_shared and c.user_id=auth.uid() and c.revoked_at is null and c.scope_checked_at>now()-interval '1 minute'
-     and (c.role='organization_admin' or exists(select 1 from jsonb_array_elements(c.facilities) f
-      where f->>'id'=s.facility_id and f->'permissions' ? 'support.manage')))
+     and (c.role='organization_admin' or (c.role='facility_admin' and exists(select 1 from jsonb_array_elements(c.facilities) f
+      where f->>'id'=s.facility_id and f->'permissions' ? 'support.manage'))))
   )));
 $$;
 
