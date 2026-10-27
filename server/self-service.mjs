@@ -50,7 +50,7 @@ export function selfService({ pool, provider, fetchImpl = fetch, publicOrigin = 
     if (!adapter) throw new HttpError(503, 'This application has no self-service adapter.');
     const response = await fetchImpl(adapter.endpoint, { method: 'POST', headers: { [adapter.header ?? 'Authorization']: `Bearer ${capability}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ contract_version: 1, app: command.app, operation: command.operation }), redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(15000) });
-    if (!response.ok) throw new HttpError(response.status === 403 ? 403 : 503, response.status === 403 ? 'Your application no longer permits this action.' : 'The application could not complete this action. Open it directly or try again.');
+    if (!response.ok) throw new HttpError(response.status === 429 ? 429 : response.status === 403 ? 403 : 503, response.status === 429 ? 'Wait before retrying this action. Check recovery history if an earlier result was uncertain.' : response.status === 403 ? 'Your application no longer permits this action.' : 'The application could not complete this action. Open it directly or try again.');
     if (!response.body) throw new HttpError(503, 'The application returned no result.');
     const reader = response.body.getReader(); const chunks = []; let bytes = 0;
     try { for (;;) { const chunk = await reader.read(); if (chunk.done) break; bytes += chunk.value.byteLength; if (bytes > 1000000) throw new HttpError(413, 'Narrow the request before retrying.'); chunks.push(chunk.value); } }
