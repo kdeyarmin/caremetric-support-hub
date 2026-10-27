@@ -281,10 +281,10 @@ create table private.customer_billing_quotes (
  connection_id uuid not null references private.self_service_connections(id), tenant_id uuid not null references hub.tenants(id),
  product_id uuid not null references hub.products(id), facility_id text, request_key uuid not null,
  quote jsonb not null, execution jsonb not null, baseline_version integer not null,
- stripe_subscription_id text, stripe_schedule_id text, stripe_checkout_id text,
+ stripe_subscription_id text, stripe_schedule_id text, stripe_checkout_id text, payment_invoice_id text,
  state text not null default 'preview' check(state in ('preview','confirming','pending_payment','scheduled','applied','failed')),
  expires_at timestamptz not null default now()+interval '5 minutes', created_at timestamptz not null default now(),
- confirmed_at timestamptz, applied_at timestamptz,
+ confirmed_at timestamptz, payment_request_started_at timestamptz, applied_at timestamptz,
  unique(actor_id,request_key)
 );
 create unique index one_customer_billing_change_in_flight on private.customer_billing_quotes(tenant_id,product_id)
@@ -411,7 +411,7 @@ begin
  then raise exception 'Facility purchasing is not authorized' using errcode='42501';end if;
  select * into q from private.customer_billing_quotes where actor_id=auth.uid() and request_key=p_request_key;
  if found then
-  if q.connection_id<>p_connection or q.facility_id is distinct from p_facility or q.execution is distinct from p_execution then raise exception 'Quote request changed' using errcode='22023';end if;
+  if q.connection_id<>p_connection or q.facility_id is distinct from p_facility or q.execution->'intent' is distinct from p_execution->'intent' then raise exception 'Quote request changed' using errcode='22023';end if;
   return q.quote;
  end if;
  insert into private.customer_billing_quotes(id,actor_id,session_id,connection_id,tenant_id,product_id,facility_id,request_key,quote,execution,baseline_version,stripe_subscription_id)
@@ -430,15 +430,42 @@ begin
  select * into c from private.self_service_connections where id=q.connection_id and user_id=auth.uid() and revoked_at is null;
  if not found or not private.is_active_member(c.tenant_id,c.product_id) or not(c.role='organization_admin' or exists(select 1 from jsonb_array_elements(c.facilities) f where f->>'id'=q.facility_id and f->'permissions' ? 'billing.manage'))
  then raise exception 'Facility purchasing is no longer authorized' using errcode='42501';end if;
- if q.state<>'preview' then return jsonb_build_object('id',q.id,'state',q.state,'execution',q.execution,'subscription',q.stripe_subscription_id,'schedule',q.stripe_schedule_id,'tenant_id',q.tenant_id,'product_id',q.product_id,'connection_id',q.connection_id);end if;
+ if q.state<>'preview' then return jsonb_build_object('id',q.id,'state',q.state,'execution',q.execution,'subscription',q.stripe_subscription_id,'schedule',q.stripe_schedule_id,'payment_invoice',q.payment_invoice_id,'payment_request_started_at',q.payment_request_started_at,'confirmed_at',q.confirmed_at,'tenant_id',q.tenant_id,'product_id',q.product_id,'connection_id',q.connection_id);end if;
  if q.expires_at<=now() then raise exception 'Quote expired. Review a new price preview.' using errcode='40001';end if;
  if q.stripe_subscription_id is not null then
   select version into v from private.billing_subscriptions where stripe_subscription_id=q.stripe_subscription_id;
   if v is distinct from q.baseline_version then raise exception 'Subscription changed. Review a new preview.' using errcode='40001';end if;
  end if;
  if p_claim then update private.customer_billing_quotes set state='confirming',confirmed_at=now() where id=q.id;end if;
- return jsonb_build_object('id',q.id,'state','confirming','execution',q.execution,'subscription',q.stripe_subscription_id,'schedule',q.stripe_schedule_id,'tenant_id',q.tenant_id,'product_id',q.product_id,'connection_id',q.connection_id);
+ return jsonb_build_object('id',q.id,'state','confirming','execution',q.execution,'subscription',q.stripe_subscription_id,'schedule',q.stripe_schedule_id,'payment_invoice',q.payment_invoice_id,'payment_request_started_at',q.payment_request_started_at,'confirmed_at',coalesce(q.confirmed_at,now()),'tenant_id',q.tenant_id,'product_id',q.product_id,'connection_id',q.connection_id);
 end;$$;
+
+create function private.mark_customer_purchase_started(p_id uuid) returns void
+language plpgsql security definer set search_path='' as $$
+begin
+ perform private.require_hub_app_server();
+ update private.customer_billing_quotes set payment_request_started_at=coalesce(payment_request_started_at,now())
+  where id=p_id and state in ('confirming','pending_payment');
+ if not found then raise exception 'Purchase not pending' using errcode='42501';end if;
+end;$$;
+revoke all on function private.mark_customer_purchase_started(uuid) from public,anon,authenticated,service_role;
+grant execute on function private.mark_customer_purchase_started(uuid) to hub_app_server;
+
+-- Bind payment to the invoice returned by this immutable, idempotent purchase.
+-- A later unrelated paid invoice cannot activate a pending purchase.
+create function private.record_customer_payment_invoice(p_id uuid,p_invoice text) returns void
+language plpgsql security definer set search_path='' as $$
+declare q private.customer_billing_quotes;
+begin
+ perform private.require_hub_app_server();
+ if p_invoice is null or p_invoice !~ '^in_[A-Za-z0-9]{1,250}$' then raise exception 'Invalid payment receipt' using errcode='22023';end if;
+ select * into q from private.customer_billing_quotes where id=p_id for update;
+ if not found or q.state not in ('confirming','pending_payment') then raise exception 'Purchase not pending' using errcode='42501';end if;
+ if q.payment_invoice_id is not null and q.payment_invoice_id<>p_invoice then raise exception 'Payment receipt changed' using errcode='40001';end if;
+ update private.customer_billing_quotes set payment_invoice_id=p_invoice where id=p_id;
+end;$$;
+revoke all on function private.record_customer_payment_invoice(uuid,text) from public,anon,authenticated,service_role;
+grant execute on function private.record_customer_payment_invoice(uuid,text) to hub_app_server;
 
 -- Provider receipts, rather than the browser success page, commit purchased facility access.
 create function private.settle_customer_billing_quote(p_id uuid,p_state text,p_subscription text default null,p_schedule text default null,p_checkout text default null) returns void
@@ -472,7 +499,7 @@ create function private.customer_quotes_for_subscription(p_subscription text) re
 language plpgsql stable security definer set search_path='' as $$
 begin
  perform private.require_hub_app_server();
- return coalesce((select jsonb_agg(jsonb_build_object('id',q.id,'state',q.state,'execution',q.execution,'schedule',q.stripe_schedule_id) order by q.created_at)
+ return coalesce((select jsonb_agg(jsonb_build_object('id',q.id,'state',q.state,'execution',q.execution,'schedule',q.stripe_schedule_id,'payment_invoice',q.payment_invoice_id,'payment_request_started_at',q.payment_request_started_at,'confirmed_at',q.confirmed_at) order by q.created_at)
   from private.customer_billing_quotes q where q.stripe_subscription_id=p_subscription and q.state in ('confirming','pending_payment','scheduled')),'[]'::jsonb);
 end;$$;
 
@@ -487,7 +514,7 @@ do $$ declare contract jsonb; signature text; relation_name text; begin
    or has_table_privilege('authenticated',relation_name,'SELECT,INSERT,UPDATE,DELETE') or has_table_privilege('anon',relation_name,'SELECT,INSERT,UPDATE,DELETE')
   then raise exception 'Self-service state must remain private' using errcode='55000';end if;
  end loop;
- foreach signature in array array['private.consume_self_service_operation(text,text)','private.claim_customer_billing_quote(uuid,boolean)','private.settle_customer_billing_quote(uuid,text,text,text,text)'] loop
+ foreach signature in array array['private.consume_self_service_operation(text,text)','private.claim_customer_billing_quote(uuid,boolean)','private.mark_customer_purchase_started(uuid)','private.record_customer_payment_invoice(uuid,text)','private.settle_customer_billing_quote(uuid,text,text,text,text)'] loop
   if to_regprocedure(signature) is null or has_function_privilege('authenticated',signature,'EXECUTE') or has_function_privilege('anon',signature,'EXECUTE')
   then raise exception 'Self-service service functions must remain closed' using errcode='55000';end if;
  end loop;

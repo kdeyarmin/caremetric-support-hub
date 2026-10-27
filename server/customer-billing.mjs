@@ -3,6 +3,7 @@ import { HttpError, withSession, transaction } from './sms-auth.mjs';
 import { customerBillingRequest, customerBillingWorkspace } from '../src/billing/customerBillingProtocol.ts';
 import { aggregateFacilityLines, planFacilityChange } from '../src/billing/facilityAllocations.ts';
 import { selfServiceApps } from '../src/self-service/protocol.ts';
+import { normalizers, StripeError } from './stripe.mjs';
 
 const rows = subscription => (subscription.items?.data ?? []).map(item => ({ price: item.price.id ?? item.price, quantity: item.quantity ?? 1 })).sort((a, b) => a.price.localeCompare(b.price));
 export const sameBillingLines = (a, b) => JSON.stringify([...a].sort((x, y) => x.price.localeCompare(y.price))) === JSON.stringify([...b].sort((x, y) => x.price.localeCompare(y.price)));
@@ -16,6 +17,9 @@ export function subscriptionItemPatch(subscription, selected) {
 }
 const reference = value => typeof value === 'string' ? value : value?.id;
 const renewalOf = sub => sub.items.data[0]?.current_period_end ?? sub.current_period_end;
+function verifyAccount(subscription, execution) {
+  if (reference(subscription.customer) !== execution.customer || subscription.metadata?.app !== execution.app) throw new HttpError(409, 'The subscription account changed. Review a new preview.');
+}
 
 /** Browser choices never supply prices, quantities, native permissions, or a provider mutation. */
 export function customerBillingService({ pool, stripe, mirrorSubscription, authorize, now = () => Date.now(), purchasingEnabled = false }) {
@@ -73,20 +77,25 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, autho
     const invoice = hasImmediate ? await live.post('/v1/invoices/create_preview', { subscription: sub.id,
       subscription_details: { items: subscriptionItemPatch(sub, immediateLines), proration_behavior: 'always_invoice', proration_date: prorationDate } }) : null;
     const id = randomUUID(), renewal = new Date(renewalOf(sub) * 1000).toISOString();
+    const visibleLines = workspace.role === 'organization_admin' ? nextLines : aggregateFacilityLines(next.filter(row => row.facility_id === input.facility_id), catalog);
     const quote = { id, facility_name: input.facility_id ? targets[0].facility_name : 'All facilities in this organization', due_now: invoice?.amount_due ?? 0,
-      currency: workspace.subscription.currency, recurring_subtotal: nextLines.reduce((sum, line) => sum + catalog.get(line.price).amount * line.quantity, 0),
+      currency: workspace.subscription.currency, recurring_subtotal: visibleLines.reduce((sum, line) => sum + catalog.get(line.price).amount * line.quantity, 0),
       effective_at: hasScheduled ? renewal : null, expires_at: new Date(now() + 300000).toISOString(), has_immediate_change: hasImmediate, has_scheduled_change: hasScheduled,
-      summary: nextLines.map(line => ({ name: catalog.get(line.price).name, quantity: line.quantity, amount: catalog.get(line.price).amount * line.quantity })) };
+      summary: visibleLines.map(line => ({ name: catalog.get(line.price).name, quantity: line.quantity, amount: catalog.get(line.price).amount * line.quantity })) };
     const execution = { mode: workspace.mode, app: workspace.app, customer: workspace.customer, facility_id: input.facility_id, immediate, next, immediateLines, nextLines,
-      originalLines: rows(sub), renewal, prorationDate, interval: workspace.subscription.interval, hasImmediate, hasScheduled, maximumDue: quote.due_now, currency: quote.currency, schedule: reference(sub.schedule) ?? null };
+      intent: { plan: input.plan, addons: [...input.addons].sort() }, originalLines: rows(sub), purchaseItems: subscriptionItemPatch(sub, immediateLines), renewal, prorationDate, interval: workspace.subscription.interval, hasImmediate, hasScheduled, maximumDue: quote.due_now, currency: quote.currency, schedule: reference(sub.schedule) ?? null };
     return rpc(session, 'save_customer_billing_quote', [id, input.connection_id, input.facility_id, input.request_id, JSON.stringify(quote), JSON.stringify(execution), workspace.subscription.version, sub.id]);
   }
   async function scheduleChange(live, quote, subscription) {
     const execution = quote.execution;
     const key = `hub-customer-${quote.id}`;
-    let schedule = subscription.schedule ? await live.get(`/v1/subscription_schedules/${reference(subscription.schedule)}`)
+    // Replaying creation recovers our schedule after a lost response. Never adopt
+    // a schedule attached by somebody else between preview and confirmation.
+    if (execution.schedule && reference(subscription.schedule) !== execution.schedule) throw new HttpError(409, 'The subscription schedule changed. Review a new preview.');
+    let schedule = execution.schedule ? await live.get(`/v1/subscription_schedules/${execution.schedule}`)
       : await live.post('/v1/subscription_schedules', { from_subscription: subscription.id }, { idempotencyKey: `${key}-schedule` });
     if (execution.schedule && schedule.metadata?.hub_self_service !== 'true') throw new HttpError(409, 'The subscription has a managed schedule.');
+    if (reference(schedule.subscription) !== subscription.id) throw new HttpError(409, 'The schedule belongs to another subscription.');
     const phase = schedule.phases.find(item => item.start_date === schedule.current_phase?.start_date);
     if (!phase || phase.end_date !== Math.floor(Date.parse(execution.renewal) / 1000)) throw new HttpError(409, 'The renewal date changed. Review a new preview.');
     const settings = Object.fromEntries(['collection_method', 'default_payment_method', 'default_tax_rates', 'automatic_tax', 'discounts', 'invoice_settings', 'transfer_data', 'application_fee_percent', 'on_behalf_of']
@@ -100,19 +109,28 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, autho
   }
   async function finish(live, quote, subscription) {
     const execution = quote.execution;
-    if (reference(subscription.customer) !== execution.customer || subscription.metadata?.app !== execution.app) throw new HttpError(409, 'The provider receipt belongs to another account.');
+    verifyAccount(subscription, execution);
+    let invoice = null;
+    if (execution.hasImmediate && quote.payment_invoice) {
+      invoice = await live.get(`/v1/invoices/${quote.payment_invoice}`);
+      const receipt = normalizers.invoice(invoice);
+      if (receipt.customer !== execution.customer || receipt.subscription !== subscription.id) throw new HttpError(409, 'The payment receipt belongs to another subscription.');
+      if (['void', 'uncollectible'].includes(invoice.status) && !subscription.pending_update && sameBillingLines(rows(subscription), execution.originalLines)) {
+        await settle(quote.id, 'failed', subscription.id); return { state: 'failed' };
+      }
+    }
     if (subscription.status === 'canceled' && !execution.nextLines.length && now() >= Date.parse(execution.renewal)) {
       await settle(quote.id, 'applied', subscription.id); return { state: 'applied' };
     }
     if (!['active', 'trialing'].includes(subscription.status) || subscription.pending_update) {
       await settle(quote.id, 'pending_payment', subscription.id); return { state: 'pending_payment', url: subscription.latest_invoice?.hosted_invoice_url ?? null };
     }
-    if (now() >= Date.parse(execution.renewal) && sameBillingLines(rows(subscription), execution.nextLines)) {
+    if ((!execution.hasImmediate || invoice?.status === 'paid') && now() >= Date.parse(execution.renewal) && sameBillingLines(rows(subscription), execution.nextLines)) {
       await settle(quote.id, 'applied', subscription.id); return { state: 'applied' };
     }
     if (!sameBillingLines(rows(subscription), execution.immediateLines)) return { state: 'pending_payment' };
-    if (execution.hasImmediate && subscription.latest_invoice?.status !== 'paid') {
-      await settle(quote.id, 'pending_payment', subscription.id); return { state: 'pending_payment', url: subscription.latest_invoice?.hosted_invoice_url ?? null };
+    if (execution.hasImmediate && invoice?.status !== 'paid') {
+      await settle(quote.id, 'pending_payment', subscription.id); return { state: 'pending_payment', url: invoice?.hosted_invoice_url ?? null };
     }
     if (execution.hasScheduled) return quote.state === 'scheduled' ? { state: 'scheduled', effective_at: execution.renewal } : scheduleChange(live, quote, subscription);
     await settle(quote.id, 'applied', subscription.id); return { state: 'applied' };
@@ -126,17 +144,38 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, autho
     quote = await rpc(session, 'claim_customer_billing_quote', [input.quote_id, true]);
     const live = await stripe();
     let sub = await live.get(`/v1/subscriptions/${quote.subscription}`, { expand: ['latest_invoice', 'discounts'] });
-    if (!sameBillingLines(rows(sub), quote.execution.immediateLines)) {
-      if (!sameBillingLines(rows(sub), quote.execution.originalLines) || sub.pending_update || reference(sub.schedule) !== (quote.execution.schedule ?? undefined)) throw new HttpError(409, 'The subscription changed after this preview. Refresh before continuing.');
-      const invoice = await live.post('/v1/invoices/create_preview', { subscription: sub.id,
-        subscription_details: { items: subscriptionItemPatch(sub, quote.execution.immediateLines), proration_behavior: 'always_invoice', proration_date: quote.execution.prorationDate } });
-      if (invoice.currency !== quote.execution.currency || invoice.amount_due > quote.execution.maximumDue) {
-        await settle(quote.id, 'failed', sub.id);
-        throw new HttpError(409, 'The payment amount increased. Review a new preview before purchasing.');
+    try { verifyAccount(sub, quote.execution); } catch (error) { await settle(quote.id, 'failed', sub.id); throw error; }
+    if (quote.payment_invoice) return finish(live, quote, sub);
+    if (quote.execution.hasImmediate) {
+      if ((!sameBillingLines(rows(sub), quote.execution.originalLines) && !sameBillingLines(rows(sub), quote.execution.immediateLines)) || reference(sub.schedule) !== (quote.execution.schedule ?? undefined) || sub.status !== 'active' || sub.pause_collection || sub.cancel_at_period_end) {
+        await settle(quote.id, 'failed', sub.id); throw new HttpError(409, 'The subscription changed after this preview. Refresh before continuing.');
       }
-      sub = await live.post(`/v1/subscriptions/${sub.id}`, { items: subscriptionItemPatch(sub, quote.execution.immediateLines),
+      if (now() - Date.parse(quote.confirmed_at) >= 23 * 60 * 60 * 1000) throw new HttpError(409, 'This purchase needs payment reconciliation before it can be retried. Open a billing support request.');
+      if (!quote.payment_request_started_at) {
+        const invoice = await live.post('/v1/invoices/create_preview', { subscription: sub.id,
+          subscription_details: { items: quote.execution.purchaseItems, proration_behavior: 'always_invoice', proration_date: quote.execution.prorationDate } });
+        if (invoice.currency !== quote.execution.currency || invoice.amount_due > quote.execution.maximumDue) {
+          await settle(quote.id, 'failed', sub.id);
+          throw new HttpError(409, 'The payment amount increased. Review a new preview before purchasing.');
+        }
+        await service('mark_customer_purchase_started', [quote.id]);
+      }
+      let receipt;
+      try { receipt = await live.post(`/v1/subscriptions/${sub.id}`, { items: quote.execution.purchaseItems,
         payment_behavior: 'pending_if_incomplete', proration_behavior: 'always_invoice', proration_date: quote.execution.prorationDate,
-        expand: ['latest_invoice', 'discounts'] }, { idempotencyKey: `hub-customer-${quote.id}-purchase` });
+        expand: ['latest_invoice', 'discounts'] }, { idempotencyKey: `hub-customer-${quote.id}-purchase` }); }
+      catch (error) {
+        // Transport/5xx/decline outcomes may be ambiguous. Preserve their
+        // reservation and key; a definitive invalid request can be re-quoted.
+        if (error instanceof StripeError && [400, 404].includes(error.status) && error.type !== 'idempotency_error') await settle(quote.id, 'failed', sub.id);
+        throw error;
+      }
+      verifyAccount(receipt, quote.execution);
+      quote.payment_invoice = reference(receipt.latest_invoice);
+      await service('record_customer_payment_invoice', [quote.id, quote.payment_invoice]);
+      // An idempotent replay can return an old response. Settlement uses the
+      // current provider subscription and this purchase's exact invoice.
+      sub = await live.get(`/v1/subscriptions/${quote.subscription}`, { expand: ['latest_invoice', 'discounts'] });
     }
     await mirrorSubscription(sub);
     return finish(live, quote, sub);

@@ -8,6 +8,9 @@ from unnest(array['anon','authenticated','service_role','hub_app_server']) role_
 unnest(array['private.self_service_handoffs','private.self_service_connections','private.self_service_operations','private.customer_billing_quotes']) name;
 select ok(not has_function_privilege('authenticated','private.refresh_self_service_scope(uuid,jsonb)','EXECUTE'),'a browser cannot grant itself cached native authority');
 select ok(not has_function_privilege('authenticated','private.settle_customer_billing_quote(uuid,text,text,text,text)','EXECUTE'),'a browser cannot settle a purchase');
+select ok(not bool_or(has_function_privilege(role_name,signature,'EXECUTE')),'clients cannot fabricate purchase attempts or invoice receipts')
+from unnest(array['anon','authenticated','service_role']) role_name,
+unnest(array['private.mark_customer_purchase_started(uuid)','private.record_customer_payment_invoice(uuid,text)']) signature;
 select ok(hub.get_backend_contract()->'features' ? 'customer.self-service.v1','backend contract advertises the implemented customer interfaces');
 
 insert into hub.tenants(id,slug,name) values

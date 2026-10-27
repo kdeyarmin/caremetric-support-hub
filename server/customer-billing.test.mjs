@@ -5,6 +5,9 @@ const connection = '95000000-0000-4000-8000-000000000001', actor = '95000000-000
 const price = (id, key, amount, kind = 'plan') => ({ id, product: `prod_${id}`, name: key, description: '', kind, key, features: [key], allows_addons: kind === 'plan', active: true, amount, currency: 'usd', interval: 'month', interval_count: 1, model: 'per_unit', unit_label: 'facility' });
 function fixture({ payment = 'paid', denied = false } = {}) {
   const quotes = new Map(), events = [];
+  const purchases = new Map();
+  let currentTime = Date.parse('2026-01-02T00:00:00Z');
+  let invoice = { id: 'in_purchase', customer: 'cus_test', subscription: 'sub_test', status: payment === 'paid' ? 'paid' : 'open', hosted_invoice_url: 'https://invoice.stripe.com/synthetic' };
   const workspace = { connection_id: connection, tenant_id: '95000000-0000-4000-8000-000000000003', app: 'carebase', role: 'organization_admin', mode: 'legacy', configuration_version: 0, can_activate: false,
     facilities: [{ id: 'site-a', name: 'Site A', permissions: ['billing.manage'] }], allocations: [{ facility_id: 'site-a', facility_name: 'Site A', plan: 'price_core', addons: [], version: 0 }],
     catalog: [price('price_core', 'core', 1000), price('price_train', 'train', 500, 'addon')], customer: 'cus_test', loaded_at: '2026-01-01T00:00:00Z',
@@ -15,28 +18,35 @@ function fixture({ payment = 'paid', denied = false } = {}) {
     let result;
     if (sql.includes('private.customer_billing_context')) result = structuredClone(workspace);
     if (sql.includes('private.save_customer_billing_quote')) { const [id, connection_id, , , quote, execution] = args; quotes.set(id, { id, connection_id, quote: JSON.parse(quote), execution: JSON.parse(execution), state: 'preview', subscription: sub.id }); result = JSON.parse(quote); events.push('saved'); }
-    if (sql.includes('private.claim_customer_billing_quote')) { const q = quotes.get(args[0]); if (args[1]) { q.state = 'confirming'; events.push('reserved'); } result = structuredClone(q); }
+    if (sql.includes('private.claim_customer_billing_quote')) { const q = quotes.get(args[0]); if (args[1] && q.state === 'preview') { q.state = 'confirming'; q.confirmed_at = new Date(currentTime).toISOString(); events.push('reserved'); } result = structuredClone(q); }
+    if (sql.includes('private.record_customer_payment_invoice')) quotes.get(args[0]).payment_invoice = args[1];
+    if (sql.includes('private.mark_customer_purchase_started')) quotes.get(args[0]).payment_request_started_at = new Date(currentTime).toISOString();
     if (sql.includes('private.settle_customer_billing_quote')) { quotes.get(args[0]).state = args[1]; events.push(args[1]); }
     if (sql.includes('private.customer_quotes_for_subscription')) result = [...quotes.values()].filter(q => ['confirming', 'pending_payment', 'scheduled'].includes(q.state));
     return { rows: [{ result }] };
   });
   const pool = { connect: async () => ({ query, release() {} }) };
-  const live = { get: vi.fn(async () => structuredClone(sub)), post: vi.fn(async (path, params) => {
+  const live = { get: vi.fn(async path => structuredClone(path.startsWith('/v1/invoices/') ? invoice : sub)), post: vi.fn(async (path, params, options) => {
     if (path === '/v1/invoices/create_preview') return { amount_due: 250, currency: 'usd' };
     if (path === '/v1/subscriptions/sub_test') {
+      const prior = purchases.get(options.idempotencyKey);
+      if (prior) { expect(params).toEqual(prior.params); return structuredClone(prior.response); }
       expect(events).toContain('reserved'); events.push('provider_purchase');
-      if (payment === 'paid') sub = { ...sub, latest_invoice: { status: 'paid' }, items: { data: params.items.filter(item => !item.deleted).map((item, i) => ({ ...item, id: item.id ?? `si_new${i}`, price: { id: item.price }, current_period_start: 1767225600, current_period_end: 1769904000 })) } };
-      else sub = { ...sub, pending_update: { expires_at: 1767312000 }, latest_invoice: { status: 'open', hosted_invoice_url: 'https://invoice.stripe.com/synthetic' } };
+      if (payment === 'paid') sub = { ...sub, latest_invoice: structuredClone(invoice), items: { data: params.items.filter(item => !item.deleted).map((item, i) => ({ ...item, id: item.id ?? `si_new${i}`, price: { id: item.price }, current_period_start: 1767225600, current_period_end: 1769904000 })) } };
+      else sub = { ...sub, pending_update: { expires_at: 1767312000 }, latest_invoice: structuredClone(invoice) };
+      purchases.set(options.idempotencyKey, { params: structuredClone(params), response: structuredClone(sub) });
       return structuredClone(sub);
     }
-    if (path === '/v1/subscription_schedules') return { id: 'sub_sched', current_phase: { start_date: 1767225600 }, phases: [{ start_date: 1767225600, end_date: 1769904000 }] };
+    if (path === '/v1/subscription_schedules') return { id: 'sub_sched', subscription: sub.id, current_phase: { start_date: 1767225600 }, phases: [{ start_date: 1767225600, end_date: 1769904000 }] };
     if (path === '/v1/subscription_schedules/sub_sched') return { id: 'sub_sched', ...params };
     throw new Error(`Unexpected provider operation ${path}`);
   }) };
   const authorize = vi.fn(async () => { if (denied) throw Object.assign(new Error('Native authority revoked'), { status: 403 }); return { authorized: true }; });
-  const service = customerBillingService({ pool, stripe: async () => live, mirrorSubscription: async () => {}, authorize, now: () => Date.parse('2026-01-02T00:00:00Z'), purchasingEnabled: true });
+  const service = customerBillingService({ pool, stripe: async () => live, mirrorSubscription: async () => {}, authorize, now: () => currentTime, purchasingEnabled: true });
   const preview = (addons = ['price_train'], plan = 'price_core') => service.handle('session', { action: 'quote', connection_id: connection, facility_id: null, plan, addons, request_id: crypto.randomUUID() });
-  return { service, preview, live, quotes, events, authorize };
+  return { service, preview, live, quotes, events, authorize, query, workspace,
+    mutateSubscription: changes => { sub = { ...sub, ...changes }; }, mutateInvoice: changes => { invoice = { ...invoice, ...changes }; },
+    advance: milliseconds => { currentTime += milliseconds; } };
 }
 describe('customer purchases', () => {
   it('rechecks native authority before provider preview or mutation', async () => {
@@ -55,6 +65,51 @@ describe('customer purchases', () => {
     const test = fixture({ payment: 'challenge' }), quote = await test.preview();
     await expect(test.service.handle('session', { action: 'confirm', quote_id: quote.id, confirmed: true })).resolves.toMatchObject({ state: 'pending_payment' });
     expect(test.events).not.toContain('applied'); expect(test.quotes.get(quote.id).state).toBe('pending_payment');
+  });
+  it.each([{ customer: 'cus_other' }, { metadata: { app: 'breathe' } }])('refuses a changed provider account before mutation: %j', async changes => {
+    const test = fixture(), quote = await test.preview(); test.mutateSubscription(changes);
+    await expect(test.service.handle('session', { action: 'confirm', quote_id: quote.id, confirmed: true })).rejects.toMatchObject({ status: 409 });
+    expect(test.events).not.toContain('provider_purchase'); expect(test.quotes.get(quote.id).state).toBe('failed');
+  });
+  it('does not activate a purchase from an unrelated paid invoice', async () => {
+    const test = fixture({ payment: 'challenge' }), quote = await test.preview();
+    await test.service.handle('session', { action: 'confirm', quote_id: quote.id, confirmed: true });
+    test.mutateSubscription({ pending_update: null, latest_invoice: { id: 'in_other', status: 'paid' }, items: { data: [{ id: 'si_core', price: { id: 'price_core' }, quantity: 1 }, { id: 'si_new', price: { id: 'price_train' }, quantity: 1 }] } });
+    await test.service.reconcileSubscription({ id: 'sub_test', metadata: { app: 'carebase' } });
+    expect(test.events).not.toContain('applied'); expect(test.quotes.get(quote.id).state).toBe('pending_payment');
+    test.mutateInvoice({ status: 'paid' });
+    await test.service.reconcileSubscription({ id: 'sub_test', metadata: { app: 'carebase' } });
+    expect(test.quotes.get(quote.id).state).toBe('applied');
+  });
+  it('releases a failed purchase after its exact invoice is voided and the pending update is gone', async () => {
+    const test = fixture({ payment: 'challenge' }), quote = await test.preview();
+    await test.service.handle('session', { action: 'confirm', quote_id: quote.id, confirmed: true });
+    test.mutateSubscription({ pending_update: null }); test.mutateInvoice({ status: 'void' });
+    await test.service.reconcileSubscription({ id: 'sub_test', metadata: { app: 'carebase' } });
+    expect(test.quotes.get(quote.id).state).toBe('failed'); expect(test.events).not.toContain('applied');
+  });
+  it('recovers a lost receipt with unchanged provider parameters and one charge', async () => {
+    const test = fixture(), quote = await test.preview();
+    const provider = test.live.post.getMockImplementation(); let lost = false;
+    test.live.post.mockImplementation(async (...args) => { const response = await provider(...args); if (args[0] === '/v1/subscriptions/sub_test' && !lost) { lost = true; throw new Error('Lost provider response'); } return response; });
+    const confirm = () => test.service.handle('session', { action: 'confirm', quote_id: quote.id, confirmed: true });
+    await expect(confirm()).rejects.toThrow('Lost provider response'); await expect(confirm()).resolves.toEqual({ state: 'applied' });
+    expect(test.events.filter(event => event === 'provider_purchase')).toHaveLength(1);
+    expect(test.live.post.mock.calls.filter(([path]) => path === '/v1/invoices/create_preview')).toHaveLength(2);
+  });
+  it('keeps retries outside the provider idempotency window from making a new charge', async () => {
+    const test = fixture(), quote = await test.preview();
+    test.quotes.get(quote.id).state = 'confirming'; test.quotes.get(quote.id).confirmed_at = '2026-01-01T00:00:00Z';
+    await expect(test.service.handle('session', { action: 'confirm', quote_id: quote.id, confirmed: true })).rejects.toThrow(/reconciliation/);
+    expect(test.events).not.toContain('provider_purchase');
+  });
+  it('does not adopt a schedule attached after preview', async () => {
+    const test = fixture(), quote = await test.preview([], null);
+    test.mutateSubscription({ schedule: 'sub_sched_external' });
+    const provider = test.live.post.getMockImplementation();
+    test.live.post.mockImplementation(async (...args) => { if (args[0] === '/v1/subscription_schedules') throw new Error('Subscription already has a schedule'); return provider(...args); });
+    await expect(test.service.handle('session', { action: 'confirm', quote_id: quote.id, confirmed: true })).rejects.toThrow(/already has/);
+    expect(test.live.post.mock.calls.some(([path]) => path === '/v1/subscription_schedules/sub_sched_external')).toBe(false);
   });
   it('requires an explicit confirmation literal', async () => {
     const test = fixture(), quote = await test.preview(); await expect(test.service.handle('session', { action: 'confirm', quote_id: quote.id, confirmed: false })).rejects.toMatchObject({ status: 400 }); expect(test.events).toEqual(['saved']);
