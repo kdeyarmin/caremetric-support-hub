@@ -1,10 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { aggregateFacilityLines, planFacilityChange } from './facilityAllocations';
+import { aggregateFacilityLines, initialSubscriptionLines, planFacilityChange } from './facilityAllocations';
 import type { FacilityAllocation, SellablePrice } from './customerBillingProtocol';
 const price = (id: string, amount: number, kind: 'plan' | 'addon' = 'plan', key = id): SellablePrice => ({ id, product: id, name: id, description: '', amount, kind, key, features: [], allows_addons: key === 'core', active: true, currency: 'usd', interval: 'month', interval_count: 1, model: 'per_unit', unit_label: 'facility' });
 const catalog = [price('core', 19900), price('complete', 64900), price('train', 9900, 'addon'), price('workforce', 9900, 'addon')];
 const row = (facility_id: string, addons: string[] = []): FacilityAllocation => ({ facility_id, facility_name: facility_id, plan: 'core', addons, version: 1 });
 const cadence = { interval: 'month', currency: 'usd' };
+describe('initial subscription selections', () => {
+  it('combines published flat and facility prices without multiplying the flat add-on', () => {
+    const prices = [price('core', 1000), { ...price('flat-addon', 500, 'addon'), model: 'flat' as const }];
+    expect(initialSubscriptionLines('core', ['flat-addon'], prices, 3)).toEqual([{ price: 'core', quantity: 3 }, { price: 'flat-addon', quantity: 1 }]);
+  });
+  it('refuses incompatible currencies and billing cycles and unpublished selections', () => {
+    expect(() => initialSubscriptionLines('core', ['train'], catalog.map(p => p.id === 'train' ? { ...p, currency: 'eur' } : p), 1)).toThrow(/currency/);
+    expect(() => initialSubscriptionLines('core', ['train'], catalog.map(p => p.id === 'train' ? { ...p, interval: 'year' } : p), 1)).toThrow(/cycle/);
+    expect(() => initialSubscriptionLines('core', [], catalog.map(p => p.id === 'core' ? { ...p, active: false } : p), 1)).toThrow(/active/);
+  });
+});
 describe('facility subscription changes', () => {
   it('consolidates only the facilities that selected each price', () => {
     expect(aggregateFacilityLines([row('a', ['train']), row('b', ['workforce'])], new Map(catalog.map(item => [item.id, item])))).toEqual([{ price: 'core', quantity: 2 }, { price: 'train', quantity: 1 }, { price: 'workforce', quantity: 1 }]);

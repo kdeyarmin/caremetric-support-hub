@@ -11,5 +11,6 @@
   "support.ai",
   "knowledge.manuals",
   "facility.setup",
-  "support.diagnostics"
+  "support.diagnostics",
+  "billing.checkout"
 ]

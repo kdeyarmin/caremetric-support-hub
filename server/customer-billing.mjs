@@ -4,6 +4,7 @@ import { customerBillingRequest, customerBillingWorkspace } from '../src/billing
 import { aggregateFacilityLines, planFacilityChange } from '../src/billing/facilityAllocations.ts';
 import { selfServiceApps } from '../src/self-service/protocol.ts';
 import { normalizers, StripeError } from './stripe.mjs';
+import { customerCheckoutService } from './customer-checkout.mjs';
 
 const rows = subscription => (subscription.items?.data ?? []).map(item => ({ price: item.price.id ?? item.price, quantity: item.quantity ?? 1 })).sort((a, b) => a.price.localeCompare(b.price));
 export const sameBillingLines = (a, b) => JSON.stringify([...a].sort((x, y) => x.price.localeCompare(y.price))) === JSON.stringify([...b].sort((x, y) => x.price.localeCompare(y.price)));
@@ -28,13 +29,14 @@ function verifyAccount(subscription, execution) {
 }
 
 /** Browser choices never supply prices, quantities, native permissions, or a provider mutation. */
-export function customerBillingService({ pool, stripe, mirrorSubscription, authorize, now = () => Date.now(), purchasingEnabled = false }) {
+export function customerBillingService({ pool, stripe, mirrorSubscription, mirrorCustomer, mirrorInvoice, publicOrigin, authorize, now = () => Date.now(), purchasingEnabled = false }) {
   const one = async (db, query, values) => (await db.query(query, values)).rows[0]?.result;
   const rpc = (session, name, values) => withSession(pool, session, async db => {
     await db.query('reset role');
     return one(db, `select private.${name}(${values.map((_, i) => `$${i + 1}`).join(',')}) as result`, values);
   });
   const service = (name, values) => transaction(pool, db => one(db, `select private.${name}(${values.map((_, i) => `$${i + 1}`).join(',')}) as result`, values));
+  const checkout = customerCheckoutService({ stripe, rpc, service, mirrorCustomer, mirrorSubscription, mirrorInvoice, publicOrigin, now });
   const settle = (id, state, sub = null, schedule = null) => service('settle_customer_billing_quote', [id, state, sub, schedule, null]);
   const context = async (session, connection) => {
     const workspace = customerBillingWorkspace.parse(await rpc(session, 'customer_billing_context', [connection]));
@@ -59,7 +61,7 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, autho
   function publicWorkspace(workspace) {
     if (workspace.role === 'organization_admin') return workspace;
     const permitted = new Set(workspace.facilities.filter(site => site.permissions.includes('billing.manage')).map(site => site.id));
-    return { ...workspace, allocations: workspace.allocations.filter(row => permitted.has(row.facility_id)), customer: null,
+    return { ...workspace, allocations: workspace.allocations.filter(row => permitted.has(row.facility_id)), customer: null, pending_checkout: null,
       subscription: workspace.subscription ? { ...workspace.subscription, items: [] } : null };
   }
   async function providerSubscription(live, workspace) {
@@ -70,11 +72,16 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, autho
     return sub;
   }
   async function preview(session, input) {
-    const workspace = await context(session, input.connection_id);
+    let workspace = await context(session, input.connection_id);
     await verifyScope(session, workspace, input.facility_id);
+    workspace = await context(session, input.connection_id);
+    if (!workspace.subscription) return checkout.preview(session, input, workspace);
     const live = await stripe(), sub = await providerSubscription(live, workspace);
     const catalog = new Map(workspace.catalog.map(price => [price.id, price]));
-    if (workspace.mode === 'legacy' && !workspace.facilities.length && [input.plan, ...input.addons].filter(Boolean).some(id => catalog.get(id)?.model !== 'flat')) {
+    if ([input.plan, ...input.addons].filter(Boolean).some(id => {
+      const price = catalog.get(id);
+      return price?.model === 'per_unit' && (!workspace.facilities.length || !/^facilit(?:y|ies)$/i.test(price.unit_label));
+    })) {
       throw new HttpError(409, 'This product uses quantity-based billing. Its native usage must be verified before changing the subscription.');
     }
     let immediate = workspace.allocations, next = workspace.allocations;
@@ -194,6 +201,7 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, autho
     const workspace = await context(session, quote.connection_id);
     await verifyScope(session, workspace, quote.execution.facility_id);
     quote = await rpc(session, 'claim_customer_billing_quote', [input.quote_id, true]);
+    if (quote.execution.kind === 'checkout') return checkout.start(quote, await context(session, quote.connection_id));
     const live = await stripe();
     let sub = await live.get(`/v1/subscriptions/${quote.subscription}`, { expand: ['latest_invoice', 'discounts'] });
     try { verifyAccount(sub, quote.execution); } catch (error) { await settle(quote.id, 'failed', sub.id); throw error; }
@@ -238,7 +246,7 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, autho
     if (!quotes?.length) return;
     const live = await stripe();
     const latest = await live.get(`/v1/subscriptions/${subscription.id}`, { expand: ['latest_invoice', 'discounts'] });
-    for (const quote of quotes) await finish(live, quote, latest);
+    for (const quote of quotes) if (quote.execution.kind !== 'checkout') await finish(live, quote, latest);
   }
   async function handle(session, input) {
     const parsed = customerBillingRequest.safeParse(input);
@@ -249,9 +257,16 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, autho
       const facility = workspace.role === 'organization_admin' ? null : workspace.facilities.find(site => site.permissions.includes('billing.manage'))?.id;
       if (facility === undefined) throw new HttpError(403, 'Purchasing permission is required.');
       await authorize(session, request.connection_id, facility);
-      return { ...publicWorkspace(workspace), purchasing_enabled: purchasingEnabled };
+      return { ...publicWorkspace(await context(session, request.connection_id)), purchasing_enabled: purchasingEnabled };
     }
     if (request.action === 'quote') return preview(session, request);
+    if (request.action === 'checkout_resume' || request.action === 'checkout_cancel') {
+      const workspace = await context(session, request.connection_id);
+      await verifyScope(session, workspace, null);
+      const quote = await rpc(session, 'customer_checkout_status', [request.quote_id, request.connection_id]);
+      const fresh = await context(session, request.connection_id);
+      return request.action === 'checkout_cancel' ? checkout.cancel(quote, fresh) : checkout.start(quote, fresh, { allowCreate: purchasingEnabled });
+    }
     if (!purchasingEnabled) throw new HttpError(503, 'Subscription purchasing is not yet enabled. Your existing subscription and payment services remain available.');
     if (request.action === 'confirm') return confirm(session, request);
     const workspace = await context(session, request.connection_id);
@@ -263,5 +278,5 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, autho
     await rpc(session, 'activate_facility_billing', [request.connection_id, request.expected_version, JSON.stringify(workspace.allocations)]);
     return { state: 'activated' };
   }
-  return { handle, reconcileSubscription };
+  return { handle, reconcileSubscription, reconcileCheckout: checkout.reconcile, reconcileCheckouts: checkout.reconcileAll };
 }

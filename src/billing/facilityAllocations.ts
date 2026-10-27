@@ -36,6 +36,25 @@ function validateSelection(row: FacilityAllocation, prior: FacilityAllocation, c
   }
 }
 
+/** Initial purchases use only a published billing basis with verified quantities. */
+export function initialSubscriptionLines(plan: string | null, addons: string[], prices: SellablePrice[], facilityCount: number): BillingLine[] {
+  const catalog = new Map(prices.map(price => [price.id, price]));
+  const base = plan ? catalog.get(plan) : null;
+  if (!base) throw new Error('Choose an available base plan.');
+  const row = { facility_id: 'organization', facility_name: 'Organization', plan, addons, version: 0 };
+  validateSelection(row, { ...row, plan: null, addons: [] }, catalog, base);
+  const selected = selectedPrices(row);
+  if (selected.length > 20) throw new Error('Choose at most 20 subscription prices.');
+  return selected.sort().map(id => {
+    const price = catalog.get(id)!;
+    if (price.model === 'flat') return { price: id, quantity: 1 };
+    if (!/^facilit(?:y|ies)$/i.test(price.unit_label) || !Number.isSafeInteger(facilityCount) || facilityCount < 1) {
+      throw new Error('This price requires a verified native usage quantity before it can be purchased.');
+    }
+    return { price: id, quantity: facilityCount };
+  });
+}
+
 /** Additions take effect now; removals retain their existing access and charges until renewal. */
 export function planFacilityChange(current: FacilityAllocation[], target: FacilityAllocation, prices: SellablePrice[], cadence: { interval: string; currency: string }) {
   const catalog = new Map(prices.map(price => [price.id, price]));

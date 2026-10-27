@@ -7,6 +7,8 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
  * Secrets never appear in thrown messages or logs.
  */
 export const STRIPE_API_VERSION = '2026-02-25.clover';
+// New Checkout sessions use the current API without changing existing integrations.
+export const CHECKOUT_API_VERSION = '2026-08-26.dahlia';
 /** The CareMetric account. A key for any other account is refused at startup. */
 export const STRIPE_ACCOUNT_ID = 'acct_1SinLKB06O2UFlNz';
 
@@ -38,10 +40,10 @@ export const keyMode = key => /^(sk|rk)_live_/.test(key ?? '') ? 'live' : /^(sk|
 
 export function stripeClient({ secretKey, fetchImpl = fetch, apiBase = 'https://api.stripe.com', timeoutMs = 20000 }) {
   if (!keyMode(secretKey)) return null;
-  async function request(method, path, params, { idempotencyKey } = {}) {
+  async function request(method, path, params, { idempotencyKey, apiVersion = STRIPE_API_VERSION } = {}) {
     if (!/^\/v1\/[A-Za-z0-9_/.-]+$/.test(path)) throw new Error('Invalid Stripe path.');
     const query = method === 'GET' && params ? `?${formEncode(params)}` : '';
-    const headers = { Authorization: `Bearer ${secretKey}`, 'Stripe-Version': STRIPE_API_VERSION };
+    const headers = { Authorization: `Bearer ${secretKey}`, 'Stripe-Version': apiVersion };
     if (method !== 'GET') headers['Content-Type'] = 'application/x-www-form-urlencoded';
     if (idempotencyKey && method === 'POST') headers['Idempotency-Key'] = idempotencyKey;
     for (let attempt = 0; ; attempt++) {
@@ -68,7 +70,7 @@ export function stripeClient({ secretKey, fetchImpl = fetch, apiBase = 'https://
   }
   return {
     mode: keyMode(secretKey),
-    get: (path, params) => request('GET', path, params),
+    get: (path, params, options) => request('GET', path, params, options),
     post: (path, params, options) => request('POST', path, params, options),
     del: (path, params) => request('DELETE', path, params),
     /** Every page of a list endpoint, up to a hard limit. */
@@ -178,6 +180,8 @@ export function normalizeSubscription(subscription, livemode = subscription.live
   const ends = (subscription.items?.data ?? []).map(item => item.current_period_end).filter(Number.isInteger);
   return {
     id: subscription.id, customer: idOf(subscription.customer), app: appOf(subscription.metadata), status: subscription.status,
+    checkout_required: Object.hasOwn(subscription.metadata ?? {}, 'hub_checkout_quote'),
+    checkout_quote: uuid(subscription.metadata?.hub_checkout_quote),
     collection_method: subscription.collection_method === 'send_invoice' ? 'send_invoice' : 'charge_automatically',
     cancel_at_period_end: subscription.cancel_at_period_end === true, cancel_at: int(subscription.cancel_at), canceled_at: int(subscription.canceled_at),
     ended_at: int(subscription.ended_at),
@@ -228,6 +232,7 @@ export function eventTarget(event) {
   const object = event?.data?.object;
   const type = event?.type ?? '';
   if (!object || typeof object !== 'object') return null;
+  if (type.startsWith('checkout.session.') && object.object === 'checkout.session') return { kind: 'checkout', id: object.id };
   if (type.startsWith('customer.subscription.')) return { kind: 'subscription', id: object.id };
   if (type.startsWith('customer.discount.')) return object.subscription ? { kind: 'subscription', id: idOf(object.subscription) } : null;
   if (type.startsWith('customer.') && object.object === 'customer') return { kind: 'customer', id: object.id };
@@ -256,6 +261,7 @@ export const normalizers = Object.freeze({
 
 /** The webhook events the Hub endpoint subscribes to. */
 export const webhookEvents = Object.freeze([
+  'checkout.session.completed', 'checkout.session.async_payment_succeeded', 'checkout.session.async_payment_failed', 'checkout.session.expired',
   'customer.created', 'customer.updated', 'customer.deleted',
   'customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted',
   'customer.subscription.paused', 'customer.subscription.resumed', 'customer.subscription.trial_will_end',

@@ -166,6 +166,7 @@ values(md5('self-service.subscriptions:revision:1')::uuid,md5('self-service.subs
 - A verified customer-center connection and current native purchasing permission.
 - A current active organization subscription for plan changes. Trials, pending payments, cancellations, and managed contracts retain their existing restrictions.
 - Different facility plans require the application''s verified facility-entitlement capability. Until enabled, facilities share the organization plan.
+- First-time paid setup requires an organization administrator and no unresolved subscription, trial, or checkout. Published facility prices require verified native facilities; other usage-based products require their application’s usage adapter.
 
 ## Permitted roles
 
@@ -177,6 +178,7 @@ values(md5('self-service.subscriptions:revision:1')::uuid,md5('self-service.subs
 1. Open Plans & add-ons in Customer center and select the connected application.
 2. Choose a permitted facility when facility subscriptions are enabled, otherwise review the shared organization selection.
 3. Use Invoices & payments to update shared payment details or pay an open invoice in Stripe.
+4. For an organization with no subscription, choose a plan and compatible add-ons, select Review subscription, and confirm the server’s price preview to open secure Stripe payment.
 
 ## Normal use
 
@@ -186,6 +188,9 @@ values(md5('self-service.subscriptions:revision:1')::uuid,md5('self-service.subs
 4. Select Confirm subscription change only when the preview is correct. Additions and upgrades wait for confirmed payment. Removals, downgrades, and cancellation start at renewal.
 5. If payment needs authentication, open the invoice in Invoices & payments and complete Stripe''s instructions. The success page alone does not grant purchased access.
 6. To keep the current services instead of a scheduled downgrade or cancellation, select the current plan and add-ons, review the notice that removes the scheduled change, and confirm. This action does not charge a payment.
+7. First-time checkout opens a secure payment page. Payment may require bank authentication or remain pending; the customer center grants access only after it verifies the exact initial invoice and subscription. Returning from Stripe does not grant access.
+8. If you close the payment page or lose the response, reopen Plans & add-ons and choose Check payment status / resume checkout. An organization administrator with current access can resume it after signing in again.
+9. To abandon an unpaid checkout, select Confirm cancel pending checkout. Wait for cancellation to be confirmed before reviewing another selection. Completed payments are reconciled instead of being reported as cancelled.
 
 ## Common problems
 
@@ -194,12 +199,16 @@ values(md5('self-service.subscriptions:revision:1')::uuid,md5('self-service.subs
 - Pending payment: complete the existing invoice before making another purchase. Your previously purchased access is retained under the existing subscription rules.
 - Managed schedule, trial, or quantity mismatch: the account retains its current terms. Open a billing support request if the displayed restriction needs review.
 - A later selection replaces an older scheduled request. Failed or externally removed changes clear their pending selection; a delayed receipt cannot restore the older choice.
+- Pending checkout: resume the existing payment instead of starting another subscription. First-time payment pages expire about one hour after confirmation. A failed or expired checkout can be replaced after the provider confirms its status.
+- Changed amount, missing receipt, or a provider outage: access stays pending. Use connection diagnostics or open a billing support ticket; include the checkout reference, without payment details.
+- A first-time purchase does not replace an existing trial or managed contract. Keep using the current payment and support tools until those terms are resolved.
 
 ## FAQ
 
 - Are flat prices multiplied by facilities? No. Published flat pricing keeps quantity one. Facility prices aggregate the selected facility quantities.
 - Does enabling facility selections charge again? No. Activation verifies that current quantities and prices match before creating allocations.
 - Can a facility manager edit the organization''s payment method? No. Shared payment administration belongs to organization administrators.
+- Can another administrator resume checkout? An organization administrator for the same application and organization can check or cancel it with current native authorization. Facility administrators and administrators for other organizations cannot.
 
 ## Helpful tips
 
@@ -208,6 +217,7 @@ values(md5('self-service.subscriptions:revision:1')::uuid,md5('self-service.subs
 - A verified customer-center connection and current native purchasing permission.
 - A current active organization subscription for plan changes. Trials, pending payments, cancellations, and managed contracts retain their existing restrictions.
 - Different facility plans require the application''s verified facility-entitlement capability. Until enabled, facilities share the organization plan.
+- First-time paid setup requires an organization administrator and no unresolved subscription, trial, or checkout. Published facility prices require verified native facilities; other usage-based products require their application’s usage adapter.
 
 ## Permitted roles
 
@@ -219,6 +229,7 @@ values(md5('self-service.subscriptions:revision:1')::uuid,md5('self-service.subs
 1. Open Plans & add-ons in Customer center and select the connected application.
 2. Choose a permitted facility when facility subscriptions are enabled, otherwise review the shared organization selection.
 3. Use Invoices & payments to update shared payment details or pay an open invoice in Stripe.
+4. For an organization with no subscription, choose a plan and compatible add-ons, select Review subscription, and confirm the server’s price preview to open secure Stripe payment.
 
 ## Normal use
 
@@ -228,6 +239,9 @@ values(md5('self-service.subscriptions:revision:1')::uuid,md5('self-service.subs
 4. Select Confirm subscription change only when the preview is correct. Additions and upgrades wait for confirmed payment. Removals, downgrades, and cancellation start at renewal.
 5. If payment needs authentication, open the invoice in Invoices & payments and complete Stripe''s instructions. The success page alone does not grant purchased access.
 6. To keep the current services instead of a scheduled downgrade or cancellation, select the current plan and add-ons, review the notice that removes the scheduled change, and confirm. This action does not charge a payment.
+7. First-time checkout opens a secure payment page. Payment may require bank authentication or remain pending; the customer center grants access only after it verifies the exact initial invoice and subscription. Returning from Stripe does not grant access.
+8. If you close the payment page or lose the response, reopen Plans & add-ons and choose Check payment status / resume checkout. An organization administrator with current access can resume it after signing in again.
+9. To abandon an unpaid checkout, select Confirm cancel pending checkout. Wait for cancellation to be confirmed before reviewing another selection. Completed payments are reconciled instead of being reported as cancelled.
 
 ## Common problems
 
@@ -236,16 +250,20 @@ values(md5('self-service.subscriptions:revision:1')::uuid,md5('self-service.subs
 - Pending payment: complete the existing invoice before making another purchase. Your previously purchased access is retained under the existing subscription rules.
 - Managed schedule, trial, or quantity mismatch: the account retains its current terms. Open a billing support request if the displayed restriction needs review.
 - A later selection replaces an older scheduled request. Failed or externally removed changes clear their pending selection; a delayed receipt cannot restore the older choice.
+- Pending checkout: resume the existing payment instead of starting another subscription. First-time payment pages expire about one hour after confirmation. A failed or expired checkout can be replaced after the provider confirms its status.
+- Changed amount, missing receipt, or a provider outage: access stays pending. Use connection diagnostics or open a billing support ticket; include the checkout reference, without payment details.
+- A first-time purchase does not replace an existing trial or managed contract. Keep using the current payment and support tools until those terms are resolved.
 
 ## FAQ
 
 - Are flat prices multiplied by facilities? No. Published flat pricing keeps quantity one. Facility prices aggregate the selected facility quantities.
 - Does enabling facility selections charge again? No. Activation verifies that current quantities and prices match before creating allocations.
 - Can a facility manager edit the organization''s payment method? No. Shared payment administration belongs to organization administrators.
+- Can another administrator resume checkout? An organization administrator for the same application and organization can check or cancel it with current native authorization. Facility administrators and administrators for other organizations cannot.
 
 ## Helpful tips
 
-- Save the quote or ticket reference when asking about a charge; never place card numbers in a support ticket.','{"features":["billing.subscription","billing.payments"]}'::jsonb,'self-service.v1','approved',now()) on conflict(id) do nothing;
+- Save the quote or ticket reference when asking about a charge; never place card numbers in a support ticket.','{"features":["billing.subscription","billing.payments","billing.checkout"]}'::jsonb,'self-service.v1','approved',now()) on conflict(id) do nothing;
 insert into hub.content_publications(id,item_id,revision_id,product_id,audience)
 select md5('self-service.subscriptions:publication:'||slug)::uuid,md5('self-service.subscriptions')::uuid,md5('self-service.subscriptions:revision:1')::uuid,id,array['all']::text[] from hub.products where slug in ('carebase','breathe','pennsync','caremetric-emr','caremetric-intel')
 on conflict(item_id,product_id) do nothing;

@@ -6,6 +6,7 @@ import { appServer } from './http.mjs';
 import { gateway } from './gateway.mjs';
 import { selfService, nativeSelfService } from './self-service.mjs';
 import { smsAuth, sessionCookie, digest, transaction, withSession } from './sms-auth.mjs';
+import { exerciseCustomerCheckout } from './customer-checkout-integration.mjs';
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -169,6 +170,9 @@ try {
   assert.deepEqual((await admin.query('select plan_price,pending_plan,pending_at from private.facility_billing_allocations where tenant_id=$1 and product_id=$2', [tenant, product])).rows,
     [{ plan_price: 'price_core', pending_plan: null, pending_at: null }]);
 
+  nativeProof = { ...nativeProof, role: 'organization_admin' };
+  assert.equal((await call('self-service', { action: 'workspace' })).body.connections[0].role, 'organization_admin');
+  await exerciseCustomerCheckout({ admin, pool, privateRpc, connection, tenant, product, customerId, account });
   nativeProof = { ...nativeProof, role: 'member', facilities: nativeProof.facilities.map(site => ({ ...site, permissions: [] })) };
   assert.equal((await call('self-service', { action: 'workspace' })).body.connections[0].role, 'member');
   assert.equal((await call('self-service', { action: 'prepare', connection_id: connection.id, operation: recovery })).status, 403, 'native demotion removes cached recovery authority');

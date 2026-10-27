@@ -328,6 +328,9 @@ begin
  return jsonb_build_object('connection_id',c.id,'tenant_id',c.tenant_id,'app',(select slug from hub.products where id=c.product_id),
   'role',c.role,'mode',coalesce(config.mode,'legacy'),'configuration_version',coalesce(config.version,0),
   'billing_revision',coalesce((select version from private.customer_billing_revisions r where r.tenant_id=c.tenant_id and r.product_id=c.product_id),0),
+  'account_name',(select name from hub.tenants where id=c.tenant_id),
+  'pending_checkout',(select jsonb_build_object('id',q.id,'state',q.state,'due_now',q.quote->'due_now','currency',q.quote->'currency')
+    from private.customer_billing_quotes q where q.tenant_id=c.tenant_id and q.product_id=c.product_id and q.execution->>'kind'='checkout' and q.state in ('confirming','pending_payment') limit 1),
   'can_activate',c.role='organization_admin' and c.capabilities ? 'facility.entitlements.v1',
   'facilities',c.facilities,'customer',(select stripe_customer_id from private.billing_customers where tenant_id=c.tenant_id and not deleted),
   'subscription',case when s.stripe_subscription_id is null then null else jsonb_build_object('id',s.stripe_subscription_id,'version',s.version,'status',s.status,'current_period_end',s.current_period_end,
@@ -445,13 +448,19 @@ begin
  select * into c from private.self_service_connections where id=q.connection_id and user_id=auth.uid() and revoked_at is null;
  if not found or not private.is_active_member(c.tenant_id,c.product_id) or not(c.role='organization_admin' or exists(select 1 from jsonb_array_elements(c.facilities) f where f->>'id'=q.facility_id and f->'permissions' ? 'billing.manage'))
  then raise exception 'Facility purchasing is no longer authorized' using errcode='42501';end if;
- if q.state<>'preview' then return jsonb_build_object('id',q.id,'state',q.state,'execution',q.execution,'subscription',q.stripe_subscription_id,'schedule',q.stripe_schedule_id,'payment_invoice',q.payment_invoice_id,'payment_request_started_at',q.payment_request_started_at,'confirmed_at',q.confirmed_at,'tenant_id',q.tenant_id,'product_id',q.product_id,'connection_id',q.connection_id);end if;
+ if q.state<>'preview' then return jsonb_build_object('id',q.id,'state',q.state,'execution',q.execution,'subscription',q.stripe_subscription_id,'checkout',q.stripe_checkout_id,'schedule',q.stripe_schedule_id,'payment_invoice',q.payment_invoice_id,'payment_request_started_at',q.payment_request_started_at,'confirmed_at',q.confirmed_at,'tenant_id',q.tenant_id,'product_id',q.product_id,'connection_id',q.connection_id);end if;
  if q.expires_at<=now() then raise exception 'Quote expired. Review a new price preview.' using errcode='40001';end if;
  if q.stripe_subscription_id is not null then
   select version into v from private.billing_subscriptions where stripe_subscription_id=q.stripe_subscription_id;
   if v is distinct from q.baseline_version then raise exception 'Subscription changed. Review a new preview.' using errcode='40001';end if;
  end if;
  if p_claim then
+  if q.execution->>'kind'='checkout' then
+   if c.role<>'organization_admin' or q.facility_id is not null then raise exception 'Organization purchasing is required' using errcode='42501';end if;
+   perform private.lock_customer_subscription_start(q.tenant_id,q.product_id);
+   if exists(select 1 from private.billing_subscriptions where tenant_id=q.tenant_id and product_id=q.product_id and status not in ('canceled','incomplete_expired')) then
+    raise exception 'An existing subscription must be resolved first' using errcode='40001';end if;
+  end if;
   insert into private.customer_billing_revisions(tenant_id,product_id) values(q.tenant_id,q.product_id) on conflict do nothing;
   select version into v from private.customer_billing_revisions where tenant_id=q.tenant_id and product_id=q.product_id for update;
   if v is distinct from coalesce((q.execution->>'billing_revision')::integer,0) then raise exception 'Another purchase changed this account. Review a new preview.' using errcode='40001';end if;
@@ -499,6 +508,8 @@ begin
  if not found or q.state in ('applied','failed','superseded') then return;end if;
  if q.state=p_state and (p_schedule is null or q.stripe_schedule_id=p_schedule) then return;end if;
  if q.state='preview' then raise exception 'Quote has not been confirmed' using errcode='42501';end if;
+ if p_state='applied' and q.execution->>'kind'='checkout' and q.checkout_verified_at is null then
+  raise exception 'A verified initial payment receipt is required' using errcode='42501';end if;
  if p_state='scheduled' or p_state='applied' and coalesce((q.execution->>'cancelSchedule')::boolean,false) then
   for prior_id in update private.customer_billing_quotes set state='superseded'
    where tenant_id=q.tenant_id and product_id=q.product_id and id<>q.id and state='scheduled' returning id loop

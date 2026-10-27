@@ -107,9 +107,11 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     return object;
   }
 
-  const customerSelfService = customerBillingService({ pool, stripe, now, purchasingEnabled: customerPurchasingEnabled,
+  const customerSelfService = customerBillingService({ pool, stripe, now, publicOrigin, purchasingEnabled: customerPurchasingEnabled,
     authorize: authorizeCustomerBilling ?? (() => { throw new HttpError(503, 'Native purchasing verification is unavailable.'); }),
     mirrorSubscription: subscription => transaction(pool, db => mirror(db, 'subscription', subscription, new Date(now()), { live: client })),
+    mirrorCustomer: customer => transaction(pool, db => mirror(db, 'customer', customer, new Date(now()), { live: client })),
+    mirrorInvoice: invoice => transaction(pool, db => mirror(db, 'invoice', invoice, new Date(now()), { live: client })),
   });
 
   // ---------------------------------------------------------------------------
@@ -130,7 +132,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         if ((await one(db, 'select private.billing_event_seen($1) as seen', [event.id])).seen) return { received: true, duplicate: true };
         const target = eventTarget(event);
         let outcome = 'ignored';
-        if (target?.id) outcome = await applyEvent(db, live, event, target);
+        if (target?.id && target.kind !== 'checkout') outcome = await applyEvent(db, live, event, target);
         if (/^[a-z_]+(\.[a-z_]+){1,4}$/.test(event.type)) {
           await db.query('select private.billing_record_event($1,$2,$3,$4,$5,$6)', [event.id, event.type, event.livemode === true,
             target?.id && /^[A-Za-z0-9_-]{1,255}$/.test(target.id) ? target.id : null, new Date(event.created * 1000), outcome]);
@@ -138,6 +140,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         return { received: true };
       });
       // A duplicate receipt can retry reconciliation after a prior provider/database timeout.
+      if (eventTarget(event)?.kind === 'checkout') await customerSelfService.reconcileCheckout(event.data.object.id);
       if (live && event.data.object.metadata?.app !== 'caremetric-go' && normalizers.invoice(event.data.object).app !== 'caremetric-go') {
         const target = eventTarget(event);
         if (target?.kind === 'subscription') await customerSelfService.reconcileSubscription(await live.get(`/v1/subscriptions/${target.id}`, { expand: ['latest_invoice', 'discounts'] }));
@@ -650,7 +653,11 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
       if (!prepared.price) throw new HttpError(409, 'No trial plan is configured for this application in the Hub.');
       const accountKey = sha256(`${prepared.app.slug}:${request.account}`).slice(0, 32);
       return await transaction(pool, async db => {
-        let customer = prepared.context.stripe_customer_id;
+        await db.query('select private.lock_customer_subscription_start($1,$2)', [prepared.tenant, prepared.app.product_id]);
+        const current = (await one(db, 'select private.billing_app_entitlements($1,$2) as e', [prepared.app.product_id, request.account])).e;
+        if (current.status !== 'none') return appResponse(current);
+        const context = (await one(db, 'select private.billing_context($1) as c', [prepared.tenant])).c;
+        let customer = context.stripe_customer_id;
         if (!customer) {
           const created = await live.post('/v1/customers', { name: request.name, ...(request.email ? { email: request.email } : {}),
             metadata: { hub_tenant_id: prepared.tenant, app: prepared.app.slug } }, { idempotencyKey: `hub-trial-customer-${accountKey}` });
@@ -696,6 +703,8 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         await each('subscription', await live.list('/v1/subscriptions', { customer: customer.id, status: 'all', expand: ['data.discounts'] }, 200));
         await each('invoice', await live.list('/v1/invoices', { customer: customer.id }, 200));
       }
+      const checkouts = await customerSelfService.reconcileCheckouts();
+      failed += checkouts.failed;
     } catch { log.warn('Platform billing could not finish refreshing from Stripe; the webhook and Sync from Stripe keep it current.'); }
     if (failed) log.warn(`Platform billing skipped ${failed} Stripe records it could not mirror.`);
     return { synced, failed };
@@ -703,6 +712,11 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
 
   return {
     start: verify, reconcile,
+    reconcileCustomerCheckouts: async () => {
+      const result = await customerSelfService.reconcileCheckouts();
+      if (result.failed || result.unbound) log.warn(`Customer Checkout reconciliation: ${result.failed} failed and ${result.unbound} unbound pending purchases.`);
+      return result;
+    },
     status: () => ({ configured: !!client, state, mode: client?.mode ?? null, account: state === 'ready' ? accountId : null,
       webhook: webhookSecrets.length > 0, portal_configuration: !!portalConfiguration }),
     webhook, command, customerPortal, entitlements, usage, trial,

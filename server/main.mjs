@@ -46,6 +46,12 @@ const billing=platformBilling({pool,secretKey:process.env.STRIPE_SECRET_KEY,auth
   portalConfiguration:/^bpc_[A-Za-z0-9]+$/.test(process.env.STRIPE_PORTAL_CONFIGURATION_ID||'')?process.env.STRIPE_PORTAL_CONFIGURATION_ID:undefined,
   publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin});
 void billing.start().then(ready => ready && billing.reconcile()).catch(() => {});
+let checkoutSweepRunning=false;
+const checkoutTimer=setInterval(()=>{
+  if(checkoutSweepRunning)return;
+  checkoutSweepRunning=true;
+  void billing.reconcileCustomerCheckouts().catch(()=>console.warn('Customer Checkout reconciliation could not run.')).finally(()=>{checkoutSweepRunning=false;});
+},60*1000);checkoutTimer.unref();
 const readiness=goLiveReadiness({pool,rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
 const setup=integrationSetup({rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
 const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});

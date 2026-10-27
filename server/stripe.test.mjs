@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  STRIPE_API_VERSION, discountRef, eventTarget, formEncode, keyMode, normalizeInvoice, normalizePrice, normalizeProduct,
+  STRIPE_API_VERSION, CHECKOUT_API_VERSION, discountRef, eventTarget, formEncode, keyMode, normalizeInvoice, normalizePrice, normalizeProduct,
   normalizeSubscription, signStripePayload, stripeClient, verifyStripeSignature,
 } from './stripe.mjs';
 
@@ -41,6 +41,13 @@ describe('Stripe signatures', () => {
 });
 
 describe('Stripe client', () => {
+  it('uses the current API for new Checkout without changing legacy requests', async () => {
+    const fetchImpl = vi.fn(async () => Response.json({ id: 'cs_test_synthetic' }));
+    const client = stripeClient({ secretKey: 'rk_test_synthetic', fetchImpl });
+    await client.post('/v1/checkout/sessions', { mode: 'subscription' }, { apiVersion: CHECKOUT_API_VERSION, idempotencyKey: 'hub-checkout-synthetic' });
+    await client.get('/v1/subscriptions/sub_existing');
+    expect(fetchImpl.mock.calls.map(([, init]) => init.headers['Stripe-Version'])).toEqual([CHECKOUT_API_VERSION, STRIPE_API_VERSION]);
+  });
   it('pins the API version and retries a failed idempotent call once with the same key', async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: 'busy' } }), { status: 500 }))
@@ -101,5 +108,10 @@ describe('Stripe normalizers', () => {
     expect(eventTarget({ type: 'customer.discount.created', data: { object: { subscription: 'sub_1' } } })).toEqual({ kind: 'subscription', id: 'sub_1' });
     expect(eventTarget({ type: 'invoice.paid', data: { object: { object: 'invoice', id: 'in_1' } } })).toEqual({ kind: 'invoice', id: 'in_1' });
     expect(eventTarget({ type: 'charge.succeeded', data: { object: { id: 'ch_1' } } })).toBeNull();
+    expect(eventTarget({ type: 'checkout.session.async_payment_succeeded', data: { object: { object: 'checkout.session', id: 'cs_test_1' } } })).toEqual({ kind: 'checkout', id: 'cs_test_1' });
+  });
+  it('keeps malformed checkout markers held instead of treating them as legacy subscriptions', () => {
+    expect(normalizeSubscription({ id: 'sub_1', metadata: { hub_checkout_quote: 'invalid' } })).toMatchObject({ checkout_required: true, checkout_quote: null });
+    expect(normalizeSubscription({ id: 'sub_legacy', metadata: {} })).toMatchObject({ checkout_required: false, checkout_quote: null });
   });
 });
