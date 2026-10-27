@@ -20,6 +20,8 @@ describe('Stripe keys', () => {
   it('reads the mode from the key and refuses anything else', () => {
     expect([keyMode('sk_live_x'), keyMode('rk_test_x'), keyMode('pk_live_x'), keyMode(undefined)]).toEqual(['live', 'test', null, null]);
     expect(stripeClient({ secretKey: 'pk_live_x' })).toBeNull();
+    expect(keyMode('rkcs_test_synthetic')).toBe('test');
+    expect(keyMode('rkcs_live_synthetic')).toBeNull();
   });
 });
 

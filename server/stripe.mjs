@@ -36,7 +36,7 @@ export function formEncode(params, prefix = '', out = new URLSearchParams()) {
   return out;
 }
 
-export const keyMode = key => /^(sk|rk)_live_/.test(key ?? '') ? 'live' : /^(sk|rk)_test_/.test(key ?? '') ? 'test' : null;
+export const keyMode = key => /^(sk|rk)_live_/.test(key ?? '') ? 'live' : /^(sk|rk|rkcs)_test_/.test(key ?? '') ? 'test' : null;
 
 export function stripeClient({ secretKey, fetchImpl = fetch, apiBase = 'https://api.stripe.com', timeoutMs = 20000 }) {
   if (!keyMode(secretKey)) return null;

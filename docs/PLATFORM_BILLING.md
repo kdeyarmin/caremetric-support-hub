@@ -228,3 +228,11 @@ account that already has billing gets its current answer and no second trial.
   paid receipts, signed/duplicate webhooks and legacy access. CI runs it twice.
 - `supabase/tests/036_customer_checkout.test.sql` checks private receipt state,
   closed service operations, server connection identity and the new contract.
+
+- `docs/evidence/customer-checkout-sandbox-20261027.json` records the isolated
+  provider smoke: invoice preview, current-version Checkout creation, hosted page,
+  concurrent idempotent retries and confirmed expiration. No payment was attempted.
+  Stripe's temporary `rkcs_test_` keys support this API smoke but cannot read account
+  identity. The Hub continues to refuse them at its account-verification guard.
+  Claim the sandbox and configure an account-readable restricted test key before
+  completing the full payment matrix; do not relax the production account guard.
