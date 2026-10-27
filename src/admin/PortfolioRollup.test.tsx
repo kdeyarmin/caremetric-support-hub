@@ -2,15 +2,17 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
-import type { AdminBillingOverview, PortfolioCapabilities, PortfolioOverview, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
+import type { PortfolioCapabilities, PortfolioOverview, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
 import { PortfolioRollup } from "./PortfolioRollup";
 import type { PortfolioClient } from "./portfolioClient";
+import type { BillingReader } from "./portfolioRollup";
+import type { Subscription } from "../billing/billingModel";
 
 // DOM tests inject every data client; initialize the app's ordinary explicit preview configuration.
 vi.hoisted(() => { vi.stubEnv("VITE_DEMO_MODE", "true"); });
 afterEach(cleanup);
 
-interface ProductReads { capabilities?: PortfolioCapabilities; overview?: PortfolioOverview; billing?: AdminBillingOverview; }
+interface ProductReads { capabilities?: PortfolioCapabilities; overview?: PortfolioOverview; }
 function fakePortfolio(reads: Partial<Record<PortfolioProduct, ProductReads>>): PortfolioClient {
   const unexpected = () => Promise.reject(new Error("Unexpected fixture read"));
   return {
@@ -24,84 +26,50 @@ function fakePortfolio(reads: Partial<Record<PortfolioProduct, ProductReads>>): 
       if (!entry?.overview) throw { code: "upstream" };
       return entry.overview;
     }),
-    organizations: unexpected, users: unexpected, subscriptions: unexpected,
-    billing: vi.fn<PortfolioClient["billing"]>(async ({ product }) => {
-      const entry = reads[product];
-      if (!entry?.billing) throw { code: "upstream" };
-      return entry.billing;
-    }),
-    invoices: unexpected, invoice: unexpected, verifySubscription: unexpected,
+    organizations: unexpected, users: unexpected,
   };
 }
-function renderRollup(portfolio: PortfolioClient) {
-  return render(<MemoryRouter><PortfolioRollup portfolio={portfolio} /></MemoryRouter>);
+const subscription = (app: Subscription["app"], status: Subscription["status"], unitAmount: number): Subscription => ({
+  id: `sub_${app}${status}`, tenant_id: "00000000-0000-4000-8000-0000000000aa", customer: "cus_1", app, status, collection_method: "send_invoice",
+  cancel_at_period_end: false, cancel_at: null, canceled_at: null, ended_at: null, current_period_start: null, current_period_end: null, trial_start: null, trial_end: null,
+  pause_behavior: null, pause_resumes_at: null, discounts: [], created: "2026-10-27T00:00:00Z", version: 1,
+  items: [{ id: "si_1", price: "price_1", product: "prod_1", quantity: 1, unit_amount: unitAmount, currency: "usd", interval: "month", interval_count: 1, product_name: "Plan", kind: "plan", unit_label: "", pricing_model: "flat", custom: false }],
+});
+const hubBilling = (subscriptions: Subscription[]): BillingReader => async () => ({ subscriptions, coupons: [] });
+function renderRollup(portfolio: PortfolioClient, billing: BillingReader = hubBilling([])) {
+  return render(<MemoryRouter><PortfolioRollup portfolio={portfolio} billing={billing} demo={false} /></MemoryRouter>);
 }
 function totalsText(root: HTMLElement): string {
   return root.querySelector(".rollup-totals")?.textContent ?? "";
 }
 
 describe("portfolio rollup", () => {
-  it("shows verified health and figures for answering applications and unavailable without invented figures for silent ones", async () => {
+  it("shows verified health for answering applications and Hub billing for every application", async () => {
     const portfolio = fakePortfolio({
-      carebase: {
-        capabilities: { apiVersion: 1, operations: ["overview", "billing.overview"], sourceRevision: "abc1234" },
-        overview: { organizationCount: 2, activeUserCount: 3 },
-        billing: { source: "application_database", subscriptionCount: 5, statusCounts: [{ status: "active", count: 5 }] },
-      },
+      carebase: { capabilities: { apiVersion: 1, operations: ["overview"], sourceRevision: "abc1234" }, overview: { organizationCount: 2, activeUserCount: 3 } },
     });
-    renderRollup(portfolio);
+    renderRollup(portfolio, hubBilling([subscription("carebase", "active", 19900), subscription("caremetric-intel", "trialing", 34900)]));
     const health = await screen.findByRole("region", { name: "Application health" });
     expect(within(health).getByText(/Connections verified for 1 of 7 applications/)).toBeTruthy();
     const carebase = within(health).getByRole("region", { name: "CareBase health" });
     expect(within(carebase).getByText("Connection verified")).toBeTruthy();
     expect(within(carebase).getByText("Deployed source: abc1234")).toBeTruthy();
-    expect(within(carebase).getByText("Organizations")).toBeTruthy();
     expect(within(health).getAllByText("Unavailable")).toHaveLength(6);
     const financials = screen.getByRole("region", { name: "Subscription financials" });
-    expect(totalsText(financials)).toContain("5 recorded subscriptions across CareBase");
-    expect(document.body.textContent).not.toContain("0 recorded subscriptions");
+    expect(totalsText(financials)).toContain("2 subscriptions across");
+    expect(totalsText(financials)).toContain("USD monthly recurring revenue: USD 199.00");
   });
 
-  it("requests the overview and billing reads only when the capabilities advertise them", async () => {
+  it("never asks an application connection for billing", async () => {
     const portfolio = fakePortfolio({
-      pennsync: {
-        capabilities: { apiVersion: 1, operations: ["overview"], sourceRevision: null },
-        overview: { organizationCount: 4, activeUserCount: null, registeredUserCount: 9, subscriptionCount: 3 },
-      },
-      "caremetric-emr": {
-        capabilities: { apiVersion: 1, operations: ["billing.overview"], sourceRevision: null },
-        billing: { source: "application_database", subscriptionCount: 2, statusCounts: [{ status: "active", count: 2 }] },
-      },
+      pennsync: { capabilities: { apiVersion: 1, operations: ["overview"], sourceRevision: null }, overview: { organizationCount: 4, activeUserCount: null, registeredUserCount: 9, subscriptionCount: 3 } },
     });
     renderRollup(portfolio);
     const health = await screen.findByRole("region", { name: "Application health" });
-    expect(portfolio.billing).not.toHaveBeenCalledWith(expect.objectContaining({ product: "pennsync" }));
-    expect(portfolio.overview).not.toHaveBeenCalledWith(expect.objectContaining({ product: "caremetric-emr" }));
     const pennsync = within(health).getByRole("region", { name: "PennSync health" });
     expect(within(pennsync).getByText("Not reported")).toBeTruthy();
-    const emr = within(health).getByRole("region", { name: "CareMetric EMR health" });
-    expect(within(emr).getByText("This connection does not provide an application overview.")).toBeTruthy();
-    const financials = screen.getByRole("region", { name: "Subscription financials" });
-    expect(within(financials).getByText("This connection does not provide a billing overview.")).toBeTruthy();
-    expect(totalsText(financials)).toContain("2 recorded subscriptions across CareMetric EMR");
-  });
-
-  it("excludes CareMetric Go from the portfolio totals and explains the shared records", async () => {
-    const portfolio = fakePortfolio({
-      "caremetric-emr": {
-        capabilities: { apiVersion: 1, operations: ["billing.overview"], sourceRevision: null },
-        billing: { source: "application_database", subscriptionCount: 4, statusCounts: [{ status: "active", count: 4 }] },
-      },
-      "caremetric-go": {
-        capabilities: { apiVersion: 1, operations: ["billing.overview"], sourceRevision: null },
-        billing: { source: "application_database", subscriptionCount: 4, statusCounts: [{ status: "active", count: 4 }] },
-      },
-    });
-    renderRollup(portfolio);
-    const financials = await screen.findByRole("region", { name: "Subscription financials" });
-    expect(totalsText(financials)).toContain("4 recorded subscriptions across CareMetric EMR");
-    expect(within(financials).getByText(/CareMetric Go reported billing records, but they are shared with CareMetric EMR/)).toBeTruthy();
-    expect(document.body.textContent).not.toContain("8 recorded subscriptions");
+    expect(portfolio.overview).toHaveBeenCalledWith(expect.objectContaining({ product: "pennsync" }));
+    expect(Object.keys(portfolio)).not.toContain("billing");
   });
 
   it("shows Healthcare Advisors consultation totals and explains that it has no subscriptions", async () => {
@@ -114,19 +82,14 @@ describe("portfolio rollup", () => {
     renderRollup(portfolio);
     const health = await screen.findByRole("region", { name: "CareMetric Healthcare Advisors health" });
     expect(within(health).getByText("Open consultation requests")).toBeTruthy();
-    expect(within(health).getByText("3")).toBeTruthy();
-    expect(within(health).queryByText("Organizations")).toBeNull();
     const financials = screen.getByRole("region", { name: "Subscription financials" });
     expect(within(financials).getByText(/consulting practice\. It has no software subscriptions/)).toBeTruthy();
     expect(totalsText(financials)).not.toContain("Healthcare Advisors");
   });
 
-  it("shows super-admin coverage for every application without counting failed connections", async () => {
+  it("shows super-admin coverage: billing from the Hub even when a connection fails", async () => {
     const portfolio = fakePortfolio({
-      carebase: { capabilities: { apiVersion: 1, operations: ["organizations.list", "users.list", "billing.overview", "billing.subscriptions.list", "billing.invoices.list"], sourceRevision: null },
-        billing: { source: "application_database", subscriptionCount: 5, statusCounts: [{ status: "active", count: 5 }] } },
-      // Connected, but its billing read fails: subscriptions must not show as held.
-      pennsync: { capabilities: { apiVersion: 1, operations: ["organizations.list", "users.list", "billing.overview", "billing.subscriptions.list"], sourceRevision: null } },
+      carebase: { capabilities: { apiVersion: 1, operations: ["organizations.list", "users.list"], sourceRevision: null } },
       advisors: { capabilities: { apiVersion: 1, operations: ["overview", "inquiries.list"], sourceRevision: null }, overview: { organizationCount: null, activeUserCount: null, inquiryCount: 0, openInquiryCount: 0 } },
     });
     renderRollup(portfolio);
@@ -134,35 +97,18 @@ describe("portfolio rollup", () => {
     expect(within(coverage).getAllByRole("row")).toHaveLength(8);
     const carebase = within(coverage).getByRole("row", { name: /CareBase \(PennTrain\)/ });
     expect(within(carebase).getAllByText("In the Hub")).toHaveLength(4);
-    const pennsync = within(coverage).getByRole("row", { name: /PennSync \(CareMetric-Pennsync\)/ });
-    expect(within(pennsync).getByText("Billing read failed")).toBeTruthy();
-    expect(within(pennsync).getAllByText("In the Hub")).toHaveLength(2);
     const breathe = within(coverage).getByRole("row", { name: /Breathe \(PennFit\)/ });
-    expect(within(breathe).getAllByText("Unavailable")).toHaveLength(3);
-    expect(within(coverage).getAllByText(/Restore the application's administration connection/)).toHaveLength(4);
-    expect(within(coverage).getByText(/of \d+ applicable areas are in the Hub now/)).toBeTruthy();
+    expect(within(breathe).getAllByText("Unavailable")).toHaveLength(1);
+    expect(within(breathe).getAllByText("In the Hub")).toHaveLength(3);
   });
 
-  it("names each application with its source repository so the owner can recognize it", async () => {
+  it("shows no portfolio total when the Hub's billing cannot be read", async () => {
     const silent: ProductReads = { capabilities: { apiVersion: 1, operations: [], sourceRevision: null } };
-    renderRollup(fakePortfolio({ carebase: silent, breathe: silent, pennsync: silent }));
-    const health = await screen.findByRole("region", { name: "Application health" });
-    expect(within(health).getByRole("heading", { name: "CareBase (PennTrain)" })).toBeTruthy();
-    expect(within(health).getByRole("heading", { name: "Breathe (PennFit)" })).toBeTruthy();
-    expect(within(health).getByRole("heading", { name: "PennSync (CareMetric-Pennsync)" })).toBeTruthy();
-    expect(within(health).getByRole("heading", { name: "CareMetric Intel" })).toBeTruthy();
-  });
-
-  it("shows no portfolio total when no application reports billing", async () => {
-    const silent: ProductReads = { capabilities: { apiVersion: 1, operations: [], sourceRevision: null } };
-    const portfolio = fakePortfolio({
-      carebase: silent, breathe: silent, "caremetric-emr": silent,
-      pennsync: silent, intel: silent, "caremetric-go": silent, advisors: silent,
-    });
-    renderRollup(portfolio);
+    const portfolio = fakePortfolio({ carebase: silent, breathe: silent, "caremetric-emr": silent, pennsync: silent, intel: silent, "caremetric-go": silent, advisors: silent });
+    renderRollup(portfolio, async () => { throw new Error("offline"); });
     const financials = await screen.findByRole("region", { name: "Subscription financials" });
-    expect(within(financials).getByText("No application reported billing totals, so no portfolio total is shown.")).toBeTruthy();
-    expect(document.body.textContent).not.toContain("0 recorded subscriptions");
+    expect(within(financials).getByText("The Hub's billing records could not be loaded, so no portfolio total is shown.")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("0 subscriptions");
     const health = screen.getByRole("region", { name: "Application health" });
     expect(within(health).getByText(/Connections verified for 7 of 7 applications/)).toBeTruthy();
   });

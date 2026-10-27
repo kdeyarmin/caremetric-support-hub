@@ -11,7 +11,7 @@ import { phoneNeedsReview, phoneTextingNeedsAttention } from "../support/phoneRe
 import type { PhoneRow } from "../support/phoneRegistryModel";
 import { applicationLabel, overviewMetrics } from "./overviewMetrics";
 import type { OverviewMetric } from "./overviewMetrics";
-import { buildPortfolioRollup, sharedWithProduct } from "./portfolioRollup";
+import { buildPortfolioRollup } from "./portfolioRollup";
 import type { RollupAppSnapshot } from "./portfolioRollup";
 import type { GoLiveReadinessReport } from "./readinessProtocol";
 import type { AiUsageSummary } from "./aiUsageClient";
@@ -73,7 +73,7 @@ export function channelCards(snapshot: CommunicationsSnapshot): ChannelCard[] {
 
 export type CardState = "ready" | "unavailable" | "not-provided" | "not-applicable";
 export type ConnectionState = "verified" | "unavailable" | "pending";
-export interface SubscriptionSummary { count: number; statusCounts: Array<{ status: string; count: number }>; sharedWith: PortfolioProduct | null }
+export interface SubscriptionSummary { count: number; statusCounts: Array<{ status: string; count: number }>; sharedWith: PortfolioProduct | null; mrrCents: number }
 export interface DirectorySummary { state: "available" | "partial" | "missing" | "unavailable" | "not-applicable"; label: string; organizations: boolean; users: boolean; accessControls: boolean }
 export interface IntegrationSummary { rollout: IntegrationRollout; connection: ConnectionState; endpointHost: string | null; sources: string[] }
 export interface SupportSummary { productId: string; openCases: number; urgentCases: number; conversations: number | null; publishedArticles: number; appSpecificArticles: number; /** AI calls in the usage period, or null when the ledger read is unavailable. */ aiCalls: number | null }
@@ -129,16 +129,14 @@ export function applicationCards(input: ControlCenterInput): ApplicationCard[] {
       : app.overview.state === "not-advertised" ? { state: "not-provided", metrics: [] }
       : { state: "unavailable", metrics: [] };
 
-    const sharedWith = sharedWithProduct(product);
+    // Subscriptions come from the Hub's own billing (Stripe mirror), so they read even when the connection is down.
     const subscriptions: ApplicationCard["subscriptions"] = advisors ? { state: "not-applicable", data: null, note: "Consulting practice · engagement fees are set by written proposal" }
-      : !connected ? { state: "unavailable", data: null, note: null }
       : app.billing.state === "ready" ? {
         state: "ready",
-        data: { count: app.billing.data.subscriptionCount, statusCounts: app.billing.data.statusCounts, sharedWith },
-        note: sharedWith ? `Shared with ${adminRegistry[sharedWith].name} · never counted twice` : product === "caremetric-emr" ? "Application entitlements" : product === "pennsync" ? "Individual account subscriptions" : null,
+        data: { count: app.billing.data.subscriptionCount, statusCounts: app.billing.data.statusCounts, sharedWith: null, mrrCents: app.billing.data.mrrCents },
+        note: "Billed by the Hub",
       }
-      : app.billing.state === "not-advertised" ? { state: "not-provided", data: null, note: "Not provided by this connection yet" }
-      : { state: "unavailable", data: null, note: "The billing read failed" };
+      : { state: "unavailable", data: null, note: "Hub billing could not be loaded" };
 
     const organizations = has(app, "organizations.list"), users = has(app, "users.list");
     const accessControls = product === "carebase" && has(app, "commands.preview") && has(app, "commands.apply");
@@ -180,7 +178,7 @@ export function applicationCards(input: ControlCenterInput): ApplicationCard[] {
 
     const workspace = `/admin/apps?product=${product}`;
     const links: ApplicationLinks = {
-      workspace, organizations: `${workspace}&view=organizations`, users: `${workspace}&view=users`, billing: `${workspace}&view=billing`, inquiries: `${workspace}&view=inquiries`,
+      workspace, organizations: `${workspace}&view=organizations`, users: `${workspace}&view=users`, billing: `/admin/billing?app=${hubProductSlugs[product]}`, inquiries: `${workspace}&view=inquiries`,
       communications: hubProduct ? `/communications?product=${hubProduct.slug}` : null,
       cases: hubProduct ? `/cases?product=${hubProduct.slug}` : null,
       knowledge: hubProduct ? `/knowledge?product=${hubProduct.slug}` : null,
@@ -192,7 +190,7 @@ export function applicationCards(input: ControlCenterInput): ApplicationCard[] {
 export interface Headline {
   connected: number;
   total: number;
-  /** Recorded subscriptions across the applications that reported billing, or null when none did. */
+  /** Subscriptions the Hub bills across every application, or null when Hub billing could not be read. */
   subscriptions: number | null;
   subscriptionApps: string[];
   /** Conversations waiting across every channel and application, or null when the inbox read is unavailable. */
@@ -203,7 +201,7 @@ export interface Headline {
   channelsTotal: number;
 }
 
-/** Portfolio-wide figures. Shared records (CareMetric Go) are excluded from subscription totals exactly as in the rollup. */
+/** Portfolio-wide figures; subscriptions come from the Hub's billing, one record per Stripe subscription. */
 export function headline(input: ControlCenterInput): Headline {
   const totals = buildPortfolioRollup(input.apps);
   const open = input.cases.filter(openCase);

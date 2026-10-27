@@ -5,26 +5,27 @@ import type { RollupAppSnapshot } from "./portfolioRollup";
 
 const app = (product: PortfolioProduct, operations: PortfolioOperationName[] | null): RollupAppSnapshot => ({
   product, capabilities: operations ? { apiVersion: 1, operations, sourceRevision: null } : null,
-  overview: { state: "not-advertised" }, billing: { state: "not-advertised" }, money: [],
+  overview: { state: "not-advertised" }, money: [],
+  billing: product === "advisors" ? { state: "not-advertised" } : { state: "ready", data: { source: "hub", subscriptionCount: 0, statusCounts: [], mrrCents: 0 } },
 });
 
 describe("super-admin coverage matrix", () => {
-  it("reports only what each live connection advertises", () => {
+  it("reports directory reads from each connection and billing from the Hub", () => {
     const [carebase, intel, breathe, emr] = coverageMatrix([
-      app("carebase", ["organizations.list", "users.list", "billing.overview", "billing.subscriptions.list", "billing.invoices.list", "billing.subscriptions.verify"]),
+      app("carebase", ["organizations.list", "users.list"]),
       app("intel", ["overview", "users.list"]),
-      app("breathe", ["organizations.list", "users.list", "billing.overview", "billing.subscriptions.list", "phone.messages.list"]),
+      app("breathe", ["organizations.list", "users.list", "phone.messages.list"]),
       app("caremetric-emr", null),
     ]);
-    expect(carebase.cells.financial).toEqual({ state: "available", label: "Invoices, payments and Stripe verification" });
+    expect(carebase.cells.subscribers).toEqual({ state: "available", label: "Billed by the Hub · subscriptions and MRR" });
+    expect(carebase.cells.financial).toEqual({ state: "available", label: "Hub invoices, payment links and the customer portal" });
     expect(carebase.nextSteps).toEqual([]);
     expect(intel.cells.directory).toEqual({ state: "partial", label: "Users only" });
-    expect(intel.cells.subscribers.state).toBe("missing");
-    expect(intel.nextSteps).toHaveLength(3);
-    expect(breathe.cells.subscribers.state).toBe("available");
-    expect(breathe.cells.financial.state).toBe("missing");
+    expect(intel.cells.subscribers.state).toBe("available");
+    expect(intel.nextSteps).toHaveLength(1);
     expect(breathe.cells.requests.state).toBe("not-applicable");
-    expect(Object.values(emr.cells).filter(cell => cell.state === "available").map(cell => cell.label)).toEqual(["Hub inbox · channel status in Communications"]);
+    // Billing is the Hub's own, so it holds even when the application cannot be reached.
+    expect(emr.cells.subscribers.state).toBe("available");
     expect(emr.cells.directory.state).toBe("unavailable");
     expect(emr.nextSteps).toEqual(["Restore the application's administration connection; its figures are unavailable until it answers."]);
   });
@@ -37,15 +38,12 @@ describe("super-admin coverage matrix", () => {
     expect(offline.cells.requests.state).toBe("unavailable");
     expect(offline.nextSteps).toEqual(["Deploy the Advisors bridge and list Hub administrators in HUB_ADMIN_USER_IDS."]);
   });
-  it("never reports subscriptions as held when the billing read failed", () => {
-    const [breathe] = coverageMatrix([{ ...app("breathe", ["organizations.list", "users.list", "billing.overview", "billing.subscriptions.list"]), billing: { state: "unavailable" } }]);
-    expect(breathe.cells.subscribers).toEqual({ state: "unavailable", label: "Billing read failed" });
+  it("never reports subscriptions as held when the Hub's billing read failed", () => {
+    const [breathe] = coverageMatrix([{ ...app("breathe", ["organizations.list", "users.list"]), billing: { state: "unavailable" } }]);
+    expect(breathe.cells.subscribers).toEqual({ state: "unavailable", label: "Hub billing unavailable" });
+    expect(breathe.cells.financial.state).toBe("unavailable");
     expect(breathe.cells.directory.state).toBe("available");
-    expect(breathe.nextSteps).toContain("Check the application's billing read; subscription figures are unavailable until it answers.");
+    expect(breathe.nextSteps).toContain("Check the Hub's Stripe configuration; billing figures are unavailable until it answers.");
     expect(coverageSummary([breathe]).available).toBe(2);
-  });
-  it("labels Go's subscriptions as shared with EMR", () => {
-    const [go] = coverageMatrix([app("caremetric-go", ["billing.overview", "billing.subscriptions.list"])]);
-    expect(go.cells.subscribers.label).toBe("Shared with CareMetric EMR · not double-counted");
   });
 });

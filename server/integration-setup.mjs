@@ -46,6 +46,12 @@ export const integrationCatalog = Object.freeze([
       { name: 'HUB_TELNYX_API_KEY', secret: true, required: true, purpose: 'Telnyx API key.' },
       { name: 'HUB_TELNYX_VERIFY_PROFILE_ID', secret: false, required: true, purpose: 'Telnyx Verify profile that issues the codes.' },
     ] },
+  { id: 'stripe-billing', name: 'Platform billing (Stripe)', purpose: 'Products, prices, subscriptions, discounts and invoices for every application, managed in Billing. The Hub is the only Stripe client for platform billing.', docs: 'docs/PLATFORM_BILLING.md',
+    variables: [
+      { name: 'STRIPE_SECRET_KEY', secret: true, required: true, purpose: 'Secret key for the CareMetric Stripe account (acct_1SinLKB06O2UFlNz). Any other account is refused at startup.' },
+      { name: 'STRIPE_WEBHOOK_SECRET', secret: true, required: true, purpose: 'Signing secret of the Hub webhook endpoint (/api/webhooks/stripe). Separate several with commas while rotating.' },
+      { name: 'STRIPE_PORTAL_CONFIGURATION_ID', secret: false, required: false, purpose: 'Customer portal configuration (bpc_…) customers see; the account default otherwise.' },
+    ] },
   { id: 'carebase-distribution', name: 'CareBase course distribution observer', purpose: 'Lets the Hub observe shared course availability in CareBase.', docs: 'docs/SHARED_COURSE_DISTRIBUTION.md',
     variables: [{ name: 'CAREBASE_DISTRIBUTION_OBSERVER_TOKEN', secret: true, required: true, purpose: 'Token CareBase issued to the Hub observer.' }] },
 ]);

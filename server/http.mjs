@@ -25,6 +25,11 @@ async function jsonBody(req,limit=2000000) {
   if (!body || Array.isArray(body) || typeof body!=='object') throw new HttpError(400,'Invalid request.');
   return body;
 }
+async function rawBody(req,limit) {
+  const chunks=[]; let size=0;
+  for await (const chunk of req) { size+=chunk.length; if(size>limit) throw new HttpError(413,'Request is too large.'); chunks.push(chunk); }
+  return Buffer.concat(chunks);
+}
 export function sameOrigin(req,origins) {
   return origins.includes(req.headers.origin) && (!req.headers['sec-fetch-site'] || req.headers['sec-fetch-site']==='same-origin');
 }
@@ -33,7 +38,7 @@ const aiCaseActions=new Set(['summary','draft-reply','triage-suggestion']);
 const staffCommunicationActions=new Set(['list','get','update','note','reply','sync']);
 // Railway's edge appends the visitor address last; rate limits use it only as a hashed bucket.
 const visitorAddress=req=>String(req.headers['x-forwarded-for']||'').split(',').at(-1).trim()||req.socket.remoteAddress||'unknown';
-export function appServer({auth,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,origins,dist=resolve('dist')}) {
+export function appServer({auth,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,origins,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -89,6 +94,20 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
           }
           if(path==='/api/channels/email/inbound') return json(await communications.emailWebhook(req));
           throw new HttpError(404,'Unavailable.');
+        }
+        // Stripe calls the billing webhook; its signature over the exact raw body is the only authority.
+        if(path==='/api/webhooks/stripe') {
+          if(req.method!=='POST' || req.headers.origin || req.headers.cookie || url.search) throw new HttpError(403,'Forbidden.');
+          if(!billing) throw new HttpError(503,'Billing is not configured.');
+          return json(await billing.webhook(await rawBody(req,1000000),req.headers['stripe-signature']));
+        }
+        // Application servers ask what a tenant has and report billable quantities with their application key.
+        const appBilling=/^\/api\/apps\/(entitlements|usage|trials)$/.exec(path);
+        if(appBilling) {
+          if(req.method!=='POST' || req.headers.origin || req.headers.cookie || url.search) throw new HttpError(403,'Forbidden.');
+          if(!billing) throw new HttpError(503,'Billing is not configured.');
+          const action={entitlements:'entitlements',usage:'usage',trials:'trial'}[appBilling[1]];
+          return json(await billing[action](req.headers.authorization,await jsonBody(req,8192)));
         }
         // Unsubscribe links in bulk email: the secret token in the path is the only authority,
         // so a mail client's one-click POST (RFC 8058) works without a session or origin.
@@ -236,6 +255,16 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
           if(!aiCases) throw new HttpError(503,'AI assistance is not configured.','AI_NOT_CONFIGURED');
           return json(await aiCases.handle(session,aiCaseRoute[2],aiCaseRoute[1],await jsonBody(req,4096)));
         }
+        if(path==='/api/admin/billing' && req.method==='POST') {
+          if(url.search) throw new HttpError(400,'Billing query parameters are not supported.');
+          if(!billing) throw new HttpError(503,'Billing is not configured.');
+          return json(await billing.command(session,await jsonBody(req,65536)));
+        }
+        if(path==='/api/billing/portal' && req.method==='POST') {
+          if(url.search) throw new HttpError(400,'Billing query parameters are not supported.');
+          if(!billing) throw new HttpError(503,'Billing is not configured.');
+          return json(await billing.customerPortal(session,await jsonBody(req,2048)));
+        }
         if(path.startsWith('/api/rpc/') && req.method==='POST') return json(await gateway.rpc(path.slice(9),await jsonBody(req),session));
         if(path.startsWith('/api/rows/') && req.method==='GET') return json(await gateway.rows(path.slice(10),session));
         if(path==='/api/admin/packages' && req.method==='POST') {
@@ -255,13 +284,13 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
           if(url.search)throw new HttpError(400,'Invitation query parameters are not supported.');
           return json(await delegations.registration.admin(session,await jsonBody(req,4096)));
         }
-        if(['/api/admin/training','/api/admin/configuration','/api/admin/pennsync-migration','/api/admin/learning','/api/admin/authoring','/api/admin/provider','/api/admin/learning-catalog','/api/admin/learning-generation','/api/admin/course-creation','/api/admin/course-distribution','/api/admin/billing-command','/api/admin/checkout-command','/api/admin/onboarding'].includes(path) && req.method==='POST') {
+        if(['/api/admin/training','/api/admin/configuration','/api/admin/pennsync-migration','/api/admin/learning','/api/admin/authoring','/api/admin/provider','/api/admin/learning-catalog','/api/admin/learning-generation','/api/admin/course-creation','/api/admin/course-distribution','/api/admin/onboarding'].includes(path) && req.method==='POST') {
           if(path==='/api/admin/training'&&url.search)throw new HttpError(400,'Training query parameters are not supported.','invalid_request');
           if(path==='/api/admin/course-distribution'&&url.search)throw new HttpError(400,'Distribution query parameters are not supported.');
           const body=await jsonBody(req,path.endsWith('/learning-generation')?262144:path.endsWith('/learning-catalog')?65536:path.endsWith('/authoring')||path.endsWith('/provider')||path.endsWith('/course-creation')||path.endsWith('/course-distribution')?32768:4096);const controller=new AbortController();
           const abort=()=>{if(!res.writableEnded)controller.abort();};
           req.once('aborted',abort);res.once('close',abort);
-          try {return json(await delegations[path.endsWith('/training')?'training':path.endsWith('/configuration')?'configuration':path.endsWith('/pennsync-migration')?'pennsyncMigration':path.endsWith('/provider')?'provider':path.endsWith('/learning-catalog')?'catalog':path.endsWith('/learning-generation')?'generation':path.endsWith('/course-distribution')?'distribution':path.endsWith('/course-creation')?'creation':path.endsWith('/onboarding')?'onboarding':path.endsWith('/checkout-command')?'checkoutCommand':path.endsWith('/billing-command')?'billingCommand':path.endsWith('/authoring')?'authoring':'learning'](session,body,controller.signal));}
+          try {return json(await delegations[path.endsWith('/training')?'training':path.endsWith('/configuration')?'configuration':path.endsWith('/pennsync-migration')?'pennsyncMigration':path.endsWith('/provider')?'provider':path.endsWith('/learning-catalog')?'catalog':path.endsWith('/learning-generation')?'generation':path.endsWith('/course-distribution')?'distribution':path.endsWith('/course-creation')?'creation':path.endsWith('/onboarding')?'onboarding':path.endsWith('/authoring')?'authoring':'learning'](session,body,controller.signal));}
           finally {req.removeListener('aborted',abort);res.removeListener('close',abort);}
         }
         if(path==='/api/media/sign' && req.method==='POST') {

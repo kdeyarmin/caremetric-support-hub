@@ -1,6 +1,5 @@
 import type { PortfolioOperationName, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
 import type { RollupAppSnapshot } from "./portfolioRollup";
-import { sharedWithProduct } from "./portfolioRollup";
 
 /** Whether the Hub holds one area of an application's super-admin information right now. */
 export type CoverageState = "available" | "partial" | "missing" | "not-applicable" | "unavailable";
@@ -40,19 +39,14 @@ export function coverageMatrix(apps: RollupAppSnapshot[]): CoverageRow[] {
       : organizations ? (nextSteps.push("Add a user read to the application's administration connection."), { state: "partial", label: "Organizations only" })
       : missing("Not provided yet", "Add organization and user reads to the application's administration connection.");
 
-    const sharedWith = sharedWithProduct(app.product);
+    // Platform billing belongs to the Hub (Stripe mirror) for every application, independent of its connection.
     const subscribers: CoverageCell = advisors ? notApplicable("Consulting practice · no subscriptions")
-      : !connected ? unavailable
-      // The connection answered but its billing read failed: never show subscriptions as held.
-      : app.billing.state === "unavailable" ? (nextSteps.push("Check the application's billing read; subscription figures are unavailable until it answers."), { state: "unavailable", label: "Billing read failed" })
-      : has(app, "billing.overview") && has(app, "billing.subscriptions.list")
-        ? { state: "available", label: sharedWith ? "Shared with CareMetric EMR · not double-counted" : "Subscription records and status totals" }
-      : missing("Not provided yet", "Add billing overview and subscription reads to the application's administration connection.");
+      : app.billing.state === "ready" ? { state: "available", label: "Billed by the Hub · subscriptions and MRR" }
+      : (nextSteps.push("Check the Hub's Stripe configuration; billing figures are unavailable until it answers."), { state: "unavailable", label: "Hub billing unavailable" });
 
     const financial: CoverageCell = advisors ? notApplicable("Fees are set by written proposal")
-      : !connected ? unavailable
-      : has(app, "billing.invoices.list") ? { state: "available", label: has(app, "billing.subscriptions.verify") ? "Invoices, payments and Stripe verification" : "Invoices and payments" }
-      : missing("Not provided yet", "Add invoice reads (amounts in minor units with currency) to the application's administration connection.");
+      : app.billing.state === "ready" ? { state: "available", label: "Hub invoices, payment links and the customer portal" }
+      : { state: "unavailable", label: "Hub billing unavailable" };
 
     const requests: CoverageCell = !advisors ? notApplicable("Software support uses the Hub inbox")
       : !connected ? unavailable

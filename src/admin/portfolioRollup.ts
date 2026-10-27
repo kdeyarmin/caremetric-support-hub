@@ -1,7 +1,16 @@
-import { parseMinorAmount } from "../../supabase/functions/_shared/billingProtocol";
 import { portfolioProducts } from "../../supabase/functions/_shared/portfolioProtocol";
-import type { AdminBillingOverview, PortfolioCapabilities, PortfolioOverview, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
+import type { PortfolioCapabilities, PortfolioOverview, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
 import type { PortfolioClient } from "./portfolioClient";
+import { parseMinorAmount } from "./billingMoney";
+import { summarizeByApp, type BillingWorkspace } from "../billing/billingModel";
+import type { BillingApp } from "../billing/billingProtocol";
+
+/**
+ * An application's subscriptions as the Hub bills them. Every application's
+ * platform billing lives in the Hub's Stripe mirror, so these figures come from
+ * one source and are never counted twice across applications.
+ */
+export interface HubAppBilling { source: "hub"; subscriptionCount: number; statusCounts: Array<{ status: string; count: number }>; mrrCents: number }
 
 /** One adapter read as the rollup records it: data, a failed connection, or an operation the adapter never advertised. */
 export type RollupRead<T> =
@@ -17,29 +26,24 @@ export interface RollupAppSnapshot {
   /** Null when the capabilities read failed: the connection is unavailable and no totals are inferred from it. */
   capabilities: PortfolioCapabilities | null;
   overview: RollupRead<PortfolioOverview>;
-  billing: RollupRead<AdminBillingOverview>;
-  /**
-   * Money figures reported for this application. No overview-class read in the
-   * portfolio protocol reports money today (amounts exist only on individual
-   * invoice records, which are never totalled), so the loader always records
-   * an empty list; any future money figure must enter through this field so
-   * aggregation can group it by currency instead of summing across currencies.
-   */
+  /** The Hub's own billing for this application; not-advertised for an application that does not bill (Healthcare Advisors). */
+  billing: RollupRead<HubAppBilling>;
+  /** Monthly recurring revenue from the Hub's billing, grouped by currency (all prices are USD today). */
   money: RollupMoney[];
 }
 
 export interface PortfolioRollupTotals {
   connectionsVerified: number;
   connectionsTotal: number;
-  /** Applications whose billing overview is included in the totals below. */
+  /** Applications whose Hub billing is included in the totals below. */
   billingReportingApps: PortfolioProduct[];
-  /** Applications that reported billing but are excluded because their records are shared with another application. */
+  /** Kept for compatibility: Hub billing is per application, so no application is ever excluded as shared. */
   billingExcludedSharedApps: PortfolioProduct[];
-  /** Recorded subscriptions across the reporting applications, or null when none reported — never a fabricated zero. */
+  /** Subscriptions across the reporting applications, or null when Hub billing could not be read — never a fabricated zero. */
   subscriptionTotal: number | null;
   /** Subscription counts grouped by the native status, across the reporting applications only. */
   statusTotals: Array<{ status: string; count: number }>;
-  /** Money grouped by currency. There is deliberately no cross-currency total. */
+  /** Monthly recurring revenue grouped by currency. There is deliberately no cross-currency total. */
   moneyByCurrency: Array<{ currency: string; amountMinor: string }>;
 }
 
@@ -87,10 +91,6 @@ export function buildPortfolioRollup(apps: readonly RollupAppSnapshot[]): Portfo
   const money: RollupMoney[] = [];
   for (const app of apps) {
     if (app.billing.state !== "ready") continue;
-    if (sharedRecordProducts.includes(app.product)) {
-      billingExcludedSharedApps.push(app.product);
-      continue;
-    }
     billingReportingApps.push(app.product);
     subscriptionTotal = (subscriptionTotal ?? 0) + app.billing.data.subscriptionCount;
     for (const item of app.billing.data.statusCounts) {
@@ -119,31 +119,47 @@ async function settle<T>(read: () => Promise<T>): Promise<RollupRead<T>> {
   }
 }
 
+/** The Hub billing slug for each administration connection; Healthcare Advisors does not bill. */
+export const billingAppFor: Record<PortfolioProduct, BillingApp | null> = {
+  carebase: "carebase", breathe: "breathe", "caremetric-emr": "caremetric-emr", pennsync: "pennsync", intel: "caremetric-intel", "caremetric-go": "caremetric-go", advisors: null,
+};
+export type BillingReader = (signal: AbortSignal) => Promise<Pick<BillingWorkspace, "subscriptions" | "coupons">>;
+
 /**
  * Load one application's rollup snapshot through the same portfolio client the
- * administration workspace uses. The overview and billing reads are requested
- * only when the capabilities response advertises them; a failed capabilities
- * read marks the whole application unavailable instead of guessing.
+ * administration workspace uses. The overview is requested only when the
+ * capabilities response advertises it; a failed capabilities read marks the
+ * connection unavailable instead of guessing. Billing comes from the Hub.
  */
-export async function loadRollupApp(portfolio: PortfolioClient, product: PortfolioProduct, signal: AbortSignal): Promise<RollupAppSnapshot> {
+export async function loadRollupApp(portfolio: PortfolioClient, product: PortfolioProduct, signal: AbortSignal, billing: RollupRead<HubAppBilling> = { state: "unavailable" }): Promise<RollupAppSnapshot> {
+  const money = billing.state === "ready" && billing.data.mrrCents > 0 ? [{ currency: "usd", amountMinor: String(billing.data.mrrCents) }] : [];
   let capabilities: PortfolioCapabilities;
   try {
     capabilities = await portfolio.capabilities({ product, signal });
   } catch {
-    return { product, capabilities: null, overview: { state: "unavailable" }, billing: { state: "unavailable" }, money: [] };
+    return { product, capabilities: null, overview: { state: "unavailable" }, billing, money };
   }
-  const [overview, billing] = await Promise.all([
-    capabilities.operations.includes("overview")
-      ? settle(() => portfolio.overview({ product, signal }))
-      : Promise.resolve<RollupRead<PortfolioOverview>>({ state: "not-advertised" }),
-    capabilities.operations.includes("billing.overview")
-      ? settle(() => portfolio.billing({ product, signal }))
-      : Promise.resolve<RollupRead<AdminBillingOverview>>({ state: "not-advertised" }),
-  ]);
-  return { product, capabilities, overview, billing, money: [] };
+  const overview = capabilities.operations.includes("overview")
+    ? await settle(() => portfolio.overview({ product, signal }))
+    : { state: "not-advertised" } as const;
+  return { product, capabilities, overview, billing, money };
+}
+
+/** Hub billing per application, read once for every card. */
+export async function loadHubBilling(readBilling: BillingReader, signal: AbortSignal): Promise<Record<PortfolioProduct, RollupRead<HubAppBilling>>> {
+  const read = await settle(() => readBilling(signal));
+  const summary = read.state === "ready" ? summarizeByApp(read.data) : null;
+  return Object.fromEntries(portfolioProducts.map(product => {
+    const app = billingAppFor[product];
+    if (!app) return [product, { state: "not-advertised" }];
+    if (!summary) return [product, { state: "unavailable" }];
+    const { subscriptionCount, statusCounts, mrrCents } = summary[app];
+    return [product, { state: "ready", data: { source: "hub", subscriptionCount, statusCounts, mrrCents } }];
+  })) as Record<PortfolioProduct, RollupRead<HubAppBilling>>;
 }
 
 /** Load every registered application's snapshot; one silent application never fails the others. */
-export function loadPortfolioRollup(portfolio: PortfolioClient, signal: AbortSignal): Promise<RollupAppSnapshot[]> {
-  return Promise.all(portfolioProducts.map(product => loadRollupApp(portfolio, product, signal)));
+export async function loadPortfolioRollup(portfolio: PortfolioClient, signal: AbortSignal, readBilling?: BillingReader): Promise<RollupAppSnapshot[]> {
+  const billing = readBilling ? await loadHubBilling(readBilling, signal) : null;
+  return Promise.all(portfolioProducts.map(product => loadRollupApp(portfolio, product, signal, billing?.[product])));
 }

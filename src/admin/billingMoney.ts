@@ -1,4 +1,8 @@
-import { parseMinorAmount } from "../../supabase/functions/_shared/billingProtocol";
+/** A non-negative Stripe minor-unit amount as an exact decimal string (never a JavaScript Number). */
+export function parseMinorAmount(value: unknown): string {
+  if (typeof value === "string" && /^(0|[1-9][0-9]{0,18})$/.test(value) && BigInt(value) <= 9223372036854775807n) return value;
+  throw new Error("Invalid minor-unit amount");
+}
 
 // Stripe charge/invoice units, reviewed 2026-09-11:
 // https://docs.stripe.com/currencies#zero-decimal and #special-cases.

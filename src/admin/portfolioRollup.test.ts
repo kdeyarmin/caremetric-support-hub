@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AdminBillingOverview, PortfolioCapabilities, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
+import type { PortfolioCapabilities, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
 import type { PortfolioClient } from "./portfolioClient";
-import { buildPortfolioRollup, groupMoneyByCurrency, loadRollupApp } from "./portfolioRollup";
-import type { RollupAppSnapshot, RollupRead } from "./portfolioRollup";
+import { buildPortfolioRollup, groupMoneyByCurrency, loadHubBilling, loadPortfolioRollup, loadRollupApp } from "./portfolioRollup";
+import type { HubAppBilling, RollupAppSnapshot, RollupRead } from "./portfolioRollup";
+import type { Subscription } from "../billing/billingModel";
 
-const capabilities: PortfolioCapabilities = { apiVersion: 1, operations: ["overview", "billing.overview"], sourceRevision: "abc1234" };
-function billing(subscriptionCount: number, statusCounts: Array<{ status: string; count: number }>): RollupRead<AdminBillingOverview> {
-  return { state: "ready", data: { source: "application_database", subscriptionCount, statusCounts } };
+const capabilities: PortfolioCapabilities = { apiVersion: 1, operations: ["overview"], sourceRevision: "abc1234" };
+function billing(subscriptionCount: number, statusCounts: Array<{ status: string; count: number }>, mrrCents = 0): RollupRead<HubAppBilling> {
+  return { state: "ready", data: { source: "hub", subscriptionCount, statusCounts, mrrCents } };
 }
 function snapshot(product: PortfolioProduct, overrides: Partial<RollupAppSnapshot> = {}): RollupAppSnapshot {
   return {
@@ -53,7 +54,6 @@ describe("portfolio rollup money grouping", () => {
   it("groups only money from applications included in the totals", () => {
     const rollup = buildPortfolioRollup([
       snapshot("carebase", { billing: billing(1, [{ status: "active", count: 1 }]), money: [{ currency: "usd", amountMinor: "100" }] }),
-      snapshot("caremetric-go", { billing: billing(1, [{ status: "active", count: 1 }]), money: [{ currency: "usd", amountMinor: "100" }] }),
       snapshot("breathe", { capabilities: null, overview: { state: "unavailable" }, billing: { state: "unavailable" }, money: [{ currency: "usd", amountMinor: "100" }] }),
     ]);
     expect(rollup.moneyByCurrency).toEqual([{ currency: "usd", amountMinor: "100" }]);
@@ -61,28 +61,14 @@ describe("portfolio rollup money grouping", () => {
 });
 
 describe("portfolio rollup totals", () => {
-  it("never counts CareMetric Go records beside CareMetric EMR records", () => {
+  it("counts CareMetric Go beside CareMetric EMR because the Hub bills each separately", () => {
     const rollup = buildPortfolioRollup([
       snapshot("caremetric-emr", { billing: billing(10, [{ status: "active", count: 8 }, { status: "past_due", count: 2 }]) }),
-      snapshot("caremetric-go", { billing: billing(10, [{ status: "active", count: 8 }, { status: "past_due", count: 2 }]) }),
+      snapshot("caremetric-go", { billing: billing(1, [{ status: "active", count: 1 }]) }),
     ]);
-    expect(rollup.subscriptionTotal).toBe(10);
-    expect(rollup.billingReportingApps).toEqual(["caremetric-emr"]);
-    expect(rollup.billingExcludedSharedApps).toEqual(["caremetric-go"]);
-    expect(rollup.statusTotals).toEqual([
-      { status: "active", count: 8 },
-      { status: "past_due", count: 2 },
-    ]);
-  });
-
-  it("shows no total when the only reporting application shares its records", () => {
-    const rollup = buildPortfolioRollup([
-      snapshot("caremetric-go", { billing: billing(10, [{ status: "active", count: 10 }]) }),
-    ]);
-    expect(rollup.subscriptionTotal).toBeNull();
-    expect(rollup.billingReportingApps).toEqual([]);
-    expect(rollup.billingExcludedSharedApps).toEqual(["caremetric-go"]);
-    expect(rollup.statusTotals).toEqual([]);
+    expect(rollup.subscriptionTotal).toBe(11);
+    expect(rollup.billingReportingApps).toEqual(["caremetric-emr", "caremetric-go"]);
+    expect(rollup.billingExcludedSharedApps).toEqual([]);
   });
 
   it("groups subscription statuses across the reporting applications", () => {
@@ -126,43 +112,50 @@ describe("portfolio rollup totals", () => {
 describe("portfolio rollup loading", () => {
   const unexpected = () => Promise.reject(new Error("Unexpected fixture read"));
   function client(overrides: Partial<PortfolioClient>): PortfolioClient {
-    return {
-      capabilities: unexpected, overview: vi.fn(unexpected), organizations: unexpected, users: unexpected,
-      subscriptions: unexpected, billing: vi.fn(unexpected), invoices: unexpected, invoice: unexpected,
-      verifySubscription: unexpected, ...overrides,
-    };
+    return { capabilities: unexpected, overview: vi.fn(unexpected), organizations: unexpected, users: unexpected, ...overrides };
   }
-
-  it("requests the overview and billing reads only when the capabilities advertise them", async () => {
-    const portfolio = client({
-      capabilities: vi.fn<PortfolioClient["capabilities"]>(async () => ({ apiVersion: 1, sourceRevision: null, operations: ["overview"] })),
-      overview: vi.fn<PortfolioClient["overview"]>(async () => ({ organizationCount: 1, activeUserCount: 1 })),
-      billing: vi.fn<PortfolioClient["billing"]>(async () => ({ source: "application_database", subscriptionCount: 0, statusCounts: [] })),
-    });
-    const result = await loadRollupApp(portfolio, "pennsync", new AbortController().signal);
-    expect(result.overview.state).toBe("ready");
-    expect(result.billing.state).toBe("not-advertised");
-    expect(portfolio.billing).not.toHaveBeenCalled();
+  const subscription = (app: Subscription["app"], status: Subscription["status"], unit_amount: number, interval: "month" | "year" = "month"): Subscription => ({
+    id: `sub_${app}${status}${unit_amount}`, tenant_id: "00000000-0000-4000-8000-0000000000aa", customer: "cus_1", app, status, collection_method: "send_invoice",
+    cancel_at_period_end: false, cancel_at: null, canceled_at: null, ended_at: null, current_period_start: null, current_period_end: null, trial_start: null, trial_end: null,
+    pause_behavior: null, pause_resumes_at: null, discounts: [], created: "2026-10-27T00:00:00Z", version: 1,
+    items: [{ id: "si_1", price: "price_1", product: "prod_1", quantity: 2, unit_amount, currency: "usd", interval, interval_count: 1, product_name: "Core", kind: "plan", unit_label: "facility", pricing_model: "per_unit", custom: false }],
   });
 
-  it("marks the whole application unavailable when the capabilities read fails", async () => {
+  it("requests the overview only when the capabilities advertise it and never asks the application for billing", async () => {
+    const portfolio = client({
+      capabilities: vi.fn<PortfolioClient["capabilities"]>(async () => ({ apiVersion: 1, sourceRevision: null, operations: [] })),
+    });
+    const result = await loadRollupApp(portfolio, "pennsync", new AbortController().signal, billing(2, [{ status: "active", count: 2 }]));
+    expect(result.overview.state).toBe("not-advertised");
+    expect(portfolio.overview).not.toHaveBeenCalled();
+    expect(result.billing).toEqual(billing(2, [{ status: "active", count: 2 }]));
+  });
+
+  it("keeps Hub billing when an application's connection is unavailable", async () => {
     const portfolio = client({ capabilities: vi.fn<PortfolioClient["capabilities"]>(async () => { throw { code: "unconfigured" }; }) });
-    const result = await loadRollupApp(portfolio, "intel", new AbortController().signal);
+    const result = await loadRollupApp(portfolio, "intel", new AbortController().signal, billing(1, [{ status: "active", count: 1 }], 34900));
     expect(result.capabilities).toBeNull();
     expect(result.overview.state).toBe("unavailable");
-    expect(result.billing.state).toBe("unavailable");
-    expect(portfolio.overview).not.toHaveBeenCalled();
-    expect(portfolio.billing).not.toHaveBeenCalled();
+    expect(result.billing.state).toBe("ready");
+    expect(result.money).toEqual([{ currency: "usd", amountMinor: "34900" }]);
   });
 
-  it("keeps a failed billing read unavailable without discarding the overview", async () => {
-    const portfolio = client({
-      capabilities: vi.fn<PortfolioClient["capabilities"]>(async () => ({ apiVersion: 1, sourceRevision: "abc1234", operations: ["overview", "billing.overview"] })),
-      overview: vi.fn<PortfolioClient["overview"]>(async () => ({ organizationCount: 2, activeUserCount: 3 })),
-      billing: vi.fn<PortfolioClient["billing"]>(async () => { throw { code: "upstream" }; }),
-    });
-    const result = await loadRollupApp(portfolio, "carebase", new AbortController().signal);
-    expect(result.overview.state).toBe("ready");
-    expect(result.billing.state).toBe("unavailable");
+  it("summarizes the Hub billing workspace per application and leaves Advisors out", async () => {
+    const read = vi.fn(async () => ({ coupons: [], subscriptions: [
+      subscription("carebase", "active", 19900), subscription("carebase", "trialing", 19900), subscription("caremetric-intel", "active", 348000, "year"),
+      subscription("breathe", "canceled", 79900),
+    ] }));
+    const result = await loadHubBilling(read, new AbortController().signal);
+    expect(result.carebase).toEqual({ state: "ready", data: { source: "hub", subscriptionCount: 2, statusCounts: [{ status: "trialing", count: 1 }, { status: "active", count: 1 }], mrrCents: 39800 } });
+    expect(result.intel).toEqual({ state: "ready", data: { source: "hub", subscriptionCount: 1, statusCounts: [{ status: "active", count: 1 }], mrrCents: 58000 } });
+    expect(result.breathe.state === "ready" && result.breathe.data.mrrCents).toBe(0);
+    expect(result.advisors).toEqual({ state: "not-advertised" });
+  });
+
+  it("marks billing unavailable everywhere when the Hub billing read fails, never zero", async () => {
+    const portfolio = client({ capabilities: vi.fn<PortfolioClient["capabilities"]>(async () => ({ apiVersion: 1, sourceRevision: null, operations: [] })) });
+    const apps = await loadPortfolioRollup(portfolio, new AbortController().signal, async () => { throw new Error("offline"); });
+    expect(apps.filter(app => app.product !== "advisors").every(app => app.billing.state === "unavailable")).toBe(true);
+    expect(buildPortfolioRollup(apps).subscriptionTotal).toBeNull();
   });
 });

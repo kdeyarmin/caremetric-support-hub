@@ -80,8 +80,7 @@ describe("operational record interactions", () => {
     const jobs = vi.spyOn(operationsClient, "jobs").mockResolvedValue(page(job));
     const portfolio: PortfolioClient = {
       capabilities: async () => ({ apiVersion: 1, sourceRevision: null, operations: ["overview", ...(enabled ? operationalReadOperations : [])] }),
-      overview: async () => ({ organizationCount: 1, activeUserCount: 1 }), organizations: unexpected, users: unexpected, subscriptions: unexpected,
-      billing: unexpected, invoices: unexpected, invoice: unexpected, verifySubscription: unexpected,
+      overview: async () => ({ organizationCount: 1, activeUserCount: 1 }), organizations: unexpected, users: unexpected,
     };
     render(<MemoryRouter><AdminWorkspace client={courseClient} portfolio={portfolio} /></MemoryRouter>);
     await screen.findByRole("button", { name: "Overview" });

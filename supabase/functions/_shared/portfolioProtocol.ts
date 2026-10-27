@@ -1,18 +1,16 @@
 import { isUuid, parseAdminEnvelope, parseAdminOperation, type AdminOperation } from "./adminProtocol.ts";
-import { billingReadOperations, parseBillingData, parseBillingOperation } from "./billingProtocol.ts";
-import type { AdminInvoiceDetail, AdminInvoicePage, AdminSubscriptionVerification, BillingReadOperation } from "./billingProtocol.ts";
-import { parseCheckoutCatalog, type BillingCatalogOperation, type BillingPackagePage } from "./checkoutCatalogProtocol.ts";
 import { isOperationalRead, operationalReadOperations, parseOperationalRead, parseOperationalPage, type OperationalPage, type OperationalRow, type OperationalReadOperation } from "./operationsProtocol.ts";
 
 export const portfolioProducts = ["carebase", "breathe", "caremetric-emr", "pennsync", "intel", "caremetric-go", "advisors"] as const;
 export type PortfolioProduct = typeof portfolioProducts[number];
 export const learningPackageCapabilities = ["learning.packages.context", "learning.packages.status", "learning.packages.upload", "learning.packages.accept", "learning.packages.finish"] as const;
-export const portfolioOperations = ["phone.messages.list", "inquiries.list", "capabilities", "overview", "courses.list", "courses.get", "organizations.list", "users.list", "billing.overview", "billing.subscriptions.list", ...billingReadOperations, ...operationalReadOperations, ...learningPackageCapabilities, "learning.distribution.context", "billing.packages.list", "commands.preview", "commands.apply", "billing.commands.preview", "billing.commands.apply", "billing.checkout.preview", "billing.checkout.apply", "billing.checkout.check", "billing.checkout.recover", "support.identity.resolve", "learning.media.v1", "operations.config.v1", "training.v1"] as const;
+// Platform billing is the Hub's own (Billing workspace); applications' billing reads are no longer requested.
+export const portfolioOperations = ["phone.messages.list", "inquiries.list", "capabilities", "overview", "courses.list", "courses.get", "organizations.list", "users.list", ...operationalReadOperations, ...learningPackageCapabilities, "learning.distribution.context", "commands.preview", "commands.apply", "support.identity.resolve", "learning.media.v1", "operations.config.v1", "training.v1"] as const;
 export type PortfolioOperationName = typeof portfolioOperations[number];
-export type DirectoryOperation = { operation: "organizations.list" | "users.list" | "billing.subscriptions.list" | "phone.messages.list" | "inquiries.list"; search?: string; limit: number; offset: number };
+export type DirectoryOperation = { operation: "organizations.list" | "users.list" | "phone.messages.list" | "inquiries.list"; search?: string; limit: number; offset: number };
 /** Healthcare Advisors is a consulting practice: it exposes only its consultation inbox. */
 export const advisorsOperations: readonly PortfolioOperationName[] = ["capabilities", "overview", "inquiries.list"];
-export type PortfolioOperation = AdminOperation | DirectoryOperation | BillingReadOperation | BillingCatalogOperation | OperationalReadOperation | { operation: "capabilities" | "billing.overview" };
+export type PortfolioOperation = AdminOperation | DirectoryOperation | OperationalReadOperation | { operation: "capabilities" };
 export interface PortfolioRequest { product: PortfolioProduct; operation: PortfolioOperation; }
 export interface PortfolioCapabilities { apiVersion: 1; operations: PortfolioOperationName[]; sourceRevision: string | null; }
 export interface PortfolioOverview { organizationCount: number | null; activeUserCount: number | null; registeredUserCount?: number; globalCourseCount?: number; subscriptionCount?: number; inquiryCount?: number; openInquiryCount?: number; }
@@ -29,14 +27,7 @@ export interface AdvisorInquiry {
 export const advisorInquiryStatuses = ["new", "in-progress", "closed"] as const;
 export interface AdminOrganization { id: string; name: string | null; slug: string | null; status: string; createdAt: string | null; }
 export interface AdminDirectoryUser { id: string; displayName: string | null; email: string | null; role: string; status: string; createdAt: string | null; }
-export interface AdminSubscription {
-  id: string; organizationId: string | null; organizationName: string | null; planCode: string | null; planName: string | null;
-  status: string; providerStatus: string | null; providerCustomerId: string | null; providerSubscriptionId: string | null;
-  currentPeriodEnd: string | null; updatedAt: string | null;
-}
 export interface AdminPage<T> { items: T[]; total: number; limit: number; offset: number; }
-export type AdminSubscriptionPage = AdminPage<AdminSubscription> & { source: "application_database" };
-export interface AdminBillingOverview { source: "application_database"; subscriptionCount: number; statusCounts: Array<{ status: string; count: number }>; }
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid administration contract");
@@ -77,18 +68,10 @@ export function parsePortfolioRequest(input: unknown): PortfolioRequest {
   if (isOperationalRead(operation.operation)) {
     if (product !== "carebase") throw new Error("Unsupported application operational read");
     parsed = parseOperationalRead(operation);
-  } else if (operation.operation === "billing.packages.list") {
-    if (product !== "carebase") throw new Error("Unsupported application checkout catalog");
-    const page = parseAdminOperation({ ...operation, operation: "courses.list" });
-    if (page.operation !== "courses.list") throw new Error("Invalid checkout pagination");
-    parsed = { ...page, operation: "billing.packages.list" };
-  } else if (billingReadOperations.includes(operation.operation as typeof billingReadOperations[number])) {
-    if (product !== "carebase") throw new Error("Unsupported application billing read");
-    parsed = parseBillingOperation(operation);
-  } else if (operation.operation === "capabilities" || operation.operation === "billing.overview") {
+  } else if (operation.operation === "capabilities") {
     only(operation, ["operation"]);
     parsed = { operation: operation.operation };
-  } else if (["organizations.list", "users.list", "billing.subscriptions.list", "phone.messages.list", "inquiries.list"].includes(String(operation.operation))) {
+  } else if (["organizations.list", "users.list", "phone.messages.list", "inquiries.list"].includes(String(operation.operation))) {
     if (operation.operation === "phone.messages.list" && product !== "breathe") throw new Error("Unsupported phone inbox source");
     // Reuse the same bounded literal-search and pagination contract as courses.
     const page = parseAdminOperation({ ...operation, operation: "courses.list" });
@@ -114,16 +97,6 @@ function user(value: unknown, product: PortfolioProduct): AdminDirectoryUser {
   if (product === "breathe" && !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(userId)) throw new Error("Invalid native identity");
   return { id: userId, displayName: nullableString(row.displayName), email: nullableString(row.email, 500), role: string(row.role, 100), status: string(row.status, 100), createdAt: timestamp(row.createdAt) };
 }
-function subscription(value: unknown, product: PortfolioProduct): AdminSubscription {
-  const row = object(value);
-  return {
-    id: entityId(row.id, product), organizationId: product === "pennsync" && row.organizationId === null ? null : entityId(row.organizationId, product), organizationName: nullableString(row.organizationName),
-    planCode: nullableString(row.planCode, 255), planName: nullableString(row.planName), status: string(row.status, 100),
-    providerStatus: nullableString(row.providerStatus, 100), providerCustomerId: nullableString(row.providerCustomerId, 255),
-    providerSubscriptionId: nullableString(row.providerSubscriptionId, 255), currentPeriodEnd: timestamp(row.currentPeriodEnd), updatedAt: timestamp(row.updatedAt),
-  };
-}
-
 function inquiry(value: unknown): AdvisorInquiry {
   const row = object(value);
   const id = string(row.id, 15);
@@ -145,16 +118,10 @@ export function parsePortfolioEnvelope(input: unknown, request: PortfolioRequest
     return parseAdminEnvelope(input, operation as AdminOperation);
   }
   const row = object(envelope.data);
-  let data: AdminPage<PhoneMessage> | AdminPage<AdvisorInquiry> | PortfolioCapabilities | PortfolioOverview | AdminPage<AdminOrganization> | AdminPage<AdminDirectoryUser> | AdminSubscriptionPage | AdminBillingOverview | AdminInvoicePage | AdminInvoiceDetail | AdminSubscriptionVerification | BillingPackagePage | OperationalPage<OperationalRow>;
+  let data: AdminPage<PhoneMessage> | AdminPage<AdvisorInquiry> | PortfolioCapabilities | PortfolioOverview | AdminPage<AdminOrganization> | AdminPage<AdminDirectoryUser> | OperationalPage<OperationalRow>;
   if (isOperationalRead(operation.operation)) {
     if (product !== "carebase" || Object.keys(envelope).length !== 5 || typeof envelope.generatedAt !== "string" || !/^\d{4}-\d\d-\d\dT/.test(envelope.generatedAt)) throw new Error("Invalid operational read envelope");
     data = parseOperationalPage(row, operation as OperationalReadOperation);
-  } else if (operation.operation === "billing.packages.list") {
-    if (product !== "carebase" || Object.keys(envelope).length !== 5) throw new Error("Invalid checkout catalog envelope");
-    data = parseCheckoutCatalog(row, operation);
-  } else if (billingReadOperations.includes(operation.operation as typeof billingReadOperations[number])) {
-    if (product !== "carebase") throw new Error("Unsupported application billing read");
-    data = parseBillingData(row, operation as BillingReadOperation, value => subscription(value, product));
   } else if (operation.operation === "capabilities") {
     if (row.apiVersion !== 1 || !Array.isArray(row.operations) || row.operations.length > 100 || row.operations.some(value => typeof value !== "string")) throw new Error("Invalid capabilities");
     const revision = nullableString(row.sourceRevision, 64);
@@ -190,21 +157,13 @@ export function parsePortfolioEnvelope(input: unknown, request: PortfolioRequest
     if (row.organizationCount !== null || row.activeUserCount !== null || row.subscriptionCount !== undefined) throw new Error("Unverified Intel totals");
     data = { organizationCount: null, activeUserCount: null, registeredUserCount: count(row.registeredUserCount) };
   } else if (operation.operation === "overview" && product === "breathe") {
-    data = { organizationCount: count(row.organizationCount), activeUserCount: count(row.activeUserCount), subscriptionCount: count(row.subscriptionCount) };
+    // Breathe's platform plans are billed by the Hub now; an older adapter may still report its own count.
+    data = { organizationCount: count(row.organizationCount), activeUserCount: count(row.activeUserCount), ...(row.subscriptionCount === undefined ? {} : { subscriptionCount: count(row.subscriptionCount) }) };
   } else if (operation.operation === "overview" && (product === "caremetric-emr" || product === "caremetric-go" || product === "pennsync")) {
     if (row.activeUserCount !== null) throw new Error("Unverified account activity count");
-    data = { organizationCount: count(row.organizationCount), activeUserCount: null, registeredUserCount: count(row.registeredUserCount), subscriptionCount: count(row.subscriptionCount) };
+    data = { organizationCount: count(row.organizationCount), activeUserCount: null, registeredUserCount: count(row.registeredUserCount), ...(row.subscriptionCount === undefined ? {} : { subscriptionCount: count(row.subscriptionCount) }) };
   } else if (operation.operation === "organizations.list") data = page(row, operation, value => organization(value, product));
   else if (operation.operation === "users.list") data = page(row, operation, value => user(value, product));
-  else if (operation.operation === "billing.subscriptions.list") {
-    if (row.source !== "application_database") throw new Error("Unrecognized billing source");
-    data = { ...page(row, operation, value => subscription(value, product)), source: "application_database" };
-  } else if (operation.operation === "billing.overview") {
-    if (row.source !== "application_database" || !Array.isArray(row.statusCounts) || row.statusCounts.length > 100) throw new Error("Invalid billing overview");
-    const statusCounts = row.statusCounts.map(value => { const status = object(value); return { status: string(status.status, 100), count: count(status.count) }; });
-    const total = count(row.subscriptionCount);
-    if (new Set(statusCounts.map(value => value.status)).size !== statusCounts.length || statusCounts.reduce((sum, value) => sum + value.count, 0) !== total) throw new Error("Incomplete billing overview");
-    data = { source: "application_database", subscriptionCount: total, statusCounts };
-  } else throw new Error("Unsupported application operation");
+  else throw new Error("Unsupported application operation");
   return { contractVersion: 1 as const, product, operation: operation.operation, generatedAt: String(envelope.generatedAt), data };
 }

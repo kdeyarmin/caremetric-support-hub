@@ -157,8 +157,6 @@ function ModuleAccess({ client, organizationId, edit }: { client: TrainingClient
   const [revision, setRevision] = useState(0);
   const [offset, setOffset] = useState(0);
   const [now, setNow] = useState(Date.now);
-  const [params] = useSearchParams();
-  const billingParams = new URLSearchParams(params); billingParams.set("view", "billing");
   const reader = useCallback(async (signal: AbortSignal) => { void revision; return await client.request({ domain: "training.v1", operation: "access.list", organizationId, limit: 20, offset }, signal) as TrainingPage<TrainingTerm>; }, [client, organizationId, offset, revision]);
   const state = useAdminRead(reader);
   useEffect(() => {
@@ -178,7 +176,7 @@ function ModuleAccess({ client, organizationId, edit }: { client: TrainingClient
     return () => { clearTimeout(timer); window.removeEventListener("focus", update); document.removeEventListener("visibilitychange", onVisible); };
   }, [state]);
   return <section className="panel training-access"><div className="panel-heading"><h3>Module access terms</h3><button className="button button-primary" onClick={() => edit({ action: "access.grant" })}>Grant module access</button></div><div className="admin-section-body">
-    <p>Grant complimentary training or record an agreed contract. Each additional module requires a separate term. These terms control application access; they do not create a charge or modify a payment subscription. Use the <Link to={`?${billingParams}`}>Hub Billing workspace</Link> for checkout and subscription management.</p>
+    <p>Grant complimentary training or record an agreed contract. Each additional module requires a separate term. These terms control application access; they do not create a charge or modify a payment subscription. Use the <Link to="/admin/billing">Hub Billing workspace</Link> for subscriptions, trials and discounts.</p>
     {state.status === "loading" && <Loading label="Loading module access" />}{state.status === "error" && <ReadFailure error={state.error} retry={() => setRevision(value => value + 1)} />}
     {state.status === "ready" && <><div className="portfolio-table-wrap"><table><thead><tr><th>Module</th><th>Basis</th><th>Starts</th><th>Ends</th><th>Status</th><th>Reason</th><th>Action</th></tr></thead><tbody>{state.data.items.map(term => <tr key={term.id}><td>{moduleNames[term.moduleKey]}</td><td>{term.source}</td><td>{trainingDate(term.startsAt)}</td><td>{term.endsAt ? trainingDate(term.endsAt) : "No expiration"}</td><td>{term.revokedAt ? "Revoked" : term.endsAt && Date.parse(term.endsAt) <= now ? "Expired" : Date.parse(term.startsAt) > now ? "Scheduled" : "Active term"}</td><td>{term.reason}</td><td>{!term.revokedAt && <button className="button button-secondary button-small" onClick={() => edit({ action: "access.revoke", term })}>Revoke term</button>}</td></tr>)}</tbody></table></div>{!state.data.items.length && <p>No module access terms were returned.</p>}</>}
     {state.status === "ready" && <div className="admin-pagination"><span>{state.data.items.length} of {state.data.total} access terms</span><div><button className="button button-secondary button-small" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 20))}>Previous access terms</button><button className="button button-secondary button-small" disabled={offset + 20 >= state.data.total} onClick={() => setOffset(offset + 20)}>Next access terms</button></div></div>}

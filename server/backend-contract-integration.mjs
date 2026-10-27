@@ -12,9 +12,8 @@ assert.equal(local.hostname,'127.0.0.1'); assert.equal(local.port,'54322');
 const client=new pg.Client({connectionString:databaseUrl});
 const migration=await readFile(new URL('../supabase/migrations/20260911190819_combined_authoring_publication_support_contract.sql',import.meta.url),'utf8');
 const editingMigration=await readFile(new URL('../supabase/migrations/20260911192238_learning_draft_editing_contract.sql',import.meta.url),'utf8');
-const billingMigration=await readFile(new URL('../supabase/migrations/20260911195910_billing_portal_backend_contract.sql',import.meta.url),'utf8');
+const platformBillingMigration=await readFile(new URL('../supabase/migrations/20261027120100_platform_billing_contract.sql',import.meta.url),'utf8');
 const structureMigration=await readFile(new URL('../supabase/migrations/20260911202823_learning_structure_backend_contract.sql',import.meta.url),'utf8');
-const checkoutMigration=await readFile(new URL('../supabase/migrations/20260911204842_billing_checkout_backend_contract.sql',import.meta.url),'utf8');
 const onboardingMigration=await readFile(new URL('../supabase/migrations/20260911200100_support_customer_onboarding_contract.sql',import.meta.url),'utf8');
 const registrationMigration=await readFile(new URL('../supabase/migrations/20260911203100_support_customer_registration_contract.sql',import.meta.url),'utf8');
 const creationMigration=await readFile(new URL('../supabase/migrations/20260911212027_governed_course_creation_contract.sql',import.meta.url),'utf8');
@@ -36,6 +35,8 @@ const policyIntentMigration=await readFile(new URL('../supabase/migrations/20260
 const historicalStructure=await readFile(new URL('../supabase/migrations/20260911202021_learning_structure_intents.sql',import.meta.url),'utf8');
 const structureActionsSql=historicalStructure.slice(0,historicalStructure.indexOf('revoke all'));
 const readContract=async()=> (await client.query('select hub.get_backend_contract() as contract')).rows[0].contract;
+// Earlier declarations gate on the retired billing.portal.v1 feature; their replays start from a contract that still lists it.
+const withPortalFeature=contract=>({...contract,features:contract.features.flatMap(feature=>feature==='learning.draft-editing.v1'?[feature,'billing.portal.v1']:[feature])});
 const cases=[
   {
     sql:'alter function hub.get_support_readiness() rename to test_missing_support_readiness',
@@ -76,7 +77,19 @@ try {
   }
   await client.query('begin');
   try {
-    const before=await readContract();
+    const current=await readContract();
+    // Platform billing replaced three app-specific billing features. Replay history with them in their original places.
+    const before={...current,features:current.features.filter(feature=>feature!=='billing.platform.v1').flatMap(feature=>
+      feature==='learning.draft-editing.v1'?[feature,'billing.portal.v1']
+      :feature==='support.customer-registration.v1'?[feature,'billing.checkout.v1']
+      :feature==='support.ai-usage.v1'?[feature,'platform.admin.tenants.v1']:[feature])};
+    assert.equal(before.features.length,current.features.length+2);
+    // Their objects are gone, so those three declarations are replayed as the features they appended.
+    const appendFeature=async feature=>{
+      const next=await readContract();
+      const literal=JSON.stringify({...next,features:[...next.features,feature]}).replaceAll("'","''");
+      await client.query(`create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='' as $$ select '${literal}'::jsonb $$`);
+    };
     // Earlier declarations advertised DocStudio between credit policy and distribution.
     // Keep their exact historical feature lists separate from the retired current contract.
     const beforeRetirement={...before,features:before.features.flatMap(feature=>
@@ -87,8 +100,7 @@ try {
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='learning.draft-editing.v1')}),/incompatible/);
     await client.query(editingMigration);
     assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['billing.portal.v1','support.customer-onboarding.v1','learning.structure.v1','support.customer-registration.v1','billing.checkout.v1','learning.course-creation.v1','learning.credit-policy.v1','learning.distribution.v1','learning.pennsync-source.v1','learning.media.v1','phone.registry.v1','phone.accounts.v1','learning.sequence.v1','support.ai-assistance.v1','support.ai-automation.v1','support.go-live-readiness.v1','support.ai-automation-server.v1','platform.admin.advisors.v1','support.ai-automation-failure-policy.v1','support.communications.v1','support.ai-usage.v1','platform.admin.tenants.v1','support.bulk-email.v1','learning.catalog-authoring.v1'].includes(feature))});
-    assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='billing.portal.v1')}),/incompatible/);
-    await client.query(billingMigration);
+    await appendFeature('billing.portal.v1');
     assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['support.customer-onboarding.v1','learning.structure.v1','support.customer-registration.v1','billing.checkout.v1','learning.course-creation.v1','learning.credit-policy.v1','learning.distribution.v1','learning.pennsync-source.v1','learning.media.v1','phone.registry.v1','phone.accounts.v1','learning.sequence.v1','support.ai-assistance.v1','support.ai-automation.v1','support.go-live-readiness.v1','support.ai-automation-server.v1','platform.admin.advisors.v1','support.ai-automation-failure-policy.v1','support.communications.v1','support.ai-usage.v1','platform.admin.tenants.v1','support.bulk-email.v1','learning.catalog-authoring.v1'].includes(feature))});
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='support.customer-onboarding.v1')}),/incompatible/);
     await client.query(onboardingMigration);
@@ -101,8 +113,7 @@ try {
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='support.customer-registration.v1')}),/incompatible/);
     await client.query(registrationMigration);
     assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['billing.checkout.v1','learning.course-creation.v1','learning.credit-policy.v1','learning.distribution.v1','learning.pennsync-source.v1','learning.media.v1','phone.registry.v1','phone.accounts.v1','learning.sequence.v1','support.ai-assistance.v1','support.ai-automation.v1','support.go-live-readiness.v1','support.ai-automation-server.v1','platform.admin.advisors.v1','support.ai-automation-failure-policy.v1','support.communications.v1','support.ai-usage.v1','platform.admin.tenants.v1','support.bulk-email.v1','learning.catalog-authoring.v1'].includes(feature))});
-    assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='billing.checkout.v1')}),/incompatible/);
-    await client.query(checkoutMigration);
+    await appendFeature('billing.checkout.v1');
     assert.deepEqual(await readContract(),{...before,features:before.features.filter(feature=>!['learning.course-creation.v1','learning.credit-policy.v1','learning.distribution.v1','learning.pennsync-source.v1','learning.media.v1','phone.registry.v1','phone.accounts.v1','learning.sequence.v1','support.ai-assistance.v1','support.ai-automation.v1','support.go-live-readiness.v1','support.ai-automation-server.v1','platform.admin.advisors.v1','support.ai-automation-failure-policy.v1','support.communications.v1','support.ai-usage.v1','platform.admin.tenants.v1','support.bulk-email.v1','learning.catalog-authoring.v1'].includes(feature))});
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='learning.course-creation.v1')}),/incompatible/);
     await client.query(creationMigration);
@@ -144,8 +155,7 @@ try {
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='support.ai-usage.v1')}),/incompatible/);
     await client.query(await readFile(new URL('../supabase/migrations/20261021120100_ai_usage_ledger_contract.sql',import.meta.url),'utf8'));
     assert.deepEqual(await readContract(),{...beforeRetirement,features:beforeRetirement.features.filter(feature=>!['platform.admin.tenants.v1','support.bulk-email.v1','learning.catalog-authoring.v1'].includes(feature))});
-    assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='platform.admin.tenants.v1')}),/incompatible/);
-    await client.query(await readFile(new URL('../supabase/migrations/20261021140100_tenant_subscriptions_contract.sql',import.meta.url),'utf8'));
+    await appendFeature('platform.admin.tenants.v1');
     assert.deepEqual(await readContract(),{...beforeRetirement,features:beforeRetirement.features.filter(feature=>!['support.bulk-email.v1','learning.catalog-authoring.v1'].includes(feature))});
     assert.throws(()=>assertBackendContract({...before,features:before.features.filter(feature=>feature!=='support.bulk-email.v1')}),/incompatible/);
     await client.query(await readFile(new URL('../supabase/migrations/20261021160100_bulk_email_contract.sql',import.meta.url),'utf8'));
@@ -156,8 +166,11 @@ try {
     await client.query(await readFile(new URL('../supabase/migrations/20261022120100_learning_catalog_authoring_contract.sql',import.meta.url),'utf8'));
     assert.deepEqual(await readContract(),beforeRetirement,'Historical declarations restore the exact pre-retirement feature set');
     await client.query(retirementMigration);
-    assert.deepEqual(await readContract(),before,'Retirement restores the exact current feature set');
+    assert.deepEqual(await readContract(),before,'Retirement restores the exact historical feature set');
+    await client.query(platformBillingMigration);
+    assert.deepEqual(await readContract(),current,'Platform billing restores the exact current feature set');
     assertBackendContract(await readContract());
+    assert.throws(()=>assertBackendContract({...current,features:current.features.filter(feature=>feature!=='billing.platform.v1')}),/incompatible/);
   } finally { await client.query('rollback'); }
   for(const sql of [
     'alter function private.learning_authoring_actions() rename to test_missing_editing_actions',
@@ -180,7 +193,7 @@ try {
   }
   await client.query('begin');
   try {
-    const before=await readContract();
+    const before=withPortalFeature(await readContract());
     const withLaterFeature={...before,features:[...before.features,'synthetic.reviewed-next.v1']};
     // Literal JSON is from this fixed synthetic fixture, not caller input.
     const literal=JSON.stringify(withLaterFeature).replaceAll("'","''");
@@ -199,7 +212,8 @@ try {
   }
   await client.query('begin');
   try {
-    const future={...await readContract(),features:[...(await readContract()).features,'fixture.future.v1']};
+    const historical=withPortalFeature(await readContract());
+    const future={...historical,features:[...historical.features,'fixture.future.v1']};
     const declaration=(await client.query("select format('create or replace function hub.get_backend_contract() returns jsonb language sql stable set search_path='''' as %L', 'select '||quote_literal($1::text)||'::jsonb') as sql",[JSON.stringify(future)])).rows[0].sql;
     await client.query(declaration);
     const before=await readContract();await client.query(onboardingMigration);assert.deepEqual(await readContract(),before,'Onboarding preserves other reviewed features and is idempotent');
