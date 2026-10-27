@@ -286,11 +286,21 @@ create table private.customer_billing_quotes (
  product_id uuid not null references hub.products(id), facility_id text, request_key uuid not null,
  quote jsonb not null, execution jsonb not null, baseline_version integer not null,
  stripe_subscription_id text, stripe_schedule_id text, stripe_checkout_id text, payment_invoice_id text,
- state text not null default 'preview' check(state in ('preview','confirming','pending_payment','scheduled','applied','failed')),
+ state text not null default 'preview' check(state in ('preview','confirming','pending_payment','scheduled','applied','failed','superseded')),
  expires_at timestamptz not null default now()+interval '5 minutes', created_at timestamptz not null default now(),
  confirmed_at timestamptz, payment_request_started_at timestamptz, applied_at timestamptz,
  unique(actor_id,request_key)
 );
+create table private.customer_billing_revisions (
+ tenant_id uuid not null references hub.tenants(id) on delete cascade,
+ product_id uuid not null references hub.products(id), version integer not null default 0,
+ primary key(tenant_id,product_id)
+);
+alter table private.customer_billing_revisions enable row level security;
+revoke all on private.customer_billing_revisions from public,anon,authenticated,service_role,hub_app_server;
+alter table private.facility_billing_allocations add column pending_quote_id uuid references private.customer_billing_quotes(id);
+create index facility_billing_allocations_pending_quote on private.facility_billing_allocations(pending_quote_id) where pending_quote_id is not null;
+
 create unique index one_customer_billing_change_in_flight on private.customer_billing_quotes(tenant_id,product_id)
  where state in ('confirming','pending_payment');
 create index customer_billing_quotes_subscription on private.customer_billing_quotes(stripe_subscription_id,state);
@@ -317,6 +327,7 @@ begin
  select * into config from private.facility_billing_configuration where tenant_id=c.tenant_id and product_id=c.product_id;
  return jsonb_build_object('connection_id',c.id,'tenant_id',c.tenant_id,'app',(select slug from hub.products where id=c.product_id),
   'role',c.role,'mode',coalesce(config.mode,'legacy'),'configuration_version',coalesce(config.version,0),
+  'billing_revision',coalesce((select version from private.customer_billing_revisions r where r.tenant_id=c.tenant_id and r.product_id=c.product_id),0),
   'can_activate',c.role='organization_admin' and c.capabilities ? 'facility.entitlements.v1',
   'facilities',c.facilities,'customer',(select stripe_customer_id from private.billing_customers where tenant_id=c.tenant_id and not deleted),
   'subscription',case when s.stripe_subscription_id is null then null else jsonb_build_object('id',s.stripe_subscription_id,'version',s.version,'status',s.status,'current_period_end',s.current_period_end,
@@ -440,7 +451,13 @@ begin
   select version into v from private.billing_subscriptions where stripe_subscription_id=q.stripe_subscription_id;
   if v is distinct from q.baseline_version then raise exception 'Subscription changed. Review a new preview.' using errcode='40001';end if;
  end if;
- if p_claim then update private.customer_billing_quotes set state='confirming',confirmed_at=now() where id=q.id;end if;
+ if p_claim then
+  insert into private.customer_billing_revisions(tenant_id,product_id) values(q.tenant_id,q.product_id) on conflict do nothing;
+  select version into v from private.customer_billing_revisions where tenant_id=q.tenant_id and product_id=q.product_id for update;
+  if v is distinct from coalesce((q.execution->>'billing_revision')::integer,0) then raise exception 'Another purchase changed this account. Review a new preview.' using errcode='40001';end if;
+  update private.customer_billing_revisions set version=version+1 where tenant_id=q.tenant_id and product_id=q.product_id;
+  update private.customer_billing_quotes set state='confirming',confirmed_at=now() where id=q.id;
+ end if;
  return jsonb_build_object('id',q.id,'state','confirming','execution',q.execution,'subscription',q.stripe_subscription_id,'schedule',q.stripe_schedule_id,'payment_invoice',q.payment_invoice_id,'payment_request_started_at',q.payment_request_started_at,'confirmed_at',coalesce(q.confirmed_at,now()),'tenant_id',q.tenant_id,'product_id',q.product_id,'connection_id',q.connection_id);
 end;$$;
 
@@ -474,13 +491,23 @@ grant execute on function private.record_customer_payment_invoice(uuid,text) to 
 -- Provider receipts, rather than the browser success page, commit purchased facility access.
 create function private.settle_customer_billing_quote(p_id uuid,p_state text,p_subscription text default null,p_schedule text default null,p_checkout text default null) returns void
 language plpgsql security definer set search_path='' as $$
-declare q private.customer_billing_quotes; a jsonb;
+declare q private.customer_billing_quotes; a jsonb; prior_id uuid;
 begin
  perform private.require_hub_app_server();
- if p_state not in ('pending_payment','scheduled','applied','failed') then raise exception 'Invalid quote outcome' using errcode='22023';end if;
+ if p_state not in ('pending_payment','scheduled','applied','failed','superseded') then raise exception 'Invalid quote outcome' using errcode='22023';end if;
  select * into q from private.customer_billing_quotes where id=p_id for update;
- if not found or q.state in ('applied','failed') then return;end if;
+ if not found or q.state in ('applied','failed','superseded') then return;end if;
+ if q.state=p_state and (p_schedule is null or q.stripe_schedule_id=p_schedule) then return;end if;
  if q.state='preview' then raise exception 'Quote has not been confirmed' using errcode='42501';end if;
+ if p_state='scheduled' or p_state='applied' and coalesce((q.execution->>'cancelSchedule')::boolean,false) then
+  for prior_id in update private.customer_billing_quotes set state='superseded'
+   where tenant_id=q.tenant_id and product_id=q.product_id and id<>q.id and state='scheduled' returning id loop
+   perform private.billing_audit(q.actor_id,'billing.customer.superseded',q.tenant_id,q.product_id,jsonb_build_object('quote',prior_id,'replacement',q.id));
+  end loop;
+  update private.facility_billing_allocations set pending_plan=null,pending_addons=null,pending_at=null,pending_quote_id=null where tenant_id=q.tenant_id and product_id=q.product_id;
+ elsif p_state in ('failed','superseded') then
+  update private.facility_billing_allocations set pending_plan=null,pending_addons=null,pending_at=null,pending_quote_id=null where pending_quote_id=q.id;
+ end if;
  if p_state in ('applied','scheduled') and q.execution->>'mode'='facility' then
   for a in select * from jsonb_array_elements(case when p_state='applied' then q.execution->'next' else q.execution->'immediate' end) loop
    insert into private.facility_billing_allocations(tenant_id,product_id,facility_id,facility_name,plan_price,addon_prices)
@@ -489,10 +516,10 @@ begin
   end loop;
   if p_state='scheduled' then
    for a in select * from jsonb_array_elements(q.execution->'next') loop
-    update private.facility_billing_allocations set pending_plan=a->>'plan',pending_addons=array(select jsonb_array_elements_text(a->'addons')),pending_at=(q.execution->>'renewal')::timestamptz
+    update private.facility_billing_allocations set pending_plan=a->>'plan',pending_addons=array(select jsonb_array_elements_text(a->'addons')),pending_at=(q.execution->>'renewal')::timestamptz,pending_quote_id=q.id
      where tenant_id=q.tenant_id and product_id=q.product_id and facility_id=a->>'facility_id';
    end loop;
-  else update private.facility_billing_allocations set pending_plan=null,pending_addons=null,pending_at=null where tenant_id=q.tenant_id and product_id=q.product_id;end if;
+  else update private.facility_billing_allocations set pending_plan=null,pending_addons=null,pending_at=null,pending_quote_id=null where pending_quote_id=q.id;end if;
  end if;
  update private.customer_billing_quotes set state=p_state,stripe_subscription_id=coalesce(p_subscription,stripe_subscription_id),
   stripe_schedule_id=coalesce(p_schedule,stripe_schedule_id),stripe_checkout_id=coalesce(p_checkout,stripe_checkout_id),applied_at=case when p_state='applied' then now() else null end where id=p_id;

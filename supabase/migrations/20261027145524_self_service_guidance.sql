@@ -185,6 +185,7 @@ values(md5('self-service.subscriptions:revision:1')::uuid,md5('self-service.subs
 3. Review Due now, recurring subtotal, renewal date, and scheduled changes. Taxes and discounts can make the recurring invoice differ from the displayed subtotal.
 4. Select Confirm subscription change only when the preview is correct. Additions and upgrades wait for confirmed payment. Removals, downgrades, and cancellation start at renewal.
 5. If payment needs authentication, open the invoice in Invoices & payments and complete Stripe''s instructions. The success page alone does not grant purchased access.
+6. To keep the current services instead of a scheduled downgrade or cancellation, select the current plan and add-ons, review the notice that removes the scheduled change, and confirm. This action does not charge a payment.
 
 ## Common problems
 
@@ -192,6 +193,7 @@ values(md5('self-service.subscriptions:revision:1')::uuid,md5('self-service.subs
 - Concurrent change: refresh and review again; the server refuses an outdated quote.
 - Pending payment: complete the existing invoice before making another purchase. Your previously purchased access is retained under the existing subscription rules.
 - Managed schedule, trial, or quantity mismatch: the account retains its current terms. Open a billing support request if the displayed restriction needs review.
+- A later selection replaces an older scheduled request. Failed or externally removed changes clear their pending selection; a delayed receipt cannot restore the older choice.
 
 ## FAQ
 
@@ -225,6 +227,7 @@ values(md5('self-service.subscriptions:revision:1')::uuid,md5('self-service.subs
 3. Review Due now, recurring subtotal, renewal date, and scheduled changes. Taxes and discounts can make the recurring invoice differ from the displayed subtotal.
 4. Select Confirm subscription change only when the preview is correct. Additions and upgrades wait for confirmed payment. Removals, downgrades, and cancellation start at renewal.
 5. If payment needs authentication, open the invoice in Invoices & payments and complete Stripe''s instructions. The success page alone does not grant purchased access.
+6. To keep the current services instead of a scheduled downgrade or cancellation, select the current plan and add-ons, review the notice that removes the scheduled change, and confirm. This action does not charge a payment.
 
 ## Common problems
 
@@ -232,6 +235,7 @@ values(md5('self-service.subscriptions:revision:1')::uuid,md5('self-service.subs
 - Concurrent change: refresh and review again; the server refuses an outdated quote.
 - Pending payment: complete the existing invoice before making another purchase. Your previously purchased access is retained under the existing subscription rules.
 - Managed schedule, trial, or quantity mismatch: the account retains its current terms. Open a billing support request if the displayed restriction needs review.
+- A later selection replaces an older scheduled request. Failed or externally removed changes clear their pending selection; a delayed receipt cannot restore the older choice.
 
 ## FAQ
 

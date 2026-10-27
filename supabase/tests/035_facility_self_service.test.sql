@@ -2,10 +2,10 @@ begin;
 select no_plan();
 
 select ok(bool_and((select relrowsecurity from pg_class where oid=to_regclass(name))), 'self-service state has RLS')
-from unnest(array['private.self_service_handoffs','private.self_service_connections','private.self_service_operations','private.facility_billing_configuration','private.facility_billing_allocations','private.customer_billing_quotes']) name;
+from unnest(array['private.self_service_handoffs','private.self_service_connections','private.self_service_operations','private.facility_billing_configuration','private.facility_billing_allocations','private.customer_billing_quotes','private.customer_billing_revisions']) name;
 select ok(not bool_or(has_table_privilege(role_name,name,'SELECT,INSERT,UPDATE,DELETE')), 'client and service roles cannot read connection, quote, or capability state directly')
 from unnest(array['anon','authenticated','service_role','hub_app_server']) role_name,
-unnest(array['private.self_service_handoffs','private.self_service_connections','private.self_service_operations','private.customer_billing_quotes']) name;
+unnest(array['private.self_service_handoffs','private.self_service_connections','private.self_service_operations','private.customer_billing_quotes','private.customer_billing_revisions']) name;
 select ok(not has_function_privilege('authenticated','private.refresh_self_service_scope(uuid,jsonb)','EXECUTE'),'a browser cannot grant itself cached native authority');
 select ok(not has_function_privilege('authenticated','private.settle_customer_billing_quote(uuid,text,text,text,text)','EXECUTE'),'a browser cannot settle a purchase');
 select ok(not bool_or(has_function_privilege(role_name,signature,'EXECUTE')),'clients cannot fabricate purchase attempts or invoice receipts')

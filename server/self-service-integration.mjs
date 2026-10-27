@@ -137,6 +137,38 @@ try {
   assert.equal(receipt.payment_invoice, 'in_syntheticReceipt'); assert.ok(receipt.payment_request_started_at);
   await transaction(pool, db => db.query("select private.settle_customer_billing_quote($1,'failed')", [quoteId]));
 
+  // An old preview cannot overwrite a later schedule, even before provider mirrors refresh.
+  const allocation = { facility_id: 'site-a', facility_name: 'Synthetic site A', plan: 'price_core', addons: [] };
+  const scheduledId = randomUUID(), staleId = randomUUID(), replacementId = randomUUID();
+  const revision = (await privateRpc('customer_billing_context', [connection.id])).billing_revision;
+  const scheduleExecution = { ...execution, billing_revision: revision, immediate: [allocation], next: [{ ...allocation, plan: 'price_basic' }] };
+  const saveSchedule = (id, intent) => privateRpc('save_customer_billing_quote', [id, connection.id, 'site-a', randomUUID(), JSON.stringify({ id }), JSON.stringify(intent), 0, null]);
+  await saveSchedule(scheduledId, scheduleExecution); await saveSchedule(staleId, scheduleExecution);
+  await privateRpc('claim_customer_billing_quote', [scheduledId, true]);
+  await transaction(pool, db => db.query("select private.settle_customer_billing_quote($1,'scheduled','sub_synthetic','sched_synthetic')", [scheduledId]));
+  await assert.rejects(privateRpc('claim_customer_billing_quote', [staleId, true]), /Another purchase changed/);
+  const replacement = { ...scheduleExecution, billing_revision: revision + 1, next: [{ ...allocation, plan: 'price_plus' }] };
+  await saveSchedule(replacementId, replacement); await privateRpc('claim_customer_billing_quote', [replacementId, true]);
+  await transaction(pool, db => db.query("select private.settle_customer_billing_quote($1,'scheduled','sub_synthetic','sched_synthetic')", [replacementId]));
+  assert.equal((await admin.query('select state from private.customer_billing_quotes where id=$1', [scheduledId])).rows[0].state, 'superseded');
+  await transaction(pool, db => db.query("select private.settle_customer_billing_quote($1,'applied','sub_synthetic')", [scheduledId]));
+  assert.deepEqual((await admin.query('select plan_price,pending_plan,pending_quote_id from private.facility_billing_allocations where tenant_id=$1 and product_id=$2', [tenant, product])).rows,
+    [{ plan_price: 'price_core', pending_plan: 'price_plus', pending_quote_id: replacementId }]);
+  await transaction(pool, db => db.query("select private.settle_customer_billing_quote($1,'failed','sub_synthetic')", [replacementId]));
+  assert.deepEqual((await admin.query('select plan_price,pending_plan,pending_at,pending_quote_id from private.facility_billing_allocations where tenant_id=$1 and product_id=$2', [tenant, product])).rows,
+    [{ plan_price: 'price_core', pending_plan: null, pending_at: null, pending_quote_id: null }]);
+  const cancelId = randomUUID(), keepId = randomUUID();
+  const currentRevision = (await privateRpc('customer_billing_context', [connection.id])).billing_revision;
+  await saveSchedule(cancelId, { ...scheduleExecution, billing_revision: currentRevision, next: [{ ...allocation, plan: null }] });
+  await privateRpc('claim_customer_billing_quote', [cancelId, true]);
+  await transaction(pool, db => db.query("select private.settle_customer_billing_quote($1,'scheduled','sub_synthetic','sched_synthetic')", [cancelId]));
+  await saveSchedule(keepId, { ...scheduleExecution, billing_revision: currentRevision + 1, cancelSchedule: true, next: [allocation] });
+  await privateRpc('claim_customer_billing_quote', [keepId, true]);
+  await transaction(pool, db => db.query("select private.settle_customer_billing_quote($1,'applied','sub_synthetic')", [keepId]));
+  assert.equal((await admin.query('select state from private.customer_billing_quotes where id=$1', [cancelId])).rows[0].state, 'superseded');
+  assert.deepEqual((await admin.query('select plan_price,pending_plan,pending_at from private.facility_billing_allocations where tenant_id=$1 and product_id=$2', [tenant, product])).rows,
+    [{ plan_price: 'price_core', pending_plan: null, pending_at: null }]);
+
   nativeProof = { ...nativeProof, role: 'member', facilities: nativeProof.facilities.map(site => ({ ...site, permissions: [] })) };
   assert.equal((await call('self-service', { action: 'workspace' })).body.connections[0].role, 'member');
   assert.equal((await call('self-service', { action: 'prepare', connection_id: connection.id, operation: recovery })).status, 403, 'native demotion removes cached recovery authority');
@@ -160,6 +192,7 @@ try {
   if (customerId) {
     await admin.query('delete from private.self_service_case_requests where actor_id=$1', [customerId]);
     await admin.query('delete from hub.support_cases where requester_id=$1', [customerId]);
+    if (tenant) await admin.query('delete from private.facility_billing_allocations where tenant_id=$1 and product_id=$2', [tenant, product]);
     await admin.query('delete from private.customer_billing_quotes where actor_id=$1', [customerId]);
     await admin.query('delete from private.self_service_operations where user_id=$1', [customerId]);
     await admin.query('delete from private.self_service_connections where user_id=$1', [customerId]);

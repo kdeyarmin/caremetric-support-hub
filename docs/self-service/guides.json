@@ -126,13 +126,15 @@
       "Choose Review change. The server calculates quantities and obtains an invoice preview from Stripe.",
       "Review Due now, recurring subtotal, renewal date, and scheduled changes. Taxes and discounts can make the recurring invoice differ from the displayed subtotal.",
       "Select Confirm subscription change only when the preview is correct. Additions and upgrades wait for confirmed payment. Removals, downgrades, and cancellation start at renewal.",
-      "If payment needs authentication, open the invoice in Invoices & payments and complete Stripe's instructions. The success page alone does not grant purchased access."
+      "If payment needs authentication, open the invoice in Invoices & payments and complete Stripe's instructions. The success page alone does not grant purchased access.",
+      "To keep the current services instead of a scheduled downgrade or cancellation, select the current plan and add-ons, review the notice that removes the scheduled change, and confirm. This action does not charge a payment."
     ],
     "problems": [
       "Preview expired: generate a new preview. Previews last five minutes.",
       "Concurrent change: refresh and review again; the server refuses an outdated quote.",
       "Pending payment: complete the existing invoice before making another purchase. Your previously purchased access is retained under the existing subscription rules.",
-      "Managed schedule, trial, or quantity mismatch: the account retains its current terms. Open a billing support request if the displayed restriction needs review."
+      "Managed schedule, trial, or quantity mismatch: the account retains its current terms. Open a billing support request if the displayed restriction needs review.",
+      "A later selection replaces an older scheduled request. Failed or externally removed changes clear their pending selection; a delayed receipt cannot restore the older choice."
     ],
     "faq": [
       "Are flat prices multiplied by facilities? No. Published flat pricing keeps quantity one. Facility prices aggregate the selected facility quantities.",

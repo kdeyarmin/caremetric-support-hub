@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { HttpError, withSession, transaction } from './sms-auth.mjs';
 import { customerBillingRequest, customerBillingWorkspace } from '../src/billing/customerBillingProtocol.ts';
 import { aggregateFacilityLines, planFacilityChange } from '../src/billing/facilityAllocations.ts';
@@ -17,6 +17,12 @@ export function subscriptionItemPatch(subscription, selected) {
 }
 const reference = value => typeof value === 'string' ? value : value?.id;
 const renewalOf = sub => sub.items.data[0]?.current_period_end ?? sub.current_period_end;
+const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object'
+  ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
+const scheduleFingerprint = schedule => createHash('sha256').update(JSON.stringify(canonical({
+  status: schedule.status, current_phase: schedule.current_phase, phases: schedule.phases, end_behavior: schedule.end_behavior, metadata: schedule.metadata,
+}))).digest('hex');
+const phaseLines = phase => (phase?.items ?? []).map(item => ({ price: reference(item.price), quantity: item.quantity ?? 1 }));
 function verifyAccount(subscription, execution) {
   if (reference(subscription.customer) !== execution.customer || subscription.metadata?.app !== execution.app) throw new HttpError(409, 'The subscription account changed. Review a new preview.');
 }
@@ -84,11 +90,13 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, autho
     }
     const immediateLines = aggregateFacilityLines(immediate, catalog), nextLines = aggregateFacilityLines(next, catalog);
     const hasImmediate = !sameBillingLines(rows(sub), immediateLines), hasScheduled = !sameBillingLines(immediateLines, nextLines);
-    if (!hasImmediate && !hasScheduled) throw new HttpError(400, 'The selected services already match your subscription.');
+    const cancelSchedule = Boolean(sub.schedule) && !hasImmediate && !hasScheduled;
+    if (!hasImmediate && !hasScheduled && !cancelSchedule) throw new HttpError(400, 'The selected services already match your subscription.');
     if (sub.schedule && hasImmediate) throw new HttpError(409, 'This subscription has a scheduled change. Review it before making an immediate purchase.');
+    let priorSchedule = null;
     if (sub.schedule) {
-      const schedule = await live.get(`/v1/subscription_schedules/${reference(sub.schedule)}`);
-      if (schedule.metadata?.hub_self_service !== 'true') throw new HttpError(409, 'This contract has a managed billing schedule. Its existing terms are retained.');
+      priorSchedule = await live.get(`/v1/subscription_schedules/${reference(sub.schedule)}`);
+      if (priorSchedule.metadata?.hub_self_service !== 'true') throw new HttpError(409, 'This contract has a managed billing schedule. Its existing terms are retained.');
     }
     const prorationDate = Math.floor(now() / 1000);
     const invoice = hasImmediate ? await live.post('/v1/invoices/create_preview', { subscription: sub.id,
@@ -97,10 +105,10 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, autho
     const visibleLines = workspace.role === 'organization_admin' ? nextLines : aggregateFacilityLines(next.filter(row => row.facility_id === input.facility_id), catalog);
     const quote = { id, facility_name: input.facility_id ? targets[0].facility_name : workspace.facilities.length ? 'All facilities in this organization' : 'Organization subscription', due_now: invoice?.amount_due ?? 0,
       currency: workspace.subscription.currency, recurring_subtotal: visibleLines.reduce((sum, line) => sum + catalog.get(line.price).amount * line.quantity, 0),
-      effective_at: hasScheduled ? renewal : null, expires_at: new Date(now() + 300000).toISOString(), has_immediate_change: hasImmediate, has_scheduled_change: hasScheduled,
+      effective_at: hasScheduled ? renewal : null, expires_at: new Date(now() + 300000).toISOString(), has_immediate_change: hasImmediate, has_scheduled_change: hasScheduled, cancels_scheduled_change: cancelSchedule,
       summary: visibleLines.map(line => ({ name: catalog.get(line.price).name, quantity: line.quantity, amount: catalog.get(line.price).amount * line.quantity })) };
-    const execution = { mode: workspace.mode, app: workspace.app, customer: workspace.customer, facility_id: input.facility_id, immediate, next, immediateLines, nextLines,
-      intent: { plan: input.plan, addons: [...input.addons].sort() }, originalLines: rows(sub), purchaseItems: subscriptionItemPatch(sub, immediateLines), renewal, prorationDate, interval: workspace.subscription.interval, hasImmediate, hasScheduled, maximumDue: quote.due_now, currency: quote.currency, schedule: reference(sub.schedule) ?? null };
+    const execution = { mode: workspace.mode, app: workspace.app, customer: workspace.customer, billing_revision: workspace.billing_revision, facility_id: input.facility_id, immediate, next, immediateLines, nextLines,
+      intent: { plan: input.plan, addons: [...input.addons].sort() }, originalLines: rows(sub), purchaseItems: subscriptionItemPatch(sub, immediateLines), renewal, prorationDate, interval: workspace.subscription.interval, hasImmediate, hasScheduled, cancelSchedule, maximumDue: quote.due_now, currency: quote.currency, schedule: reference(sub.schedule) ?? null, scheduleFingerprint: priorSchedule ? scheduleFingerprint(priorSchedule) : null };
     return rpc(session, 'save_customer_billing_quote', [id, input.connection_id, input.facility_id, input.request_id, JSON.stringify(quote), JSON.stringify(execution), workspace.subscription.version, sub.id]);
   }
   async function scheduleChange(live, quote, subscription) {
@@ -108,18 +116,38 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, autho
     const key = `hub-customer-${quote.id}`;
     // Replaying creation recovers our schedule after a lost response. Never adopt
     // a schedule attached by somebody else between preview and confirmation.
-    if (execution.schedule && reference(subscription.schedule) !== execution.schedule) throw new HttpError(409, 'The subscription schedule changed. Review a new preview.');
+    if (execution.schedule && reference(subscription.schedule) !== execution.schedule && !(execution.cancelSchedule && !subscription.schedule)) throw new HttpError(409, 'The subscription schedule changed. Review a new preview.');
     let schedule = execution.schedule ? await live.get(`/v1/subscription_schedules/${execution.schedule}`)
       : await live.post('/v1/subscription_schedules', { from_subscription: subscription.id }, { idempotencyKey: `${key}-schedule` });
+    const baseline = execution.schedule ? execution.scheduleFingerprint : scheduleFingerprint(schedule);
+    if (!execution.schedule) schedule = await live.get(`/v1/subscription_schedules/${schedule.id}`);
+    if (execution.cancelSchedule && !subscription.schedule && schedule.status === 'released' && reference(schedule.released_subscription) === subscription.id && schedule.metadata?.hub_self_service === 'true') {
+      await settle(quote.id, 'applied', subscription.id); return { state: 'applied' };
+    }
     if (execution.schedule && schedule.metadata?.hub_self_service !== 'true') throw new HttpError(409, 'The subscription has a managed schedule.');
     if (reference(schedule.subscription) !== subscription.id) throw new HttpError(409, 'The schedule belongs to another subscription.');
     const phase = schedule.phases.find(item => item.start_date === schedule.current_phase?.start_date);
     if (!phase || phase.end_date !== Math.floor(Date.parse(execution.renewal) / 1000)) throw new HttpError(409, 'The renewal date changed. Review a new preview.');
+    if (scheduleFingerprint(schedule) !== baseline) {
+      const future = schedule.phases.filter(item => item.start_date >= phase.end_date);
+      if (!execution.cancelSchedule && schedule.metadata?.hub_self_service_quote === quote.id
+        && sameBillingLines(phaseLines(phase), execution.immediateLines)
+        && future.length === (execution.nextLines.length ? 1 : 0)
+        && (!future.length || future[0].start_date === phase.end_date && sameBillingLines(phaseLines(future[0]), execution.nextLines))
+        && schedule.end_behavior === (execution.nextLines.length ? 'release' : 'cancel')) {
+        await settle(quote.id, 'scheduled', subscription.id, schedule.id); return { state: 'scheduled', effective_at: execution.renewal };
+      }
+      throw new HttpError(409, 'The scheduled selection changed after this preview. Review it again.');
+    }
+    if (execution.cancelSchedule) {
+      await live.post(`/v1/subscription_schedules/${schedule.id}/release`, { preserve_cancel_date: false }, { idempotencyKey: `${key}-release` });
+      await settle(quote.id, 'applied', subscription.id); return { state: 'applied' };
+    }
     const settings = Object.fromEntries(['collection_method', 'default_payment_method', 'default_tax_rates', 'automatic_tax', 'discounts', 'invoice_settings', 'transfer_data', 'application_fee_percent', 'on_behalf_of']
       .filter(name => phase[name] !== undefined && phase[name] !== null).map(name => [name, phase[name]]));
     const phases = [{ ...settings, start_date: phase.start_date, end_date: phase.end_date, items: execution.immediateLines, proration_behavior: 'none' }];
     if (execution.nextLines.length) phases.push({ ...settings, start_date: phase.end_date, duration: { interval: execution.interval, interval_count: 1 }, items: execution.nextLines, proration_behavior: 'none', metadata: { ...subscription.metadata } });
-    schedule = await live.post(`/v1/subscription_schedules/${schedule.id}`, { metadata: { hub_self_service: 'true' }, proration_behavior: 'none',
+    schedule = await live.post(`/v1/subscription_schedules/${schedule.id}`, { metadata: { hub_self_service: 'true', hub_self_service_quote: quote.id }, proration_behavior: 'none',
       end_behavior: execution.nextLines.length ? 'release' : 'cancel', phases }, { idempotencyKey: `${key}-phases` });
     await settle(quote.id, 'scheduled', subscription.id, schedule.id);
     return { state: 'scheduled', effective_at: execution.renewal };
@@ -127,6 +155,12 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, autho
   async function finish(live, quote, subscription) {
     const execution = quote.execution;
     verifyAccount(subscription, execution);
+    if (quote.state === 'scheduled' && quote.schedule
+      && (reference(subscription.schedule) && reference(subscription.schedule) !== quote.schedule
+        || !subscription.schedule && now() < Date.parse(execution.renewal))) {
+      await settle(quote.id, 'superseded', subscription.id);
+      return { state: 'superseded' };
+    }
     let invoice = null;
     if (execution.hasImmediate && quote.payment_invoice) {
       invoice = await live.get(`/v1/invoices/${quote.payment_invoice}`);
@@ -143,20 +177,20 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, autho
     if (!['active', 'trialing'].includes(subscription.status) || subscription.pending_update) {
       await settle(quote.id, 'pending_payment', subscription.id); return { state: 'pending_payment', url: subscription.latest_invoice?.hosted_invoice_url ?? null };
     }
-    if ((!execution.hasImmediate || invoice?.status === 'paid') && now() >= Date.parse(execution.renewal) && sameBillingLines(rows(subscription), execution.nextLines)) {
+    if (!execution.cancelSchedule && (!execution.hasImmediate || invoice?.status === 'paid') && now() >= Date.parse(execution.renewal) && sameBillingLines(rows(subscription), execution.nextLines)) {
       await settle(quote.id, 'applied', subscription.id); return { state: 'applied' };
     }
     if (!sameBillingLines(rows(subscription), execution.immediateLines)) return { state: 'pending_payment' };
     if (execution.hasImmediate && invoice?.status !== 'paid') {
       await settle(quote.id, 'pending_payment', subscription.id); return { state: 'pending_payment', url: invoice?.hosted_invoice_url ?? null };
     }
-    if (execution.hasScheduled) return quote.state === 'scheduled' ? { state: 'scheduled', effective_at: execution.renewal } : scheduleChange(live, quote, subscription);
+    if (execution.hasScheduled || execution.cancelSchedule) return quote.state === 'scheduled' ? { state: 'scheduled', effective_at: execution.renewal } : scheduleChange(live, quote, subscription);
     await settle(quote.id, 'applied', subscription.id); return { state: 'applied' };
   }
   async function confirm(session, input) {
     // This committed reservation survives a provider timeout; retries reuse exactly one provider idempotency key.
     let quote = await rpc(session, 'claim_customer_billing_quote', [input.quote_id, false]);
-    if (['applied', 'scheduled', 'failed'].includes(quote.state)) return { state: quote.state };
+    if (['applied', 'scheduled', 'failed', 'superseded'].includes(quote.state)) return { state: quote.state };
     const workspace = await context(session, quote.connection_id);
     await verifyScope(session, workspace, quote.execution.facility_id);
     quote = await rpc(session, 'claim_customer_billing_quote', [input.quote_id, true]);

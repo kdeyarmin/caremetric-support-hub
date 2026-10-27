@@ -13,6 +13,7 @@ function fixture({ payment = 'paid', denied = false } = {}) {
     catalog: [price('price_core', 'core', 1000), price('price_train', 'train', 500, 'addon')], customer: 'cus_test', loaded_at: '2026-01-01T00:00:00Z',
     subscription: { id: 'sub_test', version: 1, status: 'active', current_period_end: '2026-02-01T00:00:00Z', currency: 'usd', interval: 'month', items: [{ id: 'si_core', price: 'price_core', quantity: 1 }] } };
   let sub = { id: 'sub_test', customer: 'cus_test', metadata: { app: 'carebase' }, status: 'active', latest_invoice: { id: 'in_test', status: 'paid' }, items: { data: [{ id: 'si_core', price: { id: 'price_core' }, quantity: 1, current_period_start: 1767225600, current_period_end: 1769904000 }] } };
+  let schedule = { id: 'sub_sched', subscription: sub.id, status: 'active', metadata: {}, current_phase: { start_date: 1767225600 }, phases: [{ start_date: 1767225600, end_date: 1769904000, items: [{ price: 'price_core', quantity: 1 }] }] };
   const query = vi.fn(async (sql, args = []) => {
     if (sql.startsWith('select s.id,s.user_id')) return { rows: [{ id: '95000000-0000-4000-8000-000000000004', user_id: actor }] };
     let result;
@@ -26,7 +27,7 @@ function fixture({ payment = 'paid', denied = false } = {}) {
     return { rows: [{ result }] };
   });
   const pool = { connect: async () => ({ query, release() {} }) };
-  const live = { get: vi.fn(async path => structuredClone(path.startsWith('/v1/invoices/') ? invoice : sub)), post: vi.fn(async (path, params, options) => {
+  const live = { get: vi.fn(async path => structuredClone(path.startsWith('/v1/invoices/') ? invoice : path.startsWith('/v1/subscription_schedules/') ? schedule : sub)), post: vi.fn(async (path, params, options) => {
     if (path === '/v1/invoices/create_preview') return { amount_due: 250, currency: 'usd' };
     if (path === '/v1/subscriptions/sub_test') {
       const prior = purchases.get(options.idempotencyKey);
@@ -37,8 +38,9 @@ function fixture({ payment = 'paid', denied = false } = {}) {
       purchases.set(options.idempotencyKey, { params: structuredClone(params), response: structuredClone(sub) });
       return structuredClone(sub);
     }
-    if (path === '/v1/subscription_schedules') return { id: 'sub_sched', subscription: sub.id, current_phase: { start_date: 1767225600 }, phases: [{ start_date: 1767225600, end_date: 1769904000 }] };
-    if (path === '/v1/subscription_schedules/sub_sched') return { id: 'sub_sched', ...params };
+    if (path === '/v1/subscription_schedules') { sub.schedule = schedule.id; return structuredClone(schedule); }
+    if (path === '/v1/subscription_schedules/sub_sched/release') { sub.schedule = null; schedule = { ...schedule, status: 'released', subscription: null, released_subscription: sub.id }; return structuredClone(schedule); }
+    if (path === '/v1/subscription_schedules/sub_sched') { schedule = { ...schedule, ...params }; return structuredClone(schedule); }
     throw new Error(`Unexpected provider operation ${path}`);
   }) };
   const authorize = vi.fn(async () => { if (denied) throw Object.assign(new Error('Native authority revoked'), { status: 403 }); return { authorized: true }; });
@@ -46,6 +48,7 @@ function fixture({ payment = 'paid', denied = false } = {}) {
   const preview = (addons = ['price_train'], plan = 'price_core') => service.handle('session', { action: 'quote', connection_id: connection, facility_id: null, plan, addons, request_id: crypto.randomUUID() });
   return { service, preview, live, quotes, events, authorize, query, workspace,
     mutateSubscription: changes => { sub = { ...sub, ...changes }; }, mutateInvoice: changes => { invoice = { ...invoice, ...changes }; },
+    mutateSchedule: changes => { schedule = { ...schedule, ...changes }; },
     advance: milliseconds => { currentTime += milliseconds; } };
 }
 describe('customer purchases', () => {
@@ -147,5 +150,41 @@ describe('customer purchases', () => {
     const sub = { items: { data: [{ id: 'si_a', price: { id: 'price_a' } }, { id: 'si_b', price: { id: 'price_b' } }] } };
     expect(subscriptionItemPatch(sub, [{ price: 'price_a', quantity: 2 }, { price: 'price_c', quantity: 1 }])).toEqual([{ id: 'si_a', price: 'price_a', quantity: 2 }, { id: 'si_b', deleted: true }, { price: 'price_c', quantity: 1 }]);
     expect(sameBillingLines([{ price: 'b', quantity: 1 }, { price: 'a', quantity: 2 }], [{ price: 'a', quantity: 2 }, { price: 'b', quantity: 1 }])).toBe(true);
+  });
+  it.each([null, 'sub_sched_replacement'])('retires pending allocations after a schedule is removed or replaced: %s', async schedule => {
+    const test = fixture(), quote = await test.preview([], null);
+    await test.service.handle('session', { action: 'confirm', quote_id: quote.id, confirmed: true });
+    test.quotes.get(quote.id).schedule = 'sub_sched';
+    test.mutateSubscription({ schedule });
+    await test.service.reconcileSubscription({ id: 'sub_test', metadata: { app: 'carebase' } });
+    expect(test.quotes.get(quote.id).state).toBe('superseded');
+    const before = test.live.post.mock.calls.length;
+    await expect(test.service.handle('session', { action: 'confirm', quote_id: quote.id, confirmed: true })).resolves.toEqual({ state: 'superseded' });
+    expect(test.live.post.mock.calls.length).toBe(before);
+  });
+  it('undoes a scheduled cancellation with a confirmed, idempotent release', async () => {
+    const test = fixture(), cancellation = await test.preview([], null);
+    await test.service.handle('session', { action: 'confirm', quote_id: cancellation.id, confirmed: true });
+    const keep = await test.preview([]);
+    expect(keep.cancels_scheduled_change).toBe(true); expect(keep.due_now).toBe(0);
+    await expect(test.service.handle('session', { action: 'confirm', quote_id: keep.id, confirmed: true })).resolves.toEqual({ state: 'applied' });
+    expect(test.live.post.mock.calls.find(([path]) => path.endsWith('/release'))).toMatchObject(['/v1/subscription_schedules/sub_sched/release', { preserve_cancel_date: false }, { idempotencyKey: `hub-customer-${keep.id}-release` }]);
+  });
+  it('recovers an uncertain release without creating or releasing a second schedule', async () => {
+    const test = fixture(), cancellation = await test.preview([], null);
+    await test.service.handle('session', { action: 'confirm', quote_id: cancellation.id, confirmed: true });
+    const keep = await test.preview([]), provider = test.live.post.getMockImplementation(); let lost = false;
+    test.live.post.mockImplementation(async (...args) => { const result = await provider(...args); if (args[0].endsWith('/release') && !lost) { lost = true; throw new Error('Synthetic lost response'); } return result; });
+    await expect(test.service.handle('session', { action: 'confirm', quote_id: keep.id, confirmed: true })).rejects.toThrow(/lost response/);
+    await expect(test.service.handle('session', { action: 'confirm', quote_id: keep.id, confirmed: true })).resolves.toEqual({ state: 'applied' });
+    expect(test.live.post.mock.calls.filter(([path]) => path.endsWith('/release'))).toHaveLength(1);
+  });
+  it('refuses a schedule edited after the customer reviewed it', async () => {
+    const test = fixture(), cancellation = await test.preview([], null);
+    await test.service.handle('session', { action: 'confirm', quote_id: cancellation.id, confirmed: true });
+    const keep = await test.preview([]); test.mutateSchedule({ end_behavior: 'release', metadata: { hub_self_service: 'true', owner_note: 'Changed externally' } });
+    const before = test.live.post.mock.calls.length;
+    await expect(test.service.handle('session', { action: 'confirm', quote_id: keep.id, confirmed: true })).rejects.toMatchObject({ status: 409 });
+    expect(test.live.post.mock.calls.length).toBe(before);
   });
 });
