@@ -65,6 +65,7 @@ import { CoursePlayer, MyLearning, LearningCertificate } from "./learning/Player
 import { LearningCatalog } from "./learning/Catalog";
 import { AiCaseTools } from "./support/AiCaseTools";
 import { AiResolutionPrompt } from "./support/AiResolutionPrompt";
+import { RequestHumanSupport } from "./support/RequestHumanSupport";
 import { PhoneInbox } from "./support/PhoneInbox";
 import { Communications } from "./support/Communications";
 import { channels, conversationStatuses, type Channel, type CommunicationsClient, type ConversationStatus } from "./support/communicationsClient";
@@ -844,6 +845,7 @@ function CaseDetail({ supportCase, thread, threadStatus, threadError, threadStal
           );
         })}
       </div>
+      {!staff && !['resolved', 'closed'].includes(supportCase.status) && <RequestHumanSupport key={supportCase.id} caseId={supportCase.id} onChanged={onChanged} />}
       {!staff && supportCase.aiStage === "awaiting_response" && (
         <AiResolutionPrompt caseId={supportCase.id} onChanged={onChanged} />
       )}

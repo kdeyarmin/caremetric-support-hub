@@ -85,6 +85,12 @@ try {
   }
   assert.equal(created.status, 200, 'new verified customers can open support without operator onboarding'); ticket = created.body.id;
   assert.ok(ticket);
+  const escalation = { p_case_id: ticket, p_request_key: randomUUID() };
+  assert.equal((await call('rpc/request_human_support', { ...escalation, p_case_id: randomUUID() })).status, 403, 'invisible cases cannot be escalated');
+  assert.equal((await call('rpc/request_human_support', escalation)).status, 200, 'customers can immediately request a human');
+  assert.equal((await call('rpc/request_human_support', escalation)).body.replayed, true, 'escalation retries do not duplicate the request');
+  assert.deepEqual((await admin.query('select stage,attempts,halt_reason from hub.case_ai_automation where case_id=$1', [ticket])).rows[0], { stage: 'halted', attempts: 0, halt_reason: 'human_requested' });
+  assert.equal((await admin.query("select count(*)::int as count from hub.case_messages where case_id=$1 and body='Human support requested. Please have a support team member follow up on this case.'", [ticket])).rows[0].count, 1);
   assert.equal((await call('rpc/create_facility_support_case', { ...support, p_shared: false })).status, 400, 'a replay cannot change ticket privacy');
   await admin.query('update private.case_intake_settings set enabled=false where tenant_id=$1 and product_id=$2', [tenant, product]);
   const relink = await call('apps/connect', nativeProof, { Authorization: `Bearer ${key}` }, false);

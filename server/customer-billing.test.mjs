@@ -49,6 +49,28 @@ function fixture({ payment = 'paid', denied = false } = {}) {
     advance: milliseconds => { currentTime += milliseconds; } };
 }
 describe('customer purchases', () => {
+  it('preserves flat organization pricing without requiring a native facility', async () => {
+    const test = fixture(); test.workspace.facilities = []; test.workspace.allocations = [];
+    test.workspace.catalog = test.workspace.catalog.map(price => ({ ...price, model: 'flat', unit_label: 'organization' }));
+    const workspace = await test.service.handle('session', { action: 'workspace', connection_id: connection });
+    expect(workspace.facilities).toEqual([]);
+    expect(workspace.allocations).toMatchObject([{ facility_id: 'organization', plan: 'price_core' }]);
+    const quote = await test.preview();
+    expect(quote.facility_name).toBe('Organization subscription');
+    expect(quote.summary.every(line => line.quantity === 1)).toBe(true);
+  });
+  it('refuses quantity-based purchases without an app-owned usage adapter', async () => {
+    const test = fixture(); test.workspace.facilities = []; test.workspace.allocations = [];
+    await expect(test.preview()).rejects.toMatchObject({ status: 409 });
+    expect(test.events).not.toContain('provider_purchase');
+  });
+  it.each(['canceled', 'incomplete_expired'])('releases an unresolved purchase when the subscription is terminal: %s', async status => {
+    const test = fixture({ payment: 'challenge' }), quote = await test.preview();
+    await test.service.handle('session', { action: 'confirm', quote_id: quote.id, confirmed: true });
+    test.mutateSubscription({ status, pending_update: null });
+    await test.service.reconcileSubscription({ id: 'sub_test', metadata: { app: 'carebase' } });
+    expect(test.quotes.get(quote.id).state).toBe('failed'); expect(test.events).not.toContain('applied');
+  });
   it('rechecks native authority before provider preview or mutation', async () => {
     const test = fixture({ denied: true }); await expect(test.preview()).rejects.toThrow(/revoked/); expect(test.live.post).not.toHaveBeenCalled();
   });

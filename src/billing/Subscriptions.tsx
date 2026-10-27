@@ -43,14 +43,14 @@ export function Subscriptions() {
   }
   const current = workspace?.allocations.find(row => row.facility_id === facility) ?? workspace?.allocations[0];
   const base = workspace?.catalog.find(price => price.id === plan);
-  const choices = workspace?.catalog.filter(price => price.active && (!workspace.subscription || price.interval === workspace.subscription.interval && price.currency === workspace.subscription.currency)) ?? [];
+  const choices = workspace?.catalog.filter(price => price.active && (workspace.facilities.length > 0 || price.model === 'flat') && (!workspace.subscription || price.interval === workspace.subscription.interval && price.currency === workspace.subscription.currency)) ?? [];
   const mayPurchase = workspace?.mode === 'facility' || workspace?.role === 'organization_admin';
   return <div className="learning-workspace"><header><span className="eyebrow">Customer self-service</span><h1>Plans &amp; add-ons</h1><p>Published prices and your current services. Review a server-calculated preview before confirming a purchase.</p>{workspace?.role === 'organization_admin' && <Link to="/billing">Invoices, payment methods &amp; payment recovery</Link>}</header>
     {error && <p className="panel" role="alert">{error}</p>}{message && <p className="panel" role="status">{message}</p>}
     <label>Application<select value={connection} disabled={busy} onChange={event => { const id = event.target.value; setConnection(id); setWorkspace(null); setQuote(null); setMessage(''); if (id) void run(() => load(id)); }}><option value="">Choose a connected application</option>{connections.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
     {!connections.length && <p>Open self-service from your application with an authorized administrator account to connect it.</p>}
     {workspace && <section className="panel"><h2>{workspace.mode === 'facility' ? 'Facility subscription' : 'Organization subscription'}</h2>
-      {workspace.mode === 'legacy' && <p>Your facilities currently share this plan and billing cycle. Your existing prices and contract remain in place until you confirm a change.</p>}
+      {workspace.mode === 'legacy' && <p>Your organization shares this plan and billing cycle. Your existing prices and contract remain in place until you confirm a change.</p>}
       {workspace.mode === 'facility' && <label>Facility<select disabled={busy} value={facility} onChange={event => chooseScope(workspace, event.target.value)}>{workspace.facilities.filter(site => workspace.role === 'organization_admin' || site.permissions.includes('billing.manage')).map(site => <option value={site.id} key={site.id}>{site.name}</option>)}</select></label>}
       <p>Subscription: {workspace.subscription?.status ?? 'Not set up'}{workspace.subscription?.current_period_end ? ` · renews ${dateLabel(workspace.subscription.current_period_end)}` : ''}</p>
       {!workspace.purchasing_enabled && <p>Plan purchasing is being enabled. You can compare published prices and review previews while existing billing and payment services remain available.</p>}
@@ -67,8 +67,8 @@ export function Subscriptions() {
     </section>}
     {quote && <section className="panel" aria-label="Confirm subscription change"><h2>Review for {quote.facility_name}</h2><p>Due now: <strong>{formatCents(quote.due_now, quote.currency)}</strong></p><p>Recurring subtotal: {formatCents(quote.recurring_subtotal, quote.currency)} before taxes and discounts.</p><ul>{quote.summary.map((line, index) => <li key={index}>{line.quantity} × {line.name}: {formatCents(line.amount, quote.currency)}</li>)}</ul>{quote.has_scheduled_change && <p>Scheduled changes: {dateLabel(quote.effective_at)}.</p>}<p>This preview expires {new Date(quote.expires_at).toLocaleTimeString()}.</p>
       <button className="button button-primary" disabled={busy || !workspace?.purchasing_enabled} onClick={() => void run(async () => {
-        const receipt = z.object({ state: z.string(), url: z.string().nullable().optional() }).parse(await appRequest('billing/customer', { action: 'confirm', quote_id: quote.id, confirmed: true }));
-        setMessage(receipt.state === 'pending_payment' ? 'Payment is pending. Your existing access is retained until payment is confirmed. Open invoices to complete payment.' : receipt.state === 'scheduled' ? 'Your change is scheduled for renewal.' : 'Your subscription change is confirmed.');
+        const receipt = z.object({ state: z.enum(['pending_payment', 'scheduled', 'applied', 'failed']), url: z.string().nullable().optional() }).parse(await appRequest('billing/customer', { action: 'confirm', quote_id: quote.id, confirmed: true }));
+        setMessage(receipt.state === 'pending_payment' ? 'Payment is pending. Your existing access is retained until payment is confirmed. Open invoices to complete payment.' : receipt.state === 'scheduled' ? 'Your change is scheduled for renewal.' : receipt.state === 'failed' ? 'This change could not be completed. Review your subscription and invoices before trying again.' : 'Your subscription change is confirmed.');
         setQuote(null); await load(connection);
       })}>Confirm subscription change</button> <button className="button button-secondary" disabled={busy} onClick={() => setQuote(null)}>Cancel</button>
     </section>}

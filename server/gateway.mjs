@@ -18,6 +18,7 @@ export const rpcArguments = Object.freeze({
   create_facility_support_case: ['p_tenant_id','p_product_id','p_subject','p_category','p_priority','p_body','p_app_version','p_route','p_contains_phi','p_request_key','p_facility_id','p_shared'],
   reply_to_support_case: ['p_case_id','p_body','p_visibility','p_request_key'],
   record_ai_resolution_response: ['p_case_id','p_fixed','p_request_key'],
+  request_human_support: ['p_case_id','p_request_key'],
   update_support_case: ['p_case_id','p_status','p_priority','p_assigned_to','p_change_assignment'],
   get_learning_editor_access: [], list_learning_drafts: [], list_learning_media: [], list_learning_catalog: [], list_my_learning: [],
   get_learning_draft: ['p_item_id'],

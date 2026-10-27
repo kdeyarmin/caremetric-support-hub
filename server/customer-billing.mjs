@@ -30,7 +30,21 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, autho
   });
   const service = (name, values) => transaction(pool, db => one(db, `select private.${name}(${values.map((_, i) => `$${i + 1}`).join(',')}) as result`, values));
   const settle = (id, state, sub = null, schedule = null) => service('settle_customer_billing_quote', [id, state, sub, schedule, null]);
-  const context = async (session, connection) => customerBillingWorkspace.parse(await rpc(session, 'customer_billing_context', [connection]));
+  const context = async (session, connection) => {
+    const workspace = customerBillingWorkspace.parse(await rpc(session, 'customer_billing_context', [connection]));
+    // Individual and flat organization products need no fabricated native facility.
+    // Quantity-based products require their app-owned usage adapter instead.
+    if (workspace.mode === 'legacy' && !workspace.facilities.length && !workspace.allocations.length && workspace.subscription?.items.length) {
+      const catalog = new Map(workspace.catalog.map(price => [price.id, price]));
+      const items = workspace.subscription.items;
+      const plans = items.filter(item => catalog.get(item.price)?.kind === 'plan');
+      if (plans.length === 1 && items.every(item => item.quantity === 1 && catalog.get(item.price)?.model === 'flat')) {
+        workspace.allocations = [{ facility_id: 'organization', facility_name: 'Organization subscription', plan: plans[0].price,
+          addons: items.filter(item => catalog.get(item.price)?.kind === 'addon').map(item => item.price), version: 0 }];
+      }
+    }
+    return workspace;
+  };
   async function verifyScope(session, workspace, facility) {
     if (workspace.mode === 'legacy' && (facility !== null || workspace.role !== 'organization_admin')) throw new HttpError(403, 'Only the organization administrator can change the shared plan.');
     if (workspace.mode === 'facility' && !workspace.facilities.some(site => site.id === facility && (workspace.role === 'organization_admin' || site.permissions.includes('billing.manage')))) throw new HttpError(403, 'Facility purchasing is not authorized.');
@@ -54,6 +68,9 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, autho
     await verifyScope(session, workspace, input.facility_id);
     const live = await stripe(), sub = await providerSubscription(live, workspace);
     const catalog = new Map(workspace.catalog.map(price => [price.id, price]));
+    if (workspace.mode === 'legacy' && !workspace.facilities.length && [input.plan, ...input.addons].filter(Boolean).some(id => catalog.get(id)?.model !== 'flat')) {
+      throw new HttpError(409, 'This product uses quantity-based billing. Its native usage must be verified before changing the subscription.');
+    }
     let immediate = workspace.allocations, next = workspace.allocations;
     const targets = workspace.mode === 'legacy' ? workspace.allocations : workspace.allocations.filter(row => row.facility_id === input.facility_id);
     if (!targets.length) throw new HttpError(409, 'Complete facility setup before selecting a subscription.');
@@ -78,7 +95,7 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, autho
       subscription_details: { items: subscriptionItemPatch(sub, immediateLines), proration_behavior: 'always_invoice', proration_date: prorationDate } }) : null;
     const id = randomUUID(), renewal = new Date(renewalOf(sub) * 1000).toISOString();
     const visibleLines = workspace.role === 'organization_admin' ? nextLines : aggregateFacilityLines(next.filter(row => row.facility_id === input.facility_id), catalog);
-    const quote = { id, facility_name: input.facility_id ? targets[0].facility_name : 'All facilities in this organization', due_now: invoice?.amount_due ?? 0,
+    const quote = { id, facility_name: input.facility_id ? targets[0].facility_name : workspace.facilities.length ? 'All facilities in this organization' : 'Organization subscription', due_now: invoice?.amount_due ?? 0,
       currency: workspace.subscription.currency, recurring_subtotal: visibleLines.reduce((sum, line) => sum + catalog.get(line.price).amount * line.quantity, 0),
       effective_at: hasScheduled ? renewal : null, expires_at: new Date(now() + 300000).toISOString(), has_immediate_change: hasImmediate, has_scheduled_change: hasScheduled,
       summary: visibleLines.map(line => ({ name: catalog.get(line.price).name, quantity: line.quantity, amount: catalog.get(line.price).amount * line.quantity })) };
@@ -119,8 +136,9 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, autho
         await settle(quote.id, 'failed', subscription.id); return { state: 'failed' };
       }
     }
-    if (subscription.status === 'canceled' && !execution.nextLines.length && now() >= Date.parse(execution.renewal)) {
-      await settle(quote.id, 'applied', subscription.id); return { state: 'applied' };
+    if (['canceled', 'incomplete_expired'].includes(subscription.status)) {
+      const state = subscription.status === 'canceled' && !execution.nextLines.length && now() >= Date.parse(execution.renewal) ? 'applied' : 'failed';
+      await settle(quote.id, state, subscription.id); return { state };
     }
     if (!['active', 'trialing'].includes(subscription.status) || subscription.pending_update) {
       await settle(quote.id, 'pending_payment', subscription.id); return { state: 'pending_payment', url: subscription.latest_invoice?.hosted_invoice_url ?? null };
