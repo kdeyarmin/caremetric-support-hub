@@ -1,6 +1,6 @@
 import type {PortfolioCapabilities,PortfolioOperationName,PortfolioProduct} from '../../supabase/functions/_shared/portfolioProtocol';
 
-export type AdminView='overview'|'organizations'|'users'|'billing'|'training'|'courses'|'jobs'|'releases'|'audit';
+export type AdminView='overview'|'organizations'|'users'|'training'|'courses'|'jobs'|'releases'|'audit';
 export interface AdminFunction {
   id:string; title:string; description:string; view:AdminView;
   requires:readonly PortfolioOperationName[]; carebaseOnly?:boolean;
@@ -8,17 +8,11 @@ export interface AdminFunction {
 // Requirements mirror the actual workspace controls, including their parent view.
 // A connected read never implies permission to change its records.
 export const adminFunctions:readonly AdminFunction[]=[
-  {id:'overview',title:'Application overview',description:'Read current organization, account and subscription totals.',view:'overview',requires:['overview']},
+  {id:'overview',title:'Application overview',description:'Read current organization and account totals.',view:'overview',requires:['overview']},
   {id:'organizations',title:'Organization directory',description:'Find organizations and inspect their recorded status.',view:'organizations',requires:['organizations.list']},
   {id:'users',title:'User directory',description:'Find application accounts and inspect their current roles and status.',view:'users',requires:['users.list']},
   {id:'org-access',title:'Organization access',description:'Select an organization, review suspension or restoration, then confirm the exact change.',view:'organizations',requires:['organizations.list','commands.preview','commands.apply'],carebaseOnly:true},
   {id:'user-access',title:'User access',description:'Select an eligible user and review activation or deactivation. Administrator accounts remain protected.',view:'users',requires:['users.list','commands.preview','commands.apply'],carebaseOnly:true},
-  {id:'billing',title:'Subscriptions and billing status',description:'Inspect subscriptions recorded by the application. Provider comparisons are separate controls.',view:'billing',requires:['billing.overview','billing.subscriptions.list']},
-  {id:'billing-verify',title:'Verify subscription with Stripe',description:'Compare a selected subscription with its current provider record when billing is configured.',view:'billing',requires:['billing.overview','billing.subscriptions.list','billing.subscriptions.verify'],carebaseOnly:true},
-  {id:'invoices',title:'Invoice records',description:'Inspect invoice details in the billing workspace.',view:'billing',requires:['billing.overview','billing.subscriptions.list','billing.invoices.list','billing.invoices.get'],carebaseOnly:true},
-  {id:'billing-access',title:'Billing access override',description:'Review a selected organization’s access override and its recorded reason.',view:'billing',requires:['billing.overview','billing.subscriptions.list','commands.preview','commands.apply'],carebaseOnly:true},
-  {id:'portal',title:'Billing portal',description:'Choose an organization and review a provider billing portal request.',view:'organizations',requires:['organizations.list','billing.commands.preview','billing.commands.apply'],carebaseOnly:true},
-  {id:'checkout',title:'Subscription checkout',description:'Choose an organization, compare configured packages, and review checkout before creating it.',view:'organizations',requires:['organizations.list','billing.packages.list','billing.checkout.preview','billing.checkout.apply','billing.checkout.check','billing.checkout.recover'],carebaseOnly:true},
   {id:'courses',title:'Native course catalog',description:'Inspect course versions, lessons and publication status before opening shared authoring.',view:'courses',requires:['courses.list','courses.get'],carebaseOnly:true},
   {id:'training',title:'Facility training administration',description:'Set up a training facility and manage its students, enrollments, certificates and reports from the Hub.',view:'training',requires:['training.v1','organizations.list'],carebaseOnly:true},
   {id:'training-access',title:'Training module access',description:'Review complimentary or contracted module terms for a selected training organization.',view:'training',requires:['training.v1','organizations.list'],carebaseOnly:true},

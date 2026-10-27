@@ -1,8 +1,8 @@
 import { isUuid } from "./adminProtocol.ts";
 
-export const commandActions = ["users.setActive", "organizations.setSuspension", "billing.setAccessOverride"] as const;
+export const commandActions = ["users.setActive", "organizations.setSuspension"] as const;
 export type CommandAction = typeof commandActions[number];
-export type CommandParameters = { active: boolean } | { suspended: boolean } | { state: "comped" | "provider"; expiresAt: string | null };
+export type CommandParameters = { active: boolean } | { suspended: boolean };
 export interface CommandPreviewRequest { operation: "preview"; requestId: string; action: CommandAction; targetId: string; parameters: CommandParameters; reason: string; }
 export interface CommandApplyRequest { operation: "apply"; commandId: string; expectedDigest: string; }
 export type CommandRequest = CommandPreviewRequest | CommandApplyRequest;
@@ -42,15 +42,7 @@ export function parsePortfolioCommand(input: unknown): PortfolioCommandRequest {
   const parameters = object(command.parameters);
   let parsedParameters: CommandParameters;
   if (commandAction === "users.setActive") { closed(parameters, ["active"]); parsedParameters = { active: boolean(parameters.active) }; }
-  else if (commandAction === "organizations.setSuspension") { closed(parameters, ["suspended"]); parsedParameters = { suspended: boolean(parameters.suspended) }; }
-  else {
-    closed(parameters, ["state", "expiresAt"]);
-    if (parameters.state !== "comped" && parameters.state !== "provider") throw new Error("Unsupported access override");
-    const expiresAt = parameters.expiresAt === null ? null : timestamp(parameters.expiresAt);
-    if (expiresAt !== null && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(expiresAt)) throw new Error("Expiration requires an explicit timezone");
-    if (parameters.state === "provider" && expiresAt !== null) throw new Error("Provider access cannot have an override expiration");
-    parsedParameters = { state: parameters.state, expiresAt };
-  }
+  else { closed(parameters, ["suspended"]); parsedParameters = { suspended: boolean(parameters.suspended) }; }
   return { product, command: { operation: "preview", requestId: id(command.requestId), action: commandAction, targetId: id(command.targetId), parameters: parsedParameters, reason } };
 }
 

@@ -8,6 +8,10 @@ import { formatBillingMoney } from "./billingMoney";
 import { portfolioClient } from "./portfolioClient";
 import type { PortfolioClient } from "./portfolioClient";
 import { buildPortfolioRollup, loadPortfolioRollup, sharedWithProduct } from "./portfolioRollup";
+import type { BillingReader } from "./portfolioRollup";
+import { billingClient } from "../billing/billingClient";
+import { formatCents } from "../billing/billingModel";
+import { config } from "../lib/config";
 import { applicationLabel, overviewMetrics } from "./overviewMetrics";
 import { coverageAreas, coverageMatrix, coverageSummary } from "./coverageMatrix";
 import type { RollupAppSnapshot } from "./portfolioRollup";
@@ -38,7 +42,7 @@ function HealthCard({ app }: { app: RollupAppSnapshot }) {
     <div className="admin-section-title"><div><h2>{applicationLabel(app.product)}</h2><p>{registry.userScope}</p></div><span className={`admin-status ${verified ? "admin-status-connected" : "admin-status-muted"}`}>{verified ? "Connection verified" : "Unavailable"}</span></div>
     {verified ? <>
       <OverviewMetrics app={app} />
-      {sharedWith && <p className="admin-read-time">These records are shared with {productName(sharedWith)} and must not be counted as additional organizations or subscriptions.</p>}
+      {sharedWith && <p className="admin-read-time">These records are shared with {productName(sharedWith)} and must not be counted as additional organizations.</p>}
       <details className="portfolio-connection-details"><summary>Connection details</summary><p>Supported reads: {capabilities.operations.join(", ")}</p><p>Deployed source: {capabilities.sourceRevision ?? "Not reported"}</p></details>
     </> : <p className="admin-explanation">This application could not be reached. Its records and totals are unavailable and are not estimated.</p>}
   </section>;
@@ -60,23 +64,20 @@ function CoverageMatrix({ apps }: { apps: RollupAppSnapshot[] }) {
 function BillingRow({ app }: { app: RollupAppSnapshot }) {
   return <div className="rollup-billing-row">
     <h3>{applicationLabel(app.product)}</h3>
-    {app.product === "caremetric-emr" && <p>EMR records shown here are application entitlements. Chargebee subscription records are excluded until their organization mappings are verified.</p>}
-    {app.product === "pennsync" && <p>PennSync subscriptions belong to individual accounts.</p>}
     {app.product === "advisors" && <p>Healthcare Advisors is a consulting practice. It has no software subscriptions; engagement fees are set by written proposal outside the website.</p>}
-    {app.billing.state === "not-advertised" && app.product !== "advisors" && <p>This connection does not provide a billing overview.</p>}
-    {app.billing.state === "unavailable" && <p>Unavailable — billing records could not be loaded from this connection.</p>}
-    {app.billing.state === "ready" && <><p><strong>{formatNumber.format(app.billing.data.subscriptionCount)}</strong> recorded subscriptions</p><div className="portfolio-status-counts">{app.billing.data.statusCounts.map(item => <span key={item.status}>{item.status}: <strong>{formatNumber.format(item.count)}</strong></span>)}</div></>}
+    {app.billing.state === "unavailable" && <p>Unavailable — the Hub's billing records could not be loaded.</p>}
+    {app.billing.state === "ready" && <><p><strong>{formatNumber.format(app.billing.data.subscriptionCount)}</strong> subscriptions · <strong>{formatCents(app.billing.data.mrrCents)}</strong> MRR</p><div className="portfolio-status-counts">{app.billing.data.statusCounts.map(item => <span key={item.status}>{item.status.replaceAll("_", " ")}: <strong>{formatNumber.format(item.count)}</strong></span>)}</div></>}
   </div>;
 }
 
-export function PortfolioRollup({ portfolio = portfolioClient }: { portfolio?: PortfolioClient }) {
+export function PortfolioRollup({ portfolio = portfolioClient, billing = billingClient.workspace, demo = config.demoMode }: { portfolio?: PortfolioClient; billing?: BillingReader; demo?: boolean }) {
   const [refresh, setRefresh] = useState(0);
   const retry = () => setRefresh(value => value + 1);
-  const reader = useCallback((signal: AbortSignal) => { void refresh; return loadPortfolioRollup(portfolio, signal); }, [portfolio, refresh]);
+  const reader = useCallback((signal: AbortSignal) => { void refresh; return loadPortfolioRollup(portfolio, signal, demo ? undefined : billing); }, [billing, demo, portfolio, refresh]);
   const state = useAdminRead(reader);
   const totals = state.status === "ready" ? buildPortfolioRollup(state.data) : null;
   return <div className="portfolio-rollup">
-    <div className="page-heading"><div><span className="eyebrow">CareMetric Admin</span><h1>Portfolio rollup</h1><p>Connection health and subscription financials for every connected application, loaded live through the same administration connections as the per-application workspace. An application that cannot be reached is shown as unavailable — its figures are never estimated.</p></div><button className="button button-secondary" type="button" onClick={retry}><RefreshCw size={15} aria-hidden="true" />Refresh rollup</button></div>
+    <div className="page-heading"><div><span className="eyebrow">CareMetric Admin</span><h1>Portfolio rollup</h1><p>Connection health for every connected application, loaded live through the administration connections, and subscription financials from the Hub's own billing. An application that cannot be reached is shown as unavailable — its figures are never estimated.</p></div><button className="button button-secondary" type="button" onClick={retry}><RefreshCw size={15} aria-hidden="true" />Refresh rollup</button></div>
     {state.status === "loading" && <Loading label="Loading portfolio rollup" app="portfolio" />}
     {state.status === "error" && <ReadFailure error={state.error} retry={retry} />}
     {state.status === "ready" && totals && <>
@@ -86,17 +87,16 @@ export function PortfolioRollup({ portfolio = portfolioClient }: { portfolio?: P
         <div className="rollup-app-grid">{state.data.map(app => <HealthCard key={app.product} app={app} />)}</div>
       </section>
       <section aria-label="Subscription financials">
-        <div className="admin-section-title"><div><h2>Subscription financials</h2><p>Recorded subscriptions from each application’s own billing records. Counts are combined only across the applications named in the totals; money is never combined across currencies.</p></div></div>
+        <div className="admin-section-title"><div><h2>Subscription financials</h2><p>Every application's subscriptions as the Hub bills them in Stripe. Monthly recurring revenue counts active and past-due subscriptions after discounts; trials are not revenue yet. <Link to="/admin/billing">Open Billing</Link></p></div></div>
         <div className="panel portfolio-billing-summary rollup-billing-panel">
           {state.data.map(app => <BillingRow key={app.product} app={app} />)}
           <div className="rollup-totals">
             <h3>Portfolio totals</h3>
             {totals.subscriptionTotal === null
-              ? <p>No application reported billing totals, so no portfolio total is shown.</p>
-              : <><p><strong>{formatNumber.format(totals.subscriptionTotal)}</strong> recorded subscriptions across {totals.billingReportingApps.map(productName).join(", ")}</p>
+              ? <p>The Hub's billing records could not be loaded, so no portfolio total is shown.</p>
+              : <><p><strong>{formatNumber.format(totals.subscriptionTotal)}</strong> subscriptions across {totals.billingReportingApps.map(productName).join(", ")}</p>
                 <div className="portfolio-status-counts">{totals.statusTotals.map(item => <span key={item.status}>{item.status}: <strong>{formatNumber.format(item.count)}</strong></span>)}</div></>}
-            {totals.billingExcludedSharedApps.map(product => { const sharedWith = sharedWithProduct(product); return <p key={product}>{productName(product)} reported billing records, but they are shared with {sharedWith ? productName(sharedWith) : "another application"} and are excluded from portfolio totals so the same records are never counted twice.</p>; })}
-            {totals.moneyByCurrency.map(item => <p key={item.currency}>{item.currency.toUpperCase()} recorded amounts: <strong>{formatBillingMoney(item.amountMinor, item.currency)}</strong></p>)}
+            {totals.moneyByCurrency.map(item => <p key={item.currency}>{item.currency.toUpperCase()} monthly recurring revenue: <strong>{formatBillingMoney(item.amountMinor, item.currency)}</strong></p>)}
           </div>
         </div>
       </section>

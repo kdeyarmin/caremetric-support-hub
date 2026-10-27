@@ -21,6 +21,9 @@ import type { IntegrationSetupClient, IntegrationSetupReport } from "./integrati
 import { portfolioClient } from "./portfolioClient";
 import type { PortfolioClient } from "./portfolioClient";
 import { loadPortfolioRollup } from "./portfolioRollup";
+import type { BillingReader } from "./portfolioRollup";
+import { billingClient } from "../billing/billingClient";
+import { formatCents } from "../billing/billingModel";
 import { readinessClient as goLiveClient } from "./readinessClient";
 import type { ReadinessClient as GoLiveClient } from "./readinessClient";
 import type { GoLiveReadinessReport } from "./readinessProtocol";
@@ -36,6 +39,8 @@ const previewNote = "Not available in the implementation preview. Sign in to the
 export interface ControlCenterData { products: Product[]; cases: SupportCase[]; content: ContentItem[] }
 export interface ControlCenterClients {
   portfolio?: PortfolioClient;
+  /** The Hub's own billing workspace, the source of every subscription figure. */
+  billing?: BillingReader;
   communications?: CommunicationsReader;
   supportReadiness?: SupportReadinessClient;
   goLive?: GoLiveClient;
@@ -76,16 +81,15 @@ function ApplicationPanel({ card, communicationsLoading, intakeLoading, usageLoa
         {health.state === "unavailable" && <span className="control-muted">Unavailable — the application could not be reached. Its figures are never estimated.</span>}
       </Row>
       <Row icon={CreditCard} label="Subscriptions">
-        {subscriptions.state === "ready" && subscriptions.data && <><strong>{formatNumber.format(subscriptions.data.count)}</strong> recorded subscriptions
-          <div className="control-chips">{subscriptions.data.statusCounts.map(item => <span key={item.status}>{item.status}: <strong>{formatNumber.format(item.count)}</strong></span>)}</div></>}
-        {subscriptions.state === "not-provided" && <span className="control-muted">Not provided yet · needs a billing read in the application's administration connection.</span>}
+        {subscriptions.state === "ready" && subscriptions.data && <><strong>{formatNumber.format(subscriptions.data.count)}</strong> subscriptions · <strong>{formatCents(subscriptions.data.mrrCents)}</strong> MRR
+          <div className="control-chips">{subscriptions.data.statusCounts.map(item => <span key={item.status}>{item.status.replaceAll("_", " ")}: <strong>{formatNumber.format(item.count)}</strong></span>)}</div></>}
         {subscriptions.state === "unavailable" && <span className="control-muted">Unavailable</span>}
         {subscriptions.note && <small>{subscriptions.note}</small>}
-        {connection === "verified" && subscriptions.state === "ready" && <div className="control-links"><Link to={links.billing}>Billing and subscriptions</Link></div>}
+        {subscriptions.state !== "not-applicable" && <div className="control-links"><Link to={links.billing}>Billing and subscriptions</Link></div>}
       </Row>
       <Row icon={Users} label="Users & organizations">
         <span className={directory.state === "available" ? "" : "control-muted"}>{directory.label}</span>
-        {(directory.organizations || directory.users) && <div className="control-links">{directory.organizations && <Link to={links.organizations}>Organizations</Link>}{directory.users && <Link to={links.users}>Users</Link>}{directory.accessControls && <small>Suspension, activation and billing access changes are reviewed in the workspace.</small>}</div>}
+        {(directory.organizations || directory.users) && <div className="control-links">{directory.organizations && <Link to={links.organizations}>Organizations</Link>}{directory.users && <Link to={links.users}>Users</Link>}{directory.accessControls && <small>Suspension and activation access changes are reviewed in the workspace.</small>}</div>}
       </Row>
       <Row icon={Link2} label="Integration">
         <div>Help SDK: <span className={`state-${integration.rollout.state}`}>{integration.rollout.stateLabel}</span> <small>{integration.rollout.integration}</small></div>
@@ -142,12 +146,12 @@ function IntegrationSetupPanel({ state, retry }: { state: AdminReadState<Integra
   </section>;
 }
 
-export function ControlCenter({ data, portfolio = portfolioClient, communications = communicationsClient, supportReadiness = supportReadinessClient, goLive = goLiveClient, phones = phoneRegistryClient, aiUsage = aiUsageClient, integrationSetup = integrationSetupClient, hub = repository, demo = config.demoMode }: { data: ControlCenterData } & ControlCenterClients) {
+export function ControlCenter({ data, portfolio = portfolioClient, billing = billingClient.workspace, communications = communicationsClient, supportReadiness = supportReadinessClient, goLive = goLiveClient, phones = phoneRegistryClient, aiUsage = aiUsageClient, integrationSetup = integrationSetupClient, hub = repository, demo = config.demoMode }: { data: ControlCenterData } & ControlCenterClients) {
   const [refresh, setRefresh] = useState(0);
   const [period, setPeriod] = useState<AiUsagePeriod>(30);
   const retry = () => setRefresh(value => value + 1);
   const products = data.products;
-  const readApps = useCallback((signal: AbortSignal) => { void refresh; return loadPortfolioRollup(portfolio, signal); }, [portfolio, refresh]);
+  const readApps = useCallback((signal: AbortSignal) => { void refresh; return loadPortfolioRollup(portfolio, signal, demo ? undefined : billing); }, [billing, demo, portfolio, refresh]);
   const readCommunications = useCallback((signal: AbortSignal) => { void refresh; return loadCommunicationsSnapshot(communications, products, signal); }, [communications, products, refresh]);
   const readIntake = useCallback(async (signal: AbortSignal): Promise<ReadinessProduct[] | null> => { void refresh; return demo ? null : (await supportReadiness.summary(signal)).products; }, [demo, refresh, supportReadiness]);
   const readGoLive = useCallback(async (signal: AbortSignal): Promise<GoLiveReadinessReport | null> => { void refresh; return demo ? null : goLive.report({ signal }); }, [demo, goLive, refresh]);
@@ -185,7 +189,7 @@ export function ControlCenter({ data, portfolio = portfolioClient, communication
       <Figure icon={Boxes} tone="metric-teal" label="Applications connected" state={apps} value={() => formatNumber.format(summary.connected)} detail={() => `of ${summary.total} administration connections`} />
       <Figure icon={Inbox} tone="metric-amber" label="Conversations waiting" state={inbox} value={() => formatNumber.format(summary.conversations ?? 0)} detail={() => "Phone, text, email, chat and web forms"} />
       <article className="metric-card metric-blue"><span className="metric-icon"><Headphones /></span><div><p>Open support cases</p><strong>{formatNumber.format(summary.openCases)}</strong><small>{summary.urgentCases ? `${formatNumber.format(summary.urgentCases)} urgent` : "No urgent cases"}</small></div></article>
-      <Figure icon={CreditCard} tone="metric-violet" label="Recorded subscriptions" state={apps} value={() => summary.subscriptions === null ? "Not reported" : formatNumber.format(summary.subscriptions)} detail={() => summary.subscriptions === null ? "No application reported billing" : `Across ${summary.subscriptionApps.join(", ")}`} />
+      <Figure icon={CreditCard} tone="metric-violet" label="Subscriptions" state={apps} value={() => summary.subscriptions === null ? "Unavailable" : formatNumber.format(summary.subscriptions)} detail={() => summary.subscriptions === null ? "Hub billing could not be loaded" : "Billed by the Hub across every application"} />
       <Figure icon={Radio} tone="metric-teal" label="Channels live" state={inbox} value={() => `${summary.channelsLive ?? 0} of ${summary.channelsTotal}`} detail={() => "Live channels reach the Communications inbox"} />
     </section>
 
@@ -219,7 +223,7 @@ export function ControlCenter({ data, portfolio = portfolioClient, communication
             ? <li><Users size={16} aria-hidden="true" /><div><strong>Customer intake</strong><span className="control-detail">{previewNote}</span></div></li>
             : <li><Users size={16} aria-hidden="true" /><div><strong>Customer intake</strong><span className="control-detail">{formatNumber.format(intakeReady.reduce((sum, item) => sum + item.readyTenantCount, 0))} ready customers across {formatNumber.format(intakeReady.filter(item => item.supportEnabled).length)} applications with support enabled</span></div><Link className="control-count" to="/integration">Review access</Link></li>)}
         </ul>
-        <div className="control-panel-footer"><Link className="text-link" to="/admin/tenants">Tenants and subscription pricing</Link><Link className="text-link" to="/admin/go-live-readiness">AI go-live readiness</Link><Link className="text-link" to="/integration">Connections and customer onboarding</Link><Link className="text-link" to="/admin/portfolio">Portfolio rollup and coverage matrix</Link><Link className="text-link" to="/security">Account security</Link></div>
+        <div className="control-panel-footer"><Link className="text-link" to="/admin/billing">Billing: subscriptions, catalog and discounts</Link><Link className="text-link" to="/admin/go-live-readiness">AI go-live readiness</Link><Link className="text-link" to="/integration">Connections and customer onboarding</Link><Link className="text-link" to="/admin/portfolio">Portfolio rollup and coverage matrix</Link><Link className="text-link" to="/security">Account security</Link></div>
       </section>
 
       <AiUsagePanel state={usage} period={period} onPeriod={setPeriod} retry={retry} />

@@ -8,7 +8,6 @@ const actor = { user_id: uuid, role: "platform_admin", aal: "aal2" };
 const page = { limit: 20, offset: 0, total: 1 };
 const staff = { id: "Legacy_Staff-42", displayName: null, email: "staff@example.invalid", role: "agent", status: "active", createdAt: now };
 const organization = { id: uuid, name: "Fixture organization", slug: null, status: "active", createdAt: null };
-const subscription = { id: uuid, organizationId: uuid, organizationName: null, planCode: null, planName: null, status: "active", providerStatus: null, providerCustomerId: null, providerSubscriptionId: null, currentPeriodEnd: null, updatedAt: null };
 const envelope = (operation: string, data: unknown, product = "breathe") => ({ contractVersion: 1, product, operation, generatedAt: now, data });
 const parse = (operation: string, data: unknown, product = "breathe") => parsePortfolioEnvelope(envelope(operation, data, product), parsePortfolioRequest({ product, operation }));
 const request = (body: unknown) => new Request("https://example.invalid/platform-admin", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer header.payload.signature" }, body: JSON.stringify(body) });
@@ -41,19 +40,21 @@ describe("portfolio contracts", () => {
     expect(() => parse("users.list", { ...page, items: [staff] }, "carebase")).toThrow();
   });
   it.each(["", "../user", "a.b", "a:b", "x".repeat(129), "with space"])("rejects invalid opaque native identity %s", id => expect(() => parse("users.list", { ...page, items: [{ ...staff, id }] })).toThrow());
-  it("retains UUID requirements for Breathe organizations and subscriptions", () => {
+  it("retains UUID requirements for Breathe organizations", () => {
     expect(() => parse("organizations.list", { ...page, items: [{ ...organization, id: staff.id }] })).toThrow();
-    expect(() => parse("billing.subscriptions.list", { ...page, source: "application_database", items: [{ ...subscription, organizationId: staff.id }] })).toThrow();
   });
   it("retains a native organization with no recorded display name", () => {
     const unnamed = { ...organization, name: null };
     expect(parse("organizations.list", { ...page, items: [unnamed] }).data).toEqual({ ...page, items: [unnamed] });
     expect(() => parse("organizations.list", { ...page, items: [{ ...organization, name: undefined }] })).toThrow();
   });
-  it("requires nullable values explicitly and keeps incomplete provider snapshots honest", () => {
-    expect(parse("billing.subscriptions.list", { ...page, source: "application_database", items: [subscription] }).data).toEqual({ ...page, source: "application_database", items: [subscription] });
-    expect(() => parse("billing.subscriptions.list", { ...page, source: "stripe_live", items: [subscription] })).toThrow();
-    expect(() => parse("billing.subscriptions.list", { ...page, source: "application_database", items: [{ ...subscription, providerStatus: undefined }] })).toThrow();
+  it("never requests an application's own billing: platform billing belongs to the Hub", () => {
+    for (const operation of ["billing.overview", "billing.subscriptions.list", "billing.invoices.list", "billing.packages.list", "billing.checkout.preview", "billing.commands.apply"]) {
+      expect(() => parsePortfolioRequest({ product: "carebase", operation })).toThrow();
+      expect(() => parsePortfolioRequest({ product: "breathe", operation })).toThrow();
+    }
+    expect(parse("capabilities", { apiVersion: 1, operations: ["users.list", "billing.overview", "billing.subscriptions.list"], sourceRevision: null }).data)
+      .toEqual({ apiVersion: 1, operations: ["users.list"], sourceRevision: null });
   });
   it.each([{ offset: 20 }, { limit: 50 }, { total: -1 }, { items: Array(21).fill(organization) }])("rejects inconsistent page windows %j", changes => expect(() => parse("organizations.list", { ...page, items: [organization], ...changes })).toThrow());
   it("rejects stale source identity, a different operation and missing timestamps", () => {
@@ -62,12 +63,10 @@ describe("portfolio contracts", () => {
       expect(() => parsePortfolioEnvelope({ ...envelope("users.list", { ...page, items: [staff] }), ...changed }, requested)).toThrow();
     }
   });
-  it("requires complete unique billing state counts without deriving monetary totals", () => {
-    const data = { source: "application_database", subscriptionCount: 3, statusCounts: [{ status: "active", count: 2 }, { status: "canceled", count: 1 }] };
-    expect(parse("billing.overview", { ...data, revenue: 10000 }).data).toEqual(data);
-    expect(() => parse("billing.overview", { ...data, subscriptionCount: 4 })).toThrow();
-    expect(() => parse("billing.overview", { ...data, statusCounts: [{ status: "active", count: 2 }, { status: "active", count: 1 }] })).toThrow();
-    expect(() => parse("billing.overview", { ...data, statusCounts: [{ status: "active", count: -1 }] })).toThrow();
+  it("accepts a Breathe overview with or without its retired subscription count", () => {
+    expect(parse("overview", { organizationCount: 3, activeUserCount: 4 }).data).toEqual({ organizationCount: 3, activeUserCount: 4 });
+    expect(parse("overview", { organizationCount: 3, activeUserCount: 4, subscriptionCount: 2 }).data).toEqual({ organizationCount: 3, activeUserCount: 4, subscriptionCount: 2 });
+    expect(() => parse("overview", { organizationCount: 3, activeUserCount: 4, subscriptionCount: -1 })).toThrow();
   });
   it("keeps registered EMR profiles distinct from unavailable account activity", () => {
     const data = { organizationCount: 2, activeUserCount: null, registeredUserCount: 8, subscriptionCount: 3 };
@@ -178,12 +177,10 @@ describe("Intel registered-user boundaries", () => {
   });
 });
 
-describe("PennSync native billing boundaries", () => {
-  it("allows its individual subscriptions without inventing an organization", () => {
-    const row = { ...subscription, id: "694ec16f72e01b60d22f7cc0", organizationId: null };
-    const data = { ...page, source: "application_database", items: [row] };
-    expect(parse("billing.subscriptions.list", data, "pennsync").data).toEqual(data);
-    expect(() => parse("billing.subscriptions.list", { ...data, items: [{ ...subscription, organizationId: null }] }, "carebase")).toThrow();
+describe("PennSync native boundaries", () => {
+  it("keeps the subscription count its unchanged overview still reports", () => {
+    const data = { organizationCount: 2, activeUserCount: null, registeredUserCount: 5, subscriptionCount: 3 };
+    expect(parse("overview", data, "pennsync").data).toEqual(data);
   });
   it.each([uuid, "694EC16F72E01B60D22F7CC0", "../694ec16f72e01b60d22f7cc0"])("rejects mismatched native IDs %s", id => {
     expect(() => parse("organizations.list", { ...page, items: [{ ...organization, id }] }, "pennsync")).toThrow();

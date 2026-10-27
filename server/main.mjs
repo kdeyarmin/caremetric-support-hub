@@ -16,6 +16,7 @@ import { integrationSetup } from './integration-setup.mjs';
 import { sqlAiUsageRecorder } from './ai-usage.mjs';
 import { communications, defaultPublicOrigin, sendgridMail, twilioMessaging } from './communications.mjs';
 import { bulkEmail, sendgridBulkMail } from './bulk-email.mjs';
+import { platformBilling } from './billing.mjs';
 
 const storageUrl='https://xgauehtwksmnoqhgqegm.supabase.co';
 const pool=new pg.Pool(databaseConfig());
@@ -37,9 +38,15 @@ const messaging=communications({pool,delegations:capabilities,publicOrigin:proce
   chatEnabled:process.env.HUB_CHAT_ENABLED==='true'});
 const announcements=bulkEmail({pool,delegations:capabilities,publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin,postalAddress:(process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS||'').trim(),
   mail:sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_BULK_EMAIL_FROM||process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai',replyTo:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai'})});
+// Platform billing: the Hub is the only Stripe client for every application's subscriptions.
+const billing=platformBilling({pool,secretKey:process.env.STRIPE_SECRET_KEY,
+  webhookSecrets:(process.env.STRIPE_WEBHOOK_SECRET||'').split(',').map(value=>value.trim()).filter(Boolean),
+  portalConfiguration:/^bpc_[A-Za-z0-9]+$/.test(process.env.STRIPE_PORTAL_CONFIGURATION_ID||'')?process.env.STRIPE_PORTAL_CONFIGURATION_ID:undefined,
+  publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin});
+void billing.start().then(ready => ready && billing.reconcile()).catch(() => {});
 const readiness=goLiveReadiness({pool,rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
 const setup=integrationSetup({rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
-const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
+const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
 let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;

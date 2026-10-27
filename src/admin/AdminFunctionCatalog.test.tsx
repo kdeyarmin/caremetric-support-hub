@@ -16,19 +16,11 @@ describe('current administration function navigation',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Open Organization directory'}));
     expect(onNavigate).toHaveBeenCalledExactlyOnceWith('organizations');
   });
-  it('requires all capabilities and the parent workspace for checkout',()=>{
-    const checkout=adminFunctions.find(item=>item.id==='checkout')!;
-    expect(functionAvailable(checkout,'carebase',capabilities([...checkout.requires]))).toBe(true);
-    for(const missing of checkout.requires)expect(functionAvailable(checkout,'carebase',capabilities(checkout.requires.filter(operation=>operation!==missing)))).toBe(false);
-    expect(functionAvailable(checkout,'breathe',capabilities([...checkout.requires]))).toBe(false);
-  });
-  it('requires invoice detail permission as well as the billing and list capabilities',()=>{
-    const invoices=adminFunctions.find(item=>item.id==='invoices')!;
-    expect(invoices.requires).toContain('billing.invoices.get');
-    expect(functionAvailable(invoices,'carebase',capabilities([...invoices.requires]))).toBe(true);
-    for(const missing of invoices.requires)expect(functionAvailable(invoices,'carebase',capabilities(invoices.requires.filter(operation=>operation!==missing)))).toBe(false);
-    render(<MemoryRouter><AdminFunctionCatalog product="carebase" capabilities={capabilities(['billing.overview','billing.subscriptions.list','billing.invoices.list'])} onNavigate={vi.fn()}/></MemoryRouter>);
-    expect(screen.queryByRole('button',{name:'Open Invoice records'})).toBeNull();
+  it('no longer offers application billing controls: billing belongs to the Hub',()=>{
+    for(const id of ['billing','billing-verify','invoices','billing-access','portal','checkout'])expect(adminFunctions.find(item=>item.id===id)).toBeUndefined();
+    const access=adminFunctions.find(item=>item.id==='org-access')!;
+    expect(functionAvailable(access,'carebase',capabilities([...access.requires]))).toBe(true);
+    expect(functionAvailable(access,'breathe',capabilities([...access.requires]))).toBe(false);
   });
   it('distinguishes product scope from missing capabilities on a verified connection',()=>{
     render(<MemoryRouter><AdminFunctionCatalog product="breathe" capabilities={capabilities(['organizations.list'])} onNavigate={vi.fn()}/></MemoryRouter>);

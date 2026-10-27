@@ -28,10 +28,6 @@ import { learningMedia } from './learning-media.mjs';
 import { supportIdentityOperation } from '../src/support/onboardingProtocol.ts';
 import { supportOnboarding } from './support-onboarding.mjs';
 import { supportRegistration } from './support-registration.mjs';
-import { nativeBillingCommandSchema } from '../supabase/functions/_shared/billingCommandProtocol.ts';
-import { billingCommands } from './billing-commands.mjs';
-import { nativeCheckoutCommandSchema } from '../supabase/functions/_shared/checkoutCommandProtocol.ts';
-import { checkoutCommands } from './checkout-commands.mjs';
 import {parseConfigurationOperation} from '../supabase/functions/_shared/operationalConfiguration.ts';
 import {operationalConfiguration} from './operational-configuration.mjs';
 import {parseTrainingOperation} from '../supabase/functions/_shared/trainingProtocol.ts';
@@ -79,7 +75,7 @@ async function authorize(db,audience,payload) {
   if (audience==='carebase.command') {
     if(payload?.domain==='training.v1')parseTrainingOperation(payload);
     else if(payload?.domain==='operations.config.v1')parseConfigurationOperation(payload);
-    else if (!nativeBillingCommandSchema.safeParse(payload).success && !nativeCheckoutCommandSchema.safeParse(payload).success) parsePortfolioCommand({product:'carebase',...payload});
+    else parsePortfolioCommand({product:'carebase',...payload});
     return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
   }
   if (audience==='carebase.learning') {
@@ -118,8 +114,6 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
     courseMedia: learningMedia({pool,issue,fetchImpl}),
     onboarding: supportOnboarding({pool,issue,fetchImpl}),
     registration: supportRegistration({pool,issue,provider,fetchImpl}),
-    billingCommand: billingCommands({pool,issue,fetchImpl}),
-    checkoutCommand: checkoutCommands({pool,issue,fetchImpl}),
     pennsyncMigration: pennsyncLearningMigration({pool,issue,fetchImpl}),
     async consume(capability,audience) {
       if (!validDelegation(capability)) throw new HttpError(401,'Invalid authorization.');

@@ -40,12 +40,12 @@ describe("control center model", () => {
     const content = [article(["id-carebase"]), article(["id-carebase", "id-breathe"]), article(["id-carebase"], "draft")];
     const [carebase, breathe, go, advisors] = applicationCards({
       apps: [
-        app("carebase", ["overview", "organizations.list", "users.list", "commands.preview", "commands.apply", "billing.overview", "billing.subscriptions.list"], {
+        app("carebase", ["overview", "organizations.list", "users.list", "commands.preview", "commands.apply"], {
           overview: { state: "ready", data: { organizationCount: 12, activeUserCount: 40 } },
-          billing: { state: "ready", data: { source: "application_database", subscriptionCount: 5, statusCounts: [{ status: "active", count: 5 }] } },
+          billing: { state: "ready", data: { source: "hub", subscriptionCount: 5, statusCounts: [{ status: "active", count: 5 }], mrrCents: 99500 } },
         }),
         app("breathe", null),
-        app("caremetric-go", ["users.list", "billing.overview", "billing.subscriptions.list"], { billing: { state: "ready", data: { source: "application_database", subscriptionCount: 3, statusCounts: [{ status: "active", count: 3 }] } } }),
+        app("caremetric-go", ["users.list"], { billing: { state: "ready", data: { source: "hub", subscriptionCount: 3, statusCounts: [{ status: "active", count: 3 }], mrrCents: 0 } } }),
         app("advisors", ["overview", "inquiries.list"], { overview: { state: "ready", data: { organizationCount: null, activeUserCount: null, inquiryCount: 7, openInquiryCount: 2 } } }),
       ],
       products, cases, content, communications: snapshot({ "id-carebase": 3, "id-breathe": 1 }), readiness: [readiness("carebase"), readiness("caremetric-go", { supportEnabled: false })],
@@ -57,7 +57,8 @@ describe("control center model", () => {
     expect(carebase.connection).toEqual({ state: "verified", sourceRevision: "abc1234" });
     expect(carebase.health.state).toBe("ready");
     expect(carebase.health.metrics.map(metric => metric.label)).toEqual(["Organizations", "Active application profiles"]);
-    expect(carebase.subscriptions).toEqual({ state: "ready", data: { count: 5, statusCounts: [{ status: "active", count: 5 }], sharedWith: null }, note: null });
+    expect(carebase.subscriptions).toEqual({ state: "ready", data: { count: 5, statusCounts: [{ status: "active", count: 5 }], sharedWith: null, mrrCents: 99500 }, note: "Billed by the Hub" });
+    expect(carebase.links.billing).toBe("/admin/billing?app=carebase");
     expect(carebase.directory).toEqual({ state: "available", label: "Organizations, users and access controls", organizations: true, users: true, accessControls: true });
     expect(carebase.integration.endpointHost).toBe("cmcarebase.com");
     expect(carebase.integration.rollout.state).toBe("in_progress");
@@ -66,23 +67,23 @@ describe("control center model", () => {
     expect(carebase.intake.note).toBe("2 of 4 active customers ready · 6 SMS-verified members");
     expect(carebase.links).toEqual({
       workspace: "/admin/apps?product=carebase", organizations: "/admin/apps?product=carebase&view=organizations", users: "/admin/apps?product=carebase&view=users",
-      billing: "/admin/apps?product=carebase&view=billing", inquiries: "/admin/apps?product=carebase&view=inquiries",
+      billing: "/admin/billing?app=carebase", inquiries: "/admin/apps?product=carebase&view=inquiries",
       communications: "/communications?product=carebase", cases: "/cases?product=carebase", knowledge: "/knowledge?product=carebase",
     });
 
     // A silent connection: nothing is estimated, but the Hub's own support records still show.
     expect(breathe.connection.state).toBe("unavailable");
     expect(breathe.health).toEqual({ state: "unavailable", metrics: [] });
-    expect(breathe.subscriptions).toEqual({ state: "unavailable", data: null, note: null });
+    expect(breathe.subscriptions).toEqual({ state: "unavailable", data: null, note: "Hub billing could not be loaded" });
     expect(breathe.directory.state).toBe("unavailable");
     // A product absent from the ledger made no recorded AI calls; an unavailable ledger would be null instead.
     expect(breathe.support).toEqual({ productId: "id-breathe", openCases: 1, urgentCases: 0, conversations: 1, publishedArticles: 1, appSpecificArticles: 0, aiCalls: 0 });
     expect(breathe.intake).toEqual({ state: "not-provided", data: null, note: "Not registered for customer support intake" });
     expect(breathe.integration.sources).toEqual([]);
 
-    // Go shares EMR's records and says so; a disabled support product is reported as disabled.
-    expect(go.subscriptions.data?.sharedWith).toBe("caremetric-emr");
-    expect(go.subscriptions.note).toBe("Shared with CareMetric EMR · never counted twice");
+    // Go's billing is its own Hub subscriptions; a disabled support product is reported as disabled.
+    expect(go.subscriptions.data?.count).toBe(3);
+    expect(go.subscriptions.note).toBe("Billed by the Hub");
     expect(go.directory).toEqual({ state: "partial", label: "Users only", organizations: false, users: true, accessControls: false });
     expect(go.intake.note).toBe("Support is disabled for this application");
 
@@ -96,16 +97,16 @@ describe("control center model", () => {
 
   it("marks reads the connection never advertised as not provided and failed reads as unavailable", () => {
     const [emr, pennsync] = applicationCards({
-      apps: [app("caremetric-emr", ["users.list"]), app("pennsync", ["overview", "billing.overview"], { overview: { state: "unavailable" }, billing: { state: "unavailable" } })],
+      apps: [app("caremetric-emr", ["users.list"], { billing: { state: "ready", data: { source: "hub", subscriptionCount: 0, statusCounts: [{ status: "active", count: 0 }], mrrCents: 0 } } }), app("pennsync", ["overview"], { overview: { state: "unavailable" }, billing: { state: "unavailable" } })],
       products, cases: [], content: [], communications: null, readiness: null, aiUsage: null,
     });
     expect(emr.health.state).toBe("not-provided");
-    expect(emr.subscriptions).toEqual({ state: "not-provided", data: null, note: "Not provided by this connection yet" });
+    expect(emr.subscriptions.state).toBe("ready");
     expect(emr.support?.conversations).toBeNull();
     expect(emr.support?.aiCalls).toBeNull();
     expect(emr.intake).toEqual({ state: "unavailable", data: null, note: "Customer intake readiness could not be loaded" });
     expect(pennsync.health.state).toBe("unavailable");
-    expect(pennsync.subscriptions).toEqual({ state: "unavailable", data: null, note: "The billing read failed" });
+    expect(pennsync.subscriptions).toEqual({ state: "unavailable", data: null, note: "Hub billing could not be loaded" });
   });
 
   it("reports the phone-line import as an inbox feed for Breathe only when its connection advertises it", () => {
@@ -116,14 +117,14 @@ describe("control center model", () => {
 
   it("totals the portfolio the way the rollup does and leaves unavailable inbox figures null", () => {
     const apps = [
-      app("carebase", ["billing.overview"], { billing: { state: "ready", data: { source: "application_database", subscriptionCount: 5, statusCounts: [{ status: "active", count: 5 }] } } }),
-      app("caremetric-emr", ["billing.overview"], { billing: { state: "ready", data: { source: "application_database", subscriptionCount: 4, statusCounts: [{ status: "active", count: 4 }] } } }),
-      app("caremetric-go", ["billing.overview"], { billing: { state: "ready", data: { source: "application_database", subscriptionCount: 4, statusCounts: [{ status: "active", count: 4 }] } } }),
+      app("carebase", [], { billing: { state: "ready", data: { source: "hub", subscriptionCount: 5, statusCounts: [{ status: "active", count: 5 }], mrrCents: 0 } } }),
+      app("caremetric-emr", [], { billing: { state: "ready", data: { source: "hub", subscriptionCount: 4, statusCounts: [{ status: "active", count: 4 }], mrrCents: 0 } } }),
+      app("caremetric-go", [], { billing: { state: "ready", data: { source: "hub", subscriptionCount: 4, statusCounts: [{ status: "active", count: 4 }], mrrCents: 0 } } }),
       app("breathe", null),
     ];
     const cases = [supportCase("id-carebase", "open", "urgent"), supportCase("id-breathe", "waiting_on_customer"), supportCase("id-breathe", "resolved")];
     const live = headline({ apps, products, cases, content: [], communications: snapshot({ "id-carebase": 2, "id-breathe": 1 }, { sms: 1 }), readiness: null, aiUsage: null });
-    expect(live).toEqual({ connected: 3, total: 4, subscriptions: 9, subscriptionApps: ["CareBase", "CareMetric EMR"], conversations: 3, openCases: 2, urgentCases: 1, channelsLive: 3, channelsTotal: 5 });
+    expect(live).toEqual({ connected: 3, total: 4, subscriptions: 13, subscriptionApps: ["CareBase", "CareMetric EMR", "CareMetric Go"], conversations: 3, openCases: 2, urgentCases: 1, channelsLive: 3, channelsTotal: 5 });
     const silent = headline({ apps: [app("breathe", null)], products, cases: [], content: [], communications: null, readiness: null, aiUsage: null });
     expect(silent).toMatchObject({ connected: 0, total: 1, subscriptions: null, subscriptionApps: [], conversations: null, channelsLive: null });
   });

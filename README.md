@@ -25,11 +25,14 @@ Product names appear with their repository names so each app is easy to find.
 - **Knowledge** (`/knowledge`): shared and app-specific articles for every
   application, with per-app coverage. Healthcare Advisors' published FAQ is
   included.
-- **Tenants & pricing** (`/admin/tenants`): set up customer tenants by hand,
-  choose their applications and record each subscription's price per month or
-  per year, or make it complimentary (free) with a reason and an optional end
-  date. This is the Hub's subscription record; it never charges a card or
-  changes an application's own billing. See [tenant setup](docs/TENANT_SETUP.md).
+- **Billing** (`/admin/billing`): the only place CareMetric platform billing
+  happens. Products and prices, every subscription across the applications with
+  MRR and ARR, price changes (grandfather or move subscribers), coupons and
+  promotion codes, customer-specific prices, trials, pause and cancel, and
+  invoices, all in the CareMetric Stripe account. Tenant administrators see
+  their plans and invoices at `/billing` and manage their payment method in the
+  Stripe customer portal. Applications check entitlements and report billable
+  quantities through the Hub. See [platform billing](docs/PLATFORM_BILLING.md).
 - **Bulk email** (`/admin/email`): email the users of one or more applications,
   narrowed by role and account status read from each application's own user
   directory. Duplicates across applications and unsubscribed addresses are
@@ -92,14 +95,6 @@ no Hub migration.
 
 The Super Admin workspace now includes [facility training management](docs/FACILITY_TRAINING.md): create training-only facilities, invite administrators and students, manage enrollment and progress, open issued certificates, run complete printable/CSV reports and manage module access terms through the Hub session. Shared support, phone routing, course, onboarding and security workspaces are reachable from the same Admin page. The native CareBase `training.v1` capability gates these controls; deploy its migrations and adapter before this Hub update. Live owner verification remains separate from fixture testing.
 
-CareBase organizations now have a reviewed [Stripe billing portal workflow](docs/BILLING_PORTAL.md)
-when the native billing-command capabilities are enabled. Creation requires a
-reason, exact customer/configuration preview and confirmation. Uncertain responses
-retain the same command; opening rechecks current authority and retrieves the
-same provider session. The Hub stores redacted recovery metadata and keeps
-provider credentials and billing logic in CareBase. Deployment requires the
-API 4 `billing.portal.v1` gate and the reviewed native adapter.
-
 CareBase course details include exact governed source review and native version
 controls. An administrator loads a version, reviews its material and policy,
 preserves that immutable source in the Hub, and previews a clone or publication.
@@ -147,8 +142,9 @@ server adapter is deployed and its health and anonymous-denial probes passed;
 the authenticated connection still requires owner-session verification. See
 [the administrator connection](docs/CENTRAL_ADMIN_PILOT.md) and
 [central learning](docs/CENTRAL_LEARNING.md) for their exact scope and deployment
-order. Billing mutations, customer SSO, remaining app adapters, and CareBase
-course cutover are still pending.
+order. Customer SSO, remaining app adapters, and CareBase course cutover are
+still pending. Platform billing is consolidated in the Hub
+([platform billing](docs/PLATFORM_BILLING.md)).
 
 Version `0.1.0` now runs as the first production vertical slice:
 

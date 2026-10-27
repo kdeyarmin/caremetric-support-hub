@@ -4,15 +4,15 @@ export const REQUIRED_BACKEND_FEATURES = [
   "learning.runtime.v1", "platform.admin.read.v1", "app.sms.v1", "learning.sources.v1",
   "platform.admin.command.v1", "learning.receipts.v1", "learning.authoring.v1",
   "knowledge.publications.v1", "support.readiness.v1", "platform.admin.intel.v1", "learning.draft-editing.v1",
-  "billing.portal.v1", "support.customer-onboarding.v1", "learning.structure.v1", "support.customer-registration.v1", "billing.checkout.v1", "learning.course-creation.v1", "learning.credit-policy.v1", "learning.distribution.v1","learning.pennsync-source.v1", "learning.media.v1", "learning.sequence.v1",
+  "support.customer-onboarding.v1", "learning.structure.v1", "support.customer-registration.v1", "learning.course-creation.v1", "learning.credit-policy.v1", "learning.distribution.v1","learning.pennsync-source.v1", "learning.media.v1", "learning.sequence.v1",
   "support.ai-assistance.v1", "support.ai-automation.v1", "support.go-live-readiness.v1", "support.ai-automation-server.v1",
   "platform.admin.advisors.v1",
   "support.ai-automation-failure-policy.v1",
   "support.communications.v1",
   "support.ai-usage.v1",
-  "platform.admin.tenants.v1",
   "support.bulk-email.v1",
   "learning.catalog-authoring.v1",
+  "billing.platform.v1",
 ] as const;
 
 /** Additive features share the API version; the integer alone never proves readiness. */

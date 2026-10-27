@@ -2,7 +2,8 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
-import type { AdminBillingOverview, PortfolioCapabilities, PortfolioOverview, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
+import type { PortfolioCapabilities, PortfolioOverview, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
+import type { Subscription } from "../billing/billingModel";
 import type { ContentItem, Product, SupportCase } from "../domain";
 import type { ChannelStatus } from "../support/communicationsClient";
 import type { PhoneRegistryClient } from "../support/phoneRegistryModel";
@@ -30,14 +31,13 @@ const supportCase = (productId: string, status: SupportCase["status"], priority:
 const article = (productIds: string[]): ContentItem => ({ id: crypto.randomUUID(), contentKey: "k", kind: "article", title: "T", summary: "S", body: null, status: "published", accessLevel: "public", productIds, audience: [], locale: "en-US", revision: 1, sourceSystem: "support_hub", routePattern: null });
 const data = { products, cases: [supportCase(products[0].id, "open", "urgent"), supportCase(products[0].id, "in_progress"), supportCase(products[1].id, "resolved")], content: [article([products[0].id]), article(products.map(item => item.id))] };
 
-interface ProductReads { capabilities?: PortfolioCapabilities; overview?: PortfolioOverview; billing?: AdminBillingOverview }
+interface ProductReads { capabilities?: PortfolioCapabilities; overview?: PortfolioOverview }
 function fakePortfolio(reads: Partial<Record<PortfolioProduct, ProductReads>>): PortfolioClient {
   const unexpected = () => Promise.reject(new Error("Unexpected fixture read"));
   return {
     capabilities: vi.fn<PortfolioClient["capabilities"]>(async ({ product }) => { const entry = reads[product]; if (!entry?.capabilities) throw { code: "unconfigured" }; return entry.capabilities; }),
     overview: vi.fn<PortfolioClient["overview"]>(async ({ product }) => { const entry = reads[product]; if (!entry?.overview) throw { code: "upstream" }; return entry.overview; }),
-    billing: vi.fn<PortfolioClient["billing"]>(async ({ product }) => { const entry = reads[product]; if (!entry?.billing) throw { code: "upstream" }; return entry.billing; }),
-    organizations: unexpected, users: unexpected, subscriptions: unexpected, invoices: unexpected, invoice: unexpected, verifySubscription: unexpected,
+    organizations: unexpected, users: unexpected,
   };
 }
 const channelStatus: ChannelStatus = { sms: { inbound: false, replies: false }, email: { inbound: true, replies: false }, chat: { enabled: true }, phone: { sync: true }, webForm: { sync: true } };
@@ -66,14 +66,21 @@ const setupReport: IntegrationSetupReport = { checkedAt: "2026-10-21T00:00:00Z",
   { id: "chat", name: "Website chat", purpose: "The chat panel on every Help page.", docs: "docs/UNIFIED_COMMUNICATIONS.md", ready: false, complete: false, variables: [
     { name: "HUB_CHAT_ENABLED", secret: false, required: true, purpose: "Flag", set: true, satisfied: false, value: "false" } ] },
 ] };
+const subscription = (app: Subscription["app"], n: number): Subscription => ({
+  id: `sub_${app}${n}`, tenant_id: "00000000-0000-4000-8000-0000000000aa", customer: "cus_1", app, status: "active", collection_method: "send_invoice",
+  cancel_at_period_end: false, cancel_at: null, canceled_at: null, ended_at: null, current_period_start: null, current_period_end: null, trial_start: null, trial_end: null,
+  pause_behavior: null, pause_resumes_at: null, discounts: [], created: "2026-10-27T00:00:00Z", version: 1,
+  items: [{ id: `si_${n}`, price: "price_1", product: "prod_1", quantity: 1, unit_amount: 19900, currency: "usd", interval: "month", interval_count: 1, product_name: "Core", kind: "plan", unit_label: "facility", pricing_model: "per_unit", custom: false }],
+});
 const connectedClients = () => ({
+  billing: vi.fn(async () => ({ coupons: [], subscriptions: [1, 2, 3, 4, 5].map(n => subscription("carebase", n)) })),
   hub: { listCases: vi.fn(async () => data.cases), listContent: vi.fn(async () => data.content) },
   aiUsage: { summary: vi.fn(async (days: number) => ({ ...usageSummary, days })) } as AiUsageClient,
   integrationSetup: { report: vi.fn(async () => setupReport) } as IntegrationSetupClient,
   portfolio: fakePortfolio({
     carebase: {
-      capabilities: { apiVersion: 1, operations: ["overview", "organizations.list", "users.list", "commands.preview", "commands.apply", "billing.overview", "billing.subscriptions.list"], sourceRevision: "abc1234" },
-      overview: { organizationCount: 12, activeUserCount: 40 }, billing: { source: "application_database", subscriptionCount: 5, statusCounts: [{ status: "active", count: 5 }] },
+      capabilities: { apiVersion: 1, operations: ["overview", "organizations.list", "users.list", "commands.preview", "commands.apply"], sourceRevision: "abc1234" },
+      overview: { organizationCount: 12, activeUserCount: 40 },
     },
     advisors: { capabilities: { apiVersion: 1, operations: ["overview", "inquiries.list"], sourceRevision: null }, overview: { organizationCount: null, activeUserCount: null, inquiryCount: 7, openInquiryCount: 2 } },
   }),
@@ -100,8 +107,8 @@ describe("control center", () => {
     expect(await within(figure("Conversations waiting")).findByText("4")).toBeTruthy();
     expect(within(figure("Open support cases")).getByText("2")).toBeTruthy();
     expect(within(figure("Open support cases")).getByText("1 urgent")).toBeTruthy();
-    expect(within(figure("Recorded subscriptions")).getByText("5")).toBeTruthy();
-    expect(within(figure("Recorded subscriptions")).getByText("Across CareBase")).toBeTruthy();
+    expect(within(figure("Subscriptions")).getByText("5")).toBeTruthy();
+    expect(within(figure("Subscriptions")).getByText("Billed by the Hub across every application")).toBeTruthy();
     expect(within(figure("Channels live")).getByText("4 of 5")).toBeTruthy();
   });
 
@@ -142,11 +149,11 @@ describe("control center", () => {
     expect(within(carebase).getByText("Connection verified")).toBeTruthy();
     expect(within(carebase).getByText("Organizations:").textContent).toBe("Organizations: 12");
     expect(within(carebase).getByText("Deployed source abc1234")).toBeTruthy();
-    expect(within(carebase).getByText("recorded subscriptions", { exact: false }).textContent).toContain("5 recorded subscriptions");
+    expect(within(carebase).getByText("Subscriptions").closest("div")!.textContent).toContain("5 subscriptions · $995.00 MRR");
     expect(within(carebase).getByText("Organizations, users and access controls")).toBeTruthy();
     expect(href(within(carebase).getByRole("link", { name: "Users" }))).toBe("/admin/apps?product=carebase&view=users");
     expect(href(within(carebase).getByRole("link", { name: "Organizations" }))).toBe("/admin/apps?product=carebase&view=organizations");
-    expect(href(within(carebase).getByRole("link", { name: "Billing and subscriptions" }))).toBe("/admin/apps?product=carebase&view=billing");
+    expect(href(within(carebase).getByRole("link", { name: "Billing and subscriptions" }))).toBe("/admin/billing?app=carebase");
     expect(within(carebase).getByText("Enabled; click pending")).toBeTruthy();
     expect(within(carebase).getByText(/Administration connection: cmcarebase.com/)).toBeTruthy();
     expect(await within(carebase).findByText("conversations waiting", { exact: false })).toBeTruthy();
@@ -158,10 +165,10 @@ describe("control center", () => {
     expect(href(within(carebase).getByRole("link", { name: /Open CareBase \(PennTrain\) workspace/ }))).toBe("/admin/apps?product=carebase");
 
     const breathe = within(applications).getByRole("article", { name: "Breathe (PennFit) controls" });
-    // The connection badge and the subscriptions row both say so; neither invents a figure.
-    expect(within(breathe).getAllByText("Unavailable")).toHaveLength(2);
+    // The connection is unavailable, but its billing is the Hub's own and still reads.
+    expect(within(breathe).getAllByText("Unavailable")).toHaveLength(1);
     expect(within(breathe).getByText(/the application could not be reached/)).toBeTruthy();
-    expect(breathe.textContent).not.toContain("0 recorded subscriptions");
+    expect(within(breathe).getByText("Subscriptions").closest("div")!.textContent).toContain("0 subscriptions · $0.00 MRR");
     expect(within(breathe).getByText("Not registered for customer support intake")).toBeTruthy();
     // The Hub's own records still show for a silent application.
     expect(within(breathe).getByText("Support").closest("div")!.textContent).toContain("0 conversations waiting · 0 open cases · 1 published articles (0 app-specific) · 2 AI calls");
