@@ -56,7 +56,10 @@ export function gateway(pool) {
   return {
     rpc: (name,args,sessionToken) => {
       const query = rpcQuery(name,args);
-      return withSession(pool,sessionToken,async db => (await db.query(query)).rows[0].data,!publicCalls.has(name));
+      return withSession(pool,sessionToken,async db => (await db.query(query)).rows[0].data,!publicCalls.has(name)).catch(error => {
+        if (name === 'create_facility_support_case' && error?.code === '22023') throw new HttpError(400, 'The facility or privacy selection changed. Review a new support request.');
+        throw error;
+      });
     },
     rows: (name,sessionToken) => {
       if (!Object.hasOwn(reads,name)) throw new HttpError(404,'This resource is unavailable.');
