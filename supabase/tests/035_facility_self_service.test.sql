@@ -53,7 +53,7 @@ select set_config('request.jwt.claims','{"sub":"97000000-0000-4000-8000-00000000
 select ok(not pg_temp.case_visible('97000000-0000-4000-8000-000000000101'),'expired native scope cannot expose shared facility cases');
 update private.self_service_connections set scope_checked_at=now(),role='member' where user_id='97000000-0000-4000-8000-000000000001';
 select ok(not pg_temp.case_visible('97000000-0000-4000-8000-000000000101'),'a downgraded member cannot retain delegated support access');
-select is((select count(*)::integer from hub.content_items where content_key like 'self-service.%'),6,'maintained customer guides are published');
+select is((select count(*)::integer from hub.content_items where content_key like 'self-service.%'),7,'maintained customer guides are published');
 select is((select count(*)::integer from hub.content_publications cp join hub.content_items i on i.id=cp.item_id join hub.products p on p.id=cp.product_id where i.content_key like 'self-service.%' and p.slug='caremetric-go'),0,'CareBase self-service does not change Go guidance or billing');
 select * from finish();
 rollback;
