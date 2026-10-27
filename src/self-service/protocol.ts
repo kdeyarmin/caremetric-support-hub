@@ -18,6 +18,7 @@ export const profileRecord = z.object({
   source: z.string().min(1).max(64), id: sourceId, title: z.string().min(1).max(500),
   kind: z.enum(['training', 'certificate', 'credential', 'assignment', 'outside_training']),
   completed_on: z.string().nullable(), expires_on: z.string().nullable(), warning_days: z.number().int().min(0).max(3650),
+  days_remaining: z.number().int().nullable().optional(),
   status: z.enum(recordStatuses), href: z.string().max(2048).nullable(),
   source_revision: z.string().max(128).nullable().optional(), verification_status: z.string().max(64).nullable().optional(),
 }).strict();
