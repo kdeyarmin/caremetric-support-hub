@@ -73,6 +73,10 @@ try {
   const requestKey = randomUUID();
   const support = { p_tenant_id: tenant, p_product_id: product, p_subject: 'Synthetic self-service request', p_category: 'general', p_priority: 'normal', p_body: 'Synthetic nonclinical customer request', p_app_version: null, p_route: null, p_contains_phi: false, p_request_key: requestKey, p_facility_id: 'site-a', p_shared: true };
   const created = await call('rpc/create_facility_support_case', support);
+  if (created.status === 500) {
+    try { await gateway(pool).rpc('create_facility_support_case', support, jar[sessionCookie]); }
+    catch (error) { throw new Error(`Synthetic facility ticket failed: ${error.code ?? 'unknown'} ${error.message}`); }
+  }
   assert.equal(created.status, 200, 'new verified customers can open support without operator onboarding'); ticket = created.body.id;
   assert.ok(ticket);
   assert.equal((await call('rpc/create_facility_support_case', { ...support, p_shared: false })).status, 400, 'a replay cannot change ticket privacy');
