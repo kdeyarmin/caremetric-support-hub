@@ -4,7 +4,7 @@ import { selfServiceClient } from './client';
 import { deduplicateProfile, type ProfileRecord } from './protocol';
 import { config } from '../lib/config';
 
-const labels = { current: 'Current', expiring: 'Expiring soon', expired: 'Expired', pending_review: 'Pending review', assigned: 'Assigned', missing: 'Missing', historical: 'Historical / renewed', rejected: 'Not accepted', not_applicable: 'Not applicable' };
+const labels = { current: 'Current', expiring: 'Expiring soon', expired: 'Expired', pending_review: 'Pending review', assigned: 'Assigned', missing: 'Missing', historical: 'Historical', rejected: 'Not accepted', not_applicable: 'Not applicable' };
 const csvCell = (value: string) => `"${(/^[=+@\-\t\r]/.test(value) ? "'" : '') + value.replaceAll('"', '""')}"`;
 export function TrainingProfile() {
   const [records, setRecords] = useState<ProfileRecord[]>([]);
