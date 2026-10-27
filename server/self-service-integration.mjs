@@ -1,0 +1,135 @@
+// Exercise the real customer HTTP/SMS/database boundary on disposable local data.
+import assert from 'node:assert/strict';
+import { randomBytes, randomUUID } from 'node:crypto';
+import pg from 'pg';
+import { appServer } from './http.mjs';
+import { gateway } from './gateway.mjs';
+import { selfService, nativeSelfService } from './self-service.mjs';
+import { smsAuth, sessionCookie, digest, transaction, withSession } from './sms-auth.mjs';
+
+const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
+const local = new URL(databaseUrl);
+assert.equal(local.hostname, '127.0.0.1'); assert.equal(local.port, '54322');
+const admin = new pg.Pool({ connectionString: databaseUrl });
+await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
+const appUrl = new URL(databaseUrl); appUrl.username = 'hub_app_server'; appUrl.password = 'ephemeral-test-only';
+const pool = new pg.Pool({ connectionString: appUrl.href });
+const product = (await admin.query("select id from hub.products where slug='carebase'")).rows[0].id;
+const keyId = randomUUID(), key = `cmb_${randomBytes(32).toString('base64url')}`;
+const account = `selfservice_${randomUUID()}`, nativeUser = `user_${randomUUID()}`;
+let nativeProof = { account, user: nativeUser, account_name: 'Disposable self-service facility group', display_name: 'Synthetic customer',
+  role: 'facility_admin', facilities: [{ id: 'site-a', name: 'Synthetic site A', permissions: ['employee.recovery', 'billing.manage', 'support.manage'] }], capabilities: ['training.profile.v1', 'employee.recovery.v1'] };
+const provider = { send: async () => randomUUID(), verify: async (_id, _phone, code) => code === '123456' };
+const nativeCalls = [];
+let unavailable = false, tenant, customerId;
+const secret = 'temporary-test-secret-never-audited';
+const customer = selfService({ pool, provider, publicOrigin: 'https://hub.test', fetchImpl: async (url, options) => {
+  if (unavailable) throw new Error('Synthetic source outage');
+  assert.equal(url, nativeSelfService.carebase.endpoint);
+  assert.equal(options.redirect, 'error'); assert.equal(options.headers.Cookie, undefined);
+  // A wrong app cannot consume the capability, and successful use consumes it once.
+  await assert.rejects(customer.consume(options.headers.Authorization, 'breathe'));
+  const authority = await customer.consume(options.headers.Authorization, 'carebase');
+  await assert.rejects(customer.consume(options.headers.Authorization, 'carebase'));
+  const { operation } = JSON.parse(options.body);
+  assert.deepEqual(authority.operation, operation); assert.equal(authority.account, account); assert.equal(authority.user, nativeUser);
+  nativeCalls.push(operation);
+  if (operation.action === 'scope.read') return Response.json(nativeProof);
+  if (operation.action === 'profile.read') return Response.json({ generated_at: new Date().toISOString(), next_cursor: null, records: [
+    { source: 'carebase.credentials', id: 'credential-a', title: 'Synthetic first-aid credential', kind: 'credential', completed_on: '2026-01-01', expires_on: null, warning_days: 90, status: 'current', href: 'https://outside.invalid/evidence' },
+  ] });
+  if (operation.action === 'recovery.execute') return Response.json({ request_id: operation.request_id, state: 'issued', temporary_password: secret });
+  return Response.json({ authorized: true, facility_id: operation.facility_id ?? null, capabilities: [] });
+} });
+const server = appServer({ auth: smsAuth({ pool, provider }), gateway: gateway(pool), selfService: customer, origins: ['https://hub.test'] });
+await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+const origin = `http://127.0.0.1:${server.address().port}`, jar = {};
+async function call(path, body, headers = {}, browser = true) {
+  const response = await fetch(`${origin}/api/${path}`, { method: 'POST', headers: {
+    'Content-Type': 'application/json', ...(browser ? { Origin: 'https://hub.test', Cookie: Object.entries(jar).map(([name, value]) => `${name}=${value}`).join('; ') } : {}), ...headers,
+  }, body: JSON.stringify(body) });
+  for (const value of response.headers.getSetCookie()) { const [pair] = value.split(';'), index = pair.indexOf('='); jar[pair.slice(0, index)] = pair.slice(index + 1); }
+  return { status: response.status, body: await response.json() };
+}
+const privateRpc = (name, values) => withSession(pool, jar[sessionCookie], async db => {
+  await db.query('reset role');
+  return (await db.query(`select private.${name}(${values.map((_, index) => `$${index + 1}`).join(',')}) as result`, values)).rows[0].result;
+});
+try {
+  await admin.query('insert into private.billing_app_keys(id,product_id,key_hash,key_hint) values($1,$2,$3,$4)', [keyId, product, digest(key), key.slice(-4)]);
+  assert.equal((await call('apps/connect', nativeProof, { Authorization: `Bearer ${key}` })).status, 403, 'native proofs cannot come from a browser');
+  assert.equal((await call('apps/connect', { ...nativeProof, role: 'platform_admin' }, { Authorization: `Bearer ${key}` }, false)).status, 400);
+  const issued = await call('apps/connect', nativeProof, { Authorization: `Bearer ${key}` }, false);
+  assert.equal(issued.status, 200); const token = new URL(issued.body.url).hash.slice(1);
+  const started = await call('self-service/connect/start', { token, phone: '+12025550851', consent: true });
+  assert.equal(started.status, 200);
+  assert.equal((await call('self-service/connect/verify', { challenge_id: started.body.challenge_id, code: '000000' })).status, 401);
+  assert.equal((await call('self-service/connect/verify', { challenge_id: started.body.challenge_id, code: '123456' })).status, 200);
+  const connection = (await call('self-service', { action: 'workspace' })).body.connections[0];
+  assert.equal(connection.app, 'carebase'); assert.equal(connection.role, 'facility_admin'); tenant = connection.tenant_id;
+  customerId = (await admin.query('select user_id from private.sms_sessions where token_hash=$1', [digest(jar[sessionCookie])])).rows[0].user_id;
+  assert.equal((await admin.query('select count(*)::int as count from private.staff_permissions where user_id=$1', [customerId])).rows[0].count, 0, 'linking never grants operator authority');
+  assert.equal((await call('self-service', { action: 'connect', token, confirmed: true })).status, 403, 'a handoff is consumed once');
+  const profile = await call('self-service', { action: 'native', connection_id: connection.id, operation: { action: 'profile.read', cursor: 0 } });
+  assert.equal(profile.status, 200); assert.equal(profile.body.records[0].href, null, 'untrusted evidence links are removed');
+  const recovery = { action: 'recovery.execute', target: 'employee-a', recovery_action: 'temporary_password', reason: 'Verified employee identity in person', request_id: randomUUID() };
+  assert.equal((await call('self-service', { action: 'native', connection_id: connection.id, operation: recovery })).status, 400, 'access changes require confirmation');
+  const prepared = await call('self-service', { action: 'prepare', connection_id: connection.id, operation: recovery });
+  assert.equal(prepared.status, 200);
+  assert.equal((await call('self-service', { action: 'confirm', confirmation_id: prepared.body.confirmation_id, target: 'employee-b' })).status, 400, 'the confirmed target cannot be replaced');
+  const confirmed = await call('self-service', { action: 'confirm', confirmation_id: prepared.body.confirmation_id });
+  assert.equal(confirmed.status, 200); assert.equal(confirmed.body.temporary_password, secret);
+  assert.deepEqual(nativeCalls.at(-1), recovery);
+  assert.equal((await call('self-service', { action: 'confirm', confirmation_id: prepared.body.confirmation_id })).status, 403, 'confirmation cannot execute twice');
+  assert.equal(JSON.stringify((await admin.query('select metadata from private.audit_events where actor_id=$1', [customerId])).rows).includes(secret), false);
+  assert.equal((await admin.query('select count(*)::int as count from private.self_service_operations where user_id=$1 and result_state=\'succeeded\'', [customerId])).rows[0].count >= 2, true);
+
+  // Quote retry identity is the selection, not a newly calculated timestamp.
+  const quoteId = randomUUID(), request = randomUUID();
+  const execution = { mode: 'facility', intent: { plan: 'price_core', addons: [] }, immediate: [], next: [], renewal: '2027-01-01T00:00:00Z' };
+  const saved = await privateRpc('save_customer_billing_quote', [quoteId, connection.id, 'site-a', request, JSON.stringify({ id: quoteId }), JSON.stringify(execution), 0, null]);
+  assert.equal(saved.id, quoteId);
+  assert.equal((await privateRpc('save_customer_billing_quote', [randomUUID(), connection.id, 'site-a', request, '{}', JSON.stringify({ ...execution, prorationDate: 123 }), 0, null])).id, quoteId);
+  await assert.rejects(privateRpc('save_customer_billing_quote', [randomUUID(), connection.id, 'site-a', request, '{}', JSON.stringify({ ...execution, intent: { plan: null, addons: [] } }), 0, null]), /request changed/);
+  assert.equal((await privateRpc('claim_customer_billing_quote', [quoteId, true])).state, 'confirming');
+  await transaction(pool, db => db.query('select private.mark_customer_purchase_started($1)', [quoteId]));
+  await transaction(pool, db => db.query('select private.record_customer_payment_invoice($1,$2)', [quoteId, 'in_syntheticReceipt']));
+  await assert.rejects(transaction(pool, db => db.query('select private.record_customer_payment_invoice($1,$2)', [quoteId, 'in_anotherReceipt'])), /receipt changed/);
+  const receipt = await privateRpc('claim_customer_billing_quote', [quoteId, false]);
+  assert.equal(receipt.payment_invoice, 'in_syntheticReceipt'); assert.ok(receipt.payment_request_started_at);
+  await transaction(pool, db => db.query("select private.settle_customer_billing_quote($1,'failed')", [quoteId]));
+
+  nativeProof = { ...nativeProof, role: 'member', facilities: nativeProof.facilities.map(site => ({ ...site, permissions: [] })) };
+  assert.equal((await call('self-service', { action: 'workspace' })).body.connections[0].role, 'member');
+  assert.equal((await call('self-service', { action: 'prepare', connection_id: connection.id, operation: recovery })).status, 403, 'native demotion removes cached recovery authority');
+  nativeProof = { ...nativeProof, role: 'organization_admin' };
+  assert.equal((await call('self-service', { action: 'workspace' })).body.connections[0].role, 'organization_admin');
+  unavailable = true;
+  assert.equal((await call('self-service', { action: 'workspace' })).body.connections[0].role, 'member', 'a source outage cannot keep granting cached administration');
+  await admin.query('update private.sms_sessions set revoked_at=now() where user_id=$1', [customerId]);
+  assert.equal((await call('self-service', { action: 'workspace' })).status, 401);
+  console.log('Customer self-service: app-key ingress, real SMS linking, one-use scope-bound capabilities, confirmation, safe evidence links, immutable quote intent/payment receipts, role revocation, source outages and secret-free audit passed.');
+} finally {
+  await new Promise(resolve => server.close(resolve));
+  if (!customerId) customerId = (await admin.query("select user_id from private.sms_identities where phone_e164='+12025550851'")).rows[0]?.user_id;
+  if (!tenant) tenant = (await admin.query('select c.tenant_id from private.self_service_connections c where c.source_account=$1', [account])).rows[0]?.tenant_id;
+  if (customerId) {
+    await admin.query('delete from private.customer_billing_quotes where actor_id=$1', [customerId]);
+    await admin.query('delete from private.self_service_operations where user_id=$1', [customerId]);
+    await admin.query('delete from private.self_service_connections where user_id=$1', [customerId]);
+    await admin.query('delete from private.federated_principals where hub_user_id=$1', [customerId]);
+    await admin.query('delete from private.audit_events where actor_id=$1', [customerId]);
+    await admin.query('delete from private.sms_sessions where user_id=$1', [customerId]);
+    await admin.query('delete from private.sms_identities where user_id=$1', [customerId]);
+  }
+  await admin.query('delete from private.sms_challenges where self_service_token_hash in(select token_hash from private.self_service_handoffs where proof->>\'account\'=$1)', [account]);
+  await admin.query('delete from private.self_service_handoffs where proof->>\'account\'=$1', [account]);
+  await admin.query('delete from private.billing_app_keys where id=$1', [keyId]);
+  if (tenant) {
+    await admin.query('delete from private.federated_tenants where hub_tenant_id=$1', [tenant]);
+    await admin.query('delete from private.billing_account_links where tenant_id=$1', [tenant]);
+    await admin.query('delete from hub.tenants where id=$1', [tenant]);
+  }
+  if (customerId) await admin.query('delete from auth.users where id=$1', [customerId]);
+  await pool.end(); await admin.end();
+}
