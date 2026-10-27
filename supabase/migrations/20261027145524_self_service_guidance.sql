@@ -105,7 +105,7 @@ values(md5('self-service.training-profile:revision:1')::uuid,md5('self-service.t
 
 - A source is unavailable: the profile shows which records could not load; use Retry or open that application.
 - Pending evidence: your submission is not an approved credential until an authorized reviewer accepts it.
-- An older record appears expired: check whether it is labeled Historical / renewed before treating it as an obligation.
+- An older record appears expired: check whether it is labeled Historical before treating it as an obligation.
 - Missing staff link: ask a facility administrator to verify your staff relationship; never create another person''s record.
 
 ## FAQ
@@ -143,7 +143,7 @@ values(md5('self-service.training-profile:revision:1')::uuid,md5('self-service.t
 
 - A source is unavailable: the profile shows which records could not load; use Retry or open that application.
 - Pending evidence: your submission is not an approved credential until an authorized reviewer accepts it.
-- An older record appears expired: check whether it is labeled Historical / renewed before treating it as an obligation.
+- An older record appears expired: check whether it is labeled Historical before treating it as an obligation.
 - Missing staff link: ask a facility administrator to verify your staff relationship; never create another person''s record.
 
 ## FAQ
@@ -252,7 +252,7 @@ insert into hub.content_revisions(id,item_id,revision_no,locale,title,summary,bo
 values(md5('self-service.employee-access:revision:1')::uuid,md5('self-service.employee-access')::uuid,1,'en-US','Delegate facility authority and recover employee accounts','Let authorized facility administrators handle routine employee sign-in problems.','## Prerequisites
 
 - An active employee account in the same organization and an administrator with a current verified sign-in.
-- Facility managers must have an actual facility assignment and explicit employee.recovery delegation. Security suspensions, administrator accounts, and accounts outside the permitted facility are ineligible.
+- Facility managers must have an actual facility assignment and explicit employee.recovery delegation. Security suspensions, administrator accounts, managed SSO accounts, and accounts outside the permitted facility are ineligible.
 
 ## Permitted roles
 
@@ -291,7 +291,7 @@ values(md5('self-service.employee-access:revision:1')::uuid,md5('self-service.em
 - Share temporary passwords privately and use I have shared it; hide password after delivery. Never paste them into tickets.','## Prerequisites
 
 - An active employee account in the same organization and an administrator with a current verified sign-in.
-- Facility managers must have an actual facility assignment and explicit employee.recovery delegation. Security suspensions, administrator accounts, and accounts outside the permitted facility are ineligible.
+- Facility managers must have an actual facility assignment and explicit employee.recovery delegation. Security suspensions, administrator accounts, managed SSO accounts, and accounts outside the permitted facility are ineligible.
 
 ## Permitted roles
 
