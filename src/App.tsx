@@ -362,7 +362,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             </div>
           )}
           <Routes>
-            <Route path="/self-service" element={<CustomerCenter key={data.actor.id} />} />
+            <Route path="/self-service" element={<CustomerCenter key={data.actor.id} organizationBilling={tenantAdmin} />} />
             <Route path="/account/profile" element={<TrainingProfile key={data.actor.id} />} />
             <Route path="/manuals" element={<Manuals products={data.products} content={data.content} />} />
             <Route path="/phone" element={data.actor.role === "platform_admin" ? <PhoneInbox key={data.actor.id} /> : <Navigate to="/overview" replace />} />

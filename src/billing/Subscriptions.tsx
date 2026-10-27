@@ -45,7 +45,7 @@ export function Subscriptions() {
   const base = workspace?.catalog.find(price => price.id === plan);
   const choices = workspace?.catalog.filter(price => price.active && (!workspace.subscription || price.interval === workspace.subscription.interval && price.currency === workspace.subscription.currency)) ?? [];
   const mayPurchase = workspace?.mode === 'facility' || workspace?.role === 'organization_admin';
-  return <div className="learning-workspace"><header><span className="eyebrow">Customer self-service</span><h1>Plans &amp; add-ons</h1><p>Published prices and your current services. Review a server-calculated preview before confirming a purchase.</p><Link to="/billing">Invoices, payment methods &amp; payment recovery</Link></header>
+  return <div className="learning-workspace"><header><span className="eyebrow">Customer self-service</span><h1>Plans &amp; add-ons</h1><p>Published prices and your current services. Review a server-calculated preview before confirming a purchase.</p>{workspace?.role === 'organization_admin' && <Link to="/billing">Invoices, payment methods &amp; payment recovery</Link>}</header>
     {error && <p className="panel" role="alert">{error}</p>}{message && <p className="panel" role="status">{message}</p>}
     <label>Application<select value={connection} disabled={busy} onChange={event => { const id = event.target.value; setConnection(id); setWorkspace(null); setQuote(null); setMessage(''); if (id) void run(() => load(id)); }}><option value="">Choose a connected application</option>{connections.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
     {!connections.length && <p>Open self-service from your application with an authorized administrator account to connect it.</p>}
