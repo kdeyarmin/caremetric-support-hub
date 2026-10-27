@@ -503,3 +503,83 @@ values(md5('self-service.setup-and-manuals:revision:1')::uuid,md5('self-service.
 insert into hub.content_publications(id,item_id,revision_id,product_id,audience)
 select md5('self-service.setup-and-manuals:publication:'||slug)::uuid,md5('self-service.setup-and-manuals')::uuid,md5('self-service.setup-and-manuals:revision:1')::uuid,id,array['all']::text[] from hub.products where slug in ('carebase','breathe','pennsync','caremetric-emr','caremetric-intel','advisors')
 on conflict(item_id,product_id) do nothing;
+
+insert into hub.content_items(id,content_key,kind,status,access_level,source_system,owner_team)
+values(md5('self-service.connection-diagnostics')::uuid,'self-service.connection-diagnostics','article','published','customer','support_hub','CareMetric Support') on conflict(id) do nothing;
+insert into hub.content_revisions(id,item_id,revision_no,locale,title,summary,body_markdown,body_text,variables,source_version,review_state,approved_at)
+values(md5('self-service.connection-diagnostics:revision:1')::uuid,md5('self-service.connection-diagnostics')::uuid,1,'en-US','Get AI-assisted connection support','Run a permitted account connection check and open a private request with the results.','## Prerequisites
+
+- A verified application connection in Customer center.
+- The application must provide its non-clinical diagnostic adapter. Support intake must be open for new requests.
+
+## Permitted roles
+
+- Every connected user may check their own application connection and open a private support request. Native administration permissions do not expand through this tool.
+
+## Setup
+
+1. Connect your own account from the native application.
+2. Open Customer center and find Connected applications.
+
+## Normal use
+
+1. Choose Check connection to view available checks.
+2. Choose Get AI-assisted connection support to run a fresh check and create a private technical-support case. The result displays its ticket number and a link.
+3. When the application check is unavailable, the case records that limitation. It does not claim a successful check.
+4. Follow up in the case. The existing AI workflow uses published guidance, offers at most two automated attempts, and supports immediate human escalation.
+5. Billing and employee-access changes use their separate review and confirmation workflows. Connection support cannot execute those changes.
+
+## Common problems
+
+- Permission removed: reopen from the native application after your administrator restores access.
+- Uncertain response: retry from the same customer-center page; the existing request identity prevents duplicate cases.
+- AI assistance unavailable or insufficient: choose Request human support in the case.
+
+## FAQ
+
+- Does this read patient charts or training files? No. It requests only the application connection checks.
+- Are these cases shared with facility managers? No. This flow creates a private case under the existing case visibility rules.
+- Does creating a case change a subscription or reset a password? No. Those tasks require a separate explicit confirmation.
+
+## Helpful tips
+
+- Continue in the case that was created instead of opening duplicate requests. Never place passwords, payment card details or patient information in the conversation.','## Prerequisites
+
+- A verified application connection in Customer center.
+- The application must provide its non-clinical diagnostic adapter. Support intake must be open for new requests.
+
+## Permitted roles
+
+- Every connected user may check their own application connection and open a private support request. Native administration permissions do not expand through this tool.
+
+## Setup
+
+1. Connect your own account from the native application.
+2. Open Customer center and find Connected applications.
+
+## Normal use
+
+1. Choose Check connection to view available checks.
+2. Choose Get AI-assisted connection support to run a fresh check and create a private technical-support case. The result displays its ticket number and a link.
+3. When the application check is unavailable, the case records that limitation. It does not claim a successful check.
+4. Follow up in the case. The existing AI workflow uses published guidance, offers at most two automated attempts, and supports immediate human escalation.
+5. Billing and employee-access changes use their separate review and confirmation workflows. Connection support cannot execute those changes.
+
+## Common problems
+
+- Permission removed: reopen from the native application after your administrator restores access.
+- Uncertain response: retry from the same customer-center page; the existing request identity prevents duplicate cases.
+- AI assistance unavailable or insufficient: choose Request human support in the case.
+
+## FAQ
+
+- Does this read patient charts or training files? No. It requests only the application connection checks.
+- Are these cases shared with facility managers? No. This flow creates a private case under the existing case visibility rules.
+- Does creating a case change a subscription or reset a password? No. Those tasks require a separate explicit confirmation.
+
+## Helpful tips
+
+- Continue in the case that was created instead of opening duplicate requests. Never place passwords, payment card details or patient information in the conversation.','{"features":["support.diagnostics"]}'::jsonb,'self-service.v1','approved',now()) on conflict(id) do nothing;
+insert into hub.content_publications(id,item_id,revision_id,product_id,audience)
+select md5('self-service.connection-diagnostics:publication:'||slug)::uuid,md5('self-service.connection-diagnostics')::uuid,md5('self-service.connection-diagnostics:revision:1')::uuid,id,array['all']::text[] from hub.products where slug in ('carebase','breathe','pennsync','caremetric-emr','caremetric-intel')
+on conflict(item_id,product_id) do nothing;

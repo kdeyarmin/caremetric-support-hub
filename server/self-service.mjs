@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { HttpError, withSession, transaction, digest, token } from './sms-auth.mjs';
-import { connectionProof, nativeOperation, selfServiceRequest, profilePage, trustedRecordHref } from '../src/self-service/protocol.ts';
+import { connectionProof, nativeOperation, selfServiceRequest, profilePage, diagnosticReport, trustedRecordHref } from '../src/self-service/protocol.ts';
 
 export const nativeSelfService = Object.freeze({
   carebase: { endpoint: 'https://xsqobvvreaovwibxwyvv.supabase.co/functions/v1/self-service', origin: 'https://cmcarebase.com' },
@@ -64,6 +64,11 @@ export function selfService({ pool, provider, fetchImpl = fetch, publicOrigin = 
       await record('succeeded');
       return { ...page, records: page.records.map(record => ({ ...record, href: trustedRecordHref(record.href, adapter.origin) })) };
     }
+    if (command.operation.action === 'diagnostics.read') {
+      const report = diagnosticReport.parse(data);
+      await record('succeeded');
+      return { ...report, links: report.links.flatMap(link => { const href = trustedRecordHref(link.href, adapter.origin); return href ? [{ ...link, href }] : []; }) };
+    }
     await record('succeeded');
     return data;
     } catch (error) {
@@ -78,6 +83,16 @@ export function selfService({ pool, provider, fetchImpl = fetch, publicOrigin = 
       const op = request.data;
       if (op.action === 'workspace') { await refreshAuthority(session); return await rpc(session, 'self_service_workspace'); }
       if (op.action === 'connect') return await rpc(session, 'accept_self_service_connection', [sha(op.token)]);
+      if (op.action === 'diagnostic_support') {
+        await refreshAuthority(session);
+        const receipt = await rpc(session, 'get_diagnostic_support_receipt', [op.connection_id, op.request_id]);
+        if (receipt) return receipt;
+        const id = await rpc(session, 'prepare_self_service_operation', [op.connection_id, JSON.stringify({ action: 'diagnostics.read' }), false]);
+        let report = null;
+        try { report = diagnosticReport.parse(await call(session, id)); }
+        catch (error) { const cause = failure(error); if (cause.status !== 503) throw cause; }
+        return await rpc(session, 'create_diagnostic_support_case', [op.connection_id, op.request_id, id, report ? JSON.stringify(report.checks) : null]);
+      }
       if (op.action === 'confirm') return await call(session, op.confirmation_id, true);
       if (op.action === 'native' && op.operation.action === 'recovery.execute') throw new HttpError(400, 'Review and confirm account recovery first.');
       const id = await rpc(session, 'prepare_self_service_operation', [op.connection_id, JSON.stringify(nativeOperation.parse(op.operation)), false]);

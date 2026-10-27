@@ -24,6 +24,9 @@ export const profileRecord = z.object({
 }).strict();
 export type ProfileRecord = z.infer<typeof profileRecord>;
 export const profilePage = z.object({ records: z.array(profileRecord).max(500), next_cursor: z.number().int().min(0).nullable(), generated_at: z.string() }).strict();
+export const diagnosticReport = z.object({ checks: z.array(z.object({ name: z.string().min(1).max(180), status: z.string().min(1).max(64) }).strict()).min(1).max(50),
+  links: z.array(z.object({ label: z.string().min(1).max(180), href: z.string().max(2048) }).strict()).max(20).default([]) }).strict();
+export const diagnosticSupportReceipt = z.object({ case_id: z.uuid(), case_number: z.number().int().positive(), tool_state: z.enum(['available', 'unavailable']) });
 export const nativeOperation = z.discriminatedUnion('action', [
   z.object({ action: z.literal('scope.read') }).strict(),
   z.object({ action: z.literal('profile.read'), cursor: z.number().int().min(0).max(1_000_000) }).strict(),
@@ -36,6 +39,7 @@ export const nativeOperation = z.discriminatedUnion('action', [
 export type NativeOperation = z.infer<typeof nativeOperation>;
 export const selfServiceRequest = z.discriminatedUnion('action', [
   z.object({ action: z.literal('workspace') }).strict(),
+  z.object({ action: z.literal('diagnostic_support'), connection_id: z.uuid(), request_id: z.uuid(), confirmed: z.literal(true) }).strict(),
   z.object({ action: z.literal('connect'), token: z.string().regex(/^cmc_[A-Za-z0-9_-]{43}$/), confirmed: z.literal(true) }).strict(),
   z.object({ action: z.literal('native'), connection_id: z.uuid(), operation: nativeOperation }).strict(),
   z.object({ action: z.literal('prepare'), connection_id: z.uuid(), operation: nativeOperation }).strict(),

@@ -36,6 +36,7 @@ const customer = selfService({ pool, provider, publicOrigin: 'https://hub.test',
   assert.deepEqual(authority.operation, operation); assert.equal(authority.account, account); assert.equal(authority.user, nativeUser);
   nativeCalls.push(operation);
   if (operation.action === 'scope.read') return Response.json(nativeProof);
+  if (operation.action === 'diagnostics.read') return Response.json({ checks: [{ name: 'Application connection', status: 'available' }, { name: 'Protected membership', status: 'available' }], links: [] });
   if (operation.action === 'profile.read') return Response.json({ generated_at: new Date().toISOString(), next_cursor: null, records: [
     { source: 'carebase.credentials', id: 'credential-a', title: 'Synthetic first-aid credential', kind: 'credential', completed_on: '2026-01-01', expires_on: null, warning_days: 90, status: 'current', href: 'https://outside.invalid/evidence' },
   ] });
@@ -76,6 +77,17 @@ try {
   customerId = (await admin.query('select user_id from private.sms_sessions where token_hash=$1', [digest(jar[sessionCookie])])).rows[0].user_id;
   assert.equal((await admin.query('select count(*)::int as count from private.staff_permissions where user_id=$1', [customerId])).rows[0].count, 0, 'linking never grants operator authority');
   assert.equal((await call('self-service', { action: 'connect', token, confirmed: true })).status, 403, 'a handoff is consumed once');
+  const diagnosticRequest = { action: 'diagnostic_support', connection_id: connection.id, request_id: randomUUID(), confirmed: true };
+  assert.equal((await call('self-service', { ...diagnosticRequest, confirmed: false })).status, 400, 'a support ticket requires the customer action');
+  assert.equal((await call('self-service', { ...diagnosticRequest, connection_id: randomUUID() })).status, 403, 'diagnostic tickets cannot use another connection');
+  const diagnosticCase = await call('self-service', diagnosticRequest);
+  assert.equal(diagnosticCase.status, 200); assert.equal(diagnosticCase.body.tool_state, 'available');
+  const diagnosticCount = nativeCalls.filter(op => op.action === 'diagnostics.read').length;
+  const diagnosticReplay = await call('self-service', diagnosticRequest);
+  assert.equal(diagnosticReplay.body.case_id, diagnosticCase.body.case_id);
+  assert.equal(nativeCalls.filter(op => op.action === 'diagnostics.read').length, diagnosticCount, 'a ticket retry does not rerun its diagnostic');
+  assert.equal((await admin.query('select facility_shared from hub.support_cases where id=$1', [diagnosticCase.body.case_id])).rows[0].facility_shared, false, 'diagnostics create a private case');
+  assert.equal((await admin.query('select count(*)::int as count from private.diagnostic_support_requests where actor_id=$1', [customerId])).rows[0].count, 1);
   const requestKey = randomUUID();
   const support = { p_tenant_id: tenant, p_product_id: product, p_subject: 'Synthetic self-service request', p_category: 'general', p_priority: 'normal', p_body: 'Synthetic nonclinical customer request', p_app_version: null, p_route: null, p_contains_phi: false, p_request_key: requestKey, p_facility_id: 'site-a', p_shared: true };
   const created = await call('rpc/create_facility_support_case', support);
@@ -133,6 +145,11 @@ try {
   unavailable = true;
   assert.equal((await call('self-service', { action: 'workspace' })).body.connections[0].role, 'member', 'a source outage cannot keep granting cached administration');
   assert.equal(await withSession(pool, jar[sessionCookie], async db => (await db.query('select count(*)::int as count from hub.support_case_queue where id=$1', [ticket])).rows[0].count), 1, 'requesters retain their own historical tickets during a source outage');
+  await admin.query('update private.case_intake_settings set enabled=true where tenant_id=$1 and product_id=$2', [tenant, product]);
+  const outageCase = await call('self-service', { ...diagnosticRequest, request_id: randomUUID() });
+  assert.equal(outageCase.status, 200, 'source outages can be reported through a private customer case');
+  assert.equal(outageCase.body.tool_state, 'unavailable');
+  assert.ok(outageCase.body.case_id !== diagnosticCase.body.case_id);
   await admin.query('update private.sms_sessions set revoked_at=now() where user_id=$1', [customerId]);
   assert.equal((await call('self-service', { action: 'workspace' })).status, 401);
   console.log('Customer self-service: app-key ingress, real SMS linking, one-use scope-bound capabilities, confirmation, safe evidence links, immutable quote intent/payment receipts, role revocation, source outages and secret-free audit passed.');

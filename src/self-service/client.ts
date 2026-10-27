@@ -1,9 +1,10 @@
 import { appRequest } from '../lib/appSession';
-import { profilePage, workspaceSchema, type NativeOperation, type ProfileRecord } from './protocol';
+import { profilePage, workspaceSchema, diagnosticSupportReceipt, type NativeOperation, type ProfileRecord } from './protocol';
 import { myLearningSchema } from '../learning/model';
 
 export const selfServiceClient = {
   workspace: (signal?: AbortSignal) => appRequest('self-service', { action: 'workspace' }, signal).then(value => workspaceSchema.parse(value)),
+  diagnosticSupport: (connectionId: string, requestId: string) => appRequest('self-service', { action: 'diagnostic_support', connection_id: connectionId, request_id: requestId, confirmed: true }).then(value => diagnosticSupportReceipt.parse(value)),
   native: (connectionId: string, operation: NativeOperation, signal?: AbortSignal) => appRequest<unknown>('self-service', { action: 'native', connection_id: connectionId, operation }, signal),
   async profile(connectionId: string, signal?: AbortSignal): Promise<ProfileRecord[]> {
     const records: ProfileRecord[] = []; let cursor = 0;

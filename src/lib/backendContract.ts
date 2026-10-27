@@ -15,6 +15,7 @@ export const REQUIRED_BACKEND_FEATURES = [
   "billing.platform.v1",
   "customer.self-service.v1",
   "support.manual-escalation.v1",
+  "support.customer-diagnostics.v1",
 ] as const;
 
 /** Additive features share the API version; the integer alone never proves readiness. */

@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { z } from 'zod';
 import { selfServiceClient } from './client';
-import type { SelfServiceWorkspace } from './protocol';
+import { diagnosticReport, type SelfServiceWorkspace } from './protocol';
 import { config } from '../lib/config';
 
 const accountsSchema = z.object({ accounts: z.array(z.object({ id: z.string(), name: z.string(), facility_id: z.string(), facility_name: z.string() })) });
@@ -19,7 +19,15 @@ export function CustomerCenter({ organizationBilling = false }: { organizationBi
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [reload, setReload] = useState(0);
-  const [diagnostics, setDiagnostics] = useState<{ name: string; checks: { name: string; status: string }[] } | null>(null);
+  const [diagnostics, setDiagnostics] = useState<{ connectionId: string; name: string; checks: { name: string; status: string }[]; receipt: Awaited<ReturnType<typeof selfServiceClient.diagnosticSupport>> | null } | null>(null);
+  const pendingDiagnostics = useRef<Record<string, string>>({});
+  async function requestDiagnosticSupport(connection: SelfServiceWorkspace['connections'][number]) {
+    const requestId = pendingDiagnostics.current[connection.id] ?? crypto.randomUUID();
+    pendingDiagnostics.current[connection.id] = requestId;
+    const receipt = await selfServiceClient.diagnosticSupport(connection.id, requestId);
+    delete pendingDiagnostics.current[connection.id];
+    setDiagnostics({ connectionId: connection.id, name: connection.name, checks: [], receipt });
+  }
   useEffect(() => {
     const controller = new AbortController();
     if (!config.demoMode) void selfServiceClient.workspace(controller.signal).then(setWorkspace).catch(() => { if (!controller.signal.aborted) setError('Your application connections could not be loaded.'); });
@@ -30,11 +38,11 @@ export function CustomerCenter({ organizationBilling = false }: { organizationBi
   return <div className="learning-workspace"><header><span className="eyebrow">Customer self-service</span><h1>Manage your CareMetric services</h1><p>Plans, employee access, training records, help, and support for your authorized facilities.</p></header>
     {error && <div className="panel" role="alert"><p>{error}</p><button className="button button-secondary" onClick={() => { setError(''); setReload(value => value + 1); }}>Retry</button></div>}
     <div className="capability-grid">{[['/account/profile', 'My profile & training', 'Review certificates, expiration dates, history, and evidence.'], ['/subscriptions', 'Plans & add-ons', 'Compare services, preview charges, and manage subscriptions.'], ['/billing', 'Invoices & payments', 'Manage shared payment details and recover failed payments.'], ['/cases', 'Support requests', 'Track technical support and customer service issues.'], ['/knowledge', 'Knowledge base & FAQ', 'Find setup instructions, feature guides, and troubleshooting.'], ['/manuals', 'User manuals', 'Read and print instructions for your applications.'], ['/security', 'Account security', 'Manage sign-in and account protection.']].filter(([to]) => (to !== '/billing' || organizationBilling) && (to !== '/subscriptions' || organizationBilling || workspace?.connections.some(connection => connection.role !== 'member'))).map(([to, title, description]) => <Link className="panel" key={to} to={to}><h2>{title}</h2><p>{description}</p></Link>)}</div>
-    <section className="panel"><h2>Connected applications</h2>{!workspace ? <p>{config.demoMode ? 'Sign in to connect your real application accounts.' : 'Loading connections…'}</p> : !workspace.connections.length ? <p>Open customer self-service from your application to connect it. Each connection verifies your application account and mobile number.</p> : workspace.connections.map(connection => <article key={connection.id}><h3>{connection.name}</h3><p>{connection.role.replaceAll('_', ' ')} · {connection.facilities.map(facility => facility.name).join(', ') || 'Personal account'}</p>{['carebase', 'breathe', 'caremetric-intel'].includes(connection.app) && <button className="button button-secondary" disabled={busy} onClick={() => void run(async () => {
-      const result = z.object({ checks: z.array(z.object({ name: z.string().max(180), status: z.string().max(64) })).max(50) }).parse(await selfServiceClient.native(connection.id, { action: 'diagnostics.read' }));
-      setDiagnostics({ name: connection.name, checks: result.checks });
-    })}>Check connection</button>}</article>)}</section>
-    {diagnostics && <section className="panel" role="status"><h2>{diagnostics.name} connection check</h2><ul>{diagnostics.checks.map(check => <li key={check.name}>{check.name}: {check.status}</li>)}</ul></section>}
+    <section className="panel"><h2>Connected applications</h2>{!workspace ? <p>{config.demoMode ? 'Sign in to connect your real application accounts.' : 'Loading connections…'}</p> : !workspace.connections.length ? <p>Open customer self-service from your application to connect it. Each connection verifies your application account and mobile number.</p> : workspace.connections.map(connection => <article key={connection.id}><h3>{connection.name}</h3><p>{connection.role.replaceAll('_', ' ')} · {connection.facilities.map(facility => facility.name).join(', ') || 'Personal account'}</p><button className="button button-secondary" disabled={busy} onClick={() => void run(async () => {
+      const result = diagnosticReport.parse(await selfServiceClient.native(connection.id, { action: 'diagnostics.read' }));
+      setDiagnostics({ connectionId: connection.id, name: connection.name, checks: result.checks, receipt: null });
+    })}>Check connection</button> <button className="button button-secondary" disabled={busy || diagnostics?.connectionId === connection.id && diagnostics.receipt !== null} onClick={() => void run(() => requestDiagnosticSupport(connection))}>Get AI-assisted connection support</button><p>Creates a private support request with connection results. You can request a human at any time.</p></article>)}</section>
+    {diagnostics && <section className="panel" role="status"><h2>{diagnostics.name} connection support</h2>{diagnostics.checks.length > 0 && <ul>{diagnostics.checks.map(check => <li key={check.name}>{check.name}: {check.status}</li>)}</ul>}{diagnostics.receipt && <><p>Support request #{diagnostics.receipt.case_number} is ready.{diagnostics.receipt.tool_state === 'unavailable' ? ' The application check was unavailable; support can follow up in the case.' : ' Your connection results are included for support.'}</p><Link to={`/cases?case=${diagnostics.receipt.case_id}`}>Open support request</Link></>}</section>}
     <section className="panel"><h2>Employee account recovery</h2><p>Choose an application to see employee accounts you can recover. Account-access changes always need your confirmation.</p>
       <label>Application<select disabled={busy} value={connectionId} onChange={event => { const id = event.target.value; setConnectionId(id); setAccounts([]); setTarget(''); setConfirmation(''); setReceipt(null); if (id) void run(async () => setAccounts(accountsSchema.parse(await selfServiceClient.native(id, { action: 'employees.list' })).accounts)); }}><option value="">Choose an application</option>{workspace?.connections.filter(connection => connection.role !== 'member' && connection.capabilities.includes('employee.recovery.v1')).map(connection => <option key={connection.id} value={connection.id}>{connection.name}</option>)}</select></label>
       {selected && <form className="sign-in-form" onSubmit={event => { event.preventDefault(); if (!target || busy) return; void run(async () => { const prepared = await selfServiceClient.prepare(connectionId, { action: 'recovery.execute', target, recovery_action: action, reason, request_id: crypto.randomUUID() }); setConfirmation(prepared.confirmation_id); }); }}>
