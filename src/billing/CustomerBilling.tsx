@@ -127,7 +127,7 @@ function SubscriptionCard({ subscription, coupons, busy, onEdit, onResume }: { s
     <p className="billing-muted">{formatCents(subscriptionMonthlyCents(subscription, coupons))} per month after discounts · {subscription.status === 'trialing' && subscription.trial_end ? `trial ends ${dateLabel(subscription.trial_end)}` : subscription.ended_at ? `ended ${dateLabel(subscription.ended_at)}` : `current period ends ${dateLabel(subscription.current_period_end)}`}
       {subscription.discounts.length > 0 && ` · discounts: ${subscription.discounts.map(discount => { const coupon = coupons.find(item => item.id === discount.coupon); return coupon ? `${coupon.name || coupon.id} (${couponLabel(coupon)})` : discount.coupon; }).join(', ')}`}</p>
     {live && <div className="billing-actions">
-      <button type="button" className="button button-secondary button-small" disabled={busy} onClick={() => onEdit({ kind: 'item', subscription, item: null })}>Add add-on</button>
+      <button type="button" className="button button-secondary button-small" disabled={busy} onClick={() => onEdit({ kind: 'item', subscription, item: null })}>Add add-on or fee</button>
       <button type="button" className="button button-secondary button-small" disabled={busy} onClick={() => onEdit({ kind: 'trial', subscription })}>{subscription.status === 'trialing' ? 'Change trial' : 'Start trial'}</button>
       <button type="button" className="button button-secondary button-small" disabled={busy} onClick={() => onEdit({ kind: 'discount', subscription })}>Discounts</button>
       {subscription.pause_behavior ? <button type="button" className="button button-secondary button-small" disabled={busy} onClick={onResume}>Resume collection</button>
@@ -190,12 +190,13 @@ function NewSubscriptionSheet({ client, detail, catalog, onClose, onSaved }: { c
   const [trial, setTrial] = useState('0'); const [collection, setCollection] = useState<'send_invoice' | 'charge_automatically'>('send_invoice'); const [days, setDays] = useState('30');
   const [discount, setDiscount] = useState('');
   const action = useBillingAction();
-  const prices = [...catalog.prices, ...detail.custom_prices].filter(price => price.active && price.type === 'recurring' && catalog.products.some(product => product.id === price.product && product.app === app && product.active));
+  const prices = [...catalog.prices, ...detail.custom_prices].filter(price => price.active && catalog.products.some(product => product.id === price.product && product.app === app && product.active));
+  const recurring = prices.filter(price => price.type === 'recurring');
   const label = (price: CatalogPrice) => { const product = catalog.products.find(item => item.id === price.product); return `${product?.name ?? price.product} · ${priceLabel(price, product?.unit_label)}${price.tenant_id ? ' · custom' : ''}`; };
   async function submit(event: FormEvent) {
     event.preventDefault();
     const items = lines.filter(line => line.price);
-    if (!items.length) { action.setError('Choose a plan price.'); return; }
+    if (!items.some(line => recurring.some(price => price.id === line.price))) { action.setError('Choose a plan price.'); return; }
     const coupon = discount.startsWith('coupon:') ? discount.slice(7) : null; const promotion = discount.startsWith('promo:') ? discount.slice(6) : null;
     const fields = { tenant_id: detail.id, app, items, trial_days: Number(trial) || 0, collection_method: collection, days_until_due: Number(days) || 30, coupon, promotion_code: promotion };
     const result = await action.run(['subscription.create', JSON.stringify(fields)], request_key => client.command({ action: 'subscription.create', ...fields, request_key }));
@@ -205,11 +206,12 @@ function NewSubscriptionSheet({ client, detail, catalog, onClose, onSaved }: { c
     <label>Application<select value={app} onChange={event => { setApp(event.target.value as BillingApp); setLines([{ price: '', quantity: 1 }]); }}>{billingApps.map(slug => <option key={slug} value={slug}>{appLabels[slug]}</option>)}</select></label>
     <fieldset><legend>Plan and add-ons</legend>
       {lines.map((line, index) => <div className="billing-form-grid" key={index}>
-        <label>{index === 0 ? 'Plan' : 'Add-on'}<select value={line.price} onChange={event => setLines(current => current.map((entry, at) => at === index ? { ...entry, price: event.target.value } : entry))}><option value="">Choose…</option>{prices.map(price => <option key={price.id} value={price.id}>{label(price)}</option>)}</select></label>
+        <label>{index === 0 ? 'Plan' : 'Add-on or one-time fee'}<select value={line.price} onChange={event => setLines(current => current.map((entry, at) => at === index ? { ...entry, price: event.target.value } : entry))}><option value="">Choose…</option>{(index === 0 ? recurring : prices).map(price => <option key={price.id} value={price.id}>{label(price)}</option>)}</select></label>
         <label>Quantity<input type="number" min={1} max={100000} value={line.quantity} onChange={event => setLines(current => current.map((entry, at) => at === index ? { ...entry, quantity: Math.max(1, Number(event.target.value) || 1) } : entry))} /></label>
       </div>)}
-      {lines.length < 20 && <button type="button" className="button button-secondary button-small" onClick={() => setLines(current => [...current, { price: '', quantity: 1 }])}>Add another add-on</button>}
-      {!prices.length && <small>{appLabels[app]} has no active recurring prices. Add them in Catalog first.</small>}
+      {lines.length < 20 && <button type="button" className="button button-secondary button-small" onClick={() => setLines(current => [...current, { price: '', quantity: 1 }])}>Add another add-on or fee</button>}
+      {!recurring.length && <small>{appLabels[app]} has no active recurring prices. Add them in Catalog first.</small>}
+      <small className="billing-muted">One-time fees, such as onboarding, are charged on the first invoice.</small>
     </fieldset>
     <div className="billing-form-grid">
       <label>Free trial (days)<input type="number" min={0} max={730} value={trial} onChange={event => setTrial(event.target.value)} /></label>
@@ -235,7 +237,9 @@ function CustomPricePicker({ client, tenantId, catalog, onClose, onSaved }: { cl
 
 const prorationOptions = [['create_prorations', 'Prorate on the next invoice'], ['always_invoice', 'Prorate and invoice now'], ['none', 'No proration (from next renewal)']] as const;
 function ItemSheet({ client, subscription, item, prices, products, onClose, onSaved }: { client: BillingClient; subscription: Subscription; item: SubscriptionItem | null; prices: CatalogPrice[]; products: BillingWorkspace['products']; onClose: () => void; onSaved: (message: string) => void }) {
-  const choices = prices.filter(price => price.active && price.type === 'recurring' && products.some(product => product.id === price.product && product.app === subscription.app && product.active) && (!price.tenant_id || price.tenant_id === subscription.tenant_id));
+  // A one-time fee can be added (it goes on the next invoice) but never replaces a recurring item.
+  const choices = prices.filter(price => price.active && (price.type === 'recurring' || !item) && products.some(product => product.id === price.product && product.app === subscription.app && product.active) && (!price.tenant_id || price.tenant_id === subscription.tenant_id));
+  const oneTime = (id: string) => prices.some(entry => entry.id === id && entry.type === 'one_time');
   const [price, setPrice] = useState(item?.price ?? ''); const [quantity, setQuantity] = useState(String(item?.quantity ?? 1));
   const [proration, setProration] = useState<typeof prorationOptions[number][0]>('create_prorations');
   const action = useBillingAction();
@@ -247,17 +251,18 @@ function ItemSheet({ client, subscription, item, prices, products, onClose, onSa
     const result = item
       ? await action.run(['subscription.item.update', item.id, price, amount, proration], request_key => client.command({ action: 'subscription.item.update', ...base, item: item.id, price: price !== item.price ? price : null, quantity: amount !== item.quantity ? amount : null, request_key }))
       : await action.run(['subscription.item.add', price, amount, proration], request_key => client.command({ action: 'subscription.item.add', ...base, price, quantity: amount, request_key }));
-    if (result) onSaved(item ? 'Subscription item updated.' : 'Add-on added.');
+    if (result) onSaved(item ? 'Subscription item updated.' : oneTime(price) ? 'Fee added to the next invoice.' : 'Add-on added.');
   }
   const remove = async () => {
     if (!item || !window.confirm(`Remove ${item.product_name} from this subscription?`)) return;
     const result = await action.run(['subscription.item.remove', item.id, proration], request_key => client.command({ action: 'subscription.item.remove', subscription: subscription.id, item: item.id, proration, expected_version: subscription.version, request_key }));
     if (result) onSaved('Item removed.');
   };
-  return <Sheet title={item ? `Change ${item.product_name}` : 'Add an add-on'} onClose={onClose} busy={action.busy}><form className="billing-form" onSubmit={event => void submit(event)}>
+  return <Sheet title={item ? `Change ${item.product_name}` : 'Add an add-on or fee'} onClose={onClose} busy={action.busy}><form className="billing-form" onSubmit={event => void submit(event)}>
     <label>Price<select required value={price} onChange={event => setPrice(event.target.value)}><option value="">Choose…</option>{item && !choices.some(entry => entry.id === item.price) && <option value={item.price}>Current price (archived)</option>}{choices.map(entry => <option key={entry.id} value={entry.id}>{label(entry)}</option>)}</select></label>
     <label>Quantity{item?.unit_label ? ` (${item.unit_label}s)` : ''}<input type="number" min={1} max={100000} value={quantity} onChange={event => setQuantity(event.target.value)} /></label>
-    <label>Proration<select value={proration} onChange={event => setProration(event.target.value as typeof proration)}>{prorationOptions.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>
+    {oneTime(price) ? <p className="billing-muted">A one-time fee is charged on the subscription's next invoice.</p>
+      : <label>Proration<select value={proration} onChange={event => setProration(event.target.value as typeof proration)}>{prorationOptions.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>}
     <Notice error={action.error} /><div className="billing-actions"><button className="button button-primary" disabled={action.busy || !price}>{action.busy ? 'Saving in Stripe…' : item ? 'Save change' : 'Add'}</button>
       {item && subscription.items.length > 1 && <button type="button" className="button button-secondary" disabled={action.busy} onClick={() => void remove()}>Remove item</button>}</div>
   </form></Sheet>;

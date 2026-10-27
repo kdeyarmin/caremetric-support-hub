@@ -216,13 +216,16 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         if (!context.stripe_customer_id) throw new HttpError(400, "Save the customer's billing contact first.");
         if (context.tenant_status !== 'active') throw new HttpError(400, 'Only an active tenant can start a subscription.');
         const app = await appId(db, request.app);
+        // One-time prices (onboarding, setup) go on the first invoice; the subscription needs a recurring price.
+        const recurring = [], fees = [];
         for (const item of request.items) {
           const price = await priceFor(db, item.price, { app: request.app, tenant: request.tenant_id });
-          if (price.type !== 'recurring') throw new HttpError(400, 'Add one-time fees as an invoice item, not a subscription item.');
+          (price.type === 'recurring' ? recurring : fees).push({ price: item.price, quantity: item.quantity });
         }
+        if (!recurring.length) throw new HttpError(400, 'Choose at least one plan or add-on with a recurring price.');
         const charge = request.collection_method === 'charge_automatically';
         const subscription = await live.post('/v1/subscriptions', {
-          customer: context.stripe_customer_id, items: request.items.map(item => ({ price: item.price, quantity: item.quantity })),
+          customer: context.stripe_customer_id, items: recurring, ...(fees.length ? { add_invoice_items: fees } : {}),
           collection_method: request.collection_method, ...(charge ? { payment_behavior: 'allow_incomplete' } : { days_until_due: request.days_until_due }),
           ...(request.trial_days ? { trial_period_days: request.trial_days, trial_settings: { end_behavior: { missing_payment_method: 'create_invoice' } } } : {}),
           ...(request.coupon || request.promotion_code ? { discounts: [request.coupon ? { coupon: request.coupon } : { promotion_code: request.promotion_code }] } : {}),
@@ -232,7 +235,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         await mirror(db, 'subscription', subscription, new Date(now()), { live });
         if (subscription.latest_invoice) await refresh(db, live, 'invoice', typeof subscription.latest_invoice === 'string' ? subscription.latest_invoice : subscription.latest_invoice.id);
         await audit(db, actor, 'billing.subscription.create', request.tenant_id, app, {
-          subscription: subscription.id, status: subscription.status, items: request.items.length, trial_days: request.trial_days,
+          subscription: subscription.id, status: subscription.status, items: recurring.length, fees: fees.length, trial_days: request.trial_days,
           collection_method: request.collection_method, coupon: request.coupon, promotion_code: request.promotion_code,
         });
         return done({ id: subscription.id });
@@ -243,11 +246,12 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         const subscription = await subscriptionFor(db, request);
         const isItem = request.action !== 'subscription.item.add';
         if (isItem && !subscription.items.some(item => item.id === request.item)) throw new HttpError(400, 'That item is not on this subscription.');
-        if (request.price) {
-          const price = await priceFor(db, request.price, { app: subscription.app, tenant: subscription.tenant_id });
-          if (price.type !== 'recurring') throw new HttpError(400, 'Choose a recurring price.');
-        }
-        if (request.action === 'subscription.item.add') {
+        const price = request.price ? await priceFor(db, request.price, { app: subscription.app, tenant: subscription.tenant_id }) : null;
+        if (price && price.type !== 'recurring' && request.action !== 'subscription.item.add') throw new HttpError(400, 'Choose a recurring price.');
+        if (request.action === 'subscription.item.add' && price.type !== 'recurring') {
+          // A one-time fee is charged on the subscription's next invoice.
+          await live.post(`/v1/subscriptions/${request.subscription}`, { add_invoice_items: [{ price: request.price, quantity: request.quantity }], proration_behavior: 'none' }, { idempotencyKey: idem(request) });
+        } else if (request.action === 'subscription.item.add') {
           await live.post('/v1/subscription_items', { subscription: request.subscription, price: request.price, quantity: request.quantity, proration_behavior: request.proration }, { idempotencyKey: idem(request) });
         } else if (request.action === 'subscription.item.update') {
           await live.post(`/v1/subscription_items/${request.item}`, {

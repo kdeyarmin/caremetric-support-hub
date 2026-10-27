@@ -74,6 +74,24 @@ describe('Customer billing', () => {
     expect(await screen.findByText('Subscription cancels at the end of its period.')).toBeTruthy();
   });
 
+  it('starts a subscription with an onboarding fee on the first invoice', async () => {
+    const workspace = fixtureWorkspace();
+    workspace.products.push({ id: 'prod_onboarding', app: 'carebase', name: 'Onboarding', description: '', active: true, kind: 'fee', entitlement_key: '', unit_label: '', created: '2026-10-01T00:00:00Z', version: 1 });
+    workspace.prices.push({ id: 'price_onboarding', product: 'prod_onboarding', active: true, currency: 'usd', unit_amount: 50000, pricing_model: 'flat', type: 'one_time', interval: null,
+      interval_count: null, lookup_key: null, nickname: '', tenant_id: null, replaces: null, created: '2026-10-01T00:00:00Z', version: 1, subscribers: 0 });
+    const client = adminClient({ workspace: vi.fn(async () => workspace) });
+    renderCustomer(client);
+    fireEvent.click(await screen.findByRole('button', { name: 'New subscription' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(within(dialog).getByLabelText('Plan')).queryByText(/Onboarding/)).toBeNull();
+    fireEvent.change(within(dialog).getByLabelText('Plan'), { target: { value: 'price_core_monthly' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add another add-on or fee' }));
+    fireEvent.change(within(dialog).getByLabelText('Add-on or one-time fee'), { target: { value: 'price_onboarding' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create subscription' }));
+    await waitFor(() => expect(client.command).toHaveBeenCalledWith(expect.objectContaining({ action: 'subscription.create',
+      items: [{ price: 'price_core_monthly', quantity: 1 }, { price: 'price_onboarding', quantity: 1 }] })));
+  });
+
   it('emails an open invoice’s payment link', async () => {
     const client = adminClient({ command: vi.fn(async () => ({ ok: true as const, id: 'emailed', url: 'https://invoice.stripe.com/i/synthetic' })) });
     renderCustomer(client);

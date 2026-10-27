@@ -57,8 +57,14 @@ export function fakeStripe({ accountId = 'acct_1SinLKB06O2UFlNz' } = {}) {
       return { id: id('di'), object: 'discount', source: { type: 'coupon', coupon: structuredClone(coupon) }, promotion_code: code?.id ?? null, subscription: subscription.id };
     }).filter(Boolean);
   }
-  function invoiceFor(subscription) {
-    const total = subscription.status === 'trialing' ? 0 : subscription.items.data.reduce((sum, entry) => sum + (entry.price.unit_amount ?? 0) * entry.quantity, 0);
+  // One-time prices added with add_invoice_items, charged on the next invoice.
+  const feeTotal = entries => (entries ?? []).reduce((sum, entry) => {
+    const price = store.prices.get(entry.price);
+    if (!price || price.type !== 'one_time') throw new Error('Invoice items need a one-time price');
+    return sum + price.unit_amount * Number(entry.quantity ?? 1);
+  }, 0);
+  function invoiceFor(subscription, fees = 0) {
+    const total = fees + (subscription.status === 'trialing' ? 0 : subscription.items.data.reduce((sum, entry) => sum + (entry.price.unit_amount ?? 0) * entry.quantity, 0));
     const invoice = { id: id('in'), object: 'invoice', customer: subscription.customer, status: total ? 'open' : 'paid', number: `HUB-${store.invoices.size + 1}`,
       currency: 'usd', total, subtotal: total, amount_due: total, amount_paid: total ? 0 : 0, amount_remaining: total, collection_method: subscription.collection_method,
       hosted_invoice_url: `https://invoice.stripe.com/i/${id('test')}`, invoice_pdf: `https://pay.stripe.com/invoice/${id('test')}/pdf`, period_start: now(), period_end: now(),
@@ -132,9 +138,10 @@ export function fakeStripe({ accountId = 'acct_1SinLKB06O2UFlNz' } = {}) {
           trial_start: trialDays ? now() : null, trial_end: trialDays ? now() + trialDays * 86400 : null, pause_collection: null, metadata: params.metadata ?? {}, discounts: [], livemode: false,
           items: { object: 'list', data: [] }, latest_invoice: null, currency: 'usd' };
         subscription.items.data = params.items.map(entry => item(subscription, entry));
-        if (subscription.items.data.some(entry => !entry)) return bad('No such price');
-        try { subscription.discounts = discountsFor(subscription, params.discounts); } catch (error) { return bad(error.message); }
-        subscription.latest_invoice = invoiceFor(subscription).id;
+        if (subscription.items.data.some(entry => !entry || entry.price.type !== 'recurring')) return bad('Subscription items need a recurring price');
+        let fees;
+        try { fees = feeTotal(params.add_invoice_items); subscription.discounts = discountsFor(subscription, params.discounts); } catch (error) { return bad(error.message); }
+        subscription.latest_invoice = invoiceFor(subscription, fees).id;
         store.subscriptions.set(subscription.id, subscription); emit('customer.subscription.created', subscription);
         return { status: 200, body: expand(subscription, params) };
       }
@@ -151,6 +158,7 @@ export function fakeStripe({ accountId = 'acct_1SinLKB06O2UFlNz' } = {}) {
         }
         if ('pause_collection' in params) subscription.pause_collection = params.pause_collection === '' ? null : { behavior: params.pause_collection.behavior, resumes_at: params.pause_collection.resumes_at ? Number(params.pause_collection.resumes_at) : null };
         if ('discounts' in params) { try { subscription.discounts = discountsFor(subscription, params.discounts); } catch (error) { return bad(error.message); } }
+        if (params.add_invoice_items) { try { subscription.pending_fees = (subscription.pending_fees ?? 0) + feeTotal(params.add_invoice_items); } catch (error) { return bad(error.message); } }
         emit('customer.subscription.updated', subscription);
       }
       return { status: 200, body: expand(subscription, params) };

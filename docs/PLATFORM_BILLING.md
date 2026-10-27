@@ -73,10 +73,12 @@ change needs the command session (signed in within the last eight hours).
 - **Customers** — every Hub tenant. Open one to:
   - save the billing contact (one Stripe customer per tenant, tagged with
     `hub_tenant_id`);
-  - start a subscription for an application: plan and add-ons, quantities, a
-    trial, invoice by email (net terms) or automatic card charge, and a coupon
-    or promotion code;
-  - add, change or remove items and quantities; extend or end a trial; pause
+  - start a subscription for an application: plan and add-ons, quantities,
+    one-time fees such as onboarding (charged on the first invoice), a trial,
+    invoice by email (net terms) or automatic card charge, and a coupon or
+    promotion code;
+  - add, change or remove items and quantities, or add a one-time fee to the
+    next invoice; extend or end a trial; pause
     or resume collection; cancel at period end (and undo) or immediately with
     or without a prorated credit;
   - create a price for this customer only (a negotiated or complimentary $0

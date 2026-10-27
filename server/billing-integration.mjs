@@ -108,15 +108,16 @@ try {
   await command({ action: 'price.create', product: plan, pricing_model: 'per_unit', type: 'recurring', interval: 'year', unit_amount: 199000, nickname: '', tenant_id: null, request_key: key() });
   const addonMonthly = (await command({ action: 'price.create', product: addon, pricing_model: 'per_unit', type: 'recurring', interval: 'month', unit_amount: 14900, nickname: '', tenant_id: null, request_key: key() })).id;
   const fee = (await command({ action: 'product.create', app: 'carebase', name: 'Onboarding ' + suffix, description: '', kind: 'fee', unit_label: '', entitlement_key: '', request_key: key() })).id;
-  await command({ action: 'price.create', product: fee, pricing_model: 'flat', type: 'one_time', interval: null, unit_amount: 50000, nickname: '', tenant_id: null, request_key: key() });
+  const onboarding = (await command({ action: 'price.create', product: fee, pricing_model: 'flat', type: 'one_time', interval: null, unit_amount: 50000, nickname: '', tenant_id: null, request_key: key() })).id;
   let space = await workspace();
   assert.equal(space.products.find(item => item.id === plan).entitlement_key, 'core');
   assert.equal(space.prices.find(item => item.id === planMonthly).pricing_model, 'per_unit');
   assert.deepEqual(stripe.store.prices.get(planMonthly).metadata, { app: 'carebase', pricing_model: 'per_unit', billing_metric: 'facility' });
 
-  // Subscribe: plan plus add-on, three facilities, invoices emailed.
+  // Subscribe: plan plus add-on, three facilities, the onboarding fee on the first invoice, invoices emailed.
   const subscriptionKey = key();
-  const create = { action: 'subscription.create', tenant_id: tenant, app: 'carebase', items: [{ price: planMonthly, quantity: 3 }, { price: addonMonthly, quantity: 3 }], trial_days: 0, collection_method: 'send_invoice', days_until_due: 30, coupon: null, promotion_code: null, request_key: subscriptionKey };
+  const create = { action: 'subscription.create', tenant_id: tenant, app: 'carebase', items: [{ price: planMonthly, quantity: 3 }, { price: addonMonthly, quantity: 3 }, { price: onboarding, quantity: 1 }], trial_days: 0, collection_method: 'send_invoice', days_until_due: 30, coupon: null, promotion_code: null, request_key: subscriptionKey };
+  await assert.rejects(command({ ...create, items: [{ price: onboarding, quantity: 1 }], request_key: key() }), error => error.status === 400, 'a subscription needs a recurring price');
   const subscriptionId = (await command(create)).id;
   assert.equal((await command(create)).id, subscriptionId, 'a retried request key never creates a second subscription');
   assert.equal(stripe.store.subscriptions.size, 1);
@@ -125,6 +126,8 @@ try {
   let sub = detail.subscriptions[0];
   assert.deepEqual([sub.app, sub.status, sub.items.length, sub.items.map(item => item.quantity)], ['carebase', 'active', 2, [3, 3]]);
   assert.equal(detail.invoices[0].status, 'open');
+  assert.equal(detail.invoices[0].total, 19900 * 3 + 14900 * 3 + 50000, 'the one-time fee is on the first invoice, not a subscription item');
+  assert.deepEqual(stripe.requests.find(request => request.path === '/v1/subscriptions' && request.params.add_invoice_items).params.add_invoice_items, [{ price: onboarding, quantity: '1' }]);
   assert.equal((await admin.query('select count(*)::int as n from hub.tenant_products where tenant_id=$1', [tenant])).rows[0].n, 1, 'a subscribed application becomes a tenant application');
 
   // Applications: key, account link, entitlements, usage.
@@ -205,6 +208,11 @@ try {
   await command({ action: 'subscription.item.update', subscription: subscriptionId, item: planItem.id, price: null, quantity: 7, proration: 'create_prorations', expected_version: sub.version, request_key: key() });
   sub = (await customer(tenant)).subscriptions[0];
   assert.equal(sub.items.find(item => item.id === planItem.id).quantity, 7);
+  // A one-time fee added later goes on the next invoice and never becomes a subscription item.
+  await command({ action: 'subscription.item.add', subscription: subscriptionId, price: onboarding, quantity: 1, proration: 'none', expected_version: sub.version, request_key: key() });
+  assert.equal(stripe.store.subscriptions.get(subscriptionId).pending_fees, 50000);
+  sub = (await customer(tenant)).subscriptions[0];
+  assert.equal(sub.items.length, 2);
   const trialEnd = new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10);
   await command({ action: 'subscription.trial', subscription: subscriptionId, trial_end: trialEnd, expected_version: sub.version, request_key: key() });
   sub = (await customer(tenant)).subscriptions[0];
