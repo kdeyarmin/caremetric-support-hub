@@ -3,6 +3,8 @@ import { HttpError, transaction, withSession } from './sms-auth.mjs';
 import { billingCommandSchema, localBillingActions, entitlementRequestSchema, usageReportSchema, trialRequestSchema } from '../src/billing/billingProtocol.ts';
 import { stripeClient, StripeError, STRIPE_ACCOUNT_ID, verifyStripeSignature, eventTarget, retrievePaths, normalizers } from './stripe.mjs';
 import { customerBillingService } from './customer-billing.mjs';
+import { facilityEntitlementRequest, facilityEntitlementSnapshot } from '../src/billing/facilityEntitlements.ts';
+import { selfServiceApps } from '../src/self-service/protocol.ts';
 
 /**
  * Platform billing for every CareMetric application. Stripe is the source of
@@ -588,14 +590,26 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     if (!app) throw new HttpError(401, 'Application key required.');
     return app;
   }
-  const appResponse = entitlement => ({ ...entitlement, cache_ttl_seconds: entitlementCacheSeconds, checked_at: new Date(now()).toISOString() });
+  const appResponse = entitlement => ({ ...entitlement, cache_ttl_seconds: entitlementCacheSeconds, checked_at: entitlement.checked_at ?? new Date(now()).toISOString() });
 
   async function entitlements(authorization, input) {
     const parsed = entitlementRequestSchema.safeParse(input);
     if (!parsed.success) throw new HttpError(400, 'Send the application account id.');
     return transaction(pool, async db => {
       const app = await authenticateApp(db, authorization);
-      return appResponse((await one(db, 'select private.billing_app_entitlements($1,$2) as e', [app.product_id, parsed.data.account])).e);
+      return appResponse((await one(db, 'select private.scoped_app_billing_entitlements($1,$2) as e', [app.product_id, parsed.data.account])).e);
+    });
+  }
+
+  async function facilityEntitlements(authorization, input) {
+    const parsed = facilityEntitlementRequest.safeParse(input);
+    if (!parsed.success) throw new HttpError(400, 'Send the version, application account and unique facility ids.');
+    return transaction(pool, async db => {
+      const app = await authenticateApp(db, authorization);
+      if (!selfServiceApps.includes(app.slug)) throw new HttpError(403, 'Facility billing is unavailable for this application.');
+      const snapshot = (await one(db, 'select private.app_facility_entitlement_snapshot($1,$2,$3::jsonb) as e',
+        [app.product_id, parsed.data.account, JSON.stringify(parsed.data.facility_ids)])).e;
+      return facilityEntitlementSnapshot.parse(snapshot);
     });
   }
 
@@ -603,38 +617,49 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     const parsed = usageReportSchema.safeParse(input);
     if (!parsed.success) throw new HttpError(400, 'Send the account, metric, quantity and a request key.');
     const report = parsed.data;
-    const plan = await transaction(pool, async db => {
+    const prepared = await transaction(pool, async db => {
       const app = await authenticateApp(db, authorization);
-      const seen = (await one(db, 'select private.billing_usage_seen($1,$2) as s', [app.product_id, report.request_key])).s;
-      const targets = seen ? null : (await one(db, 'select private.billing_usage_targets($1,$2,$3) as t', [app.product_id, report.account, report.metric])).t;
-      return { app, seen, targets };
-    });
-    if (plan.seen) return { ...plan.seen, duplicate: true };
-    if (!plan.targets.tenant_id) return { outcome: 'not_linked', items_updated: 0, quantity: report.quantity };
-    const changes = plan.targets.items.filter(item => item.quantity !== report.quantity);
-    const outcome = plan.targets.items.length ? (changes.length ? 'updated' : 'unchanged') : 'no_subscription';
-    if (changes.length) {
-      // As CareBase billed it: the measured count applies from the next billing
-      // period, without a mid-period proration.
+      const plan = (await one(db, 'select private.prepare_scoped_billing_usage($1,$2,$3,$4,$5) as plan',
+        [app.product_id, report.account, report.metric, report.quantity, report.request_key])).plan;
+      return { app, plan };
+    }).catch(error => { throw asHttpError(error); });
+    if (prepared.plan.outcome) return prepared.plan;
+    const { app } = prepared;
+    try {
       const live = await stripe();
-      try {
-        for (const item of changes) {
-          await live.post(`/v1/subscription_items/${item.item}`, { quantity: report.quantity, proration_behavior: 'none' },
-            { idempotencyKey: `hub-usage-${report.request_key}-${item.item}` });
-          await transaction(pool, db => refresh(db, live, 'subscription', item.subscription));
+      return await transaction(pool, async db => {
+        // This lock also fences scope activation; the committed reservation above
+        // survives a provider timeout and refuses conflicting customer purchases.
+        const plan = (await one(db, 'select private.lock_scoped_billing_usage($1,$2) as plan', [app.product_id, report.request_key])).plan;
+        if (plan.outcome) return plan;
+        const subscriptions = [...new Set(plan.targets.items.map(item => item.subscription))];
+        for (const id of subscriptions) {
+          const expected = await lookup(db, 'subscription', id);
+          const current = await live.get(`/v1/subscriptions/${id}`, { expand: ['discounts'] });
+          const customer = typeof current.customer === 'string' ? current.customer : current.customer?.id;
+          if (!expected || expected.tenant_id !== plan.tenant_id || expected.app !== app.slug || customer !== expected.customer
+            || current.metadata?.app && current.metadata.app !== app.slug || current.items?.has_more
+            || !plan.targets.items.filter(item => item.subscription === id).every(item => current.items?.data.some(actual => actual.id === item.item
+              && (typeof actual.price === 'string' ? actual.price : actual.price?.id) === item.price
+              && [item.quantity, report.quantity].includes(actual.quantity)))) {
+            throw new HttpError(409, 'The subscription changed during quantity reconciliation. Refresh billing before continuing.');
+          }
         }
-      } catch (error) {
-        await transaction(pool, db => audit(db, null, 'billing.usage.failed', plan.targets.tenant_id, plan.app.product_id, { metric: report.metric, quantity: report.quantity }));
-        throw asHttpError(error);
-      }
+        // Replay every reserved item with immutable parameters, including a line
+        // already at its desired quantity after an uncertain earlier response.
+        for (const item of plan.targets.items) await live.post(`/v1/subscription_items/${item.item}`, {
+          quantity: report.quantity, proration_behavior: 'none',
+        }, { idempotencyKey: `hub-usage-${report.request_key}-${item.item}` });
+        for (const id of subscriptions) await refresh(db, live, 'subscription', id);
+        const changed = plan.targets.items.filter(item => item.quantity !== report.quantity).length;
+        return (await one(db, 'select private.complete_scoped_billing_usage($1,$2,$3) as result', [app.product_id, report.request_key, changed])).result;
+      });
+    } catch (error) {
+      await transaction(pool, db => audit(db, null, 'billing.usage.failed', prepared.plan.tenant_id, app.product_id, { metric: report.metric, quantity: report.quantity }));
+      throw asHttpError(error);
     }
-    const applied = outcome === 'updated' ? changes.length : 0;
-    await transaction(pool, db => db.query('select private.billing_record_usage($1,$2,$3,$4,$5,$6,$7)',
-      [plan.app.product_id, plan.targets.tenant_id, report.metric, report.quantity, report.request_key, outcome, applied]));
-    return { outcome, items_updated: applied, quantity: report.quantity };
   }
 
-  // A self-service signup in an application starts its trial here, once per account.
   async function trial(authorization, input) {
     const parsed = trialRequestSchema.safeParse(input);
     if (!parsed.success) throw new HttpError(400, 'Send the account id, organization name, contact email and plan.');
@@ -719,7 +744,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     },
     status: () => ({ configured: !!client, state, mode: client?.mode ?? null, account: state === 'ready' ? accountId : null,
       webhook: webhookSecrets.length > 0, portal_configuration: !!portalConfiguration }),
-    webhook, command, customerPortal, entitlements, usage, trial,
+    webhook, command, customerPortal, entitlements, facilityEntitlements, usage, trial,
     customer: async (session, input) => { try { return await customerSelfService.handle(session, input); } catch (error) { throw asHttpError(error); } },
   };
 }

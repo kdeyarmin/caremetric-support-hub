@@ -159,7 +159,7 @@ is retained; this flow does not enable automatic tax or new tax collection.
 
 ## Application APIs
 
-All three are `POST` with a JSON body and `Authorization: Bearer cmb_…` (the
+All application endpoints use `POST` with a JSON body and `Authorization: Bearer cmb_…` (the
 application key from **App connections**). They accept no cookies or browser
 origin. `account` is the application's own tenant id — CareBase organization
 id, Breathe organization id or Intel organization id — the same identifier the
@@ -187,6 +187,34 @@ canceled or unpaid subscription answer `entitled: false`. Applications cache an
 answer for at most `cache_ttl_seconds` and **fail closed**: if the Hub cannot be
 reached and no fresh answer is cached, paid features stay off.
 
+In facility mode this compatibility endpoint returns `billing_mode: "facility"`,
+`billing_revision`, the native `account`, and the actual `organization_status`.
+Its top-level status is `incomplete`, entitlement is false and products are empty:
+an older worker must never turn facility allocations into organization-wide
+access. Updated applications retain the organization membership status separately
+and request the full scoped snapshot below.
+
+### `POST /api/apps/facility-entitlements`
+
+```json
+{ "version": 1, "account": "native-organization-id", "facility_ids": ["site-a", "site-b"] }
+```
+
+Returns contract `caremetric.facility-entitlements.v1`, application/account,
+`billing_mode`, monotonic `revision`, database `checked_at`, a 300-second maximum
+cache lease and a `facilities` list containing each requested ID, status,
+entitlement and selected plan/add-on products. At most 1,000 unique facility IDs
+are accepted. Go is excluded. Other application keys cannot resolve this native
+account. Missing allocations, missing payment, unknown products and insufficient
+paid aggregate quantity grant no facility access. Only current allocations count;
+scheduled removals retain the existing selection until renewal settlement.
+
+Native applications must check the record's owner, retain the source observation
+time on retries, refuse stale revisions and expire their online/offline cache.
+CareBase implements the initial database and client boundaries, but does not yet
+advertise `facility.entitlements.v1`: privileged reader/job coverage and other
+native adapters remain rollout gates. No mixed plan activation is enabled here.
+
 ### `POST /api/apps/usage`
 
 ```json
@@ -197,7 +225,12 @@ Sets the quantity of the tenant's per-unit items for that application whose
 product counts `metric` (its unit label or `billing_metric`). The new quantity
 applies from the next billing period without proration, as CareBase billed it.
 Repeating a `request_key` returns the first result. Answers `outcome`:
-`updated`, `unchanged`, `no_subscription` or `not_linked`.
+`updated`, `unchanged`, `no_subscription`, `not_linked` or `facility_managed`.
+Facility-managed reports are recorded without changing provider quantities.
+Legacy changes reserve immutable target item IDs, prices and original quantities
+before provider I/O; an uncertain result blocks another report, purchase or scope
+activation until the identical request is reconciled. Every item retry preserves
+its Stripe idempotency key and parameters.
 
 ### `POST /api/apps/trials`
 
