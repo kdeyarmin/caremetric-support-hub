@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 const guides = JSON.parse(readFileSync(new URL('../docs/self-service/guides.json', import.meta.url)));
-const destination = new URL('../supabase/migrations/20261027145524_self_service_guidance.sql', import.meta.url);
+const destination = new URL('../supabase/migrations/20261028221000_three_app_self_service_guidance.sql', import.meta.url);
 const literal = value => `'${value.replaceAll("'", "''")}'`;
 const sections = { prerequisites: 'Prerequisites', roles: 'Permitted roles', setup: 'Setup', use: 'Normal use', problems: 'Common problems', faq: 'FAQ', tips: 'Helpful tips' };
 const chunks = ['-- Generated from docs/self-service/guides.json. Run npm run check:docs after changing maintained guidance.\n'];

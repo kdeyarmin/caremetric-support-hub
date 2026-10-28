@@ -1,8 +1,8 @@
 begin;
 select plan(9);
 
-select ok(exists(select 1 from hub.products where slug='advisors' and status='active' and support_enabled),
-  'Healthcare Advisors is a registered, support-enabled product');
+select ok(exists(select 1 from hub.products where slug='advisors' and status='retired' and not support_enabled),
+  'Healthcare Advisors keeps its historical product identity with Hub intake disabled');
 select ok((select pg_get_constraintdef(oid) like '%''advisors''%' and pg_get_constraintdef(oid) like '%''intel''%'
     and pg_get_constraintdef(oid) like '%carebase.learning%' and pg_get_constraintdef(oid) like '%publication%'
   from pg_constraint where conname='app_delegations_audience_check'),
@@ -23,8 +23,8 @@ select is((select count(distinct r.source_version) from hub.content_revisions r 
 
 set local role anon;
 select is((select count(*) from hub.list_published_content() c
-    where c.product_ids @> array['00000000-0000-4000-8000-000000000007'::uuid]),12::bigint,
-  'anonymous visitors see the eleven FAQ answers and the shared safety article for Advisors');
+    where c.product_ids @> array['00000000-0000-4000-8000-000000000007'::uuid]),0::bigint,
+  'anonymous visitors do not receive guidance for the disconnected Advisors app');
 reset role;
 
 select ok(not has_table_privilege('anon','private.app_delegations','select')

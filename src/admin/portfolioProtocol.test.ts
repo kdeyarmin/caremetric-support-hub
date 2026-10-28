@@ -77,15 +77,12 @@ describe("portfolio contracts", () => {
 });
 
 describe("portfolio proxy routing", () => {
-  it("routes EMR to the verified native Supabase function and retains explicit unavailable activity", async () => {
-    const data = { organizationCount: 2, activeUserCount: null, registeredUserCount: 8, subscriptionCount: 3 };
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(actor)).mockResolvedValueOnce(Response.json(envelope("overview", data, "caremetric-emr")));
-    const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product: "caremetric-emr", operation: "overview" }));
-    expect(response.status).toBe(200);
-    expect(fetcher.mock.calls[1][0]).toBe("https://ubbtgcaosuebrlwcvihw.supabase.co/functions/v1/central-admin-read");
-    expect(await response.json()).toEqual(envelope("overview", data, "caremetric-emr"));
-  });
-  it("forwards an authorized staff read only to Breathe's fixed native route", async () => {
+  it("refuses the retired caremetric-emr adapter without forwarding credentials", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(actor));
+    const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product: "caremetric-emr", operation: "capabilities" }));
+    expect(response.status).toBe(503);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });  it("forwards an authorized staff read only to Breathe's fixed native route", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(actor)).mockResolvedValueOnce(Response.json(envelope("users.list", { ...page, items: [staff] })));
     const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product: "breathe", operation: "users.list" }));
     expect(response.status).toBe(200);
@@ -120,16 +117,12 @@ describe("portfolio proxy routing", () => {
     expect(await response.json()).toEqual({ error: { code: "unconfigured" } });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
-  it("routes Go to its independent adapter while preserving shared EMR data semantics", async () => {
-    const data = { organizationCount: 2, activeUserCount: null, registeredUserCount: 8, subscriptionCount: 3 };
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(actor)).mockResolvedValueOnce(Response.json(envelope("overview", data, "caremetric-go")));
-    const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product: "caremetric-go", operation: "overview" }));
-    expect(response.status).toBe(200);
-    expect(fetcher.mock.calls[1][0]).toBe("https://ubbtgcaosuebrlwcvihw.supabase.co/functions/v1/central-go-admin-read");
-    expect((await response.json()).data).toEqual(data);
-    expect(() => parse("overview", { ...data, activeUserCount: 8 }, "caremetric-go")).toThrow();
-  });
-  it("does not accept EMR's response as Go even though both use the same database", async () => {
+  it("refuses the retired caremetric-go adapter without forwarding credentials", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(actor));
+    const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product: "caremetric-go", operation: "capabilities" }));
+    expect(response.status).toBe(503);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });  it("does not accept EMR's response as Go even though both use the same database", async () => {
     const data = { organizationCount: 2, activeUserCount: null, registeredUserCount: 8, subscriptionCount: 3 };
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(actor)).mockResolvedValueOnce(Response.json(envelope("overview", data, "caremetric-emr")));
     const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product: "caremetric-go", operation: "overview" }));
@@ -148,17 +141,12 @@ describe("portfolio proxy routing", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(fetcher.mock.calls.every(([url]) => String(url).endsWith("/rpc/authorize_platform_admin"))).toBe(true);
   });
-  it("uses only PennSync's reviewed custom header and preserves its exact native identities", async () => {
-    const data = { ...page, items: [{ ...staff, id: "694ec16f72e01b60d22f7cc0", role: "admin", status: "registered" }] };
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(actor)).mockResolvedValueOnce(Response.json(envelope("users.list", data, "pennsync")));
-    const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product: "pennsync", operation: "users.list" }));
-    expect(response.status).toBe(200);
-    expect(fetcher.mock.calls[1]).toMatchObject(["https://caremetricai.base44.app/functions/centralAdminRead", { headers: { "X-CareMetric-Hub-Authorization": "Bearer header.payload.signature" } }]);
-    expect(fetcher.mock.calls[1][1]?.headers).not.toHaveProperty("Authorization");
-    expect(fetcher.mock.calls[1][1]?.headers).not.toHaveProperty("apikey");
-    expect((await response.json()).data).toEqual(data);
-  });
-});
+  it("refuses the retired pennsync adapter without forwarding credentials", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(actor));
+    const response = await createAdminProxy({ publishableKey: "sb_publishable_fixture", fetcher })(request({ product: "pennsync", operation: "capabilities" }));
+    expect(response.status).toBe(503);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });});
 
 describe("Intel registered-user boundaries", () => {
   it("does not invent organization, active-account or subscription totals", () => {

@@ -70,6 +70,7 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
   const context = async (session, connection) => {
     const workspace = customerBillingWorkspace.parse(await rpc(session, 'customer_billing_context', [connection]));
     if (workspace.app === 'pennsync') throw new HttpError(403, 'PennSync does not accept payments.');
+    if (!selfServiceApps.includes(workspace.app)) throw new HttpError(403, 'This application is independent of the centralized Hub.');
     // Individual and flat organization products need no fabricated native facility.
     // Quantity-based products require their app-owned usage adapter instead.
     if (workspace.mode === 'legacy' && !workspace.facilities.length && !workspace.allocations.length && workspace.subscription?.items.length) {

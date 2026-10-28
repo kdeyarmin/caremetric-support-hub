@@ -1,3 +1,4 @@
+import { isCentralHubApp } from '../hubScope';
 import { useCallback, useEffect, useState } from 'react';
 import { config } from '../lib/config';
 import { readinessClient, intakeBlocker } from './readiness';
@@ -29,7 +30,7 @@ export function SupportReadiness({ client=readinessClient, demo=config.demoMode 
       {!data && !error && <p role="status">Loading support readiness…</p>}
       {data && <><p className="support-readiness-note">A ready customer has active app access, a verified SMS member, enabled intake, and an active support owner. This does not certify the app's administrator connection or email delivery.</p>
         <div className="support-readiness-table"><table><thead><tr><th>Application</th><th>Published items</th><th>Active customers</th><th>SMS members</th><th>Ready customers</th><th>Intake setup</th></tr></thead><tbody>
-          {data.products.map(item=><tr key={item.id}><th scope="row">{item.name}</th><td>{item.publishedItemCount}</td><td>{item.activeTenantCount}</td><td>{item.usableMemberCount}</td><td>{item.readyTenantCount}</td><td><button className="button button-secondary button-small" aria-label={`Review ${item.name} customer intake`} aria-pressed={selected===item.id} onClick={()=>setSelected(item.id)}>Review access</button></td></tr>)}
+          {data.products.filter(item => isCentralHubApp(item.slug)).map(item=><tr key={item.id}><th scope="row">{item.name}</th><td>{item.publishedItemCount}</td><td>{item.activeTenantCount}</td><td>{item.usableMemberCount}</td><td>{item.readyTenantCount}</td><td><button className="button button-secondary button-small" aria-label={`Review ${item.name} customer intake`} aria-pressed={selected===item.id} onClick={()=>setSelected(item.id)}>Review access</button></td></tr>)}
         </tbody></table></div><small>Loaded {new Date(data.loadedAt).toLocaleString()}. Published items include all approved access levels.</small>
         <CustomerRegistration onLinked={refresh} />
         <CustomerOnboarding onLinked={refresh} />

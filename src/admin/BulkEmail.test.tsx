@@ -52,9 +52,9 @@ describe('bulk email workspace', () => {
     fireEvent.click(panel.getByRole('button', { name: 'Read users' }));
     expect((await panel.findByRole('alert')).textContent).toBe('Choose at least one application.');
     fireEvent.click(panel.getByLabelText('CareMetric CareBase'));
-    fireEvent.click(panel.getByLabelText('CareMetric Go'));
+    expect(panel.queryByLabelText('CareMetric Go')).toBeNull();
     fireEvent.click(panel.getByRole('button', { name: 'Read users' }));
-    await waitFor(() => expect(client.create).toHaveBeenCalledWith([carebase.id, go.id]));
+    await waitFor(() => expect(client.create).toHaveBeenCalledWith([carebase.id]));
     // Reading continues page after page until the directory is loaded, then every role is shown with counts.
     await waitFor(() => expect(client.load).toHaveBeenCalled());
     const editor = within(await screen.findByRole('region', { name: 'New email' }));

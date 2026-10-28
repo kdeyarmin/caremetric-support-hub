@@ -29,10 +29,7 @@ describe("buildHelpUrl", () => {
     expect(CAREMETRIC_PRODUCT_SLUGS).toEqual([
       "breathe",
       "carebase",
-      "caremetric-emr",
-      "caremetric-go",
       "caremetric-intel",
-      "pennsync",
     ]);
     for (const product of CAREMETRIC_PRODUCT_SLUGS) {
       expect(new URL(buildHelpUrl({ context: { product } })).searchParams.get("product")).toBe(product);
@@ -75,7 +72,7 @@ describe("buildHelpUrl", () => {
     const url = new URL(
       buildHelpUrl({
         baseUrl: "https://support-hub-web-production.up.railway.app",
-        context: { product: "pennsync", route: `/${"x".repeat(400)}` },
+        context: { product: "carebase", route: `/${"x".repeat(400)}` },
       }),
     );
 
@@ -95,7 +92,7 @@ describe("buildHelpUrl", () => {
       buildHelpUrl({
         routeAllowlist: ["/patients/route-template"],
         context: {
-          product: "pennsync",
+          product: "carebase",
           route: "/patients/route-template?patient=do-not-send#clinical-record",
         },
       }),
@@ -119,7 +116,7 @@ describe("buildHelpUrl", () => {
     ]) {
       const url = new URL(buildHelpUrl({
         routeAllowlist: ["/patients/:patientId"],
-        context: { product: "caremetric-emr", route },
+        context: { product: "carebase", route },
       }));
       expect(url.searchParams.has("route")).toBe(false);
     }
@@ -296,11 +293,11 @@ describe("openLearning", () => {
     const open = vi.fn(() => opened);
     vi.stubGlobal("window", { open });
 
-    openLearning({ product: "pennsync" });
+    openLearning({ product: "carebase" });
 
     expect(open).toHaveBeenCalledOnce();
     expect(open).toHaveBeenCalledWith(
-      `${DEFAULT_HELP_BASE_URL}/learn?product=pennsync`,
+      `${DEFAULT_HELP_BASE_URL}/learn?product=carebase`,
       "_blank",
       "noopener,noreferrer",
     );

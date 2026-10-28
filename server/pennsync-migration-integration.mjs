@@ -47,73 +47,10 @@ try{
  const challenge=await call('auth/sms/start',{phone});assert.equal(challenge.status,200);
  assert.equal((await call('auth/sms/verify',{challengeId:challenge.body.challengeId,code:'123456'})).status,200);
  assert.equal((await call('admin/pennsync-migration',{operation:'inspect'},{Origin:'https://other.test'})).status,403);
- const preview=await inspect();assert.equal(preview.status,200,JSON.stringify(preview.body));
- assert.equal(preview.body.summary.unmatchedLegacyLearners,1);assert.equal(preview.body.summary.standaloneModules,1);
- assert.equal(JSON.stringify(preview.body).includes('unmatched@example.test'),false);assert.equal(preview.body.payload,undefined);
- const preserve={operation:'preserve',sourceRevision:preview.body.sourceRevision,expectedHeadRevision:preview.body.headRevision,reviewed:true};
- assert.equal((await migrate({...preserve,reviewed:false})).status,400);
- const original=payload;payload+=' ';assert.equal((await migrate(preserve)).status,409);payload=original;
- assert.equal(await snapshotCount(),0);
- const first=await migrate(preserve);assert.equal(first.status,200,JSON.stringify(first.body));assert.equal(first.body.replayed,false);
- const concurrent=await Promise.all([migrate(preserve),migrate(preserve)]);assert.ok(concurrent.every(row=>row.status===200&&row.body.replayed));assert.equal(await snapshotCount(),1);
- const beforeReviewCalls=nativeCalls,review=await migrate({operation:'review',sourceRevision:first.body.sourceRevision});
- assert.equal(review.status,200);assert.equal(review.body.courses.length,1);assert.equal(nativeCalls,beforeReviewCalls);
- assert.equal(JSON.stringify(review.body).includes('unmatched@example.test'),false);assert.equal(JSON.stringify(review.body).includes('correct_answer_json'),false);
- const stored=(await admin.query('select source_payload from private.pennsync_learning_snapshots where id=$1',[first.body.snapshotId])).rows[0].source_payload;
- assert.equal(stored,payload);assert.equal(JSON.parse(stored).records.TrainingCompletion[0].fields.nurse_email,'unmatched@example.test');
- const originalDrafts=Number((await admin.query('select count(*) from private.learning_courses')).rows[0].count);
- payload=JSON.stringify({...source,records:{...source.records,TrainingCourse:[{...source.records.TrainingCourse[0],fields:{...source.records.TrainingCourse[0].fields,title:'Updated fixture'}}]}});
- const next=await inspect();const nextOp={operation:'preserve',sourceRevision:next.body.sourceRevision,expectedHeadRevision:first.body.sourceRevision,reviewed:true};
- assert.equal((await migrate({...nextOp,expectedHeadRevision:null})).status,409);assert.equal(await snapshotCount(),1);
- const second=await migrate(nextOp);assert.equal(second.status,200);assert.equal(await snapshotCount(),2);
- assert.equal((await migrate({operation:'review',sourceRevision:first.body.sourceRevision})).status,409);
- payload=original;const replay=await migrate(preserve);assert.equal(replay.status,200);assert.equal(replay.body.snapshotId,first.body.snapshotId);assert.equal(replay.body.headRevision,second.body.sourceRevision);
- assert.equal(Number((await admin.query('select count(*) from private.learning_courses')).rows[0].count),originalDrafts);
- assert.equal(Number((await admin.query('select count(*) from private.learning_enrollments where user_id=$1',[owner])).rows[0].count),0);
- await assert.rejects(withSession(pool,jar[sessionCookie],db=>db.query('select private.pennsync_learning_head()')),error=>error.code==='42501');
- for(const role of ['anon','authenticated','service_role','hub_app_server']){
-  assert.equal((await admin.query("select has_table_privilege($1,'private.pennsync_learning_snapshots','SELECT,INSERT,UPDATE,DELETE') allowed",[role])).rows[0].allowed,false);
- }
- for(const role of ['anon','authenticated','service_role'])assert.equal((await admin.query("select has_function_privilege($1,'private.pennsync_learning_preserve(text,text,text,jsonb,timestamptz)','EXECUTE') allowed",[role])).rows[0].allowed,false);
- for(const role of ['anon','authenticated','service_role'])assert.equal((await admin.query("select has_function_privilege($1,'private.pennsync_learning_review_source(text)','EXECUTE') allowed",[role])).rows[0].allowed,false);
- // Hold the real advisory lock until authority or the request deadline expires.
- // The source must never be committed after either condition changes.
- const blocker=await admin.connect();
- const waitForSourceLock=async()=>{
-  for(let attempt=0;attempt<100;attempt++){
-   const waiting=Number((await admin.query("select count(*) from pg_stat_activity where usename='hub_app_server' and wait_event_type='Lock' and query like 'select private.pennsync_learning_preserve(%'")).rows[0].count);
-   if(waiting>0)return;await new Promise(resolve=>setTimeout(resolve,30));
-  }
-  assert.fail('Source preservation did not reach its lock');
- };
- try{
-  for(const mode of ['expiry','revocation','deadline']){
-   payload=JSON.stringify({...source,records:{...source.records,TrainingCourse:[{...source.records.TrainingCourse[0],fields:{...source.records.TrainingCourse[0].fields,title:'Lock '+mode}}]}});
-   const current=await inspect();assert.equal(current.status,200);
-   await blocker.query('begin');await blocker.query("select pg_advisory_xact_lock(hashtextextended('pennsync.learning-source.v1',0))");
-   const started=Date.now(),pending=migrate({operation:'preserve',sourceRevision:current.body.sourceRevision,expectedHeadRevision:second.body.sourceRevision,reviewed:true});
-   await waitForSourceLock();
-   if(mode==='expiry'){
-    await admin.query("update private.sms_sessions set expires_at=clock_timestamp()+interval '500 milliseconds' where user_id=$1",[owner]);
-    await admin.query('select pg_sleep(0.7)');
-   }
-   if(mode==='revocation')await admin.query('update private.staff_permissions set revoked_at=clock_timestamp() where user_id=$1',[owner]);
-   if(mode!=='deadline')await blocker.query('rollback');
-   const denied=await pending;assert.equal(denied.status,mode==='deadline'?503:401,JSON.stringify(denied.body));
-   if(mode==='deadline'){assert.ok(Date.now()-started<18000);await blocker.query('rollback');}
-   assert.equal(await snapshotCount(),2);
-   await admin.query("update private.sms_sessions set expires_at=clock_timestamp()+interval '1 hour' where user_id=$1",[owner]);
-   await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
-  }
- }finally{await blocker.query('rollback');blocker.release();}
- payload=original;
- nativeRevoked=true;assert.equal((await migrate(preserve)).status,403);nativeRevoked=false;
- revokeAfterRead=true;assert.equal((await migrate(preserve)).status,401);revokeAfterRead=false;
- await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
- revokeAfterRead=true;assert.equal((await inspect()).status,401);revokeAfterRead=false;
- await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
- await admin.query('update private.sms_identities set revoked_at=now() where user_id=$1',[owner]);assert.equal((await inspect()).status,401);
- assert.equal((await migrate({operation:'review',sourceRevision:second.body.sourceRevision})).status,401);
- assert.equal(await snapshotCount(),2);
- console.log('PennSync migration PostgreSQL/HTTP passed: private exact source/history preservation, current SMS/native authority, replay, concurrency, stale revisions, no learner grants or publication, one-use capabilities and direct-role denial.');
+ const before=await snapshotCount();
+ assert.equal((await inspect()).status,503);
+ assert.equal((await migrate({operation:'preserve',sourceRevision:'a'.repeat(64),expectedHeadRevision:null,reviewed:true})).status,503);
+ assert.equal(nativeCalls,0,'retired native source does not receive a capability or request');
+ assert.equal(await snapshotCount(),before,'disconnecting does not modify preserved learning history');
+ console.log('PennSync native migration is disconnected: no transport, delegated authority or source/history mutations.');
 }finally{await new Promise(resolve=>server.close(resolve));await pool.end();await admin.end();}

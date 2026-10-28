@@ -28,7 +28,7 @@ const go=[
   {id:randomUUID(),displayName:'Broken',email:'not an address',role:'scheduler',status:'active',createdAt:null},
   {id:randomUUID(),displayName:'Invited',email:`invited@${domain}`,role:'scheduler',status:'invited',createdAt:null},
 ];
-const directories={carebase,'caremetric-go':go};
+const directories={carebase,'breathe':go};
 const reads=[];
 const delegations={admin:async(token,input)=>{
   reads.push(input);assert.equal(input.operation,'users.list');assert.equal(input.limit,50);
@@ -67,7 +67,7 @@ try{
       finally{await contractConnection.query('rollback');}
     }
   }finally{contractConnection.release();}
-  const [carebaseId,goId,advisorsId]=[await product('carebase'),await product('caremetric-go'),await product('advisors')];
+  const [carebaseId,goId,advisorsId]=[await product('carebase'),await product('breathe'),await product('advisors')];
   await admin.query("insert into auth.users(id,email,is_anonymous) values($1,$3,false),($2,$4,false)",[owner,customer,`owner@${domain}`,`customer@${domain}`]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')",[owner]);
   await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550895',now()),($2,'+12025550896',now())",[owner,customer]);
@@ -121,7 +121,7 @@ try{
   await assert.rejects(service.test(ownerToken,{id:created.id,to:'not an address'}));
   assert.deepEqual(await service.test(ownerToken,{id:created.id,to:`owner@${domain}`}),{delivery:'sent'});
   assert.equal(sent.length,1);assert.equal(sent[0].subject,'[Test] Scheduled maintenance');assert.equal(sent[0].unsubscribeUrl,null);
-  assert.match(sent[0].text,/an account in CareMetric CareBase or CareMetric Go\./);
+  assert.match(sent[0].text,/an account in CareMetric Breathe or CareMetric CareBase\./);
   assert.ok(sent[0].html.includes('data-caremetric-email="personal"')&&sent[0].html.includes('Unsubscribe link: included in each real message.')&&!/<a\s/i.test(sent[0].html),'a test copy has the layout and no unsubscribe link');
 
   // Sending: the reviewed count must match, the command session is required, and the audience copy is deleted.
@@ -142,7 +142,7 @@ try{
   assert.equal(new Set(bulk.map(message=>message.to.toLowerCase())).size,bulk.length,'one message per address');
   assert.ok(!bulk.some(message=>message.to===unsubscribedEarlier));
   const shared=bulk.find(message=>message.to.toLowerCase()===`user4@${domain}`);
-  assert.match(shared.text,/an account in CareMetric CareBase or CareMetric Go\./);
+  assert.match(shared.text,/an account in CareMetric Breathe or CareMetric CareBase\./);
   for(const message of bulk){
     assert.equal(message.subject,'Scheduled maintenance');
     assert.match(message.unsubscribeUrl,/^https:\/\/hub\.example\/api\/email\/unsubscribe\/[0-9a-f]{64}$/);
@@ -161,7 +161,7 @@ try{
   assert.match(await service.unsubscribePage('f'.repeat(64),true),/Link not recognized/);
   assert.equal((await admin.query("select count(*)::int as n from private.audit_events where action='email_campaign.unsubscribe' and entity_id=$1",[created.id])).rows[0].n,1);
   const history=(await service.list(ownerToken,{})).campaigns.find(item=>item.id===created.id);
-  assert.deepEqual([history.status,history.recipientCount,history.unsubscribed,history.applications],['sent',expected.size-1,1,['CareMetric CareBase','CareMetric Go']]);
+  assert.deepEqual([history.status,history.recipientCount,history.unsubscribed,history.applications],['sent',expected.size-1,1,['CareMetric Breathe','CareMetric CareBase']]);
 
   // Cancelling while queued stops every message not yet handed to SendGrid.
   const second=await service.create(ownerToken,{productIds:[goId]});campaigns.push(second.id);

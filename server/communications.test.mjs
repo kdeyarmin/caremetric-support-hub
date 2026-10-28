@@ -208,17 +208,17 @@ describe('imports', () => {
   }
   it('reads at most 200 messages per import and returns where to resume', async () => {
     const first = service(260);
-    expect(await first.service.sync('session', { source: 'advisors.web' })).toMatchObject({ read: 200, nextOffset: 200 });
+    expect(await first.service.sync('session', { source: 'breathe.phone' })).toMatchObject({ read: 200, nextOffset: 200 });
     expect(first.reads).toEqual([0, 50, 100, 150]);
     const rest = service(260);
-    expect(await rest.service.sync('session', { source: 'advisors.web', offset: 200 })).toMatchObject({ read: 60, nextOffset: null });
+    expect(await rest.service.sync('session', { source: 'breathe.phone', offset: 200 })).toMatchObject({ read: 60, nextOffset: null });
     expect(rest.reads).toEqual([200, 250]);
     const exact = service(200);
-    expect(await exact.service.sync('session', { source: 'advisors.web' })).toMatchObject({ read: 200, nextOffset: null });
+    expect(await exact.service.sync('session', { source: 'breathe.phone' })).toMatchObject({ read: 200, nextOffset: null });
   });
   it('rejects a resume position outside the application contract before reading', async () => {
     const bad = service(10);
-    for (const offset of [-1, 1.5, '50', 10001]) await expect(bad.service.sync('session', { source: 'advisors.web', offset })).rejects.toMatchObject({ status: 400 });
+    for (const offset of [-1, 1.5, '50', 10001]) await expect(bad.service.sync('session', { source: 'breathe.phone', offset })).rejects.toMatchObject({ status: 400 });
     expect(bad.reads).toEqual([]);
   });
 });

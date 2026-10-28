@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import { centralHubApps } from '../hubScope.ts';
 
-export const selfServiceApps = ['carebase', 'breathe', 'pennsync', 'caremetric-emr', 'caremetric-intel'] as const;
+export const selfServiceApps = centralHubApps;
 export const sourceId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/);
 export const permission = z.enum(['employee.recovery', 'billing.manage', 'support.manage']);
 export const facilitySchema = z.object({ id: sourceId, name: z.string().trim().min(1).max(180), permissions: z.array(permission).max(3) }).strict();

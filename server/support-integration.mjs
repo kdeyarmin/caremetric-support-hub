@@ -13,7 +13,7 @@ const pool=new pg.Pool({connectionString:appUrl.href});const api=gateway(pool);
 const owner=randomUUID(),customer=randomUUID(),tenant=randomUUID(),otherTenant=randomUUID();
 const ownerToken='support-owner-'+randomUUID(),customerToken='support-customer-'+randomUUID();
 const ownerSession=randomUUID(),customerSession=randomUUID();
-const product=(await admin.query("select id from hub.products where slug='caremetric-go'")).rows[0].id;
+const product=(await admin.query("select id from hub.products where slug='carebase'")).rows[0].id;
 const otherProduct=(await admin.query("select id from hub.products where slug='breathe'")).rows[0].id;
 const rpc=(name,args={},token=ownerToken)=>api.rpc(name,args,token);
 const page=()=>rpc('list_support_intake_tenants',{p_product_id:product,p_offset:0,p_limit:50});

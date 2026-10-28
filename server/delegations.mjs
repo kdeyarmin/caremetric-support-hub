@@ -42,6 +42,7 @@ export function validateMedia(path,operation) {
   if (!mediaPath.test(path || '') || !['upload','download','sign'].includes(operation)) throw new HttpError(400,'Invalid media request.');
 }
 async function authorize(db,audience,payload) {
+  if (['pennsync','caremetric-emr','caremetric-go','advisors'].includes(audience)) throw new HttpError(403,'Application disconnected.');
   if(audience==='publication') {
     if(!payload || Object.keys(payload).sort().join(',')!=='id,operation,part,range'
       || !['upload','download'].includes(payload.operation) || (payload.operation==='upload' && payload.range!==null)) throw new HttpError(400,'Invalid publication capability.');
@@ -116,6 +117,7 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
     registration: supportRegistration({pool,issue,provider,fetchImpl}),
     pennsyncMigration: pennsyncLearningMigration({pool,issue,fetchImpl}),
     async consume(capability,audience) {
+      if (['pennsync','caremetric-emr','caremetric-go','advisors'].includes(audience)) throw new HttpError(403,'Application disconnected.');
       if (!validDelegation(capability)) throw new HttpError(401,'Invalid authorization.');
       return transaction(pool,async db => {
         const {rows:[delegation]} = await db.query(`select d.payload,s.id,s.user_id from private.app_delegations d

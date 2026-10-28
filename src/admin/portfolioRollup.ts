@@ -1,4 +1,4 @@
-import { portfolioProducts } from "../../supabase/functions/_shared/portfolioProtocol";
+import { centralHubPortfolioApps } from "../hubScope";
 import type { PortfolioCapabilities, PortfolioOverview, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
 import type { PortfolioClient } from "./portfolioClient";
 import { parseMinorAmount } from "./billingMoney";
@@ -148,20 +148,20 @@ export async function loadRollupApp(portfolio: PortfolioClient, product: Portfol
 }
 
 /** Hub billing per application, read once for every card. */
-export async function loadHubBilling(readBilling: BillingReader, signal: AbortSignal): Promise<Record<PortfolioProduct, RollupRead<HubAppBilling>>> {
+export async function loadHubBilling(readBilling: BillingReader, signal: AbortSignal): Promise<Partial<Record<PortfolioProduct, RollupRead<HubAppBilling>>>> {
   const read = await settle(() => readBilling(signal));
   const summary = read.state === "ready" ? summarizeByApp(read.data) : null;
-  return Object.fromEntries(portfolioProducts.map(product => {
+  return Object.fromEntries(centralHubPortfolioApps.map(product => {
     const app = billingAppFor[product];
     if (!app) return [product, { state: "not-advertised" }];
     if (!summary) return [product, { state: "unavailable" }];
     const { subscriptionCount, statusCounts, mrrCents } = summary[app];
     return [product, { state: "ready", data: { source: "hub", subscriptionCount, statusCounts, mrrCents } }];
-  })) as Record<PortfolioProduct, RollupRead<HubAppBilling>>;
+  })) as Partial<Record<PortfolioProduct, RollupRead<HubAppBilling>>>;
 }
 
 /** Load every registered application's snapshot; one silent application never fails the others. */
 export async function loadPortfolioRollup(portfolio: PortfolioClient, signal: AbortSignal, readBilling?: BillingReader): Promise<RollupAppSnapshot[]> {
   const billing = readBilling ? await loadHubBilling(readBilling, signal) : null;
-  return Promise.all(portfolioProducts.map(product => loadRollupApp(portfolio, product, signal, billing?.[product])));
+  return Promise.all(centralHubPortfolioApps.map(product => loadRollupApp(portfolio, product, signal, billing?.[product])));
 }

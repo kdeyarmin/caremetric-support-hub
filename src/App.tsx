@@ -1,3 +1,4 @@
+import { isCentralHubApp } from './hubScope';
 import {
   Activity,
   AlertCircle,
@@ -445,7 +446,7 @@ function OverviewPage({ data }: { data: HubData }) {
     shared: data.content.filter((item) => item.productIds.length > 1).length,
   }), [data]);
   const recent = data.cases.slice(0, 4);
-  const coverage = data.products.map((product) => ({
+  const coverage = data.products.filter(product => isCentralHubApp(product.slug)).map((product) => ({
     ...product,
     count: data.content.filter((item) => item.productIds.includes(product.id)).length,
   }));
@@ -591,7 +592,7 @@ function CasesPage({ data }: CasesPageProps) {
             </select>
             <select className="case-application-filter" aria-label="Filter by application" value={productFilter} onChange={(event) => { const next = event.target.value; setProductFilter(next); setSelectedId((current) => reconcileCaseSelection(caseRows.filter((item) => next === "all" || item.productId === next), current)); }}>
               <option value="all">All applications</option>
-              {data.products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+              {data.products.filter(product => isCentralHubApp(product.slug)).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
             </select>
           </div>
           <div className="case-count">{visibleCases.length} case{visibleCases.length === 1 ? "" : "s"}</div>
@@ -879,7 +880,7 @@ function KnowledgePage({ data }: { data: HubData }) {
       {isSupportStaff(data.actor.role) && <KnowledgeCoverage products={data.products} content={data.content} selectedProductId={productId} onSelect={setProductId} />}
       <section className="library-toolbar panel">
         <label className="search-box large"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search articles, workflows, and questions" /></label>
-        <select value={productId} onChange={(event) => setProductId(event.target.value)}><option value="all">All products</option>{data.products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select>
+        <select value={productId} onChange={(event) => setProductId(event.target.value)}><option value="all">All products</option>{data.products.filter(product => isCentralHubApp(product.slug)).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select>
       </section>
       <div className="knowledge-layout">
         <section className="article-grid">
@@ -905,7 +906,7 @@ function ProductsPage({ data }: { data: HubData }) {
     <>
       <PageHeading eyebrow="Product & contact registry" title="Owner-approved routing from one source." description="Every app reads the same product names, support channels, availability, and fallback rules—eliminating conflicting phone numbers and email addresses." />
       <div className="product-grid">
-        {data.products.map((product) => {
+        {data.products.filter(product => isCentralHubApp(product.slug)).map((product) => {
           const productContent = data.content.filter((item) => item.productIds.includes(product.id));
           const productCases = data.cases.filter((item) => item.productId === product.id && !["resolved", "closed"].includes(item.status));
           return <article className="product-card" key={product.id}><div className="product-card-header"><span className="product-logo" style={{ background: `${product.color}18`, color: product.color }}>{product.name.charAt(0)}</span><div><h2>{product.name}</h2><span className={`publication-status ${product.status === "active" ? "published" : "review"}`}>{product.status}</span></div></div><p>{product.description}</p><dl><div><dt>Product key</dt><dd>{product.slug}</dd></div><div><dt>Active cases</dt><dd>{productCases.length}</dd></div><div><dt>Published placements</dt><dd>{productContent.length}</dd></div></dl><NavLink className="button button-secondary" to={`/help?product=${encodeURIComponent(product.slug)}`}>Preview help <ArrowRight size={15} /></NavLink></article>;
@@ -1036,7 +1037,7 @@ openHelp({
       <section className="panel rollout-table">
         <div className="panel-heading"><div><h2>Application integration status</h2><p>Verified rollout state by stable product key, independent of display order.</p></div></div>
         <div className="rollout-head"><span>Application</span><span>Previous help</span><span>Central integration</span><span>State</span></div>
-        {data.products.map((product) => {
+        {data.products.filter(product => isCentralHubApp(product.slug)).map((product) => {
           const rollout = integrationRolloutBySlug[product.slug] ?? defaultIntegrationRollout;
           return <div className="rollout-row" key={product.id}><span><span className="product-dot" style={{ background: product.color }} /> {product.name}</span><span>{rollout.previousHelp}</span><span>{rollout.integration}</span><span className={`state-${rollout.state}`}>{rollout.stateLabel}</span></div>;
         })}

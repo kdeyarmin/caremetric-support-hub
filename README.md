@@ -1,11 +1,12 @@
 # CareMetric Support Hub
 
-## One hub for every application
+## One hub for CareBase, Breathe, and Intel
 
-The Hub is the super-admin, support and knowledge center for seven applications:
-CareBase (PennTrain), Breathe (PennFit), PennSync (CareMetric-Pennsync),
-CareMetric Intel, CareMetric EMR, CareMetric Go and CareMetric Healthcare Advisors.
-Product names appear with their repository names so each app is easy to find.
+The Hub is the administration, support, billing, and knowledge center for
+CareBase (PennTrain), Breathe (PennFit), and CareMetric Intel.
+PennSync, EMR, Go, and Healthcare Advisors use their own support. Historical Hub
+product identities, cases, memberships, and learning records are retained; new
+connections, intake, delegated actions, and purchases for those apps are disabled.
 
 - **Control center** (`/admin`): the administrator's home. Every application's
   connection health, subscriptions, users and organizations, Help SDK and
@@ -18,13 +19,12 @@ Product names appear with their repository names so each app is easy to find.
   `/admin/apps`. See [the control center](docs/CONTROL_CENTER.md).
 - **Communications** (`/communications`): customer service and technical
   support from the (877) 521-2890 phone line, text messages, email, website chat
-  and the Advisors web form land in one queue with triage, internal notes and
+  land in one queue with triage, internal notes and
   replies on the original channel. Text, email and chat stay off until their
   provider settings (or `HUB_CHAT_ENABLED`) are set. See
   [unified communications](docs/UNIFIED_COMMUNICATIONS.md).
 - **Knowledge** (`/knowledge`): shared and app-specific articles for every
-  application, with per-app coverage. Healthcare Advisors' published FAQ is
-  included.
+  supported application, with per-app coverage.
 - **Billing** (`/admin/billing`): the only place CareMetric platform billing
   happens. Products and prices, every subscription across the applications with
   MRR and ARR, price changes (grandfather or move subscribers), coupons and
@@ -41,8 +41,6 @@ Product names appear with their repository names so each app is easy to find.
 - **Portfolio rollup** (`/admin/portfolio`): health, subscriber and subscription
   figures, and a live **super-admin coverage** matrix showing, per application,
   what the Hub holds now and what app-side work each gap needs.
-- **Healthcare Advisors**: consultation requests are read through a one-use,
-  SMS-authorized bridge. See [the Advisors connection](docs/ADVISORS_ADMIN_CONNECTION.md).
 
 What the Hub can show depends on what each application's administration
 connection provides. As documented for each connection today:
@@ -51,11 +49,7 @@ connection provides. As documented for each connection today:
 | --- | --- | --- | --- | --- |
 | CareBase (PennTrain) | Organizations, users | Subscriptions, status totals | Invoices, Stripe verification | Courses, facility training, jobs, releases, audit |
 | Breathe (PennFit) | Organizations, staff | Subscriptions, status totals | Not provided yet | Shared phone-line messages |
-| PennSync | Organizations, users | Individual subscriptions | Not provided yet | |
 | CareMetric Intel | Registered users only | Not provided yet | Not provided yet | |
-| CareMetric EMR | Organizations, staff | Application entitlements | Not provided yet | |
-| CareMetric Go | Shared with EMR | Shared with EMR (never double-counted) | Not provided yet | |
-| Healthcare Advisors | Not applicable | Not applicable | Not applicable | Consultation requests |
 
 "Not provided yet" items need a read added to that application's
 administration connection; the coverage matrix lists them live.
@@ -291,17 +285,9 @@ docs/                        API, integration, and rollout guidance
 
 - PennTrain is the canonical CareBase source for help, courses, learning
   execution, and existing HeyGen render metadata.
-- CareMetric EMR and CareMetric Breathe have live, feature-flagged central Help
-  launchers with application-owned fallbacks.
-- PennSync is the canonical Base44 integration; legacy PennSync repositories are
-  not parallel production sources.
-- CareMetric Go has a merged cross-platform support screen; its native release
-  remains gated by a verified EAS project and release workflow.
-- CareMetric Intel is registered as a pilot with the shared course catalog;
-  its privacy-safe launcher and deterministic guide inventory are merged, while
-  authenticated production equivalence remains unverified. Current source uses
-  an Express `/api` backend; reconcile the historical Base44 deployment record
-  before connecting identity or delegated administration.
+- Breathe and Intel use their deployed native self-service adapters and central Help launchers.
+- PennSync, EMR, Go, and Healthcare Advisors are independent of this Hub. Their
+  retired product identifiers and historical contracts are retained for archival reads.
 - DocStudio is retired. PR #85 removed its application runtime;
   `20261022210000_retire_docstudio.sql` removes its private database objects and
   `knowledge.docstudio.v1` declaration. The shared publication importer,

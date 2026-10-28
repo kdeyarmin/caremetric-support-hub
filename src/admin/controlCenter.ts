@@ -1,3 +1,4 @@
+import { isCentralHubApp } from '../hubScope';
 import { adminRegistry } from "../../supabase/functions/_shared/adminRegistry";
 import type { PortfolioOperationName, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
 import type { ContentItem, Product, SupportCase } from "../domain";
@@ -51,7 +52,7 @@ async function conversationCounts(client: CommunicationsReader, filter: { channe
 
 /** Channel status plus waiting counts for every channel and every application, through the same inbox reads staff use. */
 export async function loadCommunicationsSnapshot(client: CommunicationsReader, products: readonly Product[], signal: AbortSignal): Promise<CommunicationsSnapshot> {
-  const listed = products.filter(product => product.status !== "retired");
+  const listed = products.filter(product => product.status !== "retired" && isCentralHubApp(product.slug));
   const [status, all, channelCounts, productCounts] = await Promise.all([
     client.channels(signal),
     conversationCounts(client, {}, signal),

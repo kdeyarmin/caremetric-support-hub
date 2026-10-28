@@ -1,3 +1,4 @@
+import { isCentralHubApp } from '../hubScope';
 import type {
   ActorContext,
   CaseCategory,
@@ -70,7 +71,7 @@ const products: Product[] = [
     status: "active",
     color: "#07356F",
   },
-];
+].map(product => ({ ...product, status: isCentralHubApp(product.slug) ? product.status : "retired" })) as Product[];
 
 const contacts: SupportContact[] = [
   {

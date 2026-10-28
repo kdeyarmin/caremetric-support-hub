@@ -1,10 +1,7 @@
 export const CAREMETRIC_PRODUCT_SLUGS = [
   "breathe",
   "carebase",
-  "caremetric-emr",
-  "caremetric-go",
   "caremetric-intel",
-  "pennsync",
 ] as const;
 
 export type CareMetricProduct = (typeof CAREMETRIC_PRODUCT_SLUGS)[number];

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { appRequest } from '../lib/appSession';
 
 /** Applications whose administration connection exposes a user directory (users.list). */
-export const directorySlugs = ['carebase', 'breathe', 'caremetric-emr', 'pennsync', 'caremetric-intel', 'caremetric-go'] as const;
+export const directorySlugs = ['carebase', 'breathe', 'caremetric-intel'] as const;
 export const maxSubject = 150, maxBody = 20000;
 
 const count = z.number().int().min(0);

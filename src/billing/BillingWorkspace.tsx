@@ -60,7 +60,7 @@ function ModeBanner({ data }: { data: Workspace }) {
 // ---------------------------------------------------------------------------
 function SubscriptionsTab({ data }: { data: Workspace }) {
   const [params] = useSearchParams();
-  const [app, setApp] = useState<string>(billingApps.includes(params.get('app') as BillingApp) ? params.get('app')! : '');
+  const [app, setApp] = useState<string>(billingApps.some(value => value === params.get('app')) ? params.get('app')! : '');
   const [status, setStatus] = useState<string>('live');
   const [search, setSearch] = useState('');
   const tenants = useMemo(() => new Map(data.tenants.map(tenant => [tenant.id, tenant])), [data.tenants]);

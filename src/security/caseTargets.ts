@@ -1,3 +1,4 @@
+import { isCentralHubApp } from '../hubScope';
 import type { ActorContext, ActorMembership, Product } from "../domain";
 
 export interface CaseTarget extends ActorMembership {
@@ -16,7 +17,7 @@ export function eligibleCaseTargets(actor: ActorContext, products: readonly Prod
   return actor.memberships.flatMap((membership) => {
     const product = productsById.get(membership.productId);
     const key = caseTargetKey(membership);
-    if (!membership.intakeEnabled || !product || product.status === "retired" || seen.has(key)) {
+    if (!membership.intakeEnabled || !product || !isCentralHubApp(product.slug) || product.status === "retired" || seen.has(key)) {
       return [];
     }
     seen.add(key);
