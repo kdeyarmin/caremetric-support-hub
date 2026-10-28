@@ -20,7 +20,10 @@ function failure(error) {
   if (error?.code === '23505') return new HttpError(409, 'This identity is already connected. Refresh your account.');
   return new HttpError(503, 'Self-service is temporarily unavailable. Your existing records are retained.');
 }
-export function selfService({ pool, provider, fetchImpl = fetch, publicOrigin = 'https://support-hub-web-production.up.railway.app' }) {
+// Native adapters pin this origin before opening a one-use connection link.
+// Billing/email branding can use the custom public domain independently.
+export const nativeConnectionOrigin = 'https://support-hub-web-production.up.railway.app';
+export function selfService({ pool, provider, fetchImpl = fetch, connectionOrigin = nativeConnectionOrigin }) {
   const rpc = (session, name, values = []) => withSession(pool, session, db => result(db, `select hub.${name}(${values.map((_, i) => `$${i + 1}`).join(',')}) as result`, values));
   async function issue(authorization, input) {
     const parsed = connectionProof.safeParse(input);
@@ -33,7 +36,7 @@ export function selfService({ pool, provider, fetchImpl = fetch, publicOrigin = 
       if (!app || !nativeSelfService[app.slug]) throw new HttpError(401, 'Application authentication required.');
       await db.query('select private.issue_self_service_connection($1,$2::jsonb,$3)', [app.product_id, JSON.stringify(parsed.data), sha(connectionToken)]);
     });
-    return { url: `${publicOrigin}/connect#${connectionToken}`, expires_in: 300 };
+    return { url: `${connectionOrigin}/connect#${connectionToken}`, expires_in: 300 };
   }
   async function consume(authorization, app) {
     const capability = typeof authorization === 'string' && authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
