@@ -112,12 +112,12 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
           if(req.method!=='POST' || req.headers.origin || req.headers.cookie || url.search) throw new HttpError(403,'Forbidden.');
           return json(await selfService.issue(req.headers.authorization,await jsonBody(req,262144)));
         }
-        const appBilling=/^\/api\/apps\/(entitlements|usage|trials)$/.exec(path);
+        const appBilling=/^\/api\/apps\/(entitlements|facility-entitlements|usage|trials)$/.exec(path);
         if(appBilling) {
           if(req.method!=='POST' || req.headers.origin || req.headers.cookie || url.search) throw new HttpError(403,'Forbidden.');
           if(!billing) throw new HttpError(503,'Billing is not configured.');
-          const action={entitlements:'entitlements',usage:'usage',trials:'trial'}[appBilling[1]];
-          return json(await billing[action](req.headers.authorization,await jsonBody(req,8192)));
+          const action={entitlements:'entitlements','facility-entitlements':'facilityEntitlements',usage:'usage',trials:'trial'}[appBilling[1]];
+          return json(await billing[action](req.headers.authorization,await jsonBody(req,appBilling[1]==='facility-entitlements'?65536:8192)));
         }
         // Unsubscribe links in bulk email: the secret token in the path is the only authority,
         // so a mail client's one-click POST (RFC 8058) works without a session or origin.

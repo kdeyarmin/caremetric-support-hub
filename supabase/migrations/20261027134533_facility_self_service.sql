@@ -397,7 +397,7 @@ grant execute on function private.record_self_service_result(uuid,text) to hub_a
 
 create function private.activate_facility_billing(p_connection uuid,p_expected_version integer,p_allocations jsonb) returns void
 language plpgsql security definer set search_path='' as $$
-declare c private.self_service_connections; config private.facility_billing_configuration; a jsonb;
+declare c private.self_service_connections; config private.facility_billing_configuration; a jsonb; expected jsonb; actual jsonb;
 begin
  perform private.require_hub_app_server();
  if not private.current_app_session_verified() then raise exception 'Sign in to continue' using errcode='28000';end if;
@@ -405,9 +405,32 @@ begin
  if not found or c.role<>'organization_admin' or not c.capabilities ? 'facility.entitlements.v1' or not private.is_active_member(c.tenant_id,c.product_id)
  then raise exception 'A verified facility entitlement integration is required' using errcode='42501';end if;
  perform pg_advisory_xact_lock(hashtextextended('facility-billing:'||c.tenant_id||':'||c.product_id,0));
+ if exists(select 1 from private.billing_usage_reservations where tenant_id=c.tenant_id and product_id=c.product_id and state='pending') then
+  raise exception 'A quantity report needs reconciliation before changing billing scope' using errcode='40001';end if;
+ if exists(select 1 from private.customer_billing_quotes where tenant_id=c.tenant_id and product_id=c.product_id and state in ('confirming','pending_payment','scheduled')) then
+  raise exception 'Resolve the pending subscription change before enabling facility billing' using errcode='40001';end if;
  select * into config from private.facility_billing_configuration where tenant_id=c.tenant_id and product_id=c.product_id for update;
  if coalesce(config.version,0)<>p_expected_version or coalesce(config.mode,'legacy')<>'legacy' then raise exception 'Billing changed. Refresh first.' using errcode='40001';end if;
  if jsonb_typeof(p_allocations)<>'array' or jsonb_array_length(p_allocations)<>jsonb_array_length(c.facilities) then raise exception 'Complete facility allocation required' using errcode='22023';end if;
+ if jsonb_array_length(p_allocations)<>(select count(distinct entry->>'facility_id') from jsonb_array_elements(p_allocations) entry)
+  or exists(select 1 from jsonb_array_elements(p_allocations) entry cross join lateral
+   (select entry->>'plan' as price union all select jsonb_array_elements_text(entry->'addons')) chosen
+   left join private.billing_prices r on r.stripe_price_id=chosen.price
+   left join private.billing_products p on p.stripe_product_id=r.stripe_product_id
+   where chosen.price is not null and (p.product_id is distinct from c.product_id or r.pricing_model not in ('flat','per_unit')
+    or r.pricing_model='per_unit' and p.unit_label not in ('facility','facilities')))
+ then raise exception 'Invalid facility price allocation' using errcode='22023';end if;
+ select coalesce(jsonb_agg(jsonb_build_object('price',price,'quantity',quantity) order by price),'[]'::jsonb) into expected from (
+  select chosen.price,case when r.pricing_model='flat' then 1 else count(*) end as quantity
+  from jsonb_array_elements(p_allocations) entry cross join lateral
+   (select entry->>'plan' as price union all select jsonb_array_elements_text(entry->'addons')) chosen
+  join private.billing_prices r on r.stripe_price_id=chosen.price group by chosen.price,r.pricing_model) selected;
+ select coalesce(jsonb_agg(jsonb_build_object('price',price,'quantity',quantity) order by price),'[]'::jsonb) into actual from (
+  select i.stripe_price_id as price,sum(i.quantity) as quantity from private.billing_subscription_items i
+  join private.billing_subscriptions s using(stripe_subscription_id) where s.tenant_id=c.tenant_id and s.product_id=c.product_id
+   and s.status='active' and s.pause_behavior is null and not s.cancel_at_period_end
+  group by i.stripe_price_id) selected;
+ if expected<>actual or expected='[]'::jsonb then raise exception 'Subscription quantities changed. Refresh before enabling facility billing.' using errcode='40001';end if;
  for a in select * from jsonb_array_elements(p_allocations) loop
   if not exists(select 1 from jsonb_array_elements(c.facilities) f where f->>'id'=a->>'facility_id') then raise exception 'Unknown facility' using errcode='42501';end if;
   insert into private.facility_billing_allocations(tenant_id,product_id,facility_id,facility_name,plan_price,addon_prices)
@@ -455,6 +478,9 @@ begin
   if v is distinct from q.baseline_version then raise exception 'Subscription changed. Review a new preview.' using errcode='40001';end if;
  end if;
  if p_claim then
+  perform pg_advisory_xact_lock(hashtextextended('facility-billing:'||q.tenant_id||':'||q.product_id,0));
+  if exists(select 1 from private.billing_usage_reservations where tenant_id=q.tenant_id and product_id=q.product_id and state='pending') then
+   raise exception 'A quantity report needs reconciliation before confirming this purchase' using errcode='40001';end if;
   if q.execution->>'kind'='checkout' then
    if c.role<>'organization_admin' or q.facility_id is not null then raise exception 'Organization purchasing is required' using errcode='42501';end if;
    perform private.lock_customer_subscription_start(q.tenant_id,q.product_id);

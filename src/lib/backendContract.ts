@@ -17,6 +17,7 @@ export const REQUIRED_BACKEND_FEATURES = [
   "support.manual-escalation.v1",
   "support.customer-diagnostics.v1",
   "billing.customer-checkout.v1",
+  "billing.facility-entitlements.v1",
 ] as const;
 
 /** Additive features share the API version; the integer alone never proves readiness. */

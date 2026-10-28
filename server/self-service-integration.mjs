@@ -130,6 +130,16 @@ try {
   assert.equal(saved.id, quoteId);
   assert.equal((await privateRpc('save_customer_billing_quote', [randomUUID(), connection.id, 'site-a', request, '{}', JSON.stringify({ ...execution, prorationDate: 123 }), 0, null])).id, quoteId);
   await assert.rejects(privateRpc('save_customer_billing_quote', [randomUUID(), connection.id, 'site-a', request, '{}', JSON.stringify({ ...execution, intent: { plan: null, addons: [] } }), 0, null]), /request changed/);
+  const pendingUsage = randomUUID();
+  await admin.query("insert into private.billing_usage_reservations(product_id,request_key,tenant_id,metric,quantity,targets) values($1,$2,$3,'facility',1,'{\"items\":[]}')", [product, pendingUsage, tenant]);
+  try {
+    await assert.rejects(privateRpc('claim_customer_billing_quote', [quoteId, true]), /quantity report needs reconciliation/, 'a purchase cannot race an uncertain legacy quantity update');
+    await admin.query("update private.self_service_connections set role='organization_admin',capabilities='[\"facility.entitlements.v1\"]' where id=$1", [connection.id]);
+    await assert.rejects(privateRpc('activate_facility_billing', [connection.id, 0, '[]']), /quantity report needs reconciliation/, 'scope activation cannot race an uncertain legacy quantity update');
+  } finally {
+    await admin.query("delete from private.billing_usage_reservations where product_id=$1 and request_key=$2", [product, pendingUsage]);
+    await admin.query("update private.self_service_connections set role='facility_admin',capabilities=$2::jsonb where id=$1", [connection.id, JSON.stringify(nativeProof.capabilities)]);
+  }
   assert.equal((await privateRpc('claim_customer_billing_quote', [quoteId, true])).state, 'confirming');
   await transaction(pool, db => db.query('select private.mark_customer_purchase_started($1)', [quoteId]));
   await transaction(pool, db => db.query('select private.record_customer_payment_invoice($1,$2)', [quoteId, 'in_syntheticReceipt']));

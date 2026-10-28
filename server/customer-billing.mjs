@@ -274,6 +274,7 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
     if (!workspace.can_activate || !authority.capabilities?.includes('facility.entitlements.v1')) throw new HttpError(409, 'Separate facility plans are not yet enabled by this application.');
     if (JSON.stringify([...authority.facilities].sort()) !== JSON.stringify(workspace.allocations.map(row => row.facility_id).sort())) throw new HttpError(409, 'Facility setup changed. Reopen the customer center.');
     const live = await stripe(), sub = await providerSubscription(live, workspace);
+    if (sub.schedule) throw new HttpError(409, 'Resolve the scheduled subscription change before enabling separate facility plans.');
     if (!sameBillingLines(rows(sub), aggregateFacilityLines(workspace.allocations, new Map(workspace.catalog.map(price => [price.id, price]))))) throw new HttpError(409, 'Existing billing quantities must match the facility allocation.');
     await rpc(session, 'activate_facility_billing', [request.connection_id, request.expected_version, JSON.stringify(workspace.allocations)]);
     return { state: 'activated' };

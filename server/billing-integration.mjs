@@ -8,6 +8,7 @@ import { gateway } from './gateway.mjs';
 import { platformBilling } from './billing.mjs';
 import { signStripePayload } from './stripe.mjs';
 import { fakeStripe } from './fixtures/fake-stripe.mjs';
+import { exerciseFacilityEntitlements } from './facility-entitlements-integration.mjs';
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl); assert.equal(local.hostname, '127.0.0.1'); assert.equal(local.port, '54322');
@@ -154,6 +155,7 @@ try {
   assert.equal(usage.duplicate, true, 'a retried report is a no-op');
   assert.equal((await billing.usage(bearer, { account, metric: 'facility', quantity: 5, request_key: key() })).outcome, 'unchanged');
   assert.equal((await billing.usage(bearer, { account: randomUUID(), metric: 'facility', quantity: 5, request_key: key() })).outcome, 'not_linked');
+  await exerciseFacilityEntitlements({ admin, pool, billing, bearer, breatheKey, tenant, product: await product('carebase'), account, plan: planMonthly, addon: addonMonthly, stripe });
 
   // Change a price: grandfather the add-on, move the plan now with proration.
   space = await workspace();
