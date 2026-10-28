@@ -20,10 +20,10 @@ export async function exercisePennSyncNoPayments({ admin, pool }) {
     await assert.rejects(run(async db => {
       await db.query('reset role');
       return db.query('select private.customer_billing_context($1)', [connection]);
-    }), { code: '42501', message: 'PennSync does not accept payments' });
-    await assert.rejects(prepare({ action: 'billing.authorize', facility_id: null }), { code: '42501', message: 'PennSync does not accept payments' });
-    assert.ok((await prepare({ action: 'scope.read' })).rows[0].id, 'support verification remains available');
-    assert.ok((await prepare({ action: 'profile.read', cursor: 0 })).rows[0].id, 'training profiles remain available');
+    }), { code: '42501', message: 'Billing access denied' });
+    await assert.rejects(prepare({ action: 'billing.authorize', facility_id: null }), { code: '42501', message: 'Application access denied' });
+    await assert.rejects(prepare({ action: 'scope.read' }), { code: '42501', message: 'Application access denied' });
+    await assert.rejects(prepare({ action: 'profile.read', cursor: 0 }), { code: '42501', message: 'Application access denied' });
     assert.deepEqual((await run(db => db.query('select hub.my_billing() as value'))).rows[0].value.tenants, []);
     await assert.rejects(run(db => db.query('select hub.authorize_tenant_billing($1)', [tenant])), { code: '42501', message: 'You do not manage billing for this organization.' });
 

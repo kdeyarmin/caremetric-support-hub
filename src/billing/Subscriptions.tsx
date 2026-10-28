@@ -1,3 +1,4 @@
+import { isCentralHubApp } from '../hubScope';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { z } from 'zod';
@@ -22,7 +23,7 @@ export function Subscriptions() {
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
-    if (!config.demoMode) void selfServiceClient.workspace(controller.signal).then(result => setConnections(result.connections.filter(row => row.role !== 'member' && row.app !== 'pennsync'))).catch(() => { if (!controller.signal.aborted) setError('Connections could not be loaded. Reopen the customer center from your application.'); });
+    if (!config.demoMode) void selfServiceClient.workspace(controller.signal).then(result => setConnections(result.connections.filter(row => row.role !== 'member' && isCentralHubApp(row.app)))).catch(() => { if (!controller.signal.aborted) setError('Connections could not be loaded. Reopen the customer center from your application.'); });
     return () => controller.abort();
   }, []);
   useEffect(() => {

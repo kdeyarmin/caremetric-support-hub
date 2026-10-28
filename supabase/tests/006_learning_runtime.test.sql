@@ -8,7 +8,7 @@ insert into private.staff_permissions(user_id,permission,granted_by)
 values('98000000-0000-4000-8000-000000000001','platform.admin','98000000-0000-4000-8000-000000000001');
 create temporary table learning_fixture(doc jsonb,item_id uuid,enrollment_id uuid,result jsonb);
 insert into learning_fixture(doc) values(jsonb_build_object('title','Learning test','summary','Test only','category','Test','accessLevel','public','durationMinutes',10,
-  'productIds',jsonb_build_array((select id from hub.products where slug='pennsync')),
+  'productIds',jsonb_build_array((select id from hub.products where slug='carebase')),
   'units','[{"id":"98100000-0000-4000-8000-000000000001","type":"text","title":"Lesson one","body":"Read this test lesson."},
   {"id":"98100000-0000-4000-8000-000000000002","type":"quiz","title":"Assessment","passingScore":100,"maxAttempts":2,
   "questions":[{"id":"98200000-0000-4000-8000-000000000001","prompt":"Choose the correct option","points":1,"correctOptionId":"98300000-0000-4000-8000-000000000001","secretExplanation":"must never leave the server","options":[{"id":"98300000-0000-4000-8000-000000000001","text":"Correct"},{"id":"98300000-0000-4000-8000-000000000002","text":"Incorrect"}]}]}]'::jsonb));
@@ -79,7 +79,7 @@ insert into hub.content_revisions(id,item_id,revision_no,title,review_state,appr
 values('98500000-0000-4000-8000-000000000002','98500000-0000-4000-8000-000000000001',1,'Existing source course','approved',now());
 insert into hub.content_publications(item_id,revision_id,product_id)
 select '98500000-0000-4000-8000-000000000001','98500000-0000-4000-8000-000000000002',id
-from hub.products where slug='pennsync';
+from hub.products where slug='carebase';
 insert into hub.course_links(content_item_id,penntrain_course_id,source_version,launch_path)
 values('98500000-0000-4000-8000-000000000001','98500000-0000-4000-8000-000000000003','98500000-0000-4000-8000-000000000004','/app/courses/98500000-0000-4000-8000-000000000003');
 select lives_ok($$select hub.import_learning_draft('98500000-0000-4000-8000-000000000003','98500000-0000-4000-8000-000000000004',doc) from learning_fixture$$,'source course can be imported for draft review');
@@ -146,12 +146,12 @@ insert into auth.users(id,email,raw_user_meta_data,is_anonymous)
 values('98000000-0000-4000-8000-000000000004','learning-scoped-editor@test.invalid','{"display_name":"Scoped Editor"}',false);
 insert into private.staff_permissions(user_id,product_id,permission,granted_by)
 select '98000000-0000-4000-8000-000000000004',id,'content.write','98000000-0000-4000-8000-000000000001'
-from hub.products where slug='pennsync';
+from hub.products where slug='carebase';
 insert into hub.tenants(id,slug,name)
 values('98600000-0000-4000-8000-000000000001','learning-customer-a','Learning Customer A'),
 ('98600000-0000-4000-8000-000000000002','learning-customer-b','Learning Customer B');
 insert into hub.tenant_products(tenant_id,product_id)
-select '98600000-0000-4000-8000-000000000001',id from hub.products where slug='pennsync';
+select '98600000-0000-4000-8000-000000000001',id from hub.products where slug='carebase';
 insert into hub.tenant_products(tenant_id,product_id)
 select '98600000-0000-4000-8000-000000000002',id from hub.products where slug='breathe';
 insert into storage.objects(bucket_id,name,metadata)
@@ -165,7 +165,7 @@ select jsonb_build_object('title','Customer learning','summary','Entitlement fix
   'productIds',jsonb_build_array(id),'units','[{"id":"98700000-0000-4000-8000-000000000002","type":"video","title":"Private lesson","body":"Reviewed transcript","mediaAssetId":"98700000-0000-4000-8000-000000000001"},
   {"id":"98700000-0000-4000-8000-000000000003","type":"quiz","title":"Post-test","passingScore":80,"maxAttempts":null,
   "questions":[{"id":"98700000-0000-4000-8000-000000000004","prompt":"Choose the correct option","points":1,"correctOptionId":"98700000-0000-4000-8000-000000000005","options":[{"id":"98700000-0000-4000-8000-000000000005","text":"Correct"},{"id":"98700000-0000-4000-8000-000000000006","text":"Incorrect"}]}]}]'::jsonb)
-from hub.products where slug='pennsync';
+from hub.products where slug='carebase';
 update learning_access_fixture set item_id=(hub.save_learning_draft(null,doc,0)->>'itemId')::uuid;
 select lives_ok($$select hub.publish_learning_course(item_id,1,true) from learning_access_fixture$$,'new Hub-authored customer course can publish');
 grant select on learning_fixture,learning_access_fixture to authenticated;
@@ -204,7 +204,7 @@ select throws_ok($$select hub.enroll_learning_course(item_id) from learning_acce
 reset role;
 
 insert into hub.tenant_product_memberships(tenant_id,product_id,user_id)
-select '98600000-0000-4000-8000-000000000001',id,'98000000-0000-4000-8000-000000000002' from hub.products where slug='pennsync';
+select '98600000-0000-4000-8000-000000000001',id,'98000000-0000-4000-8000-000000000002' from hub.products where slug='carebase';
 set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}';
 update learning_access_fixture set enrollment_id=hub.enroll_learning_course(item_id);
 set local role authenticated;
@@ -216,7 +216,7 @@ reset role;
 -- Give learner two the same product entitlement, but no enrollment. Ownership,
 -- not simply product access, must still gate another learner's signed media.
 insert into hub.tenant_product_memberships(tenant_id,product_id,user_id)
-select '98600000-0000-4000-8000-000000000001',id,'98000000-0000-4000-8000-000000000003' from hub.products where slug='pennsync';
+select '98600000-0000-4000-8000-000000000001',id,'98000000-0000-4000-8000-000000000003' from hub.products where slug='carebase';
 set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}';
 set local role authenticated;
 select throws_ok($$select hub.get_learning_media_paths('98700000-0000-4000-8000-000000000001',enrollment_id) from learning_access_fixture$$,'42501','Video unavailable.','another entitled learner cannot resolve someone else''s enrollment media');
@@ -225,7 +225,7 @@ reset role;
 
 set local request.jwt.claims='{"sub":"98000000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}';
 update hub.tenant_products set status='suspended'
-where tenant_id='98600000-0000-4000-8000-000000000001' and product_id=(select id from hub.products where slug='pennsync');
+where tenant_id='98600000-0000-4000-8000-000000000001' and product_id=(select id from hub.products where slug='carebase');
 set local role authenticated;
 select throws_ok($$select hub.enroll_learning_course(item_id) from learning_access_fixture$$,'42501','Course unavailable.','suspended tenant entitlement blocks enrollment');
 select throws_ok($$select hub.get_learning_course(item_id,enrollment_id) from learning_access_fixture$$,'42501','Course unavailable.','suspended entitlement blocks an existing enrollment');
@@ -235,7 +235,7 @@ select is((select count(*) from storage.objects where bucket_id='hub-learning' a
 reset role;
 
 update hub.tenant_products set status='active'
-where tenant_id='98600000-0000-4000-8000-000000000001' and product_id=(select id from hub.products where slug='pennsync');
+where tenant_id='98600000-0000-4000-8000-000000000001' and product_id=(select id from hub.products where slug='carebase');
 update hub.tenant_product_memberships set status='suspended',revoked_at=now()
 where tenant_id='98600000-0000-4000-8000-000000000001' and user_id='98000000-0000-4000-8000-000000000002';
 set local role authenticated;

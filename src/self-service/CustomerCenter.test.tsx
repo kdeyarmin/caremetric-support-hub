@@ -14,11 +14,12 @@ function show() {
   render(<MemoryRouter><CustomerCenter /></MemoryRouter>);
 }
 describe('customer diagnostic support', () => {
-  it('keeps a PennSync administrator in support and training without payment links', async () => {
+  it('does not restore an excluded app from a stale workspace response', async () => {
     methods.workspace.mockResolvedValue({ connections: [{ id: connection, app: 'pennsync', name: 'PennSync', role: 'organization_admin', facilities: [], capabilities: ['training.profile.v1'] }] });
     const billing = canManageOrganizationBilling({ role: 'tenant_admin', memberships: [{ tenantId: 'agency', tenantName: 'Agency', productId: 'pennsync', role: 'tenant_admin', intakeEnabled: true }] }, [{ id: 'pennsync', slug: 'pennsync' }]);
     render(<MemoryRouter><CustomerCenter organizationBilling={billing} /></MemoryRouter>);
-    await screen.findByText('PennSync');
+    await screen.findByText(/Open customer self-service from your application/);
+    expect(screen.queryByText('PennSync')).toBeNull();
     expect(screen.queryByRole('link', { name: /Plans & add-ons/ })).toBeNull();
     expect(screen.queryByRole('link', { name: /Invoices & payments/ })).toBeNull();
     expect(screen.getByRole('link', { name: /My profile & training/ })).toBeTruthy();

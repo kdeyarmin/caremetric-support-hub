@@ -26,7 +26,7 @@ const sweepSafetyMigration=await readFile(new URL('../supabase/migrations/202610
 const owner=randomUUID(),customer=randomUUID(),tenant=randomUUID();
 const ownerToken='automation-owner-'+randomUUID(),customerToken='automation-customer-'+randomUUID();
 const guideItem=randomUUID(),guideRevision=randomUUID(),staffItem=randomUUID(),staffRevision=randomUUID();
-const product=(await admin.query("select id from hub.products where slug='caremetric-go'")).rows[0].id;
+const product=(await admin.query("select id from hub.products where slug='caremetric-intel'")).rows[0].id;
 const rpc=(name,args,token)=>api.rpc(name,args,token);
 const fixtureCases=new Set();
 const hour=60*60*1000;

@@ -15,7 +15,7 @@ const pool=new pg.Pool({connectionString:appUrl.href});
 const owner=randomUUID(),agent=randomUUID(),customer=randomUUID();
 const ownerToken='comms-owner-'+randomUUID(),agentToken='comms-agent-'+randomUUID(),customerToken='comms-customer-'+randomUUID();
 const breathe=(await admin.query("select id from hub.products where slug='breathe'")).rows[0].id;
-const advisors=(await admin.query("select id from hub.products where slug='advisors'")).rows[0].id;
+const otherProduct=(await admin.query("select id from hub.products where slug='carebase'")).rows[0].id;
 const origin='https://support-hub-web-production.up.railway.app';
 const {privateKey,publicKey}=generateKeyPairSync('ec',{namedCurve:'prime256v1'});
 const sent={sms:[],email:[]};let smsOutcome='sent';
@@ -80,7 +80,7 @@ try {
   assert.equal(triaged.productId,breathe);assert.equal(triaged.assignedToName,'Breathe Agent');assert.equal(triaged.status,'open');
   await assert.rejects(service.update(ownerToken,{id:sms.id,status:'closed',expectedUpdatedAt:sms.updatedAt}),error=>error.status===409,'a stale screen cannot overwrite triage');
   assert.ok(await find(item=>item.id===sms.id,agentToken),'the Breathe agent now sees the Breathe conversation');
-  await assert.rejects(service.update(agentToken,{id:sms.id,changeProduct:true,productId:advisors,expectedUpdatedAt:triaged.updatedAt}),error=>error.status===403,'scoped staff cannot move work outside their application');
+  await assert.rejects(service.update(agentToken,{id:sms.id,changeProduct:true,productId:otherProduct,expectedUpdatedAt:triaged.updatedAt}),error=>error.status===403,'scoped staff cannot move work outside their application');
   await assert.rejects(service.update(ownerToken,{id:sms.id,changeAssignment:true,assignedTo:customer,expectedUpdatedAt:triaged.updatedAt}),error=>error.status===403,'customers cannot be assigned');
 
   // Notes stay internal; replies are recorded before sending and never sent twice.
@@ -117,12 +117,12 @@ try {
   assert.notEqual(other.id,mail.id);
 
   // Chat: an opaque token, internal notes hidden, staff replies visible, abuse limits.
-  const chat=await service.startChat({name:'Visitor',email:'visitor@agency.test',product:'caremetric-pennsync',message:'How do I export OASIS data?',noPhi:true},'203.0.113.10');
+  const chat=await service.startChat({name:'Visitor',email:'visitor@agency.test',product:'carebase',message:'How do I export OASIS data?',noPhi:true},'203.0.113.10');
   await assert.rejects(service.startChat({name:'Visitor',email:'visitor@agency.test',message:'Hi',noPhi:false},'203.0.113.10'),error=>error.status===400);
   await assert.rejects(communications({pool,delegations:{}}).startChat({name:'Visitor',email:'visitor@agency.test',message:'Hi',noPhi:true},'203.0.113.12'),error=>error.status===503,'chat stays off unless enabled');
   const chatRow=await find(item=>item.channel==='chat'&&item.contactEmail==='visitor@agency.test');created.push(chatRow.id);
-  assert.equal(chatRow.productId,(await admin.query("select id from hub.products where slug='pennsync'")).rows[0].id);
-  await service.note(ownerToken,{id:chatRow.id,body:'Internal: route to PennSync team.',requestKey:randomUUID()});
+  assert.equal(chatRow.productId,(await admin.query("select id from hub.products where slug='carebase'")).rows[0].id);
+  await service.note(ownerToken,{id:chatRow.id,body:'Internal: route to CareBase team.',requestKey:randomUUID()});
   await service.reply(ownerToken,{id:chatRow.id,body:'Open Reports, then Export.',requestKey:randomUUID()});
   let visitorView=await service.readChat(chat.token);
   assert.deepEqual(visitorView.messages.map(message=>[message.from,message.body]),[['visitor','How do I export OASIS data?'],['support','Open Reports, then Export.']]);
@@ -141,15 +141,13 @@ try {
   // Imports from the Breathe phone line and the Advisors form: once each, administrator only.
   await assert.rejects(service.sync(agentToken,{source:'breathe.phone'}),error=>error.status===401||error.status===403);
   assert.deepEqual(await service.sync(ownerToken,{source:'breathe.phone'}),{source:'breathe.phone',read:1,created:1,skipped:0,nextOffset:null});
-  assert.deepEqual(await service.sync(ownerToken,{source:'advisors.web'}),{source:'advisors.web',read:1,created:1,skipped:0,nextOffset:null});
+  await assert.rejects(service.sync(ownerToken,{source:'advisors.web'}),{status:410});
   const call=await find(item=>item.channel==='phone');created.push(call.id);
-  const consult=await find(item=>item.channel==='web_form');created.push(consult.id);
   assert.equal(call.productId,breathe,'PennFit calls route to Breathe');assert.equal(call.contactPhone,'+12025550171');assert.equal(call.inquiryType,'customer_service');
-  assert.equal(consult.productId,advisors);assert.equal(consult.status,'closed','a request already closed in Advisors does not reopen');
   await service.update(ownerToken,{id:call.id,status:'closed',expectedUpdatedAt:call.updatedAt});
   assert.deepEqual(await service.sync(ownerToken,{source:'breathe.phone'}),{source:'breathe.phone',read:1,created:0,skipped:1,nextOffset:null});
   assert.equal((await service.get(ownerToken,{id:call.id})).status,'closed','re-syncing never overwrites staff work');
-  assert.deepEqual(adminReads.map(read=>read.operation),['phone.messages.list','inquiries.list','phone.messages.list']);
+  assert.deepEqual(adminReads.map(read=>read.operation),['phone.messages.list','phone.messages.list']);
   assert.equal((await service.reply(ownerToken,{id:call.id,body:'Called back and resolved.',requestKey:randomUUID()})).deliveryChannel,'email','phone messages with an email reply by email');
   assert.equal(sent.email.at(-1).subject,`Re: Your phone message to CareMetric [CM-${call.reference}]`,'the caller sees a subject written for them');
   smsOutcome='sent';

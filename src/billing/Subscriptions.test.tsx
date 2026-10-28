@@ -24,7 +24,7 @@ function show({ pending = false, enabled = true, url = 'https://checkout.stripe.
     pending_checkout: pending ? { id: quoteId, state: 'pending_payment', due_now: 1000, currency: 'usd' } : null,
     catalog: [{ id: 'price_core', product: 'prod_core', name: 'Core', description: 'Organization plan', kind: 'plan', key: 'core', features: [],
       allows_addons: true, active: true, amount: 1000, currency: 'usd', interval: 'month', interval_count: 1, model: 'flat', unit_label: 'organization' }] };
-  methods.workspace.mockResolvedValue({ connections: [{ id: connection, name: 'CareBase', role: 'organization_admin' }] });
+  methods.workspace.mockResolvedValue({ connections: [{ id: connection, app: 'carebase', name: 'CareBase', role: 'organization_admin' }] });
   methods.request.mockImplementation(async (_path, input) => {
     if (input.action === 'workspace') return workspace;
     if (input.action === 'quote') return { id: quoteId, kind: 'checkout', facility_name: 'Organization subscription', due_now: 1000, currency: 'usd',

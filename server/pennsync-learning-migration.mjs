@@ -37,6 +37,7 @@ export function pennsyncLearningMigration({pool,issue,fetchImpl=fetch}) {
         });
       }
       await local(async db=>(await db.query('select private.pennsync_learning_head() as value')).rows[0].value);
+      if (!adminRegistry.pennsync.endpoint) throw new HttpError(503,'PennSync uses its own training system.','unconfigured');
       const native={operation:'learning.source.snapshot'};
       signal.throwIfAborted();
       const capability=await issue(sessionToken,'pennsync',native);

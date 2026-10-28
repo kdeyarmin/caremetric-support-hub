@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { nativeConnectionOrigin, selfService } from './self-service.mjs';
 
 describe('native customer connection links', () => {
-  it.each(['carebase', 'breathe', 'pennsync', 'caremetric-emr', 'caremetric-intel'])('keeps %s connections on the origin its native adapter trusts', async slug => {
+  it.each(['carebase', 'breathe', 'caremetric-intel'])('keeps %s connections on the origin its native adapter trusts', async slug => {
     const query = vi.fn(async sql => ({ rows: sql.includes('billing_authenticate_app') ? [{ result: { slug, product_id: '96000000-0000-4000-8000-000000000001' } }] : [] }));
     const release = vi.fn();
     const service = selfService({ pool: { connect: async () => ({ query, release }) }, provider: {}, publicOrigin: 'https://help.caremetric.ai' });

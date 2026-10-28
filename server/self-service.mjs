@@ -5,8 +5,6 @@ import { connectionProof, nativeOperation, selfServiceRequest, profilePage, diag
 export const nativeSelfService = Object.freeze({
   carebase: { endpoint: 'https://xsqobvvreaovwibxwyvv.supabase.co/functions/v1/self-service', origin: 'https://cmcarebase.com' },
   breathe: { endpoint: 'https://cmbreathe.com/resupply-api/self-service', origin: 'https://cmbreathe.com' },
-  pennsync: { endpoint: 'https://caremetricai.base44.app/functions/customerSelfService', origin: 'https://caremetricai.base44.app', header: 'X-CareMetric-Hub-Authorization' },
-  'caremetric-emr': { endpoint: 'https://ubbtgcaosuebrlwcvihw.supabase.co/functions/v1/customer-self-service', origin: 'https://caremetric.ai' },
   'caremetric-intel': { endpoint: 'https://www.caremetricintel.com/api/self-service', origin: 'https://www.caremetricintel.com' },
 });
 const sha = value => createHash('sha256').update(value).digest('hex');

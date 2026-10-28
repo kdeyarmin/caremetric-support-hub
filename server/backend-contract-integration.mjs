@@ -72,7 +72,12 @@ const cases=[
 ];
 
 await client.connect();
+const archivedAdvisors=(await client.query("select status,support_enabled from hub.products where slug='advisors'")).rows[0];
 try {
+  // Replay historical declaration prerequisites only in this disposable fixture.
+  // Native authority stays disabled by the current application allowlist.
+  await client.query("update hub.products set status='active',support_enabled=true where slug='advisors'");
+  assert.equal((await client.query("select private.hub_application_enabled(id) as enabled from hub.products where slug='advisors'")).rows[0].enabled,false);
   assertBackendContract(await readContract());
   assert.equal((await readContract()).features.includes('knowledge.docstudio.v1'),false,'The current contract excludes the retired runtime');
   for(const fixture of cases) {
@@ -240,4 +245,7 @@ try {
     const before=await readContract();await client.query(onboardingMigration);assert.deepEqual(await readContract(),before,'Onboarding preserves other reviewed features and is idempotent');
   } finally {await client.query('rollback');}
   console.log('Backend declarations rejected fifteen incomplete SQL boundaries and preserved independent onboarding and structure features.');
-} finally { await client.end(); }
+} finally {
+  await client.query("update hub.products set status=$1,support_enabled=$2 where slug='advisors'",[archivedAdvisors.status,archivedAdvisors.support_enabled]);
+  await client.end();
+}

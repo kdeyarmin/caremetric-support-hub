@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Activity, BookOpen, Building2, Flag, GraduationCap, History, Inbox, Layers3, RefreshCw, Users } from "lucide-react";
 import { adminRegistry } from "../../supabase/functions/_shared/adminRegistry";
-import { portfolioProducts } from "../../supabase/functions/_shared/portfolioProtocol";
+import { centralHubPortfolioApps as portfolioProducts } from "../hubScope";
 import type { AdminDirectoryUser, AdminOrganization, PortfolioCapabilities, PortfolioOperationName, PortfolioProduct } from "../../supabase/functions/_shared/portfolioProtocol";
 import { AdminInventory } from "./AdminInventory";
 import { AdminFunctionCatalog } from "./AdminFunctionCatalog";
@@ -46,7 +46,7 @@ const formatNumber = new Intl.NumberFormat();
 
 export function AdminWorkspace({ client, actorId, portfolio = portfolioClient }: { client: AdminClient; actorId?: string; portfolio?: PortfolioClient }) {
   const [params, setParams] = useSearchParams();
-  const product = portfolioProducts.includes(params.get("product") as PortfolioProduct) ? params.get("product") as PortfolioProduct : "carebase";
+  const product = portfolioProducts.some(value => value === params.get("product")) ? params.get("product") as PortfolioProduct : "carebase";
   const [refresh, setRefresh] = useState(0);
   return <div className="admin-workspace">
     <div className="page-heading"><div><span className="eyebrow">CareMetric Admin</span><h1>Your apps, in one workspace</h1><p>Manage connected applications, facility training, courses and support with your Hub sign-in. Subscriptions and charges for every application are in Billing.</p></div><button className="button button-secondary" type="button" onClick={() => setRefresh(value => value + 1)}><RefreshCw size={15} aria-hidden="true" />Refresh connection</button></div>

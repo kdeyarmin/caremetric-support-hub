@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { appLabels, billingApps, type BillingApp } from './billingProtocol';
+import { appLabels, billingApps, historicalBillingApps, type BillingApp } from './billingProtocol';
 import type { ActorContext, Product } from '../domain';
 
 /** Organization payment navigation follows the same paid-app memberships as the server. */
@@ -16,7 +16,7 @@ export const statusLabels: Record<SubscriptionStatus, string> = {
   trialing: 'Trial', active: 'Active', past_due: 'Past due', paused: 'Paused', unpaid: 'Unpaid', incomplete: 'Awaiting first payment',
   incomplete_expired: 'Expired before payment', canceled: 'Canceled',
 };
-const appSlug = z.enum(billingApps).nullable().catch(null);
+const appSlug = z.enum(historicalBillingApps).nullable().catch(null);
 export const itemSchema = z.object({
   id: z.string(), price: z.string(), product: z.string(), quantity: z.number().int(), unit_amount: z.number().int().nullable(), currency: z.string(),
   interval: z.enum(['day', 'week', 'month', 'year']).nullable(), interval_count: z.number().int().nullable(), product_name: z.string(),
@@ -149,7 +149,7 @@ export function billingTotals(subscriptions: readonly Subscription[], coupons: r
 /** Subscription counts per application, for the control center and the portfolio rollup. */
 export interface AppBillingSummary { app: BillingApp; subscriptionCount: number; statusCounts: Array<{ status: string; count: number }>; mrrCents: number }
 export function summarizeByApp(workspace: Pick<BillingWorkspace, 'subscriptions' | 'coupons'>): Record<BillingApp, AppBillingSummary> {
-  return Object.fromEntries(billingApps.map(app => {
+  return Object.fromEntries(historicalBillingApps.map(app => {
     const rows = workspace.subscriptions.filter(subscription => subscription.app === app && subscription.status !== 'incomplete_expired');
     const totals = billingTotals(rows, workspace.coupons);
     return [app, { app, subscriptionCount: rows.length, mrrCents: totals.mrrCents,

@@ -589,6 +589,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     const app = (await one(db, 'select private.billing_authenticate_app($1) as app', [sha256(key)])).app;
     if (!app) throw new HttpError(401, 'Application key required.');
     if (app.slug === 'pennsync') throw new HttpError(403, 'PennSync does not accept payments.');
+    if (!selfServiceApps.includes(app.slug)) throw new HttpError(403, 'This application is independent of the centralized Hub.');
     return app;
   }
   const appResponse = entitlement => ({ ...entitlement, cache_ttl_seconds: entitlementCacheSeconds, checked_at: entitlement.checked_at ?? new Date(now()).toISOString() });

@@ -29,7 +29,7 @@ const fetchImpl=async(url,options)=>{
 };
 bridge=delegations({pool,storageUrl:'https://storage.invalid',fetchImpl});
 const preview=async(extra={},token=ownerToken)=>{
-  const value=await bridge.onboarding(token,{operation:'preview',product:'caremetric-go',sourceUserId:userId,sourceAccountId:accountId,hubUserId:customer,tenantName:'Synthetic support account',...extra});
+  const value=await bridge.onboarding(token,{operation:'preview',product:'carebase',sourceUserId:userId,sourceAccountId:accountId,hubUserId:customer,tenantName:'Synthetic support account',...extra});
   tenants.add(value.hubTenantId);return value;
 };
 const apply=(p,requestId=randomUUID(),token=ownerToken,extra={})=>bridge.onboarding(token,{operation:'apply',intentId:p.intentId,proofDigest:p.proofDigest,requestId,reviewed:true,...extra});
@@ -68,10 +68,12 @@ try {
   await assert.rejects(apply(revoked),'a changed SMS identity invalidates the prior review even after verification');
   const concurrent=await Promise.all([preview(),preview()]);const sameRequest=randomUUID();
   const outcomes=await Promise.allSettled(concurrent.map(p=>apply(p,sameRequest)));assert.equal(outcomes.filter(r=>r.status==='fulfilled').length,1,'durable request key cannot apply two intents');
-  const otherProduct=await preview({product:'caremetric-emr'});const emrResult=await apply(otherProduct);assert.notEqual(emrResult.hubTenantId,result.hubTenantId,'shared backend does not imply cross-product grants');
+  const otherProduct=await preview({product:'breathe'});const emrResult=await apply(otherProduct);assert.notEqual(emrResult.hubTenantId,result.hubTenantId,'shared backend does not imply cross-product grants');
   const intel=await preview({product:'intel',sourceUserId:'a'.repeat(24),sourceAccountId:'a'.repeat(24)});assert.equal((await apply(intel)).product,'intel');
   const breathe=await preview({product:'breathe',sourceUserId:'CasePreserved_Legacy'});assert.equal((await apply(breathe)).product,'breathe');
-  const penn=await preview({product:'pennsync',sourceUserId:'b'.repeat(24),sourceAccountId:'c'.repeat(24)});assert.equal((await apply(penn)).product,'pennsync');
+  for (const product of ['pennsync','caremetric-emr','caremetric-go','advisors']) {
+    await assert.rejects(preview({product}), error => error.status===503 || error.status===403 || error.status===400, `${product} cannot onboard through the Hub`);
+  }
   const carebase=await preview({product:'carebase'});await apply(carebase);
   const canonical=(await admin.query("select f.issuer,f.verification_method,t.hub_tenant_id,p.hub_user_id from private.federation_issuers f join private.federated_tenants t on t.issuer_id=f.id join private.federated_principals p on p.issuer_id=f.id where f.issuer='https://xsqobvvreaovwibxwyvv.supabase.co/auth/v1' and t.external_tenant_hash=private.carebase_external_identity_hash($1) and p.external_subject_hash=private.carebase_external_identity_hash($2)",[accountId,userId])).rows;
   assert.deepEqual(canonical,[{issuer:'https://xsqobvvreaovwibxwyvv.supabase.co/auth/v1',verification_method:'oidc',hub_tenant_id:carebase.hubTenantId,hub_user_id:customer}]);

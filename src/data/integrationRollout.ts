@@ -20,36 +20,11 @@ export const integrationRolloutBySlug: Record<string, IntegrationRollout> = {
     state: "live",
     stateLabel: "Live",
   },
-  pennsync: {
-    previousHelp: "Static and local help surfaces",
-    integration: "Contextual launcher with local fallback",
-    state: "in_progress",
-    stateLabel: "Published; click pending",
-  },
-  "caremetric-emr": {
-    previousHelp: "Local support center",
-    integration: "Dashboard launcher with local fallback",
-    state: "live",
-    stateLabel: "Live",
-  },
-  "caremetric-go": {
-    previousHelp: "Separate provider and patient menus",
-    integration: "Shared support screen with offline fallback",
-    state: "source_ready",
-    stateLabel: "Source ready",
-  },
   "caremetric-intel": {
     previousHelp: "In-app searchable product guide",
-    integration: "Central launcher merged; Base44 publish pending",
-    state: "source_ready",
-    stateLabel: "Source ready",
-  },
-  // A plain website: it links to /help?product=advisors directly and never embeds the Help SDK.
-  advisors: {
-    previousHelp: "Website FAQ and consultation form",
-    integration: "Hub knowledge base and consultation inbox bridge",
-    state: "source_ready",
-    stateLabel: "Source ready",
+    integration: "Central launcher and native self-service enabled",
+    state: "live",
+    stateLabel: "Live",
   },
 };
 

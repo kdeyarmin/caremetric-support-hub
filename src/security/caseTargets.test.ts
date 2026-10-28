@@ -5,7 +5,7 @@ import { caseTargetByKey, eligibleCaseTargets, preferredCaseTarget } from "./cas
 const products: Product[] = [
   {
     id: "product-a",
-    slug: "product-a",
+    slug: "carebase",
     name: "Product A",
     description: "",
     status: "active",
@@ -13,7 +13,7 @@ const products: Product[] = [
   },
   {
     id: "product-b",
-    slug: "product-b",
+    slug: "breathe",
     name: "Product B",
     description: "",
     status: "pilot",

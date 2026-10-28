@@ -104,10 +104,10 @@ describe('initial subscription Checkout', () => {
     const test = fixture({ customer: 'cus_new' }); test.existingSubscriptions([{ id: 'sub_prior', status, metadata: { app: 'carebase' } }]);
     await expect(test.preview()).rejects.toMatchObject({ status: 409 }); expect(test.events).toEqual([]);
   });
-  it('refuses a separate EMR purchase for an existing shared companion subscription', async () => {
+  it('refuses EMR purchases because it is outside the centralized Hub', async () => {
     const test = fixture({ customer: 'cus_new' }); test.workspace.app = 'caremetric-emr';
     test.existingSubscriptions([{ id: 'sub_shared', status: 'active', metadata: { app: 'caremetric-go' } }]);
-    await expect(test.preview()).rejects.toMatchObject({ status: 409 });
+    await expect(test.preview()).rejects.toMatchObject({ status: 403 });
   });
   it('allows another known application on a consolidated customer without duplicating its charges', async () => {
     const test = fixture({ customer: 'cus_new' }); test.existingSubscriptions([{ id: 'sub_other_app', status: 'active', metadata: { app: 'breathe' } }]);

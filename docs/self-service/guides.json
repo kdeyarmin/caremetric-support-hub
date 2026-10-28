@@ -9,8 +9,6 @@
     "apps": [
       "carebase",
       "breathe",
-      "pennsync",
-      "caremetric-emr",
       "caremetric-intel"
     ],
     "prerequisites": [
@@ -54,8 +52,6 @@
     "apps": [
       "carebase",
       "breathe",
-      "pennsync",
-      "caremetric-emr",
       "caremetric-intel"
     ],
     "prerequisites": [
@@ -104,15 +100,13 @@
     "apps": [
       "carebase",
       "breathe",
-      "pennsync",
-      "caremetric-emr",
       "caremetric-intel"
     ],
     "prerequisites": [
       "A verified customer-center connection and current native purchasing permission.",
       "A current active organization subscription for plan changes. Trials, pending payments, cancellations, and managed contracts retain their existing restrictions.",
       "Different facility plans require the application's verified facility-entitlement capability. Until enabled, facilities share the organization plan.",
-      "First-time paid setup requires an organization administrator and no unresolved subscription, trial, or checkout. Published facility prices require verified native facilities; other usage-based products require their application’s usage adapter."
+      "First-time paid setup requires an organization administrator and no unresolved subscription, trial, or checkout. Published facility prices require verified native facilities; other usage-based products require their application\u2019s usage adapter."
     ],
     "roles": [
       "Organization administrators manage shared plans and payment details.",
@@ -122,7 +116,7 @@
       "Open Plans & add-ons in Customer center and select the connected application.",
       "Choose a permitted facility when facility subscriptions are enabled, otherwise review the shared organization selection.",
       "Use Invoices & payments to update shared payment details or pay an open invoice in Stripe.",
-      "For an organization with no subscription, choose a plan and compatible add-ons, select Review subscription, and confirm the server’s price preview to open secure Stripe payment."
+      "For an organization with no subscription, choose a plan and compatible add-ons, select Review subscription, and confirm the server\u2019s price preview to open secure Stripe payment."
     ],
     "use": [
       "Compare the published base plans, included features, cadence, and add-ons.",
@@ -212,10 +206,7 @@
     "apps": [
       "carebase",
       "breathe",
-      "pennsync",
-      "caremetric-emr",
-      "caremetric-intel",
-      "advisors"
+      "caremetric-intel"
     ],
     "prerequisites": [
       "A signed-in Hub account and membership for the application and organization.",
@@ -265,10 +256,7 @@
     "apps": [
       "carebase",
       "breathe",
-      "pennsync",
-      "caremetric-emr",
-      "caremetric-intel",
-      "advisors"
+      "caremetric-intel"
     ],
     "prerequisites": [
       "Access to the native application's facility and account settings.",
@@ -313,8 +301,6 @@
     "apps": [
       "carebase",
       "breathe",
-      "pennsync",
-      "caremetric-emr",
       "caremetric-intel"
     ],
     "prerequisites": [

@@ -97,7 +97,7 @@ try {
   tenants.push(pairing.hubTenantId);nativeAllowed=false;
   await assert.rejects(bridge.onboarding(ownerToken,{operation:'apply',intentId:pairing.intentId,proofDigest:pairing.proofDigest,requestId:randomUUID(),reviewed:true}));nativeAllowed=true;
   const linked=await bridge.onboarding(ownerToken,{operation:'apply',intentId:pairing.intentId,proofDigest:pairing.proofDigest,requestId:randomUUID(),reviewed:true});assert.equal(linked.intakeEnabled,false);
-  for(const product of ['carebase','caremetric-emr','caremetric-go','pennsync','intel']){
+  for(const product of ['carebase','intel']){
     const inv=await invite(product),customerJar={},started=await start(inv,customerJar);assert.equal(started.status,200);assert.equal((await verify(started,customerJar)).status,200);
     const uid=(await admin.query('select claimed_user_id from private.support_registration_invitations where id=$1',[inv.op.requestId])).rows[0].claimed_user_id;
     claimed.push(uid);assert.equal((await admin.query('select count(*) from hub.tenant_product_memberships where user_id=$1',[uid])).rows[0].count,'0');
