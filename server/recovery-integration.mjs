@@ -61,7 +61,7 @@ async function authorityState() {
 }
 try {
   await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
-  const product = (await admin.query("select id from hub.products where slug='caremetric-go'")).rows[0].id;
+  const product = (await admin.query("select id from hub.products where slug='caremetric-intel'")).rows[0].id;
   await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'recovery-owner@test.invalid',false),($2,'recovery-customer@test.invalid',false)", [owner,customer]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')", [owner]);
   await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550981',now()),($2,'+12025550982',now())", [owner,customer]);
