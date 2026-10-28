@@ -8,6 +8,7 @@ import { gateway } from './gateway.mjs';
 import { platformBilling } from './billing.mjs';
 import { signStripePayload } from './stripe.mjs';
 import { fakeStripe } from './fixtures/fake-stripe.mjs';
+import { exerciseFacilityEntitlements } from './facility-entitlements-integration.mjs';
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl); assert.equal(local.hostname, '127.0.0.1'); assert.equal(local.port, '54322');
@@ -25,7 +26,7 @@ const webhookSecret = 'whsec_' + randomUUID().replaceAll('-', '');
 const rpc = (name, args = {}, token = ownerToken) => api.rpc(name, args, token);
 const key = () => randomUUID();
 const product = async slug => (await admin.query('select id from hub.products where slug=$1', [slug])).rows[0].id;
-let billing;
+let billing, dropQuantityResponses = false;
 const command = (input, token = ownerToken) => billing.command(token, input);
 const workspace = () => rpc('billing_workspace');
 const customer = id => rpc('billing_customer', { p_tenant_id: id });
@@ -73,7 +74,16 @@ try {
   await assert.rejects(stranger.command(ownerToken, { action: 'catalog.sync' }), error => error.status === 503 && /different Stripe account/.test(error.message));
   await other.close();
 
-  billing = platformBilling({ pool, secretKey: 'sk_test_hub', webhookSecrets: [webhookSecret], apiBase: await stripe.listen(), publicOrigin: 'https://hub.test', log: { warn() {} } });
+  billing = platformBilling({ pool, secretKey: 'sk_test_hub', webhookSecrets: [webhookSecret], apiBase: await stripe.listen(), publicOrigin: 'https://hub.test', log: { warn() {} },
+    fetchImpl: async (url, init) => {
+      const response = await fetch(url, init);
+      if (dropQuantityResponses && new URL(url).pathname.startsWith('/v1/subscription_items/')) {
+        await response.arrayBuffer();
+        throw new TypeError('Synthetic lost provider response');
+      }
+      return response;
+    },
+  });
   assert.equal(await billing.start(), true);
   assert.equal((await workspace()).mode, 'test');
   assert.ok(stripe.requests.every(request => request.version === '2026-02-25.clover'), 'every call pins the API version');
@@ -154,6 +164,9 @@ try {
   assert.equal(usage.duplicate, true, 'a retried report is a no-op');
   assert.equal((await billing.usage(bearer, { account, metric: 'facility', quantity: 5, request_key: key() })).outcome, 'unchanged');
   assert.equal((await billing.usage(bearer, { account: randomUUID(), metric: 'facility', quantity: 5, request_key: key() })).outcome, 'not_linked');
+  await exerciseFacilityEntitlements({ admin, pool, billing, bearer, breatheKey, tenant, product: await product('carebase'), account, plan: planMonthly, addon: addonMonthly, stripe,
+    dropResponses: value => { dropQuantityResponses = value; },
+  });
 
   // Change a price: grandfather the add-on, move the plan now with proration.
   space = await workspace();
