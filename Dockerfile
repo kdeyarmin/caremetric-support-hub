@@ -24,6 +24,7 @@ COPY --from=build /app/package.json /app/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/server ./server
+COPY --from=build /app/src/domain.ts /app/src/hubScope.ts ./src/
 COPY --from=build /app/src/lib/backendContract.ts ./src/lib/backendContract.ts
 COPY --from=build /app/src/admin/configurationProtocol.ts ./src/admin/configurationProtocol.ts
 COPY --from=build /app/src/billing/billingProtocol.ts ./src/billing/billingProtocol.ts
