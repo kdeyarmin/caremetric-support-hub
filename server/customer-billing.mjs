@@ -24,6 +24,35 @@ const scheduleFingerprint = schedule => createHash('sha256').update(JSON.stringi
   status: schedule.status, current_phase: schedule.current_phase, phases: schedule.phases, end_behavior: schedule.end_behavior, metadata: schedule.metadata,
 }))).digest('hex');
 const phaseLines = phase => (phase?.items ?? []).map(item => ({ price: reference(item.price), quantity: item.quantity ?? 1 }));
+const defined = object => Object.fromEntries(Object.entries(object).filter(([, value]) => value !== undefined && value !== null));
+const accountIdentity = value => value ? defined({ type: value.type, account: reference(value.account) }) : undefined;
+// Stripe read responses contain expanded identities and read-only tax fields.
+// Retain the current commercial settings using the schedule update's input shape.
+function phaseSettings(phase) {
+  return defined({
+    collection_method: phase.collection_method,
+    default_payment_method: reference(phase.default_payment_method),
+    default_tax_rates: phase.default_tax_rates?.map(reference),
+    automatic_tax: phase.automatic_tax ? defined({ enabled: phase.automatic_tax.enabled, liability: accountIdentity(phase.automatic_tax.liability) }) : undefined,
+    discounts: phase.discounts?.map(discount => {
+      if (typeof discount === 'string') return { discount };
+      if (reference(discount.discount)) return { discount: reference(discount.discount) };
+      if (reference(discount.promotion_code)) return { promotion_code: reference(discount.promotion_code) };
+      if (reference(discount.coupon)) return { coupon: reference(discount.coupon) };
+      throw new HttpError(409, 'This subscription has a discount that needs a billing review.');
+    }),
+    invoice_settings: phase.invoice_settings ? defined({
+      account_tax_ids: phase.invoice_settings.account_tax_ids?.map(reference),
+      days_until_due: phase.invoice_settings.days_until_due,
+      custom_fields: phase.invoice_settings.custom_fields?.map(field => ({ name: field.name, value: field.value })),
+      description: phase.invoice_settings.description, footer: phase.invoice_settings.footer,
+      issuer: accountIdentity(phase.invoice_settings.issuer),
+    }) : undefined,
+    transfer_data: phase.transfer_data ? defined({ amount_percent: phase.transfer_data.amount_percent, destination: reference(phase.transfer_data.destination) }) : undefined,
+    application_fee_percent: phase.application_fee_percent,
+    on_behalf_of: reference(phase.on_behalf_of),
+  });
+}
 function verifyAccount(subscription, execution) {
   if (reference(subscription.customer) !== execution.customer || subscription.metadata?.app !== execution.app) throw new HttpError(409, 'The subscription account changed. Review a new preview.');
 }
@@ -150,8 +179,7 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
       await live.post(`/v1/subscription_schedules/${schedule.id}/release`, { preserve_cancel_date: false }, { idempotencyKey: `${key}-release` });
       await settle(quote.id, 'applied', subscription.id); return { state: 'applied' };
     }
-    const settings = Object.fromEntries(['collection_method', 'default_payment_method', 'default_tax_rates', 'automatic_tax', 'discounts', 'invoice_settings', 'transfer_data', 'application_fee_percent', 'on_behalf_of']
-      .filter(name => phase[name] !== undefined && phase[name] !== null).map(name => [name, phase[name]]));
+    const settings = phaseSettings(phase);
     const phases = [{ ...settings, start_date: phase.start_date, end_date: phase.end_date, items: execution.immediateLines, proration_behavior: 'none' }];
     if (execution.nextLines.length) phases.push({ ...settings, start_date: phase.end_date, duration: { interval: execution.interval, interval_count: 1 }, items: execution.nextLines, proration_behavior: 'none', metadata: { ...subscription.metadata } });
     schedule = await live.post(`/v1/subscription_schedules/${schedule.id}`, { metadata: { hub_self_service: 'true', hub_self_service_quote: quote.id }, proration_behavior: 'none',

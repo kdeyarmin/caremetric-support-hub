@@ -146,6 +146,31 @@ describe('customer purchases', () => {
     expect(test.live.post.mock.calls.some(([path]) => path === '/v1/subscriptions/sub_test')).toBe(false);
     expect(test.live.post.mock.calls.find(([path]) => path === '/v1/subscription_schedules/sub_sched')[1]).toMatchObject({ end_behavior: 'cancel', phases: [{ items: [{ price: 'price_core', quantity: 1 }] }] });
   });
+  it.each([
+    { automatic_tax: { enabled: false, disabled_reason: null, liability: null }, expected: { enabled: false } },
+    { automatic_tax: { enabled: true, disabled_reason: null, liability: { type: 'account', account: { id: 'acct_tax', object: 'account' } } }, expected: { enabled: true, liability: { type: 'account', account: 'acct_tax' } } },
+  ])('retains schedule settings using writable Stripe fields: $expected.enabled', async ({ automatic_tax, expected }) => {
+    const test = fixture();
+    test.mutateSchedule({ phases: [{ start_date: 1767225600, end_date: 1769904000, items: [{ price: 'price_core', quantity: 1 }],
+      collection_method: 'send_invoice', default_payment_method: { id: 'pm_saved', object: 'payment_method' },
+      default_tax_rates: [{ id: 'txr_saved', object: 'tax_rate' }], automatic_tax,
+      discounts: [{ discount: { id: 'di_saved', object: 'discount' }, coupon: { id: 'coupon_saved' } }],
+      invoice_settings: { account_tax_ids: [{ id: 'txi_saved', object: 'tax_id' }], days_until_due: 14,
+        issuer: { type: 'account', account: { id: 'acct_issuer', object: 'account' } },
+        custom_fields: [{ name: 'Reference', value: 'Synthetic', object: 'read_only' }], description: 'Synthetic terms', footer: 'Synthetic footer' },
+      transfer_data: { destination: { id: 'acct_destination', object: 'account' }, amount_percent: 75 }, application_fee_percent: 5,
+      on_behalf_of: { id: 'acct_merchant', object: 'account' },
+    }] });
+    const quote = await test.preview([], null);
+    await expect(test.service.handle('session', { action: 'confirm', quote_id: quote.id, confirmed: true })).resolves.toMatchObject({ state: 'scheduled' });
+    const settings = test.live.post.mock.calls.find(([path]) => path === '/v1/subscription_schedules/sub_sched')[1].phases[0];
+    expect(settings).toEqual({ start_date: 1767225600, end_date: 1769904000, items: [{ price: 'price_core', quantity: 1 }], proration_behavior: 'none',
+      collection_method: 'send_invoice', default_payment_method: 'pm_saved', default_tax_rates: ['txr_saved'], automatic_tax: expected,
+      discounts: [{ discount: 'di_saved' }], invoice_settings: { account_tax_ids: ['txi_saved'], days_until_due: 14,
+        issuer: { type: 'account', account: 'acct_issuer' }, custom_fields: [{ name: 'Reference', value: 'Synthetic' }], description: 'Synthetic terms', footer: 'Synthetic footer' },
+      transfer_data: { destination: 'acct_destination', amount_percent: 75 }, application_fee_percent: 5, on_behalf_of: 'acct_merchant',
+    });
+  });
   it('preserves provider item identity and removes obsolete lines in a single change', () => {
     const sub = { items: { data: [{ id: 'si_a', price: { id: 'price_a' } }, { id: 'si_b', price: { id: 'price_b' } }] } };
     expect(subscriptionItemPatch(sub, [{ price: 'price_a', quantity: 2 }, { price: 'price_c', quantity: 1 }])).toEqual([{ id: 'si_a', price: 'price_a', quantity: 2 }, { id: 'si_b', deleted: true }, { price: 'price_c', quantity: 1 }]);

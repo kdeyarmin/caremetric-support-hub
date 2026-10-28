@@ -267,10 +267,24 @@ account that already has billing gets its current answer and no second trial.
 - `supabase/tests/036_customer_checkout.test.sql` checks private receipt state,
   closed service operations, server connection identity and the new contract.
 
-- `docs/evidence/customer-checkout-sandbox-20261027.json` records the isolated
-  provider smoke: invoice preview, current-version Checkout creation, hosted page,
-  concurrent idempotent retries and confirmed expiration. No payment was attempted.
-  Stripe's temporary `rkcs_test_` keys support this API smoke but cannot read account
-  identity. The Hub continues to refuse them at its account-verification guard.
-  Claim the sandbox and configure an account-readable restricted test key before
-  completing the full payment matrix; do not relax the production account guard.
+- `docs/evidence/customer-checkout-sandbox-20261027.json` preserves the initial
+  preview, Checkout and expiration smoke before the owner claimed the sandbox.
+- `docs/evidence/customer-checkout-sandbox-20261028.json` records claimed-sandbox
+  hosted payment, consolidated quantities, matching proration preview, concurrent
+  idempotent upgrades, failed-payment recovery and authentication-required results.
+  Owner-authorized CLI access verifies the exact sandbox through the unchanged Hub
+  account guard. Isolated clocks confirm downgrade/add-on removal at renewal,
+  invoice collection after finalization and cancellation at the following renewal.
+  The actual Hub customer billing service also passes two-facility activation,
+  mixed plan purchases, credit-preserving exact-invoice recovery and scheduled downgrade
+  reconciliation against the real provider. Native authority and Auth/Storage are
+  isolated fixtures; no hosted native capability or purchasing flag is enabled.
+  All synthetic paid subscriptions are canceled and the Hub matrix catalog retired.
+  Actual signed provider events separately pass signature, persistent duplicate and
+  expired-signature checks through the shared receipt ledger. These transport checks
+  are distinct from the customer-service calls and do not claim a hosted deployment.
+  Baseline CI #40632703353 passes, including 503 pgTAP assertions and the runtime image.
+  Remaining gates include further delayed-payment variants and complete native
+  facility enforcement across privileged readers, background jobs and offline sync.
+  Keep the account-verification guard and disabled purchasing capability in place
+  until those gates pass.

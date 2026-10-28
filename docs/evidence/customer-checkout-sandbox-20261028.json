@@ -1,0 +1,221 @@
+{
+  "verified_on": "2026-10-28",
+  "environment": "isolated claimed Stripe sandbox",
+  "sandbox_account": "acct_1UVIE766OwFQY1wC",
+  "live_mode": false,
+  "api_versions": {
+    "existing_billing": "2026-02-25.clover",
+    "new_checkout": "2026-08-26.dahlia"
+  },
+  "provider_checks": [
+    {
+      "name": "initial Checkout receipt and owned subscription",
+      "passed": true,
+      "amount": 2000,
+      "currency": "usd"
+    },
+    {
+      "name": "consolidated quantities, proration and concurrent identical upgrades",
+      "passed": true,
+      "amount": 1999,
+      "currency": "usd",
+      "quantities": [
+        3,
+        2
+      ],
+      "common_renewal": true
+    },
+    {
+      "name": "failed payment holds quantities until the exact invoice is paid",
+      "passed": true,
+      "held_before_payment": true,
+      "recovered_after_exact_payment": true
+    },
+    {
+      "name": "authentication-required payment cannot report success",
+      "passed": true,
+      "requires_action": true,
+      "cleaned": true
+    },
+    {
+      "name": "scheduled removal retains current quantities and can be released",
+      "passed": true,
+      "retained_until_renewal": true,
+      "undo_preserves_current_selection": true
+    },
+    {
+      "name": "renewal cancellation retains access before the boundary",
+      "passed": true,
+      "cancel_at_period_end": true,
+      "still_active": true
+    },
+    {
+      "name": "cleanup synthetic paid subscription",
+      "passed": true,
+      "canceled": true
+    }
+  ],
+  "checkout": {
+    "hosted_page_completed": true,
+    "payment_status": "paid",
+    "subscription_status_at_completion": "active",
+    "currency": "usd",
+    "amount_paid": 2000,
+    "base_quantity": 2
+  },
+  "signed_event_checks": {
+    "transport": "Stripe CLI forwarding signed provider events to a loopback collector",
+    "implementation": "server/stripe.mjs verifyStripeSignature and private.billing_record_event",
+    "events": [
+      {
+        "type": "invoice.paid",
+        "valid_signature": true,
+        "first_recorded": true,
+        "duplicate_recorded": false,
+        "expired_signature_rejected": true
+      },
+      {
+        "type": "customer.subscription.deleted",
+        "valid_signature": true,
+        "first_recorded": true,
+        "duplicate_recorded": false,
+        "expired_signature_rejected": true
+      }
+    ],
+    "scope": "Signature verification and durable receipt deduplication; this does not exercise the complete Hub fulfillment handler."
+  },
+  "access": {
+    "sandbox_claimed": true,
+    "reconnected_stripe_app_sees_exact_sandbox": true,
+    "temporary_cli_key_account_read_status": 403,
+    "temporary_cli_key_clock_access_status": 403,
+    "stripe_app_clock_creation_succeeded": true,
+    "stripe_app_clock_read_and_advance_available": false,
+    "hub_account_verification_guard": "preserved",
+    "owner_cli_signed_in": true,
+    "owner_cli_account_identity_read": true,
+    "owner_cli_clock_read_and_advance": true,
+    "owner_cli_account_guard_verified": true
+  },
+  "cleanup": {
+    "synthetic_paid_subscription": "canceled",
+    "signed_event_trial_subscription": "canceled",
+    "authentication_intent": "canceled",
+    "production_objects_changed": false,
+    "clock_matrix_subscription": "canceled",
+    "hub_matrix_subscription": "canceled",
+    "hub_matrix_catalog": "retired"
+  },
+  "ci": {
+    "baseline_run": 40632703353,
+    "baseline_commit": "8b3728bec1799e496b20db5e8de4ba1f48af1f17",
+    "baseline_result": "passed",
+    "baseline_pgTAP_assertions": 503,
+    "local_followup": {
+      "npm_ci": "passed",
+      "npm_run_check": "passed",
+      "app_server_tests": 1281,
+      "sdk_tests": 24,
+      "self_service_postgres_runs": 2,
+      "billing_postgres_runs": 2,
+      "backend_contract_replay": "passed"
+    }
+  },
+  "remaining": [
+    "additional delayed-payment and decline scenarios, and a sandbox replay of each application's published catalog",
+    "native privileged-read, background-job and facility-specific offline entitlement coverage plus remaining source adapters before activating facility purchasing"
+  ],
+  "production_purchasing_enabled": false,
+  "application_base_commit": "8b3728bec1799e496b20db5e8de4ba1f48af1f17",
+  "workspace_defaults_migration": "20261028055830_customer_billing_workspace_defaults.sql",
+  "runtime_correction": "Schedule updates retain writable tax, discount, invoice and transfer settings without echoing read-only provider fields.",
+  "clock_checks": [
+    {
+      "name": "create a paid consolidated subscription on an isolated test clock",
+      "passed": true,
+      "amount": 2500,
+      "currency": "usd"
+    },
+    {
+      "name": "scheduled add-on removal and downgrade apply only at renewal",
+      "passed": true,
+      "boundary": 1798435937,
+      "renewal_amount": 1000,
+      "current_quantities_retained_before_boundary": true,
+      "addon_removed_after_boundary": true,
+      "draft_invoice_at_boundary": true,
+      "collection_delay_observed": true
+    },
+    {
+      "name": "cancellation takes effect at the next renewal",
+      "passed": true,
+      "boundary": 1801114337,
+      "canceled_at_renewal": true
+    },
+    {
+      "name": "cleanup clock subscription",
+      "passed": true,
+      "canceled": true
+    }
+  ],
+  "hub_purchase_checks": [
+    {
+      "name": "unchanged Hub account guard verifies the owner-authorized sandbox transport",
+      "passed": true,
+      "account_guard_preserved": true,
+      "transport": "Stripe CLI OAuth; no API key exported"
+    },
+    {
+      "name": "paid organization subscription activates two native facility allocations",
+      "passed": true,
+      "facilities": 2,
+      "initial_amount": 2000,
+      "common_subscription": true
+    },
+    {
+      "name": "server quote, confirmed mixed-facility upgrade and concurrent retries agree with exact payment",
+      "passed": true,
+      "preview_amount": 1000,
+      "paid_amount": 1000,
+      "mixed_plan_quantities": [
+        1,
+        1
+      ],
+      "concurrent_retry_states": [
+        "applied",
+        "applied"
+      ],
+      "provider_in_progress_retries": 1
+    },
+    {
+      "name": "failed facility add-on payment preserves customer credit until exact invoice recovery",
+      "passed": true,
+      "held_before_payment": true,
+      "granted_after_exact_invoice": true,
+      "customer_credit": 250,
+      "invoice_quote_amount": 250,
+      "invoice_paid_amount": 250
+    },
+    {
+      "name": "Hub schedule preserves paid access and settles facility downgrade after renewal",
+      "passed": true,
+      "retained_until_renewal": true,
+      "renewal_amount": 2500,
+      "settled_at_renewal": true
+    },
+    {
+      "name": "cleanup synthetic Hub subscription and catalog",
+      "passed": true,
+      "subscription_canceled": true,
+      "test_catalog_retired": true
+    }
+  ],
+  "hub_purchase_scope": {
+    "provider": "Actual claimed sandbox through owner-authorized Stripe CLI OAuth; no API key exported",
+    "native_authority": "Synthetic two-facility fixture",
+    "database": "Disposable local PostgreSQL with Auth/Storage fixtures",
+    "entry_points": "Hub account guard, customer billing service, durable quotes, paid invoice settlement, scoped entitlement snapshots and subscription reconciliation",
+    "webhook_transport": "Signed provider transport and durable receipt deduplication are verified separately from these service calls."
+  },
+  "catalog_basis": "Synthetic sandbox prices exercise the published facility billing basis; published prices and production catalog are unchanged."
+}
