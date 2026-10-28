@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CustomerCenter } from './CustomerCenter';
+import { canManageOrganizationBilling } from '../billing/billingModel';
 const methods = vi.hoisted(() => ({ workspace: vi.fn(), diagnosticSupport: vi.fn() }));
 vi.mock('../lib/config', () => ({ config: { demoMode: false } }));
 vi.mock('./client', () => ({ selfServiceClient: methods }));
@@ -15,7 +16,8 @@ function show() {
 describe('customer diagnostic support', () => {
   it('keeps a PennSync administrator in support and training without payment links', async () => {
     methods.workspace.mockResolvedValue({ connections: [{ id: connection, app: 'pennsync', name: 'PennSync', role: 'organization_admin', facilities: [], capabilities: ['training.profile.v1'] }] });
-    render(<MemoryRouter><CustomerCenter /></MemoryRouter>);
+    const billing = canManageOrganizationBilling({ role: 'tenant_admin', memberships: [{ tenantId: 'agency', tenantName: 'Agency', productId: 'pennsync', role: 'tenant_admin', intakeEnabled: true }] }, [{ id: 'pennsync', slug: 'pennsync' }]);
+    render(<MemoryRouter><CustomerCenter organizationBilling={billing} /></MemoryRouter>);
     await screen.findByText('PennSync');
     expect(screen.queryByRole('link', { name: /Plans & add-ons/ })).toBeNull();
     expect(screen.queryByRole('link', { name: /Invoices & payments/ })).toBeNull();

@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { billingTotals, couponLabel, customerDetailSchema, itemMonthlyCents, parseDollars, priceLabel, subscriptionMonthlyCents, summarizeByApp, workspaceSchema } from './billingModel';
+import { billingTotals, canManageOrganizationBilling, couponLabel, customerDetailSchema, itemMonthlyCents, parseDollars, priceLabel, subscriptionMonthlyCents, summarizeByApp, workspaceSchema } from './billingModel';
 import { billingCommandSchema } from './billingProtocol';
 import { fixtureCoupon, fixtureCustomer, fixtureItem, fixtureSubscription, fixtureWorkspace } from './billingFixtures';
 
 describe('billing money', () => {
+  it('shows organization payment navigation only for a paid-app administrator membership', () => {
+    const products = [{ id: 'support', slug: 'pennsync' }, { id: 'paid', slug: 'carebase' }];
+    const membership = { tenantId: 'agency', tenantName: 'Agency', productId: 'support', role: 'tenant_admin' as const, intakeEnabled: true };
+    const actor = { role: 'tenant_admin' as const, memberships: [membership] };
+    expect(canManageOrganizationBilling(actor, products)).toBe(false);
+    expect(canManageOrganizationBilling({ ...actor, memberships: [...actor.memberships, { ...membership, productId: 'paid', role: 'customer' }] }, products)).toBe(false);
+    expect(canManageOrganizationBilling({ ...actor, memberships: [...actor.memberships, { ...membership, productId: 'paid' }] }, products)).toBe(true);
+    expect(canManageOrganizationBilling({ ...actor, role: 'platform_admin' }, products)).toBe(false);
+  });
   it('rejects PennSync payment products, account links and subscriptions', () => {
     const request_key = '98000000-0000-4000-8000-000000000001';
     expect(billingCommandSchema.safeParse({ action: 'app_key.issue', app: 'pennsync' }).success).toBe(false);

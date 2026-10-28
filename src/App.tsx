@@ -81,6 +81,7 @@ import { BillingWorkspace } from "./billing/BillingWorkspace";
 import { CustomerBilling } from "./billing/CustomerBilling";
 import { MyBilling } from "./billing/MyBilling";
 import { Subscriptions } from "./billing/Subscriptions";
+import { canManageOrganizationBilling } from "./billing/billingModel";
 import { CustomerCenter } from "./self-service/CustomerCenter";
 import { TrainingProfile } from "./self-service/TrainingProfile";
 import { Connect } from "./self-service/Connect";
@@ -304,7 +305,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
   const location = useLocation();
   const staff = isSupportStaff(data.actor.role);
   // Tenant administrators see their own organization's billing; platform administrators use the Billing workspace.
-  const tenantAdmin = data.actor.role !== "platform_admin" && (data.actor.role === "tenant_admin" || data.actor.memberships.some(membership => membership.role === "tenant_admin"));
+  const tenantAdmin = canManageOrganizationBilling(data.actor, data.products);
   // The preview's in-memory inbox is created once per data load so replies and notes survive navigation within the session.
   const demoCommunications = useMemo(() => config.demoMode ? demoCommunicationsClient({
     breathe: data.products.find((product) => product.slug === "breathe")?.id, advisors: data.products.find((product) => product.slug === "advisors")?.id, pennsync: data.products.find((product) => product.slug === "pennsync")?.id,
