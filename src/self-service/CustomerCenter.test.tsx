@@ -13,6 +13,15 @@ function show() {
   render(<MemoryRouter><CustomerCenter /></MemoryRouter>);
 }
 describe('customer diagnostic support', () => {
+  it('keeps a PennSync administrator in support and training without payment links', async () => {
+    methods.workspace.mockResolvedValue({ connections: [{ id: connection, app: 'pennsync', name: 'PennSync', role: 'organization_admin', facilities: [], capabilities: ['training.profile.v1'] }] });
+    render(<MemoryRouter><CustomerCenter /></MemoryRouter>);
+    await screen.findByText('PennSync');
+    expect(screen.queryByRole('link', { name: /Plans & add-ons/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /Invoices & payments/ })).toBeNull();
+    expect(screen.getByRole('link', { name: /My profile & training/ })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Support requests/ })).toBeTruthy();
+  });
   it('creates a private support request and shows unavailable tools without claiming a successful check', async () => {
     methods.diagnosticSupport.mockResolvedValue({ case_id: caseId, case_number: 177, tool_state: 'unavailable' });
     show(); fireEvent.click(await screen.findByRole('button', { name: 'Get AI-assisted connection support' }));

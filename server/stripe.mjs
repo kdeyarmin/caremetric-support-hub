@@ -117,7 +117,7 @@ export function signStripePayload(rawBody, secret, timestamp = Math.floor(Date.n
 // ---------------------------------------------------------------------------
 // Normalizers: one Stripe object to the closed record private.billing_sync accepts.
 
-export const hubApps = Object.freeze(['carebase', 'breathe', 'pennsync', 'caremetric-emr', 'caremetric-go', 'caremetric-intel']);
+export const hubApps = Object.freeze(['carebase', 'breathe', 'caremetric-emr', 'caremetric-go', 'caremetric-intel']);
 const idOf = value => typeof value === 'string' ? value : value && typeof value === 'object' && typeof value.id === 'string' ? value.id : null;
 const appOf = metadata => hubApps.includes(metadata?.app) ? metadata.app : null;
 const text = (value, max) => typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, max) : null;

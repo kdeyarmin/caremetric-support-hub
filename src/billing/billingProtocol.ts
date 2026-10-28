@@ -7,10 +7,10 @@ import { z } from 'zod';
  */
 const plain = (max: number) => z.string().max(max).refine(value => [...value].every(char => char.charCodeAt(0) >= 32 && char.charCodeAt(0) !== 127), 'Use plain text without control characters.');
 const stripeId = (prefix?: string) => z.string().regex(prefix ? new RegExp(`^${prefix}_[A-Za-z0-9]{1,250}$`) : /^[A-Za-z0-9_-]{1,255}$/);
-export const billingApps = ['carebase', 'breathe', 'pennsync', 'caremetric-emr', 'caremetric-go', 'caremetric-intel'] as const;
+export const billingApps = ['carebase', 'breathe', 'caremetric-emr', 'caremetric-go', 'caremetric-intel'] as const;
 export type BillingApp = typeof billingApps[number];
 export const appLabels: Record<BillingApp, string> = {
-  carebase: 'CareBase', breathe: 'Breathe', pennsync: 'PennSync', 'caremetric-emr': 'CareMetric EMR', 'caremetric-go': 'CareMetric Go', 'caremetric-intel': 'CareMetric Intel',
+  carebase: 'CareBase', breathe: 'Breathe', 'caremetric-emr': 'CareMetric EMR', 'caremetric-go': 'CareMetric Go', 'caremetric-intel': 'CareMetric Intel',
 };
 export const maxAmountCents = 100_000_000;
 const amount = z.number().int().min(0).max(maxAmountCents);

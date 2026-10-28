@@ -9,6 +9,13 @@ vi.mock('../lib/config', () => ({ config: { demoMode: false } }));
 vi.mock('../self-service/client', () => ({ selfServiceClient: { workspace: methods.workspace } }));
 vi.mock('../lib/appSession', () => ({ appRequest: methods.request }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
+it('omits PennSync from purchasing even for an organization administrator', async () => {
+  methods.workspace.mockResolvedValue({ connections: [{ id: 'pennsync-support', app: 'pennsync', name: 'PennSync', role: 'organization_admin' }] });
+  render(<MemoryRouter><Subscriptions /></MemoryRouter>);
+  await waitFor(() => expect(methods.workspace).toHaveBeenCalled());
+  expect(screen.queryByRole('option', { name: 'PennSync' })).toBeNull();
+  expect(methods.request).not.toHaveBeenCalled();
+});
 const connection = '97000000-0000-4000-8000-000000000021', quoteId = '97000000-0000-4000-8000-000000000022';
 function show({ pending = false, enabled = true, url = 'https://checkout.stripe.com/c/pay/cs_test_synthetic' } = {}) {
   const workspace = { connection_id: connection, tenant_id: '97000000-0000-4000-8000-000000000023', app: 'carebase', role: 'organization_admin',

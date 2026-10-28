@@ -4,6 +4,13 @@ import { billingCommandSchema } from './billingProtocol';
 import { fixtureCoupon, fixtureCustomer, fixtureItem, fixtureSubscription, fixtureWorkspace } from './billingFixtures';
 
 describe('billing money', () => {
+  it('rejects PennSync payment products, account links and subscriptions', () => {
+    const request_key = '98000000-0000-4000-8000-000000000001';
+    expect(billingCommandSchema.safeParse({ action: 'app_key.issue', app: 'pennsync' }).success).toBe(false);
+    expect(billingCommandSchema.safeParse({ action: 'subscription.create', tenant_id: request_key, app: 'pennsync',
+      items: [{ price: 'price_example', quantity: 1 }], trial_days: 0, collection_method: 'charge_automatically',
+      days_until_due: 30, coupon: null, promotion_code: null, request_key }).success).toBe(false);
+  });
   it('parses dollar entries to whole cents and refuses anything else', () => {
     expect(['$1,299.50', '1299.5', '499', '0', '0.07'].map(parseDollars)).toEqual([129950, 129950, 49900, 0, 7]);
     expect(['', '12.345', '-5', 'ten', '10000001'].map(parseDollars)).toEqual([null, null, null, null, null]);

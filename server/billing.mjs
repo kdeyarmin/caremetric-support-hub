@@ -7,14 +7,14 @@ import { facilityEntitlementRequest, facilityEntitlementSnapshot } from '../src/
 import { selfServiceApps } from '../src/self-service/protocol.ts';
 
 /**
- * Platform billing for every CareMetric application. Stripe is the source of
+ * Platform billing for CareMetric applications that accept payments. Stripe is the source of
  * truth; this service changes Stripe for an authorized administrator, mirrors
  * what Stripe returns, applies signed webhook events once, opens the customer
  * portal for a tenant administrator, and answers the applications'
  * entitlement, usage and trial requests.
  */
 export const appKeyPattern = /^cmb_[A-Za-z0-9_-]{43}$/;
-const trialDays = { carebase: 30, breathe: 14, pennsync: 14, 'caremetric-emr': 14, 'caremetric-go': 14, 'caremetric-intel': 14 };
+const trialDays = { carebase: 30, breathe: 14, 'caremetric-emr': 14, 'caremetric-go': 14, 'caremetric-intel': 14 };
 export const entitlementCacheSeconds = 300;
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 const unixEndOfDay = day => Math.floor(Date.parse(`${day}T23:59:59Z`) / 1000);
@@ -588,6 +588,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     if (!appKeyPattern.test(key)) throw new HttpError(401, 'Application key required.');
     const app = (await one(db, 'select private.billing_authenticate_app($1) as app', [sha256(key)])).app;
     if (!app) throw new HttpError(401, 'Application key required.');
+    if (app.slug === 'pennsync') throw new HttpError(403, 'PennSync does not accept payments.');
     return app;
   }
   const appResponse = entitlement => ({ ...entitlement, cache_ttl_seconds: entitlementCacheSeconds, checked_at: entitlement.checked_at ?? new Date(now()).toISOString() });
@@ -684,6 +685,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     const parsed = trialRequestSchema.safeParse(input);
     if (!parsed.success) throw new HttpError(400, 'Send the account id, organization name, contact email and plan.');
     const request = parsed.data;
+    await transaction(pool, db => authenticateApp(db, authorization));
     const live = await stripe();
     try {
       const prepared = await transaction(pool, async db => {

@@ -69,6 +69,7 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
   const settle = (id, state, sub = null, schedule = null) => service('settle_customer_billing_quote', [id, state, sub, schedule, null]);
   const context = async (session, connection) => {
     const workspace = customerBillingWorkspace.parse(await rpc(session, 'customer_billing_context', [connection]));
+    if (workspace.app === 'pennsync') throw new HttpError(403, 'PennSync does not accept payments.');
     // Individual and flat organization products need no fabricated native facility.
     // Quantity-based products require their app-owned usage adapter instead.
     if (workspace.mode === 'legacy' && !workspace.facilities.length && !workspace.allocations.length && workspace.subscription?.items.length) {

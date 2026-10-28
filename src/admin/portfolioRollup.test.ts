@@ -77,10 +77,10 @@ describe("portfolio rollup totals", () => {
       snapshot("breathe", { billing: billing(4, [{ status: "active", count: 3 }, { status: "canceled", count: 1 }]) }),
       snapshot("pennsync", { billing: billing(1, [{ status: "active", count: 1 }]) }),
     ]);
-    expect(rollup.subscriptionTotal).toBe(8);
-    expect(rollup.billingReportingApps).toEqual(["carebase", "breathe", "pennsync"]);
+    expect(rollup.subscriptionTotal).toBe(7);
+    expect(rollup.billingReportingApps).toEqual(["carebase", "breathe"]);
     expect(rollup.statusTotals).toEqual([
-      { status: "active", count: 6 },
+      { status: "active", count: 5 },
       { status: "canceled", count: 1 },
       { status: "past_due", count: 1 },
     ]);
@@ -128,7 +128,8 @@ describe("portfolio rollup loading", () => {
     const result = await loadRollupApp(portfolio, "pennsync", new AbortController().signal, billing(2, [{ status: "active", count: 2 }]));
     expect(result.overview.state).toBe("not-advertised");
     expect(portfolio.overview).not.toHaveBeenCalled();
-    expect(result.billing).toEqual(billing(2, [{ status: "active", count: 2 }]));
+    expect(result.billing).toEqual({ state: "not-advertised" });
+    expect(result.money).toEqual([]);
   });
 
   it("keeps Hub billing when an application's connection is unavailable", async () => {
@@ -140,7 +141,7 @@ describe("portfolio rollup loading", () => {
     expect(result.money).toEqual([{ currency: "usd", amountMinor: "34900" }]);
   });
 
-  it("summarizes the Hub billing workspace per application and leaves Advisors out", async () => {
+  it("summarizes the Hub billing workspace per paid application", async () => {
     const read = vi.fn(async () => ({ coupons: [], subscriptions: [
       subscription("carebase", "active", 19900), subscription("carebase", "trialing", 19900), subscription("caremetric-intel", "active", 348000, "year"),
       subscription("breathe", "canceled", 79900),
@@ -150,12 +151,14 @@ describe("portfolio rollup loading", () => {
     expect(result.intel).toEqual({ state: "ready", data: { source: "hub", subscriptionCount: 1, statusCounts: [{ status: "active", count: 1 }], mrrCents: 58000 } });
     expect(result.breathe.state === "ready" && result.breathe.data.mrrCents).toBe(0);
     expect(result.advisors).toEqual({ state: "not-advertised" });
+    expect(result.pennsync).toEqual({ state: "not-advertised" });
   });
 
   it("marks billing unavailable everywhere when the Hub billing read fails, never zero", async () => {
     const portfolio = client({ capabilities: vi.fn<PortfolioClient["capabilities"]>(async () => ({ apiVersion: 1, sourceRevision: null, operations: [] })) });
     const apps = await loadPortfolioRollup(portfolio, new AbortController().signal, async () => { throw new Error("offline"); });
-    expect(apps.filter(app => app.product !== "advisors").every(app => app.billing.state === "unavailable")).toBe(true);
+    expect(apps.filter(app => !["advisors", "pennsync"].includes(app.product)).every(app => app.billing.state === "unavailable")).toBe(true);
+    expect(apps.find(app => app.product === "pennsync")?.billing.state).toBe("not-advertised");
     expect(buildPortfolioRollup(apps).subscriptionTotal).toBeNull();
   });
 });
