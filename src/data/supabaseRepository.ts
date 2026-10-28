@@ -130,6 +130,9 @@ function mapCase(value: unknown): SupportCase {
     lastMessageAt: asString(row.last_message_at, "last message timestamp"),
     aiStage: nullableString(row.ai_stage) as SupportCase["aiStage"],
     aiAttempts: nullableNumber(row.ai_attempts),
+    facilityId: nullableString(row.facility_id),
+    facilityName: nullableString(row.facility_name),
+    facilityShared: row.facility_shared === true,
   };
 }
 
@@ -238,7 +241,7 @@ export class SupabaseSupportRepository implements HubRepository {
   }
 
   async createCase(input: CreateCaseInput): Promise<SupportCase> {
-    const { data, error } = await hub().rpc("create_support_case", {
+    const { data, error } = await hub().rpc(input.facilityId ? "create_facility_support_case" : "create_support_case", {
       p_tenant_id: input.tenantId,
       p_product_id: input.productId,
       p_subject: input.subject,
@@ -249,6 +252,7 @@ export class SupabaseSupportRepository implements HubRepository {
       p_route: input.route ?? null,
       p_contains_phi: input.containsPhi,
       p_request_key: input.requestKey,
+      ...(input.facilityId ? { p_facility_id: input.facilityId, p_shared: input.facilityShared === true } : {}),
     });
     if (error) throw error;
     return mapCase(data);

@@ -1,0 +1,48 @@
+{
+  "verified_on": "2026-10-27",
+  "environment": "isolated unclaimed Stripe sandbox",
+  "sandbox_account": "acct_1UVIE766OwFQY1wC",
+  "sandbox_expires_on": "2026-11-03",
+  "live_mode": false,
+  "api_versions": {
+    "existing_billing": "2026-02-25.clover",
+    "new_checkout": "2026-08-26.dahlia"
+  },
+  "passed": [
+    "synthetic product and published test-price creation",
+    "synthetic customer creation",
+    "initial subscription invoice preview with server-selected quantities",
+    "hosted subscription Checkout creation with integration identifier",
+    "hosted test checkout page display",
+    "concurrent identical retries reuse one Checkout Session",
+    "provider-confirmed session expiration without payment"
+  ],
+  "selection": {
+    "currency": "usd",
+    "unit_amount": 1000,
+    "billing_basis": "facility",
+    "quantity": 2,
+    "checkout_total": 2000
+  },
+  "payment_attempted": false,
+  "final_checkout_status": "expired",
+  "account_identity_read": {
+    "status": 403,
+    "reason": "claimable sandbox key cannot read account identity",
+    "hub_account_verification_guard": "preserved"
+  },
+  "remaining": [
+    "claim sandbox and configure an account-readable restricted test key",
+    "complete end-to-end paid checkout and authentication challenges",
+    "failed or delayed payments and webhook delivery",
+    "credits, proration, scheduled changes and the complete mixed-facility matrix",
+    "native facility entitlement enforcement before activating purchasing"
+  ],
+  "ci": {
+    "run": 40596778671,
+    "commit": "5a7664c4e8421341598d0cdd906ff11e0279b156",
+    "result": "passed",
+    "pgTAP_assertions": 495
+  },
+  "production_purchasing_enabled": false
+}

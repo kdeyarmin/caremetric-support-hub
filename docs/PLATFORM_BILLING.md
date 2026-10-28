@@ -18,7 +18,9 @@ platform billing and stay in those applications.
 - On boot the Hub calls `GET /v1/account` with `STRIPE_SECRET_KEY` and refuses
   every billing change (HTTP 503) when the key belongs to any other account.
   The Billing page shows the account, test or live mode and the last webhook.
-- Every request pins Stripe API version `2026-02-25.clover`.
+- Existing billing requests keep Stripe API version `2026-02-25.clover`.
+  New customer Checkout requests use `2026-08-26.dahlia` with an integration
+  identifier. This does not upgrade existing subscriptions or webhook payloads.
 - Products and prices are never deleted. Changing a price creates a new Stripe
   price and archives the old one; removing a product archives it.
 
@@ -30,11 +32,14 @@ platform billing and stay in those applications.
 | `STRIPE_WEBHOOK_SECRET` | yes | Signing secret of the Hub's webhook endpoint. Comma-separate two secrets while rolling one. |
 | `STRIPE_PORTAL_CONFIGURATION_ID` | no | `bpc_…` Customer Portal configuration for Hub customers; Stripe's default configuration otherwise. |
 | `HUB_PUBLIC_ORIGIN` | no | Return address of the customer portal (`https://help.caremetric.ai`). |
+| `HUB_CUSTOMER_PURCHASING_ENABLED` | no | Defaults off. Enables reviewed customer purchase confirmations only after the sandbox and native entitlement rollout gates pass. Existing checkout status and cancellation remain reachable when new purchasing is off. |
 
 Webhook endpoint: `POST https://<hub>/api/webhooks/stripe`, API version
 `2026-02-25.clover`, events: customer, subscription, discount, product, price,
-coupon, promotion code and invoice events (`webhookEvents` in
+coupon, promotion code, invoice and Checkout Session events (`webhookEvents` in
 `server/stripe.mjs` lists them exactly).
+Include `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+`checkout.session.async_payment_failed` and `checkout.session.expired`.
 
 ## Data mirror
 
@@ -107,9 +112,50 @@ change needs the command session (signed in within the last eight hours).
 
 Tenant administrators see their organization's plans, quantities and invoices,
 pay an open invoice on Stripe's hosted invoice page and update their payment
-method or billing details in the Stripe customer portal. They never see Stripe
-identifiers and there is no checkout: plans are assigned by CareMetric or
-started as a trial by the application.
+method or billing details in the Stripe customer portal. The verified native
+customer workspace at `/subscriptions` adds published plan/add-on previews,
+confirmed changes and initial paid setup when purchasing is enabled. Facility
+purchasing remains gated on native facility entitlement enforcement.
+
+### Initial paid setup
+
+`POST /api/billing/customer` uses the versioned
+`billing.customer-checkout.v1` contract. `quote` previews an initial plan when
+there is no existing subscription; `confirm` requires `confirmed: true`.
+`checkout_resume` and `checkout_cancel` require the current native connection
+and quote ID; cancellation also requires `confirmed: true`. A current organization
+administrator can recover checkout after signing in again. Facility administrators
+cannot operate the shared payer.
+
+The server chooses quantities from the published billing basis: flat prices stay
+at one, and facility prices count verified native facilities. Seats, patients and
+other units require an app-owned usage adapter. The server refuses existing trials,
+unresolved subscriptions and ambiguous provider results before creating Checkout.
+Read-only checks also preserve an existing EMR/Go shared subscription; this work
+does not add Go to the customer workspace.
+
+A committed reservation and stable provider idempotency key prevent duplicate
+checkout. A tenant-level lock also coordinates native trial creation. The session
+expires one hour after confirmation. Success/cancel return URLs only navigate;
+they never grant access or cancel a payable session. Cancellation releases the
+reservation only after Stripe confirms expiration, or reconciles a completed
+payment if payment won the race.
+
+Subscriptions carrying `hub_checkout_quote` remain held in the entitlement query
+until the server verifies the exact bound session, customer, application, initial
+paid invoice, prices, quantities, currency and approved amount. Removing or
+malforming the marker cannot clear that hold. Unchanged legacy subscriptions
+retain their existing entitlement rules. A once-per-minute sweep recovers delayed
+events and lost session responses without creating new sessions. Logs report
+failed/unbound counts; unresolved ownership or payment conflicts stay pending.
+
+Before enabling purchasing, use an isolated Stripe sandbox to verify bank
+authentication, delayed/failed payments, credits, mixed facility selections,
+proration, scheduled changes, concurrent retries and delayed/duplicate webhooks.
+Link existing native billing accounts and verify native record-owner, background
+and offline entitlement enforcement before enabling separate facility plans.
+Keep the production flag off until these gates pass. Existing tax configuration
+is retained; this flow does not enable automatic tax or new tax collection.
 
 ## Application APIs
 
@@ -176,3 +222,17 @@ account that already has billing gets its current answer and no second trial.
   twice to prove teardown.
 - `supabase/tests/034_platform_billing.test.sql` checks the tables are closed
   and every function has its intended caller.
+- `server/self-service-integration.mjs` also exercises initial paid setup through
+  real SMS sessions and PostgreSQL: concurrent reservations, native trial refusal,
+  session recovery, role/organization refusal, held subscription mirrors, exact
+  paid receipts, signed/duplicate webhooks and legacy access. CI runs it twice.
+- `supabase/tests/036_customer_checkout.test.sql` checks private receipt state,
+  closed service operations, server connection identity and the new contract.
+
+- `docs/evidence/customer-checkout-sandbox-20261027.json` records the isolated
+  provider smoke: invoice preview, current-version Checkout creation, hosted page,
+  concurrent idempotent retries and confirmed expiration. No payment was attempted.
+  Stripe's temporary `rkcs_test_` keys support this API smoke but cannot read account
+  identity. The Hub continues to refuse them at its account-verification guard.
+  Claim the sandbox and configure an account-readable restricted test key before
+  completing the full payment matrix; do not relax the production account guard.

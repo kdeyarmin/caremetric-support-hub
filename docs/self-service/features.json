@@ -1,0 +1,16 @@
+[
+  "customer.connect",
+  "training.profile",
+  "training.expiration",
+  "training.evidence",
+  "billing.subscription",
+  "billing.payments",
+  "facility.delegation",
+  "employee.recovery",
+  "support.tickets",
+  "support.ai",
+  "knowledge.manuals",
+  "facility.setup",
+  "support.diagnostics",
+  "billing.checkout"
+]

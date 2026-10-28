@@ -13,6 +13,15 @@ const client=new pg.Client({connectionString:databaseUrl});
 const migration=await readFile(new URL('../supabase/migrations/20260911190819_combined_authoring_publication_support_contract.sql',import.meta.url),'utf8');
 const editingMigration=await readFile(new URL('../supabase/migrations/20260911192238_learning_draft_editing_contract.sql',import.meta.url),'utf8');
 const platformBillingMigration=await readFile(new URL('../supabase/migrations/20261027120100_platform_billing_contract.sql',import.meta.url),'utf8');
+const selfServiceMigration=await readFile(new URL('../supabase/migrations/20261027134533_facility_self_service.sql',import.meta.url),'utf8');
+const selfServiceContract=selfServiceMigration.slice(selfServiceMigration.indexOf('-- Contract publication is last:'));
+const humanEscalationMigration=await readFile(new URL('../supabase/migrations/20261027183500_customer_human_escalation.sql',import.meta.url),'utf8');
+const humanEscalationContract=humanEscalationMigration.slice(humanEscalationMigration.indexOf('do $$ declare contract'));
+const diagnosticSupportMigration=await readFile(new URL('../supabase/migrations/20261027190000_customer_diagnostic_support.sql',import.meta.url),'utf8');
+const checkoutMigration=await readFile(new URL('../supabase/migrations/20261027210000_customer_checkout.sql',import.meta.url),'utf8');
+const checkoutContract=checkoutMigration.slice(checkoutMigration.indexOf('do $$ declare contract'));
+const diagnosticSupportContract=diagnosticSupportMigration.slice(diagnosticSupportMigration.indexOf('do $$ declare contract'));
+assert.ok(selfServiceContract.startsWith('-- Contract publication is last:'),'Recognize the self-service contract declaration');
 const structureMigration=await readFile(new URL('../supabase/migrations/20260911202823_learning_structure_backend_contract.sql',import.meta.url),'utf8');
 const onboardingMigration=await readFile(new URL('../supabase/migrations/20260911200100_support_customer_onboarding_contract.sql',import.meta.url),'utf8');
 const registrationMigration=await readFile(new URL('../supabase/migrations/20260911203100_support_customer_registration_contract.sql',import.meta.url),'utf8');
@@ -79,11 +88,11 @@ try {
   try {
     const current=await readContract();
     // Platform billing replaced three app-specific billing features. Replay history with them in their original places.
-    const before={...current,features:current.features.filter(feature=>feature!=='billing.platform.v1').flatMap(feature=>
+    const before={...current,features:current.features.filter(feature=>!['billing.platform.v1','customer.self-service.v1','support.manual-escalation.v1','support.customer-diagnostics.v1','billing.customer-checkout.v1'].includes(feature)).flatMap(feature=>
       feature==='learning.draft-editing.v1'?[feature,'billing.portal.v1']
       :feature==='support.customer-registration.v1'?[feature,'billing.checkout.v1']
       :feature==='support.ai-usage.v1'?[feature,'platform.admin.tenants.v1']:[feature])};
-    assert.equal(before.features.length,current.features.length+2);
+    assert.equal(before.features.length,current.features.length-2);
     // Their objects are gone, so those three declarations are replayed as the features they appended.
     const appendFeature=async feature=>{
       const next=await readContract();
@@ -168,7 +177,15 @@ try {
     await client.query(retirementMigration);
     assert.deepEqual(await readContract(),before,'Retirement restores the exact historical feature set');
     await client.query(platformBillingMigration);
-    assert.deepEqual(await readContract(),current,'Platform billing restores the exact current feature set');
+    assert.deepEqual(await readContract(),{...current,features:current.features.filter(feature=>!['customer.self-service.v1','support.manual-escalation.v1','support.customer-diagnostics.v1','billing.customer-checkout.v1'].includes(feature))},'Platform billing restores its historical feature set');
+    await client.query(selfServiceContract);
+    assert.deepEqual(await readContract(),{...current,features:current.features.filter(feature=>!['support.manual-escalation.v1','support.customer-diagnostics.v1','billing.customer-checkout.v1'].includes(feature))},'Self-service restores its historical feature set');
+    await client.query(humanEscalationContract);
+    assert.deepEqual(await readContract(),{...current,features:current.features.filter(feature=>!['support.customer-diagnostics.v1','billing.customer-checkout.v1'].includes(feature))},'Customer escalation restores its historical feature set');
+    await client.query(diagnosticSupportContract);
+    assert.deepEqual(await readContract(),{...current,features:current.features.filter(feature=>feature!=='billing.customer-checkout.v1')},'Customer diagnostics restores its historical feature set');
+    await client.query(checkoutContract);
+    assert.deepEqual(await readContract(),current,'Checkout restores the exact current feature set');
     assertBackendContract(await readContract());
     assert.throws(()=>assertBackendContract({...current,features:current.features.filter(feature=>feature!=='billing.platform.v1')}),/incompatible/);
   } finally { await client.query('rollback'); }

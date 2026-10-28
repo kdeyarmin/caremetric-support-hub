@@ -38,7 +38,7 @@ const aiCaseActions=new Set(['summary','draft-reply','triage-suggestion']);
 const staffCommunicationActions=new Set(['list','get','update','note','reply','sync']);
 // Railway's edge appends the visitor address last; rate limits use it only as a hashed bucket.
 const visitorAddress=req=>String(req.headers['x-forwarded-for']||'').split(',').at(-1).trim()||req.socket.remoteAddress||'unknown';
-export function appServer({auth,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,origins,dist=resolve('dist')}) {
+export function appServer({auth,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,selfService,origins,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -54,6 +54,12 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
         res.setHeader('Cache-Control','no-store');
         if (path.startsWith('/api/internal/')) {
           if(req.method!=='POST' || req.headers.origin || req.headers.cookie) throw new HttpError(403,'Forbidden.');
+          const customerCapability=/^\/api\/internal\/self-service\/([a-z-]+)\/authorize$/.exec(path);
+          if(customerCapability && selfService) {
+            const input=await jsonBody(req,2048);
+            if(Object.keys(input).length) throw new HttpError(400,'Invalid capability request.');
+            return json(await selfService.consume(req.headers.authorization,customerCapability[1]));
+          }
           if(path==='/api/internal/publications/public/authorize' && publications) {
             const authorization=req.headers.authorization;
             if(typeof authorization!=='string' || !authorization.startsWith('Bearer ')) throw new HttpError(401,'Authorization required.');
@@ -102,6 +108,10 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
           return json(await billing.webhook(await rawBody(req,1000000),req.headers['stripe-signature']));
         }
         // Application servers ask what a tenant has and report billable quantities with their application key.
+        if(path==='/api/apps/connect' && selfService) {
+          if(req.method!=='POST' || req.headers.origin || req.headers.cookie || url.search) throw new HttpError(403,'Forbidden.');
+          return json(await selfService.issue(req.headers.authorization,await jsonBody(req,262144)));
+        }
         const appBilling=/^\/api\/apps\/(entitlements|usage|trials)$/.exec(path);
         if(appBilling) {
           if(req.method!=='POST' || req.headers.origin || req.headers.cookie || url.search) throw new HttpError(403,'Forbidden.');
@@ -121,6 +131,24 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
         }
         if (!['GET','POST','HEAD'].includes(req.method)) throw new HttpError(405,'Method not allowed.');
         if(req.method==='POST' && !sameOrigin(req,origins)) throw new HttpError(403,'Open this action in CareMetric.');
+        if(path==='/api/self-service/connect/start' && req.method==='POST' && selfService) {
+          if(url.search) throw new HttpError(400,'Query parameters are not supported.');
+          const started=await selfService.start(await jsonBody(req,4096),visitorAddress(req));
+          return json({challenge_id:started.id},200,[cookie(challengeCookie,started.browserToken,300)]);
+        }
+        if(path==='/api/self-service/connect/verify' && req.method==='POST' && selfService) {
+          if(url.search) throw new HttpError(400,'Query parameters are not supported.');
+          const connectedSession=await selfService.verify(await jsonBody(req,4096),readCookie(req.headers.cookie,challengeCookie),session);
+          return json({authenticated:true},200,[cookie(sessionCookie,connectedSession,28800),cookie(challengeCookie,'',0)]);
+        }
+        if(path==='/api/self-service' && req.method==='POST' && selfService) {
+          if(url.search) throw new HttpError(400,'Query parameters are not supported.');
+          return json(await selfService.handle(session,await jsonBody(req,8192)));
+        }
+        if(path==='/api/billing/customer' && req.method==='POST' && billing) {
+          if(url.search) throw new HttpError(400,'Query parameters are not supported.');
+          return json(await billing.customer(session,await jsonBody(req,8192)));
+        }
         if(path.startsWith('/api/chat/') && communications) {
           if(url.search) throw new HttpError(400,'Chat query parameters are not supported.');
           const chat=readCookie(req.headers.cookie,chatCookie);
@@ -261,12 +289,21 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
           return json(await billing.command(session,await jsonBody(req,65536)));
         }
         if(path==='/api/billing/portal' && req.method==='POST') {
+          if(selfService) await selfService.refreshAuthority(session);
           if(url.search) throw new HttpError(400,'Billing query parameters are not supported.');
           if(!billing) throw new HttpError(503,'Billing is not configured.');
           return json(await billing.customerPortal(session,await jsonBody(req,2048)));
         }
-        if(path.startsWith('/api/rpc/') && req.method==='POST') return json(await gateway.rpc(path.slice(9),await jsonBody(req),session));
-        if(path.startsWith('/api/rows/') && req.method==='GET') return json(await gateway.rows(path.slice(10),session));
+        if(path.startsWith('/api/rpc/') && req.method==='POST') {
+          const name=path.slice(9);
+          if(selfService && session && (name.includes('support_case') || name==='my_billing')) await selfService.refreshAuthority(session);
+          return json(await gateway.rpc(name,await jsonBody(req),session));
+        }
+        if(path.startsWith('/api/rows/') && req.method==='GET') {
+          const name=path.slice(10);
+          if(selfService && session && name==='support_case_queue') await selfService.refreshAuthority(session);
+          return json(await gateway.rows(name,session));
+        }
         if(path==='/api/admin/packages' && req.method==='POST') {
           if(url.search)throw new HttpError(400,'Package query parameters are not supported.');
           if(req.headers['content-encoding']&&req.headers['content-encoding']!=='identity')throw new HttpError(415,'Package content encoding is unsupported.');

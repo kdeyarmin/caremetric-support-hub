@@ -8,14 +8,17 @@ export const rpcArguments = Object.freeze({
   list_phone_numbers: [],
   save_phone_number: ['p_id','p_record','p_expected_version'],
   billing_workspace: [], billing_customer: ['p_tenant_id'], my_billing: [],
+  self_service_workspace: [],
   create_tenant: ['p_record'],
   save_tenant: ['p_tenant_id','p_record','p_expected_updated_at'],
   list_support_intake_tenants: ['p_product_id','p_offset','p_limit'],
   set_support_intake: ['p_tenant_id','p_product_id','p_enabled','p_reviewed','p_expected_updated_at'],
   get_support_case_thread: ['p_case_id'],
   create_support_case: ['p_tenant_id','p_product_id','p_subject','p_category','p_priority','p_body','p_app_version','p_route','p_contains_phi','p_request_key'],
+  create_facility_support_case: ['p_tenant_id','p_product_id','p_subject','p_category','p_priority','p_body','p_app_version','p_route','p_contains_phi','p_request_key','p_facility_id','p_shared'],
   reply_to_support_case: ['p_case_id','p_body','p_visibility','p_request_key'],
   record_ai_resolution_response: ['p_case_id','p_fixed','p_request_key'],
+  request_human_support: ['p_case_id','p_request_key'],
   update_support_case: ['p_case_id','p_status','p_priority','p_assigned_to','p_change_assignment'],
   get_learning_editor_access: [], list_learning_drafts: [], list_learning_media: [], list_learning_catalog: [], list_my_learning: [],
   get_learning_draft: ['p_item_id'],
@@ -54,7 +57,10 @@ export function gateway(pool) {
   return {
     rpc: (name,args,sessionToken) => {
       const query = rpcQuery(name,args);
-      return withSession(pool,sessionToken,async db => (await db.query(query)).rows[0].data,!publicCalls.has(name));
+      return withSession(pool,sessionToken,async db => (await db.query(query)).rows[0].data,!publicCalls.has(name)).catch(error => {
+        if (name === 'create_facility_support_case' && error?.code === '22023') throw new HttpError(400, 'The facility or privacy selection changed. Review a new support request.');
+        throw error;
+      });
     },
     rows: (name,sessionToken) => {
       if (!Object.hasOwn(reads,name)) throw new HttpError(404,'This resource is unavailable.');

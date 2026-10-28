@@ -1,0 +1,607 @@
+-- Generated from docs/self-service/guides.json. Run npm run check:docs after changing maintained guidance.
+
+insert into hub.content_items(id,content_key,kind,status,access_level,source_system,owner_team)
+values(md5('self-service.account-connection')::uuid,'self-service.account-connection','article','published','customer','support_hub','CareMetric Support') on conflict(id) do nothing;
+insert into hub.content_revisions(id,item_id,revision_no,locale,title,summary,body_markdown,body_text,variables,source_version,review_state,approved_at)
+values(md5('self-service.account-connection:revision:1')::uuid,md5('self-service.account-connection')::uuid,1,'en-US','Connect an application to the customer center','Verify your application identity and mobile number to use centralized self-service.','## Prerequisites
+
+- An active account in a supported application with its customer-center integration configured.
+- Access to the mobile number used for text-message verification. Administrators may also need recent verification in the native application.
+
+## Permitted roles
+
+- Every signed-in role can connect their own account. Native permissions determine which administration tools appear.
+
+## Setup
+
+1. Open Customer self-service in your application, then Open CareMetric customer center.
+2. Verify your mobile number by text message. If you already use the Hub, sign in to that account before linking.
+3. Confirm the displayed application and organization. Each application identity can belong to only one Hub user.
+
+## Normal use
+
+1. Open Customer center to see connected applications and permitted tasks.
+2. Open My profile & training for your own linked records. Opening the Hub never grants platform administrator permissions.
+
+## Common problems
+
+- Connection expired: reopen it from the native application. Links last five minutes.
+- Wrong organization or revoked authority: correct native access and reconnect. A saved connection cannot override native recovery or purchasing restrictions.
+- Application unavailable: retry later or use its native profile and Help Center. Partial profile results are labeled.
+
+## FAQ
+
+- Does connecting change my subscription? No. Purchases require a separate preview and confirmation.
+- Does CareBase require Go? No. Go is separate and is not part of this CareBase integration.
+
+## Helpful tips
+
+- Use your own account and mobile number; do not share sign-in codes or connection links.','## Prerequisites
+
+- An active account in a supported application with its customer-center integration configured.
+- Access to the mobile number used for text-message verification. Administrators may also need recent verification in the native application.
+
+## Permitted roles
+
+- Every signed-in role can connect their own account. Native permissions determine which administration tools appear.
+
+## Setup
+
+1. Open Customer self-service in your application, then Open CareMetric customer center.
+2. Verify your mobile number by text message. If you already use the Hub, sign in to that account before linking.
+3. Confirm the displayed application and organization. Each application identity can belong to only one Hub user.
+
+## Normal use
+
+1. Open Customer center to see connected applications and permitted tasks.
+2. Open My profile & training for your own linked records. Opening the Hub never grants platform administrator permissions.
+
+## Common problems
+
+- Connection expired: reopen it from the native application. Links last five minutes.
+- Wrong organization or revoked authority: correct native access and reconnect. A saved connection cannot override native recovery or purchasing restrictions.
+- Application unavailable: retry later or use its native profile and Help Center. Partial profile results are labeled.
+
+## FAQ
+
+- Does connecting change my subscription? No. Purchases require a separate preview and confirmation.
+- Does CareBase require Go? No. Go is separate and is not part of this CareBase integration.
+
+## Helpful tips
+
+- Use your own account and mobile number; do not share sign-in codes or connection links.','{"features":["customer.connect"]}'::jsonb,'self-service.v1','approved',now()) on conflict(id) do nothing;
+insert into hub.content_publications(id,item_id,revision_id,product_id,audience)
+select md5('self-service.account-connection:publication:'||slug)::uuid,md5('self-service.account-connection')::uuid,md5('self-service.account-connection:revision:1')::uuid,id,array['all']::text[] from hub.products where slug in ('carebase','breathe','pennsync','caremetric-emr','caremetric-intel')
+on conflict(item_id,product_id) do nothing;
+
+insert into hub.content_items(id,content_key,kind,status,access_level,source_system,owner_team)
+values(md5('self-service.training-profile')::uuid,'self-service.training-profile','article','published','customer','support_hub','CareMetric Support') on conflict(id) do nothing;
+insert into hub.content_revisions(id,item_id,revision_no,locale,title,summary,body_markdown,body_text,variables,source_version,review_state,approved_at)
+values(md5('self-service.training-profile:revision:1')::uuid,md5('self-service.training-profile')::uuid,1,'en-US','Training profiles, certificates, and renewals','Review completion dates, expiration dates, renewal history, and outside evidence.','## Prerequisites
+
+- A verified link for each application''s records. Only applications that provide the training profile capability contribute native records.
+- Native learning systems remain authoritative. Shared Hub learning appears separately.
+
+## Permitted roles
+
+- Every signed-in user has their own profile, including users without an employee roster record.
+- Facility administrators review evidence only where their native organization and facility permissions allow it.
+
+## Setup
+
+1. Open My profile & training in CareBase or the Hub.
+2. Connect each supported application from its customer-center entry.
+3. In CareBase, use Outside training & evidence to submit a certificate or transcript for facility review. Follow the displayed learning-record setup step if needed.
+
+## Normal use
+
+1. Review current, expiring, expired, pending-review, missing, and historical records.
+2. Renewed credentials retain previous evidence. Historical records do not count as current renewal obligations.
+3. Open a record for certificate downloads or evidence, or export and print your transcript.
+4. Renewal windows come from the source application; credentials default to a 90-day warning unless their policy specifies otherwise. Missing dates say No expiration recorded.
+5. Manage delivery channels in native notification preferences. A profile alert does not change a facility''s approval or compliance rules.
+
+## Common problems
+
+- A source is unavailable: the profile shows which records could not load; use Retry or open that application.
+- Pending evidence: your submission is not an approved credential until an authorized reviewer accepts it.
+- An older record appears expired: check whether it is labeled Historical before treating it as an obligation.
+- Missing staff link: ask a facility administrator to verify your staff relationship; never create another person''s record.
+
+## FAQ
+
+- Does an upload issue a CareMetric course certificate? No. Outside evidence keeps its source and review status.
+- Do empty profiles mean training was deleted? No. Verify application links, native permissions, and whether records are still loading.
+
+## Helpful tips
+
+- Keep original completion and expiration dates on uploaded documents. Do not infer an expiration date from a blank field.','## Prerequisites
+
+- A verified link for each application''s records. Only applications that provide the training profile capability contribute native records.
+- Native learning systems remain authoritative. Shared Hub learning appears separately.
+
+## Permitted roles
+
+- Every signed-in user has their own profile, including users without an employee roster record.
+- Facility administrators review evidence only where their native organization and facility permissions allow it.
+
+## Setup
+
+1. Open My profile & training in CareBase or the Hub.
+2. Connect each supported application from its customer-center entry.
+3. In CareBase, use Outside training & evidence to submit a certificate or transcript for facility review. Follow the displayed learning-record setup step if needed.
+
+## Normal use
+
+1. Review current, expiring, expired, pending-review, missing, and historical records.
+2. Renewed credentials retain previous evidence. Historical records do not count as current renewal obligations.
+3. Open a record for certificate downloads or evidence, or export and print your transcript.
+4. Renewal windows come from the source application; credentials default to a 90-day warning unless their policy specifies otherwise. Missing dates say No expiration recorded.
+5. Manage delivery channels in native notification preferences. A profile alert does not change a facility''s approval or compliance rules.
+
+## Common problems
+
+- A source is unavailable: the profile shows which records could not load; use Retry or open that application.
+- Pending evidence: your submission is not an approved credential until an authorized reviewer accepts it.
+- An older record appears expired: check whether it is labeled Historical before treating it as an obligation.
+- Missing staff link: ask a facility administrator to verify your staff relationship; never create another person''s record.
+
+## FAQ
+
+- Does an upload issue a CareMetric course certificate? No. Outside evidence keeps its source and review status.
+- Do empty profiles mean training was deleted? No. Verify application links, native permissions, and whether records are still loading.
+
+## Helpful tips
+
+- Keep original completion and expiration dates on uploaded documents. Do not infer an expiration date from a blank field.','{"features":["training.profile","training.expiration","training.evidence"]}'::jsonb,'self-service.v1','approved',now()) on conflict(id) do nothing;
+insert into hub.content_publications(id,item_id,revision_id,product_id,audience)
+select md5('self-service.training-profile:publication:'||slug)::uuid,md5('self-service.training-profile')::uuid,md5('self-service.training-profile:revision:1')::uuid,id,array['all']::text[] from hub.products where slug in ('carebase','breathe','pennsync','caremetric-emr','caremetric-intel')
+on conflict(item_id,product_id) do nothing;
+
+insert into hub.content_items(id,content_key,kind,status,access_level,source_system,owner_team)
+values(md5('self-service.subscriptions')::uuid,'self-service.subscriptions','article','published','customer','support_hub','CareMetric Support') on conflict(id) do nothing;
+insert into hub.content_revisions(id,item_id,revision_no,locale,title,summary,body_markdown,body_text,variables,source_version,review_state,approved_at)
+values(md5('self-service.subscriptions:revision:1')::uuid,md5('self-service.subscriptions')::uuid,1,'en-US','Plans, add-ons, invoices, and payments','Compare published prices, preview subscription changes, and manage organization payments.','## Prerequisites
+
+- A verified customer-center connection and current native purchasing permission.
+- A current active organization subscription for plan changes. Trials, pending payments, cancellations, and managed contracts retain their existing restrictions.
+- Different facility plans require the application''s verified facility-entitlement capability. Until enabled, facilities share the organization plan.
+- First-time paid setup requires an organization administrator and no unresolved subscription, trial, or checkout. Published facility prices require verified native facilities; other usage-based products require their application’s usage adapter.
+
+## Permitted roles
+
+- Organization administrators manage shared plans and payment details.
+- Facility administrators purchase only for facilities with explicit billing.manage delegation after facility purchasing is enabled.
+
+## Setup
+
+1. Open Plans & add-ons in Customer center and select the connected application.
+2. Choose a permitted facility when facility subscriptions are enabled, otherwise review the shared organization selection.
+3. Use Invoices & payments to update shared payment details or pay an open invoice in Stripe.
+4. For an organization with no subscription, choose a plan and compatible add-ons, select Review subscription, and confirm the server’s price preview to open secure Stripe payment.
+
+## Normal use
+
+1. Compare the published base plans, included features, cadence, and add-ons.
+2. Choose Review change. The server calculates quantities and obtains an invoice preview from Stripe.
+3. Review Due now, recurring subtotal, renewal date, and scheduled changes. Taxes and discounts can make the recurring invoice differ from the displayed subtotal.
+4. Select Confirm subscription change only when the preview is correct. Additions and upgrades wait for confirmed payment. Removals, downgrades, and cancellation start at renewal.
+5. If payment needs authentication, open the invoice in Invoices & payments and complete Stripe''s instructions. The success page alone does not grant purchased access.
+6. To keep the current services instead of a scheduled downgrade or cancellation, select the current plan and add-ons, review the notice that removes the scheduled change, and confirm. This action does not charge a payment.
+7. First-time checkout opens a secure payment page. Payment may require bank authentication or remain pending; the customer center grants access only after it verifies the exact initial invoice and subscription. Returning from Stripe does not grant access.
+8. If you close the payment page or lose the response, reopen Plans & add-ons and choose Check payment status / resume checkout. An organization administrator with current access can resume it after signing in again.
+9. To abandon an unpaid checkout, select Confirm cancel pending checkout. Wait for cancellation to be confirmed before reviewing another selection. Completed payments are reconciled instead of being reported as cancelled.
+
+## Common problems
+
+- Preview expired: generate a new preview. Previews last five minutes.
+- Concurrent change: refresh and review again; the server refuses an outdated quote.
+- Pending payment: complete the existing invoice before making another purchase. Your previously purchased access is retained under the existing subscription rules.
+- Managed schedule, trial, or quantity mismatch: the account retains its current terms. Open a billing support request if the displayed restriction needs review.
+- A later selection replaces an older scheduled request. Failed or externally removed changes clear their pending selection; a delayed receipt cannot restore the older choice.
+- Pending checkout: resume the existing payment instead of starting another subscription. First-time payment pages expire about one hour after confirmation. A failed or expired checkout can be replaced after the provider confirms its status.
+- Changed amount, missing receipt, or a provider outage: access stays pending. Use connection diagnostics or open a billing support ticket; include the checkout reference, without payment details.
+- A first-time purchase does not replace an existing trial or managed contract. Keep using the current payment and support tools until those terms are resolved.
+
+## FAQ
+
+- Are flat prices multiplied by facilities? No. Published flat pricing keeps quantity one. Facility prices aggregate the selected facility quantities.
+- Does enabling facility selections charge again? No. Activation verifies that current quantities and prices match before creating allocations.
+- Can a facility manager edit the organization''s payment method? No. Shared payment administration belongs to organization administrators.
+- Can another administrator resume checkout? An organization administrator for the same application and organization can check or cancel it with current native authorization. Facility administrators and administrators for other organizations cannot.
+
+## Helpful tips
+
+- Save the quote or ticket reference when asking about a charge; never place card numbers in a support ticket.','## Prerequisites
+
+- A verified customer-center connection and current native purchasing permission.
+- A current active organization subscription for plan changes. Trials, pending payments, cancellations, and managed contracts retain their existing restrictions.
+- Different facility plans require the application''s verified facility-entitlement capability. Until enabled, facilities share the organization plan.
+- First-time paid setup requires an organization administrator and no unresolved subscription, trial, or checkout. Published facility prices require verified native facilities; other usage-based products require their application’s usage adapter.
+
+## Permitted roles
+
+- Organization administrators manage shared plans and payment details.
+- Facility administrators purchase only for facilities with explicit billing.manage delegation after facility purchasing is enabled.
+
+## Setup
+
+1. Open Plans & add-ons in Customer center and select the connected application.
+2. Choose a permitted facility when facility subscriptions are enabled, otherwise review the shared organization selection.
+3. Use Invoices & payments to update shared payment details or pay an open invoice in Stripe.
+4. For an organization with no subscription, choose a plan and compatible add-ons, select Review subscription, and confirm the server’s price preview to open secure Stripe payment.
+
+## Normal use
+
+1. Compare the published base plans, included features, cadence, and add-ons.
+2. Choose Review change. The server calculates quantities and obtains an invoice preview from Stripe.
+3. Review Due now, recurring subtotal, renewal date, and scheduled changes. Taxes and discounts can make the recurring invoice differ from the displayed subtotal.
+4. Select Confirm subscription change only when the preview is correct. Additions and upgrades wait for confirmed payment. Removals, downgrades, and cancellation start at renewal.
+5. If payment needs authentication, open the invoice in Invoices & payments and complete Stripe''s instructions. The success page alone does not grant purchased access.
+6. To keep the current services instead of a scheduled downgrade or cancellation, select the current plan and add-ons, review the notice that removes the scheduled change, and confirm. This action does not charge a payment.
+7. First-time checkout opens a secure payment page. Payment may require bank authentication or remain pending; the customer center grants access only after it verifies the exact initial invoice and subscription. Returning from Stripe does not grant access.
+8. If you close the payment page or lose the response, reopen Plans & add-ons and choose Check payment status / resume checkout. An organization administrator with current access can resume it after signing in again.
+9. To abandon an unpaid checkout, select Confirm cancel pending checkout. Wait for cancellation to be confirmed before reviewing another selection. Completed payments are reconciled instead of being reported as cancelled.
+
+## Common problems
+
+- Preview expired: generate a new preview. Previews last five minutes.
+- Concurrent change: refresh and review again; the server refuses an outdated quote.
+- Pending payment: complete the existing invoice before making another purchase. Your previously purchased access is retained under the existing subscription rules.
+- Managed schedule, trial, or quantity mismatch: the account retains its current terms. Open a billing support request if the displayed restriction needs review.
+- A later selection replaces an older scheduled request. Failed or externally removed changes clear their pending selection; a delayed receipt cannot restore the older choice.
+- Pending checkout: resume the existing payment instead of starting another subscription. First-time payment pages expire about one hour after confirmation. A failed or expired checkout can be replaced after the provider confirms its status.
+- Changed amount, missing receipt, or a provider outage: access stays pending. Use connection diagnostics or open a billing support ticket; include the checkout reference, without payment details.
+- A first-time purchase does not replace an existing trial or managed contract. Keep using the current payment and support tools until those terms are resolved.
+
+## FAQ
+
+- Are flat prices multiplied by facilities? No. Published flat pricing keeps quantity one. Facility prices aggregate the selected facility quantities.
+- Does enabling facility selections charge again? No. Activation verifies that current quantities and prices match before creating allocations.
+- Can a facility manager edit the organization''s payment method? No. Shared payment administration belongs to organization administrators.
+- Can another administrator resume checkout? An organization administrator for the same application and organization can check or cancel it with current native authorization. Facility administrators and administrators for other organizations cannot.
+
+## Helpful tips
+
+- Save the quote or ticket reference when asking about a charge; never place card numbers in a support ticket.','{"features":["billing.subscription","billing.payments","billing.checkout"]}'::jsonb,'self-service.v1','approved',now()) on conflict(id) do nothing;
+insert into hub.content_publications(id,item_id,revision_id,product_id,audience)
+select md5('self-service.subscriptions:publication:'||slug)::uuid,md5('self-service.subscriptions')::uuid,md5('self-service.subscriptions:revision:1')::uuid,id,array['all']::text[] from hub.products where slug in ('carebase','breathe','pennsync','caremetric-emr','caremetric-intel')
+on conflict(item_id,product_id) do nothing;
+
+insert into hub.content_items(id,content_key,kind,status,access_level,source_system,owner_team)
+values(md5('self-service.employee-access')::uuid,'self-service.employee-access','article','published','customer','support_hub','CareMetric Support') on conflict(id) do nothing;
+insert into hub.content_revisions(id,item_id,revision_no,locale,title,summary,body_markdown,body_text,variables,source_version,review_state,approved_at)
+values(md5('self-service.employee-access:revision:1')::uuid,md5('self-service.employee-access')::uuid,1,'en-US','Delegate facility authority and recover employee accounts','Let authorized facility administrators handle routine employee sign-in problems.','## Prerequisites
+
+- An active employee account in the same organization and an administrator with a current verified sign-in.
+- Facility managers must have an actual facility assignment and explicit employee.recovery delegation. Security suspensions, administrator accounts, managed SSO accounts, and accounts outside the permitted facility are ineligible.
+
+## Permitted roles
+
+- Organization administrators grant and revoke facility self-service permissions.
+- Authorized facility managers recover eligible employees at assigned facilities. They cannot recover their own account, peers, or organization/platform administrators.
+
+## Setup
+
+1. As organization administrator, open Customer self-service, then Delegate facility self-service.
+2. Select an assigned facility manager, facility, and the exact recovery, purchasing, or shared-support permission required.
+3. Verify the employee''s identity under your organization''s process before any recovery.
+
+## Normal use
+
+1. Open Employee account recovery in CareBase or in the connected Hub. Select an eligible employee and action.
+2. Record how identity was verified, review the named employee and action, then confirm.
+3. Unlock removes eligible session-based access problems; reset and setup actions send a password-setup link through the existing provider.
+4. Use a temporary password only as the identity-verified fallback. It is shown once and expires after 30 minutes.
+5. The employee opens Use a temporary password from your administrator on the CareBase sign-in page, chooses a new password, then signs in normally. The temporary password cannot be used as the permanent login password.
+6. Recovery ends existing employee sessions and retains an audit receipt. Review recovery history before retrying an uncertain result.
+
+## Common problems
+
+- Employee missing from the list: verify native role, active employment, facility assignment, delegation, and account restrictions.
+- Verification expired: open Account security, verify your sign-in, and return.
+- Delivery failed: verify the employee''s existing email and check recovery history before retrying. Never redirect another person''s reset to your address.
+- Temporary password lost or expired: verify identity again and issue a new one; old temporary passwords become obsolete.
+
+## FAQ
+
+- Can support bypass a facility restriction? No. The native server enforces current permissions on each operation.
+- Can I recover a suspended administrator through this screen? No. Restricted and privileged accounts require their authorized recovery process.
+
+## Helpful tips
+
+- Share temporary passwords privately and use I have shared it; hide password after delivery. Never paste them into tickets.','## Prerequisites
+
+- An active employee account in the same organization and an administrator with a current verified sign-in.
+- Facility managers must have an actual facility assignment and explicit employee.recovery delegation. Security suspensions, administrator accounts, managed SSO accounts, and accounts outside the permitted facility are ineligible.
+
+## Permitted roles
+
+- Organization administrators grant and revoke facility self-service permissions.
+- Authorized facility managers recover eligible employees at assigned facilities. They cannot recover their own account, peers, or organization/platform administrators.
+
+## Setup
+
+1. As organization administrator, open Customer self-service, then Delegate facility self-service.
+2. Select an assigned facility manager, facility, and the exact recovery, purchasing, or shared-support permission required.
+3. Verify the employee''s identity under your organization''s process before any recovery.
+
+## Normal use
+
+1. Open Employee account recovery in CareBase or in the connected Hub. Select an eligible employee and action.
+2. Record how identity was verified, review the named employee and action, then confirm.
+3. Unlock removes eligible session-based access problems; reset and setup actions send a password-setup link through the existing provider.
+4. Use a temporary password only as the identity-verified fallback. It is shown once and expires after 30 minutes.
+5. The employee opens Use a temporary password from your administrator on the CareBase sign-in page, chooses a new password, then signs in normally. The temporary password cannot be used as the permanent login password.
+6. Recovery ends existing employee sessions and retains an audit receipt. Review recovery history before retrying an uncertain result.
+
+## Common problems
+
+- Employee missing from the list: verify native role, active employment, facility assignment, delegation, and account restrictions.
+- Verification expired: open Account security, verify your sign-in, and return.
+- Delivery failed: verify the employee''s existing email and check recovery history before retrying. Never redirect another person''s reset to your address.
+- Temporary password lost or expired: verify identity again and issue a new one; old temporary passwords become obsolete.
+
+## FAQ
+
+- Can support bypass a facility restriction? No. The native server enforces current permissions on each operation.
+- Can I recover a suspended administrator through this screen? No. Restricted and privileged accounts require their authorized recovery process.
+
+## Helpful tips
+
+- Share temporary passwords privately and use I have shared it; hide password after delivery. Never paste them into tickets.','{"features":["facility.delegation","employee.recovery"]}'::jsonb,'self-service.v1','approved',now()) on conflict(id) do nothing;
+insert into hub.content_publications(id,item_id,revision_id,product_id,audience)
+select md5('self-service.employee-access:publication:'||slug)::uuid,md5('self-service.employee-access')::uuid,md5('self-service.employee-access:revision:1')::uuid,id,array['all']::text[] from hub.products where slug in ('carebase')
+on conflict(item_id,product_id) do nothing;
+
+insert into hub.content_items(id,content_key,kind,status,access_level,source_system,owner_team)
+values(md5('self-service.support-requests')::uuid,'self-service.support-requests','article','published','customer','support_hub','CareMetric Support') on conflict(id) do nothing;
+insert into hub.content_revisions(id,item_id,revision_no,locale,title,summary,body_markdown,body_text,variables,source_version,review_state,approved_at)
+values(md5('self-service.support-requests:revision:1')::uuid,md5('self-service.support-requests')::uuid,1,'en-US','Technical support, customer service, and AI assistance','Track requests, use published guidance, and reach a human when needed.','## Prerequisites
+
+- A signed-in Hub account and membership for the application and organization.
+- Facility-shared requests require a verified native facility scope. Existing private tickets and historical links retain their original visibility.
+- The Hub handles non-clinical support. Use native clinical workflows for patient and resident information.
+
+## Permitted roles
+
+- Users can open and reply to their own cases.
+- Organization administrators and delegated facility support managers can see explicitly shared cases within their authorized scope.
+- Support staff assignments and resolution history are displayed according to existing ticket permissions.
+
+## Setup
+
+1. Open Support requests from Customer center or your application''s Help Center.
+2. Select the correct application, organization, and facility. Share with facility administrators only when appropriate.
+3. Choose technical support or customer service and describe the issue without clinical data, passwords, or payment card details.
+
+## Normal use
+
+1. Track the case number, status, replies, responsible team, and resolution history in the support queue.
+2. Use knowledge search and AI assistance for published setup and troubleshooting guidance.
+3. The existing AI workflow offers two attempts before escalation. You may request a human immediately at any stage.
+4. AI can propose permitted diagnostics and routine actions only where a capability is available. Review and explicitly confirm billing or account-access changes; conversational text is never authorization to execute a financial or recovery change.
+5. Retain the original ticket link when referring to a historical request. New centralized tickets do not rewrite existing ticket privacy.
+
+## Common problems
+
+- Missing facility: reconnect from the native application and verify your delegation.
+- A private case is absent: ask the requester to add an authorized participant through the existing support process; being a facility administrator does not expose private employee cases.
+- AI tool unavailable or guidance insufficient: choose human escalation and include the steps already tried.
+- Uncertain action result: check the displayed receipt, native recovery history, or billing status before repeating it.
+
+## FAQ
+
+- Can AI give clinical instructions or read patient charts here? No. The centralized Hub stays within its non-clinical support boundary.
+- Must I try AI before reaching a human? No. Immediate human escalation remains available.
+- Are Healthcare Advisors subscriptions created here? Advisors remains a service and support destination; use its published service engagement process.
+
+## Helpful tips
+
+- Include the feature, error message, time, and expected result. Redact screenshots before attaching them.','## Prerequisites
+
+- A signed-in Hub account and membership for the application and organization.
+- Facility-shared requests require a verified native facility scope. Existing private tickets and historical links retain their original visibility.
+- The Hub handles non-clinical support. Use native clinical workflows for patient and resident information.
+
+## Permitted roles
+
+- Users can open and reply to their own cases.
+- Organization administrators and delegated facility support managers can see explicitly shared cases within their authorized scope.
+- Support staff assignments and resolution history are displayed according to existing ticket permissions.
+
+## Setup
+
+1. Open Support requests from Customer center or your application''s Help Center.
+2. Select the correct application, organization, and facility. Share with facility administrators only when appropriate.
+3. Choose technical support or customer service and describe the issue without clinical data, passwords, or payment card details.
+
+## Normal use
+
+1. Track the case number, status, replies, responsible team, and resolution history in the support queue.
+2. Use knowledge search and AI assistance for published setup and troubleshooting guidance.
+3. The existing AI workflow offers two attempts before escalation. You may request a human immediately at any stage.
+4. AI can propose permitted diagnostics and routine actions only where a capability is available. Review and explicitly confirm billing or account-access changes; conversational text is never authorization to execute a financial or recovery change.
+5. Retain the original ticket link when referring to a historical request. New centralized tickets do not rewrite existing ticket privacy.
+
+## Common problems
+
+- Missing facility: reconnect from the native application and verify your delegation.
+- A private case is absent: ask the requester to add an authorized participant through the existing support process; being a facility administrator does not expose private employee cases.
+- AI tool unavailable or guidance insufficient: choose human escalation and include the steps already tried.
+- Uncertain action result: check the displayed receipt, native recovery history, or billing status before repeating it.
+
+## FAQ
+
+- Can AI give clinical instructions or read patient charts here? No. The centralized Hub stays within its non-clinical support boundary.
+- Must I try AI before reaching a human? No. Immediate human escalation remains available.
+- Are Healthcare Advisors subscriptions created here? Advisors remains a service and support destination; use its published service engagement process.
+
+## Helpful tips
+
+- Include the feature, error message, time, and expected result. Redact screenshots before attaching them.','{"features":["support.tickets","support.ai"]}'::jsonb,'self-service.v1','approved',now()) on conflict(id) do nothing;
+insert into hub.content_publications(id,item_id,revision_id,product_id,audience)
+select md5('self-service.support-requests:publication:'||slug)::uuid,md5('self-service.support-requests')::uuid,md5('self-service.support-requests:revision:1')::uuid,id,array['all']::text[] from hub.products where slug in ('carebase','breathe','pennsync','caremetric-emr','caremetric-intel','advisors')
+on conflict(item_id,product_id) do nothing;
+
+insert into hub.content_items(id,content_key,kind,status,access_level,source_system,owner_team)
+values(md5('self-service.setup-and-manuals')::uuid,'self-service.setup-and-manuals','article','published','customer','support_hub','CareMetric Support') on conflict(id) do nothing;
+insert into hub.content_revisions(id,item_id,revision_no,locale,title,summary,body_markdown,body_text,variables,source_version,review_state,approved_at)
+values(md5('self-service.setup-and-manuals:revision:1')::uuid,md5('self-service.setup-and-manuals')::uuid,1,'en-US','Facility setup, daily administration, and user manuals','Find app-specific instructions and perform routine setup from the customer workspace.','## Prerequisites
+
+- Access to the native application''s facility and account settings.
+- A current published guide for the application and feature. A menu link does not expand your native permissions.
+
+## Permitted roles
+
+- All users can read guidance published for their audience.
+- Organization and facility administrators use native roles to manage settings, invitations, data imports/exports, and connections.
+
+## Setup
+
+1. Open Customer self-service for shortcuts to facility setup, organization contacts, users and invitations, notification preferences, and Help.
+2. Read each feature guide''s prerequisites and permitted roles before configuring it.
+3. For imports, download the native template, validate required columns, review the preview, and confirm only after errors are resolved.
+
+## Normal use
+
+1. Search Knowledge base & FAQ by application, feature, or error message.
+2. Open User manuals, choose the application, and search its published instructions.
+3. Use Print / save manual as PDF to generate a manual from the same maintained content used by search. Publication revisions stay attached to the guidance.
+4. Use the native export controls for your authorized records and verify the facility scope before sharing a file.
+5. Run only the offered connection diagnostics. If a connector or source is unavailable, retain the failure details for a support case.
+
+## Common problems
+
+- An action is missing: check your role, facility assignment, delegated permission, and the feature''s availability.
+- A manual search is empty: broaden the search or use the application filter, then request missing guidance through support.
+- An import failed: retain the error report, correct the source file, and use the native retry process to avoid duplicate data.
+
+## FAQ
+
+- Are manuals a separate document that can become stale? Manuals are generated from published maintained articles.
+- Can setup changes bypass facility security? No. Every native operation keeps its server-side permissions.
+
+## Helpful tips
+
+- Use a dedicated account for each person and review delegations when staff change responsibilities.','## Prerequisites
+
+- Access to the native application''s facility and account settings.
+- A current published guide for the application and feature. A menu link does not expand your native permissions.
+
+## Permitted roles
+
+- All users can read guidance published for their audience.
+- Organization and facility administrators use native roles to manage settings, invitations, data imports/exports, and connections.
+
+## Setup
+
+1. Open Customer self-service for shortcuts to facility setup, organization contacts, users and invitations, notification preferences, and Help.
+2. Read each feature guide''s prerequisites and permitted roles before configuring it.
+3. For imports, download the native template, validate required columns, review the preview, and confirm only after errors are resolved.
+
+## Normal use
+
+1. Search Knowledge base & FAQ by application, feature, or error message.
+2. Open User manuals, choose the application, and search its published instructions.
+3. Use Print / save manual as PDF to generate a manual from the same maintained content used by search. Publication revisions stay attached to the guidance.
+4. Use the native export controls for your authorized records and verify the facility scope before sharing a file.
+5. Run only the offered connection diagnostics. If a connector or source is unavailable, retain the failure details for a support case.
+
+## Common problems
+
+- An action is missing: check your role, facility assignment, delegated permission, and the feature''s availability.
+- A manual search is empty: broaden the search or use the application filter, then request missing guidance through support.
+- An import failed: retain the error report, correct the source file, and use the native retry process to avoid duplicate data.
+
+## FAQ
+
+- Are manuals a separate document that can become stale? Manuals are generated from published maintained articles.
+- Can setup changes bypass facility security? No. Every native operation keeps its server-side permissions.
+
+## Helpful tips
+
+- Use a dedicated account for each person and review delegations when staff change responsibilities.','{"features":["knowledge.manuals","facility.setup"]}'::jsonb,'self-service.v1','approved',now()) on conflict(id) do nothing;
+insert into hub.content_publications(id,item_id,revision_id,product_id,audience)
+select md5('self-service.setup-and-manuals:publication:'||slug)::uuid,md5('self-service.setup-and-manuals')::uuid,md5('self-service.setup-and-manuals:revision:1')::uuid,id,array['all']::text[] from hub.products where slug in ('carebase','breathe','pennsync','caremetric-emr','caremetric-intel','advisors')
+on conflict(item_id,product_id) do nothing;
+
+insert into hub.content_items(id,content_key,kind,status,access_level,source_system,owner_team)
+values(md5('self-service.connection-diagnostics')::uuid,'self-service.connection-diagnostics','article','published','customer','support_hub','CareMetric Support') on conflict(id) do nothing;
+insert into hub.content_revisions(id,item_id,revision_no,locale,title,summary,body_markdown,body_text,variables,source_version,review_state,approved_at)
+values(md5('self-service.connection-diagnostics:revision:1')::uuid,md5('self-service.connection-diagnostics')::uuid,1,'en-US','Get AI-assisted connection support','Run a permitted account connection check and open a private request with the results.','## Prerequisites
+
+- A verified application connection in Customer center.
+- The application must provide its non-clinical diagnostic adapter. Support intake must be open for new requests.
+
+## Permitted roles
+
+- Every connected user may check their own application connection and open a private support request. Native administration permissions do not expand through this tool.
+
+## Setup
+
+1. Connect your own account from the native application.
+2. Open Customer center and find Connected applications.
+
+## Normal use
+
+1. Choose Check connection to view available checks.
+2. Choose Get AI-assisted connection support to run a fresh check and create a private technical-support case. The result displays its ticket number and a link.
+3. When the application check is unavailable, the case records that limitation. It does not claim a successful check.
+4. Follow up in the case. The existing AI workflow uses published guidance, offers at most two automated attempts, and supports immediate human escalation.
+5. Billing and employee-access changes use their separate review and confirmation workflows. Connection support cannot execute those changes.
+
+## Common problems
+
+- Permission removed: reopen from the native application after your administrator restores access.
+- Uncertain response: retry from the same customer-center page; the existing request identity prevents duplicate cases.
+- AI assistance unavailable or insufficient: choose Request human support in the case.
+
+## FAQ
+
+- Does this read patient charts or training files? No. It requests only the application connection checks.
+- Are these cases shared with facility managers? No. This flow creates a private case under the existing case visibility rules.
+- Does creating a case change a subscription or reset a password? No. Those tasks require a separate explicit confirmation.
+
+## Helpful tips
+
+- Continue in the case that was created instead of opening duplicate requests. Never place passwords, payment card details or patient information in the conversation.','## Prerequisites
+
+- A verified application connection in Customer center.
+- The application must provide its non-clinical diagnostic adapter. Support intake must be open for new requests.
+
+## Permitted roles
+
+- Every connected user may check their own application connection and open a private support request. Native administration permissions do not expand through this tool.
+
+## Setup
+
+1. Connect your own account from the native application.
+2. Open Customer center and find Connected applications.
+
+## Normal use
+
+1. Choose Check connection to view available checks.
+2. Choose Get AI-assisted connection support to run a fresh check and create a private technical-support case. The result displays its ticket number and a link.
+3. When the application check is unavailable, the case records that limitation. It does not claim a successful check.
+4. Follow up in the case. The existing AI workflow uses published guidance, offers at most two automated attempts, and supports immediate human escalation.
+5. Billing and employee-access changes use their separate review and confirmation workflows. Connection support cannot execute those changes.
+
+## Common problems
+
+- Permission removed: reopen from the native application after your administrator restores access.
+- Uncertain response: retry from the same customer-center page; the existing request identity prevents duplicate cases.
+- AI assistance unavailable or insufficient: choose Request human support in the case.
+
+## FAQ
+
+- Does this read patient charts or training files? No. It requests only the application connection checks.
+- Are these cases shared with facility managers? No. This flow creates a private case under the existing case visibility rules.
+- Does creating a case change a subscription or reset a password? No. Those tasks require a separate explicit confirmation.
+
+## Helpful tips
+
+- Continue in the case that was created instead of opening duplicate requests. Never place passwords, payment card details or patient information in the conversation.','{"features":["support.diagnostics"]}'::jsonb,'self-service.v1','approved',now()) on conflict(id) do nothing;
+insert into hub.content_publications(id,item_id,revision_id,product_id,audience)
+select md5('self-service.connection-diagnostics:publication:'||slug)::uuid,md5('self-service.connection-diagnostics')::uuid,md5('self-service.connection-diagnostics:revision:1')::uuid,id,array['all']::text[] from hub.products where slug in ('carebase','breathe','pennsync','caremetric-emr','caremetric-intel')
+on conflict(item_id,product_id) do nothing;
