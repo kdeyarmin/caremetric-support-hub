@@ -1,9 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { billingTotals, couponLabel, customerDetailSchema, itemMonthlyCents, parseDollars, priceLabel, subscriptionMonthlyCents, summarizeByApp, workspaceSchema } from './billingModel';
+import { billingTotals, canManageOrganizationBilling, couponLabel, customerDetailSchema, itemMonthlyCents, parseDollars, priceLabel, subscriptionMonthlyCents, summarizeByApp, workspaceSchema } from './billingModel';
 import { billingCommandSchema } from './billingProtocol';
 import { fixtureCoupon, fixtureCustomer, fixtureItem, fixtureSubscription, fixtureWorkspace } from './billingFixtures';
 
 describe('billing money', () => {
+  it('shows organization payment navigation only for a paid-app administrator membership', () => {
+    const products = [{ id: 'support', slug: 'pennsync' }, { id: 'paid', slug: 'carebase' }];
+    const membership = { tenantId: 'agency', tenantName: 'Agency', productId: 'support', role: 'tenant_admin' as const, intakeEnabled: true };
+    const actor = { role: 'tenant_admin' as const, memberships: [membership] };
+    expect(canManageOrganizationBilling(actor, products)).toBe(false);
+    expect(canManageOrganizationBilling({ ...actor, memberships: [...actor.memberships, { ...membership, productId: 'paid', role: 'customer' }] }, products)).toBe(false);
+    expect(canManageOrganizationBilling({ ...actor, memberships: [...actor.memberships, { ...membership, productId: 'paid' }] }, products)).toBe(true);
+    expect(canManageOrganizationBilling({ ...actor, role: 'platform_admin' }, products)).toBe(false);
+  });
+  it('rejects PennSync payment products, account links and subscriptions', () => {
+    const request_key = '98000000-0000-4000-8000-000000000001';
+    expect(billingCommandSchema.safeParse({ action: 'app_key.issue', app: 'pennsync' }).success).toBe(false);
+    expect(billingCommandSchema.safeParse({ action: 'subscription.create', tenant_id: request_key, app: 'pennsync',
+      items: [{ price: 'price_example', quantity: 1 }], trial_days: 0, collection_method: 'charge_automatically',
+      days_until_due: 30, coupon: null, promotion_code: null, request_key }).success).toBe(false);
+  });
   it('parses dollar entries to whole cents and refuses anything else', () => {
     expect(['$1,299.50', '1299.5', '499', '0', '0.07'].map(parseDollars)).toEqual([129950, 129950, 49900, 0, 7]);
     expect(['', '12.345', '-5', 'ten', '10000001'].map(parseDollars)).toEqual([null, null, null, null, null]);

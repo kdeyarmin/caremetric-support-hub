@@ -8,6 +8,7 @@ import { selfService, nativeSelfService } from './self-service.mjs';
 import { smsAuth, sessionCookie, digest, transaction, withSession } from './sms-auth.mjs';
 import { exerciseCustomerCheckout } from './customer-checkout-integration.mjs';
 import { exerciseCustomerCatalog } from './customer-catalog-integration.mjs';
+import { exercisePennSyncNoPayments } from './pennsync-no-payments-integration.mjs';
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -60,6 +61,7 @@ const privateRpc = (name, values) => withSession(pool, jar[sessionCookie], async
   return (await db.query(`select private.${name}(${values.map((_, index) => `$${index + 1}`).join(',')}) as result`, values)).rows[0].result;
 });
 try {
+  await exercisePennSyncNoPayments({ admin, pool });
   // Intake deliberately requires a usable support owner. Native customer
   // linking must never grant those platform privileges to the customer.
   await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'self-service-owner@test.invalid',false)", [supportOwner]);

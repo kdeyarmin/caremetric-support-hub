@@ -6,7 +6,7 @@ import { summarizeByApp, type BillingWorkspace } from "../billing/billingModel";
 import type { BillingApp } from "../billing/billingProtocol";
 
 /**
- * An application's subscriptions as the Hub bills them. Every application's
+ * An application's subscriptions as the Hub bills them. Paid applications'
  * platform billing lives in the Hub's Stripe mirror, so these figures come from
  * one source and are never counted twice across applications.
  */
@@ -26,7 +26,7 @@ export interface RollupAppSnapshot {
   /** Null when the capabilities read failed: the connection is unavailable and no totals are inferred from it. */
   capabilities: PortfolioCapabilities | null;
   overview: RollupRead<PortfolioOverview>;
-  /** The Hub's own billing for this application; not-advertised for an application that does not bill (Healthcare Advisors). */
+  /** The Hub's own billing; not-advertised for PennSync and Healthcare Advisors. */
   billing: RollupRead<HubAppBilling>;
   /** Monthly recurring revenue from the Hub's billing, grouped by currency (all prices are USD today). */
   money: RollupMoney[];
@@ -90,6 +90,7 @@ export function buildPortfolioRollup(apps: readonly RollupAppSnapshot[]): Portfo
   const statusCounts = new Map<string, number>();
   const money: RollupMoney[] = [];
   for (const app of apps) {
+    if (!billingAppFor[app.product]) continue;
     if (app.billing.state !== "ready") continue;
     billingReportingApps.push(app.product);
     subscriptionTotal = (subscriptionTotal ?? 0) + app.billing.data.subscriptionCount;
@@ -119,9 +120,9 @@ async function settle<T>(read: () => Promise<T>): Promise<RollupRead<T>> {
   }
 }
 
-/** The Hub billing slug for each administration connection; Healthcare Advisors does not bill. */
+/** PennSync and Healthcare Advisors have support connections without payment authority. */
 export const billingAppFor: Record<PortfolioProduct, BillingApp | null> = {
-  carebase: "carebase", breathe: "breathe", "caremetric-emr": "caremetric-emr", pennsync: "pennsync", intel: "caremetric-intel", "caremetric-go": "caremetric-go", advisors: null,
+  carebase: "carebase", breathe: "breathe", "caremetric-emr": "caremetric-emr", pennsync: null, intel: "caremetric-intel", "caremetric-go": "caremetric-go", advisors: null,
 };
 export type BillingReader = (signal: AbortSignal) => Promise<Pick<BillingWorkspace, "subscriptions" | "coupons">>;
 
@@ -132,6 +133,7 @@ export type BillingReader = (signal: AbortSignal) => Promise<Pick<BillingWorkspa
  * connection unavailable instead of guessing. Billing comes from the Hub.
  */
 export async function loadRollupApp(portfolio: PortfolioClient, product: PortfolioProduct, signal: AbortSignal, billing: RollupRead<HubAppBilling> = { state: "unavailable" }): Promise<RollupAppSnapshot> {
+  if (!billingAppFor[product]) billing = { state: "not-advertised" };
   const money = billing.state === "ready" && billing.data.mrrCents > 0 ? [{ currency: "usd", amountMinor: String(billing.data.mrrCents) }] : [];
   let capabilities: PortfolioCapabilities;
   try {

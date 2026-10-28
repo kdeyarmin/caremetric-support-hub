@@ -81,6 +81,7 @@ describe('Stripe normalizers', () => {
     expect(normalizeProduct({ id: 'prod_2', name: 'Onboarding', active: true, metadata: { app: 'caremetric-intel', tier: 'onboarding_pro' } }))
       .toMatchObject({ app: 'caremetric-intel', kind: 'fee' });
     expect(normalizeProduct({ id: 'prod_3', name: 'X', active: true, metadata: { app: 'PennTrain' } }).app).toBeNull();
+    expect(normalizeProduct({ id: 'prod_support', name: 'PennSync', active: true, metadata: { app: 'pennsync' } }).app).toBeNull();
   });
   it('classifies per-unit and flat prices and keeps a customer-specific tenant', () => {
     const tenant = '5f10a61e-3209-411a-8207-d657c8fd936d';

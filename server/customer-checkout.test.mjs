@@ -81,6 +81,12 @@ function fixture({ customer = null, role = 'organization_admin', enabled = true 
 }
 
 describe('initial subscription Checkout', () => {
+  it('refuses PennSync before any payment provider request', async () => {
+    const test = fixture(); test.workspace.app = 'pennsync';
+    await expect(test.service.handle('session', { action: 'workspace', connection_id: connection })).rejects.toMatchObject({ status: 403 });
+    expect(test.live.get).not.toHaveBeenCalled();
+    expect(test.live.post).not.toHaveBeenCalled();
+  });
   it('reserves before provider work and binds a recoverable payment URL without granting access', async () => {
     const test = fixture(), quote = await test.preview();
     expect(quote).toMatchObject({ kind: 'checkout', due_now: 2000, recurring_subtotal: 2000 });

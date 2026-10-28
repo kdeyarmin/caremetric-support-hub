@@ -1,5 +1,12 @@
 import { z } from 'zod';
 import { appLabels, billingApps, type BillingApp } from './billingProtocol';
+import type { ActorContext, Product } from '../domain';
+
+/** Organization payment navigation follows the same paid-app memberships as the server. */
+export function canManageOrganizationBilling(actor: Pick<ActorContext, 'role' | 'memberships'>, products: readonly Pick<Product, 'id' | 'slug'>[]): boolean {
+  return actor.role !== 'platform_admin' && actor.memberships.some(membership => membership.role === 'tenant_admin'
+    && products.some(product => product.id === membership.productId && billingApps.some(app => app === product.slug)));
+}
 
 /** The Billing workspace as hub.billing_workspace() returns it; Stripe stays the source of truth. */
 const ts = z.string().nullable();
