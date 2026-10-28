@@ -26,7 +26,7 @@ const provider = { send: async () => randomUUID(), verify: async (_id, _phone, c
 const nativeCalls = [];
 let unavailable = false, tenant, customerId, ticket;
 const secret = 'temporary-test-secret-never-audited';
-const customer = selfService({ pool, provider, publicOrigin: 'https://hub.test', fetchImpl: async (url, options) => {
+const customer = selfService({ pool, provider, connectionOrigin: 'https://hub.test', fetchImpl: async (url, options) => {
   if (unavailable) throw new Error('Synthetic source outage');
   assert.equal(url, nativeSelfService.carebase.endpoint);
   assert.equal(options.redirect, 'error'); assert.equal(options.headers.Cookie, undefined);
