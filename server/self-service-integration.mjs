@@ -7,6 +7,7 @@ import { gateway } from './gateway.mjs';
 import { selfService, nativeSelfService } from './self-service.mjs';
 import { smsAuth, sessionCookie, digest, transaction, withSession } from './sms-auth.mjs';
 import { exerciseCustomerCheckout } from './customer-checkout-integration.mjs';
+import { exerciseCustomerCatalog } from './customer-catalog-integration.mjs';
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -76,6 +77,7 @@ try {
   const connection = (await call('self-service', { action: 'workspace' })).body.connections[0];
   assert.equal(connection.app, 'carebase'); assert.equal(connection.role, 'facility_admin'); tenant = connection.tenant_id;
   customerId = (await admin.query('select user_id from private.sms_sessions where token_hash=$1', [digest(jar[sessionCookie])])).rows[0].user_id;
+  await exerciseCustomerCatalog({ admin, pool, privateRpc, connection });
   assert.equal((await admin.query('select count(*)::int as count from private.staff_permissions where user_id=$1', [customerId])).rows[0].count, 0, 'linking never grants operator authority');
   assert.equal((await call('self-service', { action: 'connect', token, confirmed: true })).status, 403, 'a handoff is consumed once');
   const diagnosticRequest = { action: 'diagnostic_support', connection_id: connection.id, request_id: randomUUID(), confirmed: true };
