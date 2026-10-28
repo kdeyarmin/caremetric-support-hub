@@ -113,10 +113,11 @@ create table private.billing_usage_reservations (
  tenant_id uuid not null references hub.tenants(id) on delete cascade,
  metric text not null, quantity integer not null check(quantity between 0 and 1000000),
  targets jsonb not null, state text not null default 'pending' check(state in ('pending','completed')),
- created_at timestamptz not null default now(),
+ created_at timestamptz not null default now(),last_attempt_at timestamptz,
  primary key(product_id,request_key)
 );
 create unique index one_pending_billing_usage on private.billing_usage_reservations(tenant_id,product_id) where state='pending';
+create index billing_usage_recovery_pending on private.billing_usage_reservations(last_attempt_at nulls first,created_at) where state='pending';
 alter table private.billing_usage_reservations enable row level security;
 revoke all on private.billing_usage_reservations from public,anon,authenticated,service_role,hub_app_server;
 
@@ -179,24 +180,50 @@ end;$$;
 
 create function private.complete_scoped_billing_usage(p_product uuid,p_request uuid,p_items integer) returns jsonb
 language plpgsql security definer set search_path='' as $$
-declare r private.billing_usage_reservations;
+declare r private.billing_usage_reservations;active_items integer;changed_items integer;
 begin
  perform private.require_hub_app_server();
  select * into r from private.billing_usage_reservations where product_id=p_product and request_key=p_request for update;
  if not found then raise exception 'Usage reservation unavailable' using errcode='42501';end if;
  if r.state='completed' then return private.billing_usage_seen(p_product,p_request)||jsonb_build_object('duplicate',true);end if;
- if p_items is null or p_items<>(select count(*) from jsonb_array_elements(r.targets->'items') item where (item->>'quantity')::integer<>r.quantity) then
+ select count(*),count(*) filter(where (item->>'quantity')::integer<>r.quantity) into active_items,changed_items
+  from jsonb_array_elements(r.targets->'items') item join private.billing_subscriptions s on s.stripe_subscription_id=item->>'subscription'
+  where s.tenant_id=r.tenant_id and s.product_id=r.product_id and s.status not in('canceled','incomplete_expired');
+ if p_items is null or p_items<>changed_items then
   raise exception 'Usage receipt does not match its reservation' using errcode='22023';end if;
  if exists(select 1 from jsonb_array_elements(r.targets->'items') item
-  where not exists(select 1 from private.billing_subscription_items i join private.billing_subscriptions s using(stripe_subscription_id)
-   where i.stripe_item_id=item->>'item' and i.stripe_subscription_id=item->>'subscription' and i.quantity=r.quantity
-    and s.tenant_id=r.tenant_id and s.product_id=r.product_id)) then raise exception 'Reported quantities need reconciliation' using errcode='40001';end if;
- perform private.billing_record_usage(p_product,r.tenant_id,r.metric,r.quantity,p_request,'updated',p_items);
+  where not exists(select 1 from private.billing_subscriptions s where s.stripe_subscription_id=item->>'subscription'
+   and s.tenant_id=r.tenant_id and s.product_id=r.product_id and (s.status in('canceled','incomplete_expired')
+    or exists(select 1 from private.billing_subscription_items i where i.stripe_item_id=item->>'item'
+     and i.stripe_subscription_id=s.stripe_subscription_id and i.stripe_price_id=item->>'price' and i.quantity=r.quantity))))
+  then raise exception 'Reported quantities need reconciliation' using errcode='40001';end if;
+ perform private.billing_record_usage(p_product,r.tenant_id,r.metric,r.quantity,p_request,case when active_items=0 then 'no_subscription' else 'updated' end,p_items);
+ if active_items=0 then perform private.billing_audit(null,'billing.usage.closed',r.tenant_id,r.product_id,jsonb_build_object('metric',r.metric,'quantity',r.quantity));end if;
  update private.billing_usage_reservations set state='completed' where product_id=p_product and request_key=p_request;
  return private.billing_usage_seen(p_product,p_request);
 end;$$;
 revoke all on function private.prepare_scoped_billing_usage(uuid,text,text,integer,uuid),private.lock_scoped_billing_usage(uuid,uuid),private.complete_scoped_billing_usage(uuid,uuid,integer) from public,anon,authenticated,service_role;
 grant execute on function private.prepare_scoped_billing_usage(uuid,text,text,integer,uuid),private.lock_scoped_billing_usage(uuid,uuid),private.complete_scoped_billing_usage(uuid,uuid,integer) to hub_app_server;
+
+-- Claim before I/O so failed accounts rotate behind untouched work. Live HTTP writes are skipped.
+create function private.claim_billing_usage_recovery() returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare result jsonb;
+begin
+ perform private.require_hub_app_server();
+ with candidates as(select product_id,request_key from private.billing_usage_reservations
+  where state='pending' and created_at<=now()-interval '1 minute'
+   and (last_attempt_at is null or last_attempt_at<=now()-interval '1 minute')
+  order by last_attempt_at nulls first,created_at limit 20 for update skip locked),claimed as(
+  update private.billing_usage_reservations r set last_attempt_at=now() from candidates c
+   where r.product_id=c.product_id and r.request_key=c.request_key returning r.*)
+ select coalesce(jsonb_agg(jsonb_build_object('product_id',r.product_id,'slug',p.slug,'tenant_id',r.tenant_id,
+  'metric',r.metric,'quantity',r.quantity,'request_key',r.request_key)),'[]'::jsonb) into result
+  from claimed r join hub.products p on p.id=r.product_id;
+ return result;
+end;$$;
+revoke all on function private.claim_billing_usage_recovery() from public,anon,authenticated,service_role;
+grant execute on function private.claim_billing_usage_recovery() to hub_app_server;
 
 -- Fence customer activation and confirmation against unresolved legacy quantity updates.
 create or replace function private.activate_facility_billing(p_connection uuid,p_expected_version integer,p_allocations jsonb) returns void
@@ -291,7 +318,8 @@ do $$ declare contract jsonb;signature text;relation text;begin
    raise exception 'Facility entitlement state must remain private' using errcode='55000';end if;
  end loop;
  foreach signature in array array['private.scoped_app_billing_entitlements(uuid,text)','private.app_facility_entitlement_snapshot(uuid,text,jsonb)',
-  'private.prepare_scoped_billing_usage(uuid,text,text,integer,uuid)','private.lock_scoped_billing_usage(uuid,uuid)','private.complete_scoped_billing_usage(uuid,uuid,integer)'] loop
+  'private.prepare_scoped_billing_usage(uuid,text,text,integer,uuid)','private.lock_scoped_billing_usage(uuid,uuid)','private.complete_scoped_billing_usage(uuid,uuid,integer)',
+  'private.claim_billing_usage_recovery()'] loop
   if to_regprocedure(signature) is null or not has_function_privilege('hub_app_server',signature,'EXECUTE')
    or has_function_privilege('authenticated',signature,'EXECUTE') or has_function_privilege('anon',signature,'EXECUTE') then
    raise exception 'Facility entitlement operations must remain server-only' using errcode='55000';end if;

@@ -4,7 +4,7 @@ import { transaction } from './sms-auth.mjs';
 import { appServer } from './http.mjs';
 
 /** Shares the disposable paid subscription from the real billing integration. */
-export async function exerciseFacilityEntitlements({ admin, pool, billing, bearer, breatheKey, tenant, product, account, plan, addon, stripe }) {
+export async function exerciseFacilityEntitlements({ admin, pool, billing, bearer, breatheKey, tenant, product, account, plan, addon, stripe, dropResponses }) {
   const request = { version: 1, account, facility_ids: ['site-a', 'site-b', 'unknown-site'] };
   const read = input => billing.facilityEntitlements(bearer, input ?? request);
   const server = appServer({ billing, origins: [] });
@@ -77,6 +77,36 @@ export async function exerciseFacilityEntitlements({ admin, pool, billing, beare
   assert.deepEqual(await prepare(6), reserved, 'identical retries retain their immutable original targets');
   await assert.rejects(prepare(7), error => error.code === '22023');
   await assert.rejects(billing.usage(bearer, { account, metric: 'facility', quantity: 7, request_key: randomUUID() }), error => error.status === 409);
-  assert.equal((await billing.usage(bearer, { account, metric: 'facility', quantity: 6, request_key: key })).outcome, 'updated');
+  dropResponses(true);
+  try {
+    await assert.rejects(billing.usage(bearer, { account, metric: 'facility', quantity: 6, request_key: key }), error => error.status === 503);
+    await admin.query("update private.billing_usage_reservations set created_at=now()-interval '2 minutes' where product_id=$1 and request_key=$2", [product, key]);
+    assert.deepEqual(await billing.reconcileUsage(), { attempted: 1, completed: 0, failed: 1 }, 'a provider outage leaves the reservation pending');
+    assert.ok((await admin.query('select last_attempt_at from private.billing_usage_reservations where product_id=$1 and request_key=$2', [product, key])).rows[0].last_attempt_at, 'a failed recovery attempt is recorded before provider I/O');
+    assert.deepEqual(await billing.reconcileUsage(), { attempted: 0, completed: 0, failed: 0 }, 'failed work observes its retry window instead of spinning');
+  } finally { dropResponses(false); }
+  const original = stripe.requests.filter(r => r.path === `/v1/subscription_items/${reserved.targets.items[0].item}` && r.idempotencyKey?.includes(key));
+  assert.ok(original.length >= 2);
+  assert.ok(original.every(request => request.idempotencyKey === original[0].idempotencyKey && JSON.stringify(request.params) === JSON.stringify(original[0].params)), 'provider retries retain the exact reserved parameters');
+  await admin.query("update private.billing_usage_reservations set created_at=now()-interval '2 minutes' where product_id=$1 and request_key=$2", [product, key]);
+  await admin.query("update private.billing_usage_reservations set last_attempt_at=now()-interval '2 minutes' where product_id=$1 and request_key=$2", [product, key]);
+  const recovered = await billing.reconcileUsage();
+  assert.deepEqual(recovered, { attempted: 1, completed: 1, failed: 0 }, 'the Hub recovers an orphaned report without the original app calling back');
+  assert.equal((await billing.usage(bearer, { account, metric: 'facility', quantity: 6, request_key: key })).duplicate, true);
   assert.equal((await billing.usage(bearer, { account, metric: 'facility', quantity: 5, request_key: randomUUID() })).outcome, 'updated');
+  const canceledKey = randomUUID();
+  await transaction(pool, db => db.query('select private.prepare_scoped_billing_usage($1,$2,$3,$4,$5)', [product, account, 'facility', 7, canceledKey]));
+  await admin.query("update private.billing_usage_reservations set created_at=now()-interval '2 minutes' where product_id=$1 and request_key=$2", [product, canceledKey]);
+  const ended = stripe.store.subscriptions.get(reserved.targets.items[0].subscription);
+  const writes = stripe.requests.filter(r => r.path.startsWith('/v1/subscription_items/') && r.method === 'POST').length;
+  ended.status = 'canceled';
+  try {
+    assert.deepEqual(await billing.reconcileUsage(), { attempted: 1, completed: 1, failed: 0 });
+    const receipt = await billing.usage(bearer, { account, metric: 'facility', quantity: 7, request_key: canceledKey });
+    assert.deepEqual([receipt.outcome, receipt.items_updated, receipt.duplicate], ['no_subscription', 0, true]);
+    assert.equal(stripe.requests.filter(r => r.path.startsWith('/v1/subscription_items/') && r.method === 'POST').length, writes, 'canceled subscriptions are closed without attempting a quantity mutation');
+  } finally {
+    ended.status = 'active';
+    await billing.reconcile();
+  }
 }

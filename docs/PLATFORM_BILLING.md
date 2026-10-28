@@ -231,6 +231,11 @@ Legacy changes reserve immutable target item IDs, prices and original quantities
 before provider I/O; an uncertain result blocks another report, purchase or scope
 activation until the identical request is reconciled. Every item retry preserves
 its Stripe idempotency key and parameters.
+The Hub retries orphaned reservations every minute, recording each recovery attempt
+before provider I/O and rotating failures behind untouched accounts. Confirmed
+canceled/expired subscriptions close the reservation without changing quantities.
+Changed customer, application, item or price identity still requires reconciliation;
+recovery never substitutes a new purchase or payment operation.
 
 ### `POST /api/apps/trials`
 

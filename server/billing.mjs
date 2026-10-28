@@ -624,7 +624,10 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
       return { app, plan };
     }).catch(error => { throw asHttpError(error); });
     if (prepared.plan.outcome) return prepared.plan;
-    const { app } = prepared;
+    return applyUsageReservation(prepared.app, report, prepared.plan.tenant_id);
+  }
+
+  async function applyUsageReservation(app, report, tenant) {
     try {
       const live = await stripe();
       return await transaction(pool, async db => {
@@ -633,31 +636,48 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         const plan = (await one(db, 'select private.lock_scoped_billing_usage($1,$2) as plan', [app.product_id, report.request_key])).plan;
         if (plan.outcome) return plan;
         const subscriptions = [...new Set(plan.targets.items.map(item => item.subscription))];
+        const closed = new Set();
         for (const id of subscriptions) {
           const expected = await lookup(db, 'subscription', id);
           const current = await live.get(`/v1/subscriptions/${id}`, { expand: ['discounts'] });
           const customer = typeof current.customer === 'string' ? current.customer : current.customer?.id;
+          const terminal = ['canceled', 'incomplete_expired'].includes(current.status);
+          if (terminal) closed.add(id);
           if (!expected || expected.tenant_id !== plan.tenant_id || expected.app !== app.slug || customer !== expected.customer
-            || current.metadata?.app && current.metadata.app !== app.slug || current.items?.has_more
+            || current.metadata?.app && current.metadata.app !== app.slug || !terminal && (current.items?.has_more
             || !plan.targets.items.filter(item => item.subscription === id).every(item => current.items?.data.some(actual => actual.id === item.item
               && (typeof actual.price === 'string' ? actual.price : actual.price?.id) === item.price
-              && [item.quantity, report.quantity].includes(actual.quantity)))) {
+              && [item.quantity, report.quantity].includes(actual.quantity))))) {
             throw new HttpError(409, 'The subscription changed during quantity reconciliation. Refresh billing before continuing.');
           }
         }
         // Replay every reserved item with immutable parameters, including a line
         // already at its desired quantity after an uncertain earlier response.
-        for (const item of plan.targets.items) await live.post(`/v1/subscription_items/${item.item}`, {
+        const activeItems = plan.targets.items.filter(item => !closed.has(item.subscription));
+        for (const item of activeItems) await live.post(`/v1/subscription_items/${item.item}`, {
           quantity: report.quantity, proration_behavior: 'none',
         }, { idempotencyKey: `hub-usage-${report.request_key}-${item.item}` });
         for (const id of subscriptions) await refresh(db, live, 'subscription', id);
-        const changed = plan.targets.items.filter(item => item.quantity !== report.quantity).length;
+        const changed = activeItems.filter(item => item.quantity !== report.quantity).length;
         return (await one(db, 'select private.complete_scoped_billing_usage($1,$2,$3) as result', [app.product_id, report.request_key, changed])).result;
       });
     } catch (error) {
-      await transaction(pool, db => audit(db, null, 'billing.usage.failed', prepared.plan.tenant_id, app.product_id, { metric: report.metric, quantity: report.quantity }));
+      await transaction(pool, db => audit(db, null, 'billing.usage.failed', tenant, app.product_id, { metric: report.metric, quantity: report.quantity }));
       throw asHttpError(error);
     }
+  }
+
+  async function reconcileUsage() {
+    const work = await transaction(pool, async db => (await one(db, 'select private.claim_billing_usage_recovery() as value')).value);
+    let completed = 0, failed = 0;
+    for (const report of work) {
+      try {
+        await applyUsageReservation({ product_id: report.product_id, slug: report.slug }, report, report.tenant_id);
+        completed++;
+      } catch { failed++; }
+    }
+    if (failed) log.warn(`Billing quantity reconciliation: ${failed} operations need another attempt.`);
+    return { attempted: work.length, completed, failed };
   }
 
   async function trial(authorization, input) {
@@ -730,13 +750,14 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
       }
       const checkouts = await customerSelfService.reconcileCheckouts();
       failed += checkouts.failed;
+      failed += (await reconcileUsage()).failed;
     } catch { log.warn('Platform billing could not finish refreshing from Stripe; the webhook and Sync from Stripe keep it current.'); }
     if (failed) log.warn(`Platform billing skipped ${failed} Stripe records it could not mirror.`);
     return { synced, failed };
   }
 
   return {
-    start: verify, reconcile,
+    start: verify, reconcile, reconcileUsage,
     reconcileCustomerCheckouts: async () => {
       const result = await customerSelfService.reconcileCheckouts();
       if (result.failed || result.unbound) log.warn(`Customer Checkout reconciliation: ${result.failed} failed and ${result.unbound} unbound pending purchases.`);
