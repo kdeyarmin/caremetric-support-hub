@@ -131,6 +131,16 @@ The server chooses quantities from the published billing basis: flat prices stay
 at one, and facility prices count verified native facilities. Seats, patients and
 other units require an app-owned usage adapter. The server refuses existing trials,
 unresolved subscriptions and ambiguous provider results before creating Checkout.
+
+Some plans are sold only to customers who fit them (`src/billing/planSize.ts`):
+- CareBase `small_home` and `small_home_complete`: licensed homes under 20 beds.
+- `train_single_facility`: organizations with one active facility.
+
+The application reports the facts with purchasing authority (`plan_size`, read from each
+facility's licence in force), and the Hub never stores or estimates bed counts. An
+organization-wide purchase needs every facility to qualify; a per-facility purchase checks
+only the facility being billed. Missing facts refuse the plan. A facility already on one of
+these plans keeps it when it adds modules. Owner-created subscriptions are not checked.
 Read-only checks also preserve an existing EMR/Go shared subscription; this work
 does not add Go to the customer workspace.
 

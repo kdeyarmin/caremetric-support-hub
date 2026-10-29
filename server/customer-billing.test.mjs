@@ -52,6 +52,22 @@ function fixture({ payment = 'paid', denied = false } = {}) {
     advance: milliseconds => { currentTime += milliseconds; } };
 }
 describe('customer purchases', () => {
+  it('moves a facility onto a small-home plan only when the application confirms it fits, and keeps a plan it already has', async () => {
+    const test = fixture(); test.workspace.catalog.push(price('price_small', 'small_home', 800));
+    await expect(test.preview([], 'price_small')).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/could not confirm/) });
+    const size = { small_home_bed_limit: 20, active_facilities: 1, small_home_eligible: false, single_facility_eligible: true,
+      facilities: [{ facility_id: 'site-a', licensed_beds: 32, small_home: false }] };
+    test.authorize.mockResolvedValue({ authorized: true, plan_size: size });
+    await expect(test.preview([], 'price_small')).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/fewer than 20 beds/) });
+    expect(test.events).toEqual([]);
+    test.authorize.mockResolvedValue({ authorized: true, plan_size: { ...size, small_home_eligible: true, facilities: [{ ...size.facilities[0], licensed_beds: 16, small_home: true }] } });
+    await expect(test.preview([], 'price_small')).resolves.toMatchObject({ has_immediate_change: expect.any(Boolean) });
+    // A facility already on the plan is not re-checked when it only adds a module.
+    test.workspace.allocations[0].plan = 'price_small'; test.workspace.subscription.items[0].price = 'price_small';
+    test.mutateSubscription({ items: { data: [{ id: 'si_core', price: { id: 'price_small' }, quantity: 1, current_period_start: 1767225600, current_period_end: 1769904000 }] } });
+    test.authorize.mockResolvedValue({ authorized: true });
+    await expect(test.preview(['price_train'], 'price_small')).resolves.toMatchObject({ has_immediate_change: true });
+  });
   it('preserves flat organization pricing without requiring a native facility', async () => {
     const test = fixture(); test.workspace.facilities = []; test.workspace.allocations = [];
     test.workspace.catalog = test.workspace.catalog.map(price => ({ ...price, model: 'flat', unit_label: 'organization' }));

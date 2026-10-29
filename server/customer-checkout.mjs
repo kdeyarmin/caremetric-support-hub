@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { HttpError } from './sms-auth.mjs';
 import { initialSubscriptionLines } from '../src/billing/facilityAllocations.ts';
+import { assertPlanFits } from '../src/billing/planSize.ts';
 import { selfServiceApps } from '../src/self-service/protocol.ts';
 import { CHECKOUT_API_VERSION, normalizers, StripeError } from './stripe.mjs';
 
@@ -37,12 +38,14 @@ export function customerCheckoutService({ stripe, rpc, service, mirrorCustomer, 
     }
   }
 
-  async function preview(session, input, workspace) {
+  async function preview(session, input, workspace, authority) {
     if (!selfServiceApps.includes(workspace.app) || workspace.mode !== 'legacy' || workspace.role !== 'organization_admin' || input.facility_id !== null) throw new HttpError(403, 'An organization administrator must set up the shared subscription.');
     if (workspace.pending_checkout) throw new HttpError(409, 'Resume or cancel the pending checkout before selecting another plan.');
     let lines;
-    try { lines = initialSubscriptionLines(input.plan, input.addons, workspace.catalog, workspace.facilities.length); }
-    catch (error) { throw new HttpError(400, error.message); }
+    try {
+      lines = initialSubscriptionLines(input.plan, input.addons, workspace.catalog, workspace.facilities.length);
+      assertPlanFits(workspace.catalog.find(price => price.id === input.plan), authority, null);
+    } catch (error) { throw new HttpError(400, error.message); }
     const live = await stripe();
     await noExistingSubscription(live, workspace);
     const catalog = new Map(workspace.catalog.map(price => [price.id, price]));
