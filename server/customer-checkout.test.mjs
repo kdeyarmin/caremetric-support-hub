@@ -125,6 +125,26 @@ describe('initial subscription Checkout', () => {
     const test = fixture(); test.workspace.catalog[0].unit_label = unit_label;
     await expect(test.preview()).rejects.toMatchObject({ status: 400 }); expect(test.live.post).not.toHaveBeenCalled();
   });
+  it('sells a small-home plan only when the application confirms every facility is under the bed limit', async () => {
+    const test = fixture(); test.workspace.catalog[0] = { ...test.workspace.catalog[0], key: 'small_home', name: 'Small Home' };
+    await expect(test.preview()).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/could not confirm/) });
+    const size = { small_home_bed_limit: 20, active_facilities: 2, small_home_eligible: false, single_facility_eligible: false,
+      facilities: [{ facility_id: 'site-a', licensed_beds: 12, small_home: true }, { facility_id: 'site-b', licensed_beds: 24, small_home: false }] };
+    test.authorize.mockResolvedValue({ authorized: true, plan_size: size });
+    await expect(test.preview()).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/fewer than 20 beds/) });
+    expect(test.live.post).not.toHaveBeenCalled(); expect(test.events).toEqual([]);
+    test.authorize.mockResolvedValue({ authorized: true, plan_size: { ...size, small_home_eligible: true } });
+    await expect(test.preview()).resolves.toMatchObject({ kind: 'checkout' });
+  });
+  it('sells Train Single Facility only to an organization with one active facility', async () => {
+    const test = fixture(); test.workspace.catalog[0] = { ...test.workspace.catalog[0], key: 'train_single_facility', name: 'Train Single Facility', model: 'flat', unit_label: '' };
+    const size = { small_home_bed_limit: 20, active_facilities: 2, small_home_eligible: false, single_facility_eligible: false, facilities: [] };
+    test.authorize.mockResolvedValue({ authorized: true, plan_size: size });
+    await expect(test.preview()).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/one active facility/) });
+    test.workspace.facilities = test.workspace.facilities.slice(0, 1);
+    test.authorize.mockResolvedValue({ authorized: true, plan_size: { ...size, active_facilities: 1, single_facility_eligible: true } });
+    expect((await test.preview()).summary).toMatchObject([{ quantity: 1 }]);
+  });
   it('blocks purchasing by a facility admin and keeps the rollout flag authoritative', async () => {
     const facility = fixture({ role: 'facility_admin' }); await expect(facility.preview()).rejects.toMatchObject({ status: 403 });
     const disabled = fixture({ enabled: false }), quote = await disabled.preview();

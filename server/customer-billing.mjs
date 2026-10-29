@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { HttpError, withSession, transaction } from './sms-auth.mjs';
 import { customerBillingRequest, customerBillingWorkspace } from '../src/billing/customerBillingProtocol.ts';
 import { aggregateFacilityLines, planFacilityChange } from '../src/billing/facilityAllocations.ts';
+import { assertPlanFits } from '../src/billing/planSize.ts';
 import { selfServiceApps } from '../src/self-service/protocol.ts';
 import { normalizers, StripeError } from './stripe.mjs';
 import { customerCheckoutService } from './customer-checkout.mjs';
@@ -104,9 +105,9 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
   }
   async function preview(session, input) {
     let workspace = await context(session, input.connection_id);
-    await verifyScope(session, workspace, input.facility_id);
+    const authority = await verifyScope(session, workspace, input.facility_id);
     workspace = await context(session, input.connection_id);
-    if (!workspace.subscription) return checkout.preview(session, input, workspace);
+    if (!workspace.subscription) return checkout.preview(session, input, workspace, authority);
     const live = await stripe(), sub = await providerSubscription(live, workspace);
     const catalog = new Map(workspace.catalog.map(price => [price.id, price]));
     if ([input.plan, ...input.addons].filter(Boolean).some(id => {
@@ -118,6 +119,11 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
     let immediate = workspace.allocations, next = workspace.allocations;
     const targets = workspace.mode === 'legacy' ? workspace.allocations : workspace.allocations.filter(row => row.facility_id === input.facility_id);
     if (!targets.length) throw new HttpError(409, 'Complete facility setup before selecting a subscription.');
+    // A facility already on a size-limited plan keeps it; only moving onto one is checked.
+    if (targets.some(prior => prior.plan !== input.plan)) {
+      try { assertPlanFits(catalog.get(input.plan), authority, workspace.mode === 'legacy' ? null : input.facility_id); }
+      catch (error) { throw new HttpError(400, error.message); }
+    }
     if (!sameBillingLines(aggregateFacilityLines(workspace.allocations, catalog), rows(sub))) throw new HttpError(409, 'Current quantities need reconciliation before changing this account. Existing prices and access are retained.');
     for (const prior of targets) {
       let change;
