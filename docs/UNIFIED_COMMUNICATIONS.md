@@ -90,15 +90,28 @@ accepting messages that may contain PHI.
    replies, `HUB_TWILIO_ACCOUNT_SID` plus `HUB_TWILIO_MESSAGING_SERVICE_SID`
    (preferred) or `HUB_TWILIO_FROM_NUMBER`. `HUB_PUBLIC_ORIGIN` must match the
    exact origin Twilio calls (default
-   `https://support-hub-web-production.up.railway.app`).
-2. In Twilio, set the support number's incoming-message webhook to
-   `<HUB_PUBLIC_ORIGIN>/api/channels/sms/twilio` (HTTP POST).
-   **Today that webhook points at Breathe** (`cmbreathe.com/resupply-api/sms/caremetric-inbound`,
-   see the phone registry). Moving it stops Breathe's automated text handling
-   for that number, so decide which system answers texts first, or use a
-   dedicated support texting number.
-3. The support number's A2P registration is still pending in the phone
-   registry; outbound replies may be blocked until it is approved.
+   `https://support-hub-web-production.up.railway.app`). The support number
+   belongs to the "CareMetric AI" Messaging Service
+   (`MGe4ff7c94d59f2728b463656302ce611e`).
+2. In Twilio, set the incoming-message webhook of the "CareMetric AI"
+   Messaging Service to `<HUB_PUBLIC_ORIGIN>/api/channels/sms/twilio`
+   (HTTP POST). The service routes inbound texts itself instead of deferring
+   to the number, so the number's own webhook field has no effect. Set
+   `HUB_TWILIO_AUTH_TOKEN` and let the Hub redeploy first, or every text is
+   refused. **Today the service's webhook points at Breathe**
+   (`cmbreathe.com/resupply-api/sms/caremetric-inbound`, see the phone
+   registry), which answers each text with a fixed reply pointing to the phone
+   line and Help. Moving it replaces that reply, so decide which system answers
+   texts first, or use a dedicated support texting number.
+3. The support number's toll-free verification was approved on October 28,
+   2026 for one use only: a single optional informational text that a caller
+   asks for during a call, with verbal consent, no recurring messages and no
+   patient details. Customers texting in and staff replying by text fall
+   outside it. Before moving the webhook or replying by text from this number,
+   have the verification updated to cover two-way customer-care texting, or
+   verify a dedicated support texting number for it; carriers may filter
+   messages that don't match the approved use. The phone registry still lists
+   the number's texting as pending; update it once this is decided.
 
 ### Email (SendGrid)
 
