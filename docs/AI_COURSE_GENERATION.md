@@ -6,6 +6,41 @@ one-use `carebase.learning` delegation bound to the exact operation. CareBase re
 the mapped platform administrator when the call starts, and again when an AI result is
 saved: if the session expires or access is removed while the AI runs, nothing is saved.
 
+## One-step course creation
+
+**Course authoring → Create a course** is the owner's everyday way to make a course: type a title. CareBase's AI
+(`generate-course-curriculum`) writes the whole course: lesson text, spoken narration scripts for video lessons, and
+quizzes with answers. Two optional inputs steer it:
+
+- **Anything specific to cover or add** goes to the AI as the administrator's notes (`notes`), for example the
+  audience, topics that must be covered, or the length of the quiz.
+- **Your own policy or reference text** (up to 100,000 characters) goes as `source_material`. The AI treats it as
+  authoritative: it grounds the course in it and does not add regulations that are not in it. Without it, the AI
+  flags in the course description that regulatory specifics have not been verified.
+
+The AI decides which lessons are video and which are text, so the Hub always adds one instruction to the notes:
+include at least one video module with a complete spoken narration script for a HeyGen presenter. If a draft still
+has no video lesson, the preview says so plainly.
+
+The Hub then runs the existing governed steps in order:
+
+1. `ai.generateCourse` drafts one global course from the title (`title_hint`), the notes and any source material.
+2. The draft's exact material is loaded, and every video lesson's script is sent to HeyGen with
+   `video.generate`, using the owner's preselected presenter (their AI twin unless they picked another). One paid
+   render per video lesson. The Hub checks `video.status` every 30 seconds until each is done.
+3. The finished course is shown lesson by lesson. Nothing is live yet.
+4. **Publish course** preserves the exact material the owner looked at, approves the AI content
+   (`learning.reviewDraft`) and publishes it (`learning.publishVersion`). It refuses if the material changed after
+   the owner looked at it.
+
+The job is saved after every step and keeps running while the owner uses other pages, so leaving and coming back
+picks it up where it left off. Video retries reuse the same request ID, so a retry never pays HeyGen twice; only a
+render that HeyGen reports as failed gets a new request. The AI drafting call has no request ID, so if the page was
+reloaded while a draft may still be running, the Hub does not repeat it on its own and asks the owner to check the
+full course editor first. **Edit in the full course editor** opens the controls below for anything more.
+
+## Individual controls
+
 | Hub control | Operation | Where |
 | --- | --- | --- |
 | Draft a course with AI | `ai.generateCourse` | CareBase courses view |
