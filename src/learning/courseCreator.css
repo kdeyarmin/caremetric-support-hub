@@ -8,6 +8,7 @@
 .course-creator .button-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .course-creator-form { display: grid; gap: 14px; max-width: 760px; }
 .course-creator-form label { display: grid; gap: 6px; color: #475569; font-size: 13px; font-weight: 700; }
+.course-creator-form .optional { margin-left: 4px; color: var(--muted); font-weight: 500; }
 .course-creator-form input, .course-creator-form textarea, .course-creator-form select { color: var(--ink); font-size: 14px; font-weight: 400; }
 .course-creator-form select { max-width: 360px; }
 .course-creator-progress h3 { margin: 0 0 10px; font-size: 17px; }

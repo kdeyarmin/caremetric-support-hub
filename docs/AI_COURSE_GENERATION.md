@@ -8,10 +8,11 @@ saved: if the session expires or access is removed while the AI runs, nothing is
 
 ## One-step course creation
 
-**Course authoring → Create a course** is the owner's everyday way to make a course: a title and a few sentences
-describing what it should teach. The Hub then runs the existing governed steps in order:
+**Course authoring → Create a course** is the owner's everyday way to make a course: type a title. A description
+of what it should teach is optional. The Hub then runs the existing governed steps in order:
 
-1. `ai.generateCourse` drafts one global course from the title (`title_hint`) and description (`notes`).
+1. `ai.generateCourse` drafts one global course from the title (`title_hint`), guided by the description (`notes`)
+   when one is given.
 2. The draft's exact material is loaded, and every video lesson the AI wrote a script for is sent to HeyGen with
    `video.generate`, using the owner's preselected presenter (their AI twin unless they picked another). One paid
    render per video lesson. The Hub checks `video.status` every 30 seconds until each is done.

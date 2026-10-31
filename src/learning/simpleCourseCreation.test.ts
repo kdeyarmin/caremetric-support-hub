@@ -21,6 +21,12 @@ describe("one-step course creation", () => {
     expect(generate).toHaveBeenCalledTimes(1);
   });
 
+  it("drafts from the title alone when there is no description", async () => {
+    const generate = vi.fn(() => ({ courseId, versionId, generationId: newId() }));
+    await draftCourse(deps(generate), newCourseJob("Fall prevention", "   ", "avatar", "voice"));
+    expect(generate).toHaveBeenCalledWith({ operation: "ai.generateCourse", request: { generation_mode: "course", title_hint: "Fall prevention" } });
+  });
+
   it("finds every video lesson and the script the AI wrote for it", async () => {
     const { course } = await loadCourse(deps(vi.fn(), fakeCareBase().author), { ...newCourseJob("T", "D", "a", "v"), courseId, versionId });
     expect(videoLessons(course)).toEqual([

@@ -13,19 +13,22 @@ beforeEach(() => { window.localStorage.clear(); reloadCreatorForTest(); });
 afterEach(() => { cleanup(); resetCreator(); });
 const renderCreator = (deps: ReturnType<typeof fakeCareBase>["deps"]) => render(<MemoryRouter><SimpleCourseCreator deps={deps} /></MemoryRouter>);
 
-it("turns a title and description into a course with HeyGen videos, then publishes it on one click", async () => {
+it("turns just a title into a course with HeyGen videos, then publishes it on one click", async () => {
   const carebase = fakeCareBase();
   renderCreator(carebase.deps);
   // The owner's AI twin is the preselected presenter.
   expect(((await screen.findByLabelText("Video presenter")) as HTMLSelectElement).value).toBe("twin");
   const create = screen.getByRole("button", { name: "Create course" }) as HTMLButtonElement;
   expect(create.disabled).toBe(true);
+  // A title is all it needs; the description is optional.
   fireEvent.change(screen.getByLabelText("Course title"), { target: { value: "Fall prevention" } });
-  fireEvent.change(screen.getByLabelText("What should the course teach?"), { target: { value: "Teach home care aides how to prevent falls at home." } });
+  expect(create.disabled).toBe(false);
   fireEvent.click(create);
 
   // Nothing goes live until the owner looks it over.
   const publish = await screen.findByRole("button", { name: "Publish course" });
+  expect(carebase.generate.mock.calls.find(([op]) => op.operation === "ai.generateCourse")![0])
+    .toEqual({ operation: "ai.generateCourse", request: { generation_mode: "course", title_hint: "Fall prevention" } });
   expect(carebase.calls).not.toContain("apply");
   expect(carebase.generate.mock.calls.filter(([op]) => op.operation === "video.generate").map(([op]) => op.request))
     .toMatchObject([{ avatar_id: "twin", voice_id: "v2", script: "Synthetic transcript" }, { avatar_id: "twin", voice_id: "v2", script: "Second script" }]);

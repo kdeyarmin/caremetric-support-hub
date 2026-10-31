@@ -47,10 +47,10 @@ export function defaultPresenter(avatars: Avatar[], voices: Voice[], remembered?
   return voiceId ? { avatarId: avatar.id, voiceId } : null;
 }
 
-/** Step 1: CareBase's AI writes one new global draft course from the title and description. */
+/** Step 1: CareBase's AI writes one new global draft course from the title, guided by the description when there is one. */
 export async function draftCourse(deps: CreationDeps, job: CourseJob): Promise<CourseJob> {
   if (job.courseId && job.versionId) return { ...job, stage: "videos" };
-  const created = await deps.generate({ operation: "ai.generateCourse", request: { generation_mode: "course", title_hint: job.title, notes: job.description } });
+  const created = await deps.generate({ operation: "ai.generateCourse", request: { generation_mode: "course", title_hint: job.title, ...(job.description ? { notes: job.description } : {}) } });
   return { ...job, courseId: created.courseId, versionId: created.versionId, stage: "videos" };
 }
 

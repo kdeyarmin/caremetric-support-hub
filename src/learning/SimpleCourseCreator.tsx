@@ -42,29 +42,28 @@ export function SimpleCourseCreator({ deps = liveDeps }: { deps?: CreationDeps }
     event.preventDefault();
     const presenter = presenters?.avatars.find(avatar => avatar.id === avatarId);
     const choice = presenters && presenter ? defaultPresenter([presenter], presenters.voices) : null;
-    if (!choice || !title.trim() || description.trim().length < 20) return;
+    if (!choice || !title.trim()) return;
     try { window.localStorage.setItem(presenterKey, choice.avatarId); } catch { /* Preselection is a convenience. */ }
     void advance(deps, newCourseJob(title, description, choice.avatarId, choice.voiceId));
   }
   const failed = job ? Object.entries(job.videos).filter(([, video]) => video.status === "failed") : [];
-  const ready = Boolean(presenters && avatarId && title.trim() && description.trim().length >= 20);
+  const ready = Boolean(presenters && avatarId && title.trim());
   const madeVideos = job ? Object.values(job.videos).filter(video => video.status === "completed").length : 0;
 
   return <section className="panel course-creator" aria-labelledby="course-creator-title">
     <div className="panel-heading"><div><h2 id="course-creator-title"><Sparkles size={18} aria-hidden="true" /> Create a course</h2>
-      <p>Give it a title and describe what it should teach. The AI writes the lessons and quiz, HeyGen makes the videos, and you publish it with one click.</p></div></div>
+      <p>Type a title. The AI writes the lessons and quiz, HeyGen makes the videos, and you publish it with one click.</p></div></div>
     <div className="panel-body">
       {!job && <form className="course-creator-form" onSubmit={start}>
         <label>Course title<input value={title} maxLength={300} onChange={event => setTitle(event.target.value)} placeholder="e.g. Fall prevention for home care aides" disabled={busy} /></label>
-        <label>What should the course teach?<textarea value={description} rows={5} maxLength={4000} onChange={event => setDescription(event.target.value)} disabled={busy}
-          placeholder="Who it is for, what they need to learn, and anything it must cover. A few sentences is enough." /></label>
+        <label><span>What should the course teach? <span className="optional">Optional</span></span><textarea value={description} rows={5} maxLength={4000} onChange={event => setDescription(event.target.value)} disabled={busy}
+          placeholder="Leave blank and the AI works from the title. Add who it is for or anything it must cover if you like." /></label>
         {presenters && <label>Video presenter<select value={avatarId} onChange={event => setAvatarId(event.target.value)} disabled={busy}>
           {presenters.avatars.map(avatar => <option key={avatar.id} value={avatar.id}>{avatar.name ?? avatar.id}{avatar.aiTwin ? " (your AI twin)" : ""}</option>)}</select></label>}
         {config.demoMode && <p className="muted">Sign in to the live Hub to create courses. The preview cannot reach CareBase or HeyGen.</p>}
         {!config.demoMode && !presenters && !optionsError && <p className="muted" role="status"><LoaderCircle className="spin" size={14} /> Loading your HeyGen presenters…</p>}
         {optionsError && <p className="form-message form-error" role="alert">{optionsError}</p>}
-        <div className="button-row"><button className="button button-primary" disabled={busy || !ready}><Sparkles size={17} /> Create course</button>
-          {title.trim() && description.trim().length < 20 && <span className="muted">Describe the course in at least a sentence.</span>}</div>
+        <div className="button-row"><button className="button button-primary" disabled={busy || !ready}><Sparkles size={17} /> Create course</button></div>
       </form>}
 
       {job && job.stage !== "published" && <div className="course-creator-progress">
