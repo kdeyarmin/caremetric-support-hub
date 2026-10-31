@@ -155,6 +155,22 @@ try {
   const breatheKey = (await command({ action: 'app_key.issue', app: 'breathe' })).key;
   assert.equal((await billing.entitlements('Bearer ' + breatheKey, { account })).linked, false, 'a key answers only for its own application');
 
+  // Customers manage billing inside their own application: it opens its own customer's Stripe portal and they return there.
+  const returnUrl = 'https://carebase.test/app/billing';
+  const portalRequests = () => stripe.requests.filter(request => request.path === '/v1/billing_portal/sessions');
+  const portalsBefore = portalRequests().length;
+  await assert.rejects(billing.appPortal('Bearer cmb_' + 'x'.repeat(43), { account, return_url: returnUrl }), error => error.status === 401);
+  for (const return_url of ['http://carebase.test/app/billing', 'https://user:secret@carebase.test/', 'not a url'])
+    await assert.rejects(billing.appPortal(bearer, { account, return_url }), error => error.status === 400, return_url);
+  await assert.rejects(billing.appPortal(bearer, { account: randomUUID(), return_url: returnUrl }), error => error.status === 404, 'an unlinked account has no billing to open');
+  await assert.rejects(billing.appPortal('Bearer ' + breatheKey, { account, return_url: returnUrl }), error => error.status === 404, 'a key opens only its own application\'s customers');
+  const portal = await billing.appPortal(bearer, { account, return_url: returnUrl });
+  assert.match(portal.url, /^https:\/\/billing\.stripe\.com\/p\/session\//);
+  assert.deepEqual(Object.keys(portal), ['url'], 'only the portal address leaves the Hub');
+  assert.equal(portalRequests().length, portalsBefore + 1, 'refused requests never reach Stripe');
+  const tenantCustomer = (await admin.query('select stripe_customer_id from private.billing_customers where tenant_id=$1', [tenant])).rows[0].stripe_customer_id;
+  assert.deepEqual([portalRequests().at(-1).params.customer, portalRequests().at(-1).params.return_url], [tenantCustomer, returnUrl]);
+
   const usageKey = key();
   let usage = await billing.usage(bearer, { account, metric: 'facility', quantity: 5, request_key: usageKey });
   assert.deepEqual([usage.outcome, usage.items_updated], ['updated', 2]);

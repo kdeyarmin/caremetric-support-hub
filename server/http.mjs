@@ -120,11 +120,11 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
           if(owner) throw new HttpError(403,privateHubMessage);
           return json(await selfService.issue(req.headers.authorization,await jsonBody(req,262144)));
         }
-        const appBilling=/^\/api\/apps\/(entitlements|facility-entitlements|usage|trials)$/.exec(path);
+        const appBilling=/^\/api\/apps\/(entitlements|facility-entitlements|usage|trials|portal)$/.exec(path);
         if(appBilling) {
           if(req.method!=='POST' || req.headers.origin || req.headers.cookie || url.search) throw new HttpError(403,'Forbidden.');
           if(!billing) throw new HttpError(503,'Billing is not configured.');
-          const action={entitlements:'entitlements','facility-entitlements':'facilityEntitlements',usage:'usage',trials:'trial'}[appBilling[1]];
+          const action={entitlements:'entitlements','facility-entitlements':'facilityEntitlements',usage:'usage',trials:'trial',portal:'appPortal'}[appBilling[1]];
           return json(await billing[action](req.headers.authorization,await jsonBody(req,appBilling[1]==='facility-entitlements'?262144:8192)));
         }
         // Unsubscribe links in bulk email: the secret token in the path is the only authority,

@@ -104,6 +104,9 @@ export const usageReportSchema = z.object({
   account: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/), metric: z.string().regex(/^[a-z][a-z0-9_]{0,39}$/),
   quantity: z.number().int().min(0).max(1_000_000), request_key: z.guid(),
 }).strict();
+// An application opens one of its own customers' Stripe billing; the customer returns to the application's https page.
+const httpsReturn = z.string().max(2048).refine(value => { try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password; } catch { return false; } });
+export const appPortalRequestSchema = z.object({ account: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/), return_url: httpsReturn }).strict();
 export const trialRequestSchema = z.object({
   account: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/), name: plain(180).trim().min(2), email: z.email().max(320).nullable(),
   plan: z.string().regex(/^[a-z0-9_.-]{1,64}$/).nullable(),
