@@ -130,7 +130,11 @@
 .billing-application-access dd { margin: 5px 0 0; overflow-wrap: anywhere; }
 .portfolio-status-counts { display: flex; flex-wrap: wrap; gap: 10px; }
 .portfolio-status-counts > span { background: #eef3fc; border-radius: 6px; padding: 7px 10px; font-size: var(--text-md); }
-.portfolio-table-wrap { overflow: auto; width: 100%; }
+.portfolio-table-wrap { overflow: auto; width: 100%; padding: 0; }
+.coverage-matrix { width: 100%; border-collapse: collapse; text-align: left; font-size: var(--text-md); }
+.coverage-matrix th, .coverage-matrix td { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.coverage-matrix thead th { background: #eef3fc; color: #475569; font-size: var(--text-xs); font-weight: 800; letter-spacing: .05em; text-transform: uppercase; vertical-align: bottom; }
+.coverage-matrix tbody tr:last-child > * { border-bottom: 0; }
 .portfolio-records table { width: 100%; border-collapse: collapse; text-align: left; font-size: var(--text-md); }
 .portfolio-records th, .portfolio-records td { padding: 12px 10px; border-bottom: 1px solid #e2e8f0; overflow-wrap: anywhere; min-width: 120px; max-width: 280px; }
 .portfolio-records th { color: #475569; font-size: var(--text-sm); }

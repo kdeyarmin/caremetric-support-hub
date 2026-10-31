@@ -395,7 +395,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/integration" element={<IntegrationPage data={data} />} />
             <Route path="/security" element={<SecurityPage actor={data.actor} />} />
             <Route path="/help" element={<ContextualHelpPage data={data} />} />
-            <Route path="/learn" element={<LearningCatalog products={data.products} legacyContent={data.content} />} />
+            <Route path="/learn" element={<LearningCatalog products={data.products} legacyContent={data.content} canAuthor={platformAdmin} />} />
             <Route path="*" element={<Navigate to={data.actor.role === "platform_admin" ? "/admin" : "/overview"} replace />} />
           </Routes>
         </main>

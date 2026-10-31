@@ -25,7 +25,7 @@ export function SupportReadiness({ client=readinessClient, demo=config.demoMode 
   const product=data?.products.find(item=>item.id===selected);
   return <section className="panel support-readiness" aria-label="Customer support readiness">
     <div className="panel-heading"><div><h2>Customer support readiness</h2><p>Published guidance, customer access, and case intake are measured separately for each app.</p></div><button className="button button-secondary button-small" onClick={refresh} disabled={demo}>Refresh readiness</button></div>
-    {demo ? <p>Connect to the live Hub to inspect customer access. Demo data does not establish support readiness.</p> : <>
+    <div className="panel-body">{demo ? <p>Connect to the live Hub to inspect customer access. Demo data does not establish support readiness.</p> : <>
       {error && <p role="alert">{error} Refresh before changing customer intake.</p>}
       {!data && !error && <p role="status">Loading support readiness…</p>}
       {data && <><p className="support-readiness-note">A ready customer has active app access, a verified SMS member, enabled intake, and an active support owner. This does not certify the app's administrator connection or email delivery.</p>
@@ -36,7 +36,7 @@ export function SupportReadiness({ client=readinessClient, demo=config.demoMode 
         <CustomerOnboarding onLinked={refresh} />
         {product && <TenantIntake key={`${product.id}:${revision}`} product={product} client={client} onChanged={refresh} />}
       </>}
-    </>}
+    </>}</div>
   </section>;
 }
 
