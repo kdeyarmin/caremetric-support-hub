@@ -247,6 +247,44 @@ canceled/expired subscriptions close the reservation without changing quantities
 Changed customer, application, item or price identity still requires reconciliation;
 recovery never substitutes a new purchase or payment operation.
 
+### `POST /api/apps/billing`
+
+Customers change their plan and add-ons inside their own application; the Hub is private to its
+owner. The application verifies its organization administrator (CareBase: `org_admin`, through
+`native_self_service_billing_authority`) and asks for one of its own linked accounts:
+
+```json
+{
+  "account": "5f10a61e-3209-411a-8207-d657c8fd936d",
+  "return_url": "https://cmcarebase.com/app/billing",
+  "actor": { "id": "native-profile-id" },
+  "scope": { "facilities": [{ "id": "site-a", "name": "Maple Grove" }], "plan_size": { "small_home_bed_limit": 20, "…": "…" } },
+  "request": { "action": "quote", "facility_id": null, "plan": "price_…", "addons": ["price_…"], "request_id": "<uuid>" }
+}
+```
+
+`request` is the customer center's own request (`billing.customer-checkout.v1`) without the Hub
+`connection_id`: `workspace`, `quote`, `confirm`, `checkout_resume` and `checkout_cancel`; separate
+facility billing is still enabled only from the Hub customer center. The Hub runs the same flow as
+`/api/billing/customer` for an organization administrator, so the same answers come back: the
+workspace (without the Hub's tenant, connection and Stripe customer identities), a quote, and
+`{ state, url?, effective_at? }` for confirmation and Checkout. The application's facilities set
+per-facility quantities and its `plan_size` facts decide size-limited plans, exactly as the native
+purchasing authority does for the customer center. Additions and upgrades are invoiced now with
+proration; removals, downgrades and cancellation are scheduled for renewal. An organization with no
+subscription pays in Stripe Checkout and returns to `return_url` with `?checkout=returned` or
+`?checkout=cancelled`; returning never grants access.
+
+- A key reaches only its own application's linked accounts (`private.app_customer_billing_tenant`,
+  resolved like entitlements): an unlinked account or another application's account is 404, and a
+  suspended or closed organization is 403. Browser requests (an `Origin` or a cookie) are refused.
+- Workspace and quote work while `HUB_CUSTOMER_PURCHASING_ENABLED` is off; `confirm` answers 503 and a
+  pending Checkout can be checked or cancelled but never newly created.
+- A quote belongs to the administrator who reviewed it (`app_actor`); only they can confirm it. A
+  pending Checkout belongs to the organization: any of its administrators can check or cancel it.
+- Every request is recorded as `billing.plan_change.app` with the application, account,
+  administrator id, action, outcome and quote — never names or emails.
+
 ### `POST /api/apps/trials`
 
 ```json
@@ -276,6 +314,10 @@ account that already has billing gets its current answer and no second trial.
   paid receipts, signed/duplicate webhooks and legacy access. CI runs it twice.
 - `supabase/tests/036_customer_checkout.test.sql` checks private receipt state,
   closed service operations, server connection identity and the new contract.
+- `server/app-plan-changes-integration.mjs` (run by `billing-integration.mjs`) exercises
+  `/api/apps/billing` against PostgreSQL and the fake Stripe API: key and account scope, purchasing
+  off and on, administrator-bound quotes, plan fit, a paid add-on, first-plan Checkout and its return
+  address, and the audit. `supabase/tests/045_app_plan_changes.test.sql` checks its privileges.
 
 - `docs/evidence/customer-checkout-sandbox-20261027.json` preserves the initial
   preview, Checkout and expiration smoke before the owner claimed the sandbox.

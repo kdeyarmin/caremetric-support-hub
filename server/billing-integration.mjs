@@ -9,6 +9,7 @@ import { platformBilling } from './billing.mjs';
 import { signStripePayload } from './stripe.mjs';
 import { fakeStripe } from './fixtures/fake-stripe.mjs';
 import { exerciseFacilityEntitlements } from './facility-entitlements-integration.mjs';
+import { exerciseAppPlanChanges } from './app-plan-changes-integration.mjs';
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl); assert.equal(local.hostname, '127.0.0.1'); assert.equal(local.port, '54322');
@@ -74,7 +75,8 @@ try {
   await assert.rejects(stranger.command(ownerToken, { action: 'catalog.sync' }), error => error.status === 503 && /different Stripe account/.test(error.message));
   await other.close();
 
-  billing = platformBilling({ pool, secretKey: 'sk_test_hub', webhookSecrets: [webhookSecret], apiBase: await stripe.listen(), publicOrigin: 'https://hub.test', log: { warn() {} },
+  const stripeBase = await stripe.listen();
+  billing = platformBilling({ pool, secretKey: 'sk_test_hub', webhookSecrets: [webhookSecret], apiBase: stripeBase, publicOrigin: 'https://hub.test', log: { warn() {} },
     fetchImpl: async (url, init) => {
       const response = await fetch(url, init);
       if (dropQuantityResponses && new URL(url).pathname.startsWith('/v1/subscription_items/')) {
@@ -335,6 +337,9 @@ try {
   assert.equal((await workspace()).products.find(item => item.id === 'prod_dashboard_' + suffix).app, 'caremetric-intel');
   assert.equal((await customer(adopted)).customer.id, 'cus_dashboard' + suffix);
   assert.equal((await customer(trial.tenant_id)).subscriptions.length, 1, 'reconciling never duplicates what the mirror has');
+
+  // Customers change their plan and add-ons inside their own application, through the customer center's own flow.
+  await exerciseAppPlanChanges({ admin, pool, billing, command, rpc, stripe, stripeBase, carebaseKey, breatheKey, tenantIds, suffix });
 
   // Suspending a tenant withdraws entitlements; canceling ends them.
   const suspendedFrom = (await customer(tenant)).updated_at;

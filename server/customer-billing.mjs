@@ -58,7 +58,11 @@ function verifyAccount(subscription, execution) {
   if (reference(subscription.customer) !== execution.customer || subscription.metadata?.app !== execution.app) throw new HttpError(409, 'The subscription account changed. Review a new preview.');
 }
 
-/** Browser choices never supply prices, quantities, native permissions, or a provider mutation. */
+/**
+ * Browser choices never supply prices, quantities, native permissions, or a provider mutation.
+ * Two requesters run the same flow: a Hub customer session over its native connection, and an application server
+ * acting, with its application key, for its own organization administrator.
+ */
 export function customerBillingService({ pool, stripe, mirrorSubscription, mirrorCustomer, mirrorInvoice, publicOrigin, authorize, now = () => Date.now(), purchasingEnabled = false }) {
   const one = async (db, query, values) => (await db.query(query, values)).rows[0]?.result;
   const rpc = (session, name, values) => withSession(pool, session, async db => {
@@ -66,10 +70,32 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
     return one(db, `select private.${name}(${values.map((_, i) => `$${i + 1}`).join(',')}) as result`, values);
   });
   const service = (name, values) => transaction(pool, db => one(db, `select private.${name}(${values.map((_, i) => `$${i + 1}`).join(',')}) as result`, values));
-  const checkout = customerCheckoutService({ stripe, rpc, service, mirrorCustomer, mirrorSubscription, mirrorInvoice, publicOrigin, now });
+  const checkout = customerCheckoutService({ stripe, service, mirrorCustomer, mirrorSubscription, mirrorInvoice, publicOrigin, now });
   const settle = (id, state, sub = null, schedule = null) => service('settle_customer_billing_quote', [id, state, sub, schedule, null]);
-  const context = async (session, connection) => {
-    const workspace = customerBillingWorkspace.parse(await rpc(session, 'customer_billing_context', [connection]));
+  // A Hub customer: the SMS session, the native connection and the application's purchasing authority for each request.
+  const sessionRequester = session => ({
+    context: connection => rpc(session, 'customer_billing_context', [connection]),
+    authorize: (connection, facility) => authorize(session, connection, facility),
+    saveQuote: (id, connection, facility, requestId, quote, execution, version, subscription) =>
+      rpc(session, 'save_customer_billing_quote', [id, connection, facility, requestId, JSON.stringify(quote), JSON.stringify(execution), version, subscription]),
+    claimQuote: (id, claim) => rpc(session, 'claim_customer_billing_quote', [id, claim]),
+    checkoutStatus: (id, connection) => rpc(session, 'customer_checkout_status', [id, connection]),
+  });
+  // An application's organization administrator: the application has just verified the administrator, and reports
+  // the facilities it bills and their plan-size facts, as its purchasing authority answer does for the Hub. Quotes
+  // belong to that administrator; a pending Checkout belongs to the organization, as it does in the Hub.
+  const appRequester = (app, { account, actor, scope, return_url }) => ({
+    returnUrl: return_url,
+    context: () => service('app_customer_billing_context', [app.product_id, account, JSON.stringify(scope.facilities)]),
+    authorize: async (_connection, facility) => ({ authorized: true, facility_id: facility, capabilities: [],
+      facilities: scope.facilities.map(site => site.id), plan_size: scope.plan_size }),
+    saveQuote: (id, _connection, facility, requestId, quote, execution, version, subscription) => service('app_save_customer_billing_quote',
+      [app.product_id, account, actor.id, id, facility, requestId, JSON.stringify(quote), JSON.stringify(execution), version, subscription]),
+    claimQuote: (id, claim) => service('app_claim_customer_billing_quote', [app.product_id, account, actor.id, id, claim]),
+    checkoutStatus: id => service('app_customer_checkout_status', [app.product_id, account, id]),
+  });
+  const context = async (requester, connection) => {
+    const workspace = customerBillingWorkspace.parse(await requester.context(connection));
     if (workspace.app === 'pennsync') throw new HttpError(403, 'PennSync does not accept payments.');
     if (!selfServiceApps.includes(workspace.app)) throw new HttpError(403, 'This application is independent of the centralized Hub.');
     // Individual and flat organization products need no fabricated native facility.
@@ -85,10 +111,10 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
     }
     return workspace;
   };
-  async function verifyScope(session, workspace, facility) {
+  async function verifyScope(requester, workspace, facility) {
     if (workspace.mode === 'legacy' && (facility !== null || workspace.role !== 'organization_admin')) throw new HttpError(403, 'Only the organization administrator can change the shared plan.');
     if (workspace.mode === 'facility' && !workspace.facilities.some(site => site.id === facility && (workspace.role === 'organization_admin' || site.permissions.includes('billing.manage')))) throw new HttpError(403, 'Facility purchasing is not authorized.');
-    return authorize(session, workspace.connection_id, facility);
+    return requester.authorize(workspace.connection_id, facility);
   }
   function publicWorkspace(workspace) {
     if (workspace.role === 'organization_admin') return workspace;
@@ -103,11 +129,11 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
     if (!['active'].includes(sub.status) || sub.pause_collection || sub.cancel_at_period_end || sub.pending_update) throw new HttpError(409, 'Resolve the pending payment, cancellation, pause, or trial before changing this subscription.');
     return sub;
   }
-  async function preview(session, input) {
-    let workspace = await context(session, input.connection_id);
-    const authority = await verifyScope(session, workspace, input.facility_id);
-    workspace = await context(session, input.connection_id);
-    if (!workspace.subscription) return checkout.preview(session, input, workspace, authority);
+  async function preview(requester, input) {
+    let workspace = await context(requester, input.connection_id);
+    const authority = await verifyScope(requester, workspace, input.facility_id);
+    workspace = await context(requester, input.connection_id);
+    if (!workspace.subscription) return checkout.preview(requester, input, workspace, authority);
     const live = await stripe(), sub = await providerSubscription(live, workspace);
     const catalog = new Map(workspace.catalog.map(price => [price.id, price]));
     if ([input.plan, ...input.addons].filter(Boolean).some(id => {
@@ -153,7 +179,7 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
       summary: visibleLines.map(line => ({ name: catalog.get(line.price).name, quantity: line.quantity, amount: catalog.get(line.price).amount * line.quantity })) };
     const execution = { mode: workspace.mode, app: workspace.app, customer: workspace.customer, billing_revision: workspace.billing_revision, facility_id: input.facility_id, immediate, next, immediateLines, nextLines,
       intent: { plan: input.plan, addons: [...input.addons].sort() }, originalLines: rows(sub), purchaseItems: subscriptionItemPatch(sub, immediateLines), renewal, prorationDate, interval: workspace.subscription.interval, hasImmediate, hasScheduled, cancelSchedule, maximumDue: quote.due_now, currency: quote.currency, schedule: reference(sub.schedule) ?? null, scheduleFingerprint: priorSchedule ? scheduleFingerprint(priorSchedule) : null };
-    return rpc(session, 'save_customer_billing_quote', [id, input.connection_id, input.facility_id, input.request_id, JSON.stringify(quote), JSON.stringify(execution), workspace.subscription.version, sub.id]);
+    return requester.saveQuote(id, input.connection_id, input.facility_id, input.request_id, quote, execution, workspace.subscription.version, sub.id);
   }
   async function scheduleChange(live, quote, subscription) {
     const execution = quote.execution;
@@ -230,14 +256,14 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
     if (execution.hasScheduled || execution.cancelSchedule) return quote.state === 'scheduled' ? { state: 'scheduled', effective_at: execution.renewal } : scheduleChange(live, quote, subscription);
     await settle(quote.id, 'applied', subscription.id); return { state: 'applied' };
   }
-  async function confirm(session, input) {
+  async function confirm(requester, input) {
     // This committed reservation survives a provider timeout; retries reuse exactly one provider idempotency key.
-    let quote = await rpc(session, 'claim_customer_billing_quote', [input.quote_id, false]);
+    let quote = await requester.claimQuote(input.quote_id, false);
     if (['applied', 'scheduled', 'failed', 'superseded'].includes(quote.state)) return { state: quote.state };
-    const workspace = await context(session, quote.connection_id);
-    await verifyScope(session, workspace, quote.execution.facility_id);
-    quote = await rpc(session, 'claim_customer_billing_quote', [input.quote_id, true]);
-    if (quote.execution.kind === 'checkout') return checkout.start(quote, await context(session, quote.connection_id));
+    const workspace = await context(requester, quote.connection_id);
+    await verifyScope(requester, workspace, quote.execution.facility_id);
+    quote = await requester.claimQuote(input.quote_id, true);
+    if (quote.execution.kind === 'checkout') return checkout.start(quote, await context(requester, quote.connection_id));
     const live = await stripe();
     let sub = await live.get(`/v1/subscriptions/${quote.subscription}`, { expand: ['latest_invoice', 'discounts'] });
     try { verifyAccount(sub, quote.execution); } catch (error) { await settle(quote.id, 'failed', sub.id); throw error; }
@@ -284,28 +310,34 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
     const latest = await live.get(`/v1/subscriptions/${subscription.id}`, { expand: ['latest_invoice', 'discounts'] });
     for (const quote of quotes) if (quote.execution.kind !== 'checkout') await finish(live, quote, latest);
   }
+  // One flow for both requesters: reading and previewing work while purchasing is off; confirming does not, and a
+  // pending Checkout can be checked or cancelled but never newly created.
+  async function run(requester, request) {
+    if (request.action === 'workspace') {
+      const workspace = await context(requester, request.connection_id);
+      const facility = workspace.role === 'organization_admin' ? null : workspace.facilities.find(site => site.permissions.includes('billing.manage'))?.id;
+      if (facility === undefined) throw new HttpError(403, 'Purchasing permission is required.');
+      await requester.authorize(request.connection_id, facility);
+      return { ...publicWorkspace(await context(requester, request.connection_id)), purchasing_enabled: purchasingEnabled };
+    }
+    if (request.action === 'quote') return preview(requester, request);
+    if (request.action === 'checkout_resume' || request.action === 'checkout_cancel') {
+      const workspace = await context(requester, request.connection_id);
+      await verifyScope(requester, workspace, null);
+      const quote = await requester.checkoutStatus(request.quote_id, request.connection_id);
+      const fresh = await context(requester, request.connection_id);
+      return request.action === 'checkout_cancel' ? checkout.cancel(quote, fresh) : checkout.start(quote, fresh, { allowCreate: purchasingEnabled });
+    }
+    if (!purchasingEnabled) throw new HttpError(503, 'Subscription purchasing is not yet enabled. Your existing subscription and payment services remain available.');
+    return confirm(requester, request);
+  }
   async function handle(session, input) {
     const parsed = customerBillingRequest.safeParse(input);
     if (!parsed.success) throw new HttpError(400, 'Review your subscription selection.');
     const request = parsed.data;
-    if (request.action === 'workspace') {
-      const workspace = await context(session, request.connection_id);
-      const facility = workspace.role === 'organization_admin' ? null : workspace.facilities.find(site => site.permissions.includes('billing.manage'))?.id;
-      if (facility === undefined) throw new HttpError(403, 'Purchasing permission is required.');
-      await authorize(session, request.connection_id, facility);
-      return { ...publicWorkspace(await context(session, request.connection_id)), purchasing_enabled: purchasingEnabled };
-    }
-    if (request.action === 'quote') return preview(session, request);
-    if (request.action === 'checkout_resume' || request.action === 'checkout_cancel') {
-      const workspace = await context(session, request.connection_id);
-      await verifyScope(session, workspace, null);
-      const quote = await rpc(session, 'customer_checkout_status', [request.quote_id, request.connection_id]);
-      const fresh = await context(session, request.connection_id);
-      return request.action === 'checkout_cancel' ? checkout.cancel(quote, fresh) : checkout.start(quote, fresh, { allowCreate: purchasingEnabled });
-    }
+    if (request.action !== 'activate_facility_billing') return run(sessionRequester(session), request);
     if (!purchasingEnabled) throw new HttpError(503, 'Subscription purchasing is not yet enabled. Your existing subscription and payment services remain available.');
-    if (request.action === 'confirm') return confirm(session, request);
-    const workspace = await context(session, request.connection_id);
+    const workspace = await context(sessionRequester(session), request.connection_id);
     const authority = await authorize(session, request.connection_id, null);
     if (!workspace.can_activate || !authority.capabilities?.includes('facility.entitlements.v1')) throw new HttpError(409, 'Separate facility plans are not yet enabled by this application.');
     if (JSON.stringify([...authority.facilities].sort()) !== JSON.stringify(workspace.allocations.map(row => row.facility_id).sort())) throw new HttpError(409, 'Facility setup changed. Reopen the customer center.');
@@ -315,5 +347,15 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
     await rpc(session, 'activate_facility_billing', [request.connection_id, request.expected_version, JSON.stringify(workspace.allocations)]);
     return { state: 'activated' };
   }
-  return { handle, reconcileSubscription, reconcileCheckout: checkout.reconcile, reconcileCheckouts: checkout.reconcileAll };
+  /**
+   * An application's request for one of its own linked accounts (`appBillingRequestSchema`, already parsed). The
+   * workspace leaves out the Hub's own tenant, connection and Stripe customer identities.
+   */
+  async function handleApp(app, body) {
+    const result = await run(appRequester(app, body), { ...body.request, connection_id: null });
+    if (body.request.action !== 'workspace') return result;
+    const { connection_id: _connection, tenant_id: _tenant, customer: _customer, ...workspace } = result;
+    return workspace;
+  }
+  return { handle, handleApp, reconcileSubscription, reconcileCheckout: checkout.reconcile, reconcileCheckouts: checkout.reconcileAll };
 }

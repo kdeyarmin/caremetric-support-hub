@@ -3,7 +3,7 @@ import { customerBillingService, sameBillingLines, subscriptionItemPatch } from 
 
 const connection = '95000000-0000-4000-8000-000000000001', actor = '95000000-0000-4000-8000-000000000002';
 const price = (id, key, amount, kind = 'plan') => ({ id, product: `prod_${id}`, name: key, description: '', kind, key, features: [key], allows_addons: kind === 'plan', active: true, amount, currency: 'usd', interval: 'month', interval_count: 1, model: 'per_unit', unit_label: 'facility' });
-function fixture({ payment = 'paid', denied = false } = {}) {
+function fixture({ payment = 'paid', denied = false, purchasing = true } = {}) {
   const quotes = new Map(), events = [];
   const purchases = new Map();
   let currentTime = Date.parse('2026-01-02T00:00:00Z');
@@ -20,6 +20,10 @@ function fixture({ payment = 'paid', denied = false } = {}) {
     if (sql.includes('private.customer_billing_context')) result = structuredClone(workspace);
     if (sql.includes('private.save_customer_billing_quote')) { const [id, connection_id, , , quote, execution] = args; quotes.set(id, { id, connection_id, quote: JSON.parse(quote), execution: JSON.parse(execution), state: 'preview', subscription: sub.id }); result = JSON.parse(quote); events.push('saved'); }
     if (sql.includes('private.claim_customer_billing_quote')) { const q = quotes.get(args[0]); if (args[1] && q.state === 'preview') { q.state = 'confirming'; q.confirmed_at = new Date(currentTime).toISOString(); events.push('reserved'); } result = structuredClone(q); }
+    // An application's administrator: the account and administrator replace the Hub session and connection.
+    if (sql.includes('private.app_customer_billing_context')) { result = { ...structuredClone(workspace), connection_id: null }; events.push(`app_context:${args[1]}`); }
+    if (sql.includes('private.app_save_customer_billing_quote')) { const [, account, appActor, id, facility, , quote, execution] = args; quotes.set(id, { id, account, app_actor: appActor, facility, connection_id: null, quote: JSON.parse(quote), execution: JSON.parse(execution), state: 'preview', subscription: sub.id }); result = JSON.parse(quote); events.push('saved'); }
+    if (sql.includes('private.app_claim_customer_billing_quote')) { const q = quotes.get(args[3]); if (q.app_actor !== args[2]) throw Object.assign(new Error('Quote unavailable'), { code: '42501' }); if (args[4] && q.state === 'preview') { q.state = 'confirming'; q.confirmed_at = new Date(currentTime).toISOString(); events.push('reserved'); } result = structuredClone(q); }
     if (sql.includes('private.record_customer_payment_invoice')) quotes.get(args[0]).payment_invoice = args[1];
     if (sql.includes('private.mark_customer_purchase_started')) quotes.get(args[0]).payment_request_started_at = new Date(currentTime).toISOString();
     if (sql.includes('private.settle_customer_billing_quote')) { quotes.get(args[0]).state = args[1]; events.push(args[1]); }
@@ -44,7 +48,7 @@ function fixture({ payment = 'paid', denied = false } = {}) {
     throw new Error(`Unexpected provider operation ${path}`);
   }) };
   const authorize = vi.fn(async () => { if (denied) throw Object.assign(new Error('Native authority revoked'), { status: 403 }); return { authorized: true }; });
-  const service = customerBillingService({ pool, stripe: async () => live, mirrorSubscription: async () => {}, authorize, now: () => currentTime, purchasingEnabled: true });
+  const service = customerBillingService({ pool, stripe: async () => live, mirrorSubscription: async () => {}, authorize, now: () => currentTime, purchasingEnabled: purchasing });
   const preview = (addons = ['price_train'], plan = 'price_core') => service.handle('session', { action: 'quote', connection_id: connection, facility_id: null, plan, addons, request_id: crypto.randomUUID() });
   return { service, preview, live, quotes, events, authorize, query, workspace,
     mutateSubscription: changes => { sub = { ...sub, ...changes }; }, mutateInvoice: changes => { invoice = { ...invoice, ...changes }; },
@@ -227,5 +231,36 @@ describe('customer purchases', () => {
     const before = test.live.post.mock.calls.length;
     await expect(test.service.handle('session', { action: 'confirm', quote_id: keep.id, confirmed: true })).rejects.toMatchObject({ status: 409 });
     expect(test.live.post.mock.calls.length).toBe(before);
+  });
+});
+describe('application requests', () => {
+  const app = { product_id: '95000000-0000-4000-8000-000000000009', slug: 'carebase' };
+  const body = (request, scope = { facilities: [{ id: 'site-a', name: 'Site A' }], plan_size: null }) => ({ account: 'native-org', return_url: 'https://app.test/app/billing', actor: { id: 'native-admin' }, scope, request });
+  it('runs the customer center flow for the application administrator without a Hub session or a callback to the application', async () => {
+    const test = fixture();
+    const workspace = await test.service.handleApp(app, body({ action: 'workspace' }));
+    expect(workspace).toMatchObject({ role: 'organization_admin', purchasing_enabled: true, allocations: [{ facility_id: 'site-a', plan: 'price_core' }] });
+    for (const hidden of ['connection_id', 'tenant_id', 'customer']) expect(workspace).not.toHaveProperty(hidden);
+    const quote = await test.service.handleApp(app, body({ action: 'quote', facility_id: null, plan: 'price_core', addons: ['price_train'], request_id: crypto.randomUUID() }));
+    expect(test.quotes.get(quote.id)).toMatchObject({ account: 'native-org', app_actor: 'native-admin', connection_id: null });
+    await expect(test.service.handleApp(app, { ...body({ action: 'confirm', quote_id: quote.id, confirmed: true }), actor: { id: 'another-admin' } })).rejects.toMatchObject({ code: '42501' });
+    await expect(test.service.handleApp(app, body({ action: 'confirm', quote_id: quote.id, confirmed: true }))).resolves.toEqual({ state: 'applied' });
+    expect(test.events.indexOf('reserved')).toBeLessThan(test.events.indexOf('provider_purchase'));
+    expect(test.events.filter(event => event.startsWith('app_context:'))).not.toHaveLength(0);
+    expect(test.authorize).not.toHaveBeenCalled();
+    expect(test.query.mock.calls.some(([sql]) => /private\.(customer_billing_context|save_customer_billing_quote|claim_customer_billing_quote)\(/.test(sql))).toBe(false);
+  });
+  it('checks plan fit against the size facts the application reports', async () => {
+    const test = fixture(); test.workspace.catalog.push(price('price_small', 'small_home', 800));
+    const small = request_id => ({ action: 'quote', facility_id: null, plan: 'price_small', addons: [], request_id });
+    await expect(test.service.handleApp(app, body(small(crypto.randomUUID())))).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/could not confirm/) });
+    const size = { small_home_bed_limit: 20, active_facilities: 1, small_home_eligible: true, single_facility_eligible: true, facilities: [{ facility_id: 'site-a', licensed_beds: 12, small_home: true }] };
+    await expect(test.service.handleApp(app, body(small(crypto.randomUUID()), { facilities: [{ id: 'site-a', name: 'Site A' }], plan_size: size }))).resolves.toMatchObject({ has_scheduled_change: true });
+  });
+  it('previews but never confirms while purchasing is off', async () => {
+    const test = fixture({ purchasing: false });
+    const quote = await test.service.handleApp(app, body({ action: 'quote', facility_id: null, plan: 'price_core', addons: ['price_train'], request_id: crypto.randomUUID() }));
+    await expect(test.service.handleApp(app, body({ action: 'confirm', quote_id: quote.id, confirmed: true }))).rejects.toMatchObject({ status: 503 });
+    expect(test.events).not.toContain('reserved'); expect(test.events).not.toContain('provider_purchase');
   });
 });
