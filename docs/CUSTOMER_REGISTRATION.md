@@ -1,5 +1,7 @@
 # First-use customer registration
 
+> **Turned off.** The Hub is private to its owner (see [owner-only access](APP_SMS_SIGNIN.md#owner-only-access)), so customers no longer get Hub sign-ins. This page describes the retired flow.
+
 An administrator with a current app SMS session reviews a native user/account relationship, a mobile number and the customer account name in **App integration → Invite a new Hub customer**. CareBase, Breathe, EMR, Go, PennSync and Intel each use their fixed native endpoint and current mapped administrator authority. The proof contains identifiers, relationship facts and a state digest; it never treats a native email or phone as proof of SMS ownership.
 
 Preview lasts 60 seconds. Issuing the reviewed invitation repeats the native check, binds the current administrator session and retains one request ID and 256-bit code after an uncertain response. The server stores only the code hash. The 15-minute code is shown in the current administrator view for the administrator to give to the intended person. No invitation or text is sent automatically. Pending invitations can be explicitly revoked; a lost code must be revoked and replaced.

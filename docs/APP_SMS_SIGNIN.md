@@ -21,6 +21,16 @@ The public CA test fixture comes from the production download used by Supabase's
 
 On September 11, the direct host passed PostgreSQL SSL negotiation and strict TLS 1.3 verification using this CA. No credentials or SQL were sent during that probe. The host is IPv6-only; Railway still needs IPv6 egress enabled before using it. Local reachability does not prove Railway runtime reachability.
 
+## Owner-only access
+
+The Hub is private to its owner. Only the platform administrator can sign in or stay signed in:
+
+- After a correct code, the server runs `hub.authorize_app_admin()` for the new session. Any other identity's session is revoked at once and the browser gets "This Hub is private. Only its owner can sign in."
+- Every API request with a session cookie runs the same check. A session that fails it is treated as signed out, so removing the owner's `platform.admin` permission ends access on the next request.
+- The routes that created sign-ins for other people are closed: invitation claims (`/api/auth/invitation/*`), application self-service (`/api/self-service/connect/*`) and the application hand-off (`/api/apps/connect`). The `/join` and `/connect` pages show a private-Hub notice with support contacts, and App integration no longer offers customer invitations or customer account linking.
+
+Public pages that need no sign-in, such as the help center, learning catalog and website chat, are unchanged. `server/owner-access-integration.mjs` checks all of this against a real database.
+
 ## Authorization and recovery
 
 Every protected request rechecks the current relational permissions and account usability. Codes are bound to the requesting browser, expire after five minutes, have five attempts, and cannot be reused. Resends wait 60 seconds; persisted number, client and global limits survive restarts. Unknown numbers receive a generic response without sending a message or creating an account. Cookies use Secure, HttpOnly and SameSite=Strict; mutations require the exact application Origin.

@@ -85,7 +85,6 @@ import { Subscriptions } from "./billing/Subscriptions";
 import { canManageOrganizationBilling } from "./billing/billingModel";
 import { CustomerCenter } from "./self-service/CustomerCenter";
 import { TrainingProfile } from "./self-service/TrainingProfile";
-import { Connect } from "./self-service/Connect";
 import { Manuals } from "./self-service/Manuals";
 import { selfServiceClient } from "./self-service/client";
 import type { SelfServiceWorkspace } from "./self-service/protocol";
@@ -96,7 +95,7 @@ import { safeLearningPath } from "./learning/model";
 import { config } from "./lib/config";
 import { appSession } from "./lib/appSession";
 import { SmsSignIn } from "./auth/SmsSignIn";
-import { JoinHub } from "./auth/JoinHub";
+import { PrivateHubNotice } from "./auth/PrivateHubNotice";
 import { PublicationVideo } from "./imports/PublicationVideo";
 import { courseLaunchUrl } from "./security/courseLaunch";
 import { reconcileCaseSelection } from "./security/caseListState";
@@ -958,7 +957,7 @@ function ContextualHelpPage({ data }: { data: HubData }) {
           : requestedSlug
             ? `We did not recognize “${requestedSlug}”. The shared catalog and central support team are still available below.`
             : "Search the shared CareMetric library or contact the central support team."}
-        action={<div className="heading-actions"><NavLink className="button button-secondary" to={`/learn${product ? `?product=${encodeURIComponent(product.slug)}` : ""}`}><GraduationCap size={17} /> Learning library</NavLink><NavLink className="button button-primary" to={casePath} onClick={() => { if (!data.actor.id) rememberPendingPortalPath(casePath); }}><MessageSquareText size={17} /> Open support</NavLink></div>}
+        action={<div className="heading-actions"><NavLink className="button button-secondary" to={`/learn${product ? `?product=${encodeURIComponent(product.slug)}` : ""}`}><GraduationCap size={17} /> Learning library</NavLink>{data.actor.id ? <NavLink className="button button-primary" to={casePath}><MessageSquareText size={17} /> Open support</NavLink> : <a className="button button-primary" href="#contact-caremetric"><Phone size={17} /> Contact support</a>}</div>}
       />
       {(route || feature || appVersion || environment) && (
         <section className="context-strip" aria-label="Application context">
@@ -992,7 +991,7 @@ function ContextualHelpPage({ data }: { data: HubData }) {
             );
           }) : <div className="empty-state"><Search /><strong>No exact match yet</strong><p>Contact central support and include the product, page, version, expected behavior, and error wording—never patient information.</p></div>}
         </section>
-        <aside className="panel central-contact-panel">
+        <aside className="panel central-contact-panel" id="contact-caremetric">
           <span className="eyebrow">One support team</span>
           <h2>Contact CareMetric</h2>
           <p>Every CareMetric product uses these owner-approved contact values. The web portal is live; email delivery still requires mailbox DNS.</p>
@@ -1123,8 +1122,8 @@ export default function App() {
   };
 
   const publicPortal = !authenticated && !config.demoMode && ["/help", "/learn"].includes(location.pathname);
-  if(location.pathname==='/connect'&&!config.demoMode)return <Connect authenticated={authenticated}/>;
-  if(location.pathname==='/join'&&!config.demoMode)return <JoinHub authenticated={authenticated}/>;
+  // The Hub is private to its owner: the old customer account-setup links explain that instead.
+  if(['/connect','/join'].includes(location.pathname)&&!config.demoMode)return <PrivateHubNotice/>;
   if (!authenticated && !config.demoMode && !publicPortal) return <SmsSignIn rememberPath={rememberPendingPortalPath} />;
   if (loading) return <LoadingScreen />;
   if (error) return <ErrorScreen message={error} onRetry={() => void (publicPortal ? loadPublicHelp() : authenticated ? loadAuthenticated() : load())} />;

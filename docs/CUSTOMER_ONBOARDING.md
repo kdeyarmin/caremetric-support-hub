@@ -1,5 +1,7 @@
 # Reviewed customer account linking
 
+> **Turned off.** The Hub is private to its owner (see [owner-only access](APP_SMS_SIGNIN.md#owner-only-access)), so customers no longer get Hub sign-ins. This page describes the retired flow.
+
 App integration now supports explicit customer onboarding for Breathe, EMR, Go, PennSync and Intel. CareBase continues to use its governed completion-receipt access workflow.
 
 An operator with a current Hub SMS platform-administrator session enters exact native user/account identifiers and an existing verified Hub SMS user ID. A fixed native adapter checks the currently mapped native administrator and the requested protected native account relationship. The Hub then shows the exact native IDs, account kind, relationship, Hub user/name and canonical customer account for review. Email addresses never determine a pairing.
