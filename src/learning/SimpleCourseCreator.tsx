@@ -7,7 +7,7 @@ import { runAuthoring } from "./authoringClient";
 import { runGeneration } from "./generationClient";
 import type { Avatar, Voice } from "./generationProtocol";
 import { advance, creatorStore, failureMessage, publish, resetCreator, resume } from "./courseCreatorRunner";
-import { defaultPresenter, newCourseJob, type CreationDeps } from "./simpleCourseCreation";
+import { defaultPresenter, maxDescription, maxSourceMaterial, newCourseJob, type CreationDeps } from "./simpleCourseCreation";
 import "./courseCreator.css";
 
 const presenterKey = "caremetric.courseCreator.presenter";
@@ -22,7 +22,7 @@ const lessonKind: Record<GovernedCourse["blocks"][number]["type"], string> = { t
 /** Title and description in; a finished CareBase course with HeyGen videos out, published when the owner clicks Publish. */
 export function SimpleCourseCreator({ deps = liveDeps }: { deps?: CreationDeps }) {
   const { job, lessons, preview, busy, status, error } = useSyncExternalStore(creatorStore.subscribe, creatorStore.snapshot);
-  const [title, setTitle] = useState(""); const [description, setDescription] = useState("");
+  const [title, setTitle] = useState(""); const [description, setDescription] = useState(""); const [sourceMaterial, setSourceMaterial] = useState("");
   const [presenters, setPresenters] = useState<{ avatars: Avatar[]; voices: Voice[] } | null>(null);
   const [avatarId, setAvatarId] = useState(""); const [optionsError, setOptionsError] = useState("");
 
@@ -44,7 +44,7 @@ export function SimpleCourseCreator({ deps = liveDeps }: { deps?: CreationDeps }
     const choice = presenters && presenter ? defaultPresenter([presenter], presenters.voices) : null;
     if (!choice || !title.trim()) return;
     try { window.localStorage.setItem(presenterKey, choice.avatarId); } catch { /* Preselection is a convenience. */ }
-    void advance(deps, newCourseJob(title, description, choice.avatarId, choice.voiceId));
+    void advance(deps, newCourseJob(title, description, choice.avatarId, choice.voiceId, sourceMaterial));
   }
   const failed = job ? Object.entries(job.videos).filter(([, video]) => video.status === "failed") : [];
   const ready = Boolean(presenters && avatarId && title.trim());
@@ -52,12 +52,16 @@ export function SimpleCourseCreator({ deps = liveDeps }: { deps?: CreationDeps }
 
   return <section className="panel course-creator" aria-labelledby="course-creator-title">
     <div className="panel-heading"><div><h2 id="course-creator-title"><Sparkles size={18} aria-hidden="true" /> Create a course</h2>
-      <p>Type a title. The AI writes the lessons and quiz, HeyGen makes the videos, and you publish it with one click.</p></div></div>
+      <p>Type a title. The AI writes the whole course (lessons, video scripts and quiz), HeyGen turns each video script into a video, and you publish it with one click.</p></div></div>
     <div className="panel-body">
       {!job && <form className="course-creator-form" onSubmit={start}>
         <label>Course title<input value={title} maxLength={300} onChange={event => setTitle(event.target.value)} placeholder="e.g. Fall prevention for home care aides" disabled={busy} /></label>
-        <label><span>What should the course teach? <span className="optional">Optional</span></span><textarea value={description} rows={5} maxLength={4000} onChange={event => setDescription(event.target.value)} disabled={busy}
-          placeholder="Leave blank and the AI works from the title. Add who it is for or anything it must cover if you like." /></label>
+        <label><span>Anything specific to cover or add? <span className="optional">Optional</span></span><textarea value={description} rows={4} maxLength={maxDescription} onChange={event => setDescription(event.target.value)} disabled={busy}
+          placeholder={"Leave blank and the AI works from the title. Or list what you want, for example:\n- For home care aides in Pennsylvania\n- Cover our 5-step hand-hygiene routine and when to report a fall\n- End with a 10-question quiz"} /></label>
+        <details className="course-creator-source" open={Boolean(sourceMaterial)}><summary>Add your own policy or reference text <span className="optional">Optional</span></summary>
+          <label><span className="muted">Paste a policy, procedure or regulation. The AI treats it as the authority: it follows it and does not add regulations that are not in it.</span>
+            <textarea value={sourceMaterial} rows={6} maxLength={maxSourceMaterial} onChange={event => setSourceMaterial(event.target.value)} disabled={busy} aria-label="Your own policy or reference text" /></label>
+        </details>
         {presenters && <label>Video presenter<select value={avatarId} onChange={event => setAvatarId(event.target.value)} disabled={busy}>
           {presenters.avatars.map(avatar => <option key={avatar.id} value={avatar.id}>{avatar.name ?? avatar.id}{avatar.aiTwin ? " (your AI twin)" : ""}</option>)}</select></label>}
         {config.demoMode && <p className="muted">Sign in to the live Hub to create courses. The preview cannot reach CareBase or HeyGen.</p>}
@@ -86,6 +90,7 @@ export function SimpleCourseCreator({ deps = liveDeps }: { deps?: CreationDeps }
 
       {preview && job?.stage === "ready" && <div className="course-creator-preview">
         <p className="muted">Here is the course the AI wrote. Open any lesson to read it. Nothing is live until you publish.</p>
+        {lessons.length === 0 && <p className="course-creator-alert" role="alert">The AI did not write a video lesson for this course, so HeyGen had no script to make a video from. Start a different course with the same title to try again, or add a video in the full course editor.</p>}
         {preview.course.version.description && <p>{preview.course.version.description}</p>}
         <ol className="course-creator-lessons">{[...preview.course.blocks].sort((a, b) => a.sortOrder - b.sortOrder).map(block => {
           const body = block.body && typeof block.body === "object" && !Array.isArray(block.body) ? block.body as Record<string, unknown> : {};
@@ -108,7 +113,7 @@ export function SimpleCourseCreator({ deps = liveDeps }: { deps?: CreationDeps }
 
       {error && <p className="form-message form-error" role="alert">{error}</p>}
       {error && job && job.stage !== "published" && !busy && <div className="button-row"><button type="button" className="button button-primary" onClick={() => void advance(deps, job)}>Try again</button></div>}
-      {job && !busy && <div className="button-row course-creator-reset"><button type="button" className="text-link" onClick={() => { resetCreator(); setTitle(""); setDescription(""); }}>
+      {job && !busy && <div className="button-row course-creator-reset"><button type="button" className="text-link" onClick={() => { resetCreator(); setTitle(""); setDescription(""); setSourceMaterial(""); }}>
         {job.stage === "published" ? "Create another course" : "Start a different course"}</button>
         {job.stage !== "published" && job.courseId && <span className="muted">The draft so far stays in the full course editor.</span>}</div>}
     </div>

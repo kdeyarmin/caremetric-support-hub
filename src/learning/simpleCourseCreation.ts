@@ -22,6 +22,8 @@ export interface VideoJob { requestId: string; status: VideoStatus; error?: stri
 /** Saved after every step, so leaving the page never loses a draft or pays twice for a video. */
 export interface CourseJob {
   title: string; description: string; avatarId: string; voiceId: string;
+  /** Policy or reference text the AI must treat as authoritative, if the owner supplied any. */
+  sourceMaterial?: string;
   courseId?: string; versionId?: string;
   videos: Record<string, VideoJob>;
   stage: "drafting" | "videos" | "ready" | "published";
@@ -35,8 +37,17 @@ const publishReason = "The owner looked over this AI-written course and its vide
 const bodyText = (block: Block, key: string) => block.body && typeof block.body === "object" && !Array.isArray(block.body)
   && typeof (block.body as Record<string, unknown>)[key] === "string" ? (block.body as Record<string, string>)[key] : "";
 
-export function newCourseJob(title: string, description: string, avatarId: string, voiceId: string): CourseJob {
-  return { title: title.trim(), description: description.trim(), avatarId, voiceId, videos: {}, stage: "drafting" };
+/**
+ * CareBase's AI decides which lessons are video and which are text, so the Hub always asks for video lessons:
+ * without a video script, HeyGen has nothing to narrate.
+ */
+export const videoInstruction = "Include at least one video module (block_type \"video\") with a complete spoken narration script. Each video script will be read on camera by a HeyGen presenter.";
+/** CareBase accepts up to 4,000 characters of notes; the owner's part leaves room for the video instruction. */
+export const maxDescription = 4000 - videoInstruction.length - 2;
+export const maxSourceMaterial = 100_000;
+
+export function newCourseJob(title: string, description: string, avatarId: string, voiceId: string, sourceMaterial = ""): CourseJob {
+  return { title: title.trim(), description: description.trim(), avatarId, voiceId, ...(sourceMaterial.trim() ? { sourceMaterial } : {}), videos: {}, stage: "drafting" };
 }
 
 /** The presenter to preselect: the one used last time, otherwise the owner's AI twin, otherwise a private avatar, otherwise the first. */
@@ -47,10 +58,15 @@ export function defaultPresenter(avatars: Avatar[], voices: Voice[], remembered?
   return voiceId ? { avatarId: avatar.id, voiceId } : null;
 }
 
-/** Step 1: CareBase's AI writes one new global draft course from the title, guided by the description when there is one. */
+/**
+ * Step 1: CareBase's AI writes the whole course (lesson text, video narration scripts and quizzes) from the title,
+ * following the owner's notes and grounded in their source material when they gave any.
+ */
 export async function draftCourse(deps: CreationDeps, job: CourseJob): Promise<CourseJob> {
   if (job.courseId && job.versionId) return { ...job, stage: "videos" };
-  const created = await deps.generate({ operation: "ai.generateCourse", request: { generation_mode: "course", title_hint: job.title, ...(job.description ? { notes: job.description } : {}) } });
+  const notes = [job.description, videoInstruction].filter(Boolean).join("\n\n");
+  const created = await deps.generate({ operation: "ai.generateCourse", request: { generation_mode: "course", title_hint: job.title, notes,
+    ...(job.sourceMaterial?.trim() ? { source_material: job.sourceMaterial } : {}) } });
   return { ...job, courseId: created.courseId, versionId: created.versionId, stage: "videos" };
 }
 

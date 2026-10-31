@@ -20,7 +20,7 @@ export const draftPayload = (attached: string[] = []) => ({ ...fixture, sourceVe
 let ids = 0;
 export const newId = () => `aaaaaaaa-0000-4000-8000-${String(++ids).padStart(12, "0")}`;
 
-export function fakeCareBase({ aiReviewRequired = true, renderImmediately = true } = {}) {
+export function fakeCareBase({ aiReviewRequired = true, renderImmediately = true, withVideoLessons = true } = {}) {
   let head = 1, needsReview = aiReviewRequired, published = false;
   const attached: string[] = [];
   const calls: string[] = [];
@@ -29,7 +29,11 @@ export function fakeCareBase({ aiReviewRequired = true, renderImmediately = true
   const author = vi.fn(async (op: AuthoringOperation): Promise<unknown> => {
     calls.push(op.operation === "preview" ? `preview ${op.action}` : op.operation);
     if (op.operation === "inspect") return { courseId, title: fixture.version.title, currentVersionId: null, versions: [version()] };
-    if (op.operation === "source") return { courseId, versionId, sourceRevision: revision(head), payload: JSON.stringify(draftPayload(attached)), headRevision: null, snapshotId: null };
+    if (op.operation === "source") {
+      const payload = draftPayload(attached);
+      const course = withVideoLessons ? payload : { ...payload, blocks: payload.blocks.filter(block => block.type !== "video") };
+      return { courseId, versionId, sourceRevision: revision(head), payload: JSON.stringify(course), headRevision: null, snapshotId: null };
+    }
     if (op.operation === "preserve_source") return { snapshotId: newId(), sourceRevision: op.sourceRevision, headRevision: revision(head), sequence: head, replayed: false };
     if (op.operation === "preview") {
       const before = { courseId, versionId, sourceRevision: op.parameters.sourceRevision, status: "draft", title: fixture.version.title, versionNumber: 2, aiReviewRequired: needsReview, currentVersionId: null };

@@ -28,3 +28,8 @@
 .course-creator-done { padding: 14px 16px; display: flex; align-items: flex-start; gap: 10px; border: 1px solid #bfe0c2; border-radius: 10px; background: #effaf0; color: #2f5d33; }
 .course-creator-done p { margin: 3px 0 0; }
 .course-creator-reset .text-link { padding: 0; border: 0; background: none; cursor: pointer; }
+.course-creator-source { display: grid; gap: 8px; }
+.course-creator-source summary { cursor: pointer; color: var(--brand-dark); font-size: 14px; font-weight: 700; }
+.course-creator-source[open] summary { margin-bottom: 8px; }
+.course-creator-form textarea::placeholder { white-space: pre-line; }
+.course-creator-source .muted { font-weight: 400; }

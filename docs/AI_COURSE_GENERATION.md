@@ -8,12 +8,24 @@ saved: if the session expires or access is removed while the AI runs, nothing is
 
 ## One-step course creation
 
-**Course authoring → Create a course** is the owner's everyday way to make a course: type a title. A description
-of what it should teach is optional. The Hub then runs the existing governed steps in order:
+**Course authoring → Create a course** is the owner's everyday way to make a course: type a title. CareBase's AI
+(`generate-course-curriculum`) writes the whole course: lesson text, spoken narration scripts for video lessons, and
+quizzes with answers. Two optional inputs steer it:
 
-1. `ai.generateCourse` drafts one global course from the title (`title_hint`), guided by the description (`notes`)
-   when one is given.
-2. The draft's exact material is loaded, and every video lesson the AI wrote a script for is sent to HeyGen with
+- **Anything specific to cover or add** goes to the AI as the administrator's notes (`notes`), for example the
+  audience, topics that must be covered, or the length of the quiz.
+- **Your own policy or reference text** (up to 100,000 characters) goes as `source_material`. The AI treats it as
+  authoritative: it grounds the course in it and does not add regulations that are not in it. Without it, the AI
+  flags in the course description that regulatory specifics have not been verified.
+
+The AI decides which lessons are video and which are text, so the Hub always adds one instruction to the notes:
+include at least one video module with a complete spoken narration script for a HeyGen presenter. If a draft still
+has no video lesson, the preview says so plainly.
+
+The Hub then runs the existing governed steps in order:
+
+1. `ai.generateCourse` drafts one global course from the title (`title_hint`), the notes and any source material.
+2. The draft's exact material is loaded, and every video lesson's script is sent to HeyGen with
    `video.generate`, using the owner's preselected presenter (their AI twin unless they picked another). One paid
    render per video lesson. The Hub checks `video.status` every 30 seconds until each is done.
 3. The finished course is shown lesson by lesson. Nothing is live yet.

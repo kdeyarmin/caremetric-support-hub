@@ -3,7 +3,7 @@ import { validateGovernedCourse } from "../imports/governedLearningImport";
 import { GenerationError } from "./generationClient";
 import type { GenerationOperation } from "./generationProtocol";
 import { courseId, draftPayload, fakeCareBase, firstVideo, newId, revision, secondVideoId, versionId } from "./testFixtures/courseCreator";
-import { approveAndPublish, checkVideos, defaultPresenter, draftCourse, loadCourse, newCourseJob, submitVideos, videoLessons, videosSettled,
+import { approveAndPublish, checkVideos, defaultPresenter, draftCourse, loadCourse, newCourseJob, submitVideos, videoInstruction, videoLessons, videosSettled,
   type CreationDeps } from "./simpleCourseCreation";
 
 function deps(generate: (op: GenerationOperation) => unknown, author: CreationDeps["author"] = vi.fn()): CreationDeps {
@@ -11,20 +11,27 @@ function deps(generate: (op: GenerationOperation) => unknown, author: CreationDe
 }
 
 describe("one-step course creation", () => {
-  it("asks CareBase's AI for a course from just the title and description", async () => {
+  it("asks CareBase's AI for the whole course from the title and the owner's specific asks, always with video lessons", async () => {
     const generate = vi.fn(() => ({ courseId, versionId, generationId: newId() }));
     const job = await draftCourse(deps(generate), newCourseJob("  Fall prevention  ", "  Keep residents safe  ", "avatar", "voice"));
-    expect(generate).toHaveBeenCalledWith({ operation: "ai.generateCourse", request: { generation_mode: "course", title_hint: "Fall prevention", notes: "Keep residents safe" } });
+    expect(generate).toHaveBeenCalledWith({ operation: "ai.generateCourse", request: { generation_mode: "course", title_hint: "Fall prevention", notes: `Keep residents safe\n\n${videoInstruction}` } });
     expect(job).toMatchObject({ courseId, versionId, stage: "videos" });
     // Resuming a saved job never drafts a second course.
     expect((await draftCourse(deps(generate), job)).courseId).toBe(courseId);
     expect(generate).toHaveBeenCalledTimes(1);
   });
 
-  it("drafts from the title alone when there is no description", async () => {
+  it("drafts from the title alone when there are no specific asks, still asking for video lessons", async () => {
     const generate = vi.fn(() => ({ courseId, versionId, generationId: newId() }));
     await draftCourse(deps(generate), newCourseJob("Fall prevention", "   ", "avatar", "voice"));
-    expect(generate).toHaveBeenCalledWith({ operation: "ai.generateCourse", request: { generation_mode: "course", title_hint: "Fall prevention" } });
+    expect(generate).toHaveBeenCalledWith({ operation: "ai.generateCourse", request: { generation_mode: "course", title_hint: "Fall prevention", notes: videoInstruction } });
+  });
+
+  it("grounds the course in the owner's own policy text when they paste some", async () => {
+    const generate = vi.fn(() => ({ courseId, versionId, generationId: newId() }));
+    const policy = "Policy 4.2: Report every fall to the nurse supervisor within one hour.";
+    await draftCourse(deps(generate), newCourseJob("Fall prevention", "", "avatar", "voice", policy));
+    expect(generate).toHaveBeenCalledWith({ operation: "ai.generateCourse", request: { generation_mode: "course", title_hint: "Fall prevention", notes: videoInstruction, source_material: policy } });
   });
 
   it("finds every video lesson and the script the AI wrote for it", async () => {
