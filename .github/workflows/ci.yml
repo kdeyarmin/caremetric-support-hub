@@ -96,6 +96,7 @@ jobs:
           HUB_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: |
           node server/integration.mjs
+          node server/owner-access-integration.mjs
           node server/advisors-integration.mjs
           node server/communications-integration.mjs
           # Repeat with the same fixtures to prove complete teardown.

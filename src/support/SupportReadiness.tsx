@@ -4,8 +4,6 @@ import { config } from '../lib/config';
 import { readinessClient, intakeBlocker } from './readiness';
 import type { IntakeTenant, ReadinessClient, ReadinessProduct } from './readiness';
 import './readiness.css';
-import { CustomerOnboarding } from './CustomerOnboarding';
-import { CustomerRegistration } from './CustomerRegistration';
 
 const errorText = (error: unknown) => error instanceof Error ? error.message : 'Support readiness could not be loaded.';
 
@@ -32,8 +30,6 @@ export function SupportReadiness({ client=readinessClient, demo=config.demoMode 
         <div className="support-readiness-table"><table><thead><tr><th>Application</th><th>Published items</th><th>Active customers</th><th>SMS members</th><th>Ready customers</th><th>Intake setup</th></tr></thead><tbody>
           {data.products.filter(item => isCentralHubApp(item.slug)).map(item=><tr key={item.id}><th scope="row">{item.name}</th><td>{item.publishedItemCount}</td><td>{item.activeTenantCount}</td><td>{item.usableMemberCount}</td><td>{item.readyTenantCount}</td><td><button className="button button-secondary button-small" aria-label={`Review ${item.name} customer intake`} aria-pressed={selected===item.id} onClick={()=>setSelected(item.id)}>Review access</button></td></tr>)}
         </tbody></table></div><small>Loaded {new Date(data.loadedAt).toLocaleString()}. Published items include all approved access levels.</small>
-        <CustomerRegistration onLinked={refresh} />
-        <CustomerOnboarding onLinked={refresh} />
         {product && <TenantIntake key={`${product.id}:${revision}`} product={product} client={client} onChanged={refresh} />}
       </>}
     </>}</div>

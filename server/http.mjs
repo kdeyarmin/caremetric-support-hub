@@ -38,7 +38,13 @@ const aiCaseActions=new Set(['summary','draft-reply','triage-suggestion']);
 const staffCommunicationActions=new Set(['list','get','update','note','reply','sync']);
 // Railway's edge appends the visitor address last; rate limits use it only as a hashed bucket.
 const visitorAddress=req=>String(req.headers['x-forwarded-for']||'').split(',').at(-1).trim()||req.socket.remoteAddress||'unknown';
-export function appServer({auth,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,selfService,origins,dist=resolve('dist')}) {
+export const privateHubMessage='This Hub is private. Only its owner can sign in.';
+/**
+ * `owner.allows(sessionToken)` makes the Hub private to its owner: a session that fails it is
+ * treated as signed out, a sign-in that fails it is revoked at once, and the routes that create
+ * sign-ins for anyone else (invitation claims and application self-service) are closed.
+ */
+export function appServer({auth,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,selfService,owner,origins,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -49,7 +55,8 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
     try {
       const url=new URL(req.url,'http://internal');
       const path=url.pathname;
-      const session=readCookie(req.headers.cookie,sessionCookie);
+      const cookieSession=readCookie(req.headers.cookie,sessionCookie);
+      const session=owner && cookieSession && path.startsWith('/api/') && !(await owner.allows(cookieSession)) ? undefined : cookieSession;
       if (path.startsWith('/api/')) {
         res.setHeader('Cache-Control','no-store');
         if (path.startsWith('/api/internal/')) {
@@ -110,6 +117,7 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
         // Application servers ask what a tenant has and report billable quantities with their application key.
         if(path==='/api/apps/connect' && selfService) {
           if(req.method!=='POST' || req.headers.origin || req.headers.cookie || url.search) throw new HttpError(403,'Forbidden.');
+          if(owner) throw new HttpError(403,privateHubMessage);
           return json(await selfService.issue(req.headers.authorization,await jsonBody(req,262144)));
         }
         const appBilling=/^\/api\/apps\/(entitlements|facility-entitlements|usage|trials)$/.exec(path);
@@ -131,6 +139,7 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
         }
         if (!['GET','POST','HEAD'].includes(req.method)) throw new HttpError(405,'Method not allowed.');
         if(req.method==='POST' && !sameOrigin(req,origins)) throw new HttpError(403,'Open this action in CareMetric.');
+        if(owner && (path.startsWith('/api/self-service/connect/') || path.startsWith('/api/auth/invitation/'))) throw new HttpError(403,privateHubMessage);
         if(path==='/api/self-service/connect/start' && req.method==='POST' && selfService) {
           if(url.search) throw new HttpError(400,'Query parameters are not supported.');
           const started=await selfService.start(await jsonBody(req,4096),visitorAddress(req));
@@ -252,6 +261,7 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
         if(path==='/api/auth/sms/verify' && req.method==='POST') {
           const {challengeId,code}=await jsonBody(req,2048);
           const value=await auth.verify(challengeId,readCookie(req.headers.cookie,challengeCookie),code,session);
+          if(owner && !(await owner.allows(value))) { await auth.logout(value); throw new HttpError(403,privateHubMessage); }
           return json({authenticated:true},200,[cookie(sessionCookie,value,28800),cookie(challengeCookie,'',0)]);
         }
         if(path==='/api/auth/logout' && req.method==='POST') {
