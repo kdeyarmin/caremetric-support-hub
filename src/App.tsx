@@ -1,4 +1,4 @@
-import { isCentralHubApp } from './hubScope';
+import { isCentralHubApp, isHubAdminApp } from './hubScope';
 import {
   AlertCircle,
   ArrowRight,
@@ -448,7 +448,7 @@ function OverviewPage({ data }: { data: HubData }) {
     shared: data.content.filter((item) => item.productIds.length > 1).length,
   }), [data]);
   const recent = data.cases.slice(0, 4);
-  const coverage = data.products.filter(product => isCentralHubApp(product.slug)).map((product) => ({
+  const coverage = data.products.filter(product => isHubAdminApp(product.slug)).map((product) => ({
     ...product,
     count: data.content.filter((item) => item.productIds.includes(product.id)).length,
   }));
@@ -882,7 +882,7 @@ function KnowledgePage({ data }: { data: HubData }) {
       {isSupportStaff(data.actor.role) && <KnowledgeCoverage products={data.products} content={data.content} selectedProductId={productId} onSelect={setProductId} />}
       <section className="library-toolbar panel">
         <label className="search-box large"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search articles, workflows, and questions" /></label>
-        <select value={productId} onChange={(event) => setProductId(event.target.value)}><option value="all">All products</option>{data.products.filter(product => isCentralHubApp(product.slug)).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select>
+        <select value={productId} onChange={(event) => setProductId(event.target.value)}><option value="all">All products</option>{data.products.filter(product => isHubAdminApp(product.slug)).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select>
       </section>
       <div className="knowledge-layout">
         <section className="article-grid">
@@ -908,7 +908,7 @@ function ProductsPage({ data }: { data: HubData }) {
     <>
       <PageHeading eyebrow="Product & contact registry" title="Owner-approved routing from one source." description="Every app reads the same product names, support channels, availability, and fallback rules—eliminating conflicting phone numbers and email addresses." />
       <div className="product-grid">
-        {data.products.filter(product => isCentralHubApp(product.slug)).map((product) => {
+        {data.products.filter(product => isHubAdminApp(product.slug)).map((product) => {
           const productContent = data.content.filter((item) => item.productIds.includes(product.id));
           const productCases = data.cases.filter((item) => item.productId === product.id && !["resolved", "closed"].includes(item.status));
           return <article className="product-card" key={product.id}><div className="product-card-header"><span className="product-logo" style={{ background: `${product.color}18`, color: product.color }}>{product.name.charAt(0)}</span><div><h2>{product.name}</h2><span className={`publication-status ${product.status === "active" ? "published" : "review"}`}>{product.status}</span></div></div><p>{product.description}</p><dl><div><dt>Product key</dt><dd>{product.slug}</dd></div><div><dt>Active cases</dt><dd>{productCases.length}</dd></div><div><dt>Published placements</dt><dd>{productContent.length}</dd></div></dl><NavLink className="button button-secondary" to={`/help?product=${encodeURIComponent(product.slug)}`}>Preview help <ArrowRight size={15} /></NavLink></article>;
