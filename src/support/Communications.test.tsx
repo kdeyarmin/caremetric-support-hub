@@ -69,7 +69,9 @@ describe("unified communications inbox", () => {
     await waitFor(() => expect(fake.sync).toHaveBeenLastCalledWith("breathe.phone", 200));
     expect(await screen.findByText("Phone line: 2 new, 1 already in the Hub.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Import the next phone-line batch" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Import Advisors requests" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Import Advisors requests" }));
+    await waitFor(() => expect(fake.sync).toHaveBeenLastCalledWith("advisors.web", 0));
+    expect(await screen.findByText("Advisors consultation form: 2 new, 1 already in the Hub.")).toBeTruthy();
     cleanup();
     render(<Communications products={products} actor={{ ...actor, role: "support_agent" }} client={client()} />);
     await screen.findByRole("region", { name: "Conversations" });

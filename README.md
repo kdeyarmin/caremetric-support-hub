@@ -50,6 +50,7 @@ connection provides. As documented for each connection today:
 | CareBase (PennTrain) | Organizations, users | Subscriptions, status totals | Invoices, Stripe verification | Courses, facility training, jobs, releases, audit |
 | Breathe (PennFit) | Organizations, staff | Subscriptions, status totals | Not provided yet | Shared phone-line messages |
 | CareMetric Intel | Registered users only | Not provided yet | Not provided yet | |
+| Healthcare Advisors | No software accounts | Not applicable (consulting practice) | Not applicable | Consultation requests: list, status, notes and delete ([connection](docs/ADVISORS_ADMIN_CONNECTION.md)) |
 
 "Not provided yet" items need a read added to that application's
 administration connection; the coverage matrix lists them live.

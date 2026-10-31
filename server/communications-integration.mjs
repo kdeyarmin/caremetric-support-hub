@@ -16,6 +16,7 @@ const owner=randomUUID(),agent=randomUUID(),customer=randomUUID();
 const ownerToken='comms-owner-'+randomUUID(),agentToken='comms-agent-'+randomUUID(),customerToken='comms-customer-'+randomUUID();
 const breathe=(await admin.query("select id from hub.products where slug='breathe'")).rows[0].id;
 const otherProduct=(await admin.query("select id from hub.products where slug='carebase'")).rows[0].id;
+const advisors=(await admin.query("select id from hub.products where slug='advisors'")).rows[0].id;
 const origin='https://support-hub-web-production.up.railway.app';
 const {privateKey,publicKey}=generateKeyPairSync('ec',{namedCurve:'prime256v1'});
 const sent={sms:[],email:[]};let smsOutcome='sent';
@@ -141,13 +142,15 @@ try {
   // Imports from the Breathe phone line and the Advisors form: once each, administrator only.
   await assert.rejects(service.sync(agentToken,{source:'breathe.phone'}),error=>error.status===401||error.status===403);
   assert.deepEqual(await service.sync(ownerToken,{source:'breathe.phone'}),{source:'breathe.phone',read:1,created:1,skipped:0,nextOffset:null});
-  await assert.rejects(service.sync(ownerToken,{source:'advisors.web'}),{status:410});
+  assert.deepEqual(await service.sync(ownerToken,{source:'advisors.web'}),{source:'advisors.web',read:1,created:1,skipped:0,nextOffset:null});
+  const consult=await find(item=>item.channel==='web_form');created.push(consult.id);
+  assert.equal(consult.productId,advisors);assert.equal(consult.status,'closed','a request already closed in Advisors does not reopen');
   const call=await find(item=>item.channel==='phone');created.push(call.id);
   assert.equal(call.productId,breathe,'PennFit calls route to Breathe');assert.equal(call.contactPhone,'+12025550171');assert.equal(call.inquiryType,'customer_service');
   await service.update(ownerToken,{id:call.id,status:'closed',expectedUpdatedAt:call.updatedAt});
   assert.deepEqual(await service.sync(ownerToken,{source:'breathe.phone'}),{source:'breathe.phone',read:1,created:0,skipped:1,nextOffset:null});
   assert.equal((await service.get(ownerToken,{id:call.id})).status,'closed','re-syncing never overwrites staff work');
-  assert.deepEqual(adminReads.map(read=>read.operation),['phone.messages.list','phone.messages.list']);
+  assert.deepEqual(adminReads.map(read=>read.operation),['phone.messages.list','inquiries.list','phone.messages.list']);
   assert.equal((await service.reply(ownerToken,{id:call.id,body:'Called back and resolved.',requestKey:randomUUID()})).deliveryChannel,'email','phone messages with an email reply by email');
   assert.equal(sent.email.at(-1).subject,`Re: Your phone message to CareMetric [CM-${call.reference}]`,'the caller sees a subject written for them');
   smsOutcome='sent';
