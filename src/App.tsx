@@ -1,6 +1,5 @@
-import { isCentralHubApp } from './hubScope';
+import { isCentralHubApp, isHubAdminApp } from './hubScope';
 import {
-  Activity,
   AlertCircle,
   ArrowRight,
   BookOpen,
@@ -9,32 +8,23 @@ import {
   Check,
   CheckCircle2,
   ChevronRight,
-  CreditCard,
   CircleHelp,
   Clock3,
   ExternalLink,
   FileText,
-  Gauge,
   GraduationCap,
   Headphones,
   Inbox,
-  LayoutDashboard,
-  Library,
-  Link2,
   LoaderCircle,
   LockKeyhole,
   Mail,
-  MailPlus,
   Menu,
   MessageSquareText,
-  MessagesSquare,
   MonitorPlay,
   Phone,
   Plus,
-  Rocket,
   Search,
   Send,
-  Settings2,
   ShieldCheck,
   Sparkles,
   UserRound,
@@ -92,6 +82,7 @@ import { BulkEmail } from "./admin/BulkEmail";
 import { SupportReadiness } from "./support/SupportReadiness";
 import { adminClient } from "./admin/client";
 import { safeLearningPath } from "./learning/model";
+import { currentPage, visibleNavSections } from "./navigation";
 import { config } from "./lib/config";
 import { appSession } from "./lib/appSession";
 import { SmsSignIn } from "./auth/SmsSignIn";
@@ -128,29 +119,6 @@ const emptyData: HubData = {
 
 const pendingHelpPathKey = "caremetric.pendingHelpPath";
 const registeredProductSlugs = new Set(Object.keys(integrationRolloutBySlug));
-
-const navItems = [
-  { to: "/self-service", label: "Customer center", icon: Settings2 },
-  { to: "/account/profile", label: "My profile & training", icon: UserRound },
-  { to: "/manuals", label: "User manuals", icon: BookOpen },
-  { to: "/admin", label: "Control center", icon: Gauge },
-  { to: "/admin/apps", label: "Applications", icon: Boxes },
-  { to: "/admin/billing", label: "Billing", icon: CreditCard },
-  { to: "/admin/email", label: "Bulk email", icon: MailPlus },
-  { to: "/phone-numbers", label: "Phone numbers", icon: Phone },
-  { to: "/phone", label: "Phone messages", icon: Phone },
-  { to: "/admin/portfolio", label: "Portfolio rollup", icon: Activity },
-  { to: "/admin/go-live-readiness", label: "AI go-live readiness", icon: Rocket },
-  { to: "/overview", label: "Overview", icon: LayoutDashboard },
-  { to: "/communications", label: "Communications", icon: MessagesSquare },
-  { to: "/cases", label: "Support cases", icon: Inbox },
-  { to: "/knowledge", label: "Knowledge", icon: BookOpen },
-  { to: "/library", label: "Videos & courses", icon: Library },
-  { to: "/products", label: "Products & contacts", icon: Boxes },
-  { to: "/integration", label: "App integration", icon: Link2 },
-  { to: "/billing", label: "Billing", icon: CreditCard },
-  { to: "/security", label: "Security", icon: ShieldCheck },
-] as const;
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("en-US", {
@@ -301,62 +269,96 @@ function CommunicationsRoute({ data, communications }: { data: HubData; communic
 }
 
 function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (mode: "staff" | "customer" | "admin") => void }) {
-  const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  // The mobile menu remembers the page it was opened on, so moving to any other page closes it.
+  const [menuOpenedAt, setMenuOpenedAt] = useState<string | null>(null);
+  const mobileOpen = menuOpenedAt === location.pathname;
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
   const staff = isSupportStaff(data.actor.role);
+  const platformAdmin = data.actor.role === "platform_admin";
   // Tenant administrators see their own organization's billing; platform administrators use the Billing workspace.
   const tenantAdmin = canManageOrganizationBilling(data.actor, data.products);
+  const sections = useMemo(() => visibleNavSections({ staff, platformAdmin, organizationBilling: tenantAdmin }), [staff, platformAdmin, tenantAdmin]);
+  const page = currentPage(sections, location.pathname);
+  const pageLabel = page?.label;
   // The preview's in-memory inbox is created once per data load so replies and notes survive navigation within the session.
   const demoCommunications = useMemo(() => config.demoMode ? demoCommunicationsClient({
     breathe: data.products.find((product) => product.slug === "breathe")?.id, advisors: data.products.find((product) => product.slug === "advisors")?.id, pennsync: data.products.find((product) => product.slug === "pennsync")?.id,
   }) : undefined, [data.products]);
 
+  useEffect(() => {
+    document.title = pageLabel ? `${pageLabel} · CareMetric Support Hub` : "CareMetric Support Hub";
+  }, [pageLabel]);
+
+  // A long administrator menu scrolls; keep the current page's link in view.
+  useEffect(() => {
+    navRef.current?.querySelector<HTMLElement>("a.active")?.scrollIntoView?.({ block: "nearest" });
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMenuOpenedAt(null);
+      menuButton.current?.focus();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [mobileOpen]);
+
   return (
     <div className="app-shell">
-      <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
+      <a className="skip-link" href="#main-content" onClick={(event) => { event.preventDefault(); mainRef.current?.focus(); }}>Skip to main content</a>
+      <aside id="primary-sidebar" className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
         <div className="brand-lockup">
           <span className="brand-icon"><CircleHelp size={21} /></span>
-          <span><strong>CareMetric</strong><small>{data.actor.role === "platform_admin" ? "Admin" : "Support Hub"}</small></span>
+          <span><strong>CareMetric</strong><small>{platformAdmin ? "Admin" : "Support Hub"}</small></span>
         </div>
-        <nav className="primary-nav" aria-label="Main navigation">
-          <p className="nav-label">Workspace</p>
-          {navItems.filter(item => (!["/admin", "/admin/apps", "/admin/billing", "/admin/email", "/admin/portfolio", "/admin/go-live-readiness", "/phone", "/phone-numbers"].includes(item.to) || data.actor.role === "platform_admin") && (!["/communications"].includes(item.to) || staff) && (item.to !== "/billing" || tenantAdmin)).map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} onClick={() => setMobileOpen(false)}>
-              <Icon size={18} /> <span>{label}</span>
-            </NavLink>
-          ))}
+        <nav ref={navRef} className="primary-nav" aria-label="Main navigation">
+          {sections.map((section) => {
+            const labelId = `nav-${section.label.replace(/\W+/g, "-").toLowerCase()}`;
+            return (
+              <div className="nav-section" key={section.label}>
+                <p className="nav-label" id={labelId}>{section.label}</p>
+                <ul aria-labelledby={labelId}>
+                  {section.items.map(({ to, label, icon: Icon, end }) => (
+                    <li key={to}><NavLink to={to} end={end} onClick={() => setMenuOpenedAt(null)}><Icon size={18} aria-hidden="true" /><span>{label}</span></NavLink></li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
         </nav>
-        <div className="sidebar-lower">
-          <div className="ownership-card">
-            <span className="ownership-icon"><LockKeyhole size={17} /></span>
-            <div><strong>First-party platform</strong><p>Cases and content stay under CareMetric control.</p></div>
-          </div>
-          <div className="user-card">
-            <span className="avatar">{data.actor.name.charAt(0) || "C"}</span>
-            <div className="user-copy"><strong>{data.actor.name}</strong><span>{data.actor.role.replaceAll("_", " ")}</span></div>
-            <Settings2 size={17} />
-          </div>
+        <div className="user-card">
+          <span className="avatar" aria-hidden="true">{data.actor.name.charAt(0) || "C"}</span>
+          <div className="user-copy"><strong>{data.actor.name}</strong><span>{data.actor.role.replaceAll("_", " ")}</span></div>
         </div>
       </aside>
+      {mobileOpen && <div className="sidebar-backdrop" aria-hidden="true" onClick={() => setMenuOpenedAt(null)} />}
       <div className="app-main">
         <header className="topbar">
-          <button className="icon-button mobile-menu" onClick={() => setMobileOpen((value) => !value)} aria-label="Open navigation">
+          <button ref={menuButton} className="icon-button mobile-menu" onClick={() => setMenuOpenedAt(mobileOpen ? null : location.pathname)} aria-label={mobileOpen ? "Close navigation" : "Open navigation"} aria-expanded={mobileOpen} aria-controls="primary-sidebar">
             {mobileOpen ? <X /> : <Menu />}
           </button>
-          <div className="environment-pill"><span /> {config.demoMode ? "Implementation preview" : "Connected environment"}</div>
+          <div className="topbar-context">
+            {page ? <>{page.section && <><span className="topbar-section">{page.section}</span><ChevronRight className="topbar-section" size={15} aria-hidden="true" /></>}<strong>{page.label}</strong></> : <strong>CareMetric Support Hub</strong>}
+          </div>
           <div className="topbar-actions">
+            <div className="environment-pill"><span /> {config.demoMode ? "Implementation preview" : "Connected environment"}</div>
             {config.demoMode && (
-              <div className="persona-switch" aria-label="Preview persona">
-                <button className={data.actor.role === "platform_admin" ? "active" : ""} onClick={() => onPersonaChange("admin")}><Boxes size={15} /> Admin</button>
-                <button className={staff && data.actor.role !== "platform_admin" ? "active" : ""} onClick={() => onPersonaChange("staff")}><Headphones size={15} /> Staff</button>
-                <button className={!staff ? "active" : ""} onClick={() => onPersonaChange("customer")}><UserRound size={15} /> Customer</button>
+              <div className="persona-switch" role="group" aria-label="Preview persona">
+                <button className={platformAdmin ? "active" : ""} aria-pressed={platformAdmin} aria-label="Admin" onClick={() => onPersonaChange("admin")}><Boxes size={15} aria-hidden="true" /><span>Admin</span></button>
+                <button className={staff && !platformAdmin ? "active" : ""} aria-pressed={staff && !platformAdmin} aria-label="Staff" onClick={() => onPersonaChange("staff")}><Headphones size={15} aria-hidden="true" /><span>Staff</span></button>
+                <button className={!staff ? "active" : ""} aria-pressed={!staff} aria-label="Customer" onClick={() => onPersonaChange("customer")}><UserRound size={15} aria-hidden="true" /><span>Customer</span></button>
               </div>
             )}
             {!config.demoMode && <button className="button button-secondary" onClick={() => void appSession.signOut()}>Sign out</button>}
-            <NavLink className="icon-button" to="/help" aria-label="Help"><CircleHelp size={19} /></NavLink>
+            <NavLink className="button button-secondary topbar-help" to="/help" aria-label="Help"><CircleHelp size={17} aria-hidden="true" /><span>Help</span></NavLink>
           </div>
         </header>
-        <main className="page-wrap">
+        <main id="main-content" ref={mainRef} tabIndex={-1} className="page-wrap">
           {config.demoMode && (
             <div className="preview-banner">
               <Sparkles size={17} />
@@ -392,7 +394,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/integration" element={<IntegrationPage data={data} />} />
             <Route path="/security" element={<SecurityPage actor={data.actor} />} />
             <Route path="/help" element={<ContextualHelpPage data={data} />} />
-            <Route path="/learn" element={<LearningCatalog products={data.products} legacyContent={data.content} />} />
+            <Route path="/learn" element={<LearningCatalog products={data.products} legacyContent={data.content} canAuthor={platformAdmin} />} />
             <Route path="*" element={<Navigate to={data.actor.role === "platform_admin" ? "/admin" : "/overview"} replace />} />
           </Routes>
         </main>
@@ -445,7 +447,7 @@ function OverviewPage({ data }: { data: HubData }) {
     shared: data.content.filter((item) => item.productIds.length > 1).length,
   }), [data]);
   const recent = data.cases.slice(0, 4);
-  const coverage = data.products.filter(product => isCentralHubApp(product.slug)).map((product) => ({
+  const coverage = data.products.filter(product => isHubAdminApp(product.slug)).map((product) => ({
     ...product,
     count: data.content.filter((item) => item.productIds.includes(product.id)).length,
   }));
@@ -879,7 +881,7 @@ function KnowledgePage({ data }: { data: HubData }) {
       {isSupportStaff(data.actor.role) && <KnowledgeCoverage products={data.products} content={data.content} selectedProductId={productId} onSelect={setProductId} />}
       <section className="library-toolbar panel">
         <label className="search-box large"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search articles, workflows, and questions" /></label>
-        <select value={productId} onChange={(event) => setProductId(event.target.value)}><option value="all">All products</option>{data.products.filter(product => isCentralHubApp(product.slug)).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select>
+        <select value={productId} onChange={(event) => setProductId(event.target.value)}><option value="all">All products</option>{data.products.filter(product => isHubAdminApp(product.slug)).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select>
       </section>
       <div className="knowledge-layout">
         <section className="article-grid">
@@ -905,7 +907,7 @@ function ProductsPage({ data }: { data: HubData }) {
     <>
       <PageHeading eyebrow="Product & contact registry" title="Owner-approved routing from one source." description="Every app reads the same product names, support channels, availability, and fallback rules—eliminating conflicting phone numbers and email addresses." />
       <div className="product-grid">
-        {data.products.filter(product => isCentralHubApp(product.slug)).map((product) => {
+        {data.products.filter(product => isHubAdminApp(product.slug)).map((product) => {
           const productContent = data.content.filter((item) => item.productIds.includes(product.id));
           const productCases = data.cases.filter((item) => item.productId === product.id && !["resolved", "closed"].includes(item.status));
           return <article className="product-card" key={product.id}><div className="product-card-header"><span className="product-logo" style={{ background: `${product.color}18`, color: product.color }}>{product.name.charAt(0)}</span><div><h2>{product.name}</h2><span className={`publication-status ${product.status === "active" ? "published" : "review"}`}>{product.status}</span></div></div><p>{product.description}</p><dl><div><dt>Product key</dt><dd>{product.slug}</dd></div><div><dt>Active cases</dt><dd>{productCases.length}</dd></div><div><dt>Published placements</dt><dd>{productContent.length}</dd></div></dl><NavLink className="button button-secondary" to={`/help?product=${encodeURIComponent(product.slug)}`}>Preview help <ArrowRight size={15} /></NavLink></article>;

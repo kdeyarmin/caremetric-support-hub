@@ -326,6 +326,8 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
           finally{req.removeListener('aborted',abort);res.removeListener('close',abort);}
         }
         if(path==='/api/admin/read' && req.method==='POST') return json(await delegations.admin(session,await jsonBody(req,2048)));
+        // Advisors' own body limit: two 3,000-character notes (the change and what the owner saw) can need about 18 KB.
+        if(path==='/api/admin/advisors-command' && req.method==='POST') return json(await delegations.advisorsCommand(session,await jsonBody(req,20000)));
         if(path==='/api/admin/command' && req.method==='POST') return json(await delegations.command(session,await jsonBody(req,4096)));
         if(path==='/api/admin/registration' && req.method==='POST') {
           if(url.search)throw new HttpError(400,'Invitation query parameters are not supported.');

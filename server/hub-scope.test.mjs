@@ -1,16 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 import { nativeSelfService, selfService } from './self-service.mjs';
 import { adminRegistry } from '../supabase/functions/_shared/adminRegistry.ts';
-import { centralHubApps } from '../src/hubScope.ts';
+import { centralHubApps, hubAdminApps } from '../src/hubScope.ts';
 import { selfServiceApps, connectionSchema } from '../src/self-service/protocol.ts';
 import { CAREMETRIC_PRODUCT_SLUGS, buildHelpUrl } from '../packages/help-sdk/src/index.ts';
 
 describe('centralized Hub application boundary', () => {
-  it('exposes only CareBase, Breathe and Intel across native and Help interfaces', () => {
+  it('offers customers only CareBase, Breathe and Intel, and administers those plus Healthcare Advisors', () => {
     expect(Object.keys(nativeSelfService).sort()).toEqual([...centralHubApps].sort());
     expect([...CAREMETRIC_PRODUCT_SLUGS].sort()).toEqual([...centralHubApps].sort());
     expect(selfServiceApps).toEqual(centralHubApps);
-    expect(Object.entries(adminRegistry).filter(([, entry]) => entry.endpoint).map(([slug]) => slug).sort()).toEqual(['breathe', 'carebase', 'intel']);
+    // Advisors has no software customers; the owner manages its consultation requests through its administration connection.
+    expect(Object.entries(adminRegistry).filter(([, entry]) => entry.endpoint).map(([slug]) => slug).sort()).toEqual(['advisors', 'breathe', 'carebase', 'intel']);
+    expect([...hubAdminApps].sort()).toEqual([...centralHubApps, 'advisors'].sort());
   });
 
   it.each(['pennsync', 'caremetric-emr', 'caremetric-go', 'advisors'])('refuses stale credentials for %s before issuing or redeeming authority', async slug => {

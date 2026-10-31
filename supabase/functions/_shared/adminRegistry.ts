@@ -8,7 +8,7 @@ export const adminRegistry: Record<PortfolioProduct, { name: string; endpoint: s
   pennsync: { name: "PennSync", endpoint: null, authorizationHeader: "X-CareMetric-Hub-Authorization", userScope: "Registered administrators and agency members · individual subscriptions" },
   intel: { name: "CareMetric Intel", endpoint: "https://www.caremetricintel.com/functions/centralAdminRead", authorizationHeader: "X-CareMetric-Hub-Authorization", userScope: "Registered application users · organization and billing sources not configured" },
   "caremetric-go": { name: "CareMetric Go", endpoint: null, userScope: "Organizations, staff and application entitlements shared with CareMetric EMR" },
-  advisors: { name: "CareMetric Healthcare Advisors", endpoint: null, authorizationHeader: "X-CareMetric-Hub-Authorization", userScope: "Consultation requests from caremetricadvisors.com · no software accounts or subscriptions" },
+  advisors: { name: "CareMetric Healthcare Advisors", endpoint: "https://caremetricadvisors.com/api/hub/admin-read", authorizationHeader: "X-CareMetric-Hub-Authorization", userScope: "Consultation requests from caremetricadvisors.com · no software accounts or subscriptions" },
 };
 
 /** Source repository names the owner uses for each application, shown beside the product name. */

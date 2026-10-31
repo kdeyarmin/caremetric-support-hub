@@ -1,7 +1,8 @@
 begin;
 select no_plan();
 select is((select array_agg(slug order by slug) from hub.products where private.hub_application_enabled(id)),array['breathe','carebase','caremetric-intel'],'only the three selected applications are enabled');
-select is((select count(*)::integer from hub.products where slug in ('pennsync','caremetric-emr','caremetric-go','advisors') and status='retired' and not support_enabled),4,'excluded product identities remain as retired history');
+select is((select count(*)::integer from hub.products where slug in ('pennsync','caremetric-emr','caremetric-go') and status='retired' and not support_enabled),3,'excluded product identities remain as retired history');
+select ok(exists(select 1 from hub.products where slug='advisors' and status='active' and support_enabled and not private.hub_application_enabled(id)),'Healthcare Advisors is administered from the Hub but stays out of customer-facing features');
 select is((select count(*)::integer from private.billing_app_keys k join hub.products p on p.id=k.product_id where p.slug not in ('carebase','breathe','caremetric-intel') and k.revoked_at is null),0,'excluded app credentials are revoked');
 select is((select count(*)::integer from private.self_service_connections c join hub.products p on p.id=c.product_id where p.slug not in ('carebase','breathe','caremetric-intel') and c.revoked_at is null),0,'excluded native connections are revoked');
 select ok(exists(select 1 from hub.content_publications cp join hub.products p on p.id=cp.product_id where p.slug='pennsync'),'historical learning publications are retained');
