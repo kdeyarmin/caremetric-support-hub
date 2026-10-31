@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
-import { requestAdmin } from "../admin/transport";
-import { authoringOperationSchema, authoringInspectSchema, authoringPreviewSchema, authoringSourceViewSchema,
-  projectAuthoringResult, verifyAuthoringOutcome, governedStageResultSchema, correctionLabels, type AuthoringOperation, type AuthoringPreview,
+import { runAuthoring } from "./authoringClient";
+import { authoringInspectSchema, authoringPreviewSchema, authoringSourceViewSchema,
+  verifyAuthoringOutcome, governedStageResultSchema, correctionLabels, type AuthoringPreview,
   type AuthoringResult, type AuthoringSourceView, type DraftPatch } from "./authoringProtocol";
 import { validateGovernedCourse } from "../imports/governedLearningImport";
 import { DraftEditor } from "./DraftEditor";
@@ -20,13 +20,7 @@ import { PublishedCorrectionEditor, type BlockCorrection } from "./PublishedCorr
 import { AvatarVideoPanel, BlockRegenerationPanel } from "./GenerationPanels";
 import { PackageDependencyPanel } from "./PackageDependencyPanel";
 
-async function run(operation: AuthoringOperation) {
-  const op = authoringOperationSchema.parse(operation);
-  const result = await requestAdmin("learning-authoring", op, new AbortController().signal);
-  if (op.operation === "preserve_source") return governedStageResultSchema.parse(result);
-  const projected = await projectAuthoringResult(result, op);
-  return op.operation === "source" ? authoringSourceViewSchema.parse({ ...authoringSourceViewSchema.parse(result), ...projected }) : projected;
-}
+const run = runAuthoring;
 function PreviewExpiry({ expiresAt }: { expiresAt: string }) {
   const [now, setNow] = useState(Date.now);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
