@@ -50,24 +50,39 @@ describe("portfolio rollup", () => {
     });
     renderRollup(portfolio, hubBilling([subscription("carebase", "active", 19900), subscription("caremetric-intel", "trialing", 34900)]));
     const health = await screen.findByRole("region", { name: "Application health" });
-    expect(within(health).getByText(/Connections verified for 1 of 3 applications/)).toBeTruthy();
+    expect(within(health).getByText(/Connections verified for 1 of 4 applications/)).toBeTruthy();
     const carebase = within(health).getByRole("region", { name: "CareBase health" });
     expect(within(carebase).getByText("Connection verified")).toBeTruthy();
     expect(within(carebase).getByText("Deployed source: abc1234")).toBeTruthy();
-    expect(within(health).getAllByText("Unavailable")).toHaveLength(2);
+    expect(within(health).getAllByText("Unavailable")).toHaveLength(3);
     const financials = screen.getByRole("region", { name: "Subscription financials" });
     expect(totalsText(financials)).toContain("2 subscriptions across");
     expect(totalsText(financials)).toContain("USD monthly recurring revenue: USD 199.00");
+  });
+
+  it("shows Healthcare Advisors consultation totals and explains that it has no subscriptions", async () => {
+    const portfolio = fakePortfolio({
+      advisors: {
+        capabilities: { apiVersion: 1, operations: ["overview", "inquiries.list"], sourceRevision: "37afa7a" },
+        overview: { organizationCount: null, activeUserCount: null, inquiryCount: 12, openInquiryCount: 3 },
+      },
+    });
+    renderRollup(portfolio);
+    const health = await screen.findByRole("region", { name: "CareMetric Healthcare Advisors health" });
+    expect(within(health).getByText("Open consultation requests")).toBeTruthy();
+    const financials = screen.getByRole("region", { name: "Subscription financials" });
+    expect(within(financials).getByText(/consulting practice\. It has no software subscriptions/)).toBeTruthy();
+    expect(totalsText(financials)).not.toContain("Healthcare Advisors");
   });
 
   it("does not contact excluded applications or display their active cards", async () => {
     const portfolio = fakePortfolio({});
     renderRollup(portfolio);
     await screen.findByRole("region", { name: "Application health" });
-    await waitFor(() => expect(portfolio.capabilities).toHaveBeenCalledTimes(3));
-    expect(vi.mocked(portfolio.capabilities).mock.calls.map(([request]) => request.product)).toEqual(["carebase", "breathe", "intel"]);
+    await waitFor(() => expect(portfolio.capabilities).toHaveBeenCalledTimes(4));
+    expect(vi.mocked(portfolio.capabilities).mock.calls.map(([request]) => request.product)).toEqual(["carebase", "breathe", "intel", "advisors"]);
     expect(screen.queryByRole("region", { name: "PennSync health" })).toBeNull();
-    expect(screen.queryByRole("region", { name: "CareMetric Healthcare Advisors health" })).toBeNull();
+    expect(screen.getByRole("region", { name: "CareMetric Healthcare Advisors health" })).toBeTruthy();
     expect(Object.keys(portfolio)).not.toContain("billing");
   });
 
@@ -78,7 +93,7 @@ describe("portfolio rollup", () => {
     });
     renderRollup(portfolio);
     const coverage = await screen.findByRole("region", { name: "Super-admin coverage" });
-    expect(within(coverage).getAllByRole("row")).toHaveLength(4);
+    expect(within(coverage).getAllByRole("row")).toHaveLength(5);
     const carebase = within(coverage).getByRole("row", { name: /CareBase \(PennTrain\)/ });
     expect(within(carebase).getAllByText("In the Hub")).toHaveLength(4);
     const breathe = within(coverage).getByRole("row", { name: /Breathe \(PennFit\)/ });
@@ -94,6 +109,6 @@ describe("portfolio rollup", () => {
     expect(within(financials).getByText("The Hub's billing records could not be loaded, so no portfolio total is shown.")).toBeTruthy();
     expect(document.body.textContent).not.toContain("0 subscriptions");
     const health = screen.getByRole("region", { name: "Application health" });
-    expect(within(health).getByText(/Connections verified for 3 of 3 applications/)).toBeTruthy();
+    expect(within(health).getByText(/Connections verified for 4 of 4 applications/)).toBeTruthy();
   });
 });

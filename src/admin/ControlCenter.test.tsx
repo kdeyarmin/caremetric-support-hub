@@ -101,9 +101,9 @@ describe("control center", () => {
   it("shows the portfolio at a glance from live reads and never shows an unavailable figure as zero", async () => {
     renderCenter({ ...connectedClients(), communications: fakeCommunications() });
     const glance = screen.getByRole("region", { name: "Portfolio at a glance" });
-    expect(await within(glance).findByText("of 3 administration connections")).toBeTruthy();
+    expect(await within(glance).findByText("of 4 administration connections")).toBeTruthy();
     const figure = (label: string) => within(glance).getByText(label).parentElement!;
-    expect(within(figure("Applications connected")).getByText("1")).toBeTruthy();
+    expect(within(figure("Applications connected")).getByText("2")).toBeTruthy();
     expect(await within(figure("Conversations waiting")).findByText("4")).toBeTruthy();
     expect(within(figure("Open support cases")).getByText("2")).toBeTruthy();
     expect(within(figure("Open support cases")).getByText("1 urgent")).toBeTruthy();
@@ -144,7 +144,7 @@ describe("control center", () => {
     renderCenter({ ...connectedClients(), communications: fakeCommunications() });
     const applications = screen.getByRole("region", { name: "Applications" });
     const cards = await within(applications).findAllByRole("article");
-    expect(cards).toHaveLength(3);
+    expect(cards).toHaveLength(4);
     const carebase = within(applications).getByRole("article", { name: "CareBase (PennTrain) controls" });
     expect(within(carebase).getByText("Connection verified")).toBeTruthy();
     expect(within(carebase).getByText("Organizations:").textContent).toBe("Organizations: 12");
@@ -173,7 +173,12 @@ describe("control center", () => {
     // The Hub's own records still show for a silent application.
     expect(within(breathe).getByText("Support").closest("div")!.textContent).toContain("0 conversations waiting · 0 open cases · 1 published articles (0 app-specific) · 2 AI calls");
 
-    expect(within(applications).queryByRole("article", { name: "CareMetric Healthcare Advisors controls" })).toBeNull();
+    const advisors = within(applications).getByRole("article", { name: "CareMetric Healthcare Advisors controls" });
+    expect(within(advisors).getByText("Open consultation requests:").textContent).toBe("Open consultation requests: 2");
+    expect(within(advisors).getByText("Consulting practice · engagement fees are set by written proposal")).toBeTruthy();
+    expect(within(advisors).getByText("No software accounts")).toBeTruthy();
+    expect(href(within(advisors).getByRole("link", { name: "Consultation requests" }))).toBe("/admin/apps?product=advisors&view=inquiries");
+    expect(within(advisors).getByText("Feeds the Hub inbox: Consultation request import")).toBeTruthy();
 
   });
 
@@ -256,7 +261,7 @@ describe("control center", () => {
     expect(connected.aiUsage.summary).not.toHaveBeenCalled();
     expect(connected.integrationSetup.report).not.toHaveBeenCalled();
     const cards = await screen.findAllByRole("article", { name: /controls$/ });
-    expect(cards).toHaveLength(3);
+    expect(cards).toHaveLength(4);
     expect(within(cards[0]).getByText("Not available in the implementation preview. Sign in to the live Hub to see it.")).toBeTruthy();
   });
 });

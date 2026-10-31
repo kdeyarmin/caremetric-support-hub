@@ -1,5 +1,5 @@
 import { resolveProductSlug } from '../src/domain.ts';
-import { isCentralHubApp } from '../src/hubScope.ts';
+import { isHubAdminApp } from '../src/hubScope.ts';
 import { createHmac, createPublicKey, timingSafeEqual, verify } from 'node:crypto';
 import { HttpError, digest, token, transaction, withSession } from './sms-auth.mjs';
 import { normalizePhone } from './sms-provider.mjs';
@@ -238,7 +238,7 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
       if (input.noPhi !== true) throw new HttpError(400, 'Confirm that your message contains no patient information.');
       for (const key of ['name', 'email', 'message']) if (typeof input[key] !== 'string') throw new HttpError(400, 'Enter your name, email address and question.');
       if (input.product !== undefined && input.product !== null && (typeof input.product !== 'string' || !/^[a-z0-9-]{2,40}$/.test(input.product))) throw new HttpError(400, 'Choose an application.');
-      if (input.product && !isCentralHubApp(resolveProductSlug(input.product))) throw new HttpError(400, 'Use the application’s own support.');
+      if (input.product && !isHubAdminApp(resolveProductSlug(input.product))) throw new HttpError(400, 'Use the application’s own support.');
       const chat = token();
       const result = await server('select private.start_chat($1,$2,$3,$4,$5,$6) as result', [digest(chat), digest('chat:' + clientAddress), input.name, input.email, input.product ?? null, input.message]);
       return { reference: result.reference, token: chat };
@@ -287,7 +287,6 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
     /** Copy up to 200 messages another application received into the Hub, resuming at offset. Requires the platform administrator session. */
     async sync(sessionToken, input) {
       only(input, ['source', 'offset']);
-      if (input.source === 'advisors.web') throw new HttpError(410, 'Advisors uses its own consultation inbox.');
       const source = { 'breathe.phone': { product: 'breathe', operation: 'phone.messages.list', item: phoneImportItem },
         'advisors.web': { product: 'advisors', operation: 'inquiries.list', item: inquiryImportItem } }[input.source];
       if (!source) throw new HttpError(400, 'Choose a message source.');

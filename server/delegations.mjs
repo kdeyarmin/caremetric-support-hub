@@ -2,6 +2,7 @@ import { digest, token, transaction, withSession, HttpError } from './sms-auth.m
 import { parsePortfolioRequest, parsePortfolioEnvelope } from '../supabase/functions/_shared/portfolioProtocol.ts';
 import { isOperationalRead } from '../supabase/functions/_shared/operationsProtocol.ts';
 import { adminRegistry } from '../supabase/functions/_shared/adminRegistry.ts';
+import { advisorsCommandEndpoint, isAdvisorCommand, parseAdvisorCommand, parseAdvisorCommandResult } from '../supabase/functions/_shared/advisorsCommands.ts';
 import { parsePortfolioCommand, parseCommandEnvelope } from '../supabase/functions/_shared/adminCommandProtocol.ts';
 import { callNativeAdmin } from './admin-transport.mjs';
 import { publicationId, publicationPart } from '../src/imports/publicationProtocol.ts';
@@ -42,7 +43,7 @@ export function validateMedia(path,operation) {
   if (!mediaPath.test(path || '') || !['upload','download','sign'].includes(operation)) throw new HttpError(400,'Invalid media request.');
 }
 async function authorize(db,audience,payload) {
-  if (['pennsync','caremetric-emr','caremetric-go','advisors'].includes(audience)) throw new HttpError(403,'Application disconnected.');
+  if (['pennsync','caremetric-emr','caremetric-go'].includes(audience)) throw new HttpError(403,'Application disconnected.');
   if(audience==='publication') {
     if(!payload || Object.keys(payload).sort().join(',')!=='id,operation,part,range'
       || !['upload','download'].includes(payload.operation) || (payload.operation==='upload' && payload.range!==null)) throw new HttpError(400,'Invalid publication capability.');
@@ -64,6 +65,11 @@ async function authorize(db,audience,payload) {
       supportIdentityOperation.parse(payload);
       await db.query('select hub.authorize_app_command()');
       return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
+    }
+    // The owner's changes to a Healthcare Advisors consultation request carry command authority, not read authority.
+    if (audience==='advisors' && isAdvisorCommand(payload)) {
+      parseAdvisorCommand(payload);
+      return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
     }
     parsePortfolioRequest({product:audience,...payload});
     // Operational metadata requires the original, bounded SMS assurance window.
@@ -117,7 +123,7 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
     registration: supportRegistration({pool,issue,provider,fetchImpl}),
     pennsyncMigration: pennsyncLearningMigration({pool,issue,fetchImpl}),
     async consume(capability,audience) {
-      if (['pennsync','caremetric-emr','caremetric-go','advisors'].includes(audience)) throw new HttpError(403,'Application disconnected.');
+      if (['pennsync','caremetric-emr','caremetric-go'].includes(audience)) throw new HttpError(403,'Application disconnected.');
       if (!validDelegation(capability)) throw new HttpError(401,'Invalid authorization.');
       return transaction(pool,async db => {
         const {rows:[delegation]} = await db.query(`select d.payload,s.id,s.user_id from private.app_delegations d
@@ -144,6 +150,22 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
       // A logout, revocation or role change while the native read was in flight
       // must prevent the response from reaching the browser.
       await withSession(pool,sessionToken,db=>authorize(db,request.product,operation));
+      return result;
+    },
+    /** The owner's changes to a Healthcare Advisors consultation request: its status and notes, or deleting it. */
+    async advisorsCommand(sessionToken,input) {
+      let command;
+      try { command=parseAdvisorCommand(input); } catch { throw new HttpError(400,'Review the change and try again.','invalid_request'); }
+      const capability=await issue(sessionToken,'advisors',command);
+      let result;
+      try { result=await callNativeAdmin(fetchImpl,advisorsCommandEndpoint,'X-CareMetric-Hub-Authorization',capability,command,value=>parseAdvisorCommandResult(value,command),true); }
+      catch (error) {
+        if (error instanceof HttpError && error.status===409) throw new HttpError(409,'This request changed in Advisors since it was loaded. Reload it, then try again.','conflict');
+        if (error instanceof HttpError && error.status===404) throw new HttpError(404,'This request no longer exists in Advisors.','notfound');
+        throw error;
+      }
+      // A logout or revocation while Advisors was answering keeps the answer from the browser.
+      await withSession(pool,sessionToken,db=>authorize(db,'advisors',command));
       return result;
     },
     async command(sessionToken,input) {
