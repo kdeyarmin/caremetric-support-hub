@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { GovernedCourse } from "../imports/governedLearningImport";
 import { courseDraftRequestSchema, type Avatar, type Voice } from "./generationProtocol";
 import { GenerationError, generationFailure, runGeneration } from "./generationClient";
+import { runAuthoring } from "./authoringClient";
 
 type Block = GovernedCourse["blocks"][number];
 const POLL_MS = 30_000;
@@ -14,6 +15,8 @@ const optionalNumber = (value: string) => value.trim() === "" ? undefined : Numb
 export function AiCourseDraftPanel({ onOpen }: { onOpen: (courseId: string) => void }) {
   const [fields, setFields] = useState({ title_hint: "", category: "", source_material: "", desired_module_count: "", desired_duration_minutes: "", notes: "" });
   const [running, setRunning] = useState(false); const [error, setError] = useState(""); const [created, setCreated] = useState<string | null>(null);
+  // A draft CareBase wrote but the Hub has not yet recorded in its catalog: it cannot be preserved or published until it is.
+  const [unregistered, setUnregistered] = useState<{ courseId: string; versionId: string } | null>(null);
   const pending = useRef(false);
   const request = Object.fromEntries(Object.entries({ generation_mode: "course", title_hint: fields.title_hint.trim() || undefined, category: fields.category.trim() || undefined,
     source_material: fields.source_material.trim() ? fields.source_material : undefined, notes: fields.notes.trim() ? fields.notes : undefined,
@@ -21,12 +24,26 @@ export function AiCourseDraftPanel({ onOpen }: { onOpen: (courseId: string) => v
     .filter(([, value]) => value !== undefined));
   const parsed = courseDraftRequestSchema.safeParse(request);
   const set = (patch: Partial<typeof fields>) => { setFields(current => ({ ...current, ...patch })); setCreated(null); };
+  async function register(draft: { courseId: string; versionId: string }) {
+    try { await runAuthoring({ operation: "register_generated", ...draft }); setUnregistered(null); }
+    catch { setUnregistered(draft); }
+    setCreated(draft.courseId);
+  }
   async function draft() {
-    if (pending.current || !parsed.success) return;
+    // One unregistered draft at a time: drafting another would replace its catalog retry, the only way to add it later.
+    if (pending.current || !parsed.success || unregistered) return;
     pending.current = true; setRunning(true); setError(""); setCreated(null);
-    try { setCreated((await runGeneration({ operation: "ai.generateCourse", request: parsed.data }, new AbortController().signal)).courseId); }
+    try {
+      const { courseId, versionId } = await runGeneration({ operation: "ai.generateCourse", request: parsed.data }, new AbortController().signal);
+      await register({ courseId, versionId });
+    }
     catch (caught) { setError(generationFailure(caught, "The draft was not created. Retry with the same inputs; a failed attempt is recorded in the CareBase audit trail.")); }
     finally { pending.current = false; setRunning(false); }
+  }
+  async function retryRegistration() {
+    if (pending.current || !unregistered) return;
+    pending.current = true; setRunning(true);
+    try { await register(unregistered); } finally { pending.current = false; setRunning(false); }
   }
   return <details className="admin-authoring"><summary>Draft a course with AI</summary>
     <form aria-label="Draft a course with AI" onSubmit={event => { event.preventDefault(); void draft(); }}>
@@ -45,7 +62,9 @@ export function AiCourseDraftPanel({ onOpen }: { onOpen: (courseId: string) => v
       {running && <p role="status">Drafting the course. This can take up to about two and a half minutes.</p>}
       {error && <p role="alert">{error}</p>}
       {created && <p role="status">CareBase created the draft. <button type="button" className="button button-secondary button-small" onClick={() => onOpen(created)}>Open the draft</button></p>}
-      <button type="submit" className="button button-primary" disabled={running || !parsed.success}>{error ? "Retry with the same inputs" : "Draft with AI"}</button>
+      {unregistered && !running && <p role="alert">The Hub could not add this draft to its course catalog, so it cannot be reviewed or published from the Hub yet. The draft itself is safe in CareBase. Add it to the catalog before drafting another course.{" "}
+        <button type="button" className="button button-secondary button-small" onClick={() => void retryRegistration()}>Add it to the catalog</button></p>}
+      <button type="submit" className="button button-primary" disabled={running || !parsed.success || unregistered !== null}>{error ? "Retry with the same inputs" : "Draft with AI"}</button>
     </form>
   </details>;
 }

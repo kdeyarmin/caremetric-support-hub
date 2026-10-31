@@ -4,8 +4,10 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import fixture from "../imports/fixtures/governedCourse.json";
 import { validateGovernedCourse } from "../imports/governedLearningImport";
 import { GenerationError, runGeneration } from "./generationClient";
+import { runAuthoring } from "./authoringClient";
 import { AiCourseDraftPanel, AvatarVideoPanel, BlockRegenerationPanel } from "./GenerationPanels";
 vi.mock("./generationClient", async () => ({ ...await vi.importActual<object>("./generationClient"), runGeneration: vi.fn() }));
+vi.mock("./authoringClient", () => ({ runAuthoring: vi.fn() }));
 const id = "ffffffff-0000-0000-0000-000000000001", other = "ffffffff-0000-0000-0000-000000000002";
 const withVideo = (video: object) => validateGovernedCourse({ ...fixture, sourceVersionState: "draft", blocks: fixture.blocks.map(block => block.type === "video" ? { ...block, ...video } : block) });
 // The fixture's video lesson links a video; most cases start from a lesson without one.
@@ -15,7 +17,7 @@ type Op = { operation: string; request: Record<string, unknown> };
 const calls = (name: string) => vi.mocked(runGeneration).mock.calls.map(call => call[0] as Op).filter(op => op.operation === name);
 const options = { avatars: [{ id: "twin", name: "Dr. Kim", gender: null, aiTwin: true, private: true, defaultVoiceId: "calm" }, { id: "stock", name: "Alex", gender: "male", aiTwin: false, private: false, defaultVoiceId: null }],
   voices: [{ id: "calm", name: "Calm", language: "English", gender: null }, { id: "bright", name: "Bright", language: "English", gender: null }] };
-beforeEach(() => { vi.mocked(runGeneration).mockReset(); });
+beforeEach(() => { vi.mocked(runGeneration).mockReset(); vi.mocked(runAuthoring).mockReset().mockResolvedValue({ itemId: id, registered: true } as never); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 it("drafts one global course with AI and opens it", async () => {
   vi.mocked(runGeneration).mockResolvedValueOnce({ courseId: id, versionId: other, generationId: id } as never);
@@ -29,6 +31,28 @@ it("drafts one global course with AI and opens it", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "Open the draft" }));
   expect(onOpen).toHaveBeenCalledWith(id);
   expect(calls("ai.generateCourse")).toEqual([{ operation: "ai.generateCourse", request: { generation_mode: "course", title_hint: "Fire safety for personal care homes", category: "Safety", desired_module_count: 6 } }]);
+  // The draft joins the Hub's catalog, which reviewing and publishing it from the Hub requires.
+  expect(runAuthoring).toHaveBeenCalledWith({ operation: "register_generated", courseId: id, versionId: other });
+});
+it("keeps a drafted course when the catalog step fails, and adds it later without drafting again", async () => {
+  vi.mocked(runGeneration).mockResolvedValueOnce({ courseId: id, versionId: other, generationId: id } as never);
+  vi.mocked(runAuthoring).mockRejectedValueOnce(new Error("unavailable"));
+  render(<AiCourseDraftPanel onOpen={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText("Working title"), { target: { value: "Fire safety" } });
+  fireEvent.click(screen.getByRole("button", { name: "Draft with AI" }));
+  expect((await screen.findByRole("alert")).textContent).toMatch(/could not add this draft to its course catalog/);
+  expect(screen.getByRole("button", { name: "Open the draft" })).not.toBeNull();
+  // Not a drafting failure: nothing offers to draft the same course again.
+  expect(screen.queryByRole("button", { name: "Retry with the same inputs" })).toBeNull();
+  // Another draft would replace this one's catalog retry, so none starts until it is in the catalog.
+  const submit = screen.getByRole("button", { name: "Draft with AI" }) as HTMLButtonElement;
+  expect(submit.disabled).toBe(true);
+  fireEvent.submit(screen.getByRole("form", { name: "Draft a course with AI" }));
+  fireEvent.click(screen.getByRole("button", { name: "Add it to the catalog" }));
+  await vi.waitFor(() => expect(submit.disabled).toBe(false));
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(vi.mocked(runAuthoring).mock.calls).toHaveLength(2);
+  expect(calls("ai.generateCourse")).toHaveLength(1);
 });
 it("shows CareBase's message when drafting is refused and offers the same inputs again", async () => {
   vi.mocked(runGeneration).mockRejectedValueOnce(new GenerationError("forbidden", "AI course generation is currently disabled by the platform administrator."));
