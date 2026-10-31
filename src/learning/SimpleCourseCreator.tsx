@@ -2,11 +2,12 @@ import { useEffect, useState, useSyncExternalStore, type FormEvent } from "react
 import { CheckCircle2, Clock3, LoaderCircle, Sparkles, Video } from "lucide-react";
 import { Link } from "react-router-dom";
 import { config } from "../lib/config";
+import { appSession } from "../lib/appSession";
 import type { GovernedCourse } from "../imports/governedLearningImport";
 import { runAuthoring } from "./authoringClient";
 import { runGeneration } from "./generationClient";
 import type { Avatar, Voice } from "./generationProtocol";
-import { advance, creatorStore, failureMessage, publish, resetCreator, resume } from "./courseCreatorRunner";
+import { advance, bindCreatorUser, creatorStore, failureMessage, publish, resetCreator, resume } from "./courseCreatorRunner";
 import { defaultPresenter, maxDescription, maxSourceMaterial, newCourseJob, type CreationDeps } from "./simpleCourseCreation";
 import "./courseCreator.css";
 
@@ -17,10 +18,16 @@ const liveDeps: CreationDeps = {
   generate: operation => runGeneration(operation, new AbortController().signal),
   newId: () => crypto.randomUUID(),
 };
+/** Who is signed in, so each person's saved course stays theirs. */
+export interface CreatorIdentity { current: () => Promise<string | null>; subscribe: (listener: () => void) => () => void }
+const liveIdentity: CreatorIdentity = {
+  current: async () => { try { const session: { authenticated: boolean; userId?: string } = await appSession.current(); return session.authenticated && session.userId ? session.userId : null; } catch { return null; } },
+  subscribe: listener => appSession.subscribe(listener),
+};
 const lessonKind: Record<GovernedCourse["blocks"][number]["type"], string> = { text: "Reading", video: "Video", pdf: "Document", scorm: "Package", quiz: "Quiz", attestation: "Sign-off" };
 
 /** Title and description in; a finished CareBase course with HeyGen videos out, published when the owner clicks Publish. */
-export function SimpleCourseCreator({ deps = liveDeps }: { deps?: CreationDeps }) {
+export function SimpleCourseCreator({ deps = liveDeps, identity = liveIdentity }: { deps?: CreationDeps; identity?: CreatorIdentity }) {
   const { job, lessons, preview, busy, status, error } = useSyncExternalStore(creatorStore.subscribe, creatorStore.snapshot);
   const [title, setTitle] = useState(""); const [description, setDescription] = useState(""); const [sourceMaterial, setSourceMaterial] = useState("");
   const [presenters, setPresenters] = useState<{ avatars: Avatar[]; voices: Voice[] } | null>(null);
@@ -28,15 +35,18 @@ export function SimpleCourseCreator({ deps = liveDeps }: { deps?: CreationDeps }
 
   useEffect(() => {
     if (config.demoMode) return;
-    resume(deps);
     let active = true;
+    // Resumes only the signed-in person's own job, and drops it from the screen when they sign out.
+    const bind = () => void identity.current().then(userId => { if (!active) return; bindCreatorUser(userId); if (userId) resume(deps); });
+    bind();
+    const unsubscribe = identity.subscribe(bind);
     deps.generate({ operation: "video.options", request: {} }).then(options => {
       if (!active) return;
       let remembered: string | null = null; try { remembered = window.localStorage.getItem(presenterKey); } catch { /* No saved presenter. */ }
       setPresenters(options); setAvatarId(defaultPresenter(options.avatars, options.voices, remembered)?.avatarId ?? "");
     }).catch(caught => { if (active) setOptionsError(failureMessage(caught)); });
-    return () => { active = false; };
-  }, [deps]);
+    return () => { active = false; unsubscribe(); };
+  }, [deps, identity]);
 
   function start(event: FormEvent) {
     event.preventDefault();
@@ -100,7 +110,10 @@ export function SimpleCourseCreator({ deps = liveDeps }: { deps?: CreationDeps }
             {block.type === "video" && (lesson?.attached ? <> · <Video size={13} aria-hidden="true" /> video ready</> : " · no video")}
             {block.quiz ? ` · ${block.quiz.questions.length} question${block.quiz.questions.length === 1 ? "" : "s"}` : ""}</span></summary>
             {text && <p className="manual-body">{text}</p>}
-            {block.quiz && <ol>{block.quiz.questions.map(question => <li key={question.id}>{question.prompt}</li>)}</ol>}
+            {block.quiz && <ol className="course-creator-quiz">{block.quiz.questions.map(question => <li key={question.id}>{question.prompt}
+              <ul>{[...question.options].sort((a, b) => a.sortOrder - b.sortOrder).map(option => <li key={option.id} className={option.correct ? "correct" : undefined}>
+                {option.text}{option.correct && <strong> (correct answer)</strong>}</li>)}</ul>
+              {question.explanation && <p className="muted">Why: {question.explanation}</p>}</li>)}</ol>}
           </details></li>;
         })}</ol>
         <div className="button-row"><button type="button" className="button button-primary" disabled={busy} onClick={() => void publish(deps)}>
@@ -112,7 +125,10 @@ export function SimpleCourseCreator({ deps = liveDeps }: { deps?: CreationDeps }
         <div><strong>{job.title} is published.</strong><p>Learners can take it in CareBase now.</p></div></div>}
 
       {error && <p className="form-message form-error" role="alert">{error}</p>}
-      {error && job && job.stage !== "published" && !busy && <div className="button-row"><button type="button" className="button button-primary" onClick={() => void advance(deps, job)}>Try again</button></div>}
+      {error && job && job.stage !== "published" && !busy && <div className="button-row">
+        {job.stage === "drafting" && job.draftingSince ? <><Link className="button button-primary" to={fullEditor}>Check the full course editor</Link>
+          <button type="button" className="button button-secondary" onClick={() => void advance(deps, job)}>It isn't there: write it again</button></>
+          : <button type="button" className="button button-primary" onClick={() => void advance(deps, job)}>Try again</button>}</div>}
       {job && !busy && <div className="button-row course-creator-reset"><button type="button" className="text-link" onClick={() => { resetCreator(); setTitle(""); setDescription(""); setSourceMaterial(""); }}>
         {job.stage === "published" ? "Create another course" : "Start a different course"}</button>
         {job.stage !== "published" && job.courseId && <span className="muted">The draft so far stays in the full course editor.</span>}</div>}

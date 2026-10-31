@@ -34,6 +34,7 @@ export function fakeCareBase({ aiReviewRequired = true, renderImmediately = true
       const course = withVideoLessons ? payload : { ...payload, blocks: payload.blocks.filter(block => block.type !== "video") };
       return { courseId, versionId, sourceRevision: revision(head), payload: JSON.stringify(course), headRevision: null, snapshotId: null };
     }
+    if (op.operation === "register_generated") return { itemId: newId(), registered: !calls.slice(0, -1).includes("register_generated") };
     if (op.operation === "preserve_source") return { snapshotId: newId(), sourceRevision: op.sourceRevision, headRevision: revision(head), sequence: head, replayed: false };
     if (op.operation === "preview") {
       const before = { courseId, versionId, sourceRevision: op.parameters.sourceRevision, status: "draft", title: fixture.version.title, versionNumber: 2, aiReviewRequired: needsReview, currentVersionId: null };

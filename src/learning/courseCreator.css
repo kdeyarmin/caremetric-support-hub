@@ -24,6 +24,8 @@
 .course-creator-lessons { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
 .course-creator-lessons summary { cursor: pointer; font-size: 14px; }
 .course-creator-lessons summary .muted { display: inline; }
+.course-creator-quiz ul { margin: 4px 0; padding-left: 18px; list-style: disc; }
+.course-creator-quiz li.correct { color: #166534; }
 .course-creator-lessons details > :not(summary) { margin: 8px 0 4px; font-size: 14px; }
 .course-creator-done { padding: 14px 16px; display: flex; align-items: flex-start; gap: 10px; border: 1px solid #bfe0c2; border-radius: 10px; background: #effaf0; color: #2f5d33; }
 .course-creator-done p { margin: 3px 0 0; }

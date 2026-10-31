@@ -3,7 +3,7 @@ import { validateGovernedCourse } from "../imports/governedLearningImport";
 import { GenerationError } from "./generationClient";
 import type { GenerationOperation } from "./generationProtocol";
 import { courseId, draftPayload, fakeCareBase, firstVideo, newId, revision, secondVideoId, versionId } from "./testFixtures/courseCreator";
-import { approveAndPublish, checkVideos, defaultPresenter, draftCourse, loadCourse, newCourseJob, submitVideos, videoInstruction, videoLessons, videosSettled,
+import { approveAndPublish, checkVideos, defaultPresenter, draftCourse, loadCourse, newCourseJob, registerCourse, submitVideos, videoInstruction, videoLessons, videosSettled,
   type CreationDeps } from "./simpleCourseCreation";
 
 function deps(generate: (op: GenerationOperation) => unknown, author: CreationDeps["author"] = vi.fn()): CreationDeps {
@@ -81,12 +81,30 @@ describe("one-step course creation", () => {
     expect(rerender.mock.calls[0][0]).not.toMatchObject({ request: { request_id: first.requestId } });
   });
 
+  it("stops checking on videos when the sign-in or permission fails, instead of waiting forever", async () => {
+    const job = { ...newCourseJob("T", "D", "a", "v"), courseId, versionId, stage: "videos" as const, videos: { [firstVideo.id]: { requestId: newId(), status: "processing" as const } } };
+    await expect(checkVideos(deps(() => { throw new GenerationError("unauthenticated", null); }), job)).rejects.toMatchObject({ code: "unauthenticated" });
+    await expect(checkVideos(deps(() => { throw new GenerationError("forbidden", null); }), job)).rejects.toMatchObject({ code: "forbidden" });
+    // A passing problem is checked again next round.
+    expect((await checkVideos(deps(() => { throw new GenerationError("timeout", null); }), job)).videos[firstVideo.id].status).toBe("processing");
+  });
+
+  it("records the AI draft in the Hub's catalog once, which publishing it requires", async () => {
+    const carebase = fakeCareBase();
+    const job = await registerCourse(deps(vi.fn(), carebase.author), { ...newCourseJob("T", "D", "a", "v"), courseId, versionId, stage: "videos" });
+    expect(carebase.author).toHaveBeenCalledWith({ operation: "register_generated", courseId, versionId });
+    expect(job.registered).toBe(true);
+    await registerCourse(deps(vi.fn(), carebase.author), job);
+    expect(carebase.calls.filter(call => call === "register_generated")).toHaveLength(1);
+  });
+
   it("approves the AI content and publishes only after the owner clicks Publish, against the exact material they saw", async () => {
     const carebase = fakeCareBase();
     const job = { ...newCourseJob("T", "D", "a", "v"), courseId, versionId, stage: "ready" as const };
     const published = await approveAndPublish(deps(vi.fn(), carebase.author), job, revision(1));
     expect(published).toMatchObject({ status: "published", action: "learning.publishVersion" });
-    expect(carebase.calls).toEqual(["inspect", "source", "preserve_source", "preview learning.reviewDraft", "apply",
+    // A job saved before it was recorded in the catalog is recorded first.
+    expect(carebase.calls).toEqual(["register_generated", "inspect", "source", "preserve_source", "preview learning.reviewDraft", "apply",
       "inspect", "source", "preserve_source", "preview learning.publishVersion", "apply"]);
   });
 

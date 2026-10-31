@@ -1,6 +1,6 @@
 import { withSession, HttpError } from './sms-auth.mjs';
 import { callNativeAdmin } from './admin-transport.mjs';
-import { authoringOperationSchema, authoringPreviewSchema, projectAuthoringResult, verifyAuthoringOutcome, governedStageResultSchema } from '../src/learning/authoringProtocol.ts';
+import { authoringOperationSchema, authoringPreviewSchema, projectAuthoringResult, verifyAuthoringOutcome, governedStageResultSchema, generatedRegistrationSchema } from '../src/learning/authoringProtocol.ts';
 
 export function learningAuthoring({pool,issue,fetchImpl=fetch}) {
   return async (sessionToken,input,requestSignal) => {
@@ -24,6 +24,12 @@ export function learningAuthoring({pool,issue,fetchImpl=fetch}) {
     const headFor=(rows,courseId)=>rows.find(row=>row.sourceCourseId.toLowerCase()===courseId.toLowerCase());
     const run=async()=>{
       if(op.operation==='inspect') return native(op);
+      if(op.operation==='register_generated') {
+        // The material comes from CareBase, never the browser; SQL accepts only a fresh AI draft of this course.
+        const source=await native({operation:'source',courseId:op.courseId,versionId:op.versionId});
+        return local(async db=>{await db.query('reset role');return generatedRegistrationSchema.parse((await db.query('select private.register_generated_course($1,$2,$3,$4) as value',
+          [op.courseId,op.versionId,source.payload,source.sourceRevision])).rows[0].value);});
+      }
       if(op.operation==='source' || op.operation==='preserve_source') {
         const source=await native({operation:'source',courseId:op.courseId,versionId:op.versionId});
         if(op.operation==='source') {

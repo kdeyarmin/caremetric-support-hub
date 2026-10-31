@@ -1,13 +1,13 @@
-import { authoringInspectSchema, authoringPreviewSchema, authoringSourceViewSchema, governedStageResultSchema, verifyAuthoringOutcome,
+import { authoringInspectSchema, authoringPreviewSchema, authoringSourceViewSchema, generatedRegistrationSchema, governedStageResultSchema, verifyAuthoringOutcome,
   type AuthoringOperation, type AuthoringResult } from "./authoringProtocol";
 import { validateGovernedCourse, type GovernedCourse } from "../imports/governedLearningImport";
 import type { Avatar, GenerationOperation, GenerationResult, Voice } from "./generationProtocol";
-import { generationFailure } from "./generationClient";
+import { GenerationError, generationFailure } from "./generationClient";
 
 /**
  * One-step course creation: a title and a description become a CareBase course with a HeyGen video for every video
  * lesson, ready for the owner to look over and publish with one click. Every step uses the existing governed CareBase
- * commands: AI drafting, avatar video, source preservation, AI review and publication.
+ * commands: AI drafting, catalog registration, avatar video, source preservation, AI review and publication.
  */
 export interface CreationDeps {
   author: (operation: AuthoringOperation) => Promise<unknown>;
@@ -25,6 +25,8 @@ export interface CourseJob {
   /** Policy or reference text the AI must treat as authoritative, if the owner supplied any. */
   sourceMaterial?: string;
   courseId?: string; versionId?: string;
+  /** The AI draft is in the Hub's catalog, which source preservation (and so publication) requires. */
+  registered?: boolean;
   videos: Record<string, VideoJob>;
   stage: "drafting" | "videos" | "ready" | "published";
   /** When the AI draft was requested; the AI call cannot be repeated safely while it may still be running. */
@@ -68,6 +70,13 @@ export async function draftCourse(deps: CreationDeps, job: CourseJob): Promise<C
   const created = await deps.generate({ operation: "ai.generateCourse", request: { generation_mode: "course", title_hint: job.title, notes,
     ...(job.sourceMaterial?.trim() ? { source_material: job.sourceMaterial } : {}) } });
   return { ...job, courseId: created.courseId, versionId: created.versionId, stage: "videos" };
+}
+
+/** Records the AI draft in the Hub's catalog, so its material can be preserved, reviewed and published. Safe to repeat. */
+export async function registerCourse(deps: CreationDeps, job: CourseJob): Promise<CourseJob> {
+  if (job.registered) return job;
+  generatedRegistrationSchema.parse(await deps.author({ operation: "register_generated", courseId: job.courseId!, versionId: job.versionId! }));
+  return { ...job, registered: true };
 }
 
 export async function loadCourse(deps: CreationDeps, job: CourseJob) {
@@ -118,7 +127,10 @@ export async function checkVideos(deps: CreationDeps, job: CourseJob): Promise<C
       const status = await deps.generate({ operation: "video.status", request: { course_block_id: blockId } });
       if (status.status === "completed") videos[blockId] = { ...video, status: "completed" };
       else if (status.status === "failed") videos[blockId] = { ...video, status: "failed", renderFailed: true, error: status.error ?? "HeyGen could not make this video." };
-    } catch { /* CareBase also finishes renders on its own schedule; check again next round. */ }
+    } catch (caught) {
+      // A sign-in or permission problem will not fix itself: stop and say so. Anything else, check again next round.
+      if (caught instanceof GenerationError && ["unauthenticated", "forbidden", "unconfigured"].includes(caught.code)) throw caught;
+    }
   }
   return { ...job, videos };
 }
@@ -150,6 +162,7 @@ async function command(deps: CreationDeps, job: CourseJob, action: "learning.rev
  * if the material changed since the owner looked at it.
  */
 export async function approveAndPublish(deps: CreationDeps, job: CourseJob, reviewedRevision: string): Promise<AuthoringResult> {
+  await registerCourse(deps, job);
   let state = await preserveCurrent(deps, job);
   if (state.sourceRevision !== reviewedRevision) throw new CreationStopped("The course changed since you looked at it. Look it over again, then publish.");
   if (state.version.aiReviewRequired) {

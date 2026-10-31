@@ -55,7 +55,10 @@ export const nativeAuthoringOperationSchema = z.union([
 export const authoringOperationSchema = z.union([nativeAuthoringOperationSchema,
   z.strictObject({ operation: z.literal("preserve_source"), courseId: id, versionId: id, sourceRevision: sha,
     expectedHeadRevision: sha.nullable(), reviewed: z.literal(true) }),
+  // Records a new AI-written CareBase course in the central catalog; the server reads its material from CareBase.
+  z.strictObject({ operation: z.literal("register_generated"), courseId: id, versionId: id }),
 ]);
+export const generatedRegistrationSchema = z.strictObject({ itemId: id, registered: z.boolean() });
 export type AuthoringOperation = z.infer<typeof authoringOperationSchema>;
 export type NativeAuthoringOperation = z.infer<typeof nativeAuthoringOperationSchema>;
 export const versionStateSchema = z.object({ courseId: id.optional(), versionId: id.optional(), currentVersionId: id.nullable().optional(),

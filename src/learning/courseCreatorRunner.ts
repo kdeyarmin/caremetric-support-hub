@@ -1,7 +1,7 @@
 import { AdminApiError } from "../admin/transport";
 import type { GovernedCourse } from "../imports/governedLearningImport";
 import { GenerationError, generationFailure } from "./generationClient";
-import { approveAndPublish, checkVideos, CreationStopped, draftCourse, loadCourse, submitVideos, videoLessons, videosSettled,
+import { approveAndPublish, checkVideos, CreationStopped, draftCourse, loadCourse, registerCourse, submitVideos, videoLessons, videosSettled,
   type CourseJob, type CreationDeps, type VideoLesson } from "./simpleCourseCreation";
 
 /**
@@ -12,16 +12,20 @@ export interface CreatorView {
   job: CourseJob | null; lessons: VideoLesson[]; preview: { course: GovernedCourse; revision: string } | null;
   busy: boolean; status: string; error: string;
 }
-const jobKey = "caremetric.courseCreator.job";
+/** Each signed-in person has their own saved job; with nobody signed in there is none. */
+export const jobKey = (userId: string) => `caremetric.courseCreator.job:${userId}`;
 export const pollMs = 30_000;
-// The AI call has no request ID, so a draft that was in flight when the page closed cannot be resumed safely.
-const draftingWindowMs = 4 * 60_000;
+// The AI call has no request ID: once a draft was requested, only the owner can tell whether CareBase wrote it.
+export const interruptedDraft = "The AI may already have written this course before it could confirm. Check the full course editor first: if the course is there, open it there. Write it again only if it is not, so you don't get two copies.";
 
+let user: string | null = null;
 function readJob(): CourseJob | null {
-  try { const value = window.localStorage.getItem(jobKey); return value ? JSON.parse(value) as CourseJob : null; } catch { return null; }
+  if (!user) return null;
+  try { const value = window.localStorage.getItem(jobKey(user)); return value ? JSON.parse(value) as CourseJob : null; } catch { return null; }
 }
 function writeJob(job: CourseJob | null) {
-  try { if (job) window.localStorage.setItem(jobKey, JSON.stringify(job)); else window.localStorage.removeItem(jobKey); } catch { /* The job still runs while the Hub stays open. */ }
+  if (!user) return;
+  try { if (job) window.localStorage.setItem(jobKey(user), JSON.stringify(job)); else window.localStorage.removeItem(jobKey(user)); } catch { /* The job still runs while the Hub stays open. */ }
 }
 const idle = (): CreatorView => ({ job: readJob(), lessons: [], preview: null, busy: false, status: "", error: "" });
 let view: CreatorView = idle();
@@ -36,6 +40,18 @@ export const creatorStore = {
   subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
   snapshot: () => view,
 };
+
+/**
+ * Ties the creator to the signed-in person. When that changes (signing out, or someone else signing in), work in
+ * progress stops and the last person's job and course preview leave the screen; each person gets back only their own.
+ */
+export function bindCreatorUser(userId: string | null) {
+  if (userId === user) return;
+  run += 1;
+  user = userId;
+  view = idle();
+  for (const listener of listeners) listener();
+}
 
 export function failureMessage(caught: unknown) {
   if (caught instanceof CreationStopped) return caught.message;
@@ -54,8 +70,14 @@ export async function advance(deps: CreationDeps, start: CourseJob, wait = (ms: 
   try {
     let current = start;
     if (current.stage === "drafting") {
-      update({ status: "The AI is writing your course. This takes about two and a half minutes.", job: { ...current, draftingSince: Date.now() } });
+      current = { ...current, draftingSince: Date.now() };
+      update({ status: "The AI is writing your course. This takes about two and a half minutes.", job: current });
       current = await draftCourse(deps, current);
+      if (!live()) return;
+      update({ job: current });
+    }
+    if (current.stage !== "drafting" && !current.registered) {
+      current = await registerCourse(deps, current);
       if (!live()) return;
       update({ job: current });
     }
@@ -78,20 +100,18 @@ export async function advance(deps: CreationDeps, start: CourseJob, wait = (ms: 
     }
     update({ status: "" });
   } catch (caught) {
-    if (live()) update({ status: "", error: failureMessage(caught) });
+    // A failed AI draft may still have been written; only the owner can check, so never suggest a blind retry.
+    if (live()) update({ status: "", error: view.job?.stage === "drafting" && view.job.draftingSince ? interruptedDraft : failureMessage(caught) });
   } finally {
     if (live()) update({ busy: false });
   }
 }
 
-/** Picks up a saved job when the page opens, unless an AI draft was in flight when the page closed. */
+/** Picks up a saved job when the page opens. An AI draft that was requested but never confirmed waits for the owner. */
 export function resume(deps: CreationDeps) {
   const job = view.job;
   if (!job || view.busy || job.stage === "published" || view.error) return;
-  if (job.stage === "drafting" && job.draftingSince && Date.now() - job.draftingSince < draftingWindowMs) {
-    update({ error: "The AI may still be writing this course from before the page closed. Give it a few minutes and check the full course editor before trying again, so you don't get two copies." });
-    return;
-  }
+  if (job.stage === "drafting" && job.draftingSince) { update({ error: interruptedDraft }); return; }
   void advance(deps, job);
 }
 
@@ -117,4 +137,4 @@ export function resetCreator() {
 }
 
 /** Test support: rereads saved state as a fresh page load would. */
-export function reloadCreatorForTest() { run += 1; view = idle(); }
+export function reloadCreatorForTest() { run += 1; user = null; view = idle(); }
