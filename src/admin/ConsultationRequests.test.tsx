@@ -17,6 +17,7 @@ it("updates a request's status and notes in Advisors, naming what the owner saw"
   render(<ConsultationRequests change={change} />);
   const request = await row();
   expect((within(request).getByRole("link", { name: "alex@agency.test" }) as HTMLAnchorElement).href).toBe("mailto:alex@agency.test");
+  expect((within(request).getByRole("link", { name: "(814) 555-0100" }) as HTMLAnchorElement).href).toBe("tel:8145550100");
   const save = within(request).getByRole("button", { name: "Save" }) as HTMLButtonElement;
   expect(save.disabled).toBe(true);
   fireEvent.change(within(request).getByLabelText("Status"), { target: { value: "in-progress" } });

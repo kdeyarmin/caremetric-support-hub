@@ -105,7 +105,8 @@ export function parseAdvisorInquiry(value: unknown): AdvisorInquiry {
   const createdAt = timestamp(row.createdAt);
   const status = string(row.status, 20);
   if (createdAt === null || !advisorInquiryStatuses.includes(status as AdvisorInquiry["status"])) throw new Error("Invalid consultation request");
-  const phone = string(row.phone, 40);
+  // Advisors sends "" for no phone; null is this projection's own value, so a projected request checks again unchanged.
+  const phone = row.phone === null ? "" : string(row.phone, 40);
   return { id, createdAt, name: string(row.name, 100), email: string(row.email, 200), organization: string(row.organization, 160), phone: phone.trim() ? phone : null,
     sector: string(row.sector, 80), service: string(row.service, 80), message: string(row.message, 1800), status: status as AdvisorInquiry["status"], notes: string(row.notes, 3000) };
 }

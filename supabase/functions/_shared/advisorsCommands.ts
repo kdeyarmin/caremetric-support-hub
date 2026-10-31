@@ -47,7 +47,12 @@ export function parseAdvisorCommandResult(input: unknown, command: AdvisorComman
   const envelope = record(input);
   if (envelope.contractVersion !== 1 || envelope.product !== "advisors" || envelope.operation !== command.operation
     || typeof envelope.generatedAt !== "string" || !Number.isFinite(Date.parse(envelope.generatedAt))) throw invalid();
-  const data = record(envelope.data);
+  return parseAdvisorChangeResult(envelope.data, command);
+}
+
+/** Checks a reported change against the one sent: Advisors' envelope data on the server, the Hub route's answer in the browser. */
+export function parseAdvisorChangeResult(input: unknown, command: AdvisorCommand): AdvisorCommandResult {
+  const data = record(input);
   if (command.operation === "inquiries.delete") {
     if (Object.keys(data).length !== 2 || data.id !== command.id || data.deleted !== true) throw invalid();
     return { id: command.id, deleted: true };

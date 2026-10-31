@@ -95,11 +95,12 @@ export function Communications({ products, actor, client = communicationsClient,
 
   return <div className="communications">
     <div className="page-heading"><div><span className="eyebrow">Every channel · every application</span><h1>Communications</h1>
-      <p>Customer service and technical support for CareBase, Breathe, and Intel, in one queue.</p></div>
+      <p>Customer service and technical support for CareBase, Breathe, and Intel, and Healthcare Advisors consultation requests, in one queue.</p></div>
       <div className="communications-actions">
         {admin && <><button className="button button-secondary" type="button" disabled={busy} onClick={() => void sync("breathe.phone")}><Phone size={15} aria-hidden="true" />Import phone-line messages</button>
           {resume["breathe.phone"] !== undefined && <button className="button button-secondary" type="button" disabled={busy} onClick={() => void sync("breathe.phone", resume["breathe.phone"])}>Import the next phone-line batch</button>}
-        </>}
+          <button className="button button-secondary" type="button" disabled={busy} onClick={() => void sync("advisors.web")}><Globe2 size={15} aria-hidden="true" />Import Advisors requests</button>
+          {resume["advisors.web"] !== undefined && <button className="button button-secondary" type="button" disabled={busy} onClick={() => void sync("advisors.web", resume["advisors.web"])}>Import the next Advisors batch</button>}</>}
         <button className="button button-secondary" type="button" onClick={refresh}><RefreshCw size={15} aria-hidden="true" />Refresh</button>
       </div></div>
     <ChannelStrip status={status} />

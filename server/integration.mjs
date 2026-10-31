@@ -5,6 +5,7 @@ import pg from 'pg';
 import { smsAuth,sessionCookie,digest,transaction,withSession,token } from './sms-auth.mjs';
 import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
+import { parseAdvisorChangeResult } from '../supabase/functions/_shared/advisorsCommands.ts';
 import { appServer } from './http.mjs';
 const databaseUrl=process.env.HUB_TEST_DATABASE_URL;
 const local=new URL(databaseUrl);
@@ -173,6 +174,13 @@ try {
   assert.equal(advisorsCommands.length,3,'malformed changes and other people never reach Advisors');
   assert.equal((await call('admin/advisors-command',advisorUpdate,{Origin:'https://evil.test'})).status,403);
   assert.equal(advisorsCommands.length,3);
+  // Through the browser route: the largest permitted change (two 3,000-character notes, 3 bytes per character) fits,
+  // and its answer is exactly what the browser checks.
+  const largestChange={...advisorUpdate,notes:'\u20ac'.repeat(3000),expected:{status:'new',notes:'\u2014'.repeat(3000)}};
+  const routed=await call('admin/advisors-command',largestChange);
+  assert.equal(routed.status,200);
+  assert.deepEqual(parseAdvisorChangeResult(routed.body,largestChange),routed.body);
+  assert.equal(advisorsCommands.length,4);
   assert.equal((await call('admin/command',{product:'carebase',...commandOperation},{Origin:'https://evil.test'})).status,403);
   assert.equal(nativeCalls.length,0);
   const httpPreview=await call('admin/command',{product:'carebase',...commandOperation});

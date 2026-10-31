@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseAdvisorCommand, parseAdvisorCommandResult, type AdvisorCommand } from "../../supabase/functions/_shared/advisorsCommands";
+import { parseAdvisorChangeResult, parseAdvisorCommand, parseAdvisorCommandResult, type AdvisorCommand } from "../../supabase/functions/_shared/advisorsCommands";
 
 const update: AdvisorCommand = { operation: "inquiries.update", id: "CM-00000000000A", status: "in-progress", notes: "Called back on Tuesday.\nSending a proposal.", expected: { status: "new", notes: "" } };
 const remove: AdvisorCommand = { operation: "inquiries.delete", id: "CM-00000000000B", expected: { status: "closed", notes: "Done." } };
@@ -33,6 +33,14 @@ describe("Healthcare Advisors changes from the Hub", () => {
     expect(() => parseAdvisorCommandResult(envelope("inquiries.update", { item: { ...item, id: "CM-00000000000C" } }), update)).toThrow();
     expect(() => parseAdvisorCommandResult({ ...envelope("inquiries.update", { item }), product: "carebase" }, update)).toThrow();
     expect(() => parseAdvisorCommandResult(envelope("inquiries.delete", { item }), update)).toThrow();
+  });
+
+  it("lets the browser check exactly the answer the Hub route returns", () => {
+    for (const [command, data] of [[update, { item }], [remove, { id: "CM-00000000000B", deleted: true }]] as const) {
+      const routed = parseAdvisorCommandResult(envelope(command.operation, data), command);
+      expect(parseAdvisorChangeResult(routed, command)).toEqual(routed);
+    }
+    expect(() => parseAdvisorChangeResult(envelope("inquiries.update", { item }), update)).toThrow();
   });
 
   it("confirms a delete only for the request that was named", () => {
