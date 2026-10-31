@@ -58,8 +58,11 @@ function Status({ done, yes = "Done", no = "Still needed" }: { done: boolean; ye
 }
 
 function Figure<T>({ icon: Icon, tone, label, state, value, detail }: { icon: typeof Inbox; tone: string; label: string; state: AdminReadState<T>; value: (data: T) => string; detail: (data: T) => string }) {
+  const figure = state.status === "ready" ? value(state.data) : state.status === "loading" ? "…" : "Unavailable";
+  // A missing figure reads as a status, smaller than a real number, so it fits the card.
+  const placeholder = figure === "…" || figure === "Unavailable";
   return <article className={`metric-card ${tone}`}><span className="metric-icon"><Icon /></span><div><p>{label}</p>
-    <strong>{state.status === "ready" ? value(state.data) : state.status === "loading" ? "…" : "Unavailable"}</strong>
+    <strong className={placeholder ? "metric-placeholder" : undefined}>{figure}</strong>
     <small>{state.status === "ready" ? detail(state.data) : state.status === "loading" ? "Loading live figures" : "Could not be loaded · never estimated"}</small></div></article>;
 }
 
