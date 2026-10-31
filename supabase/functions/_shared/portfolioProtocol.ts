@@ -97,7 +97,8 @@ function user(value: unknown, product: PortfolioProduct): AdminDirectoryUser {
   if (product === "breathe" && !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(userId)) throw new Error("Invalid native identity");
   return { id: userId, displayName: nullableString(row.displayName), email: nullableString(row.email, 500), role: string(row.role, 100), status: string(row.status, 100), createdAt: timestamp(row.createdAt) };
 }
-function inquiry(value: unknown): AdvisorInquiry {
+/** One consultation request, validated field by field. */
+export function parseAdvisorInquiry(value: unknown): AdvisorInquiry {
   const row = object(value);
   const id = string(row.id, 15);
   if (!/^CM-[A-F0-9]{12}$/.test(id)) throw new Error("Invalid consultation reference");
@@ -147,7 +148,7 @@ export function parsePortfolioEnvelope(input: unknown, request: PortfolioRequest
     });
   } else if (operation.operation === "inquiries.list") {
     if (product !== "advisors") throw new Error("Unsupported consultation inbox source");
-    data = page(row, operation, value => inquiry(value));
+    data = page(row, operation, value => parseAdvisorInquiry(value));
   } else if (operation.operation === "overview" && product === "advisors") {
     if (row.organizationCount !== null || row.activeUserCount !== null || row.subscriptionCount !== undefined) throw new Error("Advisors reports no organizations, accounts or subscriptions");
     const inquiryCount = count(row.inquiryCount), openInquiryCount = count(row.openInquiryCount);

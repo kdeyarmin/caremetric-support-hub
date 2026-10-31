@@ -150,7 +150,8 @@ describe("portfolio rollup loading", () => {
     expect(result.carebase).toEqual({ state: "ready", data: { source: "hub", subscriptionCount: 2, statusCounts: [{ status: "trialing", count: 1 }, { status: "active", count: 1 }], mrrCents: 39800 } });
     expect(result.intel).toEqual({ state: "ready", data: { source: "hub", subscriptionCount: 1, statusCounts: [{ status: "active", count: 1 }], mrrCents: 58000 } });
     expect(result.breathe?.state === "ready" && result.breathe.data.mrrCents).toBe(0);
-    expect(result.advisors).toBeUndefined();
+    // Advisors is a consulting practice: billing is not advertised, never zero.
+    expect(result.advisors).toEqual({ state: "not-advertised" });
     expect(result.pennsync).toBeUndefined();
   });
 
@@ -158,7 +159,8 @@ describe("portfolio rollup loading", () => {
     const portfolio = client({ capabilities: vi.fn<PortfolioClient["capabilities"]>(async () => ({ apiVersion: 1, sourceRevision: null, operations: [] })) });
     const apps = await loadPortfolioRollup(portfolio, new AbortController().signal, async () => { throw new Error("offline"); });
     expect(apps.filter(app => !["advisors", "pennsync"].includes(app.product)).every(app => app.billing.state === "unavailable")).toBe(true);
-    expect(apps.map(app => app.product)).toEqual(["carebase", "breathe", "intel"]);
+    expect(apps.map(app => app.product)).toEqual(["carebase", "breathe", "intel", "advisors"]);
+    expect(apps.find(app => app.product === "advisors")?.billing.state).toBe("not-advertised");
     expect(buildPortfolioRollup(apps).subscriptionTotal).toBeNull();
   });
 });

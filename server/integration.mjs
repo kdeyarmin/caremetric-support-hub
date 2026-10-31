@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { smsAuth,sessionCookie,digest,transaction,withSession } from './sms-auth.mjs';
+import { smsAuth,sessionCookie,digest,transaction,withSession,token } from './sms-auth.mjs';
 import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
 import { appServer } from './http.mjs';
@@ -23,8 +23,24 @@ const auth=smsAuth({pool,provider}), api=gateway(pool);
 const nativeCalls=[];
 const intelCalls=[];
 const advisorsCalls=[];
+const advisorsCommands=[];
 const nativeCommandId=randomUUID();
 const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(url,options)=>{
+  if(url==='https://caremetricadvisors.com/api/hub/admin-command') {
+    const command=JSON.parse(options.body);
+    assert.equal(options.redirect,'error');
+    assert.equal(Object.keys(options.headers).length,2);
+    const ticket=options.headers['X-CareMetric-Hub-Authorization'].slice(7);
+    const authority=await caps.consume(ticket,'advisors');
+    assert.equal(authority.user_id,editor);assert.equal(authority.role,'platform_admin');assert.equal(authority.method,'sms');
+    assert.deepEqual(authority.operation,command,'authority covers exactly this change');await assert.rejects(caps.consume(ticket,'advisors'));
+    advisorsCommands.push(command);
+    // Advisors refuses a change whose snapshot no longer matches; 'stale' stands in for an edit made in its /admin inbox.
+    if(command.expected.notes==='stale') return new Response('{"error":"changed"}',{status:409});
+    const data=command.operation==='inquiries.delete'?{id:command.id,deleted:true}
+      :{item:{id:command.id,createdAt:new Date().toISOString(),name:'Synthetic requester',email:'requester@test.invalid',organization:'Synthetic agency',phone:'',sector:'Home Health',service:'strategy',message:'Synthetic consultation request.',status:command.status,notes:command.notes}};
+    return Response.json({contractVersion:1,product:'advisors',operation:command.operation,generatedAt:new Date().toISOString(),data});
+  }
   if(url==='https://caremetricadvisors.com/api/hub/admin-read') {
     const operation=JSON.parse(options.body);
     assert.equal(options.redirect,'error');
@@ -134,10 +150,29 @@ try {
   const advisorsCapability='cmh_'+'v'.repeat(43);
   await admin.query("insert into private.app_delegations(token_hash,session_id,audience,payload,expires_at) values($1,$2,'advisors','{\"operation\":\"overview\"}',now()+interval '30 seconds')",[digest(advisorsCapability),session]);
   for(const audience of ['intel','breathe','carebase','media'])await assert.rejects(caps.consume(advisorsCapability,audience));
-  await assert.rejects(caps.consume(advisorsCapability,'advisors'),{status:403});
+  assert.deepEqual(await caps.consume(advisorsCapability,'advisors'),{user_id:editor,role:'platform_admin',method:'sms',operation:{operation:'overview'}});
   await assert.rejects(caps.consume(advisorsCapability,'advisors'));
-  await assert.rejects(caps.admin(editorToken,{product:'advisors',operation:'overview'}),{status:503});
-  assert.equal(advisorsCalls.length,0);
+  assert.deepEqual((await caps.admin(editorToken,{product:'advisors',operation:'overview'})).data,{organizationCount:null,activeUserCount:null,inquiryCount:3,openInquiryCount:1});
+  const advisorsPage=await caps.admin(editorToken,{product:'advisors',operation:'inquiries.list',limit:20,offset:0});
+  assert.equal(advisorsPage.data.items[0].form_digest,undefined,'unreviewed Advisors fields never reach the browser');
+  assert.equal(advisorsPage.data.items[0].phone,null);
+  await assert.rejects(caps.admin(editorToken,{product:'advisors',operation:'users.list'}),'Advisors exposes only its consultation inbox');
+  await assert.rejects(caps.admin(editorToken,{product:'advisors',operation:'inquiries.update',id:'CM-0A1B2C3D4E5F',status:'closed',notes:'',expected:{status:'new',notes:''}}),'reads never carry a change');
+  assert.equal(advisorsCalls.length,2);
+  // The owner manages consultation requests: each change carries command authority for exactly that change.
+  const advisorUpdate={operation:'inquiries.update',id:'CM-0A1B2C3D4E5F',status:'in-progress',notes:'Called back on Tuesday.',expected:{status:'new',notes:''}};
+  const updated=await caps.advisorsCommand(editorToken,advisorUpdate);
+  assert.deepEqual([updated.item.id,updated.item.status,updated.item.notes,updated.item.phone],['CM-0A1B2C3D4E5F','in-progress','Called back on Tuesday.',null]);
+  assert.deepEqual(await caps.advisorsCommand(editorToken,{operation:'inquiries.delete',id:'CM-0A1B2C3D4E5F',expected:{status:'in-progress',notes:'Called back on Tuesday.'}}),{id:'CM-0A1B2C3D4E5F',deleted:true});
+  await assert.rejects(caps.advisorsCommand(editorToken,{...advisorUpdate,expected:{status:'new',notes:'stale'}}),error=>error.status===409&&/changed in Advisors/.test(error.message));
+  await assert.rejects(caps.advisorsCommand(editorToken,{...advisorUpdate,extra:true}),{status:400});
+  const learnerToken=token();
+  const {rows:[learnerIdentity]}=await admin.query('select identity_version from private.sms_identities where user_id=$1',[learner]);
+  await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) values($1,$2,$3,$4,now()+interval '1 hour')",[randomUUID(),digest(learnerToken),learner,learnerIdentity.identity_version]);
+  await assert.rejects(caps.advisorsCommand(learnerToken,advisorUpdate),'only the platform administrator manages Advisors requests');
+  assert.equal(advisorsCommands.length,3,'malformed changes and other people never reach Advisors');
+  assert.equal((await call('admin/advisors-command',advisorUpdate,{Origin:'https://evil.test'})).status,403);
+  assert.equal(advisorsCommands.length,3);
   assert.equal((await call('admin/command',{product:'carebase',...commandOperation},{Origin:'https://evil.test'})).status,403);
   assert.equal(nativeCalls.length,0);
   const httpPreview=await call('admin/command',{product:'carebase',...commandOperation});
