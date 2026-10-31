@@ -2,18 +2,18 @@
 .training-heading, .training-actions, .training-facility-picker { display: flex; gap: 14px; align-items: end; flex-wrap: wrap; }
 .training-heading { align-items: center; justify-content: space-between; }
 .training-heading h2, .training-heading h3 { margin: 0; }
-.training-heading p { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.training-heading p { color: var(--muted); font-size: var(--text-md); line-height: 1.6; }
 .training-workspace fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .training-workspace-content { display: grid; gap: 20px; }
 .training-workspace-content:disabled { opacity: .65; }
-.training-workspace label { display: grid; gap: 7px; font-size: 12px; font-weight: 650; min-width: 0; }
+.training-workspace label { display: grid; gap: 7px; font-size: var(--text-md); font-weight: 650; min-width: 0; }
 .training-workspace input, .training-workspace select, .training-workspace textarea { font: inherit; min-width: 0; }
 .training-organization-picker { padding: 16px; border: 1px solid var(--line); border-radius: 12px; }
 .training-organization-picker summary { cursor: pointer; color: var(--brand-dark); font-weight: 650; }
 .training-organization-picker[open] summary { margin-bottom: 16px; }
 .training-start, .training-editor, .training-review { padding: 22px; }
 .training-start li, .training-workspace p { line-height: 1.6; }
-.training-start p, .training-editor p, .training-review p { color: var(--muted); font-size: 13px; }
+.training-start p, .training-editor p, .training-review p { color: var(--muted); font-size: var(--text-md); }
 .training-organization { display: grid; gap: 20px; min-width: 0; }
 .training-facility-picker label { flex: 1 1 220px; max-width: 500px; }
 .training-facility-choice { max-width: 700px; }
@@ -28,8 +28,8 @@
 .training-review { border: 1px solid #96b1da; border-radius: 12px; background: #eff5ff; }
 .training-review dl { display: grid; gap: 12px; }
 .training-review dl > div { display: grid; grid-template-columns: minmax(90px, 160px) minmax(0, 1fr); gap: 14px; }
-.training-review dt { color: var(--muted); font-size: 12px; }
-.training-review dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.training-review dt { color: var(--muted); font-size: var(--text-md); }
+.training-review dd { margin: 0; font-size: var(--text-md); overflow-wrap: anywhere; }
 .training-workspace .training-checkbox { display: flex; align-items: center; gap: 10px; margin: 18px 0; }
 .training-checkbox input { width: 18px; height: 18px; }
 .training-review > small { display: block; margin-top: 14px; color: var(--muted); overflow-wrap: anywhere; }
@@ -39,7 +39,7 @@
 .training-metrics { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin: 18px 0; }
 .training-metrics > div { padding: 14px; border-radius: 9px; background: #eff5ff; display: grid; gap: 7px; }
 .training-metrics strong { font-size: 24px; }
-.training-metrics span { font-size: 11px; color: var(--muted); }
+.training-metrics span { font-size: var(--text-sm); color: var(--muted); }
 .training-report progress { max-width: 85px; }
 #hub-training-print { display: none; }
 @media (max-width: 1050px) {
