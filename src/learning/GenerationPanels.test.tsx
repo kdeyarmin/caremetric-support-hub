@@ -44,8 +44,13 @@ it("keeps a drafted course when the catalog step fails, and adds it later withou
   expect(screen.getByRole("button", { name: "Open the draft" })).not.toBeNull();
   // Not a drafting failure: nothing offers to draft the same course again.
   expect(screen.queryByRole("button", { name: "Retry with the same inputs" })).toBeNull();
+  // Another draft would replace this one's catalog retry, so none starts until it is in the catalog.
+  const submit = screen.getByRole("button", { name: "Draft with AI" }) as HTMLButtonElement;
+  expect(submit.disabled).toBe(true);
+  fireEvent.submit(screen.getByRole("form", { name: "Draft a course with AI" }));
   fireEvent.click(screen.getByRole("button", { name: "Add it to the catalog" }));
-  await vi.waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  await vi.waitFor(() => expect(submit.disabled).toBe(false));
+  expect(screen.queryByRole("alert")).toBeNull();
   expect(vi.mocked(runAuthoring).mock.calls).toHaveLength(2);
   expect(calls("ai.generateCourse")).toHaveLength(1);
 });

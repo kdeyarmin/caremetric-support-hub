@@ -30,7 +30,8 @@ export function AiCourseDraftPanel({ onOpen }: { onOpen: (courseId: string) => v
     setCreated(draft.courseId);
   }
   async function draft() {
-    if (pending.current || !parsed.success) return;
+    // One unregistered draft at a time: drafting another would replace its catalog retry, the only way to add it later.
+    if (pending.current || !parsed.success || unregistered) return;
     pending.current = true; setRunning(true); setError(""); setCreated(null);
     try {
       const { courseId, versionId } = await runGeneration({ operation: "ai.generateCourse", request: parsed.data }, new AbortController().signal);
@@ -61,9 +62,9 @@ export function AiCourseDraftPanel({ onOpen }: { onOpen: (courseId: string) => v
       {running && <p role="status">Drafting the course. This can take up to about two and a half minutes.</p>}
       {error && <p role="alert">{error}</p>}
       {created && <p role="status">CareBase created the draft. <button type="button" className="button button-secondary button-small" onClick={() => onOpen(created)}>Open the draft</button></p>}
-      {unregistered && !running && <p role="alert">The Hub could not add this draft to its course catalog, so it cannot be reviewed or published from the Hub yet. The draft itself is safe in CareBase.{" "}
+      {unregistered && !running && <p role="alert">The Hub could not add this draft to its course catalog, so it cannot be reviewed or published from the Hub yet. The draft itself is safe in CareBase. Add it to the catalog before drafting another course.{" "}
         <button type="button" className="button button-secondary button-small" onClick={() => void retryRegistration()}>Add it to the catalog</button></p>}
-      <button type="submit" className="button button-primary" disabled={running || !parsed.success}>{error ? "Retry with the same inputs" : "Draft with AI"}</button>
+      <button type="submit" className="button button-primary" disabled={running || !parsed.success || unregistered !== null}>{error ? "Retry with the same inputs" : "Draft with AI"}</button>
     </form>
   </details>;
 }
