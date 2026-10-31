@@ -261,7 +261,7 @@
 .admin-record-list li button { margin-left: auto; }
 /* Managing a Healthcare Advisors consultation request. */
 .advisor-manage { min-width: 16rem; display: grid; gap: 8px; }
-.advisor-manage label { display: grid; gap: 4px; color: #475569; font-size: 13px; font-weight: 700; }
-.advisor-manage select, .advisor-manage textarea { color: var(--ink); font-size: 14px; font-weight: 400; }
-.advisor-manage .button-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
-.advisor-manage .muted { margin: 0; color: var(--muted); font-size: 13px; }
+.advisor-manage label { display: grid; gap: 4px; color: #475569; font-size: var(--text-sm); font-weight: 700; }
+.advisor-manage select, .advisor-manage textarea { color: var(--ink); font-size: var(--text-md); font-weight: 400; }
+.advisor-manage .button-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--text-sm); }
+.advisor-manage .muted { margin: 0; color: var(--muted); font-size: var(--text-sm); }
