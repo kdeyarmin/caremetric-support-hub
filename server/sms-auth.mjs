@@ -103,6 +103,11 @@ export function smsAuth({ pool, provider }) {
   };
 }
 
+/** The Hub is private to its owner, the platform administrator. Every check rereads the database, so revoking access takes effect on the next request. */
+export function ownerAccess(pool) {
+  return { allows: token => withSession(pool, token, async db => { await db.query('select hub.authorize_app_admin()'); return true; }).catch(() => false) };
+}
+
 export async function withSession(pool, sessionToken, operation, required = true) {
   return transaction(pool, async db => {
     let session = null;

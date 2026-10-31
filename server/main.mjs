@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { smsProvider } from './sms-provider.mjs';
-import { smsAuth } from './sms-auth.mjs';
+import { smsAuth, ownerAccess } from './sms-auth.mjs';
 import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
 import { appServer } from './http.mjs';
@@ -56,7 +56,7 @@ const billingTimer=setInterval(()=>{
 },60*1000);billingTimer.unref();
 const readiness=goLiveReadiness({pool,rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
 const setup=integrationSetup({rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
-const server=appServer({auth:smsAuth({pool,provider}),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
+const server=appServer({auth:smsAuth({pool,provider}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
 let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;
