@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { HttpError, transaction, withSession } from './sms-auth.mjs';
-import { billingCommandSchema, localBillingActions, entitlementRequestSchema, usageReportSchema, trialRequestSchema, appPortalRequestSchema } from '../src/billing/billingProtocol.ts';
+import { billingCommandSchema, localBillingActions, entitlementRequestSchema, usageReportSchema, trialRequestSchema, appPortalRequestSchema, appBillingRequestSchema } from '../src/billing/billingProtocol.ts';
 import { stripeClient, StripeError, STRIPE_ACCOUNT_ID, verifyStripeSignature, eventTarget, retrievePaths, normalizers } from './stripe.mjs';
 import { customerBillingService } from './customer-billing.mjs';
 import { facilityEntitlementRequest, facilityEntitlementSnapshot } from '../src/billing/facilityEntitlements.ts';
@@ -11,8 +11,9 @@ import { selfServiceApps } from '../src/self-service/protocol.ts';
  * truth; this service changes Stripe for an authorized administrator, mirrors
  * what Stripe returns, applies signed webhook events once, opens the customer
  * portal for a tenant administrator or, from inside an application, for that
- * application's own customer, and answers the applications' entitlement, usage
- * and trial requests.
+ * application's own customer, changes that customer's plan and add-ons for the
+ * application's organization administrator, and answers the applications'
+ * entitlement, usage and trial requests.
  */
 export const appKeyPattern = /^cmb_[A-Za-z0-9_-]{43}$/;
 const trialDays = { carebase: 30, breathe: 14, 'caremetric-emr': 14, 'caremetric-go': 14, 'caremetric-intel': 14 };
@@ -623,6 +624,32 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     } catch (error) { throw asHttpError(error); }
   }
 
+  // Customers change their plan and add-ons inside their own application. The application, with its key, asks for one
+  // of its own linked accounts on behalf of that organization's administrator, whom it has just verified; the Hub runs
+  // the customer center's own quote, confirmation and Checkout flow and records every request.
+  async function appPlanChanges(authorization, input) {
+    const parsed = appBillingRequestSchema.safeParse(input);
+    if (!parsed.success) throw new HttpError(400, 'Send the application account, an https return address, the administrator, the facilities and one plan request.');
+    const body = parsed.data, request = body.request;
+    const { app, tenant } = await transaction(pool, async db => {
+      const app = await authenticateApp(db, authorization);
+      return { app, tenant: (await one(db, 'select private.app_customer_billing_tenant($1,$2) as t', [app.product_id, body.account])).t };
+    }).catch(error => { throw asHttpError(error); });
+    const record = { app: app.slug, account: body.account, actor: body.actor.id, action: request.action, ...(request.quote_id ? { quote: request.quote_id } : {}) };
+    try {
+      const result = await customerSelfService.handleApp(app, body);
+      Object.assign(record, { outcome: result.state ?? request.action, ...(request.action === 'quote' ? { quote: result.id } : {}) });
+      return result;
+    } catch (error) {
+      const failure = asHttpError(error);
+      Object.assign(record, { outcome: 'refused', status: failure.status ?? 500 });
+      throw failure;
+    } finally {
+      await transaction(pool, db => audit(db, null, 'billing.plan_change.app', tenant, app.product_id, record))
+        .catch(() => log.warn('An application plan request could not be recorded in the audit trail.'));
+    }
+  }
+
   async function facilityEntitlements(authorization, input) {
     const parsed = facilityEntitlementRequest.safeParse(input);
     if (!parsed.success) throw new HttpError(400, 'Send the version, application account and unique facility ids.');
@@ -788,7 +815,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     },
     status: () => ({ configured: !!client, state, mode: client?.mode ?? null, account: state === 'ready' ? accountId : null,
       webhook: webhookSecrets.length > 0, portal_configuration: !!portalConfiguration }),
-    webhook, command, customerPortal, appPortal, entitlements, facilityEntitlements, usage, trial,
+    webhook, command, customerPortal, appPortal, appPlanChanges, entitlements, facilityEntitlements, usage, trial,
     customer: async (session, input) => { try { return await customerSelfService.handle(session, input); } catch (error) { throw asHttpError(error); } },
   };
 }

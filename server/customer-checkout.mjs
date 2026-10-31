@@ -19,7 +19,7 @@ export function checkoutUrl(value) {
 }
 
 /** A browser return URL is navigation only. Only a verified provider receipt grants access. */
-export function customerCheckoutService({ stripe, rpc, service, mirrorCustomer, mirrorSubscription, mirrorInvoice, publicOrigin, now = () => Date.now() }) {
+export function customerCheckoutService({ stripe, service, mirrorCustomer, mirrorSubscription, mirrorInvoice, publicOrigin, now = () => Date.now() }) {
   const work = async id => (await service('customer_checkout_work', [id])) ?? [];
   const bind = (id, customer, session = null) => service('bind_customer_checkout', [id, customer, session]);
   const fail = id => service('settle_customer_billing_quote', [id, 'failed', null, null, null]);
@@ -38,7 +38,8 @@ export function customerCheckoutService({ stripe, rpc, service, mirrorCustomer, 
     }
   }
 
-  async function preview(session, input, workspace, authority) {
+  // The requester saves the quote under its own identity: a Hub customer session, or an application administrator.
+  async function preview(requester, input, workspace, authority) {
     if (!selfServiceApps.includes(workspace.app) || workspace.mode !== 'legacy' || workspace.role !== 'organization_admin' || input.facility_id !== null) throw new HttpError(403, 'An organization administrator must set up the shared subscription.');
     if (workspace.pending_checkout) throw new HttpError(409, 'Resume or cancel the pending checkout before selecting another plan.');
     let lines;
@@ -58,10 +59,13 @@ export function customerCheckoutService({ stripe, rpc, service, mirrorCustomer, 
       recurring_subtotal: lines.reduce((total, line) => total + catalog.get(line.price).amount * line.quantity, 0), effective_at: null,
       expires_at: new Date(now() + 300000).toISOString(), has_immediate_change: true, has_scheduled_change: false,
       summary: lines.map(line => ({ name: catalog.get(line.price).name, quantity: line.quantity, amount: catalog.get(line.price).amount * line.quantity })) };
+    // An application's customer returns from Checkout to the application's own page, fixed here so every retry of the
+    // idempotent session request sends identical parameters. Hub customers return to the customer center.
     const execution = { kind: 'checkout', mode: 'legacy', app: workspace.app, customer: workspace.customer, account_name: workspace.account_name,
       billing_revision: workspace.billing_revision, facility_id: null, lines, intent: { plan: input.plan, addons: [...input.addons].sort() },
-      maximumDue: quote.due_now, currency, interval: catalog.get(input.plan).interval, facility_ids: workspace.facilities.map(site => site.id).sort() };
-    return rpc(session, 'save_customer_billing_quote', [id, input.connection_id, null, input.request_id, JSON.stringify(quote), JSON.stringify(execution), 0, null]);
+      maximumDue: quote.due_now, currency, interval: catalog.get(input.plan).interval, facility_ids: workspace.facilities.map(site => site.id).sort(),
+      ...(requester.returnUrl ? { return_url: requester.returnUrl } : {}) };
+    return requester.saveQuote(id, input.connection_id, null, input.request_id, quote, execution, 0, null);
   }
 
   function verifySessionIdentity(checkout, quote) {
@@ -137,16 +141,19 @@ export function customerCheckoutService({ stripe, rpc, service, mirrorCustomer, 
       if (matches.length !== 1) throw new HttpError(409, 'This checkout needs payment reconciliation before it can be retried. Open a billing support request.');
       checkout = matches[0];
     } else {
-      let origin;
-      try { origin = new URL(publicOrigin); } catch { throw new HttpError(503, 'The customer center address is not configured.'); }
-      if (origin.protocol !== 'https:' || origin.username || origin.password) throw new HttpError(503, 'The customer center address is not configured.');
+      let back;
+      try { back = execution.return_url ? new URL(execution.return_url) : new URL('/subscriptions', new URL(publicOrigin).origin); }
+      catch { throw new HttpError(503, 'The customer center address is not configured.'); }
+      if (back.protocol !== 'https:' || back.username || back.password) throw new HttpError(503, 'The customer center address is not configured.');
+      const returned = new URL(back), cancelled = new URL(back);
+      returned.searchParams.set('checkout', 'returned'); cancelled.searchParams.set('checkout', 'cancelled');
       await service('mark_customer_purchase_started', [quote.id]);
       try { checkout = await live.post('/v1/checkout/sessions', { mode: 'subscription', customer, line_items: execution.lines,
         client_reference_id: quote.id, integration_identifier: integrationIdentifier(quote.id),
         metadata: { hub_checkout_quote: quote.id, hub_tenant_id: quote.tenant_id, app: execution.app },
         subscription_data: { metadata: { hub_checkout_quote: quote.id, hub_tenant_id: quote.tenant_id, app: execution.app } },
         expires_at: Math.floor(Date.parse(quote.confirmed_at) / 1000) + 3600,
-        success_url: `${origin.origin}/subscriptions?checkout=returned`, cancel_url: `${origin.origin}/subscriptions?checkout=cancelled`,
+        success_url: returned.href, cancel_url: cancelled.href,
       }, { ...options, idempotencyKey: `hub-checkout-${quote.id}` }); }
       catch (error) {
         if (error instanceof StripeError && error.type === 'invalid_request_error' && [400, 404].includes(error.status)) await fail(quote.id);

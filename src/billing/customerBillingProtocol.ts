@@ -1,14 +1,26 @@
 import { z } from 'zod';
 import { sourceId } from '../self-service/protocol.ts';
 
+const workspaceRequest = z.object({ action: z.literal('workspace'), connection_id: z.uuid() }).strict();
+const quoteRequest = z.object({ action: z.literal('quote'), connection_id: z.uuid(), facility_id: sourceId.nullable(), plan: z.string().min(1).max(255).nullable(), addons: z.array(z.string().min(1).max(255)).max(20), request_id: z.uuid() }).strict();
+const confirmRequest = z.object({ action: z.literal('confirm'), quote_id: z.uuid(), confirmed: z.literal(true) }).strict();
+const checkoutResumeRequest = z.object({ action: z.literal('checkout_resume'), connection_id: z.uuid(), quote_id: z.uuid() }).strict();
+const checkoutCancelRequest = z.object({ action: z.literal('checkout_cancel'), connection_id: z.uuid(), quote_id: z.uuid(), confirmed: z.literal(true) }).strict();
 export const customerBillingRequest = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('workspace'), connection_id: z.uuid() }).strict(),
+  workspaceRequest,
   z.object({ action: z.literal('activate_facility_billing'), connection_id: z.uuid(), confirmed: z.literal(true), expected_version: z.number().int().nonnegative() }).strict(),
-  z.object({ action: z.literal('quote'), connection_id: z.uuid(), facility_id: sourceId.nullable(), plan: z.string().min(1).max(255).nullable(), addons: z.array(z.string().min(1).max(255)).max(20), request_id: z.uuid() }).strict(),
-  z.object({ action: z.literal('confirm'), quote_id: z.uuid(), confirmed: z.literal(true) }).strict(),
-  z.object({ action: z.literal('checkout_resume'), connection_id: z.uuid(), quote_id: z.uuid() }).strict(),
-  z.object({ action: z.literal('checkout_cancel'), connection_id: z.uuid(), quote_id: z.uuid(), confirmed: z.literal(true) }).strict(),
+  quoteRequest, confirmRequest, checkoutResumeRequest, checkoutCancelRequest,
 ]);
+/**
+ * The same requests from an application server for its own organization administrator. The application's account
+ * replaces the Hub connection, and separate facility billing is still enabled only from the Hub customer center.
+ */
+const withoutConnection = { connection_id: true } as const;
+export const appCustomerBillingRequest = z.discriminatedUnion('action', [
+  workspaceRequest.omit(withoutConnection), quoteRequest.omit(withoutConnection), confirmRequest,
+  checkoutResumeRequest.omit(withoutConnection), checkoutCancelRequest.omit(withoutConnection),
+]);
+export type AppCustomerBillingRequest = z.infer<typeof appCustomerBillingRequest>;
 export const sellablePrice = z.object({ id: z.string(), product: z.string(), name: z.string(), description: z.string(), kind: z.enum(['plan', 'addon']),
   key: z.string(), features: z.array(z.string()), allows_addons: z.boolean(), active: z.boolean(),
   amount: z.number().int().nonnegative(), currency: z.string().length(3), interval: z.enum(['month', 'year']),
@@ -18,7 +30,7 @@ export type SellablePrice = z.infer<typeof sellablePrice>;
 export const allocation = z.object({ facility_id: sourceId, facility_name: z.string(), plan: z.string().nullable(), addons: z.array(z.string()), version: z.number().int(),
   pending_plan: z.string().nullable().optional(), pending_addons: z.array(z.string()).optional(), pending_at: z.string().nullable().optional() });
 export type FacilityAllocation = z.infer<typeof allocation>;
-export const customerBillingWorkspace = z.object({ connection_id: z.uuid(), tenant_id: z.uuid(), app: z.string(), role: z.string(),
+export const customerBillingWorkspace = z.object({ connection_id: z.uuid().nullable(), tenant_id: z.uuid(), app: z.string(), role: z.string(),
   mode: z.enum(['legacy', 'facility']), can_activate: z.boolean(), configuration_version: z.number().int(),
   purchasing_enabled: z.boolean().default(false),
   billing_revision: z.number().int().nonnegative().default(0),

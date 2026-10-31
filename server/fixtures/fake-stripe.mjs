@@ -31,7 +31,8 @@ const now = () => Math.floor(Date.now() / 1000);
 const month = 30 * 86400;
 
 export function fakeStripe({ accountId = 'acct_1SinLKB06O2UFlNz' } = {}) {
-  const store = { customers: new Map(), products: new Map(), prices: new Map(), subscriptions: new Map(), coupons: new Map(), promotion_codes: new Map(), invoices: new Map() };
+  const store = { customers: new Map(), products: new Map(), prices: new Map(), subscriptions: new Map(), coupons: new Map(), promotion_codes: new Map(), invoices: new Map(),
+    checkout_sessions: new Map() };
   const requests = [];
   const idempotent = new Map();
   const events = [];
@@ -78,8 +79,37 @@ export function fakeStripe({ accountId = 'acct_1SinLKB06O2UFlNz' } = {}) {
     const copy = structuredClone(subscription);
     const fields = [params.expand, params.expand?.[0]].flat().filter(Boolean);
     if (!fields.some(field => /discounts/.test(field))) copy.discounts = copy.discounts.map(entry => entry.id);
+    if (fields.includes('latest_invoice') && typeof copy.latest_invoice === 'string') copy.latest_invoice = structuredClone(store.invoices.get(copy.latest_invoice) ?? copy.latest_invoice);
     return copy;
   };
+  // A subscription item change as Stripe takes it: an existing item by id (changed or deleted), or a new price.
+  function patchItems(subscription, entries) {
+    const rows = subscription.items.data.map(entry => ({ id: entry.id, price: entry.price.id, quantity: entry.quantity }));
+    for (const entry of entries ?? []) {
+      if (entry.id) {
+        const row = rows.find(candidate => candidate.id === entry.id);
+        if (!row) return null;
+        if (entry.deleted === 'true') row.deleted = true;
+        else { if (entry.price) row.price = entry.price; if (entry.quantity !== undefined) row.quantity = Number(entry.quantity); }
+      } else rows.push({ price: entry.price, quantity: Number(entry.quantity ?? 1) });
+    }
+    return rows.every(row => store.prices.has(row.price)) ? rows.filter(row => !row.deleted) : null;
+  }
+  const recurringTotal = rows => rows.reduce((sum, row) => sum + store.prices.get(row.price).unit_amount * row.quantity, 0);
+  const currentRows = subscription => subscription.items.data.map(entry => ({ price: entry.price.id, quantity: entry.quantity }));
+  // Prorations are simplified to the full difference in the recurring total, invoiced at once. A card on file pays it.
+  function prorationInvoice(subscription, amount) {
+    const paid = subscription.collection_method === 'charge_automatically';
+    const invoice = { id: id('in'), object: 'invoice', customer: subscription.customer, status: paid ? 'paid' : 'open', number: `HUB-${store.invoices.size + 1}`,
+      currency: 'usd', total: amount, subtotal: amount, amount_due: amount, amount_paid: paid ? amount : 0, amount_remaining: paid ? 0 : amount,
+      collection_method: subscription.collection_method, billing_reason: 'subscription_update', hosted_invoice_url: `https://invoice.stripe.com/i/${id('test')}`,
+      invoice_pdf: `https://pay.stripe.com/invoice/${id('test')}/pdf`, period_start: now(), period_end: now(), due_date: null, created: now(), livemode: false, metadata: {},
+      parent: { type: 'subscription_details', subscription_details: { subscription: subscription.id, metadata: subscription.metadata } } };
+    store.invoices.set(invoice.id, invoice);
+    emit('invoice.created', invoice);
+    return invoice;
+  }
+  const publicSession = session => { const { line_items: _lines, ...rest } = structuredClone(session); return rest; };
 
   function handle(method, path, params) {
     const parts = path.split('/').filter(Boolean).slice(1);
@@ -124,6 +154,42 @@ export function fakeStripe({ accountId = 'acct_1SinLKB06O2UFlNz' } = {}) {
       if (method === 'POST') { if ('active' in params) price.active = params.active === 'true'; emit('price.updated', price); }
       return { status: 200, body: price };
     }
+    if (resource === 'invoices' && objectId === 'create_preview' && method === 'POST') {
+      const lines = params.subscription_details?.items ?? [];
+      if (params.subscription) {
+        const subscription = store.subscriptions.get(params.subscription); if (!subscription) return notFound();
+        const next = patchItems(subscription, lines); if (!next) return bad('No such price');
+        const due = Math.max(0, recurringTotal(next) - recurringTotal(currentRows(subscription)));
+        return { status: 200, body: { object: 'invoice', customer: subscription.customer, subscription: subscription.id, currency: 'usd', total: due, subtotal: due, amount_due: due } };
+      }
+      if (!lines.length || lines.some(line => !store.prices.has(line.price))) return bad('No such price');
+      const due = recurringTotal(lines.map(line => ({ price: line.price, quantity: Number(line.quantity ?? 1) })));
+      return { status: 200, body: { object: 'invoice', customer: params.customer ?? null, currency: params.currency ?? 'usd', total: due, subtotal: due, amount_due: due } };
+    }
+    if (resource === 'checkout' && objectId === 'sessions') {
+      const [, , sessionId, sessionAction] = parts;
+      if (method === 'GET' && !sessionId) return { status: 200, body: { object: 'list', data: [...store.checkout_sessions.values()].filter(row => !params.customer || row.customer === params.customer).map(publicSession), has_more: false } };
+      if (method === 'POST' && !sessionId) {
+        if (!store.customers.has(params.customer)) return bad('No such customer');
+        const lines = (params.line_items ?? []).map(line => ({ price: line.price, quantity: Number(line.quantity ?? 1) }));
+        if (!lines.length || lines.some(line => !store.prices.has(line.price))) return bad('No such price');
+        const sessionIdentity = id('cs_test');
+        const session = { id: sessionIdentity, object: 'checkout.session', mode: params.mode, customer: params.customer, client_reference_id: params.client_reference_id ?? null,
+          metadata: params.metadata ?? {}, status: 'open', payment_status: 'unpaid', currency: 'usd', amount_total: recurringTotal(lines),
+          url: `https://checkout.stripe.com/c/pay/${sessionIdentity}`, success_url: params.success_url, cancel_url: params.cancel_url,
+          expires_at: Number(params.expires_at), subscription: null, invoice: null, created: now(), livemode: false, line_items: lines };
+        store.checkout_sessions.set(session.id, session);
+        return { status: 200, body: publicSession(session) };
+      }
+      const session = store.checkout_sessions.get(sessionId); if (!session) return notFound();
+      if (method === 'GET' && sessionAction === 'line_items') return { status: 200, body: { object: 'list', has_more: false,
+        data: session.line_items.map((line, index) => ({ id: `li_${index}`, object: 'item', price: priceObject(line.price), quantity: line.quantity })) } };
+      if (method === 'POST' && sessionAction === 'expire') {
+        if (session.status !== 'open') return bad('Only open Checkout Sessions can be expired.');
+        Object.assign(session, { status: 'expired', url: null });
+      }
+      return { status: 200, body: publicSession(session) };
+    }
     if (resource === 'subscriptions') {
       if (method === 'GET' && !objectId) {
         let rows = [...store.subscriptions.values()];
@@ -160,6 +226,18 @@ export function fakeStripe({ accountId = 'acct_1SinLKB06O2UFlNz' } = {}) {
         if ('pause_collection' in params) subscription.pause_collection = params.pause_collection === '' ? null : { behavior: params.pause_collection.behavior, resumes_at: params.pause_collection.resumes_at ? Number(params.pause_collection.resumes_at) : null };
         if ('discounts' in params) { try { subscription.discounts = discountsFor(subscription, params.discounts); } catch (error) { return bad(error.message); } }
         if (params.add_invoice_items) { try { subscription.pending_fees = (subscription.pending_fees ?? 0) + feeTotal(params.add_invoice_items); } catch (error) { return bad(error.message); } }
+        if (params.items) {
+          const next = patchItems(subscription, params.items); if (!next) return bad('No such price');
+          const due = Math.max(0, recurringTotal(next) - recurringTotal(currentRows(subscription)));
+          subscription.items.data = next.map(row => {
+            const existing = subscription.items.data.find(entry => entry.id === row.id);
+            if (!existing) return item(subscription, row);
+            if (existing.price.id !== row.price) existing.price = priceObject(row.price);
+            existing.quantity = row.quantity;
+            return existing;
+          });
+          if (params.proration_behavior === 'always_invoice' && due > 0) subscription.latest_invoice = prorationInvoice(subscription, due).id;
+        }
         emit('customer.subscription.updated', subscription);
       }
       return { status: 200, body: expand(subscription, params) };

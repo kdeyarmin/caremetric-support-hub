@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import { centralHubApps, isCentralHubApp } from '../hubScope.ts';
+import { sourceId } from '../self-service/protocol.ts';
+import { appCustomerBillingRequest } from './customerBillingProtocol.ts';
+import { planSizeFacts } from './planSize.ts';
 
 /**
  * The closed set of billing commands the Hub server runs against Stripe for a
@@ -107,6 +110,21 @@ export const usageReportSchema = z.object({
 // An application opens one of its own customers' Stripe billing; the customer returns to the application's https page.
 const httpsReturn = z.string().max(2048).refine(value => { try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password; } catch { return false; } });
 export const appPortalRequestSchema = z.object({ account: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/), return_url: httpsReturn }).strict();
+// An application changes one of its own customers' plans and add-ons for that organization's administrator. The
+// application vouches for the administrator and reports the facilities it bills and their plan-size facts, as it does
+// for the Hub customer center's purchasing authority; the customer returns from Stripe Checkout to its https page.
+export const appBillingRequestSchema = z.object({
+  account: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/), return_url: httpsReturn,
+  actor: z.object({ id: sourceId }).strict(),
+  scope: z.object({
+    facilities: z.array(z.object({ id: sourceId, name: plain(180).trim().min(1) }).strict()).max(1000),
+    plan_size: planSizeFacts.nullable(),
+  }).strict(),
+  request: appCustomerBillingRequest,
+}).strict().superRefine((value, ctx) => {
+  if (new Set(value.scope.facilities.map(site => site.id)).size !== value.scope.facilities.length) ctx.addIssue({ code: 'custom', message: 'Duplicate facility.' });
+});
+export type AppBillingRequest = z.infer<typeof appBillingRequestSchema>;
 export const trialRequestSchema = z.object({
   account: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/), name: plain(180).trim().min(2), email: z.email().max(320).nullable(),
   plan: z.string().regex(/^[a-z0-9_.-]{1,64}$/).nullable(),
