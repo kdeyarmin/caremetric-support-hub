@@ -37,7 +37,7 @@ describe('agent scheduler', () => {
     expect(store.fireSchedules).toHaveBeenCalledWith(['brief.daily', 'probe.sweep']);
     expect(store.claim).toHaveBeenCalledWith(3, 600);
     expect(probe).toHaveBeenCalledWith(expect.objectContaining({ id: 't1' }), expect.objectContaining({ signal: expect.any(AbortSignal) }));
-    expect(store.finish).toHaveBeenCalledWith('t1', 'done', { result: { checked: 4 }, errorCode: null, retryAt: null });
+    expect(store.finish).toHaveBeenCalledWith('t1', 'done', { result: { checked: 4 }, errorCode: null, retryAt: null, attempt: 1 });
     expect(actions.executeReady).toHaveBeenCalledTimes(1);
     expect(summary).toMatchObject({ skipped: false, fired: 1, claimed: 1, executedActions: 2 });
   });
@@ -52,8 +52,25 @@ describe('agent scheduler', () => {
     ]) {
       const { scheduler, store } = fixture({ tasks: [task()], handlers: { 'probe.sweep': async () => outcome } });
       await scheduler.tick();
-      expect(store.finish).toHaveBeenCalledWith('t1', outcome.status, { result: outcome.result ?? null, errorCode: outcome.errorCode ?? null, retryAt: outcome.retryAt ?? null });
+      expect(store.finish).toHaveBeenCalledWith('t1', outcome.status, { result: outcome.result ?? null, errorCode: outcome.errorCode ?? null, retryAt: outcome.retryAt ?? null, attempt: 1 });
     }
+  });
+
+  it('quotes the attempt a task was claimed under whenever it extends or ends it, so a superseded worker cannot touch the newer attempt', async () => {
+    vi.useFakeTimers();
+    try {
+      let release;
+      const { scheduler, store } = fixture({ tasks: [task({ attempts: 3 })], handlers: { 'probe.sweep': () => new Promise(resolve => { release = resolve; }) }, heartbeatMs: 1000 });
+      const tick = scheduler.tick();
+      await vi.advanceTimersByTimeAsync(1100);
+      release({ result: { late: true } });
+      await tick;
+      expect(store.heartbeat).toHaveBeenCalledWith('t1', 600, 3);
+      expect(store.finish).toHaveBeenCalledWith('t1', 'done', expect.objectContaining({ attempt: 3 }));
+    } finally { vi.useRealTimers(); }
+    const failing = fixture({ tasks: [task({ attempts: 2 })], handlers: { 'probe.sweep': async () => { throw new Error('x'); } } });
+    await failing.scheduler.tick();
+    expect(failing.store.finish).toHaveBeenCalledWith('t1', 'queued', expect.objectContaining({ attempt: 2 }));
   });
 
   it('treats an unsupported outcome as a failure to retry, not as done', async () => {
@@ -67,7 +84,7 @@ describe('agent scheduler', () => {
     for (const [attempts, minutes] of [[1, 5], [2, 10], [3, 20], [4, 30], [5, 30]]) {
       const { scheduler, store, clock } = fixture({ tasks: [task({ attempts })], handlers: { 'probe.sweep': async () => { throw outage; } } });
       await scheduler.tick();
-      expect(store.finish).toHaveBeenCalledWith('t1', 'queued', { errorCode: 'provider_outage', retryAt: new Date(clock.getTime() + minutes * 60_000) });
+      expect(store.finish).toHaveBeenCalledWith('t1', 'queued', { errorCode: 'provider_outage', retryAt: new Date(clock.getTime() + minutes * 60_000), attempt: attempts });
     }
   });
 
@@ -78,7 +95,7 @@ describe('agent scheduler', () => {
     expect(early.store.finish).toHaveBeenCalledWith('t1', 'queued', expect.objectContaining({ errorCode: 'handler_error' }));
     const last = fixture({ tasks: [task({ attempts: 3 })], handlers: { 'probe.sweep': broken } });
     await last.scheduler.tick();
-    expect(last.store.finish).toHaveBeenCalledWith('t1', 'failed', { errorCode: 'handler_error', retryAt: null });
+    expect(last.store.finish).toHaveBeenCalledWith('t1', 'failed', { errorCode: 'handler_error', retryAt: null, attempt: 3 });
   });
 
   it('keeps a handler\'s own error code and replaces database codes with a safe one', async () => {
@@ -111,7 +128,7 @@ describe('agent scheduler', () => {
   it('fails a task whose kind has no handler', async () => {
     const { scheduler, store, logs } = fixture({ tasks: [task({ kind: 'mystery.kind' })] });
     await scheduler.tick();
-    expect(store.finish).toHaveBeenCalledWith('t1', 'failed', { errorCode: 'no_handler' });
+    expect(store.finish).toHaveBeenCalledWith('t1', 'failed', { errorCode: 'no_handler', attempt: 1 });
     expect(JSON.parse(logs[0])).toMatchObject({ event: 'hub_agent_task_error', kind: 'mystery.kind', code: 'no_handler' });
   });
 
@@ -120,7 +137,7 @@ describe('agent scheduler', () => {
     const { scheduler, store } = fixture({ tasks: [task()], handlers: { 'probe.sweep': slow }, heartbeatMs: 15 });
     await scheduler.tick();
     expect(store.heartbeat.mock.calls.length).toBeGreaterThanOrEqual(2);
-    expect(store.heartbeat).toHaveBeenCalledWith('t1', 600);
+    expect(store.heartbeat).toHaveBeenCalledWith('t1', 600, 1);
   });
 
   it('never runs two ticks at once', async () => {
@@ -179,7 +196,7 @@ describe('work that waits for the owner\'s session', () => {
     release();
     await run.done;
     expect(handler).toHaveBeenCalledWith(expect.objectContaining({ id: 's1' }), expect.objectContaining({ sessionToken, signal: expect.any(AbortSignal) }));
-    expect(store.finish).toHaveBeenCalledWith('s1', 'done', { result: { created: 3 }, errorCode: null, retryAt: null });
+    expect(store.finish).toHaveBeenCalledWith('s1', 'done', { result: { created: 3 }, errorCode: null, retryAt: null, attempt: 1 });
   });
 
   it('gives the session only to a task that is marked as needing it', async () => {

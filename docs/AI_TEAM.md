@@ -376,7 +376,42 @@ control plane and the platform billing mirror.
   administrator session themselves: reads need the administrator session, changes need the
   command session (under eight hours old). A signed-out or lapsed session fails closed.
 - `20261102120100_agent_control_plane_contract.sql` refuses to declare `platform.agents.v1`
-  if any of the above has drifted.
+  if any of the above has drifted. A function that lost its `search_path` setting
+  (`ALTER FUNCTION ... RESET search_path` leaves it null) slipped through that gate's negated test, so
+  `20261102180100_agent_hardening_contract.sql` repeats every check, for every operation and helper of
+  the control plane, the probes and the brief, in a form that fails closed, and declares
+  `platform.agents.hardening.v1`.
+
+## Hardening
+
+`20261102180000_agent_hardening.sql` closes the findings of the review of the first migrations. It adds no
+capability, and every signature that existed stays (as a thin wrapper), so a server built before it keeps
+working. The Hub server uses the new operations only when the database declares
+`platform.agents.hardening.v1`, which it reads once at start; deploy it before or after the migration.
+
+- **A stale worker cannot touch a reclaimed task.** `agent_task_heartbeat` and `agent_task_finish` take the
+  attempt number the task was claimed under (`task.attempts`). A task whose lease ran out and was handed out
+  again ignores the first worker's heartbeat and finish; the current status comes back.
+- **Cancelling rejects what was approved but not started**, not only the undecided proposals. An action
+  already being carried out is left alone, because it may be mid-send and its own report settles it. The ready
+  and start operations also ignore an action whose task was cancelled.
+- **One lock order.** Proposing, cancelling, deciding and settling an execution lock the task first and the
+  action second, so none of them can wait on another. A proposal that arrives while a cancellation is in
+  flight waits for it and is then refused.
+- **Executions are numbered.** `agent_action_execution` reports `execution`, and `agent_action_executed` and
+  `agent_action_release` must quote it, so a worker whose execution the sweep reset cannot settle the next
+  start. Release hands back an execution that never began its work (the owner's session had lapsed) to the state
+  it was approved in.
+- **The ready list can be narrowed by kind before it is limited** (`kinds`, `excludeKinds`), so waiting
+  replies cannot hide an incident record behind them.
+- **A retried alert has its own clock** (`attempted_at`), so the sweep for deliveries nobody settled no longer
+  marks a fresh retry unknown.
+- **A session task asked to retry waits for its backoff**, and a schedule skips a task still waiting for approval
+  instead of firing a second one beside it.
+- **A relapse is flapping** when its first failed check came within half an hour of the last recovery.
+- **The brief** counts incidents from the probe tasks (which exist whether or not the on-call agent records
+  actions) on the day the incident began or closed, and treats an urgent alert as undelivered only when no
+  channel of it, whenever it was sent, reached the owner.
 
 ## Operations
 
@@ -384,7 +419,7 @@ Server (`hub_app_server` only): `agent_schedule_fire`, `agent_maintenance`, `age
 `agent_task_claim` (lease based, with crash recovery), `agent_task_heartbeat`, `agent_task_finish`,
 `agent_session_tasks`, `agent_session_task_claim`, `agent_run_start`, `agent_run_finish`,
 `agent_budget`, `agent_action_propose`, `agent_actions_ready`, `agent_action_execution`,
-`agent_action_executed`, `agent_notify_begin`, `agent_notify_finish`, `owner_contact`, `agent_probe_record`, `agent_brief_facts`,
+`agent_action_executed`, `agent_action_release`, `agent_notify_begin`, `agent_notify_finish`, `owner_contact`, `agent_probe_record`, `agent_brief_facts`,
 `agent_concierge_pending`, `agent_communication_snapshot`, `agent_notification_count`, `agent_accounts_snapshot`.
 
 Owner (current administrator session): `get_agent_team`, `list_agent_activity`,
@@ -542,6 +577,11 @@ Apply the migrations in order with the usual procedure:
    the Account Manager (paused, observe) and its schedule, adds the server-only account snapshot and declares
    `platform.agents.accounts.v1` (it needs the control plane and the platform billing mirror, not the
    Concierge). Deploy the Hub after applying them: the server reads the declared features once, at start.
+7. `20261102180000_agent_hardening.sql`, then its gate `20261102180100_agent_hardening_contract.sql`, which
+   fences stale workers, makes cancellation reject approved actions, numbers executions, narrows the ready list
+   by kind, gives each alert retry its own clock and declares `platform.agents.hardening.v1` (it needs the
+   control plane, the probes and the brief). Apply it before you resume any agent, and restart the Hub after
+   it so the server reads the feature.
 
 The Hub build does not require any of these features, so a Hub whose database lacks them still starts and
 serves everything else. The AI team is opt-in twice over: nothing runs unless `HUB_AGENTS_ENABLED`

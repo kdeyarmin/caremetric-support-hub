@@ -80,6 +80,15 @@ path executable by `hub_app_server` alone, and its two helpers
 and are executable by no application role. The Hub server registers the Account Manager's handler only
 when the feature is declared.
 
+`20261102180100_agent_hardening_contract.sql` declares `platform.agents.hardening.v1` only after
+`platform.agents.v1`, `platform.agents.probes.v1` and `platform.agents.brief.v1` are declared and every AI team
+table, operation (the earlier signatures and the new fenced ones), helper and owner operation still has its
+boundary: tables closed to every role with row level security on, operations security definers executable by
+`hub_app_server` alone, helpers executable by no role, owner operations behind the administrator session, and
+a pinned empty search path on all of them. Each test fails closed, so a function whose `search_path` setting
+was reset (which leaves it null) is refused. The Hub server uses the fenced operations only when the feature is
+declared.
+
 The table above is not exhaustive:
 later features such as the `billing.*` and `customer.self-service.v1` boundaries are declared
 by their own migrations and listed in `src/lib/backendContract.ts`. See [AI_TEAM.md](AI_TEAM.md).

@@ -43,10 +43,10 @@ export function agentScheduler({
     const handler = handlers[task.kind];
     if (typeof handler !== 'function') {
       log(JSON.stringify({ event: 'hub_agent_task_error', task_id: task.id, agent: task.agentKey, kind: task.kind, code: 'no_handler', transient: false, attempts: task.attempts }));
-      await guarded('finish', () => store.finish(task.id, 'failed', { errorCode: 'no_handler' }));
+      await guarded('finish', () => store.finish(task.id, 'failed', { errorCode: 'no_handler', attempt: task.attempts }));
       return { id: task.id, status: 'failed' };
     }
-    const beat = setInterval(() => { store.heartbeat(task.id, leaseSeconds).catch(() => {}); }, heartbeatMs);
+    const beat = setInterval(() => { store.heartbeat(task.id, leaseSeconds, task.attempts).catch(() => {}); }, heartbeatMs);
     beat.unref?.();
     const controller = new AbortController();
     let timer;
@@ -66,7 +66,7 @@ export function agentScheduler({
       // The owner's session token is borrowed for the run, never kept: a result carrying it is not stored.
       if (context.sessionToken && JSON.stringify(outcome ?? null).includes(context.sessionToken)) throw Object.assign(new Error('The handler returned a session secret.'), { code: 'secret_in_result' });
       const final = await store.finish(task.id, status, {
-        result: outcome?.result ?? null, errorCode: outcome?.errorCode ?? null, retryAt: outcome?.retryAt ?? null,
+        result: outcome?.result ?? null, errorCode: outcome?.errorCode ?? null, retryAt: outcome?.retryAt ?? null, attempt: task.attempts,
       });
       return { id: task.id, status: final };
     } catch (error) {
@@ -76,7 +76,7 @@ export function agentScheduler({
       log(JSON.stringify({ event: 'hub_agent_task_error', task_id: task.id, agent: task.agentKey, kind: task.kind, code, transient, attempts: task.attempts }));
       const giveUp = !transient && task.attempts >= maxPermanentAttempts;
       const final = await guarded('finish', () => store.finish(task.id, giveUp ? 'failed' : 'queued', {
-        errorCode: code, retryAt: giveUp ? null : new Date(now().getTime() + backoff(task.attempts)),
+        errorCode: code, retryAt: giveUp ? null : new Date(now().getTime() + backoff(task.attempts)), attempt: task.attempts,
       }));
       return { id: task.id, status: final ?? 'unknown' };
     } finally {

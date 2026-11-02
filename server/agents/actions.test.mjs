@@ -18,7 +18,14 @@ describe('action executor', () => {
     const { executor, store } = fixture({ executors: { 'communication.reply': send } });
     expect(await executor.executeOne('a1')).toEqual({ executed: true, failed: false, skipped: false });
     expect(send).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1', requestKey: 'k1', input: { body: 'Hi' } }), { sessionToken: null });
-    expect(store.completeExecution).toHaveBeenCalledWith('a1', true, { delivery: 'sent' });
+    expect(store.completeExecution).toHaveBeenCalledWith('a1', true, { delivery: 'sent' }, null);
+  });
+
+  it('quotes the execution number the database gave, so a superseded start cannot settle a newer one', async () => {
+    const send = vi.fn(async () => ({ delivery: 'sent' }));
+    const { executor, store } = fixture({ started: execution({ execution: 4 }), executors: { 'communication.reply': send } });
+    await executor.executeOne('a1');
+    expect(store.completeExecution).toHaveBeenCalledWith('a1', true, { delivery: 'sent' }, 4);
   });
 
   it('does nothing when another caller already has the action', async () => {
@@ -32,11 +39,11 @@ describe('action executor', () => {
   it('records a failure when there is no executor or the executor throws, without logging the message', async () => {
     const missing = fixture({ executors: {} });
     expect(await missing.executor.executeOne('a1')).toEqual({ executed: false, failed: true, skipped: false, error: 'no_executor' });
-    expect(missing.store.completeExecution).toHaveBeenCalledWith('a1', false, { error: 'no_executor' });
+    expect(missing.store.completeExecution).toHaveBeenCalledWith('a1', false, { error: 'no_executor' }, null);
 
     const throwing = fixture({ executors: { 'communication.reply': async () => { throw new Error('Dear Jane Doe, your MRN is 12345'); } } });
     expect(await throwing.executor.executeOne('a1')).toMatchObject({ failed: true, error: 'executor_error' });
-    expect(throwing.store.completeExecution).toHaveBeenCalledWith('a1', false, { error: 'executor_error' });
+    expect(throwing.store.completeExecution).toHaveBeenCalledWith('a1', false, { error: 'executor_error' }, null);
     expect(throwing.logs.join()).not.toMatch(/Jane|MRN/);
     expect(JSON.parse(throwing.logs[0])).toMatchObject({ event: 'hub_agent_action_error', action_id: 'a1', kind: 'communication.reply', code: 'executor_error' });
   });
@@ -44,7 +51,7 @@ describe('action executor', () => {
   it('keeps an executor\'s named error code', async () => {
     const { executor, store } = fixture({ executors: { 'communication.reply': async () => { throw Object.assign(new Error('x'), { code: 'channel_unavailable' }); } } });
     expect(await executor.executeOne('a1')).toMatchObject({ failed: true, error: 'channel_unavailable' });
-    expect(store.completeExecution).toHaveBeenCalledWith('a1', false, { error: 'channel_unavailable' });
+    expect(store.completeExecution).toHaveBeenCalledWith('a1', false, { error: 'channel_unavailable' }, null);
   });
 
   it('drains every ready action and carries on past one that cannot be started', async () => {
@@ -70,7 +77,7 @@ describe('action executor', () => {
       const { executor, store } = fixture({ executors: { 'communication.reply': send } });
       expect(await executor.executeOne('a1', { kind: 'communication.reply', sessionToken: token })).toEqual({ executed: true, failed: false, skipped: false });
       expect(send).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }), { sessionToken: token });
-      expect(store.completeExecution).toHaveBeenCalledWith('a1', true, { delivery: 'sent' });
+      expect(store.completeExecution).toHaveBeenCalledWith('a1', true, { delivery: 'sent' }, null);
     });
 
     it('skips a session action with no session BEFORE starting it, so it stays approved', async () => {
@@ -127,7 +134,7 @@ describe('action executor', () => {
       const failing = sessionExecutor(async () => { throw Object.assign(new Error('Dear Pat Example'), { code: 'thread_changed' }); });
       const { executor, store, logs } = fixture({ executors: { 'communication.reply': failing } });
       expect(await executor.executeOne('a1', { kind: 'communication.reply', sessionToken: token })).toEqual({ executed: false, failed: true, skipped: false, error: 'thread_changed' });
-      expect(store.completeExecution).toHaveBeenCalledWith('a1', false, { error: 'thread_changed' });
+      expect(store.completeExecution).toHaveBeenCalledWith('a1', false, { error: 'thread_changed' }, null);
       expect(logs.join()).not.toMatch(/Pat Example|SSSS/);
     });
   });
@@ -135,7 +142,7 @@ describe('action executor', () => {
   it('records incidents without side effects', async () => {
     const { executor, store } = fixture({ started: execution({ kind: 'incident.open' }), executors: { ...recordOnlyExecutors } });
     expect(await executor.executeOne('a1')).toMatchObject({ executed: true });
-    expect(store.completeExecution).toHaveBeenCalledWith('a1', true, { recorded: true });
+    expect(store.completeExecution).toHaveBeenCalledWith('a1', true, { recorded: true }, null);
     expect(Object.keys(recordOnlyExecutors)).toEqual(['incident.open', 'incident.resolve']);
   });
 });

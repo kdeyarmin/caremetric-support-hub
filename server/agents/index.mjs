@@ -22,10 +22,12 @@ const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
  * `customerTextToAi` (the owner's switch) is true, a key is set and `guides` (the guide library) is given.
  */
 export function agentTeam({
-  pool, store = sqlAgentStore(pool), handlers = {}, executors = {}, sms, email, ownerEmail, publicOrigin,
+  pool, store: givenStore = null, handlers = {}, executors = {}, sms, email, ownerEmail, publicOrigin,
   fetchImpl = fetch, enabled = false, log = line => console.warn(line), now = () => new Date(), communications = null, features = null,
   anthropicApiKey = null, record = null, model = null, guides = null, customerTextToAi = false,
 }) {
+  // Fenced operations (the attempt a task was claimed under, the execution an action started) exist once the database declares the hardening feature.
+  const store = givenStore ?? sqlAgentStore(pool, { fenced: features?.has?.('platform.agents.hardening.v1') === true });
   const notifier = ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log });
   const runtime = model ?? modelRuntime({ apiKey: anthropicApiKey, store, record, notifier, log, now });
   const shared = { store, notifier, model: runtime };

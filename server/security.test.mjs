@@ -62,7 +62,7 @@ describe('application request boundary',()=>{
     expect(rpcQuery('list_audit_events',{p_action_prefix:'agent.',p_offset:0,p_limit:5}).values).toEqual(['agent.',0,5]);
     expect(()=>rpcQuery('list_agent_activity',{p_kind:'runs',sql:'select 1'})).toThrow();
     // Approving an action also carries it out, so changes run only through the owner routes, never the browser RPC allowlist.
-    for(const name of ['set_agent_status','set_agent_autonomy','set_agent_budget','decide_agent_action','request_agent_task','cancel_agent_task','agent_task_claim','owner_contact']) expect(()=>rpcQuery(name,{})).toThrow();
+    for(const name of ['set_agent_status','set_agent_autonomy','set_agent_budget','decide_agent_action','request_agent_task','cancel_agent_task','agent_task_claim','owner_contact','agent_task_heartbeat','agent_task_finish','agent_actions_ready','agent_action_executed','agent_action_release']) expect(()=>rpcQuery(name,{})).toThrow();
   });
   it('limits media capabilities to known objects and rejects traversal',()=>{
     for(const path of ['../secret','learning/../../secret','https://evil.test/file',`learning/${id}/answer.json`,`learning/${id}/videoxmp4`]) expect(()=>validateMedia(path,'sign')).toThrow();

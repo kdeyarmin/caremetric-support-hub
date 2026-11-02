@@ -21,7 +21,7 @@ describe('the AI team', () => {
     expect(team.scheduler.kinds()).toEqual(['brief.daily', 'probe.incident', 'probe.recovery', 'probe.sweep', 'seo.weekly']);
     await team.tick();
     expect(custom).toHaveBeenCalledTimes(1);
-    expect(fake.finish).toHaveBeenCalledWith('t1', 'done', { result: { custom: true }, errorCode: null, retryAt: null });
+    expect(fake.finish).toHaveBeenCalledWith('t1', 'done', { result: { custom: true }, errorCode: null, retryAt: null, attempt: 1 });
   });
 
   it('can copy other applications\' messages only when the inbox service is given', async () => {
@@ -69,6 +69,15 @@ describe('the AI team', () => {
       expect(await bare.actions.sessionActions()).toEqual([]);
       expect(await bare.actions.executeOne('a1', { kind: 'communication.reply', sessionToken: token })).toMatchObject({ failed: true, error: 'no_executor' });
     }
+  });
+
+  it('uses the fenced database operations only when the database declares the hardening feature', () => {
+    const pool = { connect: async () => ({ query: async () => ({ rows: [] }), release() {} }) };
+    expect(agentTeam({ pool, publicOrigin: origin }).store.fenced).toBe(false);
+    expect(agentTeam({ pool, publicOrigin: origin, features: new Set(['platform.agents.v1']) }).store.fenced).toBe(false);
+    expect(agentTeam({ pool, publicOrigin: origin, features: new Set(['platform.agents.v1', 'platform.agents.hardening.v1']) }).store.fenced).toBe(true);
+    const given = store();
+    expect(agentTeam({ store: given, publicOrigin: origin, features: new Set(['platform.agents.hardening.v1']) }).store).toBe(given);
   });
 
   it('hands a function of handlers the shared services', () => {
