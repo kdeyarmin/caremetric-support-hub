@@ -406,6 +406,13 @@ try {
   await call('private.agent_notify_finish', [delivered.id, 'sent', 'SG.fixture']);
   const sent = await row('select * from private.owner_notifications where id = $1', [delivered.id]);
   assert.deepEqual([sent.status, sent.provider_message_id, sent.subject.length, sent.body.length, sent.sent_at !== null], ['sent', 'SG.fixture', 200, 4000, true]);
+  // A send the server never settled (it stopped between recording and sending) becomes unknown and is never resent on its own.
+  const stuck = await call('private.agent_notify_begin', ['sms', 'urgent', 'Stuck', 'Stuck.', `it:${run}:alert:3`, null, null]);
+  assert.equal((await call('private.agent_maintenance')).unsettledNotifications, 0, 'a fresh pending notification is left alone');
+  await admin.query("update private.owner_notifications set created_at = now() - interval '16 minutes' where id = $1", [stuck.id]);
+  assert.equal((await call('private.agent_maintenance')).unsettledNotifications, 1);
+  assert.equal((await row('select status from private.owner_notifications where id = $1', [stuck.id])).status, 'unknown');
+  assert.equal((await call('private.agent_notify_begin', ['sms', 'urgent', 'Stuck', 'Stuck.', `it:${run}:alert:3`, null, null])).duplicate, true, 'and it is not sent again');
   await assert.rejects(call('private.agent_notify_finish', [delivered.id, 'sent', null]), refused('P0002'), 'a settled notification is final');
   await assert.rejects(call('private.agent_notify_finish', [randomUUID(), 'sent', null]), refused('P0002'));
   await assert.rejects(call('private.agent_notify_finish', [first.id, 'delivered', null]), refused('22023'));

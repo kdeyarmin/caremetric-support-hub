@@ -389,7 +389,9 @@ $$;
 -- execution the server never finished (a restart mid-send) goes back to its approved state
 -- (the inbox request key makes a second attempt safe); a task whose lease ran out while it
 -- waited on the owner's session is parked again; a task waiting on approval finishes once
--- nothing it proposed is still open.
+-- nothing it proposed is still open; a notification whose send was never settled (the server
+-- stopped between recording it and sending it) becomes unknown, so the owner sees it and it is
+-- never sent again on its own.
 create function private.agent_maintenance() returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -398,6 +400,7 @@ declare
   v_parked integer;
   v_failed integer;
   v_settled integer;
+  v_unsettled integer;
 begin
   perform private.require_hub_app_server();
   update private.agent_actions set status = 'expired', updated_at = now()
@@ -427,8 +430,12 @@ begin
       where x.task_id = t.id and x.status in ('proposed', 'approved', 'auto_approved', 'executing'));
   get diagnostics v_settled = row_count;
 
+  update private.owner_notifications set status = 'unknown'
+  where status = 'pending' and created_at < now() - interval '15 minutes';
+  get diagnostics v_unsettled = row_count;
+
   return jsonb_build_object('expiredActions', v_expired, 'resetExecutions', v_reset,
-    'parkedTasks', v_parked, 'failedTasks', v_failed, 'settledTasks', v_settled);
+    'parkedTasks', v_parked, 'failedTasks', v_failed, 'settledTasks', v_settled, 'unsettledNotifications', v_unsettled);
 end;
 $$;
 
