@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assess, attentionReasons, healthVersion, reasonWords, thresholds, weights } from './health.mjs';
+import { assess, attentionReasons, cancelDate, cancellationDate, healthVersion, reasonWords, renewingSubscriptions, thresholds, weights } from './health.mjs';
 import { account, iso, item, now, subscription } from './fixtures.mjs';
 
 const rated = (over, at = now) => assess(account(over), at);
@@ -139,5 +139,32 @@ describe('how an account is doing', () => {
     }
     for (const reason of attentionReasons) expect(reasonWords[reason], reason).toBeDefined();
     expect(Object.isFrozen(weights) && Object.isFrozen(thresholds) && Object.isFrozen(attentionReasons)).toBe(true);
+  });
+});
+
+describe('which subscription and date raised a flag', () => {
+  const at = new Date('2026-11-02T12:00:00Z');
+  const days = count => new Date(at.getTime() + count * 86_400_000).toISOString();
+  const sub = (over = {}) => ({ status: 'active', items: [{ interval: 'year', interval_count: 1, unit_amount: 100000, quantity: 1 }], current_period_end: days(20), created: days(-300), ...over });
+
+  it('dates a cancellation by when it takes effect: the explicit date while it is ahead, else the end of the period', () => {
+    expect(cancelDate(sub({ cancel_at: days(10) }), at.getTime())).toBe(Date.parse(days(10)));
+    expect(cancelDate(sub({ cancel_at_period_end: true }), at.getTime())).toBe(Date.parse(days(20)));
+    // A date that has passed is stale: it does not stand in for the period end, and a plan not set to cancel has no date.
+    expect(cancelDate(sub({ cancel_at: days(-3), cancel_at_period_end: true }), at.getTime())).toBe(Date.parse(days(20)));
+    expect(cancelDate(sub({ cancel_at: days(-3) }), at.getTime())).toBeNull();
+    expect(cancelDate(sub(), at.getTime())).toBeNull();
+  });
+
+  it('picks the cancellation that takes effect first across an account\'s plans', () => {
+    const account = { subscriptions: [sub({ cancel_at: days(60) }), sub({ cancel_at_period_end: true, current_period_end: days(2) })] };
+    expect(cancellationDate(account, at)).toBe(days(2));
+    expect(cancellationDate({ subscriptions: [sub()] }, at)).toBeNull();
+  });
+
+  it('lists every plan that renews in the window, earliest first', () => {
+    const account = { subscriptions: [sub({ current_period_end: days(25) }), sub({ current_period_end: days(8) }), sub({ current_period_end: days(90) })] };
+    expect(renewingSubscriptions(account, at).map(subscription => subscription.current_period_end)).toEqual([days(8), days(25)]);
+    expect(renewingSubscriptions({ subscriptions: [] }, at)).toEqual([]);
   });
 });

@@ -60,6 +60,30 @@ describe('the weekly account report', () => {
     expect(needs['Cancel Dates Home']).toBe('Cancels Nov 14');
   });
 
+  it('shows the cancellation that takes effect first, counting the end of the period for one set to cancel then', () => {
+    const report = compose([
+      // The first plan cancels at the end of its period, in two days; the second has an explicit date much later.
+      account({ slug: 'period-end', name: 'Period End Home', subscriptions: [subscription({ cancel_at_period_end: true, current_period_end: iso(2), created: iso(-300) }), subscription({ cancel_at: iso(60) })] }),
+      // A stale explicit date does not stand in for the period end of a plan set to cancel then.
+      account({ slug: 'stale', name: 'Stale Date Home', subscriptions: [subscription({ cancel_at: iso(-4), cancel_at_period_end: true, current_period_end: iso(9) })] }),
+    ]);
+    const needs = Object.fromEntries(rowsOf(report, 'Needs you'));
+    expect(needs['Period End Home']).toBe('Cancels Nov 4');
+    expect(needs['Stale Date Home']).toBe('Cancels Nov 11');
+  });
+
+  it('adds up every plan that renews in the window, and says how many there are', () => {
+    const annual = (amount, over = {}) => subscription({ items: [item({ unit_amount: amount, interval: 'year' })], ...over });
+    const report = compose([
+      account({ slug: 'two-annual', name: 'Two Annual Home', subscriptions: [annual(120000, { current_period_end: iso(20), created: iso(-300) }), annual(240000, { current_period_end: iso(20) })] }),
+      account({ slug: 'staggered', name: 'Staggered Home', subscriptions: [annual(120000, { current_period_end: iso(25), created: iso(-300) }), annual(60000, { current_period_end: iso(8) })] }),
+    ]);
+    expect(rowsOf(report, 'Renewing in the next 30 days')).toEqual([
+      ['Staggered Home', 'Renews Nov 10 (2 plans), $1,800.00 a year'],
+      ['Two Annual Home', 'Renews Nov 22 (2 plans), $3,600.00 a year'],
+    ]);
+  });
+
   it('reports revenue with the Billing screen\'s figures, and new and lost subscriptions this week', () => {
     const report = compose();
     const revenue = rowsOf(report, 'Revenue');

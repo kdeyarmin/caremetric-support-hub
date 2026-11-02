@@ -71,14 +71,32 @@ const renewsSoon = (subscription, nowTime) => {
   const cancelAt = instant(subscription.cancel_at);
   return !(cancelAt !== null && cancelAt > nowTime && cancelAt <= end);
 };
-const soonest = (list, key) => list.reduce((best, entry) => (best === null || (instant(entry[key]) ?? Infinity) < (instant(best[key]) ?? Infinity) ? entry : best), null);
+const soonest = (list, at) => list.reduce((best, entry) => (best === null || (at(entry) ?? Infinity) < (at(best) ?? Infinity) ? entry : best), null);
+const field = key => entry => instant(entry[key]);
 
-/** The live subscription whose scheduled cancellation raised `cancel_scheduled`, the earliest first, or null. */
-export const cancelingSubscription = (account, now = new Date()) => soonest(liveOf(account).filter(subscription => cancelsSoon(subscription, now.getTime())), 'cancel_at');
+/**
+ * The time a scheduled cancellation takes effect: its explicit date while that is still ahead, otherwise the end of the period when it
+ * is set to cancel then. A date that has passed is stale data (as for `cancel_scheduled`), so it does not stand in for the period end.
+ */
+export const cancelDate = (subscription, nowTime) => {
+  const at = instant(subscription.cancel_at);
+  if (at !== null && at > nowTime) return at;
+  return subscription.cancel_at_period_end === true ? instant(subscription.current_period_end) : null;
+};
+
+/** The live subscription whose scheduled cancellation raised `cancel_scheduled`, the one that takes effect first, or null. */
+export const cancelingSubscription = (account, now = new Date()) => soonest(liveOf(account).filter(subscription => cancelsSoon(subscription, now.getTime())), subscription => cancelDate(subscription, now.getTime()));
+/** When that cancellation takes effect, as an ISO time, or null. */
+export const cancellationDate = (account, now = new Date()) => {
+  const canceling = cancelingSubscription(account, now);
+  const at = canceling ? cancelDate(canceling, now.getTime()) : null;
+  return at === null ? null : new Date(at).toISOString();
+};
 /** The trialing subscription whose end raised `trial_ending`, the earliest first, or null. */
-export const endingTrial = (account, now = new Date()) => soonest(liveOf(account).filter(subscription => trialEndsSoon(subscription, now.getTime())), 'trial_end');
-/** The subscription that raised `renewing_soon`, the earliest renewal first, or null. */
-export const renewingSubscription = (account, now = new Date()) => soonest(liveOf(account).filter(subscription => renewsSoon(subscription, now.getTime())), 'current_period_end');
+export const endingTrial = (account, now = new Date()) => soonest(liveOf(account).filter(subscription => trialEndsSoon(subscription, now.getTime())), field('trial_end'));
+/** Every subscription that raised `renewing_soon`, the earliest renewal first (empty when none did). */
+export const renewingSubscriptions = (account, now = new Date()) => liveOf(account).filter(subscription => renewsSoon(subscription, now.getTime()))
+  .sort((a, b) => (instant(a.current_period_end) ?? Infinity) - (instant(b.current_period_end) ?? Infinity));
 
 /**
  * How long the account has been billing, in days: from its earliest subscription or, with none, from when the tenant was created.

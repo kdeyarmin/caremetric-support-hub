@@ -341,10 +341,11 @@ A case waiting on the customer is not held against the account. Usage is compare
 or before 28 days earlier, so an application that never reported usage is never marked down for it. An
 overdue invoice is an open one more than three days past its due date, or past its creation when it has none.
 
-**The email** lists, in this order: who needs you (payment trouble, a cancellation scheduled, a trial ending
+**The email** lists, in this order: who needs you (payment trouble, a cancellation scheduled, shown with the date it takes effect first, a trial ending
 within a week, a high-priority case, a closed account that still bills, anyone at risk), annual and
 multi-month plans renewing within 30 days (a plan with a cancellation date at or before its renewal is
-cancelling, not renewing, and appears only under who needs you), accounts whose usage is growing, then revenue (MRR, ARR, trial MRR,
+cancelling, not renewing, and appears only under who needs you; an account with several plans renewing in the
+window shows the first date, the number of plans and their yearly total), accounts whose usage is growing, then revenue (MRR, ARR, trial MRR,
 new and lost subscriptions this week, past due) and how many accounts are in each band. Each list shows at
 most ten rows and then "And N more", names are clipped to 60 characters and escaped, and a list cut at 200
 accounts says so. The revenue figures use the same functions as the Billing screen
