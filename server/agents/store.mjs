@@ -37,6 +37,14 @@ export function sqlAgentStore(pool) {
     ownerContact: () => call('private.owner_contact'),
     /** Counts and times for the morning brief: what needs the owner, what the team did yesterday. No names, no text. */
     briefFacts: () => call('private.agent_brief_facts'),
+    /** Conversations whose newest inbound message has settled and nobody has answered or triaged. Ids and counts only. */
+    conciergePending: ({ limit = 10, settleSeconds = 90, windowHours = 72, channels = null } = {}) =>
+      call('private.agent_concierge_pending', [limit, settleSeconds, windowHours, channels]),
+    /** A minimal view of one conversation (no contact details, no notes) with up to `messages` recent messages clipped to `chars`. */
+    communicationSnapshot: ({ id, requestKey = null, messages = 0, chars = 2000 }) =>
+      call('private.agent_communication_snapshot', [id, requestKey, messages, chars]),
+    /** How many alerts whose dedupe key starts with `prefix` went out on `channel` (any when null) since `since`. */
+    notificationCount: ({ prefix, channel = null, since }) => call('private.agent_notification_count', [prefix, channel, since]),
     /** One health check for one product. The database decides when that opens or closes an incident. */
     probeRecord: ({ targetKey, ok, statusCode, latencyMs, failure = null, threshold = 2, agentKey = 'platform_engineer' }) =>
       call('private.agent_probe_record', [targetKey, ok, statusCode, latencyMs, failure, threshold, agentKey]),

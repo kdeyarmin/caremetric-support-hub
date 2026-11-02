@@ -5,10 +5,11 @@ runs it: who the agents are, what each is allowed to do, how the owner stays in 
 is built so far.
 
 > **Status.** The database layer, the server scheduler, the `/admin/team` screen, the Platform
-> Engineer's health probes, the Chief of Staff's morning brief and the SEO Analyst's weekly report are
-> in place. The scheduler is inert unless `HUB_AGENTS_ENABLED` is exactly `true` and every agent is
-> seeded **paused**. None of the three working agents uses a model. The model runtime and the Support
-> Concierge arrive in the following changes.
+> Engineer's health probes, the Chief of Staff's morning brief, the SEO Analyst's weekly report and the
+> Support Concierge's triage of new conversations are in place. The scheduler is inert unless
+> `HUB_AGENTS_ENABLED` is exactly `true` and every agent is seeded **paused**. None of the working agents
+> uses a model, and customer message text never leaves the Hub. The model runtime and the Concierge's
+> acknowledgments and drafts arrive in the following changes.
 
 ## The model
 
@@ -165,6 +166,54 @@ weekly work happens only on Monday and the other mornings finish at once. **Run 
 sends a report every time, while the scheduled report is sent once per Monday. The analyst is observe-only
 and proposes no actions. Turning findings into issues for the coder bot is a later step.
 
+## The Support Concierge
+
+Notices every new conversation in the Communications inbox within minutes and tells the owner. It uses no
+model and keeps no message text: this is customer service by simple rules, so the owner finds out quickly
+and nothing a customer wrote leaves the Hub.
+
+Every five minutes (task `concierge.sweep`, "Look for new messages") it asks the database which
+conversations have a newest inbound message that has **settled** (90 seconds old, so a burst of texts counts
+once), is **recent** (within 72 hours, so importing old history never triggers a backlog), has **no reply or
+note after it**, and has no task yet. Each message gets its own task (`concierge.communication`, "Triage a
+message") whose request key is the message's id, so a message is triaged once however often the sweep sees
+it, and a customer's next message gets a task of its own. A task is skipped, with the reason recorded, when
+the conversation is closed, someone has answered since, a newer message has superseded it, its channel is off
+or it is an automatic reply or an empty message.
+
+Triage reads a minimal view of the conversation (`private.agent_communication_snapshot`: no contact name,
+email address, phone number, organization or assignee, no internal notes, and the subject only for email,
+because the subject of a phone-line message names the caller and a text's carries the number). It then:
+
+1. **Screens for personal identifiers**: a Social Security number, a date of birth next to a birth word, a
+   record, member, policy, patient or resident number, a Medicare number, a payment card number that passes
+   its check digit. Words like "resident" or "medication" never flag on their own. The screen reports which
+   kinds it found, never the text.
+2. **Categorizes by word matching**: security, legal, outage, cancellation, billing, sales or general, or an
+   automatic reply (`server/agents/concierge/rules.mjs`). The rules favour catching the urgent kinds over
+   being right about the rest.
+3. **Tells the owner**: an outage, a security concern or a legal matter is **urgent** (text and email);
+   billing, a cancellation or a message with identifiers is a **warning** (email); anything else is
+   **information** (email). Alerts say the kind of message, the channel, the product, the reference and how
+   long ago it arrived, and "nothing has been sent to the customer". Never what the customer wrote.
+
+Alerts are capped so that anyone who can write to the support address cannot flood the owner: at most 20
+individual emails a day at each level (the next one becomes a single rollup email for the day), at most
+three urgent texts an hour (after that, urgent alerts go by email only), and one urgent alert per
+conversation per day.
+
+It leaves a run on the owner's screen for each message it triaged (model `none`, prompt version `rules.1`,
+a summary that names the reference, the channel and the category). It proposes nothing yet: the fixed
+acknowledgment the owner can approve arrives with the Concierge's reply path, and drafted answers only after
+the owner confirms an Anthropic agreement that covers support messages.
+
+**What it watches** is set in the agent's `config`, which only SQL changes (the Team screen has no settings
+editor): `channels` (default email, chat, web form and phone-line messages; text messages stay off until the
+toll-free verification covers support texts), `settle_seconds` (90) and `window_hours` (72). Switch it on by
+resuming the Concierge on the **AI team** screen, preferably in **Observe**, and press **Run now** on "Look for
+new messages". Its handlers register only when the database declares `platform.agents.concierge.v1`, so a
+Hub whose database lacks the migration still starts and the sweep stays due instead of failing.
+
 ## Boundary
 
 - Every table has row level security and **no** privilege for any browser, service or server role.
@@ -182,7 +231,8 @@ Server (`hub_app_server` only): `agent_schedule_fire`, `agent_maintenance`, `age
 `agent_task_claim` (lease based, with crash recovery), `agent_task_heartbeat`, `agent_task_finish`,
 `agent_session_tasks`, `agent_session_task_claim`, `agent_run_start`, `agent_run_finish`,
 `agent_budget`, `agent_action_propose`, `agent_actions_ready`, `agent_action_execution`,
-`agent_action_executed`, `agent_notify_begin`, `agent_notify_finish`, `owner_contact`, `agent_probe_record`, `agent_brief_facts`.
+`agent_action_executed`, `agent_notify_begin`, `agent_notify_finish`, `owner_contact`, `agent_probe_record`, `agent_brief_facts`,
+`agent_concierge_pending`, `agent_communication_snapshot`, `agent_notification_count`.
 
 Owner (current administrator session): `get_agent_team`, `list_agent_activity`,
 `list_audit_events` (reads) and `set_agent_status`, `set_agent_autonomy`, `set_agent_budget`,
@@ -266,6 +316,11 @@ Apply the migrations in order with the usual procedure:
    declares `platform.agents.brief.v1` (and needs platform billing, the probes and the control plane).
 4. `20261102150000_agent_seo.sql`, then its gate `20261102150100_agent_seo_contract.sql`, which seeds
    the SEO Analyst (paused) and declares `platform.agents.seo.v1`.
+5. `20261102160000_agent_concierge.sql`, then its gate `20261102160100_agent_concierge_contract.sql`,
+   which adds the Concierge's three server-only reads, slows its sweep to every five minutes, gives it
+   its settings and declares `platform.agents.concierge.v1` (it needs the control plane and the unified
+   communications). Deploy the Hub after applying them: the server reads the declared features once, at
+   start.
 
 The Hub build does not require any of these features, so a Hub whose database lacks them still starts and
 serves everything else. The AI team is opt-in twice over: nothing runs unless `HUB_AGENTS_ENABLED`

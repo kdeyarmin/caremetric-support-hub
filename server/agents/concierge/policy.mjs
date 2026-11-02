@@ -1,0 +1,55 @@
+/**
+ * What the Concierge tells the owner about a new message, and how loudly. Pure: a category from
+ * the rules and whether the identifier screen flagged the message go in; a severity and the words
+ * for the alert come out. Alerts carry the kind of message, the channel, the product, the
+ * reference and how long ago it arrived, and nothing the customer wrote.
+ *
+ * Severity: an outage, a security concern or a legal matter is urgent (the owner is texted and
+ * emailed); billing, a cancellation or a message with identifiers is a warning (email); anything
+ * else is information (email). A message that carries identifiers is never quieter than a warning.
+ */
+import { plural } from '../tasks/shared.mjs';
+
+const severities = {
+  security: 'urgent', legal: 'urgent', outage: 'urgent', cancellation: 'warning', billing: 'warning', sales: 'info', general: 'info',
+};
+
+const categoryWords = {
+  security: 'possible security concern', legal: 'possible legal matter', outage: 'possible outage report',
+  cancellation: 'possible cancellation', billing: 'billing question', sales: 'sales or consulting inquiry', general: 'general question',
+};
+const channelWords = { phone: 'phone-line message', sms: 'text message', email: 'email', chat: 'chat', web_form: 'web form message' };
+const productWords = {
+  carebase: 'CareBase', breathe: 'Breathe', 'caremetric-intel': 'CareMetric Intel', advisors: 'Healthcare Advisors', pennsync: 'PennSync',
+  'caremetric-emr': 'CareMetric EMR', 'caremetric-go': 'CareMetric Go',
+};
+
+export const categoryWord = category => categoryWords[category] ?? categoryWords.general;
+export const channelWord = channel => channelWords[channel] ?? 'message';
+export const productWord = slug => (slug ? productWords[slug] ?? slug : null);
+
+/** { severity } for a message, or { severity: null } when it should not be triaged (an automatic reply). */
+export function decide({ category, phi = false }) {
+  if (category === 'auto_reply') return { severity: null };
+  const base = severities[category] ?? 'info';
+  return { severity: phi && base === 'info' ? 'warning' : base };
+}
+
+/** The subject and body of the owner's alert. */
+export function alertWords({ category, phi, severity, channel, productSlug, reference, minutes }) {
+  const kind = categoryWords[category] ?? categoryWords.general;
+  const product = productWord(productSlug);
+  const via = channelWord(channel);
+  const subject = severity === 'urgent'
+    ? `Urgent: ${kind} (CM-${reference}, ${via})`
+    : `New ${via}: CM-${reference}${product ? ` for ${product}` : ''}${category === 'general' ? (phi ? ', personal identifiers' : '') : `, ${kind}`}`;
+  const ago = minutes === null || minutes === undefined ? 'just now' : minutes <= 1 ? 'a minute ago' : `${plural(minutes, 'minute')} ago`;
+  const body = [
+    `${/^[aeiou]/i.test(via) ? 'An' : 'A'} ${via}${product ? ` for ${product}` : ''} reached the Hub ${ago}. It looks like a ${kind}${phi ? ' and appears to contain personal identifiers' : ''}.`,
+    phi
+      ? `Open CM-${reference} in Communications. Please do not forward or copy it: it may contain patient or resident information.`
+      : `Open CM-${reference} in Communications. Nothing has been sent to the customer.`,
+    severity === 'urgent' ? 'This was flagged by simple word matching, so it may be a false alarm.' : null,
+  ].filter(Boolean).join('\n\n');
+  return { subject, body };
+}
