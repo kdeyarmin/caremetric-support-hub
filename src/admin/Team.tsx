@@ -1,12 +1,13 @@
 import { useCallback, useState } from "react";
 import { Bot, RefreshCw } from "lucide-react";
+import { Link, useInRouterContext } from "react-router-dom";
 import { Loading, ReadFailure } from "./AdminReads";
 import { timeLabel } from "./readState";
 import { useAdminRead } from "./useAdminRead";
 import { TeamApiError, teamClient } from "./teamClient";
 import type { TeamClient } from "./teamClient";
 import {
-  actionLabel, autonomyHelp, autonomyLabels, cadenceLabel, centsLabel, outcomeLabel, statusLabel, taskLabel, tierLabels,
+  actionLabel, autonomyHelp, autonomyLabels, cadenceLabel, centsLabel, errorLabel, outcomeLabel, statusLabel, taskLabel, tierLabels,
 } from "./teamProtocol";
 import type { ActivityKind, ActivityPage, AuditPage, TeamAgent, TeamApproval, TeamOverview, TeamServices } from "./teamProtocol";
 import "./admin.css";
@@ -22,7 +23,7 @@ function Pill({ good, children }: { good: boolean; children: string }) {
   return <span className={`admin-status ${good ? "admin-status-connected" : "admin-status-muted"}`}>{children}</span>;
 }
 
-function ServicesPanel({ services, awaitingSession, busy, onRunWaiting }: { services: TeamServices; awaitingSession: number; busy: string; onRunWaiting: () => void }) {
+function ServicesPanel({ services, awaitingSession, waitingActions, busy, onRunWaiting }: { services: TeamServices; awaitingSession: number; waitingActions: number; busy: string; onRunWaiting: () => void }) {
   const handled = services.handlers.map(taskLabel);
   const rows: Array<{ name: string; good: boolean; state: string; detail: string }> = [
     { name: "Scheduler", good: services.enabled, state: services.enabled ? "On" : "Off",
@@ -38,11 +39,20 @@ function ServicesPanel({ services, awaitingSession, busy, onRunWaiting }: { serv
     <ul className="team-service-list">
       {rows.map(row => <li key={row.name}><span className="team-service-name">{row.name}</span><Pill good={row.good}>{row.state}</Pill><span className="muted">{row.detail}</span></li>)}
     </ul>
-    {awaitingSession > 0 && <div className="team-waiting">
-      <p className="admin-explanation" role="status">{awaitingSession === 1 ? "1 task is" : `${awaitingSession} tasks are`} waiting for you to be signed in, because reading another product needs your live session. Run {awaitingSession === 1 ? "it" : "them"} now while you are signed in.</p>
+    {(awaitingSession > 0 || waitingActions > 0) && <div className="team-waiting">
+      <p className="admin-explanation" role="status">
+        {awaitingSession > 0 && <>{awaitingSession === 1 ? "1 task is" : `${awaitingSession} tasks are`} waiting for you to be signed in, because reading another product needs your live session. </>}
+        {waitingActions > 0 && <>{waitingActions === 1 ? "1 reply you approved has" : `${waitingActions} replies you approved have`} not been sent yet. </>}
+        Run {awaitingSession + waitingActions === 1 ? "it" : "them"} now while you are signed in.</p>
       <button type="button" className="button button-primary button-small" disabled={Boolean(busy) || !services.enabled} onClick={onRunWaiting}>Run what's waiting</button>
     </div>}
   </section>;
+}
+
+/** A link to the conversation a proposal is about, in the inbox (a plain link where there is no router, as in tests). */
+function RecordLink({ reference }: { reference: string }) {
+  const href = `/communications?search=${encodeURIComponent(reference)}&status=all`;
+  return useInRouterContext() ? <Link to={href}>Open {reference}</Link> : <a href={href}>Open {reference}</a>;
 }
 
 function ApprovalCard({ approval, busy, onDecide }: { approval: TeamApproval; busy: string; onDecide: (approval: TeamApproval, decision: "approve" | "reject", note: string) => void }) {
@@ -51,6 +61,7 @@ function ApprovalCard({ approval, busy, onDecide }: { approval: TeamApproval; bu
   const sends = approval.kind === "communication.reply";
   return <li className="team-approval">
     <div className="team-approval-head"><strong>{approval.agentName}</strong> proposes: {what}{approval.targetId ? <> for <span className="team-target">{approval.targetId}</span></> : null}</div>
+    {/^CM-\d+$/.test(approval.targetId) && <p className="team-record"><RecordLink reference={approval.targetId} /></p>}
     <pre className="team-preview" aria-label={`Proposed text: ${what}`}>{approval.preview}</pre>
     <label className="team-note">Note (optional)<input value={note} maxLength={1000} disabled={Boolean(busy)} onChange={event => setNote(event.target.value)} /></label>
     <div className="button-row">
@@ -145,14 +156,14 @@ function ActivityRows({ tab, data, names }: { tab: Tab; data: unknown; names: Re
     return <Table caption="Runs" head={["Started", "Agent", "Outcome", "Usage", "Cost", "Summary"]}>
       {items.map(item => <tr key={item.id}><td>{timeLabel(item.startedAt)}</td><td>{who(item.agentKey)}</td><td>{outcomeLabel(item.outcome)}</td>
         <td>{plural(item.rounds, "round")} · {plural(item.toolCalls, "tool call")}<div className="muted">{item.inputTokens.toLocaleString()} in / {item.outputTokens.toLocaleString()} out</div></td>
-        <td>{centsLabel(item.costCents)}</td><td className="team-wide">{item.summary ?? item.errorCode ?? "—"}</td></tr>)}
+        <td>{centsLabel(item.costCents)}</td><td className="team-wide">{item.summary ?? (item.errorCode ? errorLabel(item.errorCode) : "—")}</td></tr>)}
     </Table>;
   }
   if (tab === "tasks") {
     const { items } = data as ActivityPage<"tasks">;
     return <Table caption="Tasks" head={["Created", "Agent", "Task", "Status", "Attempts", "Detail"]}>
       {items.map(item => <tr key={item.id}><td>{timeLabel(item.createdAt)}</td><td>{who(item.agentKey)}</td><td>{taskLabel(item.kind)}</td><td>{statusLabel(item.status)}</td><td>{item.attempts}</td>
-        <td className="team-wide">{item.lastErrorCode ?? (item.result ? clip(JSON.stringify(item.result), 120) : "—")}</td></tr>)}
+        <td className="team-wide">{item.lastErrorCode ? errorLabel(item.lastErrorCode) : item.result ? clip(JSON.stringify(item.result), 120) : "—"}</td></tr>)}
     </Table>;
   }
   if (tab === "actions") {
@@ -245,14 +256,15 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
     () => client.run({ agentKey: agent.key, taskKind }), `${taskLabel(taskKind)} is queued for ${agent.displayName}.`);
   const onRunWaiting = () => {
     let started = 0;
-    void change("waiting", async () => { started = (await client.waiting()).started; },
-      () => started === 0 ? "Nothing was waiting to run." : `Started ${plural(started, "task")}. They finish in the background; refresh in a minute to see the result.`);
+    let sending = 0;
+    void change("waiting", async () => { const result = await client.waiting(); started = result.started; sending = result.actions; },
+      () => started === 0 && sending === 0 ? "Nothing was waiting to run." : `${[started > 0 ? `Started ${plural(started, "task")}` : "", sending > 0 ? `${started > 0 ? "sending" : "Sending"} ${plural(sending, "approved reply").replace("replys", "replies")}` : ""].filter(Boolean).join(" and ")}. ${started + sending === 1 ? "It finishes" : "They finish"} in the background; refresh in a minute to see the result.`);
   };
   const onDecide = (approval: TeamApproval, decision: "approve" | "reject", note: string) => void change(`decide:${approval.id}`,
     async () => {
       const result = await client.decide({ actionId: approval.id, decision, note: note.trim() || undefined });
       if (!result.decided) throw new TeamApiError(409, "That was already decided or has expired. The list has been refreshed.");
-      if (result.status === "failed") throw new TeamApiError(500, "It was approved but could not be carried out. See the activity below.");
+      if (result.status === "failed") throw new TeamApiError(500, result.error ? errorLabel(result.error) : "It was approved but could not be carried out. See the activity below.");
     }, decision === "approve" ? "Approved." : "Rejected.");
 
   return <div className="team">
@@ -265,7 +277,7 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
     {state.status === "error" && shown && <ReadFailure error={state.error} retry={reload} />}
     {shown && <>
       <p className="admin-read-time">Loaded {timeLabel(shown.receivedAt)}.</p>
-      <ServicesPanel services={shown.data.services} awaitingSession={shown.data.team.awaitingSessionCount} busy={busy} onRunWaiting={onRunWaiting} />
+      <ServicesPanel services={shown.data.services} awaitingSession={shown.data.team.awaitingSessionCount} waitingActions={shown.data.waitingActions} busy={busy} onRunWaiting={onRunWaiting} />
       <ApprovalsPanel approvals={shown.data.team.approvals} count={shown.data.team.approvalCount} busy={busy} onDecide={onDecide} />
       <section aria-labelledby="team-agents-title"><h2 id="team-agents-title" className="team-section-heading">Agents</h2>
         <div className="team-agent-grid">

@@ -255,15 +255,17 @@ function AdminHome({ data, communications }: { data: HubData; communications?: C
   return <ControlCenter key={data.actor.id} data={data} {...(communications ? { communications } : {})} />;
 }
 
-/** The inbox opens with the filters a link carries: a channel, a status, and an application by slug (or repository name) or id. */
+/** The inbox opens with the filters a link carries: a channel, a status ("all" shows closed ones too), an application by slug (or repository name) or id, and a search such as a reference (CM-1001). */
 function CommunicationsRoute({ data, communications }: { data: HubData; communications?: CommunicationsClient }) {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
-  const channel = params.get("channel"), status = params.get("status"), requested = params.get("product");
+  const channel = params.get("channel"), status = params.get("status"), requested = params.get("product"), search = params.get("search")?.trim().slice(0, 100);
   const product = requested ? data.products.find((item) => item.slug === resolveProductSlug(requested) || item.id === requested) : undefined;
   const initialFilter = {
     ...(channel && channels.includes(channel as Channel) ? { channel: channel as Channel } : {}),
     ...(status && (status === "active" || conversationStatuses.includes(status as ConversationStatus)) ? { status: status as ConversationStatus | "active" } : {}),
+    ...(status === "all" ? { status: "" as const } : {}),
+    ...(search ? { search } : {}),
     ...(product ? { productId: product.id } : {}),
   };
   return <Communications key={`${data.actor.id}:${location.search}`} products={data.products} actor={data.actor} initialFilter={initialFilter} {...(communications ? { client: communications } : {})} />;

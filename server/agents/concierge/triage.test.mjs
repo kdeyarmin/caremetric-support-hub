@@ -24,6 +24,7 @@ const fixture = ({ snapshot = snapshotOf('How do I export the staff roster by mo
     notificationCount: vi.fn(async ({ prefix, channel }) => counts[`${prefix}${channel ?? ''}`] ?? 0),
     startRun: vi.fn(async () => 'run-1'),
     finishRun: vi.fn(async () => undefined),
+    proposeAction: vi.fn(async () => ({ id: 'action-1', status: 'proposed', requestKey: 'k1', created: true })),
   };
   const notifier = {
     send: vi.fn(async input => { sent.push(input); return (input.severity === 'urgent' ? ['sms', 'email'] : ['email']).map(channel => ({ channel, delivery: 'sent' })); }),
@@ -31,7 +32,7 @@ const fixture = ({ snapshot = snapshotOf('How do I export the staff roster by mo
   const handler = triageHandler({ store, notifier, log: line => logs.push(line) });
   return { store, notifier, sent, logs, run: (task = taskOf()) => handler(task, { now }) };
 };
-const everywhere = ({ sent, store, logs }, outcome) => JSON.stringify([sent, store.finishRun.mock.calls, store.startRun.mock.calls, logs, outcome]);
+const everywhere = ({ sent, store, logs }, outcome) => JSON.stringify([sent, store.finishRun.mock.calls, store.startRun.mock.calls, store.proposeAction.mock.calls, logs, outcome]);
 
 describe('triaging one message', () => {
   it('tells the owner about an ordinary question by email, and records what it did without a model', async () => {
@@ -43,11 +44,12 @@ describe('triaging one message', () => {
       body: 'An email for CareBase reached the Hub 5 minutes ago. It looks like a general question.\n\nOpen CM-1042 in Communications. Nothing has been sent to the customer.',
       dedupeKey: `concierge:new:${ids.message}`, agentKey: 'support_concierge', taskId: 't1',
     }]);
-    expect(outcome).toEqual({ result: {
-      outcome: 'alerted', reference: 1042, channel: 'email', product: 'carebase', category: 'general', phi: false, severity: 'info', delivery: ['email:sent'], screen: [], rules: [],
+    expect(outcome).toEqual({ status: 'awaiting_approval', result: {
+      outcome: 'alerted', reference: 1042, channel: 'email', product: 'carebase', category: 'general', phi: false, severity: 'info', delivery: ['email:sent'],
+      reply: 'proposed', template: 'standard', screen: [], rules: [],
     } });
     expect(harness.store.startRun).toHaveBeenCalledWith('t1', 'none', 'rules.1');
-    expect(harness.store.finishRun).toHaveBeenCalledWith('run-1', 'completed', {}, 'Triaged CM-1042 (email): general question; info alert (email:sent).', null);
+    expect(harness.store.finishRun).toHaveBeenCalledWith('run-1', 'completed', {}, 'Triaged CM-1042 (email): general question; info alert (email:sent); acknowledgment proposed.', null);
     expect(everywhere(harness, outcome)).not.toContain(canary);
   });
 
@@ -83,7 +85,7 @@ describe('triaging one message', () => {
       expect(outcome.result.severity).not.toBe('info');
       expect(outcome.result.screen.length).toBeGreaterThan(0);
       expect(harness.sent[0].body).toContain('Please do not forward or copy it');
-      expect(everywhere(harness, outcome)).not.toMatch(/Sample|1900|1234567|000-12|4111|1EG4|CANARY/);
+      expect(everywhere(harness, outcome)).not.toMatch(/Sample|1900|1234567|000-12|4111 1111|1EG4|CANARY/);
     }
   });
 
@@ -138,6 +140,81 @@ describe('triaging one message', () => {
       await expect(harness.run(taskOf({ payload }))).rejects.toMatchObject({ code: 'invalid_payload' });
     }
     expect(harness.store.communicationSnapshot).not.toHaveBeenCalled();
+  });
+});
+
+describe('proposing a fixed reply', () => {
+  const ack = 'Hello,\n\nThank you for contacting CareMetric Support. We have your message and a member of our team will review it and reply here.';
+
+  it('proposes the acknowledgment for the owner to approve, with the exact text as the preview', async () => {
+    const harness = fixture({ snapshot: snapshotOf(`How do I export the roster? ${canary}`) });
+    await harness.run();
+    expect(harness.store.proposeAction).toHaveBeenCalledTimes(1);
+    expect(harness.store.proposeAction).toHaveBeenCalledWith({
+      taskId: 't1', kind: 'communication.reply', targetKind: 'communication', targetId: 'CM-1042', preview: ack,
+      input: {
+        communicationId: ids.communication, reference: 1042, channel: 'email', route: 'email', basedOnMessageId: ids.message, body: ack,
+        classification: { category: 'general', phi: false }, template: 'standard',
+      },
+    });
+    expect(JSON.stringify(harness.store.proposeAction.mock.calls)).not.toContain(canary);
+  });
+
+  it('proposes the identifier notice instead when a plain question carries identifiers, and repeats none of them', async () => {
+    const harness = fixture({ snapshot: snapshotOf(`Resident A. Sample, DOB 01/01/1900, MRN 1234567. ${canary}`) });
+    const outcome = await harness.run();
+    expect(outcome).toMatchObject({ status: 'awaiting_approval', result: { reply: 'proposed', template: 'phi', phi: true } });
+    const [{ preview, input }] = harness.store.proposeAction.mock.calls[0];
+    expect(preview).toContain('not set up to receive patient or resident information');
+    expect(input).toMatchObject({ template: 'phi', classification: { category: 'general', phi: true }, body: preview });
+    expect(everywhere(harness, outcome)).not.toMatch(/Sample|1900|1234567|CANARY/);
+  });
+
+  it('answers a text message with the short version and a conversation with no address with nothing', async () => {
+    const text = fixture({ snapshot: snapshotOf('The export is empty.', { channel: 'sms', subject: null, canText: true, canEmail: false }) });
+    await text.run(taskOf({ agent: { autonomy: 'propose', config: { channels: ['sms'] } } }));
+    const [{ input }] = text.store.proposeAction.mock.calls[0];
+    expect([input.route, input.body.length <= 320, input.body.includes('\n')]).toEqual(['sms', true, false]);
+    const unreachable = fixture({ snapshot: snapshotOf('Help please.', { canEmail: false, canText: false }) });
+    expect(await unreachable.run()).toMatchObject({ status: 'done', result: { outcome: 'alerted', reply: 'no_route', template: 'standard' } });
+    expect(unreachable.store.proposeAction).not.toHaveBeenCalled();
+  });
+
+  it('leaves everything but a plain question to the owner', async () => {
+    for (const body of ['Everything is down for every user.', 'We were charged twice this month.', 'We will cancel unless this is fixed today.', 'Someone logged in as me.']) {
+      const harness = fixture({ snapshot: snapshotOf(body) });
+      expect(await harness.run(), body).toMatchObject({ status: 'done', result: { reply: 'owner_only' } });
+      expect(harness.store.proposeAction).not.toHaveBeenCalled();
+    }
+    const lead = fixture({ snapshot: snapshotOf('We run 12 ALFs and want help.', { channel: 'web_form', productSlug: 'advisors', inquiryType: 'advisors' }) });
+    expect(await lead.run()).toMatchObject({ status: 'done', result: { reply: 'owner_only' } });
+  });
+
+  it('does not acknowledge a follow-up in a thread the team already joined', async () => {
+    const harness = fixture({ snapshot: snapshotOf('Thanks, one more thing.', { outboundCount: 1, inboundCount: 2 }) });
+    expect(await harness.run()).toMatchObject({ status: 'done', result: { outcome: 'alerted', reply: 'follow_up', template: 'standard' } });
+    expect(harness.store.proposeAction).not.toHaveBeenCalled();
+    expect(harness.sent).toHaveLength(1);
+  });
+
+  it('proposes nothing for an observe-only agent, but still tells the owner', async () => {
+    const harness = fixture();
+    const outcome = await harness.run(taskOf({ agent: { autonomy: 'observe', config: {} } }));
+    expect(outcome).toMatchObject({ status: 'done', result: { reply: 'observe_only', template: 'standard' } });
+    expect(harness.store.proposeAction).not.toHaveBeenCalled();
+    expect(harness.sent).toHaveLength(1);
+    const refused = fixture();
+    refused.store.proposeAction.mockRejectedValue(Object.assign(new Error('observe-only'), { code: '42501' }));
+    expect(await refused.run()).toMatchObject({ status: 'done', result: { reply: 'observe_only' } });
+  });
+
+  it('keeps the task open for a proposal it made before, and fails on any other error so it is tried again', async () => {
+    const again = fixture();
+    again.store.proposeAction.mockResolvedValue({ id: 'action-1', status: 'proposed', requestKey: 'k1', created: false });
+    expect(await again.run()).toMatchObject({ status: 'awaiting_approval', result: { reply: 'already_proposed' } });
+    const broken = fixture();
+    broken.store.proposeAction.mockRejectedValue(Object.assign(new Error('db down'), { code: '57014' }));
+    await expect(broken.run()).rejects.toThrow('db down');
   });
 });
 

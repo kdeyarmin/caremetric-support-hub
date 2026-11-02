@@ -6,10 +6,10 @@ is built so far.
 
 > **Status.** The database layer, the server scheduler, the `/admin/team` screen, the Platform
 > Engineer's health probes, the Chief of Staff's morning brief, the SEO Analyst's weekly report and the
-> Support Concierge's triage of new conversations are in place. The scheduler is inert unless
-> `HUB_AGENTS_ENABLED` is exactly `true` and every agent is seeded **paused**. None of the working agents
-> uses a model, and customer message text never leaves the Hub. The model runtime and the Concierge's
-> acknowledgments and drafts arrive in the following changes.
+> Support Concierge's triage of new conversations, with the fixed replies it offers the owner, are in
+> place. The scheduler is inert unless `HUB_AGENTS_ENABLED` is exactly `true` and every agent is seeded
+> **paused**. None of the working agents uses a model, and customer message text never leaves the Hub.
+> The model runtime and the Concierge's drafted answers arrive in the following changes.
 
 ## The model
 
@@ -48,9 +48,10 @@ SMS sign-in; a lapsed session signs the owner out, as everywhere else in Admin.
   email address, email delivery and text alerts are in place, and how many tasks wait for the owner to be
   signed in, with a **Run what's waiting** button (see "Work that needs the owner's session").
 - **Waiting for you** lists every proposed action with a preview. A reply shows the exact text that will
-  go to the customer and its button says "Approve and send". The owner may add a note, then approves or
-  rejects. Approving carries the action out once, under its request key, and the screen says whether it
-  worked.
+  go to the customer, a link to open its conversation in the inbox, and a button that says "Approve and
+  send". The owner may add a note, then approves or rejects. Approving carries the action out once, under
+  its request key, and the screen says whether it worked and, when it did not, why in plain words (the
+  customer wrote again since the reply was written, the conversation was closed, the provider refused it).
 - **Agents** shows each agent with Pause or Resume, its autonomy level, its daily budget (entered in
   dollars) and what it has spent today, its model, last run, task counts and schedules. **Run now**
   appears only for work this server has code for, and only while the agent is active. A change made from
@@ -204,9 +205,30 @@ three urgent texts an hour (after that, urgent alerts go by email only), and one
 conversation per day.
 
 It leaves a run on the owner's screen for each message it triaged (model `none`, prompt version `rules.1`,
-a summary that names the reference, the channel and the category). It proposes nothing yet: the fixed
-acknowledgment the owner can approve arrives with the Concierge's reply path, and drafted answers only after
-the owner confirms an Anthropic agreement that covers support messages.
+a summary that names the reference, the channel and the category).
+
+**Fixed replies.** For a plain question it also proposes one reply for the owner to approve
+(`communication.reply`; the exact text is the preview). Both are written once, in
+`server/agents/concierge/templates.mjs`: an **acknowledgment** (the message arrived and a member of the team
+will review it) and, when the question carries identifiers, a **notice** saying these channels are not set up
+for patient or resident information and asking the sender to resend without names, dates of birth, record
+numbers or health details. Neither repeats anything the customer wrote, mentions AI or a phone call, or
+promises a time or an outcome; a text message gets a shorter version that fits one message. The owner answers
+everything else personally: an outage, a security or legal matter, billing, a cancellation, a sales or
+consulting inquiry, anything from the Advisors form, and any follow-up in a thread the team already joined.
+
+An approved reply is sent the way the owner would send it, through the inbox's own reply
+(`communications.reply`): it authorizes the owner's live session, is recorded before it is sent, goes out
+under the action's request key so a retry never sends twice, and is authored in the thread as the owner. So
+it needs that session. It is sent in the same request as the approval, or, if that could not happen (a
+restart, a lapsed session), the next time the owner presses **Run what's waiting**. The background clock
+never sends it. Before sending, it checks that the conversation is still the one the reply was written for:
+if the customer wrote again, or the conversation was closed, it sends nothing and says why. A reply nobody
+approved is refused even for an agent trusted to act. A send the provider did not confirm is never
+reported as sent and is not retried; it warns the owner to look at the thread first.
+
+Drafted answers from the published guides, with the model, come only after the owner confirms an Anthropic
+agreement that covers support messages.
 
 **What it watches** is set in the agent's `config`, which only SQL changes (the Team screen has no settings
 editor): `channels` (default email, chat, web form and phone-line messages; text messages stay off until the

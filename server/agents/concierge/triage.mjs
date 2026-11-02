@@ -6,15 +6,20 @@
  * run summary and the task result carry kinds, the channel, the product, the reference number and
  * how long ago the message arrived.
  *
+ * For a plain question it also proposes one of two fixed replies for the owner to approve (see templates.mjs):
+ * an acknowledgment, or a notice asking the sender to resend without the identifiers it carried. Everything
+ * else is the owner's to answer, and so is a follow-up in a thread the team already joined.
+ *
  * Alerts are capped so that anyone who can write to the support address cannot flood the owner:
  * at most 20 individual emails a day for each level (after that, one rollup email for the day) and
  * at most three urgent texts an hour (after that, urgent alerts go by email only).
  */
 import { minutesBetween, permanent, recordRun } from '../tasks/shared.mjs';
-import { alertWords, categoryWord, channelWord, decide } from './policy.mjs';
+import { alertWords, categoryWord, channelWord, decide, replyFor, replyRoute } from './policy.mjs';
 import { categorize } from './rules.mjs';
 import { screenIdentifiers } from './screen.mjs';
 import { conciergeSettings } from './settings.mjs';
+import { replyBody } from './templates.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const dailyEmailCap = 20;
@@ -55,6 +60,30 @@ export function triageHandler({ store, notifier, log = line => console.warn(line
     return notifier.send({ ...base, severity, dedupeKey: `${prefix}${payload.messageId}` });
   }
 
+  // The owner approves the exact text; it is written here, from a template, and nothing the customer wrote is in it.
+  async function proposeReply({ task, snapshot, category, screen }) {
+    const template = replyFor({ category, phi: screen.flagged, productSlug: snapshot.productSlug, inquiryType: snapshot.inquiryType });
+    if (!template) return { reply: 'owner_only' };
+    if ((snapshot.outboundCount ?? 0) > 0) return { reply: 'follow_up', template };
+    if (task.agent?.autonomy === 'observe') return { reply: 'observe_only', template };
+    const route = replyRoute(snapshot);
+    if (!route) return { reply: 'no_route', template };
+    const body = replyBody(template, route);
+    try {
+      const proposal = await store.proposeAction({
+        taskId: task.id, kind: 'communication.reply', targetKind: 'communication', targetId: `CM-${snapshot.reference}`, preview: body,
+        input: {
+          communicationId: snapshot.id, reference: snapshot.reference, channel: snapshot.channel, route, basedOnMessageId: snapshot.headMessageId,
+          body, classification: { category, phi: screen.flagged }, template,
+        },
+      });
+      return { reply: proposal.created === false ? 'already_proposed' : 'proposed', template };
+    } catch (error) {
+      if (error?.code === '42501') return { reply: 'observe_only', template };
+      throw error;
+    }
+  }
+
   async function communication(task, { now = () => new Date() } = {}) {
     const payload = task.payload ?? {};
     if (!uuid.test(payload.communicationId ?? '') || !uuid.test(payload.messageId ?? '')) throw permanent('invalid_payload');
@@ -77,14 +106,18 @@ export function triageHandler({ store, notifier, log = line => console.warn(line
     });
     const results = await sendAlert({ task, snapshot, payload, words, severity, now });
     const delivery = results.map(item => `${item.channel}:${item.delivery}`);
+    const proposal = await proposeReply({ task, snapshot, category, screen });
+    const proposed = proposal.reply === 'proposed' || proposal.reply === 'already_proposed';
     await recordRun({ store, log }, task, {
       promptVersion: 'rules.1',
-      summary: `Triaged CM-${snapshot.reference} (${channelWord(snapshot.channel)}): ${categoryWord(category)}${screen.flagged ? ', identifiers found' : ''}; ${severity} alert (${delivery.join(', ')}).`,
+      summary: `Triaged CM-${snapshot.reference} (${channelWord(snapshot.channel)}): ${categoryWord(category)}${screen.flagged ? ', identifiers found' : ''}; ${severity} alert (${delivery.join(', ')})${proposed ? `; ${proposal.template === 'phi' ? 'identifier notice' : 'acknowledgment'} proposed` : ''}.`,
     });
     return {
+      // A proposed reply keeps the task open until the owner approves or rejects it.
+      status: proposed ? 'awaiting_approval' : 'done',
       result: {
         outcome: 'alerted', reference: snapshot.reference, channel: snapshot.channel, product: snapshot.productSlug ?? null, category, phi: screen.flagged,
-        severity, delivery, screen: screen.kinds, rules: reasons,
+        severity, delivery, reply: proposal.reply, ...(proposal.template ? { template: proposal.template } : {}), screen: screen.kinds, rules: reasons,
       },
     };
   }

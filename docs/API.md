@@ -205,24 +205,27 @@ Owner controls (POST only, same-origin, SMS session, no query string, at most 8 
 owner's session and the database authorizes it: reads need the administrator session, changes need the
 command session (under eight hours old). Unknown keys in a body are refused with 400.
 
-- `POST /api/admin/team/overview` — `{}` → `{ team, services }`: the roster (status, autonomy, model tier,
-  budget and today's spend, last run, task counts, schedules), what is waiting for approval, and which
-  services the team can use right now (scheduler on, task kinds with a handler, text, email, owner address).
+- `POST /api/admin/team/overview` — `{}` → `{ team, services, waitingActions }`: the roster (status, autonomy,
+  model tier, budget and today's spend, last run, task counts, schedules), what is waiting for approval, which
+  services the team can use right now (scheduler on, task kinds with a handler, text, email, owner address),
+  and how many approved replies could not be sent yet and wait for the owner's session.
 - `POST /api/admin/team/status` — `{ key, status: "active" | "paused", expectedUpdatedAt }` → the agent.
 - `POST /api/admin/team/autonomy` — `{ key, autonomy: "observe" | "propose" | "act", expectedUpdatedAt }` → the agent.
 - `POST /api/admin/team/budget` — `{ key, dailyBudgetCents: 0–100000, expectedUpdatedAt }` → the agent.
   A stale `expectedUpdatedAt` returns 409; hand back the `updatedAt` the roster returned, untouched.
 - `POST /api/admin/team/decide` — `{ actionId, decision: "approve" | "reject", note? }` →
-  `{ id, kind, status, decided }`. An approval is carried out straight away (`status` becomes `executed` or
-  `failed`); deciding twice, or after the proposal expired, changes nothing and reports `decided: false`.
+  `{ id, kind, status, decided, error? }`. An approval is carried out straight away, with the owner's session
+  when the action needs it (`status` becomes `executed` or `failed`; `error` is the failure's code, such as
+  `thread_changed`); deciding twice, or after the proposal expired, changes nothing and reports `decided: false`.
 - `POST /api/admin/team/run` — `{ agentKey, taskKind }` → `{ id, status }`. Queues one of the agent's own
   scheduled tasks ("Run now"); the agent must be active. A task that reads another application needs the
   owner's session, so it starts at once and answers `status: "running"`.
 - `POST /api/admin/team/cancel` — `{ taskId }` → `{ id, status }`.
-- `POST /api/admin/team/waiting` — `{}` → `{ started }`. Runs the work that was waiting for the owner's
-  sign-in (imports from Advisors and Breathe). It confirms a current administrator session first (401
-  otherwise), claims up to three tasks, answers at once and lets them finish in the background; 409 when
-  the scheduler is off.
+- `POST /api/admin/team/waiting` — `{}` → `{ started, actions }`. Runs the work that was waiting for the
+  owner's sign-in: imports from Advisors and Breathe (`started` tasks, up to three) and approved replies that
+  never went out (`actions`, sent one at a time). It confirms a current administrator session first (401
+  otherwise), answers at once and lets the work finish in the background; 409 when the scheduler is off and
+  no reply was waiting.
 
 The history pages are reads through the browser RPC allowlist (`POST /api/rpc/<name>`):
 `get_agent_team`, `list_agent_activity` (`p_kind`: `runs`, `tasks`, `actions` or `notifications`, optional

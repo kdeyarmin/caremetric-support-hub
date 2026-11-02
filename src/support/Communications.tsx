@@ -32,11 +32,11 @@ function useRequestKey() {
 }
 
 /** Filters a link can open the inbox with, for example the control center's "3 texts waiting" link. */
-export interface CommunicationsFilter { status?: ConversationStatus | "active" | ""; channel?: Channel | ""; productId?: string }
+export interface CommunicationsFilter { status?: ConversationStatus | "active" | ""; channel?: Channel | ""; productId?: string; search?: string }
 
 export function Communications({ products, actor, client = communicationsClient, initialFilter }: { products: Product[]; actor: { id: string; role: string }; client?: CommunicationsClient; initialFilter?: CommunicationsFilter }) {
-  const [filter, setFilter] = useState<{ status: ConversationStatus | "active" | ""; channel: Channel | ""; productId: string; search: string }>({ status: initialFilter?.status ?? "active", channel: initialFilter?.channel ?? "", productId: initialFilter?.productId ?? "", search: "" });
-  const [searchInput, setSearchInput] = useState("");
+  const [filter, setFilter] = useState<{ status: ConversationStatus | "active" | ""; channel: Channel | ""; productId: string; search: string }>({ status: initialFilter?.status ?? "active", channel: initialFilter?.channel ?? "", productId: initialFilter?.productId ?? "", search: initialFilter?.search ?? "" });
+  const [searchInput, setSearchInput] = useState(initialFilter?.search ?? "");
   const [offset, setOffset] = useState(0);
   const [page, setPage] = useState<ConversationPage | null>(null);
   const [selected, setSelected] = useState<string | null>(null);

@@ -56,7 +56,10 @@ export function agentAdmin({ pool, actions, services = () => ({}), kick = null, 
     /** The roster, what waits for approval, and which services the team can use right now. */
     async overview(token, input = {}) {
       exactly(input, []);
-      return { team: await query(token, 'hub.get_agent_team'), services: services() };
+      const team = await query(token, 'hub.get_agent_team');
+      // Approved replies that could not be sent yet (a restart, or a session that lapsed) wait for the owner's next press of the button.
+      const waitingActions = await Promise.resolve(actions.sessionActions?.()).then(list => list?.length ?? 0, () => 0);
+      return { team, services: services(), waitingActions };
     },
     async status(token, input) {
       exactly(input, ['key', 'status', 'expectedUpdatedAt']);
@@ -82,12 +85,17 @@ export function agentAdmin({ pool, actions, services = () => ({}), kick = null, 
       soon();
       return requested;
     },
-    /** Runs what was waiting for the owner's sign-in (imports from Advisors and Breathe). Answers at once; the work continues in the background. */
+    /** Runs what was waiting for the owner's sign-in: imports from Advisors and Breathe, and approved replies that never went out. Answers at once; the work continues in the background. */
     async waiting(token, input = {}) {
       exactly(input, []);
       // The same assurance the database asks for any change: a lapsed session gets 401 before anything is claimed.
       await query(token, 'hub.authorize_app_command');
-      return { started: await startWaiting(token) };
+      // Approved replies that never went out are sent now, with this session, one at a time in the background.
+      const ready = await Promise.resolve(actions.sessionActions?.()).catch(() => []) ?? [];
+      if (ready.length > 0) void actions.executeSessionActions(ready, { sessionToken: token }).catch(() => {});
+      // With the scheduler off there are no tasks to start, but the replies above still go out.
+      const started = await startWaiting(token).catch(error => { if (ready.length > 0 && error?.status === 409) return 0; throw error; });
+      return { started, actions: ready.length };
     },
     async cancel(token, input) {
       exactly(input, ['taskId']);
@@ -100,13 +108,15 @@ export function agentAdmin({ pool, actions, services = () => ({}), kick = null, 
       if (note !== null && (typeof note !== 'string' || note.length > 1000)) throw new HttpError(400, 'Invalid note.');
       const decided = await query(token, 'hub.decide_agent_action', [matching(input.actionId, uuid, 'action'), oneOf(input.decision, ['approve', 'reject'], 'decision'), note]);
       let status = decided.status;
+      let error = null;
       if (decided.decided && decided.status === 'approved') {
-        // The database already holds the approval; a failure here leaves it ready for the next tick to carry out.
-        const outcome = await actions.executeOne(decided.id).catch(() => null);
+        // The database already holds the approval; a failure here leaves it approved. An action that needs the owner's session
+        // runs now, with theirs; one the tick can carry out is picked up on the next tick.
+        const outcome = await actions.executeOne(decided.id, { kind: decided.kind, sessionToken: token }).catch(() => null);
         if (outcome?.executed) status = 'executed';
-        else if (outcome?.failed) status = 'failed';
+        else if (outcome?.failed) { status = 'failed'; error = outcome.error ?? null; }
       }
-      return { id: decided.id, kind: decided.kind, status, decided: decided.decided };
+      return { id: decided.id, kind: decided.kind, status, decided: decided.decided, ...(error ? { error } : {}) };
     },
   };
 }

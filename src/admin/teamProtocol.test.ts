@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionLabel, cadenceLabel, centsLabel, outcomeLabel, statusLabel, taskLabel } from "./teamProtocol";
+import { actionLabel, cadenceLabel, centsLabel, decisionSchema, errorLabel, outcomeLabel, statusLabel, taskLabel, waitingSchema } from "./teamProtocol";
 
 describe("AI team display", () => {
   it("shows money in whole cents", () => {
@@ -36,5 +36,23 @@ describe("AI team display", () => {
     expect(outcomeLabel(null)).toBe("Running");
     expect(outcomeLabel("budget_exhausted")).toBe("Stopped at the daily budget");
     expect(outcomeLabel("new_outcome")).toBe("new_outcome");
+  });
+
+  it("explains why an action could not be carried out, and shows an unknown code as it is", () => {
+    expect(errorLabel("thread_changed")).toMatch(/customer wrote again/);
+    expect(errorLabel("conversation_closed")).toBe("The conversation was closed, so nothing was sent.");
+    expect(errorLabel("session_required")).toMatch(/Run what's waiting/);
+    expect(errorLabel("delivery_unknown")).toMatch(/check the thread before sending again/);
+    expect(errorLabel("brand_new_code")).toBe("brand_new_code");
+    expect(errorLabel(null)).toBe("");
+    expect(errorLabel(undefined)).toBe("");
+  });
+
+  it("accepts a decision with or without a failure code, and a count of both kinds of waiting work", () => {
+    const decision = { id: "11111111-1111-4111-8111-111111111111", kind: "communication.reply", status: "failed", decided: true };
+    expect(decisionSchema.parse(decision)).toEqual(decision);
+    expect(decisionSchema.parse({ ...decision, error: "thread_changed" }).error).toBe("thread_changed");
+    expect(waitingSchema.parse({ started: 1, actions: 2 })).toEqual({ started: 1, actions: 2 });
+    expect(() => waitingSchema.parse({ started: 1 })).toThrow();
   });
 });

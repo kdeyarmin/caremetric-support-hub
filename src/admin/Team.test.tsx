@@ -33,13 +33,14 @@ const overview = (changes: Partial<TeamOverview["team"]> = {}, services: Partial
     ...changes,
   },
   services: { enabled: true, handlers: ["probe.sweep"], sms: true, email: true, ownerEmail: true, ...services },
+  waitingActions: 0,
 });
 const emptyPage = { items: [], total: 0, offset: 0, limit: 15 };
 function fakeClient(data: TeamOverview = overview(), overrides: Partial<TeamClient> = {}): TeamClient {
   return {
     overview: vi.fn(async () => data), setStatus: vi.fn(async () => engineer), setAutonomy: vi.fn(async () => engineer), setBudget: vi.fn(async () => engineer),
     decide: vi.fn(async () => ({ id: ids.action, kind: "communication.reply", status: "executed", decided: true })), run: vi.fn(async () => ({ id: ids.task, status: "queued" })),
-    cancel: vi.fn(async () => ({ id: ids.task, status: "cancelled" })), waiting: vi.fn(async () => ({ started: 2 })),
+    cancel: vi.fn(async () => ({ id: ids.task, status: "cancelled" })), waiting: vi.fn(async () => ({ started: 2, actions: 0 })),
     activity: vi.fn(async () => emptyPage) as TeamClient["activity"], audit: vi.fn(async () => emptyPage), ...overrides,
   };
 }
@@ -88,7 +89,7 @@ describe("AI team screen", () => {
 
   it("says when nothing was waiting, shows no button when nothing is, and disables it while the team is off", async () => {
     const client = fakeClient(overview({ awaitingSessionCount: 1 }), {});
-    (client.waiting as ReturnType<typeof vi.fn>).mockResolvedValue({ started: 0 });
+    (client.waiting as ReturnType<typeof vi.fn>).mockResolvedValue({ started: 0, actions: 0 });
     render(<Team client={client} />);
     fireEvent.click(await screen.findByRole("button", { name: "Run what's waiting" }));
     expect(await screen.findByText("Nothing was waiting to run.")).toBeTruthy();
@@ -106,6 +107,36 @@ describe("AI team screen", () => {
     render(<Team client={client} />);
     fireEvent.click(await screen.findByRole("button", { name: "Run what's waiting" }));
     expect((await screen.findByRole("alert")).textContent).toContain("Current administrator session required.");
+  });
+
+  it("offers to send approved replies that never went out, and says what started", async () => {
+    const client = fakeClient({ ...overview({ awaitingSessionCount: 0 }), waitingActions: 2 }, { waiting: vi.fn(async () => ({ started: 0, actions: 2 })) });
+    render(<Team client={client} />);
+    const services = await screen.findByRole("region", { name: "What the team can use" });
+    expect(within(services).getByText(/2 replies you approved have not been sent yet/)).toBeTruthy();
+    fireEvent.click(within(services).getByRole("button", { name: "Run what's waiting" }));
+    expect(await screen.findByText(/Sending 2 approved replies\. They finish in the background/)).toBeTruthy();
+    cleanup();
+    const both = fakeClient({ ...overview({ awaitingSessionCount: 1 }), waitingActions: 1 }, { waiting: vi.fn(async () => ({ started: 1, actions: 1 })) });
+    render(<Team client={both} />);
+    expect(await screen.findByText(/1 task is waiting for you to be signed in/)).toBeTruthy();
+    expect(screen.getByText(/1 reply you approved has not been sent yet/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Run what's waiting" }));
+    expect(await screen.findByText(/Started 1 task and sending 1 approved reply\. They finish in the background/)).toBeTruthy();
+  });
+
+  it("links a proposed reply to its conversation in the inbox", async () => {
+    render(<Team client={fakeClient()} />);
+    const waiting = await screen.findByRole("region", { name: /Waiting for you/ });
+    const link = within(waiting).getByRole("link", { name: "Open CM-1001" });
+    expect(link.getAttribute("href")).toBe("/communications?search=CM-1001&status=all");
+  });
+
+  it("says why an approved reply could not be sent", async () => {
+    const client = fakeClient(overview(), { decide: vi.fn(async () => ({ id: ids.action, kind: "communication.reply", status: "failed", decided: true, error: "thread_changed" })) });
+    render(<Team client={client} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Approve and send/ }));
+    expect((await screen.findByRole("alert")).textContent).toContain("The customer wrote again after this reply was written, so nothing was sent.");
   });
 
   it("resumes an agent, naming the version it saw, and refreshes", async () => {

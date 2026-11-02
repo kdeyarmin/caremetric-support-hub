@@ -4,6 +4,7 @@ import { actionExecutor, recordOnlyExecutors } from './actions.mjs';
 import { ownerNotifier } from './notify.mjs';
 import { agentAdmin } from './admin.mjs';
 import { builtInHandlers } from './tasks/index.mjs';
+import { conciergeExecutors } from './concierge/index.mjs';
 
 const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 
@@ -21,7 +22,7 @@ export function agentTeam({
 }) {
   const notifier = ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log });
   const shared = { store, notifier };
-  const actions = actionExecutor({ store, executors: { ...recordOnlyExecutors, ...(typeof executors === 'function' ? executors(shared) : executors) }, log });
+  const actions = actionExecutor({ store, executors: { ...recordOnlyExecutors, ...conciergeExecutors({ communications, store, notifier, features, log }), ...(typeof executors === 'function' ? executors(shared) : executors) }, log });
   // The handlers every server ships with, then any the caller adds (a caller's handler for the same kind wins).
   const registry = { ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   const scheduler = agentScheduler({ store, handlers: registry, actions, enabled, log, now });

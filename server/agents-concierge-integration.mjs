@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
-import { digest } from './sms-auth.mjs';
+import { digest, withSession } from './sms-auth.mjs';
+import { communications } from './communications.mjs';
 import { gateway } from './gateway.mjs';
 import { agentTeam } from './agents/index.mjs';
 
@@ -24,6 +25,7 @@ const api = gateway(pool);
 const gate = await readFile(new URL('../supabase/migrations/20261102160100_agent_concierge_contract.sql', import.meta.url), 'utf8');
 
 const owner = randomUUID();
+const ownerToken = `concierge-owner-${randomUUID()}`, staleToken = `concierge-stale-${randomUUID()}`;
 const run = randomUUID().slice(0, 8);
 const ownerPhone = `+1202555${String(1000 + Math.floor(Math.random() * 9000))}`;
 // Text that must never leave the conversation table: the body, the contact details, the organization and an internal note.
@@ -35,6 +37,8 @@ const refused = (code, pattern) => error => { assert.equal(error.code, code, err
 const row = async (sql, params = []) => (await admin.query(sql, params)).rows[0];
 const rows = async (sql, params = []) => (await admin.query(sql, params)).rows;
 const minutesAgo = minutes => new Date(Date.now() - minutes * 60_000);
+const action = id => row('select * from private.agent_actions where id = $1', [id]);
+const auditFor = (actionName, entityId) => rows('select * from private.audit_events where action = $1 and entity_id = $2 order by id', [actionName, entityId]);
 
 const made = [];
 let counter = 0;
@@ -59,6 +63,9 @@ async function conversation({ channel = 'email', product = 'carebase', status = 
   }
   return { id: created.id, reference: Number(created.reference), messages: ids };
 }
+// An owner call: the same statement the gateway runs, inside a real SMS session.
+const ownerCall = (fn, args = [], token = ownerToken) => withSession(pool, token, async db =>
+  (await db.query(`select to_jsonb(${fn}(${args.map((_, i) => `$${i + 1}`).join(',')})) as r`, args)).rows[0].r);
 const pending = (settle = 90, window = 72, channels = null, limit = 50) => call('private.agent_concierge_pending', [limit, settle, window, channels]);
 const snapshot = (id, key = null, count = 0, chars = 2000) => call('private.agent_communication_snapshot', [id, key, count, chars]);
 const clearWork = async () => {
@@ -75,6 +82,11 @@ try {
   await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'concierge-owner@test.invalid',false)", [owner]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')", [owner]);
   await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,$2,now())", [owner, ownerPhone]);
+  await admin.query("insert into hub.profiles(id,display_name) values($1,'Concierge integration owner') on conflict (id) do update set display_name=excluded.display_name", [owner]);
+  for (const [token, age] of [[ownerToken, '0 hours'], [staleToken, '9 hours']]) {
+    await admin.query(`insert into private.sms_sessions(id,token_hash,user_id,identity_version,created_at,expires_at)
+      select $1,$2,user_id,identity_version,now()-$4::interval,now()+interval '1 hour' from private.sms_identities where user_id=$3`, [randomUUID(), digest(token), owner, age]);
+  }
   // The owner contact is "the single active administrator": set the ones other scripts left behind aside for this run.
   setAside = (await admin.query("update private.staff_permissions set revoked_at = now() where permission = 'platform.admin' and revoked_at is null and user_id <> $1 returning id", [owner])).rows.map(entry => entry.id);
   // Other scripts leave unanswered conversations behind. Close them for this run so every count below is this script's own, and reopen them after.
@@ -211,13 +223,14 @@ try {
   for (let index = 0; index < 5; index += 1) tick = await team.tick();
   const triage = await rows("select source_ref, request_key, result, status from private.agent_tasks where kind = 'concierge.communication' order by created_at");
   assert.equal(triage.length, 9, 'eight conversations, and the newer message of one of them');
-  assert.ok(triage.every(entry => entry.status === 'done'), 'every triage task finished');
+  assert.ok(triage.every(entry => entry.status === (entry.result.reply === 'proposed' ? 'awaiting_approval' : 'done')), 'every triage task finished, and one with a proposed reply waits for the owner');
   const results = Object.fromEntries(triage.map(entry => [entry.source_ref, entry]));
   const outcomeOf = conversationFixture => results[`CM-${conversationFixture.reference}`];
-  assert.deepEqual(outcomeOf(flow.ordinary).result, { outcome: 'alerted', reference: flow.ordinary.reference, channel: 'email', product: 'carebase', category: 'general', phi: false, severity: 'info', delivery: ['email:sent'], screen: [], rules: [] });
+  assert.deepEqual(outcomeOf(flow.ordinary).result, { outcome: 'alerted', reference: flow.ordinary.reference, channel: 'email', product: 'carebase', category: 'general', phi: false, severity: 'info', delivery: ['email:sent'], reply: 'proposed', template: 'standard', screen: [], rules: [] });
   assert.deepEqual([outcomeOf(flow.outage).result.category, outcomeOf(flow.outage).result.severity, outcomeOf(flow.outage).result.delivery], ['outage', 'urgent', ['sms:sent', 'email:sent']]);
   assert.deepEqual([outcomeOf(flow.billing).result.category, outcomeOf(flow.billing).result.severity], ['billing', 'warning']);
-  assert.deepEqual([outcomeOf(flow.identifiers).result.phi, outcomeOf(flow.identifiers).result.screen, outcomeOf(flow.identifiers).result.severity], [true, ['ssn', 'dob'], 'warning']);
+  assert.deepEqual([outcomeOf(flow.identifiers).result.phi, outcomeOf(flow.identifiers).result.screen, outcomeOf(flow.identifiers).result.severity, outcomeOf(flow.identifiers).result.template], [true, ['ssn', 'dob'], 'warning', 'phi']);
+  assert.deepEqual([flow.outage, flow.billing, flow.lead].map(entry => outcomeOf(entry).result.reply), ['owner_only', 'owner_only', 'owner_only'], 'the owner answers an outage, billing and a sales lead personally');
   assert.deepEqual([outcomeOf(flow.lead).result.category, outcomeOf(flow.lead).result.product], ['sales', 'advisors']);
   assert.deepEqual(outcomeOf(flow.autoReply).result, { outcome: 'skipped', reason: 'auto_reply', reference: flow.autoReply.reference });
   assert.deepEqual(outcomeOf(flow.handled).result, { outcome: 'skipped', reason: 'answered', reference: flow.handled.reference }, 'a conversation a person answered is left alone');
@@ -271,6 +284,138 @@ try {
   assert.ok(!bare.scheduler.kinds().includes('concierge.sweep'), 'a server whose database lacks the feature does not run the sweep');
   await clearWork();
 
+  // ---- Approved replies: sent as the owner, once, into the thread they were written for ------------------------------------------
+  await clearWork();
+  await admin.query("update private.agent_schedules set next_run_at = now() + interval '1 day'");
+  const outbox = [];
+  let customerEmail = { delivery: 'sent', id: 'fixture-reply' };
+  const emailSender = { configured: true, send: async (to, subject, content) => { outbox.push([to, subject, content]); return to === 'owner@example.test' ? { delivery: 'sent', id: 'fixture-alert' } : customerEmail; } };
+  const textSender = { configured: true, send: async () => ({ delivery: 'sent', id: `SM${'2'.repeat(32)}` }) };
+  const messaging = communications({ pool, delegations: {}, publicOrigin: 'https://hub.test', chatEnabled: true, sms: textSender, email: emailSender });
+  const replyTeam = agentTeam({ pool, enabled: true, ownerEmail: 'owner@example.test', publicOrigin: 'https://hub.test', log: line => logs.push(line), features: new Set(features), sms: textSender, email: emailSender, communications: messaging });
+  const toCustomers = () => outbox.filter(entry => entry[0] !== 'owner@example.test');
+  let sweepMinutes = 10;
+  // Every sweep needs a scheduled instant no other sweep used (a firing is keyed by its instant to the second).
+  const sweepAndTriage = async () => {
+    await admin.query(`update private.agent_schedules set next_run_at = now() - interval '${sweepMinutes} minutes' where task_kind = 'concierge.sweep'`);
+    sweepMinutes += 1;
+    for (let index = 0; index < 6; index += 1) await replyTeam.tick();
+  };
+  const reached = async (id, statuses, table = 'private.agent_actions', timeout = 5000) => {
+    const deadline = Date.now() + timeout;
+    while (Date.now() < deadline) { const current = await row(`select * from ${table} where id = $1`, [id]); if (statuses.includes(current.status)) return current; await new Promise(resolve => setTimeout(resolve, 25)); }
+    assert.fail(`${id} never reached ${statuses.join(' or ')}`);
+  };
+  const proposalFor = async fixture => row("select * from private.agent_actions where target_id = $1 and kind = 'communication.reply' order by created_at desc limit 1", [`CM-${fixture.reference}`]);
+  const ackText = 'Hello,\n\nThank you for contacting CareMetric Support. We have your message and a member of our team will review it and reply here.';
+  const reply = {
+    ok: await conversation({ messages: [{ ago: 6, body: `How do I export the staff roster by month? ${canary}` }] }),
+    moved: await conversation({ messages: [{ ago: 6, body: `Can you add a second administrator? ${canary}` }] }),
+    closes: await conversation({ messages: [{ ago: 6, body: `Where is the export button? ${canary}` }] }),
+    phi: await conversation({ messages: [{ ago: 6, body: `Resident A. Sample, SSN 000-12-3456, cannot be found. ${canary}` }] }),
+    follow: await conversation({ messages: [{ ago: 30, body: 'First question' }, { ago: 20, direction: 'outbound', body: 'We answered by hand', requestKey: randomUUID() }, { ago: 6, body: `Thanks, one more thing ${canary}` }] }),
+  };
+  await sweepAndTriage();
+  const proposals = Object.fromEntries(await Promise.all(Object.entries(reply).map(async ([name, fixture]) => [name, await proposalFor(fixture)])));
+  assert.equal(proposals.follow, undefined, 'a follow-up in a thread the team already joined is not acknowledged');
+  assert.equal((await row("select result from private.agent_tasks where source_ref = $1 and kind = 'concierge.communication'", [`CM-${reply.follow.reference}`])).result.reply, 'follow_up');
+  const okInput = proposals.ok.input;
+  assert.deepEqual([proposals.ok.status, proposals.ok.preview === okInput.body, okInput.body, okInput.template, okInput.basedOnMessageId, okInput.route], ['proposed', true, ackText, 'standard', reply.ok.messages[0], 'email'], 'the preview is the exact text, written from the template');
+  assert.equal(proposals.phi.input.template, 'phi');
+  assert.match(proposals.phi.preview, /not set up to receive patient or resident information/);
+  assert.ok(!JSON.stringify(proposals).includes('000-12-3456') && !JSON.stringify(proposals).includes(canary), 'a proposal repeats nothing the customer wrote');
+  assert.equal((await replyTeam.actions.sessionActions()).length, 0, 'nothing is approved yet');
+
+  // Approving sends it once, as the owner, in the conversation it was written for.
+  const mailBefore = toCustomers().length;
+  assert.deepEqual(await replyTeam.admin.decide(ownerToken, { actionId: proposals.ok.id, decision: 'approve' }), { id: proposals.ok.id, kind: 'communication.reply', status: 'executed', decided: true });
+  assert.equal(toCustomers().length, mailBefore + 1);
+  const [to, subject, content] = toCustomers().at(-1);
+  assert.deepEqual([to, subject.endsWith(`[CM-${reply.ok.reference}]`), content.text.includes('We have your message and a member of our team will review it')], [secrets.email, true, true]);
+  assert.ok(!/\bAI\b|assistant/i.test(content.text), 'the reply says nothing about AI');
+  const sentRow = await row("select m.*, c.status as conversation_status from private.communication_messages m join private.communications c on c.id = m.communication_id where m.communication_id = $1 and m.direction = 'outbound'", [reply.ok.id]);
+  assert.deepEqual([sentRow.body, sentRow.delivery, sentRow.delivery_channel, sentRow.request_key, sentRow.author_id, sentRow.conversation_status], [ackText, 'sent', 'email', proposals.ok.request_key, owner, 'waiting'], 'recorded under the action\'s own key, authored by the owner');
+  const executed = await action(proposals.ok.id);
+  assert.deepEqual([executed.status, executed.result], ['executed', { delivery: 'sent', channel: 'email', replay: false }]);
+  assert.equal((await row('select status from private.agent_tasks where id = $1', [proposals.ok.task_id])).status, 'done', 'the task closes once its proposal is settled');
+  assert.equal((await replyTeam.admin.decide(ownerToken, { actionId: proposals.ok.id, decision: 'approve' })).decided, false, 'deciding twice changes nothing');
+  assert.equal(toCustomers().length, mailBefore + 1, 'and sends nothing');
+  assert.ok((await auditFor('communication.reply', reply.ok.id)).length === 1 && (await auditFor('agent.action.executed', proposals.ok.id)).length === 1, 'one audit event for the reply and one for the execution');
+
+  // The identifier notice goes out the same way, and repeats nothing.
+  assert.equal((await replyTeam.admin.decide(ownerToken, { actionId: proposals.phi.id, decision: 'approve' })).status, 'executed');
+  const phiMail = toCustomers().at(-1)[2].text;
+  assert.match(phiMail, /not set up to receive patient or resident information/);
+  assert.ok(!phiMail.includes('000-12-3456') && !phiMail.includes('Sample') && !phiMail.includes(canary), 'the notice repeats nothing');
+
+  // A conversation that moved on, or was closed, is never answered with a reply written for an earlier moment.
+  await admin.query(`insert into private.communication_messages(communication_id, direction, body, delivery, created_at) values ($1, 'inbound', 'Actually, never mind. Also...', 'received', now() - interval '1 minute')`, [reply.moved.id]);
+  await admin.query("update private.communications set status = 'closed' where id = $1", [reply.closes.id]);
+  const sentSoFar = toCustomers().length;
+  assert.deepEqual(await replyTeam.admin.decide(ownerToken, { actionId: proposals.moved.id, decision: 'approve' }), { id: proposals.moved.id, kind: 'communication.reply', status: 'failed', decided: true, error: 'thread_changed' });
+  assert.deepEqual(await replyTeam.admin.decide(ownerToken, { actionId: proposals.closes.id, decision: 'approve' }), { id: proposals.closes.id, kind: 'communication.reply', status: 'failed', decided: true, error: 'conversation_closed' });
+  assert.equal(toCustomers().length, sentSoFar, 'nothing was sent');
+  assert.equal(Number((await row("select count(*) from private.communication_messages where communication_id = any($1) and direction = 'outbound'", [[reply.moved.id, reply.closes.id]])).count), 0, 'and nothing was recorded');
+  assert.deepEqual((await action(proposals.moved.id)).result, { error: 'thread_changed' });
+
+  // An approval the server could not carry out waits for the owner's session; the tick never sends it, and a lapsed session cannot.
+  const late = await conversation({ messages: [{ ago: 6, body: `Please help ${canary}` }] });
+  await sweepAndTriage();
+  const lateProposal = await proposalFor(late);
+  assert.equal((await ownerCall('hub.decide_agent_action', [lateProposal.id, 'approve', null])).status, 'approved', 'the database holds the approval; nothing has been sent');
+  const tickAfter = await replyTeam.tick();
+  assert.equal(tickAfter.executedActions, 0, 'the tick leaves a reply that needs the owner\'s session');
+  assert.equal((await action(lateProposal.id)).status, 'approved');
+  assert.equal((await replyTeam.admin.overview(ownerToken, {})).waitingActions, 1, 'the owner\'s screen says one approved reply is waiting');
+  await assert.rejects(replyTeam.admin.waiting(staleToken, {}), error => error.status === 401, 'a lapsed session sends nothing');
+  assert.equal((await action(lateProposal.id)).status, 'approved');
+  const lateMail = toCustomers().length;
+  assert.deepEqual(await replyTeam.admin.waiting(ownerToken, {}), { started: 0, actions: 1 });
+  await reached(lateProposal.id, ['executed']);
+  assert.equal(toCustomers().length, lateMail + 1, 'pressing the button sent it');
+  assert.equal((await replyTeam.admin.overview(ownerToken, {})).waitingActions, 0);
+
+  // A send that did not go through is reported with its code, never retried, never recorded as sent; an unconfirmed one warns the owner.
+  const refusedConv = await conversation({ messages: [{ ago: 6, body: `Hello ${canary}` }] });
+  const unknownConv = await conversation({ messages: [{ ago: 6, body: `Hello again ${canary}` }] });
+  await sweepAndTriage();
+  customerEmail = { delivery: 'failed', id: null };
+  const failed = await replyTeam.admin.decide(ownerToken, { actionId: (await proposalFor(refusedConv)).id, decision: 'approve' });
+  assert.deepEqual([failed.status, failed.error], ['failed', 'delivery_failed']);
+  assert.equal((await row("select delivery from private.communication_messages where communication_id = $1 and direction = 'outbound'", [refusedConv.id])).delivery, 'failed');
+  customerEmail = { delivery: 'unknown', id: null };
+  const alertsBefore = outbox.filter(entry => entry[0] === 'owner@example.test').length;
+  const unknown = await replyTeam.admin.decide(ownerToken, { actionId: (await proposalFor(unknownConv)).id, decision: 'approve' });
+  assert.deepEqual([unknown.status, unknown.error], ['failed', 'delivery_unknown']);
+  assert.equal((await row("select delivery from private.communication_messages where communication_id = $1 and direction = 'outbound'", [unknownConv.id])).delivery, 'unknown');
+  assert.ok(outbox.filter(entry => entry[0] === 'owner@example.test').slice(alertsBefore).some(entry => entry[1] === `Check CM-${unknownConv.reference} before sending again`), 'the owner is told to look at the thread');
+  customerEmail = { delivery: 'sent', id: 'fixture-reply' };
+
+  // An agent trusted to act still never sends a reply on its own: the executor refuses one nobody approved.
+  await admin.query(`update private.agents set autonomy = 'act', config = config || '{"auto_approve_kinds": ["communication.reply"]}'::jsonb where key = 'support_concierge'`);
+  const auto = await conversation({ messages: [{ ago: 6, body: `Hello once more ${canary}` }] });
+  await sweepAndTriage();
+  const autoProposal = await proposalFor(auto);
+  assert.equal(autoProposal.status, 'auto_approved');
+  assert.equal((await action(autoProposal.id)).status, 'auto_approved', 'the tick does not send it');
+  const autoMail = toCustomers().length;
+  assert.deepEqual(await replyTeam.admin.waiting(ownerToken, {}), { started: 0, actions: 1 });
+  const refusedAuto = await reached(autoProposal.id, ['failed']);
+  assert.deepEqual(refusedAuto.result, { error: 'auto_approved_refused' });
+  assert.equal(toCustomers().length, autoMail, 'nothing was sent');
+  await admin.query(`update private.agents set autonomy = 'propose', config = config || '{"auto_approve_kinds": []}'::jsonb where key = 'support_concierge'`);
+
+  // Still nothing the customer wrote is anywhere but the conversation: not in a task, action, run, alert, audit event or log line.
+  const afterReplies = JSON.stringify([
+    await rows('select to_jsonb(t) as r from private.agent_tasks t'), await rows('select to_jsonb(r) as r from private.agent_runs r'),
+    await rows('select to_jsonb(a) as r from private.agent_actions a'), await rows('select to_jsonb(n) as r from private.owner_notifications n'),
+    await rows("select metadata from private.audit_events where action like 'agent.%' or action = 'communication.reply'"), logs,
+  ]);
+  for (const secret of [canary, secrets.name, secrets.email, secrets.phone, secrets.organization, secrets.note, 'Resident A. Sample', '000-12-3456', ownerToken, staleToken]) {
+    assert.ok(!afterReplies.includes(secret), `${secret.slice(0, 12)}… appears in no task, action, run, alert, audit event or log line`);
+  }
+  await clearWork();
+
   // ---- The deployment gate re-runs cleanly, and refuses to declare the feature once the boundary drifts -----------------------
   const client = await admin.connect();
   try {
@@ -294,7 +439,7 @@ try {
     }
   } finally { client.release(); }
 
-  console.log('Support Concierge: the three server-only operations (pending conversations, minimal snapshots, alert counts), the sweep, rule-based triage with its identifier screen, the owner alerts and their caps, the privacy of every stored record, and the deployment gate all behave through hub_app_server.');
+  console.log('Support Concierge: the three server-only operations (pending conversations, minimal snapshots, alert counts), the sweep, rule-based triage with its identifier screen, the owner alerts and their caps, the approved replies sent once as the owner into the thread they were written for, the privacy of every stored record, and the deployment gate all behave through hub_app_server.');
 } finally {
   await admin.query("delete from private.audit_events where action like 'agent.%' or actor_id = $1", [owner]);
   await admin.query('delete from private.agent_actions');
@@ -306,8 +451,10 @@ try {
   for (const seed of seedSchedules) await admin.query('update private.agent_schedules set next_run_at=$2, last_run_at=$3, last_task_id=$4, enabled=$5 where id=$1', [seed.id, seed.next_run_at, seed.last_run_at, seed.last_task_id, seed.enabled]);
   if (setAside.length) await admin.query('update private.staff_permissions set revoked_at = null where id = any($1::uuid[])', [setAside]);
   if (foreign.length) await admin.query('update private.communications c set status = r.status from jsonb_to_recordset($1::jsonb) as r(id uuid, status text) where c.id = r.id', [JSON.stringify(foreign)]);
+  await admin.query('delete from private.sms_sessions where user_id = $1', [owner]);
   await admin.query('delete from private.sms_identities where user_id = $1', [owner]);
   await admin.query('delete from private.staff_permissions where user_id = $1', [owner]);
+  await admin.query('delete from hub.profiles where id = $1', [owner]);
   await admin.query('delete from auth.users where id = $1', [owner]);
   await pool.end();
   await admin.end();

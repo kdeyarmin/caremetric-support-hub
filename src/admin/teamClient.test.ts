@@ -37,14 +37,14 @@ describe("AI team client", () => {
   });
 
   it("starts the waiting work with an empty body and checks how many tasks started", async () => {
-    const fetcher = respond({ started: 2 });
+    const fetcher = respond({ started: 2, actions: 1 });
     vi.stubGlobal("fetch", fetcher);
-    expect(await teamClient.waiting()).toEqual({ started: 2 });
+    expect(await teamClient.waiting()).toEqual({ started: 2, actions: 1 });
     const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("/api/admin/team/waiting");
     expect(init).toMatchObject({ method: "POST", credentials: "same-origin" });
     expect(JSON.parse(String(init.body))).toEqual({});
-    vi.stubGlobal("fetch", respond({ started: -1 }));
+    vi.stubGlobal("fetch", respond({ started: -1, actions: 0 }));
     await expect(teamClient.waiting()).rejects.toThrow();
     vi.stubGlobal("fetch", respond({ error: "Current administrator session required." }, 401));
     await expect(teamClient.waiting()).rejects.toMatchObject({ status: 401, message: "Current administrator session required." });

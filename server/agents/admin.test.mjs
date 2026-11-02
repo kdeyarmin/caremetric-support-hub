@@ -4,11 +4,11 @@ import { HttpError } from '../sms-auth.mjs';
 
 const actionId = '11111111-1111-4111-8111-111111111111';
 const version = '2026-11-02T12:00:00.123456+00:00';
-const fixture = ({ results = {}, execution = { executed: true, failed: false }, waiting = vi.fn(async () => ({ skipped: false, started: 2, done: Promise.resolve([]) })) } = {}) => {
+const fixture = ({ results = {}, execution = { executed: true, failed: false }, waiting = vi.fn(async () => ({ skipped: false, started: 2, done: Promise.resolve([]) })), ready = [] } = {}) => {
   const queries = [];
   const db = { query: vi.fn(async (sql, args) => { queries.push([sql, args]); const name = /select (\S+)\(/.exec(sql)[1]; const value = results[name]; if (value instanceof Error) throw value; return { rows: [{ result: value ?? {} }] }; }) };
   const session = vi.fn(async (token, work) => { if (!token) throw new HttpError(401, 'Sign in with an SMS code to continue.'); return work(db); });
-  const actions = { executeOne: vi.fn(async () => execution) };
+  const actions = { executeOne: vi.fn(async () => execution), sessionActions: vi.fn(async () => ready), executeSessionActions: vi.fn(async () => ({ executed: ready.length, failed: 0 })) };
   const kick = vi.fn();
   return { queries, session, actions, kick, waiting, admin: agentAdmin({ session, actions, kick, waiting, services: () => ({ enabled: true, handlers: ['probe.sweep'] }) }) };
 };
@@ -17,7 +17,7 @@ const databaseError = (code, message) => Object.assign(new Error(message), { cod
 describe('agent administration', () => {
   it('returns the roster with the services the team can use', async () => {
     const { admin, queries } = fixture({ results: { 'hub.get_agent_team': { agents: [], approvalCount: 0 } } });
-    expect(await admin.overview('token', {})).toEqual({ team: { agents: [], approvalCount: 0 }, services: { enabled: true, handlers: ['probe.sweep'] } });
+    expect(await admin.overview('token', {})).toEqual({ team: { agents: [], approvalCount: 0 }, services: { enabled: true, handlers: ['probe.sweep'] }, waitingActions: 0 });
     expect(queries[0][0]).toBe('select hub.get_agent_team() as result');
   });
 
@@ -73,7 +73,7 @@ describe('agent administration', () => {
   it('carries out an approval straight away, once', async () => {
     const { admin, actions } = fixture({ results: { 'hub.decide_agent_action': { id: actionId, kind: 'communication.reply', status: 'approved', decided: true } } });
     expect(await admin.decide('token', { actionId, decision: 'approve', note: 'Looks right' })).toEqual({ id: actionId, kind: 'communication.reply', status: 'executed', decided: true });
-    expect(actions.executeOne).toHaveBeenCalledWith(actionId);
+    expect(actions.executeOne).toHaveBeenCalledWith(actionId, { kind: 'communication.reply', sessionToken: 'token' });
   });
 
   it('does not carry out a rejection, an expired proposal or a decision made before', async () => {
@@ -91,7 +91,9 @@ describe('agent administration', () => {
   it('reports a failed or interrupted execution without losing the approval', async () => {
     const approved = { id: actionId, kind: 'communication.reply', status: 'approved', decided: true };
     const failed = fixture({ results: { 'hub.decide_agent_action': approved }, execution: { executed: false, failed: true } });
-    expect((await failed.admin.decide('token', { actionId, decision: 'approve' })).status).toBe('failed');
+    expect(await failed.admin.decide('token', { actionId, decision: 'approve' })).toEqual({ id: actionId, kind: 'communication.reply', status: 'failed', decided: true });
+    const why = fixture({ results: { 'hub.decide_agent_action': approved }, execution: { executed: false, failed: true, error: 'thread_changed' } });
+    expect(await why.admin.decide('token', { actionId, decision: 'approve' })).toEqual({ id: actionId, kind: 'communication.reply', status: 'failed', decided: true, error: 'thread_changed' });
     const crashed = fixture({ results: { 'hub.decide_agent_action': approved } });
     crashed.actions.executeOne.mockRejectedValue(new Error('db down'));
     expect((await crashed.admin.decide('token', { actionId, decision: 'approve' })).status).toBe('approved');
@@ -103,6 +105,16 @@ describe('agent administration', () => {
     await new Promise(resolve => setImmediate(resolve));
     expect(kick).toHaveBeenCalledTimes(1);
     expect(waiting).not.toHaveBeenCalled();
+  });
+
+  it('counts the approved replies that are waiting for a session, and never lets that count break the overview', async () => {
+    const waitingReplies = fixture({ results: { 'hub.get_agent_team': { agents: [] } }, ready: [{ id: 'a1', kind: 'communication.reply' }, { id: 'a2', kind: 'communication.reply' }] });
+    expect((await waitingReplies.admin.overview('token', {})).waitingActions).toBe(2);
+    const broken = fixture({ results: { 'hub.get_agent_team': { agents: [] } } });
+    broken.actions.sessionActions.mockRejectedValue(new Error('db down'));
+    expect((await broken.admin.overview('token', {})).waitingActions).toBe(0);
+    const bare = agentAdmin({ session: fixture({ results: { 'hub.get_agent_team': { agents: [] } } }).session, actions: {} });
+    expect((await bare.overview('token', {})).waitingActions).toBe(0);
   });
 
   describe('work that waits for the owner\'s session', () => {
@@ -124,11 +136,31 @@ describe('agent administration', () => {
       expect(await broken.admin.run('token', { agentKey: 'support_concierge', taskKind: 'import.advisors' })).toEqual({ id: actionId, status: 'awaiting_session' });
     });
 
+    it('sends the replies the owner approved but that never went out, with their session, in the background', async () => {
+      let finish;
+      const sending = new Promise(resolve => { finish = resolve; });
+      const ready = [{ id: 'a1', kind: 'communication.reply' }, { id: 'a2', kind: 'communication.reply' }];
+      const { admin, actions, waiting } = fixture({ ready });
+      actions.executeSessionActions.mockReturnValue(sending);
+      expect(await admin.waiting('token', {})).toEqual({ started: 2, actions: 2 });
+      expect(actions.executeSessionActions).toHaveBeenCalledWith(ready, { sessionToken: 'token' });
+      expect(waiting).toHaveBeenCalledTimes(1);
+      finish({ executed: 2, failed: 0 });
+    });
+
+    it('still sends approved replies when the scheduler is off, and refuses only when there is nothing to send', async () => {
+      const off = () => vi.fn(async () => ({ skipped: true, started: 0, done: Promise.resolve([]) }));
+      const sends = fixture({ waiting: off(), ready: [{ id: 'a1', kind: 'communication.reply' }] });
+      expect(await sends.admin.waiting('token', {})).toEqual({ started: 0, actions: 1 });
+      expect(sends.actions.executeSessionActions).toHaveBeenCalledTimes(1);
+      await expect(fixture({ waiting: off() }).admin.waiting('token', {})).rejects.toMatchObject({ status: 409 });
+    });
+
     it('starts what is waiting, after the database confirms the owner\'s current session, and answers at once', async () => {
       let finish;
       const done = new Promise(resolve => { finish = resolve; });
       const { admin, queries, waiting } = fixture({ waiting: vi.fn(async () => ({ skipped: false, started: 2, done })) });
-      expect(await admin.waiting('token', {})).toEqual({ started: 2 });
+      expect(await admin.waiting('token', {})).toEqual({ started: 2, actions: 0 });
       expect(queries.map(([sql]) => sql)).toEqual(['select hub.authorize_app_command() as result']);
       expect(waiting).toHaveBeenCalledWith({ sessionToken: 'token', only: null });
       finish([]);
