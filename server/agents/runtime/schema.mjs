@@ -4,8 +4,8 @@
  * because the checks that matter (a closed set of values, no stray fields) are cheap and the
  * model's output is never trusted.
  *
- * Allowed: type (object, array, string, integer, number, boolean, null), enum, properties,
- * required, items, description. Every object must say `additionalProperties: false`. Limits such
+ * Allowed: type (object, array, string, integer, number, boolean, null), enum (of strings, numbers,
+ * booleans or null only), properties, required, items, description. Every object must say `additionalProperties: false`. Limits such
  * as minLength or maximum are not allowed: the provider does not enforce them, so a schema that
  * leaned on them would only look safe. Length and content limits belong in the agent's own
  * `validate`.
@@ -30,6 +30,8 @@ export function schemaDefects(schema, path = '$') {
   }
   if (schema.type === 'array') defects.push(...schemaDefects(schema.items, `${path}[]`));
   if (schema.enum !== undefined && (!Array.isArray(schema.enum) || schema.enum.length === 0)) defects.push(`${path}: enum must be a non-empty list`);
+  // An array or object member could never match a parsed answer (it is compared by identity), so the run would be paid for and then refused.
+  else if (schema.enum !== undefined && schema.enum.some(member => member !== null && typeof member === 'object')) defects.push(`${path}: enum members must be strings, numbers, booleans or null`);
   return defects;
 }
 

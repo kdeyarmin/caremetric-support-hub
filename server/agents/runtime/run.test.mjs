@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { aiModels } from '../../ai-assistance.mjs';
 import { anthropicClient } from './client.mjs';
-import { costCents, worstCaseCents } from './pricing.mjs';
-import { modelRunner } from './run.mjs';
+import { costCents, inputOnlyCents, worstCaseCents } from './pricing.mjs';
+import { inputTokenBound, modelRunner, requestBody } from './run.mjs';
 
 const CANARY = 'Pat Example 555-0142 canary-8841';
 const schema = {
@@ -48,6 +48,8 @@ function fixture({ remaining = 300, steps = [ok()], record = true, notifier = fa
   return { runner, store, seen, logs, runs, ledger, alerts, run: (req = request(), context) => runner.run(task(taskOver), req, context) };
 }
 const rejection = async promise => { try { await promise; } catch (error) { return error; } throw new Error('Expected the run to fail.'); };
+/** The most prompt tokens the runner will assume for a request, computed the way the runner does (3,000 tokens and medium effort are its defaults). */
+const boundOf = (req = request()) => inputTokenBound(requestBody(aiModels.draft, { maxTokens: 3000, effort: 'medium', ...req }));
 
 describe('one model run', () => {
   it('sends one tool-less call with the planned shape and returns the validated answer', async () => {
@@ -103,9 +105,7 @@ describe('one model run', () => {
 });
 
 describe('the budget', () => {
-  const reserve = () => worstCaseCents(aiModels.draft, {
-    inputChars: request().system[0].text.length + request().user.length + JSON.stringify(schema).length, maxTokens: 3000, cached: true,
-  });
+  const reserve = () => worstCaseCents(aiModels.draft, { inputTokens: boundOf(), maxTokens: 3000, cached: true });
 
   it('makes no call and records a budget_exhausted run when the day\'s money does not cover the worst case', async () => {
     const f = fixture({ remaining: reserve() - 0.0001 });
@@ -250,9 +250,7 @@ describe('what a response can mean', () => {
     const f = fixture({ steps: [ok(message({ usage: undefined }))] });
     const result = await f.run();
     expect(result.outcome).toBe('completed');
-    expect(result.costCents).toBe(worstCaseCents(aiModels.draft, {
-      inputChars: request().system[0].text.length + request().user.length + JSON.stringify(schema).length, maxTokens: 3000, cached: true,
-    }));
+    expect(result.costCents).toBe(worstCaseCents(aiModels.draft, { inputTokens: boundOf(), maxTokens: 3000, cached: true }));
     expect(f.ledger[0]).toMatchObject({ inputTokens: 0, outputTokens: 0 });
   });
 });
@@ -271,12 +269,11 @@ describe('failures', () => {
     }
   });
 
-  it('books a call whose outcome is unknown at its input estimate', async () => {
+  it('books a call whose outcome is unknown at its input bound', async () => {
     const dropped = fixture({ steps: [() => { throw new TypeError(`fetch failed ${CANARY}`); }] });
     expect(await rejection(dropped.run())).toMatchObject({ code: 'provider_unreachable', transient: true });
     expect(dropped.runs[0].outcome).toBe('failed');
-    expect(dropped.runs[0].usage.costCents).toBeGreaterThan(0);
-    expect(dropped.runs[0].usage.costCents).toBeLessThan(0.1);
+    expect(dropped.runs[0].usage.costCents).toBe(inputOnlyCents(aiModels.draft, boundOf()));
     expect(dropped.runner.reserved('support_concierge')).toBe(0);
   });
 
@@ -335,6 +332,7 @@ describe('failures', () => {
     expect(f.logs).toContain(JSON.stringify({ event: 'hub_agent_run_unrecorded', agent: 'support_concierge', kind: 'concierge.communication' }));
     expect(f.store.finishRun).toHaveBeenCalledTimes(1);
     expect(f.runner.reserved('support_concierge')).toBe(0);
+    expect(f.runner.owing('support_concierge'), 'the unbooked cost stays against the budget').toBeCloseTo(costCents(aiModels.draft, { inputTokens: 1000, outputTokens: 200 }), 6);
   });
 
   it('propagates a failure to start the run without calling the model, and releases the money it held', async () => {
@@ -360,6 +358,128 @@ describe('failures', () => {
     expect(exploding.reserved('support_concierge')).toBe(0);
     expect(f.logs).toEqual([JSON.stringify({ event: 'hub_agent_model_unexpected', agent: 'support_concierge', kind: 'concierge.communication', name: 'TypeError' })]);
     expect(JSON.stringify([f.logs, error.message])).not.toContain('canary-8841');
+  });
+});
+
+describe('the budget cannot be spent twice', () => {
+  const reserve = () => worstCaseCents(aiModels.draft, { inputTokens: boundOf(), maxTokens: 3000, cached: true });
+  const oneCall = () => costCents(aiModels.draft, { inputTokens: 1000, outputTokens: 200 });
+
+  it('judges a call by the money another call spent while its budget read was in flight, not by a stale snapshot', async () => {
+    // The budget covers exactly one reservation. Call A reads the budget and waits; call B starts meanwhile, runs and books its cost;
+    // then A's stale read returns. Without a queue per agent, B reserved, finished and released inside A's read, so A saw neither the
+    // reservation nor the cost and made a second call against money already spent.
+    let spent = 0;
+    let releaseRead = () => {};
+    let reads = 0;
+    const f = fixture({ remaining: 0 });
+    f.store.budget = vi.fn(() => {
+      const snapshot = { remainingCents: reserve() - spent };
+      reads += 1;
+      return reads === 1 ? new Promise(resolve => { releaseRead = () => resolve(snapshot); }) : Promise.resolve(snapshot);
+    });
+    f.store.finishRun = vi.fn(async (id, outcome, used) => { spent += used.costCents ?? 0; Object.assign(f.runs.find(run => run.id === id), { finished: true, outcome, usage: used }); });
+    const first = f.run();
+    await vi.waitFor(() => expect(f.store.budget).toHaveBeenCalledTimes(1));
+    const second = f.runner.run(task({ id: 't2' }), request());
+    await new Promise(resolve => setTimeout(resolve, 30));
+    releaseRead();
+    const results = await Promise.all([first, second]);
+    expect(results.map(result => result.outcome)).toEqual(['completed', 'budget_exhausted']);
+    expect(f.seen).toHaveLength(1);
+    expect(f.runner.reserved('support_concierge')).toBe(0);
+  });
+
+  it('holds a call\'s reservation until its cost is booked, even while another call is reading a budget figure from before that booking', async () => {
+    // Call C is admitted and waits on the network. Call A starts and its budget read is in flight (the figure it will get was taken
+    // before C's cost is booked). C is answered and books its cost; its release must wait behind A's admission, or A would see neither
+    // C's reservation nor C's cost and spend the same money again.
+    let spent = 0;
+    let reads = 0;
+    let answerC = () => {};
+    let releaseRead = () => {};
+    const answered = () => new Response(JSON.stringify(message()), { status: 200, headers: { 'content-type': 'application/json', 'request-id': 'req_c' } });
+    const f = fixture({ remaining: 0, steps: [() => new Promise(resolve => { answerC = () => resolve(answered()); }), ok()] });
+    f.store.budget = vi.fn(() => {
+      reads += 1;
+      const snapshot = { remainingCents: reserve() - spent };
+      return reads === 2 ? new Promise(resolve => { releaseRead = () => resolve(snapshot); }) : Promise.resolve(snapshot);
+    });
+    f.store.finishRun = vi.fn(async (id, outcome, used) => { spent += used.costCents ?? 0; Object.assign(f.runs.find(run => run.id === id), { finished: true, outcome, usage: used }); });
+    const holder = f.run();
+    await vi.waitFor(() => expect(f.seen).toHaveLength(1));
+    const reader = f.runner.run(task({ id: 't2' }), request());
+    await vi.waitFor(() => expect(f.store.budget).toHaveBeenCalledTimes(2));
+    answerC();
+    await vi.waitFor(() => expect(f.store.finishRun).toHaveBeenCalledTimes(1));
+    expect(f.runner.reserved('support_concierge'), 'still held: the release waits for the read in flight').toBeGreaterThan(0);
+    releaseRead();
+    const results = await Promise.all([holder, reader]);
+    expect(results.map(result => result.outcome)).toEqual(['completed', 'budget_exhausted']);
+    expect(f.seen).toHaveLength(1);
+    expect(f.runner.reserved('support_concierge')).toBe(0);
+  });
+
+  it('reserves for the bytes of the request, which no tokenizer can exceed, not for a guess at characters per token', async () => {
+    // 6,000 Chinese characters are 18,000 bytes. The old reserve counted 2,400 tokens (2.5 characters each).
+    const dense = request({ user: '患者の名前は山田太郎です。'.repeat(500) });
+    expect(Buffer.byteLength(dense.user, 'utf8')).toBeGreaterThan(18_000);
+    const bound = boundOf(dense);
+    expect(bound).toBeGreaterThan(Buffer.byteLength(dense.user, 'utf8'));
+    expect(bound).toBeGreaterThan(Math.ceil(dense.user.length / 2.5) * 4);
+    const f = fixture({ remaining: 0.01 });
+    const refused = await f.run(dense);
+    expect(refused).toMatchObject({ outcome: 'budget_exhausted' });
+    expect(refused.neededCents).toBe(worstCaseCents(aiModels.draft, { inputTokens: bound, maxTokens: 3000, cached: true }));
+    expect(f.seen).toHaveLength(0);
+  });
+
+  it('keeps the cost of a run whose write failed against the budget, retries the write, and stops counting it once the database has it', async () => {
+    const f = fixture({ remaining: 0, steps: [ok(), ok(), ok(), ok()] });
+    // The database knows nothing of the first call's cost: it reports room for one more call and a little over.
+    f.store.budget = vi.fn(async () => ({ remainingCents: reserve() + oneCall() / 2 }));
+    const failing = vi.fn(async () => { throw new Error(`database ${CANARY}`); });
+    f.store.finishRun = failing;
+    expect((await f.run()).outcome).toBe('completed');
+    expect(f.runner.owing('support_concierge')).toBeCloseTo(oneCall(), 6);
+    // Counting the debit, the next call no longer fits, although the database still says it does.
+    const refused = await f.runner.run(task({ id: 't2' }), request());
+    expect(refused.outcome).toBe('budget_exhausted');
+    expect(f.seen).toHaveLength(1);
+    // The database comes back: the write is retried at the next admission, the debt is cleared, and the call goes ahead.
+    f.store.finishRun = vi.fn(async (id, outcome, used) => { Object.assign(f.runs.find(run => run.id === id) ?? {}, { finished: true, outcome, usage: used }); });
+    expect((await f.runner.run(task({ id: 't3' }), request())).outcome).toBe('completed');
+    expect(f.runner.owing('support_concierge')).toBe(0);
+    expect(f.store.finishRun.mock.calls.some(call => call[0] === 'run-1')).toBe(true);
+  });
+
+  it('treats a retried write the database says is already closed as booked', async () => {
+    const f = fixture({ remaining: 0 });
+    f.store.budget = vi.fn(async () => ({ remainingCents: reserve() * 3 }));
+    f.store.finishRun = vi.fn(async () => { throw new Error('connection lost after the commit'); });
+    await f.run();
+    expect(f.runner.owing('support_concierge')).toBeGreaterThan(0);
+    // The database already has run-1 (the commit succeeded and only the reply was lost); every other run closes normally.
+    f.store.finishRun = vi.fn(async (id, outcome, used) => {
+      if (id === 'run-1') throw Object.assign(new Error('Unknown or finished agent run.'), { code: 'P0002' });
+      Object.assign(f.runs.find(run => run.id === id), { finished: true, outcome, usage: used });
+    });
+    expect((await f.runner.run(task({ id: 't2' }), request())).outcome).toBe('completed');
+    expect(f.store.finishRun.mock.calls.some(call => call[0] === 'run-1')).toBe(true);
+    expect(f.runner.owing('support_concierge')).toBe(0);
+  });
+
+  it('does not let one agent wait on, or pay for, another\'s budget read', async () => {
+    let releaseRead = () => {};
+    const f = fixture({ remaining: reserve() * 2 });
+    f.store.budget = vi.fn(agentKey => (agentKey === 'support_concierge'
+      ? new Promise(resolve => { releaseRead = () => resolve({ remainingCents: reserve() * 2 }); })
+      : Promise.resolve({ remainingCents: reserve() * 2 })));
+    const slow = f.runner.run(task({ agentKey: 'support_concierge' }), request());
+    await vi.waitFor(() => expect(f.store.budget).toHaveBeenCalledTimes(1));
+    expect((await f.runner.run(task({ id: 't2', agentKey: 'seo_analyst' }), request())).outcome).toBe('completed');
+    releaseRead();
+    expect((await slow).outcome).toBe('completed');
   });
 });
 

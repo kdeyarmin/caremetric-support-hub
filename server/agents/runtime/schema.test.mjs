@@ -32,6 +32,13 @@ describe('the closed schema subset', () => {
     expect(schemaDefects({ type: 'object', additionalProperties: false, properties: { deep: { type: 'object', properties: {} } } })).toContain('$.deep: an object must set additionalProperties to false');
   });
 
+  it('refuses an enum whose members could never match a parsed answer', () => {
+    // An object or array member is compared by identity, so every answer would be refused after the call was paid for.
+    expect(schemaDefects({ type: 'string', enum: [{ a: 1 }] })).toEqual(['$: enum members must be strings, numbers, booleans or null']);
+    expect(schemaDefects({ type: 'array', items: { type: 'string', enum: ['a', ['b']] } })).toEqual(['$[]: enum members must be strings, numbers, booleans or null']);
+    expect(schemaDefects({ type: 'string', enum: ['a', 1, true, null] })).toEqual([]);
+  });
+
   it('accepts a value that fits', () => {
     expect(schemaProblems(schema, { category: 'billing', urgent: false, tags: ['a', 'b'], count: 3, score: 1.5, note: null })).toEqual([]);
     expect(schemaProblems(schema, { category: 'general', urgent: true, tags: [] })).toEqual([]);

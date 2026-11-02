@@ -7,9 +7,11 @@
  * Choices made here, not left to the SDK's defaults:
  * - The origin is pinned, so an ANTHROPIC_BASE_URL variable on the host cannot send customer
  *   text somewhere else.
- * - One retry and a 90 second timeout. The defaults (two retries, ten minutes) would outlive the
- *   scheduler's four-minute limit for a task, and a call the scheduler has given up on would go
- *   on running and spending.
+ * - No automatic retry and a 90 second timeout. The defaults (two retries, ten minutes) would
+ *   outlive the scheduler's four-minute limit for a task, and a call the scheduler has given up on
+ *   would go on running and spending. A retry after a timeout or a dropped connection is also a
+ *   second billable request whose cost the run (one reservation, one booked call) never sees. The
+ *   scheduler's own retry makes the next attempt a separate run with its own budget check.
  * - The SDK's logger is off: its messages can name request details.
  */
 import Anthropic from '@anthropic-ai/sdk';
@@ -22,7 +24,7 @@ export const requestTimeoutMs = 90_000;
  * `client` is for tests (anything with `messages.create`); `fetchImpl` swaps only the transport,
  * so a test can run the real SDK against a fake network.
  */
-export function anthropicClient({ apiKey, client = null, fetchImpl = null, timeoutMs = requestTimeoutMs, maxRetries = 1 } = {}) {
+export function anthropicClient({ apiKey, client = null, fetchImpl = null, timeoutMs = requestTimeoutMs, maxRetries = 0 } = {}) {
   const key = typeof apiKey === 'string' ? apiKey.trim() : '';
   const sdk = client ?? (key
     ? new Anthropic({ apiKey: key, baseURL: apiOrigin, timeout: timeoutMs, maxRetries, logLevel: 'off', ...(fetchImpl ? { fetch: fetchImpl } : {}) })

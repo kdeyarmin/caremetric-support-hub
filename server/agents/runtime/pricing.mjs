@@ -4,9 +4,11 @@
  * actually used, and price the worst case before it is made (the reservation the budget check
  * holds while the call is in flight).
  *
- * Prices are US dollars per million tokens, from the published Claude 5.5 price list. A model
- * that is not in the table is refused, so changing a tier in `aiModels` without pricing it stops
- * the agents instead of letting them spend unmetered (a test holds the two together).
+ * Prices are US dollars per million tokens, from the published Claude 5.5 price list. The table
+ * is keyed by literal model ids, not by whatever `aiModels` currently names: pointing a tier at a
+ * new model must not quietly give it the old model's rates. A model that is not in the table is
+ * refused, so changing a tier in `aiModels` without pricing it stops the agents instead of letting
+ * them spend unmetered, and a test holds the two together.
  *
  * Anthropic reports a call's prompt in three parts: `input_tokens` (not cached), the tokens read
  * from the cache and the tokens written to it. The first is billed at the input price, a cache
@@ -14,21 +16,20 @@
  * one-hour kind, which this server never asks for, at twice). Haiku 5.5 is priced higher for the
  * whole call when the prompt, all three parts together, is over 100,000 tokens.
  */
-import { aiModels } from '../../ai-assistance.mjs';
 import { aiError } from './errors.mjs';
 
 const rate = (input, output, cacheRead) => Object.freeze({ input, output, cacheRead });
 
 export const prices = Object.freeze({
-  [aiModels.fast]: Object.freeze({ short: rate(0.10, 0.50, 0.01), long: rate(0.50, 2.50, 0.05), longAbove: 100_000 }),
-  [aiModels.draft]: Object.freeze({ short: rate(2, 10, 0.20) }),
-  [aiModels.quality]: Object.freeze({ short: rate(4, 20, 0.20) }),
+  'claude-haiku-5-5': Object.freeze({ short: rate(0.10, 0.50, 0.01), long: rate(0.50, 2.50, 0.05), longAbove: 100_000 }),
+  'claude-sonnet-5-5': Object.freeze({ short: rate(2, 10, 0.20) }),
+  'claude-opus-5-5': Object.freeze({ short: rate(4, 20, 0.20) }),
 });
 
 /**
- * A rough upper bound on tokens from characters. The newer tokenizer counts about three characters
- * to a token for English, and text with many numbers or symbols runs denser, so 2.5 over-counts on
- * purpose: a reservation that is too large only delays a call, one that is too small overspends.
+ * A rough estimate of tokens from characters, for sizing a prompt. It is NOT a bound: text in another
+ * script, symbols or emoji can run denser than any characters-per-token guess. The reservation a call
+ * is admitted against uses `inputTokenBound` in run.mjs instead, which cannot be too small.
  */
 export const charsPerToken = 2.5;
 export const estimateTokens = chars => Math.ceil(Math.max(Number(chars) || 0, 0) / charsPerToken);
@@ -62,14 +63,15 @@ export function costCents(model, usage = {}) {
 }
 
 /**
- * The most a call could cost: every input character taken as a token at the cache-write price
- * when the request asks for a cache breakpoint (the first call after a deploy writes the cache),
- * and every output token up to `maxTokens`.
+ * The most a call could cost: `inputTokens` (an upper bound on the prompt, see `inputTokenBound`) at the
+ * cache-write price when the request asks for a cache breakpoint (the first call after a deploy writes
+ * the cache), priced at the long-prompt rate when the bound crosses its threshold, and every output
+ * token up to `maxTokens`.
  */
-export function worstCaseCents(model, { inputChars, maxTokens, cached = false }) {
-  const tokens = estimateTokens(inputChars);
+export function worstCaseCents(model, { inputTokens, maxTokens, cached = false }) {
+  const tokens = count(inputTokens);
   return costCents(model, { inputTokens: cached ? 0 : tokens, cacheWriteTokens: cached ? tokens : 0, outputTokens: maxTokens });
 }
 
 /** What a call whose outcome is unknown (a timeout, an abort, a dropped connection) is booked at: its input, as if it had been read. */
-export const inputOnlyCents = (model, inputChars) => costCents(model, { inputTokens: estimateTokens(inputChars) });
+export const inputOnlyCents = (model, inputTokens) => costCents(model, { inputTokens: count(inputTokens) });
