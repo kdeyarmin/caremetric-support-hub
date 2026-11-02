@@ -26,6 +26,10 @@
 --   * The morning brief counted incidents from actions (which an observe-only agent never records,
 --     and which are dated by approval), and treated an urgent alert as undelivered when a different
 --     channel of it had gone out outside the 24-hour window.
+--   * A reply the server recorded and sent, whose execution then stopped before it was settled, was
+--     refused on its replay when the customer had written meanwhile, and reported as never sent. The
+--     conversation snapshot now says what became of the reply recorded under the request key it is asked
+--     about, so the replay can settle that delivery instead of judging the thread.
 --
 -- Signatures that existed are kept, so a server built before this migration keeps working: the old
 -- operation is now a thin wrapper that calls the new one without an attempt number. The new
@@ -624,6 +628,72 @@ begin
       'trialsEnding', (select count(*) from private.billing_subscriptions
                        where livemode and status = 'trialing' and trial_end >= now() and trial_end < now() + interval '7 days'))
   );
+end;
+$$;
+
+-- ---------------------------------------------------------------------------------------
+-- The conversation snapshot, as before, plus ownReplyDelivery: the delivery status (pending, sent, failed or
+-- unknown) of the outbound message recorded under p_request_key, or null when there is none or no key is given.
+-- ---------------------------------------------------------------------------------------
+create or replace function private.agent_communication_snapshot(
+  p_id uuid, p_request_key uuid, p_messages integer, p_chars integer
+) returns jsonb
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  c private.communications%rowtype;
+  v_inbound_id uuid;
+  v_inbound_at timestamptz;
+  v_head uuid;
+  v_answered boolean := false;
+  v_messages jsonb := '[]'::jsonb;
+begin
+  perform private.require_hub_app_server();
+  if p_messages is null or p_messages < 0 or p_messages > 10 then
+    raise exception 'Read between 0 and 10 messages.' using errcode = '22023';
+  end if;
+  if p_chars is null or p_chars < 100 or p_chars > 4000 then
+    raise exception 'Clip messages to between 100 and 4000 characters.' using errcode = '22023';
+  end if;
+  select * into c from private.communications where id = p_id;
+  if not found then
+    return null;
+  end if;
+  select i.id, i.created_at into v_inbound_id, v_inbound_at from private.communication_messages i
+  where i.communication_id = c.id and i.direction = 'inbound'
+  order by i.created_at desc, i.id desc limit 1;
+  select m.id into v_head from private.communication_messages m
+  where m.communication_id = c.id and m.direction in ('inbound', 'outbound')
+    and (p_request_key is null or m.request_key is distinct from p_request_key)
+  order by m.created_at desc, m.id desc limit 1;
+  if v_inbound_id is not null then
+    v_answered := exists (
+      select 1 from private.communication_messages a
+      where a.communication_id = c.id and a.direction in ('outbound', 'note') and (a.created_at, a.id) > (v_inbound_at, v_inbound_id));
+  end if;
+  if p_messages > 0 then
+    select coalesce(jsonb_agg(jsonb_build_object('id', t.id, 'direction', t.direction, 'at', t.created_at, 'body', left(t.body, p_chars))
+                              order by t.created_at, t.id), '[]'::jsonb)
+    into v_messages
+    from (
+      select m.id, m.direction, m.created_at, m.body from private.communication_messages m
+      where m.communication_id = c.id and m.direction in ('inbound', 'outbound')
+      order by m.created_at desc, m.id desc limit p_messages) t;
+  end if;
+  return jsonb_build_object(
+    'id', c.id, 'reference', c.reference, 'channel', c.channel, 'status', c.status, 'inquiryType', c.inquiry_type,
+    'productSlug', (select p.slug from hub.products p where p.id = c.product_id),
+    'createdAt', c.created_at, 'updatedAt', c.updated_at,
+    'canEmail', c.contact_email is not null,
+    'canText', coalesce(c.contact_phone ~ '^\+[1-9][0-9]{7,14}$', false),
+    -- Subjects of phone and web-form conversations name the caller, and a text's carries the number.
+    'subject', case when c.channel = 'email' then c.subject end,
+    'headMessageId', v_head, 'latestInboundId', v_inbound_id, 'answered', v_answered,
+    -- How many times each side has written, so a first message (nobody has replied yet) can be told from a follow-up.
+    'inboundCount', (select count(*) from private.communication_messages x where x.communication_id = c.id and x.direction = 'inbound'),
+    'outboundCount', (select count(*) from private.communication_messages x where x.communication_id = c.id and x.direction = 'outbound'),
+    'ownReplyDelivery', (select o.delivery from private.communication_messages o
+                         where p_request_key is not null and o.communication_id = c.id and o.direction = 'outbound' and o.request_key = p_request_key),
+    'messages', v_messages);
 end;
 $$;
 

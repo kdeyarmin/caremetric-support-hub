@@ -408,6 +408,9 @@ working. The Hub server uses the new operations only when the database declares
   marks a fresh retry unknown.
 - **A session task asked to retry waits for its backoff**, and a schedule skips a task still waiting for approval
   instead of firing a second one beside it.
+- **The conversation snapshot says what became of a reply** recorded under the request key it is asked about
+  (`ownReplyDelivery`: pending, sent, failed or unknown, else null), so a reply whose execution stopped before
+  it was settled can be settled on replay instead of being judged against a thread that has since moved on.
 - **A relapse is flapping** when its first failed check came within half an hour of the last recovery.
 - **The brief** counts incidents from the probe tasks (which exist whether or not the on-call agent records
   actions) on the day the incident began or closed, and treats an urgent alert as undelivered only when no
