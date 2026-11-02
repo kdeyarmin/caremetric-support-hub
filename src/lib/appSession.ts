@@ -1,6 +1,8 @@
 import { config } from './config';
 
 const authEvent = 'caremetric:session';
+/** Raised whenever the sign-in may have changed (or lapsed) so the shell re-checks it. */
+export const sessionEvent = authEvent;
 export async function appRequest<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`/api/${path}`, {
     method: body === undefined ? 'GET' : 'POST', credentials:'same-origin', cache:'no-store', redirect:'error',

@@ -4,9 +4,9 @@ The Hub is where the CareMetric AI team lives. This document describes the contr
 runs it: who the agents are, what each is allowed to do, how the owner stays in charge, and what
 is built so far.
 
-> **Status.** The database layer and the server scheduler are in place. The scheduler is inert
-> unless `HUB_AGENTS_ENABLED` is exactly `true`, every agent is seeded **paused**, and no agent has
-> a handler yet, so nothing runs. The `/admin/team` screen, the Platform Engineer, the model
+> **Status.** The database layer, the server scheduler and the `/admin/team` screen are in place.
+> The scheduler is inert unless `HUB_AGENTS_ENABLED` is exactly `true`, every agent is seeded
+> **paused**, and no agent has a handler yet, so nothing runs. The Platform Engineer, the model
 > runtime, the Chief of Staff and the Support Concierge arrive in the following changes.
 
 ## The model
@@ -36,6 +36,31 @@ never send twice. A proposal nobody decides within seven days expires.
 Nothing here lets an agent move money, change a plan or price, delete data, merge code, deploy,
 or read resident or patient records. Inbound message text is `possible_phi` and never enters audit
 metadata, run summaries or task payloads.
+
+## The Team screen
+
+Platform administrators open **AI team** in the Admin navigation (`/admin/team`). It needs the owner's
+SMS sign-in; a lapsed session signs the owner out, as everywhere else in Admin.
+
+- **What the team can use** shows whether the scheduler, the code behind each kind of work, the owner's
+  email address, email delivery and text alerts are in place, and how many tasks wait for the owner to be
+  signed in.
+- **Waiting for you** lists every proposed action with a preview. A reply shows the exact text that will
+  go to the customer and its button says "Approve and send". The owner may add a note, then approves or
+  rejects. Approving carries the action out once, under its request key, and the screen says whether it
+  worked.
+- **Agents** shows each agent with Pause or Resume, its autonomy level, its daily budget (entered in
+  dollars) and what it has spent today, its model, last run, task counts and schedules. **Run now**
+  appears only for work this server has code for, and only while the agent is active. A change made from
+  another device since the page loaded is refused and the screen reloads, so one edit never silently
+  overwrites another.
+- **What the team has done** has five tabs: runs, tasks, proposed actions, the alerts sent to the owner,
+  and the Hub's audit log. Each shows 15 at a time, newest first. All but the audit log can be filtered
+  by agent. Message text is never kept in any of them.
+
+The screen checks every answer against the schemas in `src/admin/teamProtocol.ts`, and the server
+integration test (`server/agents-integration.mjs`) parses the real database output with the same
+schemas, so a change to the stored JSON cannot reach one side without the other.
 
 ## Boundary
 
