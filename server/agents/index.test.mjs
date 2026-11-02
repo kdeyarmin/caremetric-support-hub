@@ -10,14 +10,14 @@ const origin = 'https://support-hub-web-production.up.railway.app';
 describe('the AI team', () => {
   it('ships the on-call agent\'s handlers without being asked', () => {
     const team = agentTeam({ store: store(), publicOrigin: origin, enabled: true });
-    expect(team.scheduler.kinds()).toEqual(['brief.daily', 'probe.incident', 'probe.recovery', 'probe.sweep']);
+    expect(team.scheduler.kinds()).toEqual(['brief.daily', 'probe.incident', 'probe.recovery', 'probe.sweep', 'seo.weekly']);
   });
 
   it('adds the caller\'s handlers beside them, and lets the caller replace one', async () => {
     const custom = vi.fn(async () => ({ result: { custom: true } }));
     const fake = store([{ id: 't1', agentKey: 'platform_engineer', kind: 'probe.sweep', attempts: 1, payload: {} }]);
     const team = agentTeam({ store: fake, publicOrigin: origin, enabled: true, handlers: { 'probe.sweep': custom, 'brief.daily': async () => ({}) } });
-    expect(team.scheduler.kinds()).toEqual(['brief.daily', 'probe.incident', 'probe.recovery', 'probe.sweep']);
+    expect(team.scheduler.kinds()).toEqual(['brief.daily', 'probe.incident', 'probe.recovery', 'probe.sweep', 'seo.weekly']);
     await team.tick();
     expect(custom).toHaveBeenCalledTimes(1);
     expect(fake.finish).toHaveBeenCalledWith('t1', 'done', { result: { custom: true }, errorCode: null, retryAt: null });
