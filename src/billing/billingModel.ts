@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { appLabels, billingApps, historicalBillingApps, type BillingApp } from './billingProtocol';
 import type { ActorContext, Product } from '../domain';
+import { itemMonthlyCents, monthlyTotals, revenueStatuses as revenueStatusList, subscriptionMonthlyCents } from './billingMath.ts';
 
 /** Organization payment navigation follows the same paid-app memberships as the server. */
 export function canManageOrganizationBilling(actor: Pick<ActorContext, 'role' | 'memberships'>, products: readonly Pick<Product, 'id' | 'slug'>[]): boolean {
@@ -103,47 +104,14 @@ export function parseDollars(value: string): number | null {
 }
 export const centsToDollars = (cents: number) => (cents / 100).toFixed(2);
 
-const perMonth: Record<string, number> = { day: 365 / 12, week: 52 / 12, month: 1, year: 1 / 12 };
-/** One recurring item's list amount per month, before discounts. */
-export function itemMonthlyCents(item: Pick<SubscriptionItem, 'unit_amount' | 'quantity' | 'interval' | 'interval_count'>): number {
-  if (item.unit_amount === null || !item.interval) return 0;
-  return (item.unit_amount * item.quantity * perMonth[item.interval]) / (item.interval_count || 1);
-}
-/**
- * Monthly recurring revenue of one subscription after its discounts. A percent
- * coupon reduces the items it applies to; an amount coupon is spread over the
- * subscription's interval. Never below zero.
- */
-export function subscriptionMonthlyCents(subscription: Pick<Subscription, 'items' | 'discounts'>, coupons: readonly Coupon[]): number {
-  let total = subscription.items.reduce((sum, item) => sum + itemMonthlyCents(item), 0);
-  for (const discount of subscription.discounts) {
-    const coupon = coupons.find(entry => entry.id === discount.coupon);
-    if (!coupon) continue;
-    const applies = (item: SubscriptionItem) => !coupon.applies_to.length || coupon.applies_to.includes(item.product);
-    if (coupon.percent_off !== null) {
-      const base = subscription.items.filter(applies).reduce((sum, item) => sum + itemMonthlyCents(item), 0);
-      total -= base * coupon.percent_off / 100;
-    } else if (coupon.amount_off !== null) {
-      const interval = subscription.items.find(item => item.interval)?.interval ?? 'month';
-      total -= coupon.amount_off * perMonth[interval];
-    }
-  }
-  return Math.max(0, Math.round(total));
-}
+// The revenue maths lives in billingMath.ts so the server's account report uses the very same functions.
+export { itemMonthlyCents, subscriptionMonthlyCents };
 /** Paying statuses count toward MRR; a trial is reported separately and paused or unpaid collection is not revenue. */
-export const revenueStatuses: readonly SubscriptionStatus[] = ['active', 'past_due'];
+export const revenueStatuses: readonly SubscriptionStatus[] = revenueStatusList as readonly SubscriptionStatus[];
 export const liveStatuses: readonly SubscriptionStatus[] = ['trialing', 'active', 'past_due', 'paused', 'unpaid', 'incomplete'];
 export interface BillingTotals { subscriptions: number; mrrCents: number; arrCents: number; trialMrrCents: number; byStatus: Partial<Record<SubscriptionStatus, number>> }
 export function billingTotals(subscriptions: readonly Subscription[], coupons: readonly Coupon[]): BillingTotals {
-  const byStatus: Partial<Record<SubscriptionStatus, number>> = {};
-  let mrr = 0, trial = 0;
-  for (const subscription of subscriptions) {
-    byStatus[subscription.status] = (byStatus[subscription.status] ?? 0) + 1;
-    const monthly = subscriptionMonthlyCents(subscription, coupons);
-    if (revenueStatuses.includes(subscription.status)) mrr += monthly;
-    else if (subscription.status === 'trialing') trial += monthly;
-  }
-  return { subscriptions: subscriptions.length, mrrCents: mrr, arrCents: mrr * 12, trialMrrCents: trial, byStatus };
+  return monthlyTotals(subscriptions, coupons) as BillingTotals;
 }
 
 /** Subscription counts per application, for the control center and the portfolio rollup. */

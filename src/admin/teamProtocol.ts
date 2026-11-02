@@ -94,7 +94,7 @@ export const tierLabels = { fast: "Fast (Haiku)", draft: "Draft (Sonnet)", quali
 const taskLabels: Record<string, string> = {
   "probe.sweep": "Health check", "probe.incident": "Handle an incident", "probe.recovery": "Write a recovery note",
   "brief.daily": "Morning brief", "seo.weekly": "Weekly SEO check", "concierge.sweep": "Look for new messages", "concierge.communication": "Triage a message",
-  "import.advisors": "Import Advisors requests", "import.breathe": "Import phone messages",
+  "import.advisors": "Import Advisors requests", "import.breathe": "Import phone messages", "accounts.weekly": "Weekly account report",
 };
 export const taskLabel = (kind: string) => taskLabels[kind] ?? kind;
 

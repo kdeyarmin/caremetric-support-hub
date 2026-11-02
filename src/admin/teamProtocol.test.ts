@@ -26,6 +26,7 @@ describe("AI team display", () => {
   it("names the work, the actions and the states in plain words, and falls back to the raw name", () => {
     expect(taskLabel("probe.sweep")).toBe("Health check");
     expect(taskLabel("seo.weekly")).toBe("Weekly SEO check");
+    expect(taskLabel("accounts.weekly")).toBe("Weekly account report");
     expect(taskLabel("some.new.kind")).toBe("some.new.kind");
     expect(actionLabel("communication.reply")).toBe("Reply to a customer");
     expect(actionLabel("future.action")).toBe("future.action");

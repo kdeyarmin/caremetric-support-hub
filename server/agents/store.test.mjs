@@ -39,6 +39,8 @@ describe('agent store', () => {
     await store.communicationSnapshot({ id: 'c1', requestKey: 'k1', messages: 3, chars: 500 });
     await store.notificationCount({ prefix: 'concierge:urgent:', channel: 'sms', since: when });
     await store.notificationCount({ prefix: 'concierge:new:', since: when });
+    await store.accountsSnapshot();
+    await store.accountsSnapshot({ limit: 50 });
     expect(calls).toEqual([
       ['select private.agent_schedule_fire($1, $2) as result', [10, ['probe.sweep', 'brief.daily']]],
       ['select private.agent_maintenance() as result', []],
@@ -68,6 +70,8 @@ describe('agent store', () => {
       ['select private.agent_communication_snapshot($1, $2, $3, $4) as result', ['c1', 'k1', 3, 500]],
       ['select private.agent_notification_count($1, $2, $3) as result', ['concierge:urgent:', 'sms', when]],
       ['select private.agent_notification_count($1, $2, $3) as result', ['concierge:new:', null, when]],
+      ['select private.agent_accounts_snapshot($1) as result', [200]],
+      ['select private.agent_accounts_snapshot($1) as result', [50]],
     ]);
   });
 
