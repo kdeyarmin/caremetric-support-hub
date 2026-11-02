@@ -294,11 +294,22 @@ describe("AI team screen", () => {
     await waitFor(() => expect(client.activity).toHaveBeenCalledTimes(4));
   });
 
-  it("says an approved reply has not been sent yet when it is waiting for the owner's session", async () => {
-    const client = fakeClient(overview(), { decide: vi.fn(async () => ({ id: ids.action, kind: "communication.reply", status: "approved", decided: true })) });
+  it("says an approved reply has not been sent yet only when the server confirmed it was waiting for the owner's session", async () => {
+    const client = fakeClient(overview(), { decide: vi.fn(async () => ({ id: ids.action, kind: "communication.reply", status: "approved", decided: true, needsSession: true })) });
     render(<Team client={client} />);
     fireEvent.click(await screen.findByRole("button", { name: /Approve and send/ }));
     expect(await screen.findByText("Approved. It has not been sent yet. Press Run what's waiting while you are signed in.")).toBeTruthy();
+  });
+
+  it("does not say a reply was not sent when the approval came back without a confirmation either way", async () => {
+    // The server also answers a bare "approved" when the reply went out and only its record was lost.
+    const client = fakeClient(overview(), { decide: vi.fn(async () => ({ id: ids.action, kind: "communication.reply", status: "approved", decided: true })) });
+    render(<Team client={client} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Approve and send/ }));
+    const text = (await screen.findByRole("status")).textContent ?? "";
+    expect(text).toContain("could not confirm what happened next");
+    expect(text).toContain("open the conversation before answering again");
+    expect(text).not.toMatch(/not been sent|Run what's waiting/);
   });
 
   it("does not send the owner to Run what's waiting for a reply that failed because the sign-in lapsed", async () => {
@@ -357,7 +368,7 @@ describe("AI team screen", () => {
       decidedAt: status === "failed" ? "2026-11-02T11:40:00+00:00" : null, executedAt: null, result,
     });
     const activity = vi.fn(async (input: { kind: string }) => (input.kind === "actions"
-      ? { items: [action(1, "failed", { error: "thread_changed" }), action(2, "failed", null), action(3, "proposed", null)], total: 3, offset: 0, limit: 15 }
+      ? { items: [action(1, "failed", { error: "thread_changed" }), action(2, "failed", null), action(3, "proposed", null), action(4, "failed", { error: "session_required" })], total: 4, offset: 0, limit: 15 }
       : emptyPage)) as unknown as TeamClient["activity"];
     render(<Team client={fakeClient(overview(), { activity })} />);
     await screen.findByRole("region", { name: "What the team has done" });
@@ -371,6 +382,10 @@ describe("AI team screen", () => {
     expect(text("CM-1002")).toContain("Failed");
     expect(text("CM-1002")).not.toContain("nothing was sent");
     expect(text("CM-1003")).toContain("Waiting for approval");
+    // A failed action is final: the button picks up only approved ones, so a lapsed sign-in is not sent there for a retry.
+    expect(text("CM-1004")).toContain("Failed");
+    expect(text("CM-1004")).toContain("Your sign-in lapsed before the reply was sent, so nothing was sent. Sign in again and answer from the conversation.");
+    expect(text("CM-1004")).not.toMatch(/Run what's waiting/);
   });
 
   it("switches between kinds of activity and the audit log", async () => {

@@ -68,9 +68,10 @@ export function replySubject(subject, reference) {
 export const PHONE_REPLY_SUBJECT = 'Your phone message to CareMetric';
 /** The email a staff reply sends: the agent's words exactly as written, signed by
     CareMetric Support, in the shared person-to-person layout with a matching text part.
-    `channel` is where the conversation started; a database without it keeps the stored subject. */
-export function supportReplyEmail({ subject, reference, body, channel }) {
-  const title = replySubject(channel === 'phone' ? PHONE_REPLY_SUBJECT : subject, reference);
+    `channel` is where the conversation started; a database without it keeps the stored subject.
+    `override` is a subject the caller chose (server code only): it wins over both the stored subject and the phone title. */
+export function supportReplyEmail({ subject, reference, body, channel, override = null }) {
+  const title = replySubject(override ?? (channel === 'phone' ? PHONE_REPLY_SUBJECT : subject), reference);
   const { html, text } = renderEmail({
     layout: 'personal',
     title,
@@ -179,7 +180,7 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
     let outcome;
     if (started.deliveryChannel === 'sms') outcome = await sms.send(started.to, body);
     else {
-      const message = supportReplyEmail({ subject: subject ?? started.subject, reference: started.reference, body, channel: started.channel });
+      const message = supportReplyEmail({ subject: started.subject, reference: started.reference, body, channel: started.channel, override: subject });
       outcome = await email.send(started.to, message.subject, message);
     }
     try {

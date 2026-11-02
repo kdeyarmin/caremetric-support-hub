@@ -101,7 +101,17 @@ describe('agent administration', () => {
     expect(await why.admin.decide('token', { actionId, decision: 'approve' })).toEqual({ id: actionId, kind: 'communication.reply', status: 'failed', decided: true, error: 'thread_changed' });
     const crashed = fixture({ results: { 'hub.decide_agent_action': approved } });
     crashed.actions.executeOne.mockRejectedValue(new Error('db down'));
-    expect((await crashed.admin.decide('token', { actionId, decision: 'approve' })).status).toBe('approved');
+    // Approved is all that can be said: the work may have been done and only its record lost, so nothing claims it was not sent.
+    expect(await crashed.admin.decide('token', { actionId, decision: 'approve' })).toEqual({ id: actionId, kind: 'communication.reply', status: 'approved', decided: true });
+  });
+
+  it('says an approval is waiting for the owner\'s session only when the executor confirmed it was not started', async () => {
+    const approved = { id: actionId, kind: 'communication.reply', status: 'approved', decided: true };
+    const handedBack = fixture({ results: { 'hub.decide_agent_action': approved }, execution: { executed: false, failed: false, skipped: true, needsSession: true } });
+    expect(await handedBack.admin.decide('token', { actionId, decision: 'approve' })).toEqual({ id: actionId, kind: 'communication.reply', status: 'approved', decided: true, needsSession: true });
+    // Someone else already started it, or the database would not start it: skipped, but not for want of a session.
+    const taken = fixture({ results: { 'hub.decide_agent_action': approved }, execution: { executed: false, failed: false, skipped: true } });
+    expect(await taken.admin.decide('token', { actionId, decision: 'approve' })).toEqual({ id: actionId, kind: 'communication.reply', status: 'approved', decided: true });
   });
 
   it('starts a task it queued without waiting for the next tick', async () => {

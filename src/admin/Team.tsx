@@ -7,7 +7,7 @@ import { useAdminRead } from "./useAdminRead";
 import { TeamApiError, teamClient } from "./teamClient";
 import type { TeamClient } from "./teamClient";
 import {
-  actionLabel, autonomyHelp, autonomyLabels, cadenceLabel, centsLabel, errorLabel, outcomeLabel, statusLabel, taskLabel, tierLabels,
+  actionLabel, autonomyHelp, autonomyLabels, cadenceLabel, centsLabel, errorLabel, failedActionLabel, outcomeLabel, statusLabel, taskLabel, tierLabels,
 } from "./teamProtocol";
 import type { ActivityKind, ActivityPage, AuditPage, TeamAgent, TeamApproval, TeamOverview, TeamServices } from "./teamProtocol";
 import "./admin.css";
@@ -178,7 +178,7 @@ function ActivityRows({ tab, data, names }: { tab: Tab; data: unknown; names: Re
     return <Table caption="Proposed actions" head={["Proposed", "Agent", "Action", "For", "Status", "Decision"]}>
       {items.map(item => {
         // Why a carried-out action failed: the code its executor stored, in plain words, so a refused send is not just "Failed".
-        const failure = item.status === "failed" && typeof item.result?.error === "string" ? errorLabel(item.result.error) : "";
+        const failure = item.status === "failed" && typeof item.result?.error === "string" ? failedActionLabel(item.result.error) : "";
         const decision = item.decidedAt ? `${timeLabel(item.decidedAt)}${item.decisionNote ? ` — ${item.decisionNote}` : ""}` : "";
         return <tr key={item.id}><td>{timeLabel(item.createdAt)}</td><td>{who(item.agentKey)}</td><td>{actionLabel(item.kind)}</td><td>{item.targetId || "—"}</td><td>{statusLabel(item.status)}</td>
           <td className="team-wide">{[decision, failure].filter(Boolean).join(" · ") || "—"}</td></tr>;
@@ -273,19 +273,22 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
       () => started === 0 && sending === 0 ? "Nothing was waiting to run." : `${[started > 0 ? `Started ${plural(started, "task")}` : "", sending > 0 ? `${started > 0 ? "sending" : "Sending"} ${plural(sending, "approved reply").replace("replys", "replies")}` : ""].filter(Boolean).join(" and ")}. ${started + sending === 1 ? "It finishes" : "They finish"} in the background; refresh in a minute to see the result.`);
   };
   const onDecide = (approval: TeamApproval, decision: "approve" | "reject", note: string) => {
-    let sent = false;
+    let outcome: "sent" | "waiting" | "unconfirmed" = "unconfirmed";
     void change(`decide:${approval.id}`,
     async () => {
       const result = await client.decide({ actionId: approval.id, decision, note: note.trim() || undefined });
       if (!result.decided) throw new TeamApiError(409, "That was already decided or has expired. The list has been refreshed.");
-      if (result.status === "failed") {
-        // A failed reply is final, so "press Run what's waiting" (the label a waiting task gets) would send the owner the wrong way.
-        const lapsed = result.error === "session_required" ? "Your sign-in lapsed before the reply was sent, so nothing was sent. Sign in again and answer from the conversation." : null;
-        throw new TeamApiError(500, lapsed ?? (result.error ? errorLabel(result.error) : "It was approved but could not be carried out. See the activity below."));
-      }
-      // Approved but not carried out: a reply waits for the owner's session, and nothing has been sent yet.
-      sent = result.status === "executed";
-    }, () => (decision === "reject" ? "Rejected." : sent ? "Approved." : "Approved. It has not been sent yet. Press Run what's waiting while you are signed in."));
+      // A failed reply is final, so "press Run what's waiting" (the label a waiting task gets) would send the owner the wrong way.
+      if (result.status === "failed") throw new TeamApiError(500, result.error ? failedActionLabel(result.error) : "It was approved but could not be carried out. See the activity below.");
+      // Only the server can say a reply was not started. A plain "approved" may be an action whose work was done and whose result could not
+      // be recorded, so it is never reported as unsent.
+      outcome = result.status === "executed" ? "sent" : result.needsSession ? "waiting" : "unconfirmed";
+    }, () => {
+      if (decision === "reject") return "Rejected.";
+      if (outcome === "sent") return "Approved.";
+      if (outcome === "waiting") return "Approved. It has not been sent yet. Press Run what's waiting while you are signed in.";
+      return "Approved, but the Hub could not confirm what happened next. Check the Proposed actions below, and for a reply open the conversation before answering again.";
+    });
   };
 
   return <div className="team">

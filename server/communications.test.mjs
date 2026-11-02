@@ -138,6 +138,22 @@ describe('reply providers', () => {
     await expect(service.reply('session', { ...input, subject: 'Anything' })).rejects.toMatchObject({ status: 400 });
     for (const subject of ['', 'Line\nbreak', 'x'.repeat(151), 7]) await expect(service.reply('session', input, { subject })).rejects.toMatchObject({ status: 400 });
   });
+  it('lets a subject the server chose win over the phone-line title, which replaces only the stored subject', async () => {
+    const started = { messageId: 'm5', replay: false, delivery: 'pending', deliveryChannel: 'email', to: 'jordan@example.com', reference: 1046,
+      subject: 'Customer service call from Jordan Rivera', channel: 'phone' };
+    const send = vi.fn(async () => ({ delivery: 'sent', id: 'sg-5' }));
+    const service = communications({ pool: fakePool(started).pool, delegations: {}, email: { configured: true, send }, sms: { configured: false } });
+    const input = { id: '99000000-0000-4000-8000-000000000009', body: 'Hello.', requestKey: '99000000-0000-4000-8000-00000000000a' };
+    await service.reply('session', input, { subject: 'Your message to CareMetric support' });
+    expect(send.mock.calls[0][1]).toBe('Re: Your message to CareMetric support [CM-1046]');
+    expect(send.mock.calls[0][2].subject).toBe(send.mock.calls[0][1]);
+    expect(send.mock.calls[0][2].html).not.toContain('Jordan Rivera');
+    // Without one, a staff reply to the same conversation still carries the phone title.
+    await communications({ pool: fakePool(started).pool, delegations: {}, email: { configured: true, send }, sms: { configured: false } }).reply('session', input);
+    expect(send.mock.calls[1][1]).toBe('Re: Your phone message to CareMetric [CM-1046]');
+    expect(supportReplyEmail({ subject: 'Anything', reference: 1046, body: 'Hi', channel: 'phone', override: 'Your message to CareMetric support' }).subject).toBe('Re: Your message to CareMetric support [CM-1046]');
+    expect(supportReplyEmail({ subject: 'Anything', reference: 1046, body: 'Hi', channel: 'phone' }).subject).toBe('Re: Your phone message to CareMetric [CM-1046]');
+  });
   it('says so, with a code, when the provider answered but the delivery could not be recorded', async () => {
     const started = { messageId: 'm4', replay: false, delivery: 'pending', deliveryChannel: 'email', to: 'pat@agency.test', reference: 1045, subject: 'Help' };
     const calls = [];
