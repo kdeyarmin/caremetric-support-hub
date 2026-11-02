@@ -1,0 +1,60 @@
+import { describe, expect, it } from 'vitest';
+import { sqlAgentStore } from './store.mjs';
+
+const harness = (result = null) => {
+  const calls = [];
+  const pool = { connect: async () => ({ query: async (sql, args) => { if (/^select/.test(sql)) { calls.push([sql, args]); return { rows: [{ result }] }; } return { rows: [] }; }, release() {} }) };
+  return { calls, store: sqlAgentStore(pool) };
+};
+const when = new Date('2026-11-02T13:00:00Z');
+
+describe('agent store', () => {
+  it('calls exactly one database operation per method, with its arguments in order', async () => {
+    const { store, calls } = harness();
+    await store.fireSchedules(['probe.sweep', 'brief.daily']);
+    await store.maintenance();
+    await store.claim(3, 600);
+    await store.heartbeat('t1', 600);
+    await store.finish('t1', 'queued', { result: { a: 1 }, errorCode: 'provider_outage', retryAt: when });
+    await store.finish('t1', 'done');
+    await store.enqueue('platform_engineer', 'probe.incident', 'incident:hub:1', { payload: { target: 'hub' }, priority: 1, sourceKind: 'probe', requiresSession: false });
+    await store.sessionTasks(5);
+    await store.claimSessionTask('t1', 600);
+    await store.startRun('t1', 'claude-haiku-5-5', 'v1');
+    await store.finishRun('r1', 'completed', { costCents: 1.5 }, 'Done.', null);
+    await store.budget('chief_of_staff');
+    await store.proposeAction({ taskId: 't1', runId: 'r1', kind: 'communication.reply', targetKind: 'communication', targetId: 'CM-1', preview: 'Hi', input: { body: 'Hi' } });
+    await store.readyActions(10);
+    await store.beginExecution('a1');
+    await store.completeExecution('a1', true, { delivery: 'sent' });
+    await store.notifyBegin({ channel: 'email', severity: 'info', subject: 'S', body: 'B', dedupeKey: 'k', agentKey: 'chief_of_staff' });
+    await store.notifyFinish('n1', 'sent', 'SG1');
+    await store.ownerContact();
+    expect(calls).toEqual([
+      ['select private.agent_schedule_fire($1, $2) as result', [10, ['probe.sweep', 'brief.daily']]],
+      ['select private.agent_maintenance() as result', []],
+      ['select private.agent_task_claim($1, $2) as result', [3, 600]],
+      ['select private.agent_task_heartbeat($1, $2) as result', ['t1', 600]],
+      ['select private.agent_task_finish($1, $2, $3, $4, $5) as result', ['t1', 'queued', { a: 1 }, 'provider_outage', when]],
+      ['select private.agent_task_finish($1, $2, $3, $4, $5) as result', ['t1', 'done', null, null, null]],
+      ['select private.agent_task_enqueue($1, $2, $3, $4, $5, $6, $7, $8, $9) as result', ['platform_engineer', 'probe.incident', 'incident:hub:1', { target: 'hub' }, 1, null, 'probe', null, false]],
+      ['select private.agent_session_tasks($1) as result', [5]],
+      ['select private.agent_session_task_claim($1, $2) as result', ['t1', 600]],
+      ['select private.agent_run_start($1, $2, $3) as result', ['t1', 'claude-haiku-5-5', 'v1']],
+      ['select private.agent_run_finish($1, $2, $3, $4, $5) as result', ['r1', 'completed', { costCents: 1.5 }, 'Done.', null]],
+      ['select private.agent_budget($1) as result', ['chief_of_staff']],
+      ['select private.agent_action_propose($1, $2, $3, $4, $5, $6, $7) as result', ['t1', 'r1', 'communication.reply', 'communication', 'CM-1', 'Hi', { body: 'Hi' }]],
+      ['select private.agent_actions_ready($1) as result', [10]],
+      ['select private.agent_action_execution($1) as result', ['a1']],
+      ['select private.agent_action_executed($1, $2, $3) as result', ['a1', true, { delivery: 'sent' }]],
+      ['select private.agent_notify_begin($1, $2, $3, $4, $5, $6, $7) as result', ['email', 'info', 'S', 'B', 'k', 'chief_of_staff', null]],
+      ['select private.agent_notify_finish($1, $2, $3) as result', ['n1', 'sent', 'SG1']],
+      ['select private.owner_contact() as result', []],
+    ]);
+  });
+
+  it('returns what the database returns', async () => {
+    const { store } = harness([{ id: 't1' }]);
+    expect(await store.claim(1, 60)).toEqual([{ id: 't1' }]);
+  });
+});

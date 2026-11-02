@@ -194,6 +194,36 @@ Staff (same-origin, SMS session, `case.read`/`case.write` for the application):
   `offset` (default 0); `nextOffset` is where the next batch starts, or `null` when none remain.
 - `GET /api/communications/channels` — which channels are configured, as booleans only.
 
+## AI team (server endpoints)
+
+Implemented in `server/agents/` (backend feature `platform.agents.v1`). See [AI_TEAM.md](AI_TEAM.md).
+
+- `GET /api/health` — public liveness for uptime probes: `{ "ok": true }` when this process can reach
+  its database, 503 otherwise. It reveals nothing else and needs no session.
+
+Owner controls (POST only, same-origin, SMS session, no query string, at most 8 KiB). Each runs inside the
+owner's session and the database authorizes it: reads need the administrator session, changes need the
+command session (under eight hours old). Unknown keys in a body are refused with 400.
+
+- `POST /api/admin/team/overview` — `{}` → `{ team, services }`: the roster (status, autonomy, model tier,
+  budget and today's spend, last run, task counts, schedules), what is waiting for approval, and which
+  services the team can use right now (scheduler on, task kinds with a handler, text, email, owner address).
+- `POST /api/admin/team/status` — `{ key, status: "active" | "paused", expectedUpdatedAt }` → the agent.
+- `POST /api/admin/team/autonomy` — `{ key, autonomy: "observe" | "propose" | "act", expectedUpdatedAt }` → the agent.
+- `POST /api/admin/team/budget` — `{ key, dailyBudgetCents: 0–100000, expectedUpdatedAt }` → the agent.
+  A stale `expectedUpdatedAt` returns 409; hand back the `updatedAt` the roster returned, untouched.
+- `POST /api/admin/team/decide` — `{ actionId, decision: "approve" | "reject", note? }` →
+  `{ id, kind, status, decided }`. An approval is carried out straight away (`status` becomes `executed` or
+  `failed`); deciding twice, or after the proposal expired, changes nothing and reports `decided: false`.
+- `POST /api/admin/team/run` — `{ agentKey, taskKind }` → `{ id, status }`. Queues one of the agent's own
+  scheduled tasks ("Run now"); the agent must be active.
+- `POST /api/admin/team/cancel` — `{ taskId }` → `{ id, status }`.
+
+The history pages are reads through the browser RPC allowlist (`POST /api/rpc/<name>`):
+`get_agent_team`, `list_agent_activity` (`p_kind`: `runs`, `tasks`, `actions` or `notifications`, optional
+`p_agent_key`, `p_offset`, `p_limit ≤ 50`) and `list_audit_events` (optional `p_action_prefix`, such as
+`agent.`, with `p_offset` and `p_limit ≤ 50`).
+
 ## Healthcare Advisors administration reads
 
 `POST /api/admin/read` with `product: "advisors"` accepts only `capabilities`,

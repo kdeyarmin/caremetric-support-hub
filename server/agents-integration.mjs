@@ -9,6 +9,7 @@ import pg from 'pg';
 import { digest, withSession } from './sms-auth.mjs';
 import { gateway } from './gateway.mjs';
 import { assertBackendContract } from '../src/lib/backendContract.ts';
+import { agentTeam } from './agents/index.mjs';
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -427,6 +428,136 @@ try {
   await admin.query('update private.sms_identities set verified_at = null where user_id = $1', [owner]);
   assert.equal(await call('private.owner_contact'), null, 'an unverified number is never texted');
   await admin.query('update private.sms_identities set verified_at = now() where user_id = $1', [owner]);
+
+  {
+    // The server side, through the real store: the scheduler runs only what it can handle, a handler's alert reaches the
+    // owner once, retries back off, an approval is carried out exactly once, and the owner's routes work in a real session.
+    await clearWork();
+    for (const [key, status] of [['platform_engineer', 'active'], ['support_concierge', 'active'], ['chief_of_staff', 'active']]) {
+      if ((await agentRow(key)).status !== status) await setStatus(key, status);
+    }
+    await admin.query("update private.agent_schedules set next_run_at = now() + interval '1 day', enabled = true");
+    const sent = { sms: [], email: [] };
+    const logs = [];
+    const handled = [];
+    let probeFails = true;
+    const team2 = agentTeam({
+      pool, enabled: true, ownerEmail: 'owner@example.test', publicOrigin: 'https://hub.test', log: line => logs.push(line),
+      sms: { configured: true, send: async (to, body) => { sent.sms.push([to, body]); return { delivery: 'sent', id: 'SM' + '0'.repeat(32) }; } },
+      email: { configured: true, send: async (to, subject, content) => { sent.email.push([to, subject, content]); return { delivery: 'sent', id: 'fixture-message' }; } },
+      handlers: ({ store, notifier }) => ({
+        'probe.sweep': async current => {
+          handled.push(current.id);
+          if (probeFails) { probeFails = false; throw Object.assign(new Error('The probe could not reach a product.'), { transient: true }); }
+          await notifier.send({ severity: 'urgent', subject: 'Hub is down', body: 'The Hub probe failed twice.', dedupeKey: `it:${run}:team:down`, agentKey: current.agentKey, taskId: current.id });
+          return { result: { checked: 1 } };
+        },
+        'probe.incident': async current => {
+          await store.proposeAction({ taskId: current.id, kind: 'incident.open', targetKind: 'probe_target', targetId: 'hub', preview: 'Hub health probe failed twice.', input: { target: 'hub' } });
+          return { status: 'awaiting_approval' };
+        },
+        'concierge.communication': async current => {
+          const proposal = await store.proposeAction({ taskId: current.id, kind: 'communication.reply', targetKind: 'communication', targetId: current.payload.reference, preview: 'Here is how to export by month.', input: { body: 'Here is how to export by month.' } });
+          return { status: 'awaiting_approval', result: { proposed: proposal.id } };
+        },
+      }),
+      executors: () => ({ 'communication.reply': async execution => { executed.push(execution); return { delivery: 'sent' }; } }),
+    });
+    const executed = [];
+    const settle = async (id, status, timeout = 5000) => {
+      const deadline = Date.now() + timeout;
+      while (Date.now() < deadline) { if ((await task(id)).status === status) return task(id); await new Promise(resolve => setTimeout(resolve, 25)); }
+      assert.fail(`task ${id} never reached ${status}`);
+    };
+    assert.deepEqual(team2.scheduler.kinds().sort(), ['concierge.communication', 'probe.incident', 'probe.sweep']);
+
+    // A due schedule becomes a task and runs; a schedule for a kind with no handler stays due and untouched.
+    // A firing's key carries its scheduled instant to the second, so give this firing an instant no earlier section used.
+    await admin.query("update private.agent_schedules set next_run_at = now() - interval '9 minutes' where task_kind in ('probe.sweep', 'brief.daily', 'concierge.sweep')");
+    const briefDue = await row("select next_run_at from private.agent_schedules where task_kind = 'brief.daily'");
+    const tickStarted = (await row('select clock_timestamp() as at')).at;
+    let tick = await team2.tick();
+    assert.deepEqual([tick.skipped, tick.fired, tick.claimed], [false, 1, 1], `only the handled kind fires (${logs.join(' | ') || 'no log lines'})`);
+    assert.deepEqual((await row("select next_run_at from private.agent_schedules where task_kind = 'brief.daily'")).next_run_at, briefDue.next_run_at, 'a kind with no handler is left due');
+    assert.equal(Number((await row("select count(*) from private.agent_tasks where kind in ('brief.daily', 'concierge.sweep') and created_at >= $1", [tickStarted])).count), 0, 'and no task is created for it');
+
+    // The first probe fails transiently: the task waits out a backoff and keeps its place, with no alert yet.
+    const probeTask = (await rows("select * from private.agent_tasks where kind = 'probe.sweep' order by created_at desc limit 1"))[0];
+    assert.deepEqual([probeTask.status, probeTask.attempts, probeTask.last_error_code], ['queued', 1, 'provider_outage']);
+    const waitMinutes = (await row('select extract(epoch from due_at - now()) / 60 as minutes from private.agent_tasks where id = $1', [probeTask.id])).minutes;
+    assert.ok(waitMinutes > 4 && waitMinutes <= 5, 'the first retry waits five minutes');
+    assert.deepEqual([sent.sms.length, sent.email.length], [0, 0]);
+    const failure = JSON.parse(logs.find(line => JSON.parse(line).event === 'hub_agent_task_error'));
+    assert.deepEqual([failure.code, failure.transient, failure.attempts], ['provider_outage', true, 1]);
+    assert.ok(!logs.join().includes('could not reach a product'), 'a log line never carries the error message');
+    tick = await team2.tick();
+    assert.deepEqual([tick.fired, tick.claimed], [0, 0], 'a backed-off task is not claimed early');
+
+    // When the retry is due the probe succeeds and the owner is told once, by text and by email.
+    await admin.query("update private.agent_tasks set due_at = now() - interval '1 second' where id = $1", [probeTask.id]);
+    tick = await team2.tick();
+    assert.equal(tick.claimed, 1);
+    const done = await task(probeTask.id);
+    assert.deepEqual([done.status, done.attempts, done.result], ['done', 2, { checked: 1 }]);
+    assert.deepEqual(sent.sms, [['+12025550701', 'CareMetric: Hub is down. The Hub probe failed twice.']]);
+    assert.equal(sent.email.length, 1);
+    assert.deepEqual([sent.email[0][0], sent.email[0][1]], ['owner@example.test', 'Hub is down']);
+    assert.match(sent.email[0][2].html, /Needs your attention/);
+    assert.deepEqual((await rows('select channel, status, agent_key from private.owner_notifications where dedupe_key = $1 order by channel', [`it:${run}:team:down`])).map(entry => [entry.channel, entry.status, entry.agent_key]),
+      [['email', 'sent', 'platform_engineer'], ['sms', 'sent', 'platform_engineer']]);
+    assert.deepEqual((await team2.notifier.send({ severity: 'urgent', subject: 'Hub is down', body: 'The Hub probe failed twice.', dedupeKey: `it:${run}:team:down` })).map(entry => entry.delivery), ['duplicate', 'duplicate']);
+    assert.deepEqual([sent.sms.length, sent.email.length], [1, 1], 'a repeated alert is never sent twice');
+
+    // An agent on "act" is trusted with incident records: the same tick that runs the task carries them out.
+    const incident = await enqueue('platform_engineer', 'probe.incident', `it:${run}:server:incident`);
+    tick = await team2.tick();
+    assert.deepEqual([tick.claimed, tick.executedActions], [1, 1], 'an auto-approved action is drained in the same tick');
+    const incidentAction = (await rows("select * from private.agent_actions where task_id = $1", [incident]))[0];
+    assert.deepEqual([incidentAction.status, incidentAction.result, (await task(incident)).status], ['executed', { recorded: true }, 'done']);
+
+    // The owner approves a proposal; it is carried out through the executor exactly once, whatever happens next.
+    const draft = await enqueue('support_concierge', 'concierge.communication', `it:${run}:server:concierge`, { payload: { reference: 'CM-2001' } });
+    await team2.tick();
+    const proposed = (await rows('select * from private.agent_actions where task_id = $1', [draft]))[0];
+    assert.deepEqual([proposed.status, (await task(draft)).status], ['proposed', 'awaiting_approval']);
+    const overview = await team2.admin.overview(ownerToken, {});
+    assert.deepEqual(overview.services, { enabled: true, handlers: ['concierge.communication', 'probe.incident', 'probe.sweep'], sms: true, email: true, ownerEmail: true });
+    assert.equal(overview.team.approvals[0].id, proposed.id);
+    const decision = await team2.admin.decide(ownerToken, { actionId: proposed.id, decision: 'approve', note: 'Send it' });
+    assert.deepEqual(decision, { id: proposed.id, kind: 'communication.reply', status: 'executed', decided: true });
+    assert.deepEqual(executed.map(entry => [entry.requestKey, entry.input, entry.autoApproved]), [[proposed.request_key, { body: 'Here is how to export by month.' }, false]]);
+    assert.deepEqual([(await action(proposed.id)).status, (await action(proposed.id)).result, (await task(draft)).status], ['executed', { delivery: 'sent' }, 'done']);
+    assert.equal((await team2.admin.decide(ownerToken, { actionId: proposed.id, decision: 'approve' })).decided, false);
+    assert.equal(executed.length, 1, 'deciding again carries nothing out again');
+    // A rejection, and an action no executor knows, are recorded rather than lost.
+    const declined = await enqueue('support_concierge', 'concierge.communication', `it:${run}:server:declined`, { payload: { reference: 'CM-2002' } });
+    await team2.tick();
+    const declinedAction = (await rows('select * from private.agent_actions where task_id = $1', [declined]))[0];
+    assert.equal((await team2.admin.decide(ownerToken, { actionId: declinedAction.id, decision: 'reject' })).status, 'rejected');
+    assert.equal(executed.length, 1, 'a rejection is never carried out');
+    await admin.query("update private.agent_actions set kind = 'import.run' where id = $1", [(await rows('select id from private.agent_actions where task_id = $1', [incident]))[0].id]);
+    const orphan = await enqueue('platform_engineer', 'probe.incident', `it:${run}:server:orphan`);
+    await team2.tick();
+    await admin.query("update private.agent_actions set kind = 'import.run' where task_id = $1", [orphan]);
+    const orphanAction = (await rows('select id, status from private.agent_actions where task_id = $1', [orphan]))[0];
+    assert.equal(orphanAction.status, 'executed', 'the incident record was auto-approved and drained before the kind was changed');
+
+    // The owner's routes: changes need the current version, and map the database's reviewed errors to statuses.
+    const status = await agentRow('platform_engineer');
+    await assert.rejects(team2.admin.status(ownerToken, { key: 'platform_engineer', status: 'paused', expectedUpdatedAt: '2020-01-01T00:00:00.000000+00:00' }), error => error.status === 409 && /changed/.test(error.message));
+    assert.equal((await team2.admin.status(ownerToken, { key: 'platform_engineer', status: 'paused', expectedUpdatedAt: status.updatedAt })).status, 'paused');
+    await assert.rejects(team2.admin.run(ownerToken, { agentKey: 'platform_engineer', taskKind: 'probe.sweep' }), error => error.status === 409 && /Resume this agent/.test(error.message));
+    await team2.admin.status(ownerToken, { key: 'platform_engineer', status: 'active', expectedUpdatedAt: (await agentRow('platform_engineer')).updatedAt });
+    probeFails = false;
+    const requested = await team2.admin.run(ownerToken, { agentKey: 'platform_engineer', taskKind: 'probe.sweep' });
+    assert.equal((await settle(requested.id, 'done')).source_kind, 'owner', '"Run now" starts without waiting for the next tick');
+    await assert.rejects(team2.admin.overview(otherToken, {}), error => error.status === 401, 'a session without administrator rights is refused');
+    await assert.rejects(team2.admin.cancel(ownerToken, { taskId: randomUUID() }), error => error.status === 404);
+    await assert.rejects(team2.admin.status(staleToken, { key: 'platform_engineer', status: 'paused', expectedUpdatedAt: (await agentRow('platform_engineer')).updatedAt }), error => error.status === 401);
+    assert.ok(!logs.join().includes('Here is how to export'), 'a reply draft never reaches a log line');
+    await clearWork();
+
+  }
 
   // The owner's history: runs, tasks, actions, notifications, and the audit log.
   const runs = await ownerCall('hub.list_agent_activity', ['runs', null, 0, 50]);
