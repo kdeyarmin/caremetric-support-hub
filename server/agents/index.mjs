@@ -5,6 +5,7 @@ import { ownerNotifier } from './notify.mjs';
 import { agentAdmin } from './admin.mjs';
 import { builtInHandlers } from './tasks/index.mjs';
 import { conciergeExecutors } from './concierge/index.mjs';
+import { modelRuntime } from './runtime/index.mjs';
 
 const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 
@@ -15,13 +16,18 @@ const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
  * The handlers every server ships with (see tasks/) are always registered; `handlers` adds to
  * or replaces them. Nothing runs unless `enabled` is exactly true (HUB_AGENTS_ENABLED); every
  * agent also starts paused in the database until the owner resumes it.
+ * `model` is the shared model runtime (runtime/): built from `anthropicApiKey` unless one is given,
+ * and handed to function-style `handlers` beside the store and the notifier. `record` writes the
+ * usage ledger. No handler this server ships calls the model yet.
  */
 export function agentTeam({
   pool, store = sqlAgentStore(pool), handlers = {}, executors = {}, sms, email, ownerEmail, publicOrigin,
   fetchImpl = fetch, enabled = false, log = line => console.warn(line), now = () => new Date(), communications = null, features = null,
+  anthropicApiKey = null, record = null, model = null,
 }) {
   const notifier = ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log });
-  const shared = { store, notifier };
+  const runtime = model ?? modelRuntime({ apiKey: anthropicApiKey, store, record, notifier, log, now });
+  const shared = { store, notifier, model: runtime };
   const actions = actionExecutor({ store, executors: { ...recordOnlyExecutors, ...conciergeExecutors({ communications, store, notifier, features, log }), ...(typeof executors === 'function' ? executors(shared) : executors) }, log });
   // The handlers every server ships with, then any the caller adds (a caller's handler for the same kind wins).
   const registry = { ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
@@ -30,8 +36,8 @@ export function agentTeam({
     pool, actions, kick: () => scheduler.tick(), waiting: scheduler.runWaiting,
     services: () => ({
       enabled: scheduler.active(), handlers: scheduler.kinds(),
-      sms: Boolean(sms?.configured), email: Boolean(email?.configured), ownerEmail: emailAddress.test(ownerEmail ?? ''),
+      sms: Boolean(sms?.configured), email: Boolean(email?.configured), ownerEmail: emailAddress.test(ownerEmail ?? ''), ai: Boolean(runtime.configured),
     }),
   });
-  return { store, notifier, actions, scheduler, admin, tick: scheduler.tick, active: scheduler.active, runWaiting: scheduler.runWaiting };
+  return { store, notifier, model: runtime, actions, scheduler, admin, tick: scheduler.tick, active: scheduler.active, runWaiting: scheduler.runWaiting };
 }

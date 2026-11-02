@@ -7,9 +7,10 @@ is built so far.
 > **Status.** The database layer, the server scheduler, the `/admin/team` screen, the Platform
 > Engineer's health probes, the Chief of Staff's morning brief, the SEO Analyst's weekly report and the
 > Support Concierge's triage of new conversations, with the fixed replies it offers the owner, are in
-> place. The scheduler is inert unless `HUB_AGENTS_ENABLED` is exactly `true` and every agent is seeded
-> **paused**. None of the working agents uses a model, and customer message text never leaves the Hub.
-> The model runtime and the Concierge's drafted answers arrive in the following changes.
+> place, and so is the model runtime they will share (see "The model runtime"). The scheduler is inert
+> unless `HUB_AGENTS_ENABLED` is exactly `true` and every agent is seeded **paused**. None of the working
+> agents calls a model yet, and customer message text never leaves the Hub. The Concierge's drafted answers
+> arrive in a following change.
 
 ## The model
 
@@ -296,6 +297,71 @@ external check on `GET /api/health` (an uptime monitor, or a scheduled workflow 
 Each agent has a daily budget in cents; the day runs midnight to midnight Eastern. Model calls
 are checked against it where the tokens are spent, so a budget that is used up stops that agent's
 model calls until the next day without holding back model-free work such as health probes.
+The rules the check follows are under "The model runtime".
+
+## The model runtime
+
+`server/agents/runtime/` is how an agent calls a model. It is shared by every agent and used by none yet:
+an agent's handler asks for it (`model.run(task, request, { signal })`), so the Concierge's drafted answers,
+the Account Manager and the Content Marketer can be built on one metered path. It adds the official
+Anthropic SDK (`@anthropic-ai/sdk`, pinned to an exact version) beside the Hub's older case assistant,
+which keeps its own small client. The SDK's origin is fixed to `https://api.anthropic.com` (a base URL
+variable on the host cannot redirect it), its logger is off, and it retries once with a 90 second timeout,
+so a call can never outlive the scheduler's four-minute limit for a task.
+
+**One call per task.** The loop is written by hand rather than handed to the SDK's tool runner, because
+the Hub keeps its own budget, deadline and accounting. A run makes one call and has no tools: a model that
+stops for any reason except finishing has produced nothing usable. The request names the agent's tier
+(`fast`, `draft` or `quality`, which pick the Haiku, Sonnet or Opus 5.5 model), a closed JSON schema the
+answer must fit, an effort of low, medium or high, and system blocks marked for caching. It never sends a
+sampling parameter, a thinking setting or a prefill, and `max_tokens` (3,000 by default, 8,000 at most)
+covers the model's thinking as well as its answer. The answer is checked again in code against the schema
+and against the agent's own `validate`; the model never causes a side effect, the handler does.
+
+**Budget.** A call is allowed only if the agent's remaining cents for the Eastern day, less what other
+calls in this process have reserved and not yet booked, cover its worst case: every input character taken
+as a token (two and a half characters to a token, on purpose too few) at the cache-write price, and every
+output token up to `max_tokens`. A call that is refused makes no request, leaves a `budget_exhausted` run
+for the owner to see and tells the handler, which should put the task off until the next Eastern day. The
+cost of a run reaches the database only when its run row is closed, and up to three tasks run at once, so
+the row is closed straight after the response, before anything can fail, and the reservation is released
+only after that. A call whose outcome is unknown (a timeout, an abort, a dropped connection) is booked at
+its input estimate instead of at nothing, and a response that reports no usage is booked at the reserve.
+A server that stops mid-call loses that call's cost: at most the three reserves it held.
+
+**Prices** are per million tokens: Haiku 5.5 $0.10 in and $0.50 out (above a 100,000-token prompt, $0.50
+and $2.50 for the whole call), Sonnet 5.5 $2 and $10, Opus 5.5 $4 and $20; a cache read costs $0.01 (Haiku
+at the short rate) or $0.20 and a five-minute cache write 1.25 times the input price. A model with no price
+in the table is refused, and a test holds the table to the tiers the Hub names, so changing a tier cannot
+leave the agents spending unmetered. Costs are rounded up at the fourth decimal of a cent.
+
+**How a run ends**, in `private.agent_runs`: `completed`; `refused` (the model declined; not retried);
+`budget_exhausted`; `no_result` (the answer was cut off, or was not valid JSON, did not fit the schema or
+failed the agent's own checks; the failure is `output_truncated` or `output_invalid`, and it stops after
+three attempts); `failed` with a code; `cancelled` (the scheduler's deadline or a shutdown reached the
+call). Failure codes are lowercase words: `rate_limited`, `provider_outage` (any 5xx, including overload),
+`provider_unreachable` and `run_aborted` are transient and retried with the scheduler's backoff;
+`request_rejected`, `ai_auth_failed`, `ai_not_permitted`, `model_not_found`, `unknown_model`,
+`ai_not_configured`, `output_truncated`, `output_invalid` and `ai_error` are not. A refused key, account or
+model also emails the owner once a day.
+
+**Ledger.** Each real call writes one `private.ai_usage` row, as for the case assistant: actor `automation`,
+feature `agent_<agent key>`, the model, `completed` or `failed`, the whole prompt's tokens (input, cache
+reads and cache writes) and the output tokens. An agent's calls belong to no support case, so the control
+center counts them as unattributed and labels them by feature. A refused call has no row.
+
+**Nothing from a request is kept.** The request text may be customer text. It is never logged, stored in a
+run, task, alert or error, or used in a summary: logs carry the agent, the kind, a code, the HTTP status and
+the provider's request id; the provider's own error message (which can quote the request) is dropped; and a
+run's summary comes from the agent's `describe`, which returns counts and fixed words only.
+
+**Using it.** A handler that calls the model checks `signal.aborted` before it proposes an action or sends an
+alert (the scheduler can stop waiting for a handler but cannot stop its code). The runtime is on
+`team.model` and is handed to function-style `handlers` beside the store and the notifier. It is "Ready" on
+the Team screen when `ANTHROPIC_API_KEY` is set, and no agent calls it unless its own code was written to.
+To check the key and the tier models once, from a machine of your own, run
+`HUB_RUNTIME_SMOKE=one-synthetic-call ANTHROPIC_API_KEY=… node server/agents-runtime-smoke.mjs fast`: one
+invented sentence, a fraction of a cent, never run in CI.
 
 ## Work that needs the owner's session
 
