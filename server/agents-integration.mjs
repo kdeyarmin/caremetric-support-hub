@@ -420,7 +420,7 @@ try {
   // A send the server never settled (it stopped between recording and sending) becomes unknown and is never resent on its own.
   const stuck = await call('private.agent_notify_begin', ['sms', 'urgent', 'Stuck', 'Stuck.', `it:${run}:alert:3`, null, null]);
   assert.equal((await call('private.agent_maintenance')).unsettledNotifications, 0, 'a fresh pending notification is left alone');
-  await admin.query("update private.owner_notifications set created_at = now() - interval '16 minutes' where id = $1", [stuck.id]);
+  await admin.query("update private.owner_notifications set created_at = now() - interval '16 minutes', attempted_at = now() - interval '16 minutes' where id = $1", [stuck.id]);
   assert.equal((await call('private.agent_maintenance')).unsettledNotifications, 1);
   assert.equal((await row('select status from private.owner_notifications where id = $1', [stuck.id])).status, 'unknown');
   assert.equal((await call('private.agent_notify_begin', ['sms', 'urgent', 'Stuck', 'Stuck.', `it:${run}:alert:3`, null, null])).duplicate, true, 'and it is not sent again');
@@ -806,6 +806,10 @@ try {
       ('platform_engineer', 'incident.resolve', 'probe_target', 'carebase:7', 'Closed', 'executed', $1),
       ('support_concierge', 'communication.note', 'communication', 'CM-BRIEF-3', 'Noted', 'executed', $1),
       ('support_concierge', 'communication.note', 'communication', 'CM-BRIEF-4', 'Noted today', 'executed', now())`, [at(3_600_000)]);
+    // Incidents are counted from the probe tasks created when they began and closed (an observe-only agent records no actions), by the day of that transition.
+    await admin.query(`insert into private.agent_tasks (agent_key, kind, request_key, status, source_kind, created_at) values
+      ('platform_engineer', 'probe.incident', $1, 'cancelled', 'probe', $4), ('platform_engineer', 'probe.recovery', $2, 'cancelled', 'probe', $4),
+      ('platform_engineer', 'probe.incident', $3, 'cancelled', 'probe', now())`, [`it:${run}:brief:inc:1`, `it:${run}:brief:rec:1`, `it:${run}:brief:inc:today`, at(3_600_000)]);
     const tenant = randomUUID();
     await admin.query("insert into hub.tenants (id, slug, name, status) values ($1, $2, 'Brief fixture tenant', 'active')", [tenant, `brief-${run}`]);
     await admin.query("insert into private.billing_customers (tenant_id, stripe_customer_id, livemode, seen_at) values ($1, $2, true, now())", [tenant, `cus_brief${run}`]);
@@ -1059,6 +1063,10 @@ try {
     assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 1, actions: 0 });
     const waited = await reached(outage, ['awaiting_session']);
     assert.deepEqual([waited.last_error_code, waited.requires_session], ['bridge_unavailable', true]);
+
+    // A session task asked to retry waits for its backoff like any other task, so pressing again at once finds nothing; once the backoff has passed it is offered again.
+    assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 0, actions: 0 });
+    await admin.query('update private.agent_tasks set due_at = now() where id = $1', [outage]);
 
     // Two presses at once claim a task once.
     behavior = async (_token, input) => ({ source: input.source, read: 0, created: 0, skipped: 0, nextOffset: null });

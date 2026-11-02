@@ -143,7 +143,7 @@ try {
   assert.equal(await snapshot(randomUUID()), null, 'a conversation that does not exist is null, not an error');
   const rich = await conversation({ messages: [{ ago: 30, body: 'First question', direction: 'inbound' }, { ago: 28, direction: 'note', body: secrets.note }, { ago: 25, direction: 'outbound', body: 'Our answer', requestKey: randomUUID() }, { ago: 5, body: `${secrets.body} ${'x'.repeat(300)}` }] });
   const full = await snapshot(rich.id, null, 10, 200);
-  assert.deepEqual(Object.keys(full).sort(), ['answered', 'canEmail', 'canText', 'channel', 'createdAt', 'headMessageId', 'id', 'inboundCount', 'inquiryType', 'latestInboundId', 'messages', 'outboundCount', 'productSlug', 'reference', 'status', 'subject', 'updatedAt']);
+  assert.deepEqual(Object.keys(full).sort(), ['answered', 'canEmail', 'canText', 'channel', 'createdAt', 'headMessageId', 'id', 'inboundCount', 'inquiryType', 'latestInboundId', 'messages', 'outboundCount', 'ownReplyDelivery', 'productSlug', 'reference', 'status', 'subject', 'updatedAt']);
   const serialized = JSON.stringify(full);
   for (const secret of [secrets.name, secrets.email, secrets.phone, secrets.organization, secrets.note]) assert.ok(!serialized.includes(secret), `the snapshot never carries ${secret.slice(0, 8)}…`);
   assert.deepEqual([full.canEmail, full.canText, full.productSlug, full.subject, full.answered], [true, true, 'carebase', 'A question', false]);
@@ -160,6 +160,12 @@ try {
   assert.deepEqual([sentSnapshot.headMessageId, sentSnapshot.latestInboundId, sentSnapshot.answered], [aside.messages[1], aside.messages[0], true], 'a reply is the head and answers the message');
   assert.deepEqual([(await snapshot(aside.id, sentKey, 0, 200)).headMessageId], [aside.messages[0]], 'the head ignores the reply sent under the key it is asked about');
   assert.equal((await snapshot(aside.id, randomUUID(), 0, 200)).headMessageId, aside.messages[1], 'and only that key');
+  // What became of the reply recorded under the key asked about: the thread's state cannot say whether it was sent.
+  assert.deepEqual([(await snapshot(aside.id, sentKey, 0, 200)).ownReplyDelivery, (await snapshot(aside.id, randomUUID(), 0, 200)).ownReplyDelivery, (await snapshot(aside.id, null, 0, 200)).ownReplyDelivery],
+    ['sent', null, null], 'the delivery of the reply under the key, and nothing for another key or none');
+  await admin.query("update private.communication_messages set delivery = 'pending' where id = $1", [aside.messages[1]]);
+  assert.equal((await snapshot(aside.id, sentKey, 0, 200)).ownReplyDelivery, 'pending', 'a reply recorded but never settled says so');
+  assert.equal((await snapshot(rich.id, sentKey, 0, 200)).ownReplyDelivery, null, 'and only in the conversation it was recorded in');
   const phoneLine = await conversation({ channel: 'phone', product: 'breathe', subject: `Billing call from ${secrets.name}`, messages: [{ ago: 5 }] });
   const textLine = await conversation({ channel: 'sms', subject: `Text message from ${secrets.phone}`, messages: [{ ago: 5 }] });
   const noContact = await conversation({ channel: 'web_form', product: 'advisors', subject: 'Consultation request from someone', contact: false, messages: [{ ago: 5 }] });

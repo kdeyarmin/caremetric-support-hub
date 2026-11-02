@@ -53,7 +53,7 @@ export function actionExecutor({ store, executors = {}, log = line => console.wa
         log(JSON.stringify({ event: 'hub_agent_action_error', action_id: execution.id, agent: execution.agentKey, kind: execution.kind, code: result.error }));
       }
     }
-    await store.completeExecution(execution.id, ok, result);
+    await store.completeExecution(execution.id, ok, result, execution.execution ?? null);
     return ok ? { executed: true, failed: false, skipped: false } : { executed: false, failed: true, skipped: false, error: result.error };
   }
 

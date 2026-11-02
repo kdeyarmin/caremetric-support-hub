@@ -6,18 +6,29 @@ import { transaction } from '../sms-auth.mjs';
  * method is one call to a private.agent_* security definer operation that refuses any
  * other role. Nothing here decides anything: the database keeps the rules (leases,
  * autonomy, idempotency, budgets) and this module only carries values to and from it.
+ *
+ * `fenced` is true when the database declares platform.agents.hardening.v1. Then a task's heartbeat
+ * and finish quote the attempt it was claimed under (a worker whose lease ran out and whose task was
+ * handed out again can no longer touch it), an action's settlement quotes the execution it started,
+ * the ready list can be narrowed by kind before it is limited, and an execution that never began its
+ * work can be handed back. Against a database without those operations the calls keep their old shape
+ * and the extras are ignored, so a server can be deployed before the migration is applied.
  */
-export function sqlAgentStore(pool) {
+export function sqlAgentStore(pool, { fenced = false } = {}) {
   const call = (operation, args = []) => transaction(pool, async client =>
     (await client.query(`select ${operation}(${args.map((_, index) => `$${index + 1}`).join(', ')}) as result`, args)).rows[0].result);
   return {
+    fenced,
     /** Turns due schedules of the given task kinds (the ones this server can handle) into tasks. */
     fireSchedules: (kinds, limit = 10) => call('private.agent_schedule_fire', [limit, kinds]),
     maintenance: () => call('private.agent_maintenance'),
     claim: (limit, leaseSeconds) => call('private.agent_task_claim', [limit, leaseSeconds]),
-    heartbeat: (taskId, leaseSeconds) => call('private.agent_task_heartbeat', [taskId, leaseSeconds]),
-    finish: (taskId, status, { result = null, errorCode = null, retryAt = null } = {}) =>
-      call('private.agent_task_finish', [taskId, status, result, errorCode, retryAt]),
+    heartbeat: (taskId, leaseSeconds, attempt = null) => (fenced && Number.isInteger(attempt)
+      ? call('private.agent_task_heartbeat', [taskId, leaseSeconds, attempt])
+      : call('private.agent_task_heartbeat', [taskId, leaseSeconds])),
+    finish: (taskId, status, { result = null, errorCode = null, retryAt = null, attempt = null } = {}) => (fenced && Number.isInteger(attempt)
+      ? call('private.agent_task_finish', [taskId, status, result, errorCode, retryAt, attempt])
+      : call('private.agent_task_finish', [taskId, status, result, errorCode, retryAt])),
     enqueue: (agentKey, kind, requestKey, { payload = {}, priority = 5, dueAt = null, sourceKind = null, sourceRef = null, requiresSession = false } = {}) =>
       call('private.agent_task_enqueue', [agentKey, kind, requestKey, payload, priority, dueAt, sourceKind, sourceRef, requiresSession]),
     sessionTasks: (limit = 10) => call('private.agent_session_tasks', [limit]),
@@ -28,9 +39,19 @@ export function sqlAgentStore(pool) {
     budget: agentKey => call('private.agent_budget', [agentKey]),
     proposeAction: ({ taskId, runId = null, kind, targetKind = null, targetId = null, preview, input = {} }) =>
       call('private.agent_action_propose', [taskId, runId, kind, targetKind, targetId, preview, input]),
-    readyActions: (limit = 10) => call('private.agent_actions_ready', [limit]),
+    /** Approved actions ready to carry out, oldest first. `kinds` and `excludeKinds` narrow the list before the limit (hardened databases only). */
+    readyActions: (limit = 10, { kinds = null, excludeKinds = null } = {}) => (fenced
+      ? call('private.agent_actions_ready', [limit, kinds, excludeKinds])
+      : call('private.agent_actions_ready', [limit])),
     beginExecution: actionId => call('private.agent_action_execution', [actionId]),
-    completeExecution: (actionId, ok, result = null) => call('private.agent_action_executed', [actionId, ok, result]),
+    /** `execution` is the number beginExecution reported for this start; a report for any other start is refused. */
+    completeExecution: (actionId, ok, result = null, execution = null) => (fenced && Number.isInteger(execution)
+      ? call('private.agent_action_executed', [actionId, ok, result, execution])
+      : call('private.agent_action_executed', [actionId, ok, result])),
+    /** Hands an execution that never began its work back to its approved state. False when the database cannot (not hardened) or it is no longer that execution. */
+    releaseExecution: async (actionId, execution = null) => (fenced && Number.isInteger(execution)
+      ? call('private.agent_action_release', [actionId, execution])
+      : false),
     notifyBegin: ({ channel, severity, subject, body, dedupeKey, agentKey = null, taskId = null }) =>
       call('private.agent_notify_begin', [channel, severity, subject, body, dedupeKey, agentKey, taskId]),
     notifyFinish: (id, delivery, providerMessageId = null) => call('private.agent_notify_finish', [id, delivery, providerMessageId]),

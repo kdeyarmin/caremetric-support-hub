@@ -75,6 +75,50 @@ describe('agent store', () => {
     ]);
   });
 
+  it('keeps the old call shapes against a database without the hardening operations, ignoring what it cannot carry', async () => {
+    const { store, calls } = harness();
+    expect(store.fenced).toBe(false);
+    await store.heartbeat('t1', 600, 2);
+    await store.finish('t1', 'done', { attempt: 2 });
+    await store.readyActions(20, { kinds: ['communication.reply'], excludeKinds: null });
+    await store.completeExecution('a1', true, { delivery: 'sent' }, 3);
+    expect(await store.releaseExecution('a1', 3)).toBe(false);
+    expect(calls.map(([sql]) => sql)).toEqual([
+      'select private.agent_task_heartbeat($1, $2) as result',
+      'select private.agent_task_finish($1, $2, $3, $4, $5) as result',
+      'select private.agent_actions_ready($1) as result',
+      'select private.agent_action_executed($1, $2, $3) as result',
+    ]);
+  });
+
+  it('quotes the attempt, the kind filters and the execution number once the database declares the hardening feature', async () => {
+    const calls = [];
+    const pool = { connect: async () => ({ query: async (sql, args) => { if (/^select/.test(sql)) { calls.push([sql, args]); return { rows: [{ result: true }] }; } return { rows: [] }; }, release() {} }) };
+    const store = sqlAgentStore(pool, { fenced: true });
+    expect(store.fenced).toBe(true);
+    await store.heartbeat('t1', 600, 2);
+    await store.heartbeat('t1', 600);
+    await store.finish('t1', 'queued', { errorCode: 'provider_outage', retryAt: when, attempt: 2 });
+    await store.finish('t1', 'done');
+    await store.readyActions(20, { kinds: null, excludeKinds: ['communication.reply'] });
+    await store.readyActions(5);
+    await store.completeExecution('a1', true, { delivery: 'sent' }, 3);
+    await store.completeExecution('a1', true, { delivery: 'sent' });
+    expect(await store.releaseExecution('a1', 3)).toBe(true);
+    expect(await store.releaseExecution('a1')).toBe(false);
+    expect(calls).toEqual([
+      ['select private.agent_task_heartbeat($1, $2, $3) as result', ['t1', 600, 2]],
+      ['select private.agent_task_heartbeat($1, $2) as result', ['t1', 600]],
+      ['select private.agent_task_finish($1, $2, $3, $4, $5, $6) as result', ['t1', 'queued', null, 'provider_outage', when, 2]],
+      ['select private.agent_task_finish($1, $2, $3, $4, $5) as result', ['t1', 'done', null, null, null]],
+      ['select private.agent_actions_ready($1, $2, $3) as result', [20, null, ['communication.reply']]],
+      ['select private.agent_actions_ready($1, $2, $3) as result', [5, null, null]],
+      ['select private.agent_action_executed($1, $2, $3, $4) as result', ['a1', true, { delivery: 'sent' }, 3]],
+      ['select private.agent_action_executed($1, $2, $3) as result', ['a1', true, { delivery: 'sent' }]],
+      ['select private.agent_action_release($1, $2) as result', ['a1', 3]],
+    ]);
+  });
+
   it('returns what the database returns', async () => {
     const { store } = harness([{ id: 't1' }]);
     expect(await store.claim(1, 60)).toEqual([{ id: 't1' }]);

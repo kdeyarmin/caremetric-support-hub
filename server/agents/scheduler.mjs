@@ -43,16 +43,29 @@ export function agentScheduler({
     const handler = handlers[task.kind];
     if (typeof handler !== 'function') {
       log(JSON.stringify({ event: 'hub_agent_task_error', task_id: task.id, agent: task.agentKey, kind: task.kind, code: 'no_handler', transient: false, attempts: task.attempts }));
-      await guarded('finish', () => store.finish(task.id, 'failed', { errorCode: 'no_handler' }));
+      await guarded('finish', () => store.finish(task.id, 'failed', { errorCode: 'no_handler', attempt: task.attempts }));
       return { id: task.id, status: 'failed' };
     }
-    const beat = setInterval(() => { store.heartbeat(task.id, leaseSeconds).catch(() => {}); }, heartbeatMs);
-    beat.unref?.();
     const controller = new AbortController();
+    // The heartbeat is also how a worker learns that the task is no longer its own: the owner cancelled it, or another worker took it over
+    // after the lease lapsed. It stops waiting at once and tells the handler (its signal), so one that honors the signal stops sending
+    // alerts or making model calls for work nobody wants any more. The database leaves a cancelled or taken-over task as it is.
+    let release;
+    const gone = new Promise((_, reject) => { release = reject; });
+    gone.catch(() => {});
+    const beat = setInterval(() => {
+      store.heartbeat(task.id, leaseSeconds, task.attempts).then(alive => {
+        if (alive !== false) return;
+        controller.abort();
+        release(Object.assign(new Error('The agent task is no longer running.'), { code: 'task_cancelled' }));
+      }, () => {});
+    }, heartbeatMs);
+    beat.unref?.();
     let timer;
     try {
       const outcome = await Promise.race([
         Promise.resolve().then(() => handler(task, { signal: controller.signal, now, ...context })),
+        gone,
         new Promise((_, reject) => {
           timer = setTimeout(() => {
             controller.abort();
@@ -66,7 +79,7 @@ export function agentScheduler({
       // The owner's session token is borrowed for the run, never kept: a result carrying it is not stored.
       if (context.sessionToken && JSON.stringify(outcome ?? null).includes(context.sessionToken)) throw Object.assign(new Error('The handler returned a session secret.'), { code: 'secret_in_result' });
       const final = await store.finish(task.id, status, {
-        result: outcome?.result ?? null, errorCode: outcome?.errorCode ?? null, retryAt: outcome?.retryAt ?? null,
+        result: outcome?.result ?? null, errorCode: outcome?.errorCode ?? null, retryAt: outcome?.retryAt ?? null, attempt: task.attempts,
       });
       return { id: task.id, status: final };
     } catch (error) {
@@ -76,7 +89,7 @@ export function agentScheduler({
       log(JSON.stringify({ event: 'hub_agent_task_error', task_id: task.id, agent: task.agentKey, kind: task.kind, code, transient, attempts: task.attempts }));
       const giveUp = !transient && task.attempts >= maxPermanentAttempts;
       const final = await guarded('finish', () => store.finish(task.id, giveUp ? 'failed' : 'queued', {
-        errorCode: code, retryAt: giveUp ? null : new Date(now().getTime() + backoff(task.attempts)),
+        errorCode: code, retryAt: giveUp ? null : new Date(now().getTime() + backoff(task.attempts)), attempt: task.attempts,
       }));
       return { id: task.id, status: final ?? 'unknown' };
     } finally {
