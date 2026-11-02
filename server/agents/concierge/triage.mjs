@@ -53,6 +53,12 @@ const easternDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_Yo
 const undelivered = results => (results.some(item => item.delivery === 'failed')
   ? Object.assign(new Error('The owner alert could not be delivered.'), { code: 'alert_not_delivered', transient: true })
   : null);
+// After the notifier's attempts are used up, every try says "duplicate" and the earlier status says why. When nothing reached the owner and a
+// channel ended failed, there is nothing left to retry: the task fails, which shows on the Team screen, instead of passing for an alert.
+const given = item => item.delivery === 'sent' || (item.delivery === 'duplicate' && item.original === 'sent');
+const exhausted = results => (results.some(item => item.delivery === 'duplicate' && item.original === 'failed') && !results.some(given)
+  ? Object.assign(new Error('The owner alert could not be delivered.'), { code: 'alert_not_delivered' })
+  : null);
 
 function skipReason(snapshot, payload, settings) {
   if (!snapshot) return 'not_found';
@@ -69,6 +75,11 @@ function skipReason(snapshot, payload, settings) {
  * and the guide library), and null otherwise, which keeps the handler exactly as it is without a model.
  */
 export function triageHandler({ store, notifier, drafting = null, log = line => console.warn(line) }) {
+  // Whether this alert has been tried before in a channel: its key already has a row there. A refused try counts toward the caps like any
+  // other, so a retry has to resume the alert under its own key and channels instead of being judged by the caps again, which would turn it
+  // into an email-only alert or a rollup because of itself.
+  const tried = async (key, channel) => await store.notificationCount({ prefix: key, channel, since: new Date(0) }) > 0;
+
   async function deliverAlert({ task, snapshot, payload, words, severity, now }) {
     const day = easternDate.format(now());
     const dayStart = task.budget?.dayStart ? new Date(task.budget.dayStart) : new Date(now().getTime() - 24 * 3_600_000);
@@ -79,17 +90,22 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
       dedupeKey: `concierge:rollup:${level}:${day}`, agentKey: task.agentKey, taskId: task.id,
     });
     if (severity === 'urgent') {
+      const urgentKey = `concierge:urgent:${snapshot.id}:${day}`;
+      const [textTried, emailTried] = await Promise.all([tried(urgentKey, 'sms'), tried(urgentKey, 'email')]);
+      if (textTried || emailTried) return notifier.send({ ...base, severity: textTried ? 'urgent' : 'warning', dedupeKey: urgentKey });
       const [texts, emails] = await Promise.all([
         store.notificationCount({ prefix: 'concierge:urgent:', channel: 'sms', since: new Date(now().getTime() - 3_600_000) }),
         store.notificationCount({ prefix: 'concierge:urgent:', channel: 'email', since: dayStart }),
       ]);
       if (emails >= dailyEmailCap) return rollup('urgent');
       // Past the hourly limit on texts, an urgent alert still goes by email.
-      return notifier.send({ ...base, severity: texts >= hourlyTextCap ? 'warning' : 'urgent', dedupeKey: `concierge:urgent:${snapshot.id}:${day}` });
+      return notifier.send({ ...base, severity: texts >= hourlyTextCap ? 'warning' : 'urgent', dedupeKey: urgentKey });
     }
     const prefix = severity === 'warning' ? 'concierge:warn:' : 'concierge:new:';
+    const key = `${prefix}${payload.messageId}`;
+    if (await tried(key, 'email')) return notifier.send({ ...base, severity, dedupeKey: key });
     if (await store.notificationCount({ prefix, channel: 'email', since: dayStart }) >= dailyEmailCap) return rollup(severity);
-    return notifier.send({ ...base, severity, dedupeKey: `${prefix}${payload.messageId}` });
+    return notifier.send({ ...base, severity, dedupeKey: key });
   }
 
   // The caps are a count followed by a send, and up to three tasks run at once in this process: left alone, each would read the same
@@ -175,7 +191,7 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
   // One alert, counted and sent in turn. A definite failure ends the attempt, before anything else is done, so the retry starts clean.
   async function tellOwner(input) {
     const results = await sendAlert(input);
-    const refused = undelivered(results);
+    const refused = undelivered(results) ?? exhausted(results);
     if (refused) throw refused;
     return results.map(item => `${item.channel}:${item.delivery}`);
   }
@@ -194,11 +210,12 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
     const screen = screenIdentifiers(`${snapshot.subject ?? ''}\n${inbound.body}`);
     const { category: ruleCategory, reasons } = categorize({ text: inbound.body, subject: snapshot.subject });
     let { severity } = decide({ category: ruleCategory, phi: screen.flagged });
-    if (severity === null) return { result: { outcome: 'skipped', reason: ruleCategory, reference: snapshot.reference } };
     // Only the first readChars characters were screened and categorized. A message that fills them may say more, so it is never
-    // quieter than a warning, and nothing is offered to the customer or sent to the model for it.
+    // quieter than a warning, and nothing is offered to the customer or sent to the model for it: not even one that opens like an
+    // automatic reply, because its unread end could hold anything.
     const unread = inbound.body.length >= readChars;
-    if (unread && severityRank[severity] < severityRank.warning) severity = 'warning';
+    if (severity === null && !unread) return { result: { outcome: 'skipped', reason: ruleCategory, reference: snapshot.reference } };
+    if (severity === null || (unread && severityRank[severity] < severityRank.warning)) severity = 'warning';
 
     const minutes = minutesBetween(inbound.at, now());
     const words = alertWords({ category: ruleCategory, phi: screen.flagged, severity, channel: snapshot.channel, productSlug: snapshot.productSlug, reference: snapshot.reference, minutes, unread });

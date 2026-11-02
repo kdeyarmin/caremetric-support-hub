@@ -61,7 +61,8 @@ export function ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log
 
   async function deliver(channel, input) {
     const begun = await store.notifyBegin({ ...input, channel });
-    if (begun.duplicate) return { channel, delivery: 'duplicate' };
+    // A duplicate says what became of the original: a handler that is run again must not take "already recorded" for "already sent".
+    if (begun.duplicate) return { channel, delivery: 'duplicate', original: begun.status ?? null };
     let outcome;
     try {
       outcome = await transport(channel, input);
@@ -79,7 +80,7 @@ export function ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log
 
   return {
     channelsFor,
-    /** Returns one { channel, delivery } per channel; delivery is sent, failed, unknown, suppressed or duplicate. */
+    /** Returns one { channel, delivery } per channel; delivery is sent, failed, unknown, suppressed or duplicate (with `original`, the status of the earlier attempt). */
     async send({ severity = 'info', subject, body, dedupeKey, agentKey = null, taskId = null, blocks = null }) {
       if (!severities.has(severity)) throw new TypeError('Unsupported notification severity.');
       if (!subject || !body || !dedupeKey) throw new TypeError('A notification needs a subject, a body and a dedupe key.');

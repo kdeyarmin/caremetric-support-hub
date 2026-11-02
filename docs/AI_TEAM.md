@@ -199,12 +199,14 @@ many times each side has written). It then:
    automatic reply (`server/agents/concierge/rules.mjs`). The rules favour catching the urgent kinds over
    being right about the rest. A message counts as an automatic reply only when it opens like one: a label a
    mail system adds ("Automatic reply:", "Out of office:", "Undeliverable:") at the start of the subject or the
-   message, or an out-of-office opening sentence. An urgent kind always wins over that guess ("our account was
+   message, a message that opens with a sender line from a bounce address ("From: ... mailer-daemon@..."), or an
+   out-of-office opening sentence. An address that a person merely mentions ("send it to postmaster@...") or a
+   notice they forward after a note of their own proves nothing. An urgent kind always wins over that guess ("our account was
    hacked while I was out of the office" is a security report), and so does a cancellation or a billing matter
    when only an opening sentence suggests an automatic reply.
    Only the first 4,000 characters of a message are read. A message that fills them is never quieter than a
    warning, the alert says the rest was not screened, and nothing is offered to the customer or sent to the
-   model for it: it is yours to read.
+   model for it: it is yours to read. That holds even for a long message that opens like an automatic reply.
 3. **Tells the owner**: an outage, a security concern or a legal matter is **urgent** (text and email);
    billing, a cancellation or a message with identifiers is a **warning** (email); anything else is
    **information** (email). Alerts say the kind of message, the channel, the product, the reference and how
@@ -219,7 +221,10 @@ conversation per day.
 If the provider definitely refuses an alert (the delivery fails), the task is retried by the scheduler a few
 minutes later, before anything else is done for that message. The retry goes out under the same key, so only
 the channel that failed is tried again and one that was sent is never repeated; the notifier makes up to three
-attempts per channel. A delivery the provider did not confirm is not retried, because it may have arrived.
+attempts per channel. A delivery the provider did not confirm is not retried, because it may have arrived. A
+retry resumes the alert under its own key and channels, whatever the caps say by then (a refused try counts toward
+them, and it must not turn the alert into an email-only one or a rollup because of itself). If the three tries are
+used up and nothing reached you, the task fails and shows on the Team screen, instead of passing for an alert.
 
 It leaves a run on the owner's screen for each message it triaged (model `none`, prompt version `rules.1`,
 a summary that names the reference, the channel and the category).

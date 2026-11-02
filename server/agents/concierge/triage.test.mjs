@@ -658,3 +658,68 @@ describe('an alert the provider definitely refused', () => {
     expect(harness.store.proposeAction).not.toHaveBeenCalled();
   });
 });
+
+describe('an alert that is retried', () => {
+  const urgentKey = `concierge:urgent:${ids.communication}:2026-11-02`;
+  const warnKey = `concierge:warn:${ids.message}`;
+
+  it('is resumed under its own key and channels, although its own refused try now counts toward the cap', async () => {
+    // The third urgent text of the hour was refused, so the count is three, and this alert's own row is one of them.
+    const harness = fixture({ snapshot: snapshotOf('Everything is down for every user.'), counts: { 'concierge:urgent:sms': 3, [`${urgentKey}sms`]: 1, [`${urgentKey}email`]: 1 } });
+    const outcome = await harness.run();
+    expect(harness.sent).toHaveLength(1);
+    expect(harness.sent[0]).toMatchObject({ severity: 'urgent', dedupeKey: urgentKey });
+    expect(outcome.result).toMatchObject({ severity: 'urgent' });
+  });
+
+  it('stays email-only when that is how it first went out', async () => {
+    const harness = fixture({ snapshot: snapshotOf('Everything is down for every user.'), counts: { 'concierge:urgent:sms': 3, [`${urgentKey}email`]: 1 } });
+    await harness.run();
+    expect(harness.sent.map(item => [item.severity, item.dedupeKey])).toEqual([['warning', urgentKey]]);
+  });
+
+  it('is not turned into a rollup when its own refused email is the twentieth of the day', async () => {
+    const harness = fixture({ snapshot: snapshotOf('We were charged twice this month.'), counts: { 'concierge:warn:email': 20, [`${warnKey}email`]: 1 } });
+    await harness.run();
+    expect(harness.sent.map(item => [item.severity, item.dedupeKey])).toEqual([['warning', warnKey]]);
+    // An alert that has never been tried is still held to the cap.
+    const fresh = fixture({ snapshot: snapshotOf('We were charged twice this month.'), counts: { 'concierge:warn:email': 20 } });
+    await fresh.run();
+    expect(fresh.sent[0].dedupeKey).toBe('concierge:rollup:warning:2026-11-02');
+  });
+
+  it('fails the task, and proposes no reply, once the notifier has used up its tries and nothing reached the owner', async () => {
+    const harness = fixture();
+    harness.notifier.send.mockImplementationOnce(async input => { harness.sent.push(input); return [{ channel: 'email', delivery: 'duplicate', original: 'failed' }]; });
+    const error = await harness.run().catch(caught => caught);
+    expect(error).toMatchObject({ code: 'alert_not_delivered', message: 'The owner alert could not be delivered.' });
+    expect(error.transient).toBeUndefined();
+    expect(harness.store.proposeAction).not.toHaveBeenCalled();
+  });
+
+  it('is done when a channel reached the owner, though another is used up, or when the earlier try may have gone', async () => {
+    for (const results of [
+      [{ channel: 'sms', delivery: 'duplicate', original: 'failed' }, { channel: 'email', delivery: 'duplicate', original: 'sent' }],
+      [{ channel: 'email', delivery: 'duplicate', original: 'unknown' }],
+      [{ channel: 'email', delivery: 'duplicate', original: null }],
+    ]) {
+      const harness = fixture();
+      harness.notifier.send.mockImplementationOnce(async input => { harness.sent.push(input); return results; });
+      expect((await harness.run()).result, JSON.stringify(results)).toMatchObject({ outcome: 'alerted' });
+    }
+  });
+});
+
+describe('a long message that opens like an automatic reply', () => {
+  it('is not skipped, because its unread end could hold anything, and a short one still is', async () => {
+    const long = `Automatic reply: I am away. ${'word '.repeat(1000)}`.slice(0, 4000);
+    const harness = fixture({ snapshot: snapshotOf(long, { subject: 'Automatic reply: hello' }) });
+    const outcome = await harness.run();
+    expect(outcome.result).toMatchObject({ outcome: 'alerted', severity: 'warning', unread: true });
+    expect(harness.sent[0].body).toContain('It is longer than the part the AI team reads');
+    expect(harness.store.proposeAction).not.toHaveBeenCalled();
+    const short = fixture({ snapshot: snapshotOf('Automatic reply: I am away.', { subject: 'Automatic reply: hello' }) });
+    expect((await short.run()).result).toMatchObject({ outcome: 'skipped', reason: 'auto_reply' });
+    expect(short.sent).toHaveLength(0);
+  });
+});

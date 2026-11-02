@@ -27,8 +27,9 @@ const autoLabel = new RegExp(`^${reply}(?:(?:automatic reply|auto-?reply|auto re
 const bounceLabel = new RegExp(`^${reply}(?:undeliverable|delivery (?:status )?notification|mail delivery (?:failed|subsystem)|returned mail|failure notice)\\b`, 'i');
 const autoSentence = new RegExp(`^${reply}(?:(?:please )?do not reply|(?:thank you for (?:your|the) (?:email|message)[.!,]?\\s*)?(?:i am|i'm|i will be|we are|we will be) (?:currently |now )?(?:out of (?:the )?office|away from (?:my|the) (?:desk|office)))\\b`, 'i');
 const emptyMessage = /^\[empty (?:text message|email)\]$/i;
-// Addresses only machines write from, anywhere in the first lines.
-const machineSender = /\b(?:mailer-daemon|postmaster@|no-?reply@)/i;
+// A message that opens with a sender line from an address only machines write from (a bounce shows "From: ... <mailer-daemon@...>"). An address
+// merely mentioned in a request ("send the confirmation to postmaster@...") is a person asking, and a forwarded notice comes after the person's note.
+const machineSender = /^(?:from|sender|return-path)\s*:[^\n]{0,80}?\b(?:mailer-daemon|postmaster|no-?reply)@/i;
 const urgentKinds = new Set(['security', 'legal', 'outage']);
 const businessKinds = new Set(['cancellation', 'billing']);
 
@@ -93,7 +94,7 @@ export function categorize({ text, subject = null } = {}) {
   const urgent = firstOf(urgentKinds);
   if (urgent) return urgent;
   if (opens(autoLabel)) return { category: 'auto_reply', reasons: ['auto_reply'] };
-  if (opens(bounceLabel) || machineSender.test(whole.slice(0, 400))) return { category: 'auto_reply', reasons: ['bounce'] };
+  if (opens(bounceLabel) || opens(machineSender)) return { category: 'auto_reply', reasons: ['bounce'] };
   const business = firstOf(businessKinds);
   if (business) return business;
   if (opens(autoSentence)) return { category: 'auto_reply', reasons: ['auto_reply'] };

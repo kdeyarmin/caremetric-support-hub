@@ -75,8 +75,16 @@ describe('message categories by word matching', () => {
     expect(category('Thanks. Invoice attached.', 'Automatic reply: Invoice from CareMetric')).toBe('auto_reply');
     expect(category('We were charged twice.', 'Out of office: back Nov 9')).toBe('auto_reply');
     expect(category('x', 'RE: Undeliverable: Your question')).toBe('auto_reply');
-    expect(category('Delivery has failed. From: MAILER-DAEMON@mail.example.test')).toBe('auto_reply');
+    expect(category('From: MAILER-DAEMON@mail.example.test\nDelivery has failed to these recipients.')).toBe('auto_reply');
+    expect(category('From: Mail Delivery Subsystem <mailer-daemon@mail.example.test>\nWe could not deliver your message.')).toBe('auto_reply');
     expect(category('Please see the attached.', 'Fwd: Auto-reply')).toBe('auto_reply');
+  });
+
+  it('is not fooled by a machine address that a person mentions or forwards', () => {
+    expect(category('Please cancel our subscription. Send the confirmation to postmaster@example.test.')).toBe('cancellation');
+    expect(category('How do I export the roster? Send the file to noreply@example.test please.')).toBe('general');
+    expect(category('Hi, my password reset does not work. The message is below.\n\nFrom: noreply@example.test\nSubject: Reset your password')).toBe('general');
+    expect(category('Our emails from no-reply@example.test never arrive, and the account was hacked.')).toBe('security');
   });
 
   it('names the rules that matched and never the words', () => {
