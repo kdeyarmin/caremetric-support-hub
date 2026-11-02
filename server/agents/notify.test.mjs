@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ownerNotifier, renderOwnerEmail } from './notify.mjs';
+import { delivered, ownerNotifier, renderOwnerEmail } from './notify.mjs';
 
 const origin = 'https://support-hub-web-production.up.railway.app';
-const fixture = ({ duplicate = false, sms = { configured: true }, email = { configured: true }, phone = '+12025550701', ownerEmail = 'owner@example.test' } = {}) => {
+const fixture = ({ duplicate = false, original = 'pending', sms = { configured: true }, email = { configured: true }, phone = '+12025550701', ownerEmail = 'owner@example.test' } = {}) => {
   const calls = [];
   const logs = [];
   const store = {
-    notifyBegin: vi.fn(async input => { calls.push(`begin ${input.channel}`); return { id: `n-${input.channel}`, duplicate, status: 'pending' }; }),
+    notifyBegin: vi.fn(async input => { calls.push(`begin ${input.channel}`); return { id: `n-${input.channel}`, duplicate, status: original }; }),
     notifyFinish: vi.fn(async (id, delivery) => { calls.push(`finish ${id} ${delivery}`); }),
     ownerContact: vi.fn(async () => (phone ? { phone } : null)),
   };
@@ -53,6 +53,20 @@ describe('owner notifier', () => {
     }
   });
 
+  it('records a text as failed, not unknown, when the number to text cannot be looked up, because nothing was sent', async () => {
+    const { notifier, store, senders } = fixture();
+    store.ownerContact.mockRejectedValue(new Error('database blip'));
+    const results = await notifier.send({ severity: 'urgent', subject: 'Hub is down', body: 'The Hub probe failed twice.', dedupeKey: 'k-contact' });
+    // The email still goes, and the failed text can be retried under the same key.
+    expect(results).toEqual([{ channel: 'sms', delivery: 'failed' }, { channel: 'email', delivery: 'sent' }]);
+    expect(senders.sms.send).not.toHaveBeenCalled();
+    expect(store.notifyFinish).toHaveBeenCalledWith('n-sms', 'failed', null);
+    // A text the provider was given and then threw on may have gone, so it stays unknown and is never resent.
+    const sent = fixture();
+    sent.senders.sms.send.mockRejectedValue(new Error('socket hang up'));
+    expect(await sent.notifier.send({ severity: 'urgent', subject: 'Hub is down', body: 'The Hub probe failed twice.', dedupeKey: 'k-socket' })).toEqual([{ channel: 'sms', delivery: 'unknown' }, { channel: 'email', delivery: 'sent' }]);
+  });
+
   it('keeps a text within two segments', async () => {
     const { notifier, senders } = fixture();
     await notifier.send({ severity: 'urgent', subject: 'S'.repeat(100), body: 'B'.repeat(900), dedupeKey: 'k3' });
@@ -67,6 +81,18 @@ describe('owner notifier', () => {
     expect(senders.sms.send).not.toHaveBeenCalled();
     expect(senders.email.send).not.toHaveBeenCalled();
     expect(store.notifyFinish).not.toHaveBeenCalled();
+  });
+
+  it('says what became of the earlier attempt, so a repeat is not taken for a delivery', async () => {
+    for (const [original, reached] of [['sent', true], ['pending', false], ['unknown', false], ['suppressed', false], ['failed', false]]) {
+      const { notifier } = fixture({ duplicate: true, original });
+      const results = await notifier.send({ severity: 'info', subject: 'Brief', body: 'Hello.', dedupeKey: `k-${original}` });
+      expect(results, original).toEqual([{ channel: 'email', delivery: 'duplicate', original }]);
+      expect(results.some(delivered), original).toBe(reached);
+    }
+    expect(delivered({ channel: 'email', delivery: 'sent' })).toBe(true);
+    expect(delivered({ channel: 'email', delivery: 'failed' })).toBe(false);
+    expect(delivered({ channel: 'email', delivery: 'duplicate' })).toBe(false);
   });
 
   it('records a channel it cannot use as suppressed instead of failing', async () => {

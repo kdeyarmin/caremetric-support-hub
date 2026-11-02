@@ -12,7 +12,7 @@
  * failure word. A response body is read for at most 4 KB so a slow or endless one cannot hold
  * the sweep, then thrown away. Redirects are never followed.
  */
-import { minutesBetween, permanent, plural, recordRun, when } from './shared.mjs';
+import { minutesBetween, mustHaveReached, permanent, plural, recordRun, when } from './shared.mjs';
 
 const timeoutMs = 8000;
 const bodyLimitBytes = 4096;
@@ -149,6 +149,7 @@ export function probeHandlers({
       kind: 'incident.open', target, incident: payload.incident, preview: subject,
       input: { target: target.key, incident: payload.incident, since: payload.since ?? null, failures, statusCode: last.statusCode, failure: last.failure, flapping },
     });
+    mustHaveReached(results);
     return { result: { target: target.key, incident: payload.incident, severity: urgent ? 'urgent' : 'warning', delivery: results.map(item => `${item.channel}:${item.delivery}`), action } };
   }
 
@@ -170,6 +171,7 @@ export function probeHandlers({
       kind: 'incident.resolve', target, incident: payload.incident, preview: subject,
       input: { target: target.key, incident: payload.incident, downSince: payload.downSince ?? null, recoveredAt: payload.recoveredAt ?? null },
     });
+    mustHaveReached(results);
     return { result: { target: target.key, incident: payload.incident, delivery: results.map(item => `${item.channel}:${item.delivery}`), action } };
   }
 

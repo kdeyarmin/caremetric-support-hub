@@ -29,19 +29,25 @@ describe('importing other applications\' messages', () => {
     expect(phone).toHaveBeenCalledWith(sessionToken, { source: 'breathe.phone', offset: 0 });
   });
 
-  it('stops at the first window with nothing new when the source lists newest first', async () => {
-    const sync = vi.fn(async () => page({ created: 0, skipped: 200, nextOffset: 200 }));
-    expect(await run('import.advisors', sync)).toEqual({ result: { source: 'advisors.web', read: 200, created: 0, skipped: 200, calls: 1, complete: true, nextOffset: null } });
-    expect(sync).toHaveBeenCalledTimes(1);
+  it('does not take a first window with nothing new for "caught up": an earlier run may have been cut off after copying it', async () => {
+    // The newest 200 were copied by a run that then lost its session; the 200 behind them were never read.
+    const sync = vi.fn()
+      .mockResolvedValueOnce(page({ created: 0, skipped: 200, nextOffset: 200 }))
+      .mockResolvedValueOnce(page({ created: 40, skipped: 160, nextOffset: 400 }))
+      .mockResolvedValueOnce(page({ created: 0, skipped: 200, nextOffset: null }));
+    expect(await run('import.advisors', sync)).toEqual({ result: { source: 'advisors.web', read: 600, created: 40, skipped: 560, calls: 3, complete: true, nextOffset: null } });
+    expect(sync.mock.calls.map(call => call[1].offset)).toEqual([0, 200, 400]);
   });
 
-  it('keeps going while there is something new, up to three calls, resuming where each stopped', async () => {
+  it('reads up to three calls, resuming where each stopped, and is complete only at the end of the list', async () => {
     const sync = vi.fn()
       .mockResolvedValueOnce(page({ created: 200, skipped: 0, nextOffset: 200 }))
       .mockResolvedValueOnce(page({ created: 7, skipped: 193, nextOffset: 400 }))
       .mockResolvedValueOnce(page({ created: 0, skipped: 200, nextOffset: 600 }));
-    expect(await run('import.advisors', sync)).toEqual({ result: { source: 'advisors.web', read: 600, created: 207, skipped: 393, calls: 3, complete: true, nextOffset: null } });
+    expect(await run('import.advisors', sync)).toEqual({ result: { source: 'advisors.web', read: 600, created: 207, skipped: 393, calls: 3, complete: false, nextOffset: 600 } });
     expect(sync.mock.calls.map(call => call[1].offset)).toEqual([0, 200, 400]);
+    const short = vi.fn(async () => page({ created: 3, skipped: 0, nextOffset: null }));
+    expect(await run('import.advisors', short)).toEqual({ result: { source: 'advisors.web', read: 200, created: 3, skipped: 0, calls: 1, complete: true, nextOffset: null } });
   });
 
   it('reads a source whose order is unknown through its whole window and says how far it got', async () => {

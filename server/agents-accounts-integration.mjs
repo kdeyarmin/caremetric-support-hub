@@ -343,7 +343,7 @@ try {
   const suppressedRun = await row("select * from private.agent_runs where agent_key = 'account_manager' order by started_at desc limit 1");
   assert.deepEqual([suppressedRun.outcome, suppressedRun.error_code], ['failed', 'not_delivered'], 'the run says it was not delivered');
   assert.equal((await row("select status from private.owner_notifications where dedupe_key = $1", [`accounts:weekly:${weekStart(clock.value)}`])).status, 'suppressed');
-  assert.deepEqual((await fire()).result, { skipped: 'already_sent', week: weekStart(clock.value) }, 'a later run does not resend a week that was switched off');
+  assert.deepEqual((await fire()).result, { skipped: 'earlier_attempt_unconfirmed', week: weekStart(clock.value) }, 'a later run does not resend a week that was switched off, and does not call it sent');
   assert.equal(mail.length, 3);
   assert.deepEqual((await runNow()).result.delivery, ['email:sent']);
   assert.equal(mail.length, 4, 'but Run now does');

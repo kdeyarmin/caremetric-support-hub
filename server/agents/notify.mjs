@@ -45,12 +45,18 @@ export function renderOwnerEmail({ subject, body, severity = 'info', publicOrigi
   });
 }
 
+/** True when the owner has the message: it was sent now, or an earlier attempt under the same key was sent. */
+export const delivered = item => item.delivery === 'sent' || (item.delivery === 'duplicate' && item.original === 'sent');
+
 export function ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log = line => console.warn(line) }) {
   const channelsFor = severity => (severity === 'urgent' ? ['sms', 'email'] : ['email']);
 
   async function transport(channel, { subject, body, severity, blocks }) {
     if (channel === 'sms') {
-      const contact = await store.ownerContact();
+      // Looking up where to text the owner happens before anything is sent. If that fails, nothing went out: that is a definite failure,
+      // which a retry can put right, not an unknown outcome (which is never retried because the message may have gone).
+      let contact;
+      try { contact = await store.ownerContact(); } catch { return { delivery: 'failed', id: null }; }
       if (!sms?.configured || !contact?.phone) return { delivery: 'suppressed', id: null };
       return sms.send(contact.phone, clip(`CareMetric: ${subject}. ${paragraphs(body)[0] ?? ''}`, smsLimit));
     }

@@ -105,7 +105,12 @@ per product, so two overlapping sweeps can never open the same incident twice):
 - **An observe-only agent** still tells the owner about an incident but proposes no records.
 
 Each incident and recovery has its own request key and alert key, so a retry sends nothing twice.
-An alert is recorded before it is sent. A sweep records a run on the Team screen only when it saw
+An alert is recorded before it is sent. When a provider refuses one (a temporary 429, say) the task is
+retried, and only the channel that failed is sent again, a bounded number of times; a channel that is
+switched off, or a send that may or may not have gone, is not retried, because that could send twice.
+Every report that uses the same alert record (the brief, the SEO report, the account report) counts only a
+message that was sent, now or by an earlier attempt, as delivered: a repeat that finds an earlier attempt still
+pending, unknown or switched off says so instead of "sent". A sweep records a run on the Team screen only when it saw
 something or changed something, and once an hour otherwise, so the page shows a pulse without
 288 rows a day.
 
@@ -133,8 +138,10 @@ When nothing needs you the brief says so. It is sent every day, so silence never
 as "all is well". It carries only counts, product names and times: never a customer's words, an
 address or an amount of money. Only live-mode subscriptions are counted.
 
-The scheduled brief is keyed by the Eastern date, so a retry, a restart or a second server sends it
-once. A brief you start with **Run now** is sent every time. It goes by email only, since an incident
+The scheduled brief is keyed by the Eastern day it was due for (read from the task, not the clock), so a
+retry, a restart or a second server sends it once, even a retry that runs after midnight. If the email
+provider refuses the send, the task is tried again a few minutes later under the same key. A brief you start
+with **Run now** is sent once per request and is not repeated by a retry. It goes by email only, since an incident
 already texts you when it happens. If email is not set up or the send fails, the run on the Team
 screen says the brief was written but not delivered.
 
@@ -404,8 +411,9 @@ and every run in an Eastern week (Monday to Sunday, found from the calendar date
 change cannot move it) uses the same alert key, `accounts:weekly:<Monday>`. The first run of a week sends and a
 later one finds it already sent, so a server that was down on Monday reports on the next run and a restart or a
 second server never sends twice. A failed delivery is retried by the notifier up to three times. A week whose
-email was switched off (not set up, so recorded as suppressed) is not sent again by itself: press **Run now**,
-which always sends a fresh report under a key of its own. The agent starts paused and observe-only, and in
+email was switched off (not set up, so recorded as suppressed), or whose earlier attempt is stuck or unconfirmed,
+is not sent again by itself and the skipped run says `earlier_attempt_unconfirmed` instead of `already_sent`:
+press **Run now**, which always sends a fresh report under a key of its own. The agent starts paused and observe-only, and in
 observe it proposes nothing, since it has no actions yet.
 
 Its handler registers only when the database declares `platform.agents.accounts.v1`, so a Hub whose database
@@ -501,8 +509,10 @@ error code, never an error message. The service environment is `HUB_AGENTS_ENABL
 **Owner alerts** are recorded before they are sent, under a dedupe key, so a retried task never texts or
 emails twice. An urgent item goes by text (to the administrator's verified number, through the Hub's
 Twilio settings) and by email; everything else by email. A channel that is not configured is recorded as
-suppressed instead of failing the task. Alert text carries counts, names and references, never inbound
-customer text.
+suppressed instead of failing the task. Each channel ends as sent, failed, unknown or suppressed. Failed means
+nothing reached you (a provider refusal, or a text whose number could not be looked up) and is retried; unknown
+means the provider was given the message and then errored, so it may have gone and is never resent. Alert text
+carries counts, names and references, never inbound customer text.
 
 **The Hub cannot watch itself.** A probe that runs inside the Hub reports a database or network problem
 from the Hub's point of view, but nothing inside a stopped process can notice that it stopped. Keep one
@@ -615,10 +625,11 @@ Two handlers use this today, both calling the inbox's own sync (`communications.
 source and message, so reading a message twice never creates it twice):
 
 - `import.advisors` copies consultation requests from Healthcare Advisors; `import.breathe` copies Breathe
-  phone-line messages. Each run makes at most three calls of 200 messages from the newest end of the list.
-  Advisors lists newest first, so its run stops at the first window with nothing new. Breathe's order has
-  not been checked, so its run reads its whole window. History beyond 600 messages is brought in with the
-  **Import** buttons on the Communications page, which resume where they stopped.
+  phone-line messages. Each run makes at most three calls of 200 messages from the newest end of the list and
+  always reads its whole window, even when the first call finds nothing new: an earlier run may have copied the
+  newest 200 and then lost its session, so an empty first window says nothing about the older ones. History
+  beyond 600 messages is brought in with the **Import** buttons on the Communications page, which resume where
+  they stopped.
 - The result records `source`, `read`, `created`, `skipped`, `calls`, `complete` and `nextOffset`.
   A lapsed session parks the task again (`session_required`); an application that has not connected its
   administrator session finishes quietly as `not_connected`; an outage waits for the next press

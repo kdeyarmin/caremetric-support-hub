@@ -125,11 +125,34 @@ describe('the morning brief task', () => {
     expect(notifier.send.mock.calls.slice(2).map(([input]) => input.dedupeKey)).toEqual(['brief:2026-11-02', 'brief:2026-11-03']);
   });
 
-  it('sends a brief the owner asks for every time', async () => {
+  it('keeps a scheduled brief under the day it was due for, so a retry after midnight cannot send it twice or take tomorrow\'s key', async () => {
+    const schedule = '6c1d0000-0000-4000-8000-000000000001';
+    const monday = task({ requestKey: `schedule:${schedule}:20261102T120000Z` });
     const { handlers, notifier } = fixture();
-    await handlers['brief.daily'](task({ sourceKind: 'owner', id: 'a' }), at('2026-11-02T12:00:00Z'));
-    await handlers['brief.daily'](task({ sourceKind: 'owner', id: 'b' }), at('2026-11-02T12:01:00Z'));
-    expect(notifier.send.mock.calls.map(([input]) => input.dedupeKey)).toEqual(['brief:2026-11-02:a', 'brief:2026-11-02:b']);
+    await handlers['brief.daily'](monday, at('2026-11-02T12:00:00Z'));
+    // The retry runs at 00:30 Eastern on Tuesday. It is still Monday's brief.
+    const retried = await handlers['brief.daily'](task({ ...monday, attempts: 2 }), at('2026-11-03T05:30:00Z'));
+    // Tuesday's own brief then has its own key, and is not taken for a repeat.
+    await handlers['brief.daily'](task({ requestKey: `schedule:${schedule}:20261103T120000Z` }), at('2026-11-03T12:00:00Z'));
+    expect(notifier.send.mock.calls.map(([input]) => input.dedupeKey)).toEqual(['brief:2026-11-02', 'brief:2026-11-02', 'brief:2026-11-03']);
+    expect(retried.result.date).toBe('2026-11-02');
+  });
+
+  it('falls back to the clock for a task whose request key is not a schedule\'s', async () => {
+    const { handlers, notifier } = fixture();
+    for (const requestKey of ['owner:abc', 'schedule:not-an-id:20261102T120000Z', 'schedule:6c1d0000-0000-4000-8000-000000000001:soon', undefined]) {
+      await handlers['brief.daily'](task({ requestKey }), at('2026-11-03T12:00:00Z'));
+    }
+    expect(new Set(notifier.send.mock.calls.map(([input]) => input.dedupeKey))).toEqual(new Set(['brief:2026-11-03']));
+  });
+
+  it('sends a brief the owner asks for once per request, whatever day a retry falls on', async () => {
+    const { handlers, notifier } = fixture();
+    const asked = task({ sourceKind: 'owner', id: 'a' });
+    await handlers['brief.daily'](asked, at('2026-11-02T23:55:00-05:00'));
+    await handlers['brief.daily'](task({ ...asked, attempts: 2 }), at('2026-11-03T00:10:00-05:00'));
+    await handlers['brief.daily'](task({ sourceKind: 'owner', id: 'b' }), at('2026-11-03T00:11:00-05:00'));
+    expect(notifier.send.mock.calls.map(([input]) => input.dedupeKey)).toEqual(['brief:owner:a', 'brief:owner:a', 'brief:owner:b']);
   });
 
   it('records a run the owner can see', async () => {
@@ -140,7 +163,7 @@ describe('the morning brief task', () => {
   });
 
   it('says so when the brief was written but reached nobody', async () => {
-    for (const delivery of [[{ channel: 'email', delivery: 'suppressed' }], [{ channel: 'email', delivery: 'failed' }], [{ channel: 'email', delivery: 'unknown' }]]) {
+    for (const delivery of [[{ channel: 'email', delivery: 'suppressed' }], [{ channel: 'email', delivery: 'unknown' }]]) {
       const { handlers, store } = fixture({ delivery });
       const { result } = await handlers['brief.daily'](task(), at('2026-11-02T12:00:00Z'));
       expect(result.delivery).toEqual([`email:${delivery[0].delivery}`]);
@@ -148,10 +171,26 @@ describe('the morning brief task', () => {
     }
   });
 
-  it('counts a brief that was already sent as delivered', async () => {
-    const { handlers, store } = fixture({ delivery: [{ channel: 'email', delivery: 'duplicate' }] });
+  it('retries when the provider refuses the brief, under the same key, and records each attempt', async () => {
+    const { handlers, notifier, store } = fixture();
+    notifier.send.mockResolvedValueOnce([{ channel: 'email', delivery: 'failed' }]);
+    await expect(handlers['brief.daily'](task(), at('2026-11-02T12:00:00Z'))).rejects.toMatchObject({ code: 'notification_failed', transient: true });
+    expect(store.finishRun).toHaveBeenCalledWith('run-1', 'failed', {}, 'The morning brief was written but not delivered (email:failed).', 'not_delivered');
+    notifier.send.mockResolvedValueOnce([{ channel: 'email', delivery: 'sent' }]);
+    const { result } = await handlers['brief.daily'](task({ attempts: 2 }), at('2026-11-02T12:10:00Z'));
+    expect(result).toMatchObject({ delivery: ['email:sent'] });
+    expect(notifier.send.mock.calls.map(([input]) => input.dedupeKey)).toEqual(['brief:2026-11-02', 'brief:2026-11-02']);
+  });
+
+  it('counts a brief that was already sent as delivered, and one that only reached the record as not', async () => {
+    const { handlers, store } = fixture({ delivery: [{ channel: 'email', delivery: 'duplicate', original: 'sent' }] });
     await handlers['brief.daily'](task(), at('2026-11-02T12:00:00Z'));
     expect(store.finishRun).toHaveBeenCalledWith('run-1', 'completed', {}, expect.stringContaining('Sent the morning brief'), null);
+    for (const original of ['pending', 'unknown', 'suppressed', 'failed']) {
+      const stuck = fixture({ delivery: [{ channel: 'email', delivery: 'duplicate', original }] });
+      await stuck.handlers['brief.daily'](task(), at('2026-11-02T12:00:00Z'));
+      expect(stuck.store.finishRun, original).toHaveBeenCalledWith('run-1', 'failed', {}, 'The morning brief was written but not delivered (email:duplicate).', 'not_delivered');
+    }
   });
 
   it('retries when the facts cannot be read, and sends nothing', async () => {

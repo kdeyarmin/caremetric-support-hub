@@ -57,9 +57,14 @@ describe('the weekly account report task', () => {
     await first.run({}, new Date('2026-11-02T12:15:00Z'));
     await first.run({}, new Date('2026-11-05T12:15:00Z'));
     expect(first.notifier.send.mock.calls.map(call => call[0].dedupeKey)).toEqual(['accounts:weekly:2026-11-02', 'accounts:weekly:2026-11-02']);
-    const later = fixture({ deliveries: [{ channel: 'email', delivery: 'duplicate' }] });
+    const later = fixture({ deliveries: [{ channel: 'email', delivery: 'duplicate', original: 'sent' }] });
     expect(await later.run({}, new Date('2026-11-05T12:15:00Z'))).toEqual({ result: { skipped: 'already_sent', week: '2026-11-02' } });
     expect(later.store.startRun).not.toHaveBeenCalled();
+    // An earlier attempt that never reached the owner (stuck, unknown or switched off) is not called "sent".
+    for (const original of ['pending', 'unknown', 'suppressed']) {
+      const unconfirmed = fixture({ deliveries: [{ channel: 'email', delivery: 'duplicate', original }] });
+      expect(await unconfirmed.run({}, new Date('2026-11-05T12:15:00Z')), original).toEqual({ result: { skipped: 'earlier_attempt_unconfirmed', week: '2026-11-02' } });
+    }
     const nextWeek = fixture();
     await nextWeek.run({}, new Date('2026-11-09T12:15:00Z'));
     expect(nextWeek.notifier.send.mock.calls[0][0].dedupeKey).toBe('accounts:weekly:2026-11-09');
@@ -69,7 +74,7 @@ describe('the weekly account report task', () => {
     const asked = fixture();
     await asked.run({ sourceKind: 'owner', id: 'task-9' }, new Date('2026-11-04T15:00:00Z'));
     expect(asked.notifier.send.mock.calls[0][0].dedupeKey).toBe('accounts:run:task-9');
-    const retried = fixture({ deliveries: [{ channel: 'email', delivery: 'duplicate' }] });
+    const retried = fixture({ deliveries: [{ channel: 'email', delivery: 'duplicate', original: 'sent' }] });
     const outcome = await retried.run({ sourceKind: 'owner', id: 'task-9' });
     expect(outcome.result).toMatchObject({ delivery: ['email:duplicate'], accounts: 2 });
     expect(retried.store.finishRun).toHaveBeenCalledWith('run-1', 'completed', {}, expect.stringContaining('Sent the weekly accounts report'), null);

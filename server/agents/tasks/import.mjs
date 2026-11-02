@@ -5,17 +5,16 @@
  * screen runs them with the owner's session. Nothing here runs unattended, and nothing is kept:
  * the session token is used for the calls and is never stored, logged or returned.
  *
- * One run makes at most three sync calls (200 messages each) from the newest end of the list.
- * A source that lists newest first stops after a call that finds nothing new, because everything
- * older was already copied. History beyond that window is brought in with the Import buttons on
- * the Communications page, which resume where they stopped; the sync itself is idempotent, so
- * reading a message twice never creates it twice.
+ * One run makes at most three sync calls (200 messages each) from the newest end of the list, and
+ * always reads its whole window, even when the first call finds nothing new: an earlier run may have
+ * copied the newest 200 and then lost its session, so an empty first window says nothing about the
+ * older ones. History beyond that window is brought in with the Import buttons on the Communications
+ * page, which resume where they stopped; the sync itself is idempotent, so reading a message twice
+ * never creates it twice.
  */
 const sources = {
-  // Advisors lists inquiries newest first (advisors/hub-bridge.mjs orders by created_at DESC).
-  'import.advisors': { source: 'advisors.web', newestFirst: true },
-  // Breathe's order has not been checked, so every run reads its whole window instead of stopping early.
-  'import.breathe': { source: 'breathe.phone', newestFirst: false },
+  'import.advisors': { source: 'advisors.web' },
+  'import.breathe': { source: 'breathe.phone' },
 };
 const maxCalls = 3;
 const count = value => (Number.isSafeInteger(value) && value >= 0 ? value : 0);
@@ -38,7 +37,7 @@ function failure(error, summary) {
 /** The import handlers, only when the Communications service is available to call. */
 export function importHandlers({ communications }) {
   if (!communications || typeof communications.sync !== 'function') return {};
-  return Object.fromEntries(Object.entries(sources).map(([kind, { source, newestFirst }]) => [kind, async (_task, { sessionToken, signal } = {}) => {
+  return Object.fromEntries(Object.entries(sources).map(([kind, { source }]) => [kind, async (_task, { sessionToken, signal } = {}) => {
     // Without the owner's session there is nothing to do but wait for it.
     if (!sessionToken) return { status: 'awaiting_session', errorCode: 'session_required' };
     const summary = { source, read: 0, created: 0, skipped: 0, calls: 0, complete: false, nextOffset: null };
@@ -56,8 +55,10 @@ export function importHandlers({ communications }) {
       summary.created += count(page?.created);
       summary.skipped += count(page?.skipped);
       summary.nextOffset = Number.isSafeInteger(page?.nextOffset) ? page.nextOffset : null;
-      // The end of the list, or (newest first) a window with nothing new: caught up.
-      if (summary.nextOffset === null || (newestFirst && count(page?.created) === 0)) { summary.complete = true; summary.nextOffset = null; break; }
+      // Only the end of the list means caught up. A window with nothing new proves nothing about the older ones: an earlier run may have
+      // copied the newest 200 and then lost its session before the rest. These runs happen only when the owner asks, so reading
+      // the whole window costs nothing that matters, and the sync itself never copies a message twice.
+      if (summary.nextOffset === null) { summary.complete = true; break; }
       offset = summary.nextOffset;
     }
     return { result: summary };
