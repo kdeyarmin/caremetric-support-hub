@@ -24,9 +24,14 @@ const bodies = {
 
 export const templateNames = Object.keys(bodies);
 
+/** The greeting and the text, laid out for the route the message will travel: one line for a text message, a paragraph for the rest. */
+export function wrapReply(text, route) {
+  return route === 'sms' ? `${greeting} ${text}` : `${greeting}\n\n${text}`;
+}
+
 /** The whole message for a template, ready to send by the route it will travel (sms, email or chat). */
 export function replyBody(template, route) {
   const words = bodies[template];
   if (!words) throw new TypeError('Unknown reply template.');
-  return route === 'sms' ? `${greeting} ${words.short}` : `${greeting}\n\n${words.long}`;
+  return wrapReply(route === 'sms' ? words.short : words.long, route);
 }

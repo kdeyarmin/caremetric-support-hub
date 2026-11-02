@@ -56,6 +56,7 @@ export const integrationCatalog = Object.freeze([
     variables: [
       { name: 'HUB_AGENTS_ENABLED', secret: false, required: true, flag: true, purpose: 'Exactly "true" turns the scheduler on.' },
       { name: 'HUB_OWNER_EMAIL', secret: false, required: true, purpose: 'Where the AI team emails alerts and the morning brief. Urgent items are also texted to the administrator\'s verified number.' },
+      { name: 'HUB_AGENTS_CUSTOMER_TEXT_TO_AI', secret: false, required: false, flag: true, purpose: 'Exactly "true" lets the Support Concierge send a plain question\'s scrubbed text to the model to draft an answer for you to approve. Set it only when your Anthropic agreement covers support messages.' },
     ] },
   { id: 'carebase-distribution', name: 'CareBase course distribution observer', purpose: 'Lets the Hub observe shared course availability in CareBase.', docs: 'docs/SHARED_COURSE_DISTRIBUTION.md',
     variables: [{ name: 'CAREBASE_DISTRIBUTION_OBSERVER_TOKEN', secret: true, required: true, purpose: 'Token CareBase issued to the Hub observer.' }] },

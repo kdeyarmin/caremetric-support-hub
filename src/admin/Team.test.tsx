@@ -32,7 +32,7 @@ const overview = (changes: Partial<TeamOverview["team"]> = {}, services: Partial
       preview: "Here is how to export by month.", createdAt: "2026-11-02T11:30:00+00:00", expiresAt: "2026-11-09T11:30:00+00:00" }],
     ...changes,
   },
-  services: { enabled: true, handlers: ["probe.sweep"], sms: true, email: true, ownerEmail: true, ai: true, ...services },
+  services: { enabled: true, handlers: ["probe.sweep"], sms: true, email: true, ownerEmail: true, ai: true, customerTextToAi: false, ...services },
   waitingActions: 0,
 });
 const emptyPage = { items: [], total: 0, offset: 0, limit: 15 };
@@ -65,7 +65,7 @@ describe("AI team screen", () => {
   });
 
   it("says plainly when nothing is switched on, instead of looking broken", async () => {
-    render(<Team client={fakeClient(overview({ approvals: [], approvalCount: 0, awaitingSessionCount: 2 }, { enabled: false, handlers: [], sms: false, email: false, ownerEmail: false, ai: false }))} />);
+    render(<Team client={fakeClient(overview({ approvals: [], approvalCount: 0, awaitingSessionCount: 2 }, { enabled: false, handlers: [], sms: false, email: false, ownerEmail: false, ai: false, customerTextToAi: false }))} />);
     const services = await screen.findByRole("region", { name: "What the team can use" });
     expect(within(services).getByText(/Set HUB_AGENTS_ENABLED to true/)).toBeTruthy();
     expect(within(services).getByText(/Set ANTHROPIC_API_KEY on the Hub service/)).toBeTruthy();
@@ -84,6 +84,19 @@ describe("AI team screen", () => {
     expect(within(row).getByText("Ready")).toBeTruthy();
     expect(within(row).getByText(/uses it only where its own setting says so/)).toBeTruthy();
     expect(within(services).queryByText(/Set ANTHROPIC_API_KEY/)).toBeNull();
+  });
+
+  it("says customer messages stay in the Hub until the owner switches drafting on, and what goes to the model when it is on", async () => {
+    const off = render(<Team client={fakeClient(overview())} />);
+    let row = (await within(await screen.findByRole("region", { name: "What the team can use" })).findByText("Customer text to AI")).closest("li") as HTMLElement;
+    expect(within(row).getByText("Off")).toBeTruthy();
+    expect(within(row).getByText(/Customer messages stay in the Hub\. Set HUB_AGENTS_CUSTOMER_TEXT_TO_AI to true/)).toBeTruthy();
+    off.unmount();
+    render(<Team client={fakeClient(overview({}, { customerTextToAi: true }))} />);
+    row = (await within(await screen.findByRole("region", { name: "What the team can use" })).findByText("Customer text to AI")).closest("li") as HTMLElement;
+    expect(within(row).getByText("On")).toBeTruthy();
+    expect(within(row).getByText(/scrubbed text to the model to draft an answer for you to approve/)).toBeTruthy();
+    expect(within(row).getByText(/never go/)).toBeTruthy();
   });
 
   it("runs the work that was waiting for the owner's sign-in, and says how much started", async () => {

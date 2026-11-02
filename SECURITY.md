@@ -11,6 +11,7 @@
 - Never place patient identifiers, case bodies, filenames, raw payloads, access tokens, or signed URLs in logs or audit metadata.
 - Keep internal notes physically separate from customer correspondence.
 - Treat every inbound free-text body as `possible_phi` until classified.
+- Customer message text reaches a model only through the AI team's Support Concierge, only while the owner has set `HUB_AGENTS_CUSTOMER_TEXT_TO_AI` to `true`, only for a plain first question that the identifier screen did not flag, and only after links, email addresses, phone numbers, dates, long numbers and street addresses are removed ([details](docs/AI_TEAM.md)). The staff case assistant is a separate path with its own switch.
 - Keep production case intake disabled for every tenant/product until that exact entitlement is explicitly activated and an active support writer with a verified SMS sign-in number is available.
 - Require a caller-generated UUID request key for retryable case creation and replies. The private ledger may contain only keyed digests and entity identifiers, never subjects or message bodies.
 

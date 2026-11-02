@@ -13,11 +13,18 @@ export const conciergeFeature = 'platform.agents.concierge.v1';
 
 const declared = features => (features instanceof Set ? features.has(conciergeFeature) : Array.isArray(features) && features.includes(conciergeFeature));
 
-export function conciergeHandlers({ store, notifier, features = null, log }) {
+/**
+ * `customerTextToAi` is the owner's explicit switch (HUB_AGENTS_CUSTOMER_TEXT_TO_AI, exactly "true"). Customer text can go to the
+ * model only when it is on, a model key is set and the guide library is there; otherwise triage is rules-only, as before.
+ */
+export const draftingFor = ({ model = null, guides = null, customerTextToAi = false } = {}) =>
+  (customerTextToAi === true && model?.configured === true && typeof model.run === 'function' && typeof guides?.top === 'function' ? { model, guides } : null);
+
+export function conciergeHandlers({ store, notifier, features = null, log, model = null, guides = null, customerTextToAi = false }) {
   if (!declared(features)) return {};
   return {
     'concierge.sweep': sweepHandler({ store }),
-    'concierge.communication': triageHandler({ store, notifier, log }),
+    'concierge.communication': triageHandler({ store, notifier, log, drafting: draftingFor({ model, guides, customerTextToAi }) }),
   };
 }
 

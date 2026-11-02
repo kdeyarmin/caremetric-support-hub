@@ -4,7 +4,7 @@ import { actionExecutor, recordOnlyExecutors } from './actions.mjs';
 import { ownerNotifier } from './notify.mjs';
 import { agentAdmin } from './admin.mjs';
 import { builtInHandlers } from './tasks/index.mjs';
-import { conciergeExecutors } from './concierge/index.mjs';
+import { conciergeExecutors, draftingFor } from './concierge/index.mjs';
 import { modelRuntime } from './runtime/index.mjs';
 
 const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
@@ -18,25 +18,27 @@ const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
  * agent also starts paused in the database until the owner resumes it.
  * `model` is the shared model runtime (runtime/): built from `anthropicApiKey` unless one is given,
  * and handed to function-style `handlers` beside the store and the notifier. `record` writes the
- * usage ledger. No handler this server ships calls the model yet.
+ * usage ledger. The only handler that calls the model is the Concierge's triage, and only when
+ * `customerTextToAi` (the owner's switch) is true, a key is set and `guides` (the guide library) is given.
  */
 export function agentTeam({
   pool, store = sqlAgentStore(pool), handlers = {}, executors = {}, sms, email, ownerEmail, publicOrigin,
   fetchImpl = fetch, enabled = false, log = line => console.warn(line), now = () => new Date(), communications = null, features = null,
-  anthropicApiKey = null, record = null, model = null,
+  anthropicApiKey = null, record = null, model = null, guides = null, customerTextToAi = false,
 }) {
   const notifier = ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log });
   const runtime = model ?? modelRuntime({ apiKey: anthropicApiKey, store, record, notifier, log, now });
   const shared = { store, notifier, model: runtime };
   const actions = actionExecutor({ store, executors: { ...recordOnlyExecutors, ...conciergeExecutors({ communications, store, notifier, features, log }), ...(typeof executors === 'function' ? executors(shared) : executors) }, log });
   // The handlers every server ships with, then any the caller adds (a caller's handler for the same kind wins).
-  const registry = { ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
+  const registry = { ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   const scheduler = agentScheduler({ store, handlers: registry, actions, enabled, log, now });
   const admin = agentAdmin({
     pool, actions, kick: () => scheduler.tick(), waiting: scheduler.runWaiting,
     services: () => ({
       enabled: scheduler.active(), handlers: scheduler.kinds(),
       sms: Boolean(sms?.configured), email: Boolean(email?.configured), ownerEmail: emailAddress.test(ownerEmail ?? ''), ai: Boolean(runtime.configured),
+      customerTextToAi: draftingFor({ model: runtime, guides, customerTextToAi }) !== null,
     }),
   });
   return { store, notifier, model: runtime, actions, scheduler, admin, tick: scheduler.tick, active: scheduler.active, runWaiting: scheduler.runWaiting };

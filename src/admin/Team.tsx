@@ -34,6 +34,8 @@ function ServicesPanel({ services, awaitingSession, waitingActions, busy, onRunW
     { name: "Email delivery", good: services.email, state: services.email ? "Ready" : "Not set up", detail: services.email ? "Through SendGrid." : "Set HUB_SENDGRID_API_KEY so the team can email you." },
     { name: "Text alerts", good: services.sms, state: services.sms ? "Ready" : "Not set up", detail: services.sms ? "Urgent items are texted to your verified number." : "Urgent items fall back to email until Twilio is configured." },
     { name: "AI model", good: services.ai, state: services.ai ? "Ready" : "Not set up", detail: services.ai ? "Anthropic is connected. An agent uses it only where its own setting says so." : "Set ANTHROPIC_API_KEY on the Hub service. Agents that need a model wait until then." },
+    { name: "Customer text to AI", good: services.customerTextToAi, state: services.customerTextToAi ? "On" : "Off",
+      detail: services.customerTextToAi ? "The Concierge sends a plain question's scrubbed text to the model to draft an answer for you to approve. Billing, outages, sales and anything with personal identifiers never go." : "Customer messages stay in the Hub. Set HUB_AGENTS_CUSTOMER_TEXT_TO_AI to true, with the AI model ready, to let the Concierge draft answers from your published guides." },
   ];
   return <section className="panel team-services" aria-labelledby="team-services-title">
     <div className="admin-section-title"><div><h2 id="team-services-title">What the team can use</h2><p>The team only does what is switched on here.</p></div></div>
