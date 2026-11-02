@@ -137,8 +137,10 @@ When nothing needs you the brief says so. It is sent every day, so silence never
 as "all is well". It carries only counts, product names and times: never a customer's words, an
 address or an amount of money. Only live-mode subscriptions are counted.
 
-The scheduled brief is keyed by the Eastern date, so a retry, a restart or a second server sends it
-once. A brief you start with **Run now** is sent every time. It goes by email only, since an incident
+The scheduled brief is keyed by the Eastern day it was due for (read from the task, not the clock), so a
+retry, a restart or a second server sends it once, even a retry that runs after midnight. If the email
+provider refuses the send, the task is tried again a few minutes later under the same key. A brief you start
+with **Run now** is sent once per request and is not repeated by a retry. It goes by email only, since an incident
 already texts you when it happens. If email is not set up or the send fails, the run on the Team
 screen says the brief was written but not delivered.
 

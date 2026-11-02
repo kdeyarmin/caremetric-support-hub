@@ -8,7 +8,7 @@
  * amount of money.
  */
 import { delivered } from '../notify.mjs';
-import { plural, recordRun, when } from './shared.mjs';
+import { dueMoment, mustHaveReached, plural, recordRun, when } from './shared.mjs';
 
 const day = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric' });
 // en-CA writes a date as YYYY-MM-DD, which is what the alert key and the schedule both use.
@@ -92,9 +92,11 @@ export function briefHandlers({ store, notifier, publicOrigin, services = {}, la
     const facts = await store.briefFacts();
     const moment = now();
     const content = composeBrief(facts, { now: moment, publicOrigin, services, labels });
-    const date = dayKey.format(moment);
-    // The scheduled brief is sent once a day, however often the task is retried. A brief the owner asks for is sent every time.
-    const dedupeKey = task.sourceKind === 'owner' ? `brief:${date}:${task.id}` : `brief:${date}`;
+    // The scheduled brief is sent once a day, however often the task is retried, and the day is the one it was due for, so a retry after
+    // midnight keeps its key. A brief the owner asks for is sent once per request (its own task), whatever day a retry falls on.
+    const owner = task.sourceKind === 'owner';
+    const date = dayKey.format(owner ? moment : dueMoment(task) ?? moment);
+    const dedupeKey = owner ? `brief:owner:${task.id}` : `brief:${date}`;
     const results = await notifier.send({
       severity: content.needsYou > 0 ? 'warning' : 'info', subject: content.subject, body: content.body, blocks: content.blocks,
       dedupeKey, agentKey: task.agentKey, taskId: task.id,
@@ -107,6 +109,8 @@ export function briefHandlers({ store, notifier, publicOrigin, services = {}, la
       outcome: reached ? 'completed' : 'failed',
       errorCode: reached ? null : 'not_delivered',
     });
+    // A brief the provider refused is tried again; the run above stays as the record of this attempt.
+    mustHaveReached(results);
     return { result: { date, needsYou: content.needsYou, delivery } };
   }
   return { 'brief.daily': brief };

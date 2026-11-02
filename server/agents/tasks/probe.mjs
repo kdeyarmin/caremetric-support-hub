@@ -12,7 +12,7 @@
  * failure word. A response body is read for at most 4 KB so a slow or endless one cannot hold
  * the sweep, then thrown away. Redirects are never followed.
  */
-import { minutesBetween, permanent, plural, recordRun, when } from './shared.mjs';
+import { minutesBetween, mustHaveReached, permanent, plural, recordRun, when } from './shared.mjs';
 
 const timeoutMs = 8000;
 const bodyLimitBytes = 4096;
@@ -111,13 +111,6 @@ export function probeHandlers({
         transitions: rows.filter(row => row.outcome.transition !== 'none').map(row => ({ target: row.target.key, transition: row.outcome.transition, incident: row.outcome.incident })),
       },
     };
-  }
-
-  // A provider that refuses a message (a temporary 429, say) is reported by the notifier as `failed`, not thrown. Finishing the task
-  // then would leave the owner without the alert for the whole outage, because nothing enqueues a second incident task. Retry instead:
-  // the notifier resends only the channels that failed, a bounded number of times, and skips the ones that went.
-  function mustHaveReached(results) {
-    if (results.some(item => item.delivery === 'failed')) throw Object.assign(new Error('The owner could not be told.'), { code: 'notification_failed', transient: true });
   }
 
   // An observe-only agent still tells the owner (that is a report), but proposes no action.
