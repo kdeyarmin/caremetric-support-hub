@@ -216,6 +216,11 @@ individual emails a day at each level (the next one becomes a single rollup emai
 three urgent texts an hour (after that, urgent alerts go by email only), and one urgent alert per
 conversation per day.
 
+If the provider definitely refuses an alert (the delivery fails), the task is retried by the scheduler a few
+minutes later, before anything else is done for that message. The retry goes out under the same key, so only
+the channel that failed is tried again and one that was sent is never repeated; the notifier makes up to three
+attempts per channel. A delivery the provider did not confirm is not retried, because it may have arrived.
+
 It leaves a run on the owner's screen for each message it triaged (model `none`, prompt version `rules.1`,
 a summary that names the reference, the channel and the category).
 
@@ -250,10 +255,12 @@ separate step and nothing turns it on by merging or deploying.
 
 **What goes to the model.** Only a message that the rules call a plain question (not billing, a
 cancellation, an outage, a security or legal matter, a sale or anything from the Advisors form), that the
-identifier screen did not flag, that is the first message in its conversation with nothing yet sent to the
+identifier screen did not flag, that is the only message the customer has sent in its conversation so far
+(a follow-up that arrives before anyone has replied is not a first message), with nothing yet sent to the
 customer, that can be answered, and that matches at least one published guide. Everything the owner answers
 personally stays in the Hub, and so does everything with an identifier. **Observe** mode never calls the
-model. What is sent is the message with links, email addresses, phone numbers, dates, runs of six or more
+model. What is sent is the message, after spaces, tabs and non-breaking spaces are collapsed (so an address typed with extra
+spaces is still found), with links, email addresses, phone numbers, dates, runs of six or more
 digits, street addresses, post office boxes and state-and-ZIP endings replaced by words such as `[phone]`,
 and `<`, `>` and `&` escaped (`redact.mjs`); an email's subject, scrubbed the same way, and no other
 conversation's subject; the channel, the product and how many messages the customer has sent; and up to

@@ -45,6 +45,15 @@ const draftWords = {
 };
 const easternDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
 
+/**
+ * A delivery the provider definitely refused (`failed`) is an alert the owner never got. The task is retried by the scheduler a few
+ * minutes later and the notifier reopens only that channel under the same key, so a channel that was sent is never sent again.
+ * An unknown delivery may have arrived and is not retried; a suppressed channel has nothing to retry.
+ */
+const undelivered = results => (results.some(item => item.delivery === 'failed')
+  ? Object.assign(new Error('The owner alert could not be delivered.'), { code: 'alert_not_delivered', transient: true })
+  : null);
+
 function skipReason(snapshot, payload, settings) {
   if (!snapshot) return 'not_found';
   if (snapshot.status === 'closed') return 'closed';
@@ -163,6 +172,14 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
     }
   }
 
+  // One alert, counted and sent in turn. A definite failure ends the attempt, before anything else is done, so the retry starts clean.
+  async function tellOwner(input) {
+    const results = await sendAlert(input);
+    const refused = undelivered(results);
+    if (refused) throw refused;
+    return results.map(item => `${item.channel}:${item.delivery}`);
+  }
+
   async function communication(task, { now = () => new Date(), signal } = {}) {
     const payload = task.payload ?? {};
     if (!uuid.test(payload.communicationId ?? '') || !uuid.test(payload.messageId ?? '')) throw permanent('invalid_payload');
@@ -185,8 +202,7 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
 
     const minutes = minutesBetween(inbound.at, now());
     const words = alertWords({ category: ruleCategory, phi: screen.flagged, severity, channel: snapshot.channel, productSlug: snapshot.productSlug, reference: snapshot.reference, minutes, unread });
-    const results = await sendAlert({ task, snapshot, payload, words, severity, now });
-    const delivery = results.map(item => `${item.channel}:${item.delivery}`);
+    const delivery = await tellOwner({ task, snapshot, payload, words, severity, now });
 
     // The model sees a message only if it is one the Concierge would offer a fixed acknowledgment for anyway: a plain, first, unflagged
     // question the owner has not taken over, to a conversation that can be answered, from an agent allowed to propose. The owner's own
@@ -195,7 +211,8 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
     let phi = screen.flagged;
     let asked = null;
     const route = replyRoute(snapshot);
-    const eligible = drafting && !screen.flagged && !unread && route !== null && task.agent?.autonomy !== 'observe' && (snapshot.outboundCount ?? 0) === 0
+    const eligible = drafting && !screen.flagged && !unread && route !== null && task.agent?.autonomy !== 'observe'
+      && (snapshot.inboundCount ?? 1) === 1 && (snapshot.outboundCount ?? 0) === 0
       && replyFor({ category: ruleCategory, phi: false, productSlug: snapshot.productSlug, inquiryType: snapshot.inquiryType }) === 'standard';
     if (eligible) {
       asked = await askModel({ task, snapshot, inbound, route, signal });
@@ -206,7 +223,7 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
       const reread = decide({ category, phi, urgent: asked.urgent === true }).severity;
       if (severityRank[reread] > severityRank[severity]) {
         const louder = alertWords({ category, phi, severity: reread, channel: snapshot.channel, productSlug: snapshot.productSlug, reference: snapshot.reference, minutes, source: 'model' });
-        delivery.push(...(await sendAlert({ task, snapshot, payload, words: louder, severity: reread, now })).map(item => `${item.channel}:${item.delivery}`));
+        delivery.push(...(await tellOwner({ task, snapshot, payload, words: louder, severity: reread, now })));
         severity = reread;
       }
     }

@@ -22,6 +22,11 @@ describe('message categories by word matching', () => {
     for (const text of ['My attorney will contact you.', 'We will sue if this is not fixed.', 'This is a HIPAA complaint.', 'I will be reporting you to the attorney general', 'We received a subpoena for your records']) expect(category(text), text).toBe('legal');
   });
 
+  it('reads every form of the word sue, and nothing that only contains it', () => {
+    for (const text of ['We are suing your company.', 'They sued us last year and we want out.', 'Suing is the next step.', 'If it is not fixed we will sue.']) expect(category(text), text).toBe('legal');
+    for (const text of ['We are pursuing the issue with a suite of tools.', 'Is this suitable for a small facility?', 'The tissue box report is wrong.']) expect(category(text), text).toBe('general');
+  });
+
   it('spots a cancellation and a billing question', () => {
     for (const text of ['We will cancel our subscription unless this is fixed today.', 'Please close our account.', 'We are switching to a competitor.', 'I want to cancel the service', 'We will cancel unless this is fixed today.', 'We\'ll have to cancel']) expect(category(text), text).toBe('cancellation');
     for (const text of ['We were charged twice this month.', 'I need a refund.', 'Our payment failed again.', 'Where do I find the invoice?', 'There is a billing error on our statement']) expect(category(text), text).toBe('billing');

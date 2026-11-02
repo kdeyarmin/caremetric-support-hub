@@ -40,7 +40,7 @@ const categories = [
     ['suspicious', /\b(?:suspicious|strange|unknown) (?:login|log-in|sign-?in|activity|charge|access)\b/i],
   ]],
   ['legal', [
-    ['counsel', /\b(?:attorney|lawyer|law firm|lawsuit|sue(?:d|ing)?|subpoena|cease and desist|litigation|court order|legal (?:action|department|counsel|notice))\b/i],
+    ['counsel', /\b(?:attorney|lawyer|law firm|lawsuit|su(?:e|ed|ing)|subpoena|cease and desist|litigation|court order|legal (?:action|department|counsel|notice))\b/i],
     ['hipaa', /\bhipaa\b[^.\n]{0,30}\b(?:complaint|violation|breach|incident)\b/i],
     ['regulator', /\b(?:report(?:ing)? (?:you|this|it) to|file a complaint|ombudsman|attorney general|better business bureau)\b/i],
   ]],

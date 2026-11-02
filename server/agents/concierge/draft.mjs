@@ -16,6 +16,7 @@
  *   claim to be an AI, a reference to the prompt, a repeat of a name or identifier-like token from the
  *   customer's message that the guides do not use, and a long verbatim quotation of the customer.
  */
+import { phoneNumber } from './redact.mjs';
 import { screenIdentifiers } from './screen.mjs';
 import { smsLimit, wrapReply } from './templates.mjs';
 
@@ -72,7 +73,7 @@ const amountPattern = /\$\s?\d[\d,]*(?:\.\d+)?|\b\d+(?:\.\d+)?\s?%/g;
 const amountsIn = text => new Set((String(text).match(amountPattern) ?? []).map(value => value.replace(/\s/g, '')));
 
 const markup = /[<>`]|\]\(|\*\*|__|^#{1,6}\s/m;
-const contactDetail = /\bhttps?:|\bwww\.|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|\b\d{3}[\s.-]?\d{3}[\s.-]?\d{4}\b/i;
+const contactDetail = new RegExp(String.raw`\bhttps?:|\bwww\.|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|${phoneNumber.source}`, 'i');
 const voiceOffer = /\b(?:calls?|called|calling|phone|phones|telephone|voicemail|dial|meeting|meetings|demo)\b/i;
 const promise = /\b(?:refund(?:s|ed)?|credit(?:s|ed)? (?:to|back|your)|guarantee[ds]?|promise[ds]?|waive[ds]?|free of charge|at no (?:extra )?(?:cost|charge)|within (?:\d+|a|an|one|two|three|four|five|the next) (?:minutes?|hours?|days?|business|weeks?)|by (?:tomorrow|today|tonight|monday|tuesday|wednesday|thursday|friday|end of (?:the )?(?:day|week))|we will (?:fix|resolve|refund|credit|waive))\b/i;
 const advice = /\b(?:hipaa[- ]compliant|compliance is guaranteed|(?:will|would) (?:pass|satisfy) (?:a |an |the )?(?:survey|inspection|audit)|legally (?:required|compliant|binding)|medical advice|diagnos\w+|dosages?|prescri\w+)\b/i;

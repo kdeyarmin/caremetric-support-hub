@@ -395,6 +395,7 @@ describe('triaging with the model', () => {
       ['the Advisors form', snapshotOf('How do I export the staff roster by month?', { channel: 'web_form', productSlug: 'advisors', inquiryType: 'advisors', subject: null }), taskOf()],
       ['a sales inquiry', snapshotOf('How do I export the staff roster by month?', { inquiryType: 'sales' }), taskOf()],
       ['a follow-up', snapshotOf('How do I export the staff roster by month?', { outboundCount: 1 }), taskOf()],
+      ['a second message before anyone replied', snapshotOf('How do I export the staff roster by month?', { inboundCount: 2, outboundCount: 0 }), taskOf()],
       ['no way to reply', snapshotOf('How do I export the staff roster by month?', { canEmail: false }), taskOf()],
       ['an auto reply', snapshotOf('[Empty text message]'), taskOf()],
       ['observe mode', snapshotOf('How do I export the staff roster by month?'), taskOf({ agent: { autonomy: 'observe', config: {} } })],
@@ -594,5 +595,66 @@ describe('triaging with the model', () => {
     expect(harness.sent.map(alert => alert.dedupeKey)).toEqual([`concierge:new:${ids.message}`, `concierge:new:${ids.message}`]);
     expect(proposals(harness).map(call => call.targetId)).toEqual(['CM-1042', 'CM-1042']);
     expect(proposals(harness)[0].preview).toBe(proposals(harness)[1].preview);
+  });
+});
+
+describe('only a customer\'s first message goes to the model', () => {
+  it('sends a conversation that holds one message and nothing from us, and no other', async () => {
+    const first = withModel({ snapshot: snapshotOf('How do I export the staff roster by month?', { inboundCount: 1, outboundCount: 0 }) });
+    await first.run();
+    expect(first.model.run).toHaveBeenCalledTimes(1);
+    // A follow-up that arrives before anyone has replied is still not a first message. It gets the fixed acknowledgment, not a draft.
+    const second = withModel({ snapshot: snapshotOf('How do I export the staff roster by month?', { inboundCount: 2, outboundCount: 0 }) });
+    const outcome = await second.run();
+    expect(second.model.run).not.toHaveBeenCalled();
+    expect(outcome.result).toMatchObject({ outcome: 'alerted', reply: 'proposed', template: 'standard' });
+    expect(outcome.result.draft).toBeUndefined();
+  });
+});
+
+describe('an alert the provider definitely refused', () => {
+  const answer = (harness, ...outcomes) => {
+    for (const results of outcomes) harness.notifier.send.mockImplementationOnce(async input => { harness.sent.push(input); return results; });
+  };
+
+  it('is retried by the scheduler, and nothing else happens until the owner has been told', async () => {
+    const harness = fixture({ snapshot: snapshotOf(`How do I export the staff roster by month? ${canary}`) });
+    answer(harness, [{ channel: 'email', delivery: 'failed' }]);
+    const error = await harness.run().catch(caught => caught);
+    expect(error).toMatchObject({ code: 'alert_not_delivered', transient: true, message: 'The owner alert could not be delivered.' });
+    expect(JSON.stringify([error.message, error.code, harness.logs])).not.toContain(canary);
+    expect(harness.store.proposeAction).not.toHaveBeenCalled();
+    expect(harness.store.startRun).not.toHaveBeenCalled();
+    // The next attempt sends under the same key, and then the task finishes as it always did.
+    const outcome = await harness.run();
+    expect(outcome).toMatchObject({ status: 'awaiting_approval', result: { outcome: 'alerted', delivery: ['email:sent'] } });
+    expect(harness.sent.map(item => item.dedupeKey)).toEqual([`concierge:new:${ids.message}`, `concierge:new:${ids.message}`]);
+  });
+
+  it('retries an urgent alert whose text was refused although its email went out, under the same key', async () => {
+    const harness = fixture({ snapshot: snapshotOf('Everything is down for every user.') });
+    answer(harness, [{ channel: 'sms', delivery: 'failed' }, { channel: 'email', delivery: 'sent' }]);
+    await expect(harness.run()).rejects.toMatchObject({ code: 'alert_not_delivered' });
+    const outcome = await harness.run();
+    expect(outcome.result).toMatchObject({ severity: 'urgent', delivery: ['sms:sent', 'email:sent'] });
+    expect(harness.sent.map(item => item.dedupeKey)).toEqual([`concierge:urgent:${ids.communication}:2026-11-02`, `concierge:urgent:${ids.communication}:2026-11-02`]);
+  });
+
+  it('does not retry a delivery that may have arrived, that has nowhere to go, or that was made before', async () => {
+    for (const delivery of ['sent', 'unknown', 'suppressed', 'duplicate']) {
+      const harness = fixture();
+      answer(harness, [{ channel: 'email', delivery }]);
+      const outcome = await harness.run();
+      expect(outcome.result, delivery).toMatchObject({ outcome: 'alerted', delivery: [`email:${delivery}`] });
+      expect(harness.notifier.send, delivery).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('retries when it is the model\'s louder alert that was refused, before anything is proposed', async () => {
+    const harness = withModel({ result: done(reading({ category: 'billing', urgency: 'urgent', canAnswerFromGuides: false, citations: [], reply: '' })) });
+    answer(harness, [{ channel: 'email', delivery: 'sent' }], [{ channel: 'sms', delivery: 'failed' }, { channel: 'email', delivery: 'sent' }]);
+    await expect(harness.run()).rejects.toMatchObject({ code: 'alert_not_delivered', transient: true });
+    expect(harness.sent.map(item => item.severity)).toEqual(['info', 'urgent']);
+    expect(harness.store.proposeAction).not.toHaveBeenCalled();
   });
 });
