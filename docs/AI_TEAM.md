@@ -5,10 +5,10 @@ runs it: who the agents are, what each is allowed to do, how the owner stays in 
 is built so far.
 
 > **Status.** The database layer, the server scheduler, the `/admin/team` screen, the Platform
-> Engineer's health probes and the Chief of Staff's morning brief are in place. The scheduler is
-> inert unless `HUB_AGENTS_ENABLED` is exactly `true` and every agent is seeded **paused**. Neither
-> working agent uses a model. The model runtime and the Support Concierge arrive in the following
-> changes.
+> Engineer's health probes, the Chief of Staff's morning brief and the SEO Analyst's weekly report are
+> in place. The scheduler is inert unless `HUB_AGENTS_ENABLED` is exactly `true` and every agent is
+> seeded **paused**. None of the three working agents uses a model. The model runtime and the Support
+> Concierge arrive in the following changes.
 
 ## The model
 
@@ -132,6 +132,39 @@ once. A brief you start with **Run now** is sent every time. It goes by email on
 already texts you when it happens. If email is not set up or the send fails, the run on the Team
 screen says the brief was written but not delivered.
 
+## The SEO Analyst
+
+Checks the company's public websites every Monday and emails what to fix. It uses no model and reads
+only public pages of the sites it is told about: Healthcare Advisors (`caremetricadvisors.com`),
+CareBase (`cmcarebase.com`, with `caremetrictrain.com` as another address) and CareMetric Intel
+(`www.caremetricintel.com`). The list is fixed in `server/agents/seo/sites.mjs`, a check never leaves a
+site's own host, and nothing a customer says can add a site.
+
+It reads each site the way a crawler that does not run scripts (and most AI assistants) does: plain GET
+requests that follow no redirect, at most 20 pages and 30 links a site, 8 seconds a request, 600 KB a
+page and about two and a half minutes a site.
+
+- **The site**: robots.txt exists and does not block everything, a sitemap exists and lists pages on the
+  site, plain http redirects to https, and the other addresses for the site redirect to it with a
+  permanent redirect (or name it as canonical).
+- **Its pages**, which are the home page and the pages in the sitemap (or the pages the home page links
+  to when there is no sitemap): reachable, HTML, not marked noindex, a title and a description of a
+  sensible length that no other page shares, a canonical link, one main heading, enough text before
+  scripts run, a language, a phone viewport, social sharing tags, structured data that parses, image
+  descriptions, and links that work.
+
+Each finding is **urgent** (it could keep pages out of search results), **worth fixing** or **minor**. The
+email lists each site's worst problems with an example page and scores each site out of 100 by how many
+kinds of problem it has, so a problem on twenty pages counts once. It says when a site was slow or could
+not be checked, and it quotes nothing a page says. A page that looks empty to the check may look fine in
+a browser, which is itself worth knowing: many crawlers and AI assistants see only what is there before
+scripts run.
+
+The schedule fires every morning at 06:30 Eastern, because an interval schedule is limited to a day. The
+weekly work happens only on Monday and the other mornings finish at once. **Run now** checks on any day and
+sends a report every time, while the scheduled report is sent once per Monday. The analyst is observe-only
+and proposes no actions. Turning findings into issues for the coder bot is a later step.
+
 ## Boundary
 
 - Every table has row level security and **no** privilege for any browser, service or server role.
@@ -207,6 +240,8 @@ Apply the migrations in order with the usual procedure:
    declares `platform.agents.probes.v1`.
 3. `20261102140000_agent_brief.sql`, then its gate `20261102140100_agent_brief_contract.sql`, which
    declares `platform.agents.brief.v1` (and needs platform billing, the probes and the control plane).
+4. `20261102150000_agent_seo.sql`, then its gate `20261102150100_agent_seo_contract.sql`, which seeds
+   the SEO Analyst (paused) and declares `platform.agents.seo.v1`.
 
 The Hub build does not require any of these features, so a Hub whose database lacks them still starts and
 serves everything else. The AI team is opt-in twice over: nothing runs unless `HUB_AGENTS_ENABLED`
@@ -217,6 +252,7 @@ To switch the Platform Engineer on: apply the migrations, set `HUB_AGENTS_ENABLE
 `HUB_OWNER_EMAIL`, open **AI team**, resume the Platform Engineer, press **Run now** on its health
 check and read the run it records. To switch the brief on, resume the Chief of Staff and press
 **Run now** on its morning brief: the first email arrives within a minute, and the next one at 07:00.
+To switch the SEO report on, resume the SEO Analyst and press **Run now** on its weekly check.
 
 `supabase/schema.sql` is a reference snapshot that stopped being appended in October; these
 migrations are not mirrored into it.

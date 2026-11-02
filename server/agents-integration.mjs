@@ -27,6 +27,7 @@ const api = gateway(pool);
 const contractMigration = await readFile(new URL('../supabase/migrations/20261102120100_agent_control_plane_contract.sql', import.meta.url), 'utf8');
 const probesMigration = await readFile(new URL('../supabase/migrations/20261102130100_agent_probes_contract.sql', import.meta.url), 'utf8');
 const briefMigration = await readFile(new URL('../supabase/migrations/20261102140100_agent_brief_contract.sql', import.meta.url), 'utf8');
+const seoMigration = await readFile(new URL('../supabase/migrations/20261102150100_agent_seo_contract.sql', import.meta.url), 'utf8');
 
 const aiAssistant = 'a1a00000-a1a0-4000-8000-000000000001';
 const owner = randomUUID(), other = randomUUID(), secondAdmin = randomUUID();
@@ -99,10 +100,11 @@ try {
   assert.ok((await api.rpc('get_backend_contract', {})).features.includes('platform.agents.v1'));
   assert.ok((await api.rpc('get_backend_contract', {})).features.includes('platform.agents.probes.v1'));
   assert.ok((await api.rpc('get_backend_contract', {})).features.includes('platform.agents.brief.v1'));
+  assert.ok((await api.rpc('get_backend_contract', {})).features.includes('platform.agents.seo.v1'));
 
-  // The owner sees the three seeded agents, paused.
+  // The owner sees the seeded agents, paused.
   let view = await team();
-  assert.deepEqual(view.agents.map(agent => agent.key), ['chief_of_staff', 'platform_engineer', 'support_concierge']);
+  assert.deepEqual(view.agents.map(agent => agent.key), ['chief_of_staff', 'platform_engineer', 'seo_analyst', 'support_concierge']);
   assert.ok(view.agents.every(agent => agent.status === 'paused'));
   assert.deepEqual([view.approvalCount, view.awaitingSessionCount], [0, 0]);
   assert.deepEqual((await api.rpc('get_agent_team', {}, ownerToken)).agents.map(agent => agent.key), view.agents.map(agent => agent.key), 'the gateway serves the team view');
@@ -122,7 +124,7 @@ try {
   assert.deepEqual(statusAudit.metadata, { agent: 'platform_engineer', status: 'active' });
   await assert.rejects(ownerCall('hub.set_agent_status', ['platform_engineer', 'paused', activated.updatedAt], staleToken), refused('28000', /Current administrator session required/),
     'a session older than eight hours can read but not change');
-  assert.equal((await ownerCall('hub.get_agent_team', [], staleToken)).agents.length, 3);
+  assert.equal((await ownerCall('hub.get_agent_team', [], staleToken)).agents.length, 4);
   const budgeted = await ownerCall('hub.set_agent_budget', ['platform_engineer', 75, activated.updatedAt]);
   assert.equal(budgeted.dailyBudgetCents, 75);
   await assert.rejects(ownerCall('hub.set_agent_budget', ['platform_engineer', -1, budgeted.updatedAt]), refused('22023'));
@@ -475,7 +477,7 @@ try {
       while (Date.now() < deadline) { if ((await task(id)).status === status) return task(id); await new Promise(resolve => setTimeout(resolve, 25)); }
       assert.fail(`task ${id} never reached ${status}`);
     };
-    assert.deepEqual(team2.scheduler.kinds().sort(), ['brief.daily', 'concierge.communication', 'probe.incident', 'probe.recovery', 'probe.sweep'], 'the shipped handlers are registered beside the caller\'s');
+    assert.deepEqual(team2.scheduler.kinds().sort(), ['brief.daily', 'concierge.communication', 'probe.incident', 'probe.recovery', 'probe.sweep', 'seo.weekly'], 'the shipped handlers are registered beside the caller\'s');
 
     // A due schedule becomes a task and runs; a schedule for a kind with no handler stays due and untouched.
     // A firing's key carries its scheduled instant to the second, so give this firing an instant no earlier section used.
@@ -527,7 +529,7 @@ try {
     const proposed = (await rows('select * from private.agent_actions where task_id = $1', [draft]))[0];
     assert.deepEqual([proposed.status, (await task(draft)).status], ['proposed', 'awaiting_approval']);
     const overview = overviewSchema.parse(await team2.admin.overview(ownerToken, {}));
-    assert.deepEqual(overview.services, { enabled: true, handlers: ['brief.daily', 'concierge.communication', 'probe.incident', 'probe.recovery', 'probe.sweep'], sms: true, email: true, ownerEmail: true });
+    assert.deepEqual(overview.services, { enabled: true, handlers: ['brief.daily', 'concierge.communication', 'probe.incident', 'probe.recovery', 'probe.sweep', 'seo.weekly'], sms: true, email: true, ownerEmail: true });
     assert.equal(overview.team.approvals[0].id, proposed.id);
     const decision = decisionSchema.parse(await team2.admin.decide(ownerToken, { actionId: proposed.id, decision: 'approve', note: 'Send it' }));
     assert.deepEqual(decision, { id: proposed.id, kind: 'communication.reply', status: 'executed', decided: true });
@@ -615,7 +617,7 @@ try {
       sms: { configured: true, send: async (to, body) => { sent.sms.push([to, body]); return { delivery: 'sent', id: 'SM' + '1'.repeat(32) }; } },
       email: { configured: true, send: async (to, subject, content) => { sent.email.push([to, subject, content]); return { delivery: 'sent', id: 'fixture-probe-message' }; } },
     });
-    assert.deepEqual(probes.scheduler.kinds(), ['brief.daily', 'probe.incident', 'probe.recovery', 'probe.sweep']);
+    assert.deepEqual(probes.scheduler.kinds(), ['brief.daily', 'probe.incident', 'probe.recovery', 'probe.sweep', 'seo.weekly']);
     const carebase = 'https://cmcarebase.com/health';
     let sweeps = 0;
     const sweep = async () => {
@@ -888,6 +890,98 @@ try {
     await admin.query('delete from private.agent_probe_state');
   }
 
+  {
+    // The SEO Analyst end to end: the real scheduler and database, the shipped handler, a scripted network for the
+    // three sites. The weekday is pinned, so this behaves the same on any day it runs.
+    await clearWork();
+    await admin.query('delete from private.owner_notifications');
+    for (const [key, status] of [['seo_analyst', 'active'], ['chief_of_staff', 'paused'], ['platform_engineer', 'paused'], ['support_concierge', 'paused']]) {
+      if ((await agentRow(key)).status !== status) await setStatus(key, status);
+    }
+    const seoAgent = await agentRow('seo_analyst');
+    assert.deepEqual([seoAgent.autonomy, seoAgent.modelTier, seoAgent.dailyBudgetCents], ['observe', 'fast', 50], 'the SEO Analyst is observe-only');
+    const requested = [];
+    const homePage = (origin, extra = '') => `<!doctype html><html lang="en"><head><title>Compliance training made simple for homes</title>
+      <meta name="description" content="Keep every home compliant with training, tracking and survey readiness, all in one clear place."><meta name="viewport" content="width=device-width">
+      <link rel="canonical" href="${origin}/">${extra}<meta property="og:title" content="t"><meta property="og:description" content="d"><meta property="og:image" content="${origin}/i.png"><meta name="twitter:card" content="summary">
+      <script type="application/ld+json">{"@type":"Organization"}</script></head><body><h1>Welcome</h1><p>${Array.from({ length: 80 }, (_, i) => `word${i}`).join(' ')}</p></body></html>`;
+    const primary = { 'caremetricadvisors.com': 'https://caremetricadvisors.com', 'cmcarebase.com': 'https://cmcarebase.com', 'www.caremetricintel.com': 'https://www.caremetricintel.com' };
+    const variants = { 'www.caremetricadvisors.com': 'https://caremetricadvisors.com', 'caremetrictrain.com': 'https://cmcarebase.com', 'caremetricintel.com': 'https://www.caremetricintel.com' };
+    const network = async url => {
+      const parsed = new URL(url);
+      requested.push(parsed.host);
+      const answer = (body, status = 200, type = 'text/html; charset=utf-8', location) => new Response(status === 301 ? null : body, { status, headers: { 'content-type': type, ...(location ? { location } : {}) } });
+      if (parsed.protocol === 'http:') return answer('', 301, 'text/plain', `https://${parsed.host}/`);
+      if (variants[parsed.host]) return answer('', 301, 'text/plain', `${variants[parsed.host]}/`);
+      const origin = primary[parsed.host];
+      if (!origin) return answer('not a known host', 404, 'text/plain');
+      if (parsed.pathname === '/robots.txt') return answer(`User-agent: *\nAllow: /\nSitemap: ${origin}/sitemap.xml\n`, 200, 'text/plain');
+      if (parsed.pathname === '/sitemap.xml') return answer(`<urlset><url><loc>${origin}/</loc></url></urlset>`, 200, 'application/xml');
+      if (parsed.pathname === '/') return answer(homePage(origin, parsed.host === 'caremetricadvisors.com' ? '<meta name="robots" content="noindex">' : ''));
+      return answer('missing', 404, 'text/plain');
+    };
+    const mail = { email: [] };
+    const clock = { value: new Date('2026-11-03T12:00:00Z') };
+    const seoTeam = agentTeam({
+      pool, enabled: true, ownerEmail: 'owner@example.test', publicOrigin: 'https://hub.test', fetchImpl: network, log: () => {}, now: () => clock.value,
+      sms: { configured: false, send: async () => ({ delivery: 'sent', id: 'x' }) },
+      email: { configured: true, send: async (to, subject, content) => { mail.email.push([to, subject, content]); return { delivery: 'sent', id: 'fixture-seo' }; } },
+    });
+    assert.ok(seoTeam.scheduler.kinds().includes('seo.weekly'));
+    await admin.query("update private.agent_schedules set next_run_at = now() + interval '1 day', enabled = true");
+
+    // The schedule fires every morning, but only Monday's is the weekly check: on a Tuesday it does nothing and says nothing.
+    await admin.query("update private.agent_schedules set next_run_at = now() - interval '2 minutes' where task_kind = 'seo.weekly'");
+    let tick = await seoTeam.tick();
+    assert.deepEqual([tick.fired, tick.claimed], [1, 1]);
+    const skipped = await row("select * from private.agent_tasks where agent_key = 'seo_analyst' order by created_at desc limit 1");
+    assert.deepEqual([skipped.kind, skipped.source_kind, skipped.status, skipped.result], ['seo.weekly', 'schedule', 'done', { skipped: 'not_monday' }]);
+    assert.deepEqual([mail.email.length, requested.length], [0, 0], 'a Tuesday sends no email and fetches nothing');
+
+    // On Monday the same scheduled task audits all three sites, emails the report once and records a run.
+    clock.value = new Date('2026-11-02T12:00:00Z');
+    await enqueue('seo_analyst', 'seo.weekly', `it:${run}:seo:monday`, { sourceKind: 'schedule' });
+    tick = await seoTeam.tick();
+    assert.equal(tick.claimed, 1);
+    assert.equal(mail.email.length, 1);
+    assert.equal(mail.email[0][0], 'owner@example.test');
+    assert.equal(mail.email[0][1], 'Weekly SEO report: 1 thing to fix across 3 sites, 1 urgent');
+    assert.match(mail.email[0][2].text, /Urgent: A page tells search engines not to index it/);
+    assert.match(mail.email[0][2].text, /Healthcare Advisors: score 85 of 100/);
+    assert.match(mail.email[0][2].text, /CareBase: score 100 of 100, 1 page checked\.\n\nNothing to fix\./);
+    assert.deepEqual([...new Set(requested)].sort(), ['caremetrictrain.com', 'caremetricintel.com', 'cmcarebase.com', 'caremetricadvisors.com', 'www.caremetricadvisors.com', 'www.caremetricintel.com'].sort(), 'only the three sites and their other addresses are ever contacted');
+    const delivered = await row("select * from private.owner_notifications where dedupe_key like 'seo:%' order by created_at desc limit 1");
+    assert.deepEqual([delivered.dedupe_key, delivered.channel, delivered.severity, delivered.status, delivered.agent_key], ['seo:2026-11-02', 'email', 'warning', 'sent', 'seo_analyst']);
+    const seoRun = await row("select * from private.agent_runs where agent_key = 'seo_analyst' order by started_at desc limit 1");
+    assert.deepEqual([seoRun.model, seoRun.outcome, Number(seoRun.cost_cents)], ['none', 'completed', 0]);
+    assert.equal(seoRun.summary, 'Sent the SEO report: 1 problem could keep pages out of search results.');
+    const finished = await row("select result from private.agent_tasks where request_key = $1", [`it:${run}:seo:monday`]);
+    assert.deepEqual(finished.result.sites.map(site => [site.key, site.score, site.checked]), [['advisors', 85, 1], ['carebase', 100, 1], ['intel', 100, 1]]);
+    assert.deepEqual(finished.result.sites[0].top, [{ code: 'noindex', severity: 'high', count: 1, page: '/' }]);
+    assert.ok(JSON.stringify(finished.result).length < 8000);
+
+    // The same Monday's report is sent once, however often the task is retried; one the owner asks for is sent every time.
+    const requestsBefore = requested.length;
+    await enqueue('seo_analyst', 'seo.weekly', `it:${run}:seo:retry`, { sourceKind: 'schedule' });
+    tick = await seoTeam.tick();
+    assert.equal(tick.claimed, 1);
+    assert.equal(mail.email.length, 1, 'the weekly report is sent once');
+    assert.ok(requested.length > requestsBefore, 'the retry still audited the sites');
+    clock.value = new Date('2026-11-04T12:00:00Z');
+    const asked = await ownerCall('hub.request_agent_task', ['seo_analyst', 'seo.weekly']);
+    tick = await seoTeam.tick();
+    assert.equal(tick.claimed, 1);
+    assert.equal((await task(asked.id)).status, 'done');
+    assert.equal(mail.email.length, 2, 'Run now sends a report on any day');
+
+    // The owner's screen shows what the analyst leaves behind.
+    for (const kind of ['runs', 'tasks', 'notifications']) {
+      const page = activitySchemas[kind].parse(await ownerCall('hub.list_agent_activity', [kind, 'seo_analyst', 0, 25]));
+      assert.ok(page.items.length > 0, `the owner sees the analyst's ${kind}`);
+    }
+    await clearWork();
+  }
+
   // The deployment gate re-runs cleanly, and refuses to declare the feature once the boundary drifts.
   const client = await admin.connect();
   try {
@@ -900,6 +994,19 @@ try {
     await client.query('begin');
     await client.query(briefMigration);
     await client.query('rollback');
+    await client.query('begin');
+    await client.query(seoMigration);
+    await client.query('rollback');
+    for (const [sql, message] of [
+      ["delete from private.agent_schedules where agent_key = 'seo_analyst'", /weekly schedule must exist/],
+      ["delete from private.owner_notifications where agent_key = 'seo_analyst'; delete from private.agent_actions where agent_key = 'seo_analyst'; delete from private.agent_runs where agent_key = 'seo_analyst'; delete from private.agent_tasks where agent_key = 'seo_analyst'; delete from private.agent_schedules where agent_key = 'seo_analyst'; delete from private.agents where key = 'seo_analyst'", /agent must exist/],
+    ]) {
+      await client.query('begin');
+      try {
+        await client.query(sql);
+        await assert.rejects(client.query(seoMigration), rejection => rejection.code === '55000' && message.test(rejection.message), sql);
+      } finally { await client.query('rollback'); }
+    }
     for (const [sql, message] of [
       ['grant execute on function private.agent_brief_facts() to authenticated', /executable by the Hub server only/],
       ['revoke execute on function private.agent_brief_facts() from hub_app_server', /executable by the Hub server only/],
@@ -947,7 +1054,7 @@ try {
   } finally { client.release(); }
   assertBackendContract(await api.rpc('get_backend_contract', {}));
 
-  console.log('AI team control plane: the closed boundary, owner changes and reads, enqueue, claim, lease recovery, retry, session tasks, schedules, budget, actions and approvals, notifications, the owner contact, the on-call agent health probes with their incidents and recoveries, and the deployment gates all behave through hub_app_server and real sessions.');
+  console.log('AI team control plane: the closed boundary, owner changes and reads, enqueue, claim, lease recovery, retry, session tasks, schedules, budget, actions and approvals, notifications, the owner contact, the on-call agent health probes with their incidents and recoveries, the morning brief, the weekly SEO report, and the deployment gates all behave through hub_app_server and real sessions.');
 } finally {
   await admin.query("delete from private.audit_events where action like 'agent.%' or actor_id in ($1,$2,$3)", [owner, other, secondAdmin]);
   await admin.query('delete from private.agent_actions');

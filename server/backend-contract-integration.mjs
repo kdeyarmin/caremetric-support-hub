@@ -25,6 +25,7 @@ const facilityContract=facilityMigration.slice(facilityMigration.indexOf('do $$ 
 const agentsContract=await readFile(new URL('../supabase/migrations/20261102120100_agent_control_plane_contract.sql',import.meta.url),'utf8');
 const probesContract=await readFile(new URL('../supabase/migrations/20261102130100_agent_probes_contract.sql',import.meta.url),'utf8');
 const briefContract=await readFile(new URL('../supabase/migrations/20261102140100_agent_brief_contract.sql',import.meta.url),'utf8');
+const seoContract=await readFile(new URL('../supabase/migrations/20261102150100_agent_seo_contract.sql',import.meta.url),'utf8');
 const diagnosticSupportContract=diagnosticSupportMigration.slice(diagnosticSupportMigration.indexOf('do $$ declare contract'));
 assert.ok(selfServiceContract.startsWith('-- Contract publication is last:'),'Recognize the self-service contract declaration');
 const structureMigration=await readFile(new URL('../supabase/migrations/20260911202823_learning_structure_backend_contract.sql',import.meta.url),'utf8');
@@ -98,7 +99,7 @@ try {
   try {
     const latest=await readContract();
     // The AI team declarations are the newest features (declared ahead of the build that will require them): replay history without them, then replay their gates last, in order.
-    const current={...latest,features:latest.features.filter(feature=>!['platform.agents.v1','platform.agents.probes.v1','platform.agents.brief.v1'].includes(feature))};
+    const current={...latest,features:latest.features.filter(feature=>!['platform.agents.v1','platform.agents.probes.v1','platform.agents.brief.v1','platform.agents.seo.v1'].includes(feature))};
     // Platform billing replaced three app-specific billing features. Replay history with them in their original places.
     const before={...current,features:current.features.filter(feature=>!['billing.platform.v1','customer.self-service.v1','support.manual-escalation.v1','support.customer-diagnostics.v1','billing.customer-checkout.v1','billing.facility-entitlements.v1'].includes(feature)).flatMap(feature=>
       feature==='learning.draft-editing.v1'?[feature,'billing.portal.v1']
@@ -205,7 +206,9 @@ try {
     await client.query(probesContract);
     assert.deepEqual(await readContract(),{...current,features:[...current.features,'platform.agents.v1','platform.agents.probes.v1']},'The health probe declaration adds only its own feature');
     await client.query(briefContract);
-    assert.deepEqual(await readContract(),latest,'The morning brief declaration restores the exact current feature set');
+    assert.deepEqual(await readContract(),{...current,features:[...current.features,'platform.agents.v1','platform.agents.probes.v1','platform.agents.brief.v1']},'The morning brief declaration adds only its own feature');
+    await client.query(seoContract);
+    assert.deepEqual(await readContract(),latest,'The SEO analyst declaration restores the exact current feature set');
     assertBackendContract(await readContract());
     assert.throws(()=>assertBackendContract({...latest,features:latest.features.filter(feature=>feature!=='billing.platform.v1')}),/incompatible/);
   } finally { await client.query('rollback'); }

@@ -62,6 +62,9 @@ alone. Like the feature above it is declared ahead of any build that requires it
 `private.agent_brief_facts()` is a security definer with a pinned empty search path executable by
 `hub_app_server` alone.
 
+`20261102150100_agent_seo_contract.sql` declares `platform.agents.seo.v1` only after
+`platform.agents.v1` is declared and the SEO Analyst agent and its weekly schedule exist.
+
 The table above is not exhaustive:
 later features such as the `billing.*` and `customer.self-service.v1` boundaries are declared
 by their own migrations and listed in `src/lib/backendContract.ts`. See [AI_TEAM.md](AI_TEAM.md).

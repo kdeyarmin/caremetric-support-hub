@@ -1,6 +1,7 @@
 import { probeTargets } from '../targets.mjs';
 import { briefHandlers } from './brief.mjs';
 import { probeHandlers } from './probe.mjs';
+import { seoHandlers } from './seo.mjs';
 
 /**
  * The handlers every Hub server ships with. They are always registered; nothing runs unless
@@ -12,5 +13,6 @@ export function builtInHandlers({ store, notifier }, { publicOrigin, fetchImpl =
   return {
     ...probeHandlers({ store, notifier, targets, fetchImpl, log }),
     ...briefHandlers({ store, notifier, publicOrigin, services, labels: Object.fromEntries(targets.map(target => [target.key, target.label])), log }),
+    ...seoHandlers({ store, notifier, publicOrigin, fetchImpl, log }),
   };
 }
