@@ -4,10 +4,11 @@ The Hub is where the CareMetric AI team lives. This document describes the contr
 runs it: who the agents are, what each is allowed to do, how the owner stays in charge, and what
 is built so far.
 
-> **Status.** The database layer, the server scheduler and the `/admin/team` screen are in place.
-> The scheduler is inert unless `HUB_AGENTS_ENABLED` is exactly `true`, every agent is seeded
-> **paused**, and no agent has a handler yet, so nothing runs. The Platform Engineer, the model
-> runtime, the Chief of Staff and the Support Concierge arrive in the following changes.
+> **Status.** The database layer, the server scheduler, the `/admin/team` screen and the Platform
+> Engineer's health probes are in place. The scheduler is inert unless `HUB_AGENTS_ENABLED` is
+> exactly `true` and every agent is seeded **paused**. The Platform Engineer is the only agent with
+> work to do yet; the model runtime, the Chief of Staff and the Support Concierge arrive in the
+> following changes.
 
 ## The model
 
@@ -62,6 +63,50 @@ The screen checks every answer against the schemas in `src/admin/teamProtocol.ts
 integration test (`server/agents-integration.mjs`) parses the real database output with the same
 schemas, so a change to the stored JSON cannot reach one side without the other.
 
+## The Platform Engineer
+
+The on-call agent. It uses no model and costs nothing. Every five minutes (task `probe.sweep`,
+shown as "Health check") it asks each product's public health address for a page and records how
+it answered:
+
+| Product | Address |
+| --- | --- |
+| Support Hub | the Hub's own public origin, `/api/health` |
+| CareBase | `https://cmcarebase.com/health` |
+| CareMetric Intel | `https://www.caremetricintel.com/api/ready` (answers only when Intel's database does) |
+| Healthcare Advisors | `https://caremetricadvisors.com/health` |
+
+The list is fixed in `server/agents/targets.mjs` and nothing a customer, a task or the database
+says can add to it. A product passes with any 2xx answer inside eight seconds. A redirect is a
+failure, because a health address that redirects is not the address the product serves (Intel's
+bare domain redirects to `www`, so the `www` address is the one checked). Breathe is not listed
+until it has a confirmed health route. A page is read for at most 4 KB and thrown away; only a
+status code, a latency and one fixed failure word (timeout, network, status or redirect) are kept.
+
+The database decides what a check means (`private.agent_probe_record`, one row-locked statement
+per product, so two overlapping sweeps can never open the same incident twice):
+
+- **One failed check is a blip.** Nothing is sent. The run on the Team screen shows what was seen.
+- **Two in a row open an incident.** The owner gets a text and an email ("CareBase is down"), and
+  an `incident.open` record appears in the agent's actions. The message says when the first
+  failed check was, what the last one saw, and that nothing was restarted or changed.
+- **The first healthy check closes it.** One email says the product is back and for how long it
+  was down, and an `incident.resolve` record closes the incident. A recovery never texts.
+- **A relapse within thirty minutes** of a recovery is sent as a warning by email only, so a
+  product that flaps cannot wake the owner again and again.
+- **An alert that arrives more than an hour after the failure began** (the agent was paused, the
+  server was down) goes by email only and says it is late.
+- **An observe-only agent** still tells the owner about an incident but proposes no records.
+
+Each incident and recovery has its own request key and alert key, so a retry sends nothing twice.
+An alert is recorded before it is sent. A sweep records a run on the Team screen only when it saw
+something or changed something, and once an hour otherwise, so the page shows a pulse without
+288 rows a day.
+
+The agent never restarts, redeploys or changes anything. Restart proposals come later, behind the
+owner's approval. A probe inside the Hub cannot see the Hub stop; keep the external check described
+under "The Hub cannot watch itself" below.
+
 ## Boundary
 
 - Every table has row level security and **no** privilege for any browser, service or server role.
@@ -79,7 +124,7 @@ Server (`hub_app_server` only): `agent_schedule_fire`, `agent_maintenance`, `age
 `agent_task_claim` (lease based, with crash recovery), `agent_task_heartbeat`, `agent_task_finish`,
 `agent_session_tasks`, `agent_session_task_claim`, `agent_run_start`, `agent_run_finish`,
 `agent_budget`, `agent_action_propose`, `agent_actions_ready`, `agent_action_execution`,
-`agent_action_executed`, `agent_notify_begin`, `agent_notify_finish`, `owner_contact`.
+`agent_action_executed`, `agent_notify_begin`, `agent_notify_finish`, `owner_contact`, `agent_probe_record`.
 
 Owner (current administrator session): `get_agent_team`, `list_agent_activity`,
 `list_audit_events` (reads) and `set_agent_status`, `set_agent_autonomy`, `set_agent_budget`,
@@ -129,12 +174,21 @@ until the owner is signed in and runs them. Unattended reads need a separate, re
 
 ## Applying it to production
 
-Apply `20261102120000_agent_control_plane.sql` and then `20261102120100_agent_control_plane_contract.sql`
-with the usual migration procedure. This change adds only the database layer and declares
-`platform.agents.v1` ahead of time; no deployed code calls the new operations yet, so the order
-relative to merging this change does not matter. The Hub build that introduces the agent runtime
-adds `platform.agents.v1` to the features the server and the connected build require, and from
-then on the migrations must be applied first.
+Apply the migrations in order with the usual procedure:
+
+1. `20261102120000_agent_control_plane.sql`, then its gate `20261102120100_agent_control_plane_contract.sql`,
+   which declares `platform.agents.v1`.
+2. `20261102130000_agent_probes.sql`, then its gate `20261102130100_agent_probes_contract.sql`, which
+   declares `platform.agents.probes.v1`.
+
+The Hub build does not require either feature, so a Hub whose database lacks them still starts and
+serves everything else. The AI team is opt-in twice over: nothing runs unless `HUB_AGENTS_ENABLED`
+is `true`, and every agent is paused until the owner resumes it. Apply the migrations before doing
+either. With the code but not the tables, the AI team page shows a read failure and every task fails.
+
+To switch the Platform Engineer on: apply the migrations, set `HUB_AGENTS_ENABLED=true` and
+`HUB_OWNER_EMAIL`, open **AI team**, resume the Platform Engineer, press **Run now** on its health
+check and read the run it records.
 
 `supabase/schema.sql` is a reference snapshot that stopped being appended in October; these
 migrations are not mirrored into it.

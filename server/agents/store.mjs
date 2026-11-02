@@ -35,5 +35,8 @@ export function sqlAgentStore(pool) {
       call('private.agent_notify_begin', [channel, severity, subject, body, dedupeKey, agentKey, taskId]),
     notifyFinish: (id, delivery, providerMessageId = null) => call('private.agent_notify_finish', [id, delivery, providerMessageId]),
     ownerContact: () => call('private.owner_contact'),
+    /** One health check for one product. The database decides when that opens or closes an incident. */
+    probeRecord: ({ targetKey, ok, statusCode, latencyMs, failure = null, threshold = 2, agentKey = 'platform_engineer' }) =>
+      call('private.agent_probe_record', [targetKey, ok, statusCode, latencyMs, failure, threshold, agentKey]),
   };
 }

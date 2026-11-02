@@ -30,6 +30,8 @@ describe('agent store', () => {
     await store.notifyBegin({ channel: 'email', severity: 'info', subject: 'S', body: 'B', dedupeKey: 'k', agentKey: 'chief_of_staff' });
     await store.notifyFinish('n1', 'sent', 'SG1');
     await store.ownerContact();
+    await store.probeRecord({ targetKey: 'hub', ok: false, statusCode: 503, latencyMs: 90, failure: 'status' });
+    await store.probeRecord({ targetKey: 'intel', ok: true, statusCode: 200, latencyMs: 40, threshold: 3, agentKey: 'platform_engineer' });
     expect(calls).toEqual([
       ['select private.agent_schedule_fire($1, $2) as result', [10, ['probe.sweep', 'brief.daily']]],
       ['select private.agent_maintenance() as result', []],
@@ -50,6 +52,8 @@ describe('agent store', () => {
       ['select private.agent_notify_begin($1, $2, $3, $4, $5, $6, $7) as result', ['email', 'info', 'S', 'B', 'k', 'chief_of_staff', null]],
       ['select private.agent_notify_finish($1, $2, $3) as result', ['n1', 'sent', 'SG1']],
       ['select private.owner_contact() as result', []],
+      ['select private.agent_probe_record($1, $2, $3, $4, $5, $6, $7) as result', ['hub', false, 503, 90, 'status', 2, 'platform_engineer']],
+      ['select private.agent_probe_record($1, $2, $3, $4, $5, $6, $7) as result', ['intel', true, 200, 40, null, 3, 'platform_engineer']],
     ]);
   });
 
