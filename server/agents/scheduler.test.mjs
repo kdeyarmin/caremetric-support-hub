@@ -223,7 +223,8 @@ describe('work that waits for the owner\'s session', () => {
     const { scheduler, store } = fixture({ handlers: { 'import.advisors': async () => ({}) }, claimable: { odd: task({ id: 'odd', kind: 'mystery.kind', requiresSession: true }) } });
     const run = await scheduler.runWaiting({ sessionToken, only: ['odd'] });
     await run.done;
-    expect(store.finish).toHaveBeenCalledWith('odd', 'failed', { errorCode: 'no_handler' });
+    // The attempt number the control plane hardening adds to every finish is not what this test is about, so it is not pinned here.
+    expect(store.finish).toHaveBeenCalledWith('odd', 'failed', expect.objectContaining({ errorCode: 'no_handler' }));
   });
 
   it('skips a task another caller claimed first, so a double click runs nothing twice', async () => {
