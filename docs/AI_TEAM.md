@@ -468,7 +468,9 @@ abort, a dropped connection) is booked at its input bound instead of at nothing,
 reports no usage is booked at the reserve. If closing the row fails, the answer is still returned, the cost
 stays against the agent's budget in memory and the write is retried at the next call, so the money is not
 spent twice while the database is failing; a retry the database answers with "already closed" counts as
-booked. A server that stops mid-call loses that call's cost: at most the three reserves it held.
+booked. A cost counts only against the Eastern day its run started in (the day the database counts it in), and
+a write that fails five times is given up with a log line, so a failure that never clears cannot shrink every
+later day's budget. Settling removes only the costs it settled, so one that went unbooked in the meantime stays. A server that stops mid-call loses that call's cost: at most the three reserves it held.
 
 **Prices** are per million tokens: Haiku 5.5 $0.10 in and $0.50 out (above a 100,000-token prompt, $0.50
 and $2.50 for the whole call), Sonnet 5.5 $2 and $10, Opus 5.5 $4 and $20; a cache read costs $0.01 (Haiku

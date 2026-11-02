@@ -42,6 +42,8 @@ const configurationAlerts = {
 };
 const easternDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
 const ours = new Set([...transientCodes, ...permanentCodes]);
+// How many times a closing write that keeps failing is tried again, one try per later call, before the debt is given up.
+const writeAttempts = 5;
 
 // What the provider wraps around a request (role markers, the structured-output instructions): a fixed margin on top of the bytes.
 const requestOverheadTokens = 512;
@@ -120,9 +122,12 @@ export function modelRunner({
   // Cents reserved by calls in flight in this process, per agent. The database only learns a call's cost when its run is closed.
   const held = new Map();
   const heldFor = agentKey => held.get(agentKey) ?? 0;
-  // Costs whose run could not be closed (the write failed): still owed to the budget, retried at the next admission.
+  // Costs whose run could not be closed (the write failed): still owed to the budget, retried at the next admission. Each belongs to the
+  // Eastern day its run started, which is the day the database counts it in, so only today's count against today's money; a write that keeps
+  // failing is given up after a few tries, because nothing else would ever clear it.
   const owed = new Map();
-  const owedFor = agentKey => (owed.get(agentKey) ?? []).reduce((total, debt) => total + (Number(debt.usage?.costCents) || 0), 0);
+  const today = () => easternDate.format(now());
+  const owedFor = agentKey => (owed.get(agentKey) ?? []).filter(debt => debt.day === today()).reduce((total, debt) => total + (Number(debt.usage?.costCents) || 0), 0);
   // One queue per agent: the budget read and the reservation (and every release) happen alone, in order.
   const lanes = new Map();
   async function exclusive(agentKey, work) {
@@ -146,13 +151,25 @@ export function modelRunner({
   };
   /** Tries again to close the runs whose cost write failed. A run the database says is already closed was written after all. */
   async function settleOwed(agentKey) {
-    const list = owed.get(agentKey);
-    if (!list?.length) return;
-    const remaining = [];
+    const list = [...(owed.get(agentKey) ?? [])];
+    if (!list.length) return;
+    const done = new Set();
     for (const debt of list) {
-      try { await store.finishRun(debt.runId, debt.outcome, debt.usage, debt.summary, debt.errorCode); } catch (error) { if (error?.code !== 'P0002') remaining.push(debt); }
+      try {
+        await store.finishRun(debt.runId, debt.outcome, debt.usage, debt.summary, debt.errorCode);
+        done.add(debt);
+      } catch (error) {
+        debt.tries += 1;
+        if (error?.code === 'P0002') done.add(debt);
+        else if (debt.tries >= writeAttempts) {
+          done.add(debt);
+          log(JSON.stringify({ event: 'hub_agent_run_unbooked_dropped', agent: agentKey, run_id: debt.runId }));
+        }
+      }
     }
-    if (remaining.length) owed.set(agentKey, remaining); else owed.delete(agentKey);
+    // A call that is still in flight can add a debt while a write above is waiting, so the list is read again: only what was settled goes.
+    const current = (owed.get(agentKey) ?? []).filter(debt => !done.has(debt));
+    if (current.length) owed.set(agentKey, current); else owed.delete(agentKey);
   }
 
   /** Bookkeeping that must never fail or delay the task: the ledger row and the once-a-day owner alert. */
@@ -213,6 +230,7 @@ export function modelRunner({
       return { outcome: 'budget_exhausted', neededCents: reserve, remainingCents: Math.max(remaining, 0) };
     }
     const { release } = admission;
+    const budgetDay = today();
     let runId = null;
     let finished = false;
     const finish = async (outcome, usage, summary, errorCode = null) => {
@@ -220,7 +238,7 @@ export function modelRunner({
       finished = true;
       try { await store.finishRun(runId, outcome, usage, summary, errorCode); } catch {
         // Not booked. The cost stays against the budget (and the write is retried) until the database has it.
-        owed.set(agentKey, [...(owed.get(agentKey) ?? []), { runId, outcome, usage, summary, errorCode }]);
+        owed.set(agentKey, [...(owed.get(agentKey) ?? []), { runId, outcome, usage, summary, errorCode, day: budgetDay, tries: 0 }]);
         log(JSON.stringify({ event: 'hub_agent_run_unrecorded', agent: agentKey, kind: task.kind }));
       }
     };

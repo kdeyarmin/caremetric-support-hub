@@ -453,6 +453,59 @@ describe('the budget cannot be spent twice', () => {
     expect(f.store.finishRun.mock.calls.some(call => call[0] === 'run-1')).toBe(true);
   });
 
+  it('keeps a cost that went unbooked while another one was being settled', async () => {
+    // X is in flight. A completes and its closing write fails, so A is owed. A new call then settles A, and while that write waits X comes
+    // back and its own closing write fails. Settling must remove only A: X is still owed.
+    let answerX = () => {};
+    let releaseA = () => {};
+    let triesA = 0;
+    const answered = () => new Response(JSON.stringify(message()), { status: 200, headers: { 'content-type': 'application/json', 'request-id': 'req_x' } });
+    const f = fixture({ remaining: 0, steps: [() => new Promise(resolve => { answerX = () => resolve(answered()); }), ok(), ok()] });
+    f.store.budget = vi.fn(async () => ({ remainingCents: reserve() * 5 }));
+    f.store.finishRun = vi.fn(async (id, outcome, used) => {
+      if (id === 'run-1') throw new Error('database blip');            // X: always fails
+      if (id === 'run-2') {                                              // A: fails once, then waits on the test and succeeds
+        triesA += 1;
+        if (triesA === 1) throw new Error('database blip');
+        await new Promise(resolve => { releaseA = resolve; });
+        return undefined;
+      }
+      Object.assign(f.runs.find(run => run.id === id), { finished: true, outcome, usage: used });
+      return undefined;
+    });
+    const inFlight = f.run();
+    await vi.waitFor(() => expect(f.seen).toHaveLength(1));
+    await f.runner.run(task({ id: 'ta' }), request());
+    expect(f.runner.owing('support_concierge')).toBeCloseTo(oneCall(), 6);
+    const settling = f.runner.run(task({ id: 't3' }), request());
+    await vi.waitFor(() => expect(triesA).toBe(2));
+    answerX();
+    await vi.waitFor(() => expect(f.store.finishRun.mock.calls.some(call => call[0] === 'run-1')).toBe(true));
+    // X's release waits in the lane behind the settlement, so X's call returns only after A's write is let go.
+    await vi.waitFor(() => expect(f.runner.owing('support_concierge')).toBeCloseTo(oneCall() * 2, 6));
+    releaseA();
+    await Promise.all([inFlight, settling]);
+    expect(f.runner.owing('support_concierge'), 'only A was settled; X is still owed').toBeCloseTo(oneCall(), 6);
+  });
+
+  it('counts an unbooked cost only against the Eastern day its run started in, and gives up on a write that never succeeds', async () => {
+    let time = new Date('2026-11-02T15:00:00Z');
+    const f = fixture({ remaining: 0, options: { runner: { now: () => time } } });
+    f.store.budget = vi.fn(async () => ({ remainingCents: reserve() * 5 }));
+    f.store.finishRun = vi.fn(async () => { throw Object.assign(new Error('constraint'), { code: '23514' }); });
+    await f.run();
+    expect(f.runner.owing('support_concierge')).toBeCloseTo(oneCall(), 6);
+    // The next Eastern day: the database counts that run in yesterday, so it takes nothing from today's money.
+    time = new Date('2026-11-03T15:00:00Z');
+    expect(f.runner.owing('support_concierge')).toBe(0);
+    // It is tried again at each later admission, and given up on after five tries, so it cannot be kept forever.
+    for (let attempt = 0; attempt < 5; attempt += 1) await f.runner.run(task({ id: `again-${attempt}` }), request());
+    expect(f.store.finishRun.mock.calls.filter(call => call[0] === 'run-1').length).toBe(1 + 5);
+    expect(f.logs.some(line => line.includes('hub_agent_run_unbooked_dropped'))).toBe(true);
+    await f.runner.run(task({ id: 'after' }), request());
+    expect(f.store.finishRun.mock.calls.filter(call => call[0] === 'run-1').length, 'no longer tried').toBe(1 + 5);
+  });
+
   it('treats a retried write the database says is already closed as booked', async () => {
     const f = fixture({ remaining: 0 });
     f.store.budget = vi.fn(async () => ({ remainingCents: reserve() * 3 }));
