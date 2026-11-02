@@ -11,11 +11,13 @@
 --     ready and start operations also ignore an action whose task was cancelled.
 --   * Proposing an action did not lock its task, so a cancellation could commit between the status
 --     check and the insert. Cancelling, deciding, proposing and settling an execution now take the
---     task's row lock first and the action's second, so none of them can wait on another.
+--     task's row lock first and the action's second, so none of them can wait on another. The
+--     housekeeping sweep does the same for the actions it expires or resets.
 --   * A retried notification kept its original creation time, so the sweep for deliveries nobody
 --     settled could mark a fresh retry unknown at once. Each attempt now has its own time.
---   * A session task that failed and was queued again ignored its backoff. The schedule skipped a
---     task still waiting for approval and fired another beside it.
+--   * A session task that failed and was queued again ignored its backoff, and a second press of "Run
+--     what's waiting" could claim it before the backoff had passed. The schedule skipped a task still
+--     waiting for approval and fired another beside it.
 --   * The ready list took its oldest rows before the server skipped the kinds it cannot run
 --     without the owner's session, so enough waiting replies could hide an incident record behind
 --     them forever. The list can now be filtered by kind before it is limited.
@@ -101,6 +103,14 @@ declare
   v_unsettled integer;
 begin
   perform private.require_hub_app_server();
+  -- The same lock order as every command that touches both: the task first, then its actions. Expiring
+  -- the last open proposal of a task settles that task below, so without this the sweep would hold the
+  -- action and then wait for the task while the owner's decision on the same proposal holds the task and
+  -- waits for the action. The tasks are locked in id order so two sweeps cannot wait on each other either.
+  perform 1 from private.agent_tasks t
+  where t.id in (select a.task_id from private.agent_actions a where a.status = 'proposed' and a.expires_at <= now())
+  order by t.id
+  for update;
   update private.agent_actions set status = 'expired', updated_at = now()
   where status = 'proposed' and expires_at <= now();
   get diagnostics v_expired = row_count;
@@ -134,6 +144,32 @@ begin
 
   return jsonb_build_object('expiredActions', v_expired, 'resetExecutions', v_reset,
     'parkedTasks', v_parked, 'failedTasks', v_failed, 'settledTasks', v_settled, 'unsettledNotifications', v_unsettled);
+end;
+$$;
+
+-- Claims a task that is waiting for the owner's session. Like the list that offers it, the claim
+-- honors the task's due time: two presses of "Run what's waiting" can list the same task, and the
+-- second must not run it the moment the first one asked for it to be retried later.
+create or replace function private.agent_session_task_claim(p_task_id uuid, p_lease_seconds integer default 600) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_id uuid;
+begin
+  perform private.require_hub_app_server();
+  if p_lease_seconds is null or p_lease_seconds < 30 or p_lease_seconds > 3600 then
+    raise exception 'Choose a lease between 30 and 3600 seconds.' using errcode = '22023';
+  end if;
+  update private.agent_tasks t
+  set status = 'running', attempts = t.attempts + 1, claimed_at = now(), last_error_code = null,
+      lease_until = now() + make_interval(secs => p_lease_seconds), updated_at = now()
+  from private.agents a
+  where t.id = p_task_id and t.status = 'awaiting_session' and t.due_at <= now()
+    and a.key = t.agent_key and a.status = 'active'
+  returning t.id into v_id;
+  if v_id is null then
+    return null;
+  end if;
+  return private.agent_task_json(v_id);
 end;
 $$;
 

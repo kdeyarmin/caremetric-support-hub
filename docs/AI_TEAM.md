@@ -410,8 +410,9 @@ working. The Hub server uses the new operations only when the database declares
   already being carried out is left alone, because it may be mid-send and its own report settles it. The ready
   and start operations also ignore an action whose task was cancelled.
 - **One lock order.** Proposing, cancelling, deciding and settling an execution lock the task first and the
-  action second, so none of them can wait on another. A proposal that arrives while a cancellation is in
-  flight waits for it and is then refused.
+  action second, so none of them can wait on another. The housekeeping sweep locks the tasks of the proposals
+  it is about to expire first too, so expiring a task's last open proposal cannot deadlock with the owner's
+  decision on it. A proposal that arrives while a cancellation is in flight waits for it and is then refused.
 - **Executions are numbered.** `agent_action_execution` reports `execution`, and `agent_action_executed` and
   `agent_action_release` must quote it, so a worker whose execution the sweep reset cannot settle the next
   start. Release hands back an execution that never began its work (the owner's session had lapsed) to the state
@@ -420,8 +421,9 @@ working. The Hub server uses the new operations only when the database declares
   replies cannot hide an incident record behind them.
 - **A retried alert has its own clock** (`attempted_at`), so the sweep for deliveries nobody settled no longer
   marks a fresh retry unknown.
-- **A session task asked to retry waits for its backoff**, and a schedule skips a task still waiting for approval
-  instead of firing a second one beside it.
+- **A session task asked to retry waits for its backoff**, in the list that offers it and in the claim, so a
+  second press of the button that listed it earlier cannot run it before then. A schedule skips a task still
+  waiting for approval instead of firing a second one beside it.
 - **The conversation snapshot says what became of a reply** recorded under the request key it is asked about
   (`ownReplyDelivery`: pending, sent, failed or unknown, else null), so a reply whose execution stopped before
   it was settled can be settled on replay instead of being judged against a thread that has since moved on.
