@@ -57,6 +57,11 @@ privilege for any browser, service or server role, and `private.agent_probe_reco
 stays a security definer with a pinned empty search path executable by `hub_app_server`
 alone. Like the feature above it is declared ahead of any build that requires it.
 
+`20261102140100_agent_brief_contract.sql` declares `platform.agents.brief.v1` only after
+`platform.agents.v1`, `platform.agents.probes.v1` and `billing.platform.v1` are declared and
+`private.agent_brief_facts()` is a security definer with a pinned empty search path executable by
+`hub_app_server` alone.
+
 The table above is not exhaustive:
 later features such as the `billing.*` and `customer.self-service.v1` boundaries are declared
 by their own migrations and listed in `src/lib/backendContract.ts`. See [AI_TEAM.md](AI_TEAM.md).

@@ -26,6 +26,7 @@ const pool = new pg.Pool({ connectionString: appUrl.href });
 const api = gateway(pool);
 const contractMigration = await readFile(new URL('../supabase/migrations/20261102120100_agent_control_plane_contract.sql', import.meta.url), 'utf8');
 const probesMigration = await readFile(new URL('../supabase/migrations/20261102130100_agent_probes_contract.sql', import.meta.url), 'utf8');
+const briefMigration = await readFile(new URL('../supabase/migrations/20261102140100_agent_brief_contract.sql', import.meta.url), 'utf8');
 
 const aiAssistant = 'a1a00000-a1a0-4000-8000-000000000001';
 const owner = randomUUID(), other = randomUUID(), secondAdmin = randomUUID();
@@ -97,6 +98,7 @@ try {
   assertBackendContract(await api.rpc('get_backend_contract', {}));
   assert.ok((await api.rpc('get_backend_contract', {})).features.includes('platform.agents.v1'));
   assert.ok((await api.rpc('get_backend_contract', {})).features.includes('platform.agents.probes.v1'));
+  assert.ok((await api.rpc('get_backend_contract', {})).features.includes('platform.agents.brief.v1'));
 
   // The owner sees the three seeded agents, paused.
   let view = await team();
@@ -473,17 +475,17 @@ try {
       while (Date.now() < deadline) { if ((await task(id)).status === status) return task(id); await new Promise(resolve => setTimeout(resolve, 25)); }
       assert.fail(`task ${id} never reached ${status}`);
     };
-    assert.deepEqual(team2.scheduler.kinds().sort(), ['concierge.communication', 'probe.incident', 'probe.recovery', 'probe.sweep'], 'the shipped handlers are registered beside the caller\'s');
+    assert.deepEqual(team2.scheduler.kinds().sort(), ['brief.daily', 'concierge.communication', 'probe.incident', 'probe.recovery', 'probe.sweep'], 'the shipped handlers are registered beside the caller\'s');
 
     // A due schedule becomes a task and runs; a schedule for a kind with no handler stays due and untouched.
     // A firing's key carries its scheduled instant to the second, so give this firing an instant no earlier section used.
-    await admin.query("update private.agent_schedules set next_run_at = now() - interval '9 minutes' where task_kind in ('probe.sweep', 'brief.daily', 'concierge.sweep')");
-    const briefDue = await row("select next_run_at from private.agent_schedules where task_kind = 'brief.daily'");
+    await admin.query("update private.agent_schedules set next_run_at = now() - interval '9 minutes' where task_kind in ('probe.sweep', 'concierge.sweep')");
+    const unhandledDue = await row("select next_run_at from private.agent_schedules where task_kind = 'concierge.sweep'");
     const tickStarted = (await row('select clock_timestamp() as at')).at;
     let tick = await team2.tick();
     assert.deepEqual([tick.skipped, tick.fired, tick.claimed], [false, 1, 1], `only the handled kind fires (${logs.join(' | ') || 'no log lines'})`);
-    assert.deepEqual((await row("select next_run_at from private.agent_schedules where task_kind = 'brief.daily'")).next_run_at, briefDue.next_run_at, 'a kind with no handler is left due');
-    assert.equal(Number((await row("select count(*) from private.agent_tasks where kind in ('brief.daily', 'concierge.sweep') and created_at >= $1", [tickStarted])).count), 0, 'and no task is created for it');
+    assert.deepEqual((await row("select next_run_at from private.agent_schedules where task_kind = 'concierge.sweep'")).next_run_at, unhandledDue.next_run_at, 'a kind with no handler is left due');
+    assert.equal(Number((await row("select count(*) from private.agent_tasks where kind = 'concierge.sweep' and created_at >= $1", [tickStarted])).count), 0, 'and no task is created for it');
 
     // The first probe fails transiently: the task waits out a backoff and keeps its place, with no alert yet.
     const probeTask = (await rows("select * from private.agent_tasks where kind = 'probe.sweep' order by created_at desc limit 1"))[0];
@@ -525,7 +527,7 @@ try {
     const proposed = (await rows('select * from private.agent_actions where task_id = $1', [draft]))[0];
     assert.deepEqual([proposed.status, (await task(draft)).status], ['proposed', 'awaiting_approval']);
     const overview = overviewSchema.parse(await team2.admin.overview(ownerToken, {}));
-    assert.deepEqual(overview.services, { enabled: true, handlers: ['concierge.communication', 'probe.incident', 'probe.recovery', 'probe.sweep'], sms: true, email: true, ownerEmail: true });
+    assert.deepEqual(overview.services, { enabled: true, handlers: ['brief.daily', 'concierge.communication', 'probe.incident', 'probe.recovery', 'probe.sweep'], sms: true, email: true, ownerEmail: true });
     assert.equal(overview.team.approvals[0].id, proposed.id);
     const decision = decisionSchema.parse(await team2.admin.decide(ownerToken, { actionId: proposed.id, decision: 'approve', note: 'Send it' }));
     assert.deepEqual(decision, { id: proposed.id, kind: 'communication.reply', status: 'executed', decided: true });
@@ -613,7 +615,7 @@ try {
       sms: { configured: true, send: async (to, body) => { sent.sms.push([to, body]); return { delivery: 'sent', id: 'SM' + '1'.repeat(32) }; } },
       email: { configured: true, send: async (to, subject, content) => { sent.email.push([to, subject, content]); return { delivery: 'sent', id: 'fixture-probe-message' }; } },
     });
-    assert.deepEqual(probes.scheduler.kinds(), ['probe.incident', 'probe.recovery', 'probe.sweep']);
+    assert.deepEqual(probes.scheduler.kinds(), ['brief.daily', 'probe.incident', 'probe.recovery', 'probe.sweep']);
     const carebase = 'https://cmcarebase.com/health';
     let sweeps = 0;
     const sweep = async () => {
@@ -754,6 +756,138 @@ try {
     await admin.query('delete from private.agent_probe_state');
   }
 
+  {
+    // The Chief of Staff's morning brief: the facts it reads, the email it writes, and that it is sent once a day.
+    await clearWork();
+    await admin.query('delete from private.agent_probe_state');
+    await admin.query('delete from private.owner_notifications');
+    const before = await call('private.agent_brief_facts');
+    assert.deepEqual(Object.keys(before).sort(), ['agents', 'approvals', 'awaitingSession', 'billing', 'failedTasks', 'generatedAt', 'incidents', 'todayStart', 'undeliveredAlerts', 'yesterday', 'yesterdayStart']);
+    assert.equal(before.approvals.count, 0);
+    assert.deepEqual([before.awaitingSession, before.incidents.length, before.undeliveredAlerts], [0, 0, 0]);
+    await assert.rejects(admin.query('select private.agent_brief_facts()'), refused('42501', /Application server required/));
+
+    // The previous Eastern day is a whole day, midnight to midnight, whatever the clocks did.
+    const span = (new Date(before.todayStart) - new Date(before.yesterdayStart)) / 3_600_000;
+    assert.ok([23, 24, 25].includes(span), `yesterday is one Eastern day (${span} hours)`);
+    assert.equal((await row("select (($1::timestamptz at time zone 'America/New_York')::time)::text as local", [before.yesterdayStart])).local, '00:00:00');
+
+    // Fixtures: work waiting for the owner, an incident, failures, alerts that went nowhere, yesterday's activity and subscriptions.
+    const yesterday = new Date(before.yesterdayStart).getTime() + 10 * 3_600_000;
+    const at = offsetMs => new Date(yesterday + offsetMs).toISOString();
+    await admin.query(`insert into private.agent_actions (agent_key, kind, target_kind, target_id, preview, status, created_at)
+      values ('support_concierge', 'communication.reply', 'communication', 'CM-BRIEF-1', 'A private customer sentence', 'proposed', now() - interval '3 days'),
+             ('support_concierge', 'communication.note', 'communication', 'CM-BRIEF-2', 'Another private sentence', 'proposed', now() - interval '1 hour')`);
+    for (const index of [1, 2]) {
+      await admin.query("insert into private.agent_tasks (agent_key, kind, request_key, requires_session, status) values ('support_concierge', 'import.advisors', $1, true, 'awaiting_session')", [`it:${run}:brief:wait:${index}`]);
+    }
+    // One failure today (inside the last 24 hours, outside yesterday) and one more than a day old (before yesterday began), at any hour.
+    await admin.query("insert into private.agent_tasks (agent_key, kind, request_key, status, finished_at) values ('chief_of_staff', 'brief.daily', $1, 'failed', now()), ('chief_of_staff', 'brief.daily', $2, 'failed', $3)",
+      [`it:${run}:brief:failed:new`, `it:${run}:brief:failed:old`, new Date(new Date(before.yesterdayStart).getTime() - 2 * 3_600_000).toISOString()]);
+    await call('private.agent_probe_record', ['carebase', false, 503, 10, 'status', 2, 'platform_engineer']);
+    await call('private.agent_probe_record', ['carebase', false, 503, 10, 'status', 2, 'platform_engineer']);
+    await admin.query(`insert into private.owner_notifications (dedupe_key, channel, severity, subject, body, status) values
+      ($1, 'sms', 'urgent', 'Lost', 'Lost', 'suppressed'), ($1, 'email', 'urgent', 'Lost', 'Lost', 'failed'),
+      ($2, 'sms', 'urgent', 'Reached', 'Reached', 'suppressed'), ($2, 'email', 'urgent', 'Reached', 'Reached', 'sent'),
+      ($3, 'email', 'info', 'Not urgent', 'Not urgent', 'failed')`, [`it:${run}:brief:lost`, `it:${run}:brief:reached`, `it:${run}:brief:info`]);
+    // Yesterday's activity: two runs (one stopped at its budget), tasks, and actions carried out.
+    const [doneTask] = (await admin.query("insert into private.agent_tasks (agent_key, kind, request_key, status, finished_at) values ('platform_engineer', 'probe.sweep', $1, 'done', $2), ('platform_engineer', 'probe.sweep', $3, 'done', $2), ('platform_engineer', 'probe.sweep', $4, 'done', $2), ('platform_engineer', 'probe.sweep', $5, 'failed', $2), ('platform_engineer', 'probe.sweep', $6, 'done', now()) returning id",
+      [`it:${run}:brief:d1`, at(0), `it:${run}:brief:d2`, `it:${run}:brief:d3`, `it:${run}:brief:f1`, `it:${run}:brief:today`])).rows;
+    await admin.query(`insert into private.agent_runs (task_id, agent_key, model, prompt_version, started_at, finished_at, outcome, cost_cents) values
+      ($1, 'platform_engineer', 'none', 'probe.1', $2, $2, 'completed', 12.5),
+      ($1, 'support_concierge', 'claude-sonnet-5-5', 'v1', $2, $2, 'budget_exhausted', 40),
+      ($1, 'platform_engineer', 'none', 'probe.1', now(), now(), 'completed', 99)`, [doneTask.id, at(0)]);
+    await admin.query(`insert into private.agent_actions (agent_key, kind, target_kind, target_id, preview, status, executed_at) values
+      ('platform_engineer', 'incident.open', 'probe_target', 'carebase:7', 'Opened', 'executed', $1),
+      ('platform_engineer', 'incident.resolve', 'probe_target', 'carebase:7', 'Closed', 'executed', $1),
+      ('support_concierge', 'communication.note', 'communication', 'CM-BRIEF-3', 'Noted', 'executed', $1),
+      ('support_concierge', 'communication.note', 'communication', 'CM-BRIEF-4', 'Noted today', 'executed', now())`, [at(3_600_000)]);
+    const tenant = randomUUID();
+    await admin.query("insert into hub.tenants (id, slug, name, status) values ($1, $2, 'Brief fixture tenant', 'active')", [tenant, `brief-${run}`]);
+    await admin.query("insert into private.billing_customers (tenant_id, stripe_customer_id, livemode, seen_at) values ($1, $2, true, now())", [tenant, `cus_brief${run}`]);
+    for (const [suffix, status, trialEnd, livemode] of [
+      ['a', 'past_due', null, true], ['b', 'unpaid', null, true], ['c', 'past_due', null, false], ['d', 'active', null, true],
+      ['e', 'trialing', "now() + interval '3 days'", true], ['f', 'trialing', "now() + interval '30 days'", true], ['g', 'trialing', "now() - interval '1 day'", true],
+    ]) {
+      await admin.query(`insert into private.billing_subscriptions (stripe_subscription_id, tenant_id, stripe_customer_id, status, collection_method, livemode, stripe_created, seen_at, trial_end)
+        values ($1, $2, $3, $4, 'charge_automatically', $5, now(), now(), ${trialEnd ?? 'null'})`, [`sub_brief${run}${suffix}`, tenant, `cus_brief${run}`, status, livemode]);
+    }
+
+    const facts = await call('private.agent_brief_facts');
+    assert.equal(facts.approvals.count, 2);
+    assert.ok(Math.abs(Date.now() - new Date(facts.approvals.oldestAt) - 3 * 86_400_000) < 60_000, 'the oldest approval is the three-day-old one');
+    // Yesterday's failed fixture is inside the rolling 24 hours only until this time yesterday, so what is expected depends on the hour.
+    const yesterdayStillCounts = Date.now() - yesterday < 24 * 3_600_000 ? 1 : 0;
+    assert.deepEqual([facts.awaitingSession, facts.failedTasks, facts.undeliveredAlerts], [2, before.failedTasks + 1 + yesterdayStillCounts, 1],
+      'failures from the last 24 hours count, older ones do not');
+    assert.deepEqual(facts.incidents.map(incident => [incident.target, incident.failures]), [['carebase', 2]]);
+    assert.ok(Math.abs(Date.now() - new Date(facts.incidents[0].since)) < 60_000);
+    assert.deepEqual({ ...facts.yesterday, spendCents: Number(facts.yesterday.spendCents) },
+      { runs: before.yesterday.runs + 2, tasksDone: before.yesterday.tasksDone + 3, tasksFailed: before.yesterday.tasksFailed + 1, actionsExecuted: before.yesterday.actionsExecuted + 3,
+        incidentsOpened: before.yesterday.incidentsOpened + 1, incidentsClosed: before.yesterday.incidentsClosed + 1, spendCents: Number(before.yesterday.spendCents) + 52.5 });
+    const agentFacts = Object.fromEntries(facts.agents.map(agent => [agent.key, agent]));
+    const agentBefore = Object.fromEntries(before.agents.map(agent => [agent.key, agent]));
+    assert.deepEqual([agentFacts.support_concierge.hitBudget, Number(agentFacts.support_concierge.spentCents)], [true, Number(agentBefore.support_concierge.spentCents) + 40]);
+    assert.deepEqual([agentFacts.platform_engineer.hitBudget, Number(agentFacts.platform_engineer.spentCents)], [agentBefore.platform_engineer.hitBudget, Number(agentBefore.platform_engineer.spentCents) + 12.5]);
+    assert.deepEqual(facts.billing, { pastDue: before.billing.pastDue + 2, trialsEnding: before.billing.trialsEnding + 1 }, 'only live subscriptions are counted, and only trials ending within a week');
+    assert.doesNotMatch(JSON.stringify(facts), /private customer|Another private|@/, 'the facts hold counts and times, never message text or addresses');
+
+    // The brief itself, through the real scheduler: due at 07:00, written from those facts, emailed once.
+    const mail = { sms: [], email: [] };
+    const briefTeam = agentTeam({
+      pool, enabled: true, ownerEmail: 'owner@example.test', publicOrigin: 'https://hub.test', log: () => {},
+      sms: { configured: false, send: async () => { mail.sms.push(true); return { delivery: 'sent', id: 'x' }; } },
+      email: { configured: true, send: async (to, subject, content) => { mail.email.push([to, subject, content]); return { delivery: 'sent', id: 'fixture-brief' }; } },
+    });
+    assert.ok(briefTeam.scheduler.kinds().includes('brief.daily'));
+    for (const [key, status] of [['chief_of_staff', 'active'], ['platform_engineer', 'paused'], ['support_concierge', 'paused']]) if ((await agentRow(key)).status !== status) await setStatus(key, status);
+    await admin.query("update private.agent_schedules set next_run_at = now() + interval '1 day', enabled = true");
+    await admin.query("update private.agent_schedules set next_run_at = now() - interval '2 minutes' where task_kind = 'brief.daily'");
+    let tick = await briefTeam.tick();
+    assert.deepEqual([tick.fired, tick.claimed], [1, 1]);
+    assert.equal(mail.email.length, 1);
+    assert.deepEqual([mail.email[0][0], mail.sms.length], ['owner@example.test', 0], 'the brief goes by email, never by text');
+    assert.match(mail.email[0][1], /^CareMetric brief for \w{3}, \w{3} \d{1,2}: \d+ things need you$/);
+    assert.match(mail.email[0][2].text, /Waiting for your approval: 2 \(oldest 3 days\)/);
+    assert.match(mail.email[0][2].text, /CareBase is down: since /);
+    assert.match(mail.email[0][2].text, /Subscriptions past due: \d+/);
+    assert.match(mail.email[0][2].text, /Text alerts are not set up/);
+    assert.doesNotMatch(mail.email[0][2].text + mail.email[0][2].html, /private customer|Another private/, 'the brief never quotes a message');
+    const delivered = await row("select * from private.owner_notifications where dedupe_key like 'brief:%' order by created_at desc limit 1");
+    assert.match(delivered.dedupe_key, /^brief:\d{4}-\d{2}-\d{2}$/);
+    assert.deepEqual([delivered.channel, delivered.severity, delivered.status, delivered.agent_key], ['email', 'warning', 'sent', 'chief_of_staff']);
+    const briefRun = await row("select * from private.agent_runs where agent_key = 'chief_of_staff' order by started_at desc limit 1");
+    assert.deepEqual([briefRun.model, briefRun.outcome, Number(briefRun.cost_cents)], ['none', 'completed', 0]);
+    assert.match(briefRun.summary, /^Sent the morning brief: \d+ things need you this morning\.$/);
+
+    // A retry of the same day's brief sends nothing more, and still counts as delivered.
+    await enqueue('chief_of_staff', 'brief.daily', `it:${run}:brief:retry`, { sourceKind: 'schedule' });
+    tick = await briefTeam.tick();
+    assert.equal(tick.claimed, 1);
+    assert.equal(mail.email.length, 1, 'the scheduled brief is sent once a day');
+    assert.equal((await row("select outcome from private.agent_runs where agent_key = 'chief_of_staff' order by started_at desc limit 1")).outcome, 'completed');
+
+    // A brief the owner asks for ("Run now") is sent every time.
+    const requested = await ownerCall('hub.request_agent_task', ['chief_of_staff', 'brief.daily']);
+    tick = await briefTeam.tick();
+    assert.equal(tick.claimed, 1);
+    assert.equal((await task(requested.id)).status, 'done');
+    assert.equal(mail.email.length, 2);
+    assert.equal(mail.email[1][1], mail.email[0][1]);
+
+    // The owner's screen shows the brief's task, run and alert.
+    for (const kind of ['runs', 'tasks', 'notifications']) {
+      const page = activitySchemas[kind].parse(await ownerCall('hub.list_agent_activity', [kind, 'chief_of_staff', 0, 25]));
+      assert.ok(page.items.length > 0, `the owner sees the brief's ${kind}`);
+    }
+
+    await admin.query('delete from private.billing_subscriptions where tenant_id = $1', [tenant]);
+    await admin.query('delete from private.billing_customers where tenant_id = $1', [tenant]);
+    await admin.query('delete from hub.tenants where id = $1', [tenant]);
+    await clearWork();
+    await admin.query('delete from private.agent_probe_state');
+  }
+
   // The deployment gate re-runs cleanly, and refuses to declare the feature once the boundary drifts.
   const client = await admin.connect();
   try {
@@ -763,6 +897,20 @@ try {
     await client.query('begin');
     await client.query(probesMigration);
     await client.query('rollback');
+    await client.query('begin');
+    await client.query(briefMigration);
+    await client.query('rollback');
+    for (const [sql, message] of [
+      ['grant execute on function private.agent_brief_facts() to authenticated', /executable by the Hub server only/],
+      ['revoke execute on function private.agent_brief_facts() from hub_app_server', /executable by the Hub server only/],
+      ['alter function private.agent_brief_facts() security invoker', /security definer/],
+    ]) {
+      await client.query('begin');
+      try {
+        await client.query(sql);
+        await assert.rejects(client.query(briefMigration), rejection => rejection.code === '55000' && message.test(rejection.message), sql);
+      } finally { await client.query('rollback'); }
+    }
     for (const [sql, message] of [
       ['grant select on private.agent_probe_state to hub_app_server', /must remain closed/],
       ['grant update (state) on private.agent_probe_state to authenticated', /must remain closed/],
@@ -804,6 +952,9 @@ try {
   await admin.query("delete from private.audit_events where action like 'agent.%' or actor_id in ($1,$2,$3)", [owner, other, secondAdmin]);
   await admin.query('delete from private.agent_actions');
   await admin.query('delete from private.agent_probe_state');
+  await admin.query("delete from private.billing_subscriptions where stripe_subscription_id like $1", [`sub_brief${run}%`]);
+  await admin.query('delete from private.billing_customers where stripe_customer_id = $1', [`cus_brief${run}`]);
+  await admin.query('delete from hub.tenants where slug = $1', [`brief-${run}`]);
   await admin.query('delete from private.agent_runs');
   await admin.query('delete from private.owner_notifications');
   await admin.query('delete from private.agent_tasks');

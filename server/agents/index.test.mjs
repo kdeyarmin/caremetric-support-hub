@@ -10,7 +10,7 @@ const origin = 'https://support-hub-web-production.up.railway.app';
 describe('the AI team', () => {
   it('ships the on-call agent\'s handlers without being asked', () => {
     const team = agentTeam({ store: store(), publicOrigin: origin, enabled: true });
-    expect(team.scheduler.kinds()).toEqual(['probe.incident', 'probe.recovery', 'probe.sweep']);
+    expect(team.scheduler.kinds()).toEqual(['brief.daily', 'probe.incident', 'probe.recovery', 'probe.sweep']);
   });
 
   it('adds the caller\'s handlers beside them, and lets the caller replace one', async () => {

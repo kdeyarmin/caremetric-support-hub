@@ -4,11 +4,11 @@ The Hub is where the CareMetric AI team lives. This document describes the contr
 runs it: who the agents are, what each is allowed to do, how the owner stays in charge, and what
 is built so far.
 
-> **Status.** The database layer, the server scheduler, the `/admin/team` screen and the Platform
-> Engineer's health probes are in place. The scheduler is inert unless `HUB_AGENTS_ENABLED` is
-> exactly `true` and every agent is seeded **paused**. The Platform Engineer is the only agent with
-> work to do yet; the model runtime, the Chief of Staff and the Support Concierge arrive in the
-> following changes.
+> **Status.** The database layer, the server scheduler, the `/admin/team` screen, the Platform
+> Engineer's health probes and the Chief of Staff's morning brief are in place. The scheduler is
+> inert unless `HUB_AGENTS_ENABLED` is exactly `true` and every agent is seeded **paused**. Neither
+> working agent uses a model. The model runtime and the Support Concierge arrive in the following
+> changes.
 
 ## The model
 
@@ -107,6 +107,31 @@ The agent never restarts, redeploys or changes anything. Restart proposals come 
 owner's approval. A probe inside the Hub cannot see the Hub stop; keep the external check described
 under "The Hub cannot watch itself" below.
 
+## The Chief of Staff
+
+Writes the morning brief: one email at 07:00 Eastern (task `brief.daily`, shown as "Morning brief").
+It uses no model. The email is composed from counts and times read in one server-only operation
+(`private.agent_brief_facts`), so it always arrives and never says anything the database does not.
+A model may later write the narrative on top of the same facts.
+
+- **Needs you**: proposed actions waiting for your approval (and how long the oldest has waited),
+  tasks waiting for your sign-in, each product that is down right now and since when, tasks that
+  failed in the last 24 hours, urgent alerts that reached you by no channel, and subscriptions that
+  are past due.
+- **Yesterday**, the previous Eastern day from midnight to midnight: runs, tasks done and failed,
+  actions carried out, incidents opened and closed, and what the AI cost.
+- **Worth knowing**: trials ending within a week, agents that are paused, agents that reached their
+  daily budget, and a text channel that is not set up.
+
+When nothing needs you the brief says so. It is sent every day, so silence never has to be read
+as "all is well". It carries only counts, product names and times: never a customer's words, an
+address or an amount of money. Only live-mode subscriptions are counted.
+
+The scheduled brief is keyed by the Eastern date, so a retry, a restart or a second server sends it
+once. A brief you start with **Run now** is sent every time. It goes by email only, since an incident
+already texts you when it happens. If email is not set up or the send fails, the run on the Team
+screen says the brief was written but not delivered.
+
 ## Boundary
 
 - Every table has row level security and **no** privilege for any browser, service or server role.
@@ -124,7 +149,7 @@ Server (`hub_app_server` only): `agent_schedule_fire`, `agent_maintenance`, `age
 `agent_task_claim` (lease based, with crash recovery), `agent_task_heartbeat`, `agent_task_finish`,
 `agent_session_tasks`, `agent_session_task_claim`, `agent_run_start`, `agent_run_finish`,
 `agent_budget`, `agent_action_propose`, `agent_actions_ready`, `agent_action_execution`,
-`agent_action_executed`, `agent_notify_begin`, `agent_notify_finish`, `owner_contact`, `agent_probe_record`.
+`agent_action_executed`, `agent_notify_begin`, `agent_notify_finish`, `owner_contact`, `agent_probe_record`, `agent_brief_facts`.
 
 Owner (current administrator session): `get_agent_team`, `list_agent_activity`,
 `list_audit_events` (reads) and `set_agent_status`, `set_agent_autonomy`, `set_agent_budget`,
@@ -180,15 +205,18 @@ Apply the migrations in order with the usual procedure:
    which declares `platform.agents.v1`.
 2. `20261102130000_agent_probes.sql`, then its gate `20261102130100_agent_probes_contract.sql`, which
    declares `platform.agents.probes.v1`.
+3. `20261102140000_agent_brief.sql`, then its gate `20261102140100_agent_brief_contract.sql`, which
+   declares `platform.agents.brief.v1` (and needs platform billing, the probes and the control plane).
 
-The Hub build does not require either feature, so a Hub whose database lacks them still starts and
+The Hub build does not require any of these features, so a Hub whose database lacks them still starts and
 serves everything else. The AI team is opt-in twice over: nothing runs unless `HUB_AGENTS_ENABLED`
 is `true`, and every agent is paused until the owner resumes it. Apply the migrations before doing
 either. With the code but not the tables, the AI team page shows a read failure and every task fails.
 
 To switch the Platform Engineer on: apply the migrations, set `HUB_AGENTS_ENABLED=true` and
 `HUB_OWNER_EMAIL`, open **AI team**, resume the Platform Engineer, press **Run now** on its health
-check and read the run it records.
+check and read the run it records. To switch the brief on, resume the Chief of Staff and press
+**Run now** on its morning brief: the first email arrives within a minute, and the next one at 07:00.
 
 `supabase/schema.sql` is a reference snapshot that stopped being appended in October; these
 migrations are not mirrored into it.

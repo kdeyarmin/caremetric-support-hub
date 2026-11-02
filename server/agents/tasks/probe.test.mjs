@@ -126,13 +126,13 @@ describe('the health sweep', () => {
     const pulse = fixture();
     await pulse.handlers['probe.sweep'](task(), at('2026-11-02T14:02:00Z'));
     expect(pulse.store.startRun).toHaveBeenCalledWith('t1', 'none', 'probe.1');
-    expect(pulse.store.finishRun).toHaveBeenCalledWith('run-1', 'completed', {}, expect.stringMatching(/^All 2 products answered, the slowest in \d+ ms\.$/));
+    expect(pulse.store.finishRun).toHaveBeenCalledWith('run-1', 'completed', {}, expect.stringMatching(/^All 2 products answered, the slowest in \d+ ms\.$/), null);
   });
 
   it('records a run for a failed check or a change of state', async () => {
     const failing = fixture({ fetchImpl: answer(503) });
     await failing.handlers['probe.sweep'](task(), at('2026-11-02T14:30:00Z'));
-    expect(failing.store.finishRun).toHaveBeenCalledWith('run-1', 'completed', {}, expect.stringContaining('returned 503'));
+    expect(failing.store.finishRun).toHaveBeenCalledWith('run-1', 'completed', {}, expect.stringContaining('returned 503'), null);
 
     const recovered = fixture({ outcomes: { hub: { target: 'hub', state: 'up', transition: 'recovered', failures: 0, incident: 2, taskId: 'r' } } });
     await recovered.handlers['probe.sweep'](task(), at('2026-11-02T14:30:00Z'));
