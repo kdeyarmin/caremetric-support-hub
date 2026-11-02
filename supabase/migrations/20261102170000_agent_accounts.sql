@@ -21,8 +21,10 @@ on conflict (agent_key, task_kind) do nothing;
 -- What the report reads. Two internal helpers (no role may execute them directly) and one
 -- server operation. The facts are projected by whitelist: nothing is removed from a wider
 -- view, so a column added to the billing mirror later cannot leak into the snapshot. No
--- billing contact address, name or Stripe identifier is returned; "hasEmail" says only
--- whether an address exists.
+-- billing contact address or name and no Stripe customer, subscription, invoice or item
+-- identifier is returned; "hasEmail" says only whether an address exists. The catalog's
+-- product and coupon identifiers stay, because the revenue maths matches discounts to items
+-- by them.
 -- ---------------------------------------------------------------------------------------
 
 -- One subscription, as the Billing screen's own view renders it, cut down to what the money maths and the health score read.

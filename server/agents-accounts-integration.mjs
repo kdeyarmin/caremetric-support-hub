@@ -439,7 +439,7 @@ try {
     }
   } finally { gateClient.release(); }
 
-  console.log(`Account Manager: the server-only snapshot (no billing address, name or Stripe identifier; three Stripe modes; a 300-account book in ${Math.round(took)} ms), the health scores read from real rows, one weekly report through the real store, queue and notifier, the weekly key and Run now, suppressed and partial-list reports, the privacy of every stored record, and the deployment gate all behave through hub_app_server.`);
+  console.log(`Account Manager: the server-only snapshot (no billing address, name or customer, subscription or invoice identifier; three Stripe modes; a 300-account book in ${Math.round(took)} ms), the health scores read from real rows, one weekly report through the real store, queue and notifier, the weekly key and Run now, suppressed and partial-list reports, the privacy of every stored record, and the deployment gate all behave through hub_app_server.`);
 } finally {
   const problems = [];
   const attempt = async (sql, params = []) => { try { await admin.query(sql, params); } catch (error) { problems.push(`${error.message} [${sql.slice(0, 70)}]`); } };

@@ -314,9 +314,11 @@ Stripe customer or a subscription, listed by name, up to 200 for the report (the
 500). For each it returns the plan and state, whether a billing email exists (never the address), the
 subscriptions with their items, discounts and dates, invoice counts and amounts, the latest usage figure
 against the one from four weeks earlier, and case counts. It never returns a billing contact's name or
-address, a Stripe identifier, a case subject or requester, or a message. The Stripe mode filter is the
-Billing screen's: the verified mode, or everything while the mode is unverified, and the email says "Test
-data" or "Stripe mode not verified" when that applies.
+address, a Stripe customer, subscription, invoice or item identifier, a case subject or requester, or a
+message. The catalog's product and coupon identifiers stay in the snapshot, because the revenue maths matches
+a discount to its items by them, and they never reach the email or any stored record. The Stripe mode filter
+is the Billing screen's: the verified mode, or everything while the mode is unverified, and the email says
+"Test data" or "Stripe mode not verified" when that applies.
 
 **The health score** (version `health.1`, every weight in `server/agents/accounts/health.mjs`) is advice for
 the owner and never changes a plan, a price or anyone's access. It runs from 0 to 100: 75 or more is healthy,

@@ -142,7 +142,7 @@ select is((select array_agg(k order by k) from snap, jsonb_object_keys(j -> 'acc
   array['highOrUrgent', 'oldestOpenAt', 'waitingOnCustomer', 'waitingOnYou'], 'Cases are counts and one time');
 
 select ok((select j::text !~ '(canary\.contact|Canary Contact Name|test\.mode@|requester@example|A subject that must not travel|(cus|sub|in|si|price|di)_[A-Za-z0-9]{4,})' from snap),
-  'No contact address, name, case subject or Stripe identifier is anywhere in the snapshot');
+  'No contact address, name, case subject, or Stripe customer, subscription, invoice, item, price or discount identifier is anywhere in the snapshot');
 
 select is((select j -> 'accounts' -> 1 -> 'customer' from snap), '{"delinquent": false, "hasEmail": true, "balanceCents": 123}'::jsonb, 'A customer with an address is flagged hasEmail and nothing more');
 select is((select j -> 'accounts' -> 0 -> 'customer' ->> 'hasEmail' from snap), 'false', 'A customer with a blank address is flagged without one');
