@@ -1,9 +1,9 @@
 name: Claude coder
 
 # The coder bot for this repository. It is part of the CareMetric AI team the owner runs from the
-# Support Hub. It starts in two ways, and only for people with write access (the action checks that,
-# and bots cannot start it):
-#   - a comment, review or issue that mentions @claude
+# Support Hub. It starts in two ways, and only for people with write access (the job ignores every
+# bot, including review bots whose comments quote "@claude", and the action checks the person's access):
+#   - a comment, review or new issue that mentions @claude
 #   - the label agent:coder on an issue
 # It follows CLAUDE.md, works on a claude/ branch and opens a draft pull request for the owner to
 # review. It never merges, approves or deploys. Railway deploys main when the owner merges.
@@ -25,7 +25,7 @@ on:
   pull_request_review:
     types: [submitted]
   issues:
-    types: [labeled]
+    types: [opened, labeled]
 
 # One run at a time for each issue or pull request, so two comments cannot start two branches.
 concurrency:
@@ -35,10 +35,13 @@ concurrency:
 jobs:
   claude:
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-      (github.event_name == 'issues' && github.event.label.name == 'agent:coder')
+      github.event.sender.type != 'Bot' && (
+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+        (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'agent:coder') ||
+        (github.event_name == 'issues' && github.event.action == 'opened' && (contains(github.event.issue.title, '@claude') || contains(github.event.issue.body, '@claude')))
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
