@@ -37,7 +37,10 @@ reply classification — is recorded in `private.ai_usage` with its feature,
 model, outcome, token counts and latency. The row is attributed through the
 support case it served to the application and the customer tenant; the database
 resolves both from the case id so the server never asserts them. Prompt and
-reply content are never stored.
+reply content are never stored. The AI team's agents write to the same ledger
+(actor `automation`, feature `agent_<agent key>`); their calls belong to no
+support case, so they are counted as unattributed and labelled by feature. See
+[AI_TEAM.md](AI_TEAM.md), "The model runtime".
 
 - Recording runs through `private.record_ai_usage(...)`, executable only by the
   Hub server role (`hub_app_server`), after the call completes or fails. A ledger

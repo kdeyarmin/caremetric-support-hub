@@ -15,7 +15,7 @@ import { HttpError } from './sms-auth.mjs';
 const present = (value) => typeof value === 'string' && value.trim().length > 0;
 
 export const integrationCatalog = Object.freeze([
-  { id: 'anthropic', name: 'AI assistance (Anthropic)', purpose: 'Staff case summaries, reply drafts, triage suggestions and the customer auto-resolution loop.', docs: 'docs/CONTROL_CENTER.md',
+  { id: 'anthropic', name: 'AI assistance (Anthropic)', purpose: 'Staff case summaries, reply drafts, triage suggestions, the customer auto-resolution loop and the AI team\'s agents (an agent calls it only where its own setting allows).', docs: 'docs/CONTROL_CENTER.md',
     variables: [
       { name: 'ANTHROPIC_API_KEY', secret: true, required: true, purpose: 'The Hub service calls Anthropic directly with this key.' },
       { name: 'HUB_AI_AUTOMATION_ENABLED', secret: false, required: false, flag: true, purpose: 'Exactly "true" turns on the customer auto-resolution loop.' },

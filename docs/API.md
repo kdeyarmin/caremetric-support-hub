@@ -207,7 +207,8 @@ command session (under eight hours old). Unknown keys in a body are refused with
 
 - `POST /api/admin/team/overview` — `{}` → `{ team, services, waitingActions }`: the roster (status, autonomy,
   model tier, budget and today's spend, last run, task counts, schedules), what is waiting for approval, which
-  services the team can use right now (scheduler on, task kinds with a handler, text, email, owner address),
+  services the team can use right now (scheduler on, task kinds with a handler, text, email, owner address,
+  and whether a model key is set: `ai`),
   and how many approved replies could not be sent yet and wait for the owner's session.
 - `POST /api/admin/team/status` — `{ key, status: "active" | "paused", expectedUpdatedAt }` → the agent.
 - `POST /api/admin/team/autonomy` — `{ key, autonomy: "observe" | "propose" | "act", expectedUpdatedAt }` → the agent.

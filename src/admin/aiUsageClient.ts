@@ -27,6 +27,7 @@ export type AiUsagePeriod = typeof aiUsagePeriods[number];
 export const aiFeatureLabels: Record<string, string> = {
   case_summary: "Case summary for staff", case_draft_reply: "Reply draft for staff", case_triage: "Triage suggestion",
   automation_attempt: "Automated resolution attempt", automation_escalation_summary: "Escalation summary", automation_resolution_classification: "Customer reply classification",
+  agent_support_concierge: "Support Concierge (AI team)",
 };
 
 export interface AiUsageClient { summary(days: AiUsagePeriod, signal?: AbortSignal): Promise<AiUsageSummary> }

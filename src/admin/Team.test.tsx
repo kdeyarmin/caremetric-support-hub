@@ -32,7 +32,7 @@ const overview = (changes: Partial<TeamOverview["team"]> = {}, services: Partial
       preview: "Here is how to export by month.", createdAt: "2026-11-02T11:30:00+00:00", expiresAt: "2026-11-09T11:30:00+00:00" }],
     ...changes,
   },
-  services: { enabled: true, handlers: ["probe.sweep"], sms: true, email: true, ownerEmail: true, ...services },
+  services: { enabled: true, handlers: ["probe.sweep"], sms: true, email: true, ownerEmail: true, ai: true, ...services },
   waitingActions: 0,
 });
 const emptyPage = { items: [], total: 0, offset: 0, limit: 15 };
@@ -65,15 +65,25 @@ describe("AI team screen", () => {
   });
 
   it("says plainly when nothing is switched on, instead of looking broken", async () => {
-    render(<Team client={fakeClient(overview({ approvals: [], approvalCount: 0, awaitingSessionCount: 2 }, { enabled: false, handlers: [], sms: false, email: false, ownerEmail: false }))} />);
+    render(<Team client={fakeClient(overview({ approvals: [], approvalCount: 0, awaitingSessionCount: 2 }, { enabled: false, handlers: [], sms: false, email: false, ownerEmail: false, ai: false }))} />);
     const services = await screen.findByRole("region", { name: "What the team can use" });
     expect(within(services).getByText(/Set HUB_AGENTS_ENABLED to true/)).toBeTruthy();
+    expect(within(services).getByText(/Set ANTHROPIC_API_KEY on the Hub service/)).toBeTruthy();
     expect(within(services).getByText(/Nothing here is broken/)).toBeTruthy();
     expect(within(services).getByText(/Set HUB_OWNER_EMAIL/)).toBeTruthy();
     expect(within(services).getByText(/fall back to email/)).toBeTruthy();
     expect(within(services).getByText(/2 tasks are waiting for you to be signed in/)).toBeTruthy();
     expect(screen.getByText("Nothing is waiting for your approval.")).toBeTruthy();
     expect(screen.getAllByText("No code behind it yet").length).toBeGreaterThan(0);
+  });
+
+  it("shows the model as ready when a key is set, and says an agent uses it only where its own setting allows", async () => {
+    render(<Team client={fakeClient(overview())} />);
+    const services = await screen.findByRole("region", { name: "What the team can use" });
+    const row = within(services).getByText("AI model").closest("li") as HTMLElement;
+    expect(within(row).getByText("Ready")).toBeTruthy();
+    expect(within(row).getByText(/uses it only where its own setting says so/)).toBeTruthy();
+    expect(within(services).queryByText(/Set ANTHROPIC_API_KEY/)).toBeNull();
   });
 
   it("runs the work that was waiting for the owner's sign-in, and says how much started", async () => {

@@ -73,7 +73,25 @@ describe('the AI team', () => {
   it('hands a function of handlers the shared services', () => {
     const seen = [];
     agentTeam({ store: store(), publicOrigin: origin, handlers: services => { seen.push(Object.keys(services).sort()); return {}; } });
-    expect(seen).toEqual([['actions', 'notifier', 'store']]);
+    expect(seen).toEqual([['actions', 'model', 'notifier', 'store']]);
+  });
+
+  it('shares one model runtime, built from the key it is given, and says whether a key is there', () => {
+    const none = agentTeam({ store: store(), publicOrigin: origin });
+    expect(none.model.configured).toBe(false);
+    expect(typeof none.model.run).toBe('function');
+    const keyed = agentTeam({ store: store(), publicOrigin: origin, anthropicApiKey: 'sk-test-key' });
+    expect(keyed.model.configured).toBe(true);
+    const given = { configured: true, run: vi.fn() };
+    const shared = [];
+    const injected = agentTeam({ store: store(), publicOrigin: origin, model: given, anthropicApiKey: 'sk-test-key', handlers: services => { shared.push(services.model); return {}; } });
+    expect(injected.model).toBe(given);
+    expect(shared).toEqual([given]);
+  });
+
+  it('registers no work that uses the model, with or without a key', () => {
+    const keyed = agentTeam({ store: store(), publicOrigin: origin, enabled: true, anthropicApiKey: 'sk-test-key' });
+    expect(keyed.scheduler.kinds()).toEqual(agentTeam({ store: store(), publicOrigin: origin, enabled: true }).scheduler.kinds());
   });
 
   it('runs nothing unless it is enabled', async () => {
