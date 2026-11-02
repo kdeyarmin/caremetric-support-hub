@@ -17,13 +17,13 @@ const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
  */
 export function agentTeam({
   pool, store = sqlAgentStore(pool), handlers = {}, executors = {}, sms, email, ownerEmail, publicOrigin,
-  fetchImpl = fetch, enabled = false, log = line => console.warn(line), now = () => new Date(), communications = null,
+  fetchImpl = fetch, enabled = false, log = line => console.warn(line), now = () => new Date(), communications = null, features = null,
 }) {
   const notifier = ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log });
   const shared = { store, notifier };
   const actions = actionExecutor({ store, executors: { ...recordOnlyExecutors, ...(typeof executors === 'function' ? executors(shared) : executors) }, log });
   // The handlers every server ships with, then any the caller adds (a caller's handler for the same kind wins).
-  const registry = { ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
+  const registry = { ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   const scheduler = agentScheduler({ store, handlers: registry, actions, enabled, log, now });
   const admin = agentAdmin({
     pool, actions, kick: () => scheduler.tick(), waiting: scheduler.runWaiting,

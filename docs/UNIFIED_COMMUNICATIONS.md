@@ -67,6 +67,11 @@ tells visitors to keep the page open or return to Help in the same browser.
 - Inbound text is untrusted and stored as `possible_phi`. Chat requires the same
   no-patient-information acknowledgment as the support form; text and email
   cannot enforce it, so staff treat every message as possibly containing PHI.
+- The AI team's Support Concierge notices new conversations without any staff
+  session, through three operations only the Hub server role can run. It reads
+  a minimal view (no contact details, no internal notes, the subject only for
+  email) and uses it to alert the owner; it never writes to a conversation and
+  keeps no message text. See [AI_TEAM.md](AI_TEAM.md), "The Support Concierge".
 - Attachments are never stored. The message records how many were dropped.
 - Message text never enters logs, error responses or audit metadata. Audit
   events record only the action, the changed field names, and identifiers.

@@ -65,6 +65,13 @@ alone. Like the feature above it is declared ahead of any build that requires it
 `20261102150100_agent_seo_contract.sql` declares `platform.agents.seo.v1` only after
 `platform.agents.v1` is declared and the SEO Analyst agent and its weekly schedule exist.
 
+`20261102160100_agent_concierge_contract.sql` declares `platform.agents.concierge.v1` only after
+`platform.agents.v1` and `support.communications.v1` are declared, the Support Concierge agent and its
+sweep schedule exist, and `private.agent_concierge_pending(...)`, `private.agent_communication_snapshot(...)`
+and `private.agent_notification_count(...)` are security definers with a pinned empty search path
+executable by `hub_app_server` alone. The Hub server registers the Concierge's handlers only when the
+feature is declared.
+
 The table above is not exhaustive:
 later features such as the `billing.*` and `customer.self-service.v1` boundaries are declared
 by their own migrations and listed in `src/lib/backendContract.ts`. See [AI_TEAM.md](AI_TEAM.md).

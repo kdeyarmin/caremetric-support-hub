@@ -33,6 +33,12 @@ describe('agent store', () => {
     await store.briefFacts();
     await store.probeRecord({ targetKey: 'hub', ok: false, statusCode: 503, latencyMs: 90, failure: 'status' });
     await store.probeRecord({ targetKey: 'intel', ok: true, statusCode: 200, latencyMs: 40, threshold: 3, agentKey: 'platform_engineer' });
+    await store.conciergePending();
+    await store.conciergePending({ limit: 5, settleSeconds: 0, windowHours: 24, channels: ['email', 'chat'] });
+    await store.communicationSnapshot({ id: 'c1' });
+    await store.communicationSnapshot({ id: 'c1', requestKey: 'k1', messages: 3, chars: 500 });
+    await store.notificationCount({ prefix: 'concierge:urgent:', channel: 'sms', since: when });
+    await store.notificationCount({ prefix: 'concierge:new:', since: when });
     expect(calls).toEqual([
       ['select private.agent_schedule_fire($1, $2) as result', [10, ['probe.sweep', 'brief.daily']]],
       ['select private.agent_maintenance() as result', []],
@@ -56,6 +62,12 @@ describe('agent store', () => {
       ['select private.agent_brief_facts() as result', []],
       ['select private.agent_probe_record($1, $2, $3, $4, $5, $6, $7) as result', ['hub', false, 503, 90, 'status', 2, 'platform_engineer']],
       ['select private.agent_probe_record($1, $2, $3, $4, $5, $6, $7) as result', ['intel', true, 200, 40, null, 3, 'platform_engineer']],
+      ['select private.agent_concierge_pending($1, $2, $3, $4) as result', [10, 90, 72, null]],
+      ['select private.agent_concierge_pending($1, $2, $3, $4) as result', [5, 0, 24, ['email', 'chat']]],
+      ['select private.agent_communication_snapshot($1, $2, $3, $4) as result', ['c1', null, 0, 2000]],
+      ['select private.agent_communication_snapshot($1, $2, $3, $4) as result', ['c1', 'k1', 3, 500]],
+      ['select private.agent_notification_count($1, $2, $3) as result', ['concierge:urgent:', 'sms', when]],
+      ['select private.agent_notification_count($1, $2, $3) as result', ['concierge:new:', null, when]],
     ]);
   });
 

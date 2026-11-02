@@ -37,6 +37,16 @@ describe('the AI team', () => {
     expect(fake.finish).toHaveBeenCalledWith('s1', 'done', expect.objectContaining({ result: expect.objectContaining({ source: 'breathe.phone', created: 1 }) }));
   });
 
+  it('triages new conversations only when the database declares the Concierge\'s feature', () => {
+    for (const features of [undefined, null, new Set(), new Set(['platform.agents.v1']), ['platform.agents.v1'], 'platform.agents.concierge.v1']) {
+      expect(agentTeam({ store: store(), publicOrigin: origin, enabled: true, features }).scheduler.kinds(), String(features)).not.toContain('concierge.sweep');
+    }
+    for (const features of [new Set(['platform.agents.v1', 'platform.agents.concierge.v1']), ['platform.agents.concierge.v1']]) {
+      expect(agentTeam({ store: store(), publicOrigin: origin, enabled: true, features }).scheduler.kinds()).toEqual(
+        ['brief.daily', 'concierge.communication', 'concierge.sweep', 'probe.incident', 'probe.recovery', 'probe.sweep', 'seo.weekly']);
+    }
+  });
+
   it('hands a function of handlers the shared services', () => {
     const seen = [];
     agentTeam({ store: store(), publicOrigin: origin, handlers: services => { seen.push(Object.keys(services).sort()); return {}; } });

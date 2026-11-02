@@ -101,6 +101,7 @@ try {
   assert.ok((await api.rpc('get_backend_contract', {})).features.includes('platform.agents.probes.v1'));
   assert.ok((await api.rpc('get_backend_contract', {})).features.includes('platform.agents.brief.v1'));
   assert.ok((await api.rpc('get_backend_contract', {})).features.includes('platform.agents.seo.v1'));
+  assert.ok((await api.rpc('get_backend_contract', {})).features.includes('platform.agents.concierge.v1'));
 
   // The owner sees the seeded agents, paused.
   let view = await team();
