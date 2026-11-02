@@ -72,6 +72,14 @@ and `private.agent_notification_count(...)` are security definers with a pinned 
 executable by `hub_app_server` alone. The Hub server registers the Concierge's handlers only when the
 feature is declared.
 
+`20261102170100_agent_accounts_contract.sql` declares `platform.agents.accounts.v1` only after
+`platform.agents.v1` and `billing.platform.v1` are declared, the Account Manager agent and its weekly
+schedule exist, `private.agent_accounts_snapshot(...)` is a security definer with a pinned empty search
+path executable by `hub_app_server` alone, and its two helpers
+(`private.agent_accounts_json(...)` and `private.agent_subscription_facts(...)`) pin an empty search path
+and are executable by no application role. The Hub server registers the Account Manager's handler only
+when the feature is declared.
+
 The table above is not exhaustive:
 later features such as the `billing.*` and `customer.self-service.v1` boundaries are declared
 by their own migrations and listed in `src/lib/backendContract.ts`. See [AI_TEAM.md](AI_TEAM.md).

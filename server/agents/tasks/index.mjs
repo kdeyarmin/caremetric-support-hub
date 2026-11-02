@@ -1,5 +1,6 @@
 import { probeTargets } from '../targets.mjs';
 import { conciergeHandlers } from '../concierge/index.mjs';
+import { accountsHandlers } from './accounts.mjs';
 import { briefHandlers } from './brief.mjs';
 import { importHandlers } from './import.mjs';
 import { probeHandlers } from './probe.mjs';
@@ -19,6 +20,7 @@ export function builtInHandlers({ store, notifier, model = null }, { publicOrigi
     ...probeHandlers({ store, notifier, targets, fetchImpl, log }),
     ...briefHandlers({ store, notifier, publicOrigin, services, labels: Object.fromEntries(targets.map(target => [target.key, target.label])), log }),
     ...seoHandlers({ store, notifier, publicOrigin, fetchImpl, log }),
+    ...accountsHandlers({ store, notifier, publicOrigin, features, log }),
     ...importHandlers({ communications }),
     ...conciergeHandlers({ store, notifier, features, log, model, guides, customerTextToAi }),
   };

@@ -5,8 +5,9 @@ runs it: who the agents are, what each is allowed to do, how the owner stays in 
 is built so far.
 
 > **Status.** The database layer, the server scheduler, the `/admin/team` screen, the Platform
-> Engineer's health probes, the Chief of Staff's morning brief, the SEO Analyst's weekly report and the
-> Support Concierge's triage of new conversations, with the fixed replies it offers the owner, are in
+> Engineer's health probes, the Chief of Staff's morning brief, the SEO Analyst's weekly report, the
+> Support Concierge's triage of new conversations, with the fixed replies it offers the owner, and the
+> Account Manager's weekly report on how each customer account is doing are in
 > place, and so is the model runtime they share (see "The model runtime"). The scheduler is inert
 > unless `HUB_AGENTS_ENABLED` is exactly `true` and every agent is seeded **paused**. Only the Concierge
 > can call a model, only to draft an answer to a plain question, and only while the owner has set
@@ -297,6 +298,73 @@ resuming the Concierge on the **AI team** screen, preferably in **Observe**, and
 new messages". Its handlers register only when the database declares `platform.agents.concierge.v1`, so a
 Hub whose database lacks the migration still starts and the sweep stays due instead of failing.
 
+## The Account Manager
+
+Emails the owner every Monday how the customer accounts are doing (task `accounts.weekly`, shown as "Weekly
+account report"). It uses no model, reads only what the Hub already holds, and **sends nothing to a
+customer**. Stripe's own customer emails (a failed payment, a trial ending, receipts) stay on; this agent
+never sends those and only tells the owner about them. Customer emails from the Account Manager, each one
+approved by the owner template by template, are a later step.
+
+**What it reads** is one server-only operation, `private.agent_accounts_snapshot`, over the mirrored Stripe
+data, the usage figures the applications report to the Hub and the support case counts. It never reads a
+product's own data, so it needs no owner sign-in. The operation builds each account from a list of allowed
+fields, so a column added to a billing table later cannot reach the report. An account is a tenant with a
+Stripe customer or a subscription, listed by name, up to 200 for the report (the operation allows at most
+500). For each it returns the plan and state, whether a billing email exists (never the address), the
+subscriptions with their items, discounts and dates, invoice counts and amounts, the latest usage figure
+against the one from four weeks earlier, and case counts. It never returns a billing contact's name or
+address, a Stripe identifier, a case subject or requester, or a message. The Stripe mode filter is the
+Billing screen's: the verified mode, or everything while the mode is unverified, and the email says "Test
+data" or "Stripe mode not verified" when that applies.
+
+**The health score** (version `health.1`, every weight in `server/agents/accounts/health.mjs`) is advice for
+the owner and never changes a plan, a price or anyone's access. It runs from 0 to 100: 75 or more is healthy,
+50 to 74 is watch, below 50 is at risk. An account that has been billing for under 14 days is "new" and has no
+score, and one with no live subscription is "inactive". Each point off has a reason the email shows, so a
+score never appears without why.
+
+| Reason | Points off |
+| --- | --- |
+| Subscription unpaid, past due, an overdue invoice, or the customer marked delinquent | The largest of these (50, 40, 25, 20), once |
+| Cancellation scheduled | 35 |
+| Account closed but still billing | 30 |
+| Usage stopped, or dropped by a quarter or more | 25, or 15 |
+| Account suspended | 20 |
+| A high-priority case is open | 15 |
+| Trial ends within 7 days, subscription paused, several open cases | 10 each |
+| No billing email on file | 5, or 15 while a past-due or trial customer has no other way to hear from us |
+
+A case waiting on the customer is not held against the account. Usage is compared with the newest report at
+or before 28 days earlier, so an application that never reported usage is never marked down for it. An
+overdue invoice is an open one more than three days past its due date, or past its creation when it has none.
+
+**The email** lists, in this order: who needs you (payment trouble, a cancellation scheduled, a trial ending
+within a week, a high-priority case, a closed account that still bills, anyone at risk), annual and
+multi-month plans renewing within 30 days, accounts whose usage is growing, then revenue (MRR, ARR, trial MRR,
+new and lost subscriptions this week, past due) and how many accounts are in each band. Each list shows at
+most ten rows and then "And N more", names are clipped to 60 characters and escaped, and a list cut at 200
+accounts says so. The revenue figures use the same functions as the Billing screen
+(`src/billing/billingMath.ts`): paying and past-due subscriptions after discounts count as MRR, trials are
+counted apart, and ARR is twelve times MRR.
+
+**What is stored** is counts only. The email's subject, the stored body (also the preview), the task result and
+the run summary hold numbers: no account name, amount or address. Names, reasons and amounts are in the email's
+blocks, which the notifier never stores. The report never texts.
+
+**When it sends.** The schedule fires every morning at 07:15 Eastern (an interval schedule is limited to a day)
+and every run in an Eastern week (Monday to Sunday, found from the calendar date, so the two nights the clocks
+change cannot move it) uses the same alert key, `accounts:weekly:<Monday>`. The first run of a week sends and a
+later one finds it already sent, so a server that was down on Monday reports on the next run and a restart or a
+second server never sends twice. A failed delivery is retried by the notifier up to three times. A week whose
+email was switched off (not set up, so recorded as suppressed) is not sent again by itself: press **Run now**,
+which always sends a fresh report under a key of its own. The agent starts paused and observe-only, and in
+observe it proposes nothing, since it has no actions yet.
+
+Its handler registers only when the database declares `platform.agents.accounts.v1`, so a Hub whose database
+lacks the migration still starts and the schedule stays due instead of failing. The declaration needs the
+control plane and the platform billing mirror.
+
 ## Boundary
 
 - Every table has row level security and **no** privilege for any browser, service or server role.
@@ -315,7 +383,7 @@ Server (`hub_app_server` only): `agent_schedule_fire`, `agent_maintenance`, `age
 `agent_session_tasks`, `agent_session_task_claim`, `agent_run_start`, `agent_run_finish`,
 `agent_budget`, `agent_action_propose`, `agent_actions_ready`, `agent_action_execution`,
 `agent_action_executed`, `agent_notify_begin`, `agent_notify_finish`, `owner_contact`, `agent_probe_record`, `agent_brief_facts`,
-`agent_concierge_pending`, `agent_communication_snapshot`, `agent_notification_count`.
+`agent_concierge_pending`, `agent_communication_snapshot`, `agent_notification_count`, `agent_accounts_snapshot`.
 
 Owner (current administrator session): `get_agent_team`, `list_agent_activity`,
 `list_audit_events` (reads) and `set_agent_status`, `set_agent_autonomy`, `set_agent_budget`,
@@ -467,8 +535,11 @@ Apply the migrations in order with the usual procedure:
 5. `20261102160000_agent_concierge.sql`, then its gate `20261102160100_agent_concierge_contract.sql`,
    which adds the Concierge's three server-only reads, slows its sweep to every five minutes, gives it
    its settings and declares `platform.agents.concierge.v1` (it needs the control plane and the unified
-   communications). Deploy the Hub after applying them: the server reads the declared features once, at
-   start.
+   communications).
+6. `20261102170000_agent_accounts.sql`, then its gate `20261102170100_agent_accounts_contract.sql`, which seeds
+   the Account Manager (paused, observe) and its schedule, adds the server-only account snapshot and declares
+   `platform.agents.accounts.v1` (it needs the control plane and the platform billing mirror, not the
+   Concierge). Deploy the Hub after applying them: the server reads the declared features once, at start.
 
 The Hub build does not require any of these features, so a Hub whose database lacks them still starts and
 serves everything else. The AI team is opt-in twice over: nothing runs unless `HUB_AGENTS_ENABLED`
@@ -480,6 +551,10 @@ To switch the Platform Engineer on: apply the migrations, set `HUB_AGENTS_ENABLE
 check and read the run it records. To switch the brief on, resume the Chief of Staff and press
 **Run now** on its morning brief: the first email arrives within a minute, and the next one at 07:00.
 To switch the SEO report on, resume the SEO Analyst and press **Run now** on its weekly check.
+To switch the weekly account report on, apply the two Account Manager migrations, restart the Hub so it
+reads the new feature, resume the Account Manager and press **Run now** on its weekly report: the first email
+arrives within a minute and the next on Monday. Check the "Test data" and "Stripe mode" notes against what you
+expect before relying on the figures.
 
 `supabase/schema.sql` is a reference snapshot that stopped being appended in October; these
 migrations are not mirrored into it.

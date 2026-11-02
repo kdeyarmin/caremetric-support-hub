@@ -45,6 +45,8 @@ export function sqlAgentStore(pool) {
       call('private.agent_communication_snapshot', [id, requestKey, messages, chars]),
     /** How many alerts whose dedupe key starts with `prefix` went out on `channel` (any when null) since `since`. */
     notificationCount: ({ prefix, channel = null, since }) => call('private.agent_notification_count', [prefix, channel, since]),
+    /** A snapshot of every account's billing facts, usage and case counts for the weekly report: names and numbers, never a contact address. */
+    accountsSnapshot: ({ limit = 200 } = {}) => call('private.agent_accounts_snapshot', [limit]),
     /** One health check for one product. The database decides when that opens or closes an incident. */
     probeRecord: ({ targetKey, ok, statusCode, latencyMs, failure = null, threshold = 2, agentKey = 'platform_engineer' }) =>
       call('private.agent_probe_record', [targetKey, ok, statusCode, latencyMs, failure, threshold, agentKey]),
