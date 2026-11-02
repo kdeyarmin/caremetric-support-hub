@@ -11,7 +11,7 @@
  * past-due subscriptions after discounts count as MRR, trials are counted separately, and ARR is MRR times twelve.
  */
 import { plural } from '../tasks/shared.mjs';
-import { assess, healthVersion, liveStatuses, reasonWords } from './health.mjs';
+import { assess, cancellationDate, endingTrial, healthVersion, liveStatuses, reasonWords, renewingSubscriptions } from './health.mjs';
 import { monthlyTotals } from './money.mjs';
 
 export const rowLimit = 10;
@@ -27,14 +27,11 @@ const dateWords = value => (instant(value) === null ? 'soon' : shortDay.format(n
 const capital = text => (text ? text[0].toUpperCase() + text.slice(1) : text);
 
 /** The reasons for one account in words, the first three, with the dates and amounts that make them actionable. */
-function reasonLine(account, health) {
-  const live = (account.subscriptions ?? []).filter(subscription => liveStatuses.includes(subscription.status));
+function reasonLine(account, health, now) {
+  // Each date comes from the subscription that raised the reason (health.mjs), never from the first one the account has.
   const words = health.reasons.slice(0, 3).map(reason => {
-    if (reason === 'trial_ending') return `trial ends ${dateWords(live.find(subscription => subscription.status === 'trialing')?.trial_end)}`;
-    if (reason === 'cancel_scheduled') {
-      const canceling = live.find(subscription => subscription.cancel_at_period_end === true || instant(subscription.cancel_at) !== null);
-      return `cancels ${dateWords(canceling?.cancel_at ?? canceling?.current_period_end)}`;
-    }
+    if (reason === 'trial_ending') return `trial ends ${dateWords(endingTrial(account, now)?.trial_end)}`;
+    if (reason === 'cancel_scheduled') return `cancels ${dateWords(cancellationDate(account, now))}`;
     if (reason === 'invoice_overdue') return `${plural(account.invoices?.overdue ?? 0, 'overdue invoice')}, ${dollars(account.invoices?.remainingCents)} remaining`;
     return reasonWords[reason] ?? reason.replaceAll('_', ' ');
   });
@@ -65,8 +62,8 @@ export function composeAccountsReport({ snapshot, now = new Date(), publicOrigin
 
   const needs = assessed.filter(entry => entry.health.attention)
     .sort((a, b) => b.health.penalty - a.health.penalty || a.account.name.localeCompare(b.account.name));
-  const renewals = assessed.filter(entry => entry.health.flags.includes('renewing_soon'))
-    .sort((a, b) => (instant(a.account.subscriptions.find(subscription => subscription.current_period_end)?.current_period_end) ?? 0) - (instant(b.account.subscriptions.find(subscription => subscription.current_period_end)?.current_period_end) ?? 0));
+  const renewalDate = entry => instant(renewingSubscriptions(entry.account, now)[0]?.current_period_end) ?? 0;
+  const renewals = assessed.filter(entry => entry.health.flags.includes('renewing_soon')).sort((a, b) => renewalDate(a) - renewalDate(b));
   const growing = assessed.filter(entry => entry.health.flags.includes('usage_up'));
 
   const allSubscriptions = everyone.flatMap(account => account.subscriptions ?? []);
@@ -93,10 +90,11 @@ export function composeAccountsReport({ snapshot, now = new Date(), publicOrigin
     ...(snapshot.mode === 'unverified' ? [{ type: 'callout', tone: 'warning', title: 'Stripe mode not verified.', text: 'The Hub has not verified which Stripe mode it is reading, so test and live data may be mixed.' }] : []),
     ...(snapshot.truncated ? [{ type: 'callout', tone: 'info', title: 'Partial list.', text: `Showing ${everyone.length} of ${snapshot.total ?? everyone.length} accounts. The figures below cover only these.` }] : []),
     { type: 'callout', tone: counts.needsYou ? 'warning' : 'success', title: counts.needsYou ? 'Heads up.' : 'All clear.', text: headline },
-    ...section('Needs you', needs.map(entry => [clip(entry.account.name, nameLimit), reasonLine(entry.account, entry.health)])),
+    ...section('Needs you', needs.map(entry => [clip(entry.account.name, nameLimit), reasonLine(entry.account, entry.health, now)])),
     ...section('Renewing in the next 30 days', renewals.map(entry => {
-      const renewing = entry.account.subscriptions.find(subscription => subscription.current_period_end);
-      return [clip(entry.account.name, nameLimit), `Renews ${dateWords(renewing?.current_period_end)}, ${dollars(entry.mrrCents * 12)} a year`];
+      // The date is the first renewal's, and the amount covers every plan that renews in the window, so a second plan is not left out of it.
+      const renewing = renewingSubscriptions(entry.account, now);
+      return [clip(entry.account.name, nameLimit), `Renews ${dateWords(renewing[0]?.current_period_end)}${renewing.length > 1 ? ` (${plural(renewing.length, 'plan')})` : ''}, ${dollars(monthlyTotals(renewing, coupons).arrCents)} a year`];
     })),
     ...section('Growing', growing.map(entry => [clip(entry.account.name, nameLimit), capital(reasonWords.usage_up)])),
     { type: 'paragraph', text: 'Revenue' },
