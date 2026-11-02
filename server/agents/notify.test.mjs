@@ -53,6 +53,20 @@ describe('owner notifier', () => {
     }
   });
 
+  it('records a text as failed, not unknown, when the number to text cannot be looked up, because nothing was sent', async () => {
+    const { notifier, store, senders } = fixture();
+    store.ownerContact.mockRejectedValue(new Error('database blip'));
+    const results = await notifier.send({ severity: 'urgent', subject: 'Hub is down', body: 'The Hub probe failed twice.', dedupeKey: 'k-contact' });
+    // The email still goes, and the failed text can be retried under the same key.
+    expect(results).toEqual([{ channel: 'sms', delivery: 'failed' }, { channel: 'email', delivery: 'sent' }]);
+    expect(senders.sms.send).not.toHaveBeenCalled();
+    expect(store.notifyFinish).toHaveBeenCalledWith('n-sms', 'failed', null);
+    // A text the provider was given and then threw on may have gone, so it stays unknown and is never resent.
+    const sent = fixture();
+    sent.senders.sms.send.mockRejectedValue(new Error('socket hang up'));
+    expect(await sent.notifier.send({ severity: 'urgent', subject: 'Hub is down', body: 'The Hub probe failed twice.', dedupeKey: 'k-socket' })).toEqual([{ channel: 'sms', delivery: 'unknown' }, { channel: 'email', delivery: 'sent' }]);
+  });
+
   it('keeps a text within two segments', async () => {
     const { notifier, senders } = fixture();
     await notifier.send({ severity: 'urgent', subject: 'S'.repeat(100), body: 'B'.repeat(900), dedupeKey: 'k3' });

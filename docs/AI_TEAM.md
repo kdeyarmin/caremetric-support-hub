@@ -422,8 +422,10 @@ error code, never an error message. The service environment is `HUB_AGENTS_ENABL
 **Owner alerts** are recorded before they are sent, under a dedupe key, so a retried task never texts or
 emails twice. An urgent item goes by text (to the administrator's verified number, through the Hub's
 Twilio settings) and by email; everything else by email. A channel that is not configured is recorded as
-suppressed instead of failing the task. Alert text carries counts, names and references, never inbound
-customer text.
+suppressed instead of failing the task. Each channel ends as sent, failed, unknown or suppressed. Failed means
+nothing reached you (a provider refusal, or a text whose number could not be looked up) and is retried; unknown
+means the provider was given the message and then errored, so it may have gone and is never resent. Alert text
+carries counts, names and references, never inbound customer text.
 
 **The Hub cannot watch itself.** A probe that runs inside the Hub reports a database or network problem
 from the Hub's point of view, but nothing inside a stopped process can notice that it stopped. Keep one
