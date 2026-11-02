@@ -148,7 +148,8 @@ try {
 
   // ---- The boundary: the Hub server reads through one operation; nobody else reads anything ----------------------------------
   await assert.rejects(admin.query('select private.agent_accounts_snapshot(10)'), refused('42501', /Application server required/));
-  for (const role of ['anon', 'authenticated', 'service_role']) {
+  // (service_role is covered by the privilege checks in pgTAP 051: the CI database's postgres role may not switch to it.)
+  for (const role of ['anon', 'authenticated']) {
     const client = await admin.connect();
     try {
       await client.query('begin');
@@ -190,6 +191,11 @@ try {
   const slugs = snapshot => mine(snapshot).map(entry => entry.slug.slice(prefix.length + 1)).sort();
   let snap = await read();
   assert.deepEqual(Object.keys(snap).sort(), ['accounts', 'coupons', 'generatedAt', 'mode', 'total', 'truncated']);
+  // The server operation returns exactly what the internal helper builds, and its default limit is 200 (pgTAP cannot become the server role).
+  const unstamped = value => JSON.stringify({ ...value, generatedAt: null });
+  assert.equal(unstamped((await admin.query('select private.agent_accounts_json(500) as r')).rows[0].r), unstamped(snap), 'the server operation returns exactly what the helper builds');
+  const byDefault = await call('private.agent_accounts_snapshot');
+  assert.deepEqual([byDefault.accounts.length, byDefault.truncated], [Math.min(200, snap.total), snap.total > 200], 'the default limit is 200');
   assert.equal(snap.mode, 'live');
   assert.deepEqual(slugs(snap), [...live].sort(), 'live mode: the seven live accounts, not the test-mode one, not the tenant with no billing');
   assert.ok(snap.total >= live.length);

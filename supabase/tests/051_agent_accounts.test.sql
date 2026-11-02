@@ -1,5 +1,5 @@
 begin;
-select plan(47);
+select plan(42);
 
 -- ---------------------------------------------------------------------------------------
 -- The boundary: one operation for the Hub server role, two internal helpers for nobody.
@@ -188,31 +188,9 @@ update hub.tenants set status = 'closed' where slug = 'accounts-zeta';
 select is((select private.agent_accounts_json(10) -> 'accounts' -> 1 ->> 'status'), 'closed', 'A closed tenant is still listed, with its status, for the report to judge');
 update hub.tenants set status = 'active' where slug = 'accounts-zeta';
 
--- ---------------------------------------------------------------------------------------
--- Through the server operation, as the Hub server role. That role cannot call pgTAP, so what it does is
--- recorded in a temp table and checked afterwards.
--- ---------------------------------------------------------------------------------------
-create function pg_temp.attempt(p_sql text) returns text language plpgsql as $$
-begin
-  execute p_sql;
-  return 'ok';
-exception when others then
-  return sqlstate || ': ' || sqlerrm;
-end;
-$$;
-set local session authorization hub_app_server;
-create temp table server_results as select
-  pg_temp.attempt('select private.agent_accounts_snapshot(0)') as below,
-  pg_temp.attempt('select private.agent_accounts_snapshot(501)') as above,
-  pg_temp.attempt('select private.agent_accounts_snapshot(null)') as missing,
-  private.agent_accounts_snapshot(10) as snapshot,
-  jsonb_array_length(private.agent_accounts_snapshot() -> 'accounts') as default_count;
-reset session authorization;
-select is((select below from server_results), '22023: Choose a limit between 1 and 500.', 'A limit below 1 is refused');
-select is((select above from server_results), '22023: Choose a limit between 1 and 500.', 'A limit above 500 is refused');
-select is((select missing from server_results), '22023: Choose a limit between 1 and 500.', 'No limit is refused');
-select is((select snapshot - 'generatedAt' from server_results), (select j - 'generatedAt' from snap), 'The server role gets exactly what the helper builds');
-select is((select default_count from server_results), 2, 'The default limit covers a small book');
+-- The server operation itself (limit validation, the default limit, and that it returns exactly what the helper builds) is checked
+-- in server/agents-accounts-integration.mjs, which logs in as the real Hub server role. pgTAP cannot: the CLI's postgres role is not
+-- a superuser, so it cannot become hub_app_server, and the operation refuses every other session user before it looks at its arguments.
 
 select * from finish();
 rollback;
