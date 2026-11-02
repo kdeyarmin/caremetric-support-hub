@@ -17,7 +17,7 @@ const taskKind = /^[a-z][a-z0-9_.]{1,60}$/;
 // The database returns an agent's updated_at to the microsecond; the browser hands it back untouched.
 const instant = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
 const reviewedErrors = { '22023': 400, '40001': 409, '42501': 403, '28000': 401, P0002: 404, '55000': 409 };
-export const agentAdminActions = new Set(['overview', 'status', 'autonomy', 'budget', 'decide', 'run', 'cancel']);
+export const agentAdminActions = new Set(['overview', 'status', 'autonomy', 'budget', 'decide', 'run', 'cancel', 'waiting']);
 
 function reviewed(error) {
   if (error instanceof HttpError) return error;
@@ -38,11 +38,19 @@ function oneOf(value, allowed, label) {
   return value;
 }
 
-export function agentAdmin({ pool, actions, services = () => ({}), kick = null, session = (token, work) => withSession(pool, token, work) }) {
+export function agentAdmin({ pool, actions, services = () => ({}), kick = null, waiting = null, session = (token, work) => withSession(pool, token, work) }) {
   const query = (token, operation, args = []) => session(token, async db =>
     (await db.query(`select ${operation}(${args.map((_, index) => `$${index + 1}`).join(', ')}) as result`, args)).rows[0].result).catch(error => { throw reviewed(error); });
   // A queued task starts within a second instead of waiting for the next minute's tick.
   const soon = () => { if (kick) setImmediate(() => { Promise.resolve(kick()).catch(() => {}); }); };
+  // Work that needs the owner's session: claim it now, let it finish in the background. The token is only handed on, never kept.
+  async function startWaiting(token, only = null) {
+    if (!waiting) throw new HttpError(409, 'The AI team is not running on this server.');
+    const run = await waiting({ sessionToken: token, only });
+    if (run.skipped) throw new HttpError(409, 'The AI team is switched off on this server.');
+    run.done.catch(() => {});
+    return run.started;
+  }
 
   return {
     /** The roster, what waits for approval, and which services the team can use right now. */
@@ -66,8 +74,20 @@ export function agentAdmin({ pool, actions, services = () => ({}), kick = null, 
     async run(token, input) {
       exactly(input, ['agentKey', 'taskKind']);
       const requested = await query(token, 'hub.request_agent_task', [matching(input.agentKey, agentKey, 'agent'), matching(input.taskKind, taskKind, 'task')]);
+      // A task that reads another application waits for the owner's session. They are signed in right now, so run it now.
+      if (requested?.status === 'awaiting_session') {
+        const started = await startWaiting(token, [requested.id]).catch(() => 0);
+        return started > 0 ? { ...requested, status: 'running' } : requested;
+      }
       soon();
       return requested;
+    },
+    /** Runs what was waiting for the owner's sign-in (imports from Advisors and Breathe). Answers at once; the work continues in the background. */
+    async waiting(token, input = {}) {
+      exactly(input, []);
+      // The same assurance the database asks for any change: a lapsed session gets 401 before anything is claimed.
+      await query(token, 'hub.authorize_app_command');
+      return { started: await startWaiting(token) };
     },
     async cancel(token, input) {
       exactly(input, ['taskId']);

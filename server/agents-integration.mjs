@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
-import { digest, withSession } from './sms-auth.mjs';
+import { digest, HttpError, withSession } from './sms-auth.mjs';
 import { gateway } from './gateway.mjs';
 import { assertBackendContract } from '../src/lib/backendContract.ts';
 import { agentTeam } from './agents/index.mjs';
@@ -982,6 +982,98 @@ try {
     await clearWork();
   }
 
+  {
+    // Work that needs the owner's session, through the real store: an import waits until the owner asks for it, then runs
+    // with the owner's session; the route starts it only for a current administrator session and answers at once.
+    await clearWork();
+    if ((await agentRow('support_concierge')).status !== 'active') await setStatus('support_concierge', 'active');
+    await admin.query("update private.agent_schedules set next_run_at = now() + interval '1 day', enabled = true");
+    const reads = [];
+    const logs = [];
+    let behavior = async (_token, input) => ({ source: input.source, read: 3, created: 2, skipped: 1, nextOffset: null });
+    const sessionTeam = agentTeam({
+      pool, enabled: true, publicOrigin: 'https://hub.test', log: line => logs.push(line),
+      sms: { configured: false, send: async () => ({ delivery: 'sent', id: 'x' }) }, email: { configured: false, send: async () => ({ delivery: 'sent', id: 'x' }) },
+      communications: { sync: async (token, input) => { reads.push([token, input]); return behavior(token, input); } },
+    });
+    assert.ok(['import.advisors', 'import.breathe'].every(kind => sessionTeam.scheduler.kinds().includes(kind)), 'the imports are registered once the inbox service exists');
+    const reached = async (id, statuses, timeout = 5000) => {
+      const deadline = Date.now() + timeout;
+      while (Date.now() < deadline) { const current = await task(id); if (statuses.includes(current.status)) return current; await new Promise(resolve => setTimeout(resolve, 25)); }
+      assert.fail(`task ${id} never reached ${statuses.join(' or ')}`);
+    };
+
+    // The schedule makes a waiting task, and the tick never runs it or reads another application.
+    await admin.query("update private.agent_schedules set next_run_at = now() - interval '3 minutes' where task_kind = 'import.advisors'");
+    const tick = await sessionTeam.tick();
+    assert.deepEqual([tick.fired, tick.claimed], [1, 0], 'the schedule fires and the tick claims nothing');
+    const waiting = await row("select * from private.agent_tasks where kind = 'import.advisors' order by created_at desc limit 1");
+    assert.deepEqual([waiting.status, waiting.requires_session, waiting.source_kind, waiting.attempts], ['awaiting_session', true, 'schedule', 0]);
+    assert.equal(reads.length, 0, 'nothing is read without the owner');
+
+    // A lapsed session, or someone who is not the administrator, claims nothing.
+    await assert.rejects(sessionTeam.admin.waiting(staleToken, {}), error => error.status === 401, 'a session older than eight hours is refused');
+    await assert.rejects(sessionTeam.admin.waiting(otherToken, {}), error => error.status === 401, 'a user who is not the administrator is refused');
+    await assert.rejects(sessionTeam.admin.waiting(undefined, {}), error => error.status === 401);
+    const breatheBefore = Number((await row("select count(*) from private.agent_tasks where kind = 'import.breathe'")).count);
+    await assert.rejects(sessionTeam.admin.run(staleToken, { agentKey: 'support_concierge', taskKind: 'import.breathe' }), error => error.status === 401);
+    assert.deepEqual([(await task(waiting.id)).status, reads.length], ['awaiting_session', 0], 'the waiting task was not claimed');
+    assert.equal(Number((await row("select count(*) from private.agent_tasks where kind = 'import.breathe'")).count), breatheBefore, 'a refused Run now creates no task');
+
+    // The owner's session starts it. The answer comes at once and the import finishes in the background.
+    assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 1 });
+    const finished = await reached(waiting.id, ['done']);
+    assert.deepEqual(finished.result, { source: 'advisors.web', read: 3, created: 2, skipped: 1, calls: 1, complete: true, nextOffset: null });
+    assert.deepEqual([finished.attempts, finished.last_error_code], [1, null]);
+    assert.deepEqual(reads, [[ownerToken, { source: 'advisors.web', offset: 0 }]]);
+    assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 0 }, 'a second press finds nothing left');
+
+    // The session is borrowed, never kept: no table, log line or alert holds it.
+    const everything = JSON.stringify([
+      await rows('select to_jsonb(t) as r from private.agent_tasks t'), await rows('select to_jsonb(r) as r from private.agent_runs r'),
+      await rows('select to_jsonb(a) as r from private.agent_actions a'), await rows('select to_jsonb(n) as r from private.owner_notifications n'),
+      await rows("select metadata from private.audit_events where action like 'agent.%'"), logs,
+    ]);
+    assert.ok(!everything.includes(ownerToken), 'the owner\'s session token is stored and logged nowhere');
+
+    // Run now on an import starts it immediately for a current session (the other import, not yet waiting, is created and run).
+    const asked = await sessionTeam.admin.run(ownerToken, { agentKey: 'support_concierge', taskKind: 'import.breathe' });
+    assert.equal(asked.status, 'running');
+    assert.equal((await reached(asked.id, ['done'])).result.source, 'breathe.phone');
+    assert.deepEqual(reads.at(-1), [ownerToken, { source: 'breathe.phone', offset: 0 }]);
+
+    // A lapsed session mid-run parks the task for the next press; a bridge that is off finishes quietly; an outage waits as a session task.
+    const parked = await enqueue('support_concierge', 'import.advisors', `it:${run}:session:parked`, { requiresSession: true });
+    behavior = async () => { throw new HttpError(401, 'Sign in with an SMS code to continue.'); };
+    assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 1 });
+    const lapsed = await reached(parked, ['awaiting_session']);
+    assert.deepEqual([lapsed.last_error_code, lapsed.attempts], ['session_required', 1]);
+    behavior = async () => { throw new HttpError(503, 'This application has not connected its administrator session.', 'unconfigured'); };
+    assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 1 });
+    const off = await reached(parked, ['done']);
+    assert.deepEqual([off.result.skipped, off.attempts], ['not_connected', 2]);
+    const outage = await enqueue('support_concierge', 'import.breathe', `it:${run}:session:outage`, { requiresSession: true });
+    behavior = async () => { throw new HttpError(503, 'Administrator connection is unavailable.', 'upstream'); };
+    assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 1 });
+    const waited = await reached(outage, ['awaiting_session']);
+    assert.deepEqual([waited.last_error_code, waited.requires_session], ['bridge_unavailable', true]);
+
+    // Two presses at once claim a task once.
+    behavior = async (_token, input) => ({ source: input.source, read: 0, created: 0, skipped: 0, nextOffset: null });
+    const readsBefore = reads.length;
+    const presses = await Promise.all([sessionTeam.admin.waiting(ownerToken, {}), sessionTeam.admin.waiting(ownerToken, {})]);
+    assert.equal(presses[0].started + presses[1].started, 1, 'the database hands the task to one caller');
+    await reached(outage, ['done']);
+    assert.equal(reads.length - readsBefore, 1, 'and the import ran once');
+
+    // A paused agent's waiting task is not offered or run.
+    await setStatus('support_concierge', 'paused');
+    const idle = await enqueue('support_concierge', 'import.advisors', `it:${run}:session:paused`, { requiresSession: true });
+    assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 0 });
+    assert.equal((await task(idle)).status, 'awaiting_session');
+    await clearWork();
+  }
+
   // The deployment gate re-runs cleanly, and refuses to declare the feature once the boundary drifts.
   const client = await admin.connect();
   try {
@@ -1054,7 +1146,7 @@ try {
   } finally { client.release(); }
   assertBackendContract(await api.rpc('get_backend_contract', {}));
 
-  console.log('AI team control plane: the closed boundary, owner changes and reads, enqueue, claim, lease recovery, retry, session tasks, schedules, budget, actions and approvals, notifications, the owner contact, the on-call agent health probes with their incidents and recoveries, the morning brief, the weekly SEO report, and the deployment gates all behave through hub_app_server and real sessions.');
+  console.log('AI team control plane: the closed boundary, owner changes and reads, enqueue, claim, lease recovery, retry, session tasks, schedules, budget, actions and approvals, notifications, the owner contact, the on-call agent health probes with their incidents and recoveries, the morning brief, the weekly SEO report, the session-bound imports the owner runs, and the deployment gates all behave through hub_app_server and real sessions.');
 } finally {
   await admin.query("delete from private.audit_events where action like 'agent.%' or actor_id in ($1,$2,$3)", [owner, other, secondAdmin]);
   await admin.query('delete from private.agent_actions');

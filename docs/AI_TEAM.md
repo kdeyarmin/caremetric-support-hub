@@ -45,7 +45,7 @@ SMS sign-in; a lapsed session signs the owner out, as everywhere else in Admin.
 
 - **What the team can use** shows whether the scheduler, the code behind each kind of work, the owner's
   email address, email delivery and text alerts are in place, and how many tasks wait for the owner to be
-  signed in.
+  signed in, with a **Run what's waiting** button (see "Work that needs the owner's session").
 - **Waiting for you** lists every proposed action with a preview. A reply shows the exact text that will
   go to the customer and its button says "Approve and send". The owner may add a note, then approves or
   rejects. Approving carries the action out once, under its request key, and the screen says whether it
@@ -227,8 +227,32 @@ model calls until the next day without holding back model-free work such as heal
 ## Work that needs the owner's session
 
 Reading another application (Advisors inquiries, Breathe phone messages) requires the owner's live
-SMS session, by design. Such tasks are marked `requires_session` and wait as `awaiting_session`
-until the owner is signed in and runs them. Unattended reads need a separate, reviewed decision.
+SMS session, by design. Such tasks are marked `requires_session`: their schedule creates them waiting
+(`awaiting_session`) and the tick never claims them. Unattended reads need a separate, reviewed decision.
+
+The owner runs what is waiting from the **AI team** screen. The banner under "What the team can use"
+shows how many tasks wait and has a **Run what's waiting** button (`POST /api/admin/team/waiting`). The
+route asks the database to confirm a current administrator session (the same check any change needs, so a
+session older than eight hours gets 401 and nothing is claimed), claims up to three waiting tasks, starts
+them in the background and answers at once with how many started. **Run now** on an import does the same
+for just that task. The database hands each task to one caller, so pressing twice runs nothing twice.
+
+The session token is borrowed for the run and never kept: it reaches only the handler of a task marked
+`requires_session`, and a result that contains it is refused before it is stored. Nothing in a table, log
+line or alert holds it.
+
+Two handlers use this today, both calling the inbox's own sync (`communications.sync`, which dedupes by
+source and message, so reading a message twice never creates it twice):
+
+- `import.advisors` copies consultation requests from Healthcare Advisors; `import.breathe` copies Breathe
+  phone-line messages. Each run makes at most three calls of 200 messages from the newest end of the list.
+  Advisors lists newest first, so its run stops at the first window with nothing new. Breathe's order has
+  not been checked, so its run reads its whole window. History beyond 600 messages is brought in with the
+  **Import** buttons on the Communications page, which resume where they stopped.
+- The result records `source`, `read`, `created`, `skipped`, `calls`, `complete` and `nextOffset`.
+  A lapsed session parks the task again (`session_required`); an application that has not connected its
+  administrator session finishes quietly as `not_connected`; an outage waits for the next press
+  (`bridge_unavailable`, `rate_limited`); a refusal fails the task (`not_permitted`, `request_rejected`).
 
 ## Applying it to production
 

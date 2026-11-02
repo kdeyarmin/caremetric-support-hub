@@ -4,13 +4,13 @@ import { HttpError } from '../sms-auth.mjs';
 
 const actionId = '11111111-1111-4111-8111-111111111111';
 const version = '2026-11-02T12:00:00.123456+00:00';
-const fixture = ({ results = {}, execution = { executed: true, failed: false } } = {}) => {
+const fixture = ({ results = {}, execution = { executed: true, failed: false }, waiting = vi.fn(async () => ({ skipped: false, started: 2, done: Promise.resolve([]) })) } = {}) => {
   const queries = [];
   const db = { query: vi.fn(async (sql, args) => { queries.push([sql, args]); const name = /select (\S+)\(/.exec(sql)[1]; const value = results[name]; if (value instanceof Error) throw value; return { rows: [{ result: value ?? {} }] }; }) };
   const session = vi.fn(async (token, work) => { if (!token) throw new HttpError(401, 'Sign in with an SMS code to continue.'); return work(db); });
   const actions = { executeOne: vi.fn(async () => execution) };
   const kick = vi.fn();
-  return { queries, session, actions, kick, admin: agentAdmin({ session, actions, kick, services: () => ({ enabled: true, handlers: ['probe.sweep'] }) }) };
+  return { queries, session, actions, kick, waiting, admin: agentAdmin({ session, actions, kick, waiting, services: () => ({ enabled: true, handlers: ['probe.sweep'] }) }) };
 };
 const databaseError = (code, message) => Object.assign(new Error(message), { code });
 
@@ -98,9 +98,63 @@ describe('agent administration', () => {
   });
 
   it('starts a task it queued without waiting for the next tick', async () => {
-    const { admin, kick } = fixture({ results: { 'hub.request_agent_task': { id: actionId, status: 'queued' } } });
+    const { admin, kick, waiting } = fixture({ results: { 'hub.request_agent_task': { id: actionId, status: 'queued' } } });
     expect(await admin.run('token', { agentKey: 'platform_engineer', taskKind: 'probe.sweep' })).toEqual({ id: actionId, status: 'queued' });
     await new Promise(resolve => setImmediate(resolve));
     expect(kick).toHaveBeenCalledTimes(1);
+    expect(waiting).not.toHaveBeenCalled();
+  });
+
+  describe('work that waits for the owner\'s session', () => {
+    it('runs a task that reads another application the moment the owner asks for it', async () => {
+      const { admin, kick, waiting } = fixture({ results: { 'hub.request_agent_task': { id: actionId, status: 'awaiting_session' } } });
+      expect(await admin.run('token', { agentKey: 'support_concierge', taskKind: 'import.advisors' })).toEqual({ id: actionId, status: 'running' });
+      expect(waiting).toHaveBeenCalledWith({ sessionToken: 'token', only: [actionId] });
+      await new Promise(resolve => setImmediate(resolve));
+      expect(kick).not.toHaveBeenCalled();
+    });
+
+    it('still reports the queued task when nothing could be started or the scheduler is off', async () => {
+      const requested = { 'hub.request_agent_task': { id: actionId, status: 'awaiting_session' } };
+      const idle = fixture({ results: requested, waiting: vi.fn(async () => ({ skipped: false, started: 0, done: Promise.resolve([]) })) });
+      expect(await idle.admin.run('token', { agentKey: 'support_concierge', taskKind: 'import.advisors' })).toEqual({ id: actionId, status: 'awaiting_session' });
+      const off = fixture({ results: requested, waiting: vi.fn(async () => ({ skipped: true, started: 0, done: Promise.resolve([]) })) });
+      expect(await off.admin.run('token', { agentKey: 'support_concierge', taskKind: 'import.advisors' })).toEqual({ id: actionId, status: 'awaiting_session' });
+      const broken = fixture({ results: requested, waiting: vi.fn(async () => { throw new Error('db down'); }) });
+      expect(await broken.admin.run('token', { agentKey: 'support_concierge', taskKind: 'import.advisors' })).toEqual({ id: actionId, status: 'awaiting_session' });
+    });
+
+    it('starts what is waiting, after the database confirms the owner\'s current session, and answers at once', async () => {
+      let finish;
+      const done = new Promise(resolve => { finish = resolve; });
+      const { admin, queries, waiting } = fixture({ waiting: vi.fn(async () => ({ skipped: false, started: 2, done })) });
+      expect(await admin.waiting('token', {})).toEqual({ started: 2 });
+      expect(queries.map(([sql]) => sql)).toEqual(['select hub.authorize_app_command() as result']);
+      expect(waiting).toHaveBeenCalledWith({ sessionToken: 'token', only: null });
+      finish([]);
+    });
+
+    it('claims nothing for a lapsed session or a caller who is not signed in', async () => {
+      const lapsed = fixture({ results: { 'hub.authorize_app_command': databaseError('28000', 'Current administrator session required.') } });
+      await expect(lapsed.admin.waiting('token', {})).rejects.toMatchObject({ status: 401, message: 'Current administrator session required.' });
+      const denied = fixture({ results: { 'hub.authorize_app_command': databaseError('42501', 'Administrator access is required.') } });
+      await expect(denied.admin.waiting('token', {})).rejects.toMatchObject({ status: 403 });
+      const anonymous = fixture();
+      await expect(anonymous.admin.waiting(undefined, {})).rejects.toMatchObject({ status: 401 });
+      for (const { waiting } of [lapsed, denied, anonymous]) expect(waiting).not.toHaveBeenCalled();
+    });
+
+    it('says so when the AI team is not running on this server', async () => {
+      const off = fixture({ waiting: vi.fn(async () => ({ skipped: true, started: 0, done: Promise.resolve([]) })) });
+      await expect(off.admin.waiting('token', {})).rejects.toMatchObject({ status: 409 });
+      const none = agentAdmin({ session: fixture().session, actions: {} });
+      await expect(none.waiting('token', {})).rejects.toMatchObject({ status: 409 });
+    });
+
+    it('takes no input', async () => {
+      const { admin, session } = fixture();
+      await expect(admin.waiting('token', { all: true })).rejects.toMatchObject({ status: 400 });
+      expect(session).not.toHaveBeenCalled();
+    });
   });
 });
