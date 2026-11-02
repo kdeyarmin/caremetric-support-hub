@@ -7,15 +7,24 @@
  *
  * It refuses, before anything is recorded, to send into a conversation that moved on since the reply was
  * proposed (the customer wrote again, or the conversation was closed): the owner would be answering a
- * message the reply was never written for. It also refuses a reply nobody approved.
+ * message the reply was never written for. It also refuses a reply nobody approved. That judgement is for a
+ * NEW message only: when the reply was already recorded under this action's key (a restart came after it was
+ * sent), the replay settles that delivery whatever the thread has done since, instead of reporting a sent
+ * reply as never sent.
  *
- * Every failure is coded, never retried and never recorded as sent. A send the provider did not confirm, or a
- * replay of one that was recorded but whose delivery was never settled, also warns the owner to look at the
- * thread before sending again, because the customer may or may not have received it.
+ * The email carries a fixed subject, never the customer's: a message that named a person or carried an
+ * identifier in its subject would otherwise have it echoed back by an automated reply.
+ *
+ * Every failure is coded, never retried and never recorded as sent. A send the provider did not confirm, a
+ * replay of one that was recorded but whose delivery was never settled, and a send the provider answered whose
+ * delivery could not be recorded also warn the owner to look at the thread before sending again, because the
+ * customer may or may not have received it. A session that lapsed before anything was sent is `session_required`.
  */
 import { sessionExecutor } from '../actions.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** What every Concierge email is titled: the subject line becomes "Re: <this> [CM-n]". It is never taken from the conversation. */
+export const replySubject = 'Your message to CareMetric support';
 const failure = code => Object.assign(new Error('The reply could not be sent.'), { code });
 const httpCode = { 400: 'invalid_reply', 401: 'session_required', 403: 'not_permitted', 409: 'reply_refused' };
 
@@ -42,13 +51,23 @@ export function replyExecutor({ communications, store, notifier, log = line => c
     // The head asked about ignores the reply sent under this action's own key, so a replay after a crash still matches.
     const snapshot = await store.communicationSnapshot({ id: input.communicationId, requestKey: execution.requestKey, messages: 0, chars: 100 });
     if (!snapshot) throw failure('conversation_missing');
-    if (snapshot.status === 'closed') throw failure('conversation_closed');
-    if (snapshot.headMessageId !== input.basedOnMessageId) throw failure('thread_changed');
+    // A reply already recorded under this key is settled by the replay below, not judged: it was written for the thread as it was.
+    // (A database from before the field reports nothing and gets the guards for every execution, as it always did.)
+    const recorded = typeof snapshot.ownReplyDelivery === 'string';
+    if (!recorded) {
+      if (snapshot.status === 'closed') throw failure('conversation_closed');
+      if (snapshot.headMessageId !== input.basedOnMessageId) throw failure('thread_changed');
+    }
 
     let outcome;
     try {
-      outcome = await communications.reply(sessionToken, { id: input.communicationId, body: input.body, requestKey: execution.requestKey });
+      outcome = await communications.reply(sessionToken, { id: input.communicationId, body: input.body, requestKey: execution.requestKey }, { subject: replySubject });
     } catch (error) {
+      if (error?.code === 'delivery_unsettled') {
+        // The provider answered but the record was not settled: the customer may have the reply, so this is not a plain failure.
+        await warn(execution, reference);
+        throw failure('delivery_unconfirmed');
+      }
       const code = httpCode[error?.status];
       throw code ? failure(code) : error;
     }

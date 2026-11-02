@@ -15,7 +15,10 @@ import "./admin.css";
 type Notice = { ok: boolean; text: string } | null;
 type Change = (id: string, work: () => Promise<unknown>, success: string | (() => string)) => Promise<void>;
 
-const failureText = (error: unknown) => error instanceof TeamApiError ? error.message : "The change could not be completed. Nothing was changed.";
+// A refusal from the server carries its reviewed text. Anything else (a timeout, a dropped connection, an answer the screen could not read)
+// can happen after the server has acted, so it never claims that nothing changed: a second press could queue the same work again.
+const failureText = (error: unknown) => error instanceof TeamApiError ? error.message
+  : "The result could not be confirmed, so the change may have gone through. Refresh and check the lists below before you try again.";
 const clip = (value: string, limit: number) => (value.length <= limit ? value : `${value.slice(0, limit - 1)}…`);
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
@@ -47,7 +50,8 @@ function ServicesPanel({ services, awaitingSession, waitingActions, busy, onRunW
         {awaitingSession > 0 && <>{awaitingSession === 1 ? "1 task is" : `${awaitingSession} tasks are`} waiting for you to be signed in, because reading another product needs your live session. </>}
         {waitingActions > 0 && <>{waitingActions === 1 ? "1 reply you approved has" : `${waitingActions} replies you approved have`} not been sent yet. </>}
         Run {awaitingSession + waitingActions === 1 ? "it" : "them"} now while you are signed in.</p>
-      <button type="button" className="button button-primary button-small" disabled={Boolean(busy) || !services.enabled} onClick={onRunWaiting}>Run what's waiting</button>
+      {/* Approved replies go out with this session whether or not the scheduler is on; only the waiting tasks need it. */}
+      <button type="button" className="button button-primary button-small" disabled={Boolean(busy) || (!services.enabled && waitingActions === 0)} onClick={onRunWaiting}>Run what's waiting</button>
     </div>}
   </section>;
 }
@@ -188,19 +192,19 @@ function ActivityRows({ tab, data, names }: { tab: Tab; data: unknown; names: Re
   </Table>;
 }
 
-function ActivityPanel({ client, agents }: { client: TeamClient; agents: TeamAgent[] }) {
+function ActivityPanel({ client, agents, refresh }: { client: TeamClient; agents: TeamAgent[]; refresh: number }) {
   const [tab, setTab] = useState<Tab>("runs");
   const [agentKey, setAgentKey] = useState("");
   const [offset, setOffset] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const names = Object.fromEntries(agents.map(agent => [agent.key, agent.displayName]));
   const reader = useCallback(async (signal: AbortSignal) => {
-    void attempt;
+    void attempt; void refresh;
     const page = tab === "audit"
       ? await client.audit({ prefix: null, offset, limit: pageSize }, { signal })
       : await client.activity({ kind: tab as ActivityKind, agentKey: agentKey || null, offset, limit: pageSize }, { signal });
     return { tab, page };
-  }, [client, tab, agentKey, offset, attempt]);
+  }, [client, tab, agentKey, offset, attempt, refresh]);
   const state = useAdminRead(reader);
   const choose = (next: Tab) => { setTab(next); setOffset(0); };
   return <section className="panel team-activity" aria-labelledby="team-activity-title">
@@ -263,12 +267,21 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
     void change("waiting", async () => { const result = await client.waiting(); started = result.started; sending = result.actions; },
       () => started === 0 && sending === 0 ? "Nothing was waiting to run." : `${[started > 0 ? `Started ${plural(started, "task")}` : "", sending > 0 ? `${started > 0 ? "sending" : "Sending"} ${plural(sending, "approved reply").replace("replys", "replies")}` : ""].filter(Boolean).join(" and ")}. ${started + sending === 1 ? "It finishes" : "They finish"} in the background; refresh in a minute to see the result.`);
   };
-  const onDecide = (approval: TeamApproval, decision: "approve" | "reject", note: string) => void change(`decide:${approval.id}`,
+  const onDecide = (approval: TeamApproval, decision: "approve" | "reject", note: string) => {
+    let sent = false;
+    void change(`decide:${approval.id}`,
     async () => {
       const result = await client.decide({ actionId: approval.id, decision, note: note.trim() || undefined });
       if (!result.decided) throw new TeamApiError(409, "That was already decided or has expired. The list has been refreshed.");
-      if (result.status === "failed") throw new TeamApiError(500, result.error ? errorLabel(result.error) : "It was approved but could not be carried out. See the activity below.");
-    }, decision === "approve" ? "Approved." : "Rejected.");
+      if (result.status === "failed") {
+        // A failed reply is final, so "press Run what's waiting" (the label a waiting task gets) would send the owner the wrong way.
+        const lapsed = result.error === "session_required" ? "Your sign-in lapsed before the reply was sent, so nothing was sent. Sign in again and answer from the conversation." : null;
+        throw new TeamApiError(500, lapsed ?? (result.error ? errorLabel(result.error) : "It was approved but could not be carried out. See the activity below."));
+      }
+      // Approved but not carried out: a reply waits for the owner's session, and nothing has been sent yet.
+      sent = result.status === "executed";
+    }, () => (decision === "reject" ? "Rejected." : sent ? "Approved." : "Approved. It has not been sent yet. Press Run what's waiting while you are signed in."));
+  };
 
   return <div className="team">
     <div className="page-heading"><div><span className="eyebrow">CareMetric Admin</span><h1><Bot size={22} aria-hidden="true" /> AI team</h1>
@@ -286,7 +299,7 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
         <div className="team-agent-grid">
           {shown.data.team.agents.map(agent => <AgentCard key={`${agent.key}:${agent.updatedAt}`} agent={agent} services={shown.data.services} busy={busy} onStatus={onStatus} onAutonomy={onAutonomy} onBudget={onBudget} onRun={onRun} />)}
         </div></section>
-      <ActivityPanel client={client} agents={shown.data.team.agents} />
+      <ActivityPanel client={client} agents={shown.data.team.agents} refresh={refresh} />
     </>}
   </div>;
 }

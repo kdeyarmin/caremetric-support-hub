@@ -125,6 +125,20 @@ describe("AI team screen", () => {
     expect((await screen.findByRole("button", { name: "Run what's waiting" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("lets approved replies be sent with the scheduler off, since they need only the owner's session", async () => {
+    const off = { enabled: false };
+    const withReplies = fakeClient({ ...overview({ awaitingSessionCount: 1 }, off), waitingActions: 2 }, { waiting: vi.fn(async () => ({ started: 0, actions: 2 })) });
+    render(<Team client={withReplies} />);
+    const button = await screen.findByRole("button", { name: "Run what's waiting" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+    expect(await screen.findByText(/Sending 2 approved replies/)).toBeTruthy();
+    cleanup();
+    // Waiting tasks alone cannot run with the scheduler off, so the button stays disabled then.
+    render(<Team client={fakeClient({ ...overview({ awaitingSessionCount: 1 }, off), waitingActions: 0 })} />);
+    expect((await screen.findByRole("button", { name: "Run what's waiting" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("shows the server's reason when the waiting work could not be started", async () => {
     const client = fakeClient(overview({ awaitingSessionCount: 1 }), { waiting: vi.fn(async () => { throw new TeamApiError(401, "Current administrator session required."); }) });
     render(<Team client={client} />);
@@ -258,7 +272,42 @@ describe("AI team screen", () => {
     cleanup();
     render(<Team client={unknown} />);
     fireEvent.click(await screen.findByRole("button", { name: "Resume Support Concierge" }));
-    expect((await screen.findByRole("alert")).textContent).toBe("The change could not be completed. Nothing was changed.");
+    const text = (await screen.findByRole("alert")).textContent ?? "";
+    // A dropped connection or a timeout can come after the server has acted, so the screen never says nothing changed.
+    expect(text).toBe("The result could not be confirmed, so the change may have gone through. Refresh and check the lists below before you try again.");
+    expect(text).not.toMatch(/nothing was changed/i);
+  });
+
+  it("reloads the activity history when the page is refreshed or something changes, keeping its tab", async () => {
+    const client = fakeClient();
+    render(<Team client={client} />);
+    await screen.findByRole("region", { name: "What the team has done" });
+    await waitFor(() => expect(client.activity).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("tab", { name: "Proposed actions" }));
+    await waitFor(() => expect(client.activity).toHaveBeenCalledTimes(2));
+    expect((client.activity as ReturnType<typeof vi.fn>).mock.calls[1][0]).toMatchObject({ kind: "actions", offset: 0 });
+    fireEvent.click(screen.getByRole("button", { name: /Refresh/ }));
+    await waitFor(() => expect(client.activity).toHaveBeenCalledTimes(3));
+    expect((client.activity as ReturnType<typeof vi.fn>).mock.calls[2][0]).toMatchObject({ kind: "actions", offset: 0 });
+    expect(screen.getByRole("tab", { name: "Proposed actions" }).getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(await screen.findByRole("button", { name: "Resume Support Concierge" }));
+    await waitFor(() => expect(client.activity).toHaveBeenCalledTimes(4));
+  });
+
+  it("says an approved reply has not been sent yet when it is waiting for the owner's session", async () => {
+    const client = fakeClient(overview(), { decide: vi.fn(async () => ({ id: ids.action, kind: "communication.reply", status: "approved", decided: true })) });
+    render(<Team client={client} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Approve and send/ }));
+    expect(await screen.findByText("Approved. It has not been sent yet. Press Run what's waiting while you are signed in.")).toBeTruthy();
+  });
+
+  it("does not send the owner to Run what's waiting for a reply that failed because the sign-in lapsed", async () => {
+    const client = fakeClient(overview(), { decide: vi.fn(async () => ({ id: ids.action, kind: "communication.reply", status: "failed", decided: true, error: "session_required" })) });
+    render(<Team client={client} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Approve and send/ }));
+    const text = (await screen.findByRole("alert")).textContent ?? "";
+    expect(text).toContain("nothing was sent");
+    expect(text).not.toMatch(/Run what's waiting/);
   });
 
   it("keeps showing the team while it refreshes after a change", async () => {

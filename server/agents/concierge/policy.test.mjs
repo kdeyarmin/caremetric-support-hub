@@ -90,6 +90,13 @@ describe('which reply to offer the owner', () => {
     expect(replyFor({ category: 'general', inquiryType: 'advisors' })).toBeNull();
     expect(replyFor({ category: 'general', inquiryType: 'sales', phi: true })).toBeNull();
   });
+
+  it('leaves a conversation filed as billing to the owner, whatever its words say', () => {
+    // A phone-line message tagged billing may read only "Please help", which no word rule can tell from a plain question.
+    expect(replyFor({ category: 'general', inquiryType: 'billing' })).toBeNull();
+    expect(replyFor({ category: 'general', inquiryType: 'billing', phi: true })).toBeNull();
+    expect(replyFor({ category: 'general', inquiryType: 'customer_service' })).toBe('standard');
+  });
 });
 
 describe('how a reply would travel', () => {

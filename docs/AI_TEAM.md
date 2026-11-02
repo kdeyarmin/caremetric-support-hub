@@ -220,6 +220,8 @@ numbers or health details. Neither repeats anything the customer wrote, mentions
 promises a time or an outcome; a text message gets a shorter version that fits one message. The owner answers
 everything else personally: an outage, a security or legal matter, billing, a cancellation, a sales or
 consulting inquiry, anything from the Advisors form, and any follow-up in a thread the team already joined.
+That holds for how a conversation was filed as well as for its words: one filed as billing (a phone-line
+message may read only "Please help") never gets a fixed reply or reaches the model.
 
 An approved reply is sent the way the owner would send it, through the inbox's own reply
 (`communications.reply`): it authorizes the owner's live session, is recorded before it is sent, goes out
@@ -227,9 +229,20 @@ under the action's request key so a retry never sends twice, and is authored in 
 it needs that session. It is sent in the same request as the approval, or, if that could not happen (a
 restart, a lapsed session), the next time the owner presses **Run what's waiting**. The background clock
 never sends it. Before sending, it checks that the conversation is still the one the reply was written for:
-if the customer wrote again, or the conversation was closed, it sends nothing and says why. A reply nobody
+if the customer wrote again, or the conversation was closed, it sends nothing and says why. That judgement is
+for a new message only: a reply already recorded under the action's key (a restart came after it was sent) is
+settled on replay, whatever the thread has done since, instead of being reported as never sent. A reply nobody
 approved is refused even for an agent trusted to act. A send the provider did not confirm is never
-reported as sent and is not retried; it warns the owner to look at the thread first.
+reported as sent and is not retried; it warns the owner to look at the thread first. So does a send the provider
+answered whose delivery the Hub could not record (`delivery_unsettled`).
+
+Every email the Concierge sends has one fixed subject, "Re: Your message to CareMetric support [CM-n]", never
+the conversation's own: a subject that named a person or carried an identifier would otherwise be echoed back by
+an automated reply. The owner's session reaches only executors that act as the owner (`sessionExecutor`), never
+the others. A session that lapsed after the approval and before anything was sent is not a failure: on a database
+with the hardening feature the action is handed back to approved (`release`) and waits for **Run what's
+waiting**, and the background drain asks the database for the kinds it can run (and the button for the kinds that
+need the session) before it limits the list, so replies waiting for the owner cannot hide an incident record.
 
 ### Drafted answers
 

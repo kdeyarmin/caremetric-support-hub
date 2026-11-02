@@ -123,6 +123,36 @@ describe('reply providers', () => {
     expect((await replayed.reply('session', { id: '99000000-0000-4000-8000-000000000001', body, requestKey: '99000000-0000-4000-8000-000000000002' })).replay).toBe(true);
     expect(send).toHaveBeenCalledTimes(1);
   });
+  it('can send an email under a fixed subject chosen by the server, never one the browser supplies', async () => {
+    const started = { messageId: 'm3', replay: false, delivery: 'pending', deliveryChannel: 'email', to: 'pat@agency.test', reference: 1044, subject: 'Roster for Pat Example SSN 000-12-3456' };
+    const send = vi.fn(async () => ({ delivery: 'sent', id: 'sg-3' }));
+    const service = communications({ pool: fakePool(started).pool, delegations: {}, email: { configured: true, send }, sms: { configured: false } });
+    const input = { id: '99000000-0000-4000-8000-000000000005', body: 'Hello.', requestKey: '99000000-0000-4000-8000-000000000006' };
+    await service.reply('session', input, { subject: 'Your message to CareMetric support' });
+    expect(send.mock.calls[0][1]).toBe('Re: Your message to CareMetric support [CM-1044]');
+    expect(JSON.stringify(send.mock.calls[0])).not.toMatch(/Pat Example|000-12-3456/);
+    // The conversation's own subject is used when no override is given, as before.
+    await communications({ pool: fakePool(started).pool, delegations: {}, email: { configured: true, send }, sms: { configured: false } }).reply('session', input);
+    expect(send.mock.calls[1][1]).toBe('Re: Roster for Pat Example SSN 000-12-3456 [CM-1044]');
+    // A subject in the request itself is refused (the route passes the browser's body as the input and nothing else).
+    await expect(service.reply('session', { ...input, subject: 'Anything' })).rejects.toMatchObject({ status: 400 });
+    for (const subject of ['', 'Line\nbreak', 'x'.repeat(151), 7]) await expect(service.reply('session', input, { subject })).rejects.toMatchObject({ status: 400 });
+  });
+  it('says so, with a code, when the provider answered but the delivery could not be recorded', async () => {
+    const started = { messageId: 'm4', replay: false, delivery: 'pending', deliveryChannel: 'email', to: 'pat@agency.test', reference: 1045, subject: 'Help' };
+    const calls = [];
+    const client = { query: vi.fn(async sql => {
+      if (sql.startsWith('select private.finish_communication_delivery')) throw new Error('connection to the database was lost');
+      calls.push(sql);
+      return { rows: [{ result: started }] };
+    }), release: vi.fn() };
+    const send = vi.fn(async () => ({ delivery: 'sent', id: 'sg-4' }));
+    const service = communications({ pool: { connect: async () => client }, delegations: {}, email: { configured: true, send }, sms: { configured: false } });
+    const failure = await service.reply('session', { id: '99000000-0000-4000-8000-000000000007', body: 'Hello.', requestKey: '99000000-0000-4000-8000-000000000008' }).catch(error => error);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect([failure.status, failure.code]).toEqual([502, 'delivery_unsettled']);
+    expect(failure.message).not.toMatch(/connection to the database/);
+  });
   it('names an emailed reply to a phone-line message for the caller, not with the staff import title', async () => {
     const started = { messageId: 'm2', replay: false, delivery: 'pending', deliveryChannel: 'email', to: 'jordan@example.com', reference: 1043,
       subject: 'Customer service call from Jordan Rivera', channel: 'phone' };

@@ -8,6 +8,7 @@ const fixture = ({ ready = [], started = execution(), executors = {} } = {}) => 
     readyActions: vi.fn(async () => ready),
     beginExecution: vi.fn(async () => started),
     completeExecution: vi.fn(async () => undefined),
+    releaseExecution: vi.fn(async () => true),
   };
   return { store, logs, executor: actionExecutor({ store, executors, log: line => logs.push(line) }) };
 };
@@ -95,6 +96,55 @@ describe('action executor', () => {
       const { executor } = fixture({ started: execution({ kind: 'incident.open' }), executors: { 'incident.open': plain } });
       expect(await executor.executeOne('a1', { kind: 'incident.open' })).toMatchObject({ executed: true });
       expect(plain).toHaveBeenCalledWith(expect.anything(), { sessionToken: null });
+    });
+
+    it('gives the owner\'s session only to an executor that acts as the owner, whoever asked', async () => {
+      const plain = vi.fn(async () => ({}));
+      const { executor } = fixture({ started: execution({ kind: 'incident.open' }), executors: { 'incident.open': plain } });
+      await executor.executeOne('a1', { kind: 'incident.open', sessionToken: token });
+      expect(plain).toHaveBeenCalledWith(expect.anything(), { sessionToken: null });
+      expect(JSON.stringify(plain.mock.calls)).not.toContain(token);
+    });
+
+    it('hands a session action back to approved when the session lapsed before anything was sent, instead of recording a failure', async () => {
+      const lapsed = sessionExecutor(async () => { throw Object.assign(new Error('x'), { code: 'session_required' }); });
+      const { executor, store, logs } = fixture({ started: execution({ execution: 3 }), executors: { 'communication.reply': lapsed } });
+      expect(await executor.executeOne('a1', { kind: 'communication.reply', sessionToken: token })).toEqual({ executed: false, failed: false, skipped: true, needsSession: true });
+      expect(store.releaseExecution).toHaveBeenCalledWith('a1', 3);
+      expect(store.completeExecution).not.toHaveBeenCalled();
+      expect(logs).toEqual([]);
+    });
+
+    it('records the failure as before when the database cannot hand it back, and for any other code', async () => {
+      const lapsed = sessionExecutor(async () => { throw Object.assign(new Error('x'), { code: 'session_required' }); });
+      for (const release of [vi.fn(async () => false), vi.fn(async () => { throw new Error('db'); }), undefined]) {
+        const { executor, store } = fixture({ executors: { 'communication.reply': lapsed } });
+        if (release) store.releaseExecution = release; else delete store.releaseExecution;
+        expect(await executor.executeOne('a1', { kind: 'communication.reply', sessionToken: token })).toMatchObject({ failed: true, error: 'session_required' });
+        expect(store.completeExecution).toHaveBeenCalledWith('a1', false, { error: 'session_required' }, null);
+      }
+      const other = sessionExecutor(async () => { throw Object.assign(new Error('x'), { code: 'thread_changed' }); });
+      const { executor, store } = fixture({ executors: { 'communication.reply': other } });
+      await executor.executeOne('a1', { kind: 'communication.reply', sessionToken: token });
+      expect(store.releaseExecution).not.toHaveBeenCalled();
+    });
+
+    it('never hands back an action whose executor does not act as the owner, whatever code it threw', async () => {
+      const plain = async () => { throw Object.assign(new Error('x'), { code: 'session_required' }); };
+      const { executor, store } = fixture({ started: execution({ kind: 'incident.open' }), executors: { 'incident.open': plain } });
+      expect(await executor.executeOne('a1', { kind: 'incident.open' })).toMatchObject({ failed: true });
+      expect(store.releaseExecution).not.toHaveBeenCalled();
+    });
+
+    it('asks the database for the kinds each caller can run before it limits the list, so waiting replies cannot hide an incident record', async () => {
+      const { executor, store } = fixture({ ready: [], executors: { 'communication.reply': reply(), 'incident.open': async () => ({}) } });
+      await executor.executeReady();
+      expect(store.readyActions).toHaveBeenLastCalledWith(50, { excludeKinds: ['communication.reply'] });
+      await executor.sessionActions();
+      expect(store.readyActions).toHaveBeenLastCalledWith(50, { kinds: ['communication.reply'] });
+      const none = fixture({ executors: { 'incident.open': async () => ({}) } });
+      expect(await none.executor.sessionActions()).toEqual([]);
+      expect(none.store.readyActions).not.toHaveBeenCalled();
     });
 
     it('leaves session actions to the owner when it drains, and counts them as waiting', async () => {

@@ -62,11 +62,13 @@ export function alertWords({ category, phi, severity, channel, productSlug, refe
 /**
  * Which fixed reply, if any, to offer the owner for a message. Only a plain question gets one: the owner answers
  * an outage, a security or legal matter, billing, a cancellation and a sales or consulting inquiry personally.
- * A plain question that carries identifiers gets the notice that asks the sender to resend without them.
+ * That holds for how the conversation was classified as well as for what its words say: a phone-line message
+ * filed as billing may read "Please help". A plain question that carries identifiers gets the notice that asks
+ * the sender to resend without them.
  */
 export function replyFor({ category, phi = false, productSlug = null, inquiryType = null }) {
   if (category !== 'general') return null;
-  if (productSlug === 'advisors' || inquiryType === 'sales' || inquiryType === 'advisors') return null;
+  if (productSlug === 'advisors' || inquiryType === 'sales' || inquiryType === 'advisors' || inquiryType === 'billing') return null;
   return phi ? 'phi' : 'standard';
 }
 

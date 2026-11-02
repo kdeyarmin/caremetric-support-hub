@@ -13,7 +13,10 @@
  * as the owner). Those are marked with `sessionExecutor`. They run only when a session is at hand:
  * straight after the owner approves, or when the owner presses "Run what's waiting". The background
  * drain leaves them alone, and a session action that cannot run is skipped BEFORE it is started, so
- * it stays approved instead of being stranded half way (there is no way to release one).
+ * it stays approved instead of being stranded half way. One whose session lapsed after it was started, before
+ * anything was done, is handed back to its approved state (on a database that can: see store.releaseExecution)
+ * rather than recorded as failed, so signing in again and pressing the button sends it. The owner's session
+ * reaches only the executors marked with `sessionExecutor`.
  */
 const databaseCode = /^[a-z][a-z_]{0,59}$/;
 const codeOf = error => (databaseCode.test(error?.code ?? '') ? error.code : 'executor_error');
@@ -29,6 +32,7 @@ export const sessionExecutor = executor => Object.assign(executor, { requiresSes
 
 export function actionExecutor({ store, executors = {}, log = line => console.warn(line) }) {
   const needsSession = kind => executors[kind]?.requiresSession === true;
+  const sessionKinds = () => Object.keys(executors).filter(needsSession);
 
   /**
    * Carries out one approved action. Pass its `kind` (the callers always know it) so a session action
@@ -46,10 +50,18 @@ export function actionExecutor({ store, executors = {}, log = line => console.wa
       result = { error: 'no_executor' };
     } else {
       try {
-        result = (await executor(execution, { sessionToken })) ?? {};
+        // The owner's session goes only to an executor that acts as the owner; every other executor runs without one.
+        result = (await executor(execution, { sessionToken: executor.requiresSession === true ? sessionToken : null })) ?? {};
         ok = true;
       } catch (error) {
-        result = { error: codeOf(error) };
+        const code = codeOf(error);
+        // A session that lapsed before anything was sent is not a failure: the action goes back to the state it was approved in
+        // and waits for the owner's next press. If the database cannot hand it back, it is recorded as failed, as it always was.
+        if (code === 'session_required' && executor.requiresSession === true
+          && await Promise.resolve(store.releaseExecution?.(execution.id, execution.execution ?? null)).catch(() => false) === true) {
+          return { executed: false, failed: false, skipped: true, needsSession: true };
+        }
+        result = { error: code };
         log(JSON.stringify({ event: 'hub_agent_action_error', action_id: execution.id, agent: execution.agentKey, kind: execution.kind, code: result.error }));
       }
     }
@@ -62,7 +74,8 @@ export function actionExecutor({ store, executors = {}, log = line => console.wa
     let executed = 0;
     let failed = 0;
     let waiting = 0;
-    for (const { id, kind } of await store.readyActions(limit)) {
+    // The database leaves the session kinds out before it limits the list, so enough waiting replies cannot hide the rest behind them.
+    for (const { id, kind } of await store.readyActions(limit, { excludeKinds: sessionKinds() })) {
       if (needsSession(kind)) { waiting += 1; continue; }
       try {
         const outcome = await executeOne(id, { kind });
@@ -77,7 +90,9 @@ export function actionExecutor({ store, executors = {}, log = line => console.wa
 
   /** Approved actions that are waiting for the owner's session: { id, kind } for each. */
   async function sessionActions(limit = 50) {
-    return (await store.readyActions(limit)).filter(item => needsSession(item.kind)).map(({ id, kind }) => ({ id, kind }));
+    const kinds = sessionKinds();
+    if (kinds.length === 0) return [];
+    return (await store.readyActions(limit, { kinds })).filter(item => needsSession(item.kind)).map(({ id, kind }) => ({ id, kind }));
   }
 
   /** Carries those out one at a time with the owner's session. Never rejects. */
