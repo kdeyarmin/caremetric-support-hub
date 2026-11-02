@@ -229,11 +229,14 @@ export async function auditSite(site, { fetchImpl = fetch, signal, now = () => D
     if (target && (target.status === 0 || target.status >= 400)) add('broken_link', `${target.status || target.error} on ${path(link)}`, path(from));
   });
 
-  // http to https
+  // http to https: whatever answers on the plain address must redirect, to this site's own https address, and permanently
   const plain = await get(`http://${host}/`, 0);
   if (plain && plain.status !== 0) {
-    if (plain.status === 200) add('http_not_redirected', 'http://… answers instead of redirecting', '/');
-    else if ((plain.status === 302 || plain.status === 307) && plain.location?.startsWith('https://')) add('http_redirect_temporary', `${plain.status}`, '/');
+    const redirects = [301, 302, 303, 307, 308].includes(plain.status);
+    const target = redirects && plain.location ? resolve(plain.location, `http://${host}/`) : null;
+    if (!redirects) add('http_not_redirected', plain.status === 200 ? 'http://… answers instead of redirecting' : `http://… answers ${plain.status} instead of redirecting`, '/');
+    else if (target === null || !(target === `${site.origin}/` || target.startsWith(`${site.origin}/`))) add('http_not_redirected', 'http://… redirects somewhere other than the https address', '/');
+    else if (plain.status !== 301 && plain.status !== 308) add('http_redirect_temporary', `${plain.status}`, '/');
   }
 
   // other addresses that should reach this site

@@ -131,6 +131,26 @@ describe('site level problems', () => {
     expect(codes((await audit({ ...healthy(), 'http://www.example.test/': reply('', { status: 302, location: `${origin}/` }) })).result)).toEqual(['http_redirect_temporary']);
   });
 
+  it('wants the plain http address to redirect permanently to this site\'s own https address', async () => {
+    const cases = [
+      ['a permanent redirect to the https address', reply('', { status: 301, location: `${origin}/` }), []],
+      ['a 308 to a page of the site', reply('', { status: 308, location: `${origin}/pricing` }), []],
+      ['a redirect to another http address', reply('', { status: 301, location: 'http://www.example.test/' }), ['http_not_redirected']],
+      ['a relative redirect that stays on http', reply('', { status: 301, location: '/' }), ['http_not_redirected']],
+      ['a redirect to another site', reply('', { status: 301, location: 'https://elsewhere.test/' }), ['http_not_redirected']],
+      ['a redirect to a lookalike host', reply('', { status: 301, location: `${origin}.evil.test/` }), ['http_not_redirected']],
+      ['a redirect with no destination', reply('', { status: 301 }), ['http_not_redirected']],
+      ['a 404', reply('Not found', { status: 404, type: 'text/plain' }), ['http_not_redirected']],
+      ['a server error', reply('x', { status: 500, type: 'text/plain' }), ['http_not_redirected']],
+      ['a temporary redirect to the https address', reply('', { status: 307, location: `${origin}/` }), ['http_redirect_temporary']],
+      ['a 303 to the https address', reply('', { status: 303, location: `${origin}/` }), ['http_redirect_temporary']],
+      ['a temporary redirect to another site', reply('', { status: 302, location: 'https://elsewhere.test/' }), ['http_not_redirected']],
+    ];
+    for (const [name, answer, expected] of cases) expect(codes((await audit({ ...healthy(), 'http://www.example.test/': answer })).result), name).toEqual(expected);
+    const { result } = await audit({ ...healthy(), 'http://www.example.test/': reply('', { status: 301, location: 'https://elsewhere.test/secret-token' }) });
+    expect(JSON.stringify(result)).not.toContain('secret-token');
+  });
+
   it('says nothing about http when the host does not answer on that port', async () => {
     expect((await audit({ ...healthy(), 'http://www.example.test/': 'refuse' })).result.findings).toEqual([]);
   });

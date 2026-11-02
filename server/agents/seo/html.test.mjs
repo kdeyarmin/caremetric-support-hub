@@ -104,6 +104,12 @@ describe('reading a poor page', () => {
     }
   });
 
+  it('reads addresses in attributes the way a browser does, with entities decoded', () => {
+    const facts = analyzeHtml('<link rel="canonical" href="https://example.test/a?x=1&amp;y=2"><a href="/search?a=1&amp;b=2">s</a><a href="/p?c=1&#38;d=2">p</a><a href="&#106;avascript:alert(1)">no</a>', page);
+    expect(facts.canonical).toBe('https://example.test/a?x=1&y=2');
+    expect(facts.links).toEqual([resolve('/search?a=1&b=2', page), resolve('/p?c=1&d=2', page)]);
+  });
+
   it('reads only the first 600 KB of a page', () => {
     expect(analyzeHtml(`<title>kept</title>${' '.repeat(700_000)}<h1>late</h1>`, page)).toMatchObject({ title: 'kept', h1Count: 0 });
   });
@@ -132,8 +138,39 @@ describe('reading robots.txt', () => {
   });
   it('says null for an app shell or anything else that is not a robots file', () => {
     expect(analyzeRobots('<!doctype html><html><body>app</body></html>')).toBeNull();
+    expect(analyzeRobots('  \n<HTML lang="en">')).toBeNull();
     expect(analyzeRobots('Not found')).toBeNull();
     expect(analyzeRobots('')).toBeNull();
+  });
+  it('treats User-agent lines that follow one another as one group, in either order', () => {
+    expect(analyzeRobots('User-agent: *\nUser-agent: Bingbot\nDisallow: /\n').blocksAll).toBe(true);
+    expect(analyzeRobots('User-agent: Bingbot\nUser-agent: *\nDisallow: /\n').blocksAll).toBe(true);
+    // A rule ends the group: the next User-agent line starts another one.
+    expect(analyzeRobots('User-agent: *\nAllow: /\nUser-agent: Bingbot\nDisallow: /\n').blocksAll).toBe(false);
+    expect(analyzeRobots('User-agent: Bingbot\nDisallow: /\nUser-agent: Googlebot\nUser-agent: *\nAllow: /\n').blocksAll).toBe(false);
+    // Sitemap lines belong to no group.
+    expect(analyzeRobots('User-agent: Bingbot\nSitemap: https://example.test/s.xml\nUser-agent: *\nDisallow: /\n')).toEqual({ sitemaps: ['https://example.test/s.xml'], blocksAll: true });
+  });
+  it('reads CRLF files, any letter case and a sitemap address followed by words', () => {
+    expect(analyzeRobots('USER-AGENT: *\r\nDISALLOW: /\r\nSitemap: https://example.test/s.xml (main)\r\n')).toEqual({ sitemaps: ['https://example.test/s.xml'], blocksAll: true });
+  });
+  it('stays fast on hostile robots.txt shapes, because it runs inside the server', () => {
+    const shapes = {
+      'blank lines, then text': '\n'.repeat(300_000) + 'not robots',
+      'blank lines before a rule': '\n'.repeat(300_000) + 'User-agent: *\nDisallow: /\n',
+      'one line of spaces': `${' '.repeat(300_000)}:`,
+      'spaces after a colon': `Disallow:${' '.repeat(300_000)}/x\n`,
+      'many comments': `#${'x'.repeat(50)}\n`.repeat(10_000),
+      'only colons': ':'.repeat(300_000),
+      'many sitemap lines': 'Sitemap: https://example.test/s.xml\n'.repeat(10_000),
+    };
+    for (const [name, input] of Object.entries(shapes)) {
+      const started = performance.now();
+      analyzeRobots(input);
+      // A guard against the quadratic blow-up this once had (seconds at 80,000 blank lines), not a benchmark.
+      expect(performance.now() - started, name).toBeLessThan(500);
+    }
+    expect(analyzeRobots('\n'.repeat(300_000) + 'User-agent: *\nDisallow: /\n')).toEqual({ sitemaps: [], blocksAll: true });
   });
 });
 
