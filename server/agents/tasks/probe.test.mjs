@@ -227,6 +227,32 @@ describe('an incident', () => {
     await expect(broken.handlers['probe.incident'](incidentTask(), at('2026-11-02T14:11:00Z'))).rejects.toThrow('down');
   });
 
+  it('retries when a provider refuses the alert, so an outage is not left without one, and counts only sent and already-sent as told', async () => {
+    const { handlers, notifier, store } = fixture();
+    // The text was refused (a temporary 429, say) while the email went: the notifier reports it instead of throwing.
+    notifier.send.mockResolvedValue([{ channel: 'sms', delivery: 'failed' }, { channel: 'email', delivery: 'sent' }]);
+    const error = await handlers['probe.incident'](incidentTask(), at('2026-11-02T14:11:00Z')).catch(thrown => thrown);
+    expect(error).toMatchObject({ code: 'notification_failed', transient: true });
+    expect(store.proposeAction).toHaveBeenCalledTimes(1);
+
+    // The retry finds the email already sent and the text sent now: the task is done.
+    notifier.send.mockResolvedValue([{ channel: 'sms', delivery: 'sent' }, { channel: 'email', delivery: 'duplicate', original: 'sent' }]);
+    expect((await handlers['probe.incident'](incidentTask(), at('2026-11-02T14:16:00Z'))).result).toMatchObject({ delivery: ['sms:sent', 'email:duplicate'] });
+
+    // A channel that is switched off, or a send that may or may not have gone, is not retried: that could send twice.
+    for (const delivery of ['suppressed', 'unknown']) {
+      notifier.send.mockResolvedValue([{ channel: 'email', delivery }]);
+      await expect(handlers['probe.incident'](incidentTask(), at('2026-11-02T14:11:00Z')), delivery).resolves.toBeDefined();
+    }
+  });
+
+  it('retries a recovery note the same way', async () => {
+    const { handlers, notifier } = fixture();
+    notifier.send.mockResolvedValue([{ channel: 'email', delivery: 'failed' }]);
+    const recovery = task({ kind: 'probe.recovery', payload: { target: 'hub', incident: 2, downSince: '2026-11-02T14:05:00Z', recoveredAt: '2026-11-02T14:35:00Z' } });
+    await expect(handlers['probe.recovery'](recovery)).rejects.toMatchObject({ code: 'notification_failed', transient: true });
+  });
+
   it('alerts before it records, so a failure to record never silences the alert', async () => {
     const { handlers, store, notifier } = fixture();
     const order = [];

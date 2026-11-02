@@ -207,6 +207,25 @@ describe('work that waits for the owner\'s session', () => {
     expect(store.claimSessionTask.mock.calls.map(call => call[0])).toEqual(['b', 'c', 'd', 'e']);
   });
 
+  it('claims a task the owner just asked for even when twenty older ones are waiting ahead of it', async () => {
+    const handler = vi.fn(async () => ({}));
+    const crowd = Array.from({ length: 20 }, (_, index) => waitingItem(`old-${index}`));
+    const { scheduler, store } = fixture({ handlers: { 'import.advisors': handler }, waiting: crowd, claimable: { fresh: imported('fresh') } });
+    const run = await scheduler.runWaiting({ sessionToken, only: ['fresh'] });
+    expect(run.started).toBe(1);
+    expect(store.claimSessionTask.mock.calls.map(call => call[0])).toEqual(['fresh']);
+    expect(store.sessionTasks).not.toHaveBeenCalled();
+    await run.done;
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ id: 'fresh' }), expect.anything());
+  });
+
+  it('fails visibly, as no_handler, a named task whose kind this server cannot run', async () => {
+    const { scheduler, store } = fixture({ handlers: { 'import.advisors': async () => ({}) }, claimable: { odd: task({ id: 'odd', kind: 'mystery.kind', requiresSession: true }) } });
+    const run = await scheduler.runWaiting({ sessionToken, only: ['odd'] });
+    await run.done;
+    expect(store.finish).toHaveBeenCalledWith('odd', 'failed', { errorCode: 'no_handler' });
+  });
+
   it('skips a task another caller claimed first, so a double click runs nothing twice', async () => {
     const handler = vi.fn(async () => ({}));
     const { scheduler, store } = fixture({ handlers: { 'import.advisors': handler }, waiting: [waitingItem('s1')], claimable: {} });

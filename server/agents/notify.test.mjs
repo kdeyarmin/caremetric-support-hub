@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ownerNotifier, renderOwnerEmail } from './notify.mjs';
+import { delivered, ownerNotifier, renderOwnerEmail } from './notify.mjs';
 
 const origin = 'https://support-hub-web-production.up.railway.app';
-const fixture = ({ duplicate = false, sms = { configured: true }, email = { configured: true }, phone = '+12025550701', ownerEmail = 'owner@example.test' } = {}) => {
+const fixture = ({ duplicate = false, original = 'pending', sms = { configured: true }, email = { configured: true }, phone = '+12025550701', ownerEmail = 'owner@example.test' } = {}) => {
   const calls = [];
   const logs = [];
   const store = {
-    notifyBegin: vi.fn(async input => { calls.push(`begin ${input.channel}`); return { id: `n-${input.channel}`, duplicate, status: 'pending' }; }),
+    notifyBegin: vi.fn(async input => { calls.push(`begin ${input.channel}`); return { id: `n-${input.channel}`, duplicate, status: original }; }),
     notifyFinish: vi.fn(async (id, delivery) => { calls.push(`finish ${id} ${delivery}`); }),
     ownerContact: vi.fn(async () => (phone ? { phone } : null)),
   };
@@ -63,10 +63,22 @@ describe('owner notifier', () => {
 
   it('does not send a duplicate', async () => {
     const { notifier, senders, store } = fixture({ duplicate: true });
-    expect(await notifier.send({ severity: 'urgent', subject: 'Hub is down', body: 'Down.', dedupeKey: 'k4' })).toEqual([{ channel: 'sms', delivery: 'duplicate' }, { channel: 'email', delivery: 'duplicate' }]);
+    expect(await notifier.send({ severity: 'urgent', subject: 'Hub is down', body: 'Down.', dedupeKey: 'k4' })).toEqual([{ channel: 'sms', delivery: 'duplicate', original: 'pending' }, { channel: 'email', delivery: 'duplicate', original: 'pending' }]);
     expect(senders.sms.send).not.toHaveBeenCalled();
     expect(senders.email.send).not.toHaveBeenCalled();
     expect(store.notifyFinish).not.toHaveBeenCalled();
+  });
+
+  it('says what became of the earlier attempt, so a repeat is not taken for a delivery', async () => {
+    for (const [original, reached] of [['sent', true], ['pending', false], ['unknown', false], ['suppressed', false], ['failed', false]]) {
+      const { notifier } = fixture({ duplicate: true, original });
+      const results = await notifier.send({ severity: 'info', subject: 'Brief', body: 'Hello.', dedupeKey: `k-${original}` });
+      expect(results, original).toEqual([{ channel: 'email', delivery: 'duplicate', original }]);
+      expect(results.some(delivered), original).toBe(reached);
+    }
+    expect(delivered({ channel: 'email', delivery: 'sent' })).toBe(true);
+    expect(delivered({ channel: 'email', delivery: 'failed' })).toBe(false);
+    expect(delivered({ channel: 'email', delivery: 'duplicate' })).toBe(false);
   });
 
   it('records a channel it cannot use as suppressed instead of failing', async () => {

@@ -12,6 +12,7 @@
  * What is kept: the task result and the run summary carry counts only, and so do the alert's subject and stored body. Account names
  * and amounts travel in the email's blocks, which the notifier never stores.
  */
+import { delivered } from '../notify.mjs';
 import { composeAccountsReport } from '../accounts/report.mjs';
 import { weekStart } from '../accounts/week.mjs';
 import { recordRun } from './shared.mjs';
@@ -37,10 +38,11 @@ export function accountsHandlers({ store, notifier, publicOrigin, features = nul
       severity: 'info', subject: report.subject, body: report.body, blocks: report.blocks,
       dedupeKey: asked ? `accounts:run:${task.id}` : `accounts:weekly:${week}`, agentKey: task.agentKey, taskId: task.id,
     });
-    if (!asked && results.every(item => item.delivery === 'duplicate')) return { result: { skipped: 'already_sent', week } };
+    // A scheduled run that finds the week's alert already recorded sends nothing. It says whether that earlier attempt reached the owner.
+    if (!asked && results.every(item => item.delivery === 'duplicate')) return { result: { skipped: results.some(delivered) ? 'already_sent' : 'earlier_attempt_unconfirmed', week } };
 
     const delivery = results.map(item => `${item.channel}:${item.delivery}`);
-    const reached = results.some(item => item.delivery === 'sent' || item.delivery === 'duplicate');
+    const reached = results.some(delivered);
     await recordRun({ store, log }, task, {
       promptVersion: 'accounts.1',
       summary: reached ? `Sent the weekly accounts report: ${report.body}` : `The weekly accounts report was written but not delivered (${delivery.join(', ')}).`,

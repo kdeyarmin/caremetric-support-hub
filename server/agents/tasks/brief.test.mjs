@@ -148,10 +148,15 @@ describe('the morning brief task', () => {
     }
   });
 
-  it('counts a brief that was already sent as delivered', async () => {
-    const { handlers, store } = fixture({ delivery: [{ channel: 'email', delivery: 'duplicate' }] });
+  it('counts a brief that was already sent as delivered, and one that only reached the record as not', async () => {
+    const { handlers, store } = fixture({ delivery: [{ channel: 'email', delivery: 'duplicate', original: 'sent' }] });
     await handlers['brief.daily'](task(), at('2026-11-02T12:00:00Z'));
     expect(store.finishRun).toHaveBeenCalledWith('run-1', 'completed', {}, expect.stringContaining('Sent the morning brief'), null);
+    for (const original of ['pending', 'unknown', 'suppressed', 'failed']) {
+      const stuck = fixture({ delivery: [{ channel: 'email', delivery: 'duplicate', original }] });
+      await stuck.handlers['brief.daily'](task(), at('2026-11-02T12:00:00Z'));
+      expect(stuck.store.finishRun, original).toHaveBeenCalledWith('run-1', 'failed', {}, 'The morning brief was written but not delivered (email:duplicate).', 'not_delivered');
+    }
   });
 
   it('retries when the facts cannot be read, and sends nothing', async () => {

@@ -7,6 +7,7 @@
  * The brief carries counts, product names and times. It never quotes a customer, an address or an
  * amount of money.
  */
+import { delivered } from '../notify.mjs';
 import { plural, recordRun, when } from './shared.mjs';
 
 const day = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric' });
@@ -99,7 +100,7 @@ export function briefHandlers({ store, notifier, publicOrigin, services = {}, la
       dedupeKey, agentKey: task.agentKey, taskId: task.id,
     });
     const delivery = results.map(item => `${item.channel}:${item.delivery}`);
-    const reached = results.some(item => item.delivery === 'sent' || item.delivery === 'duplicate');
+    const reached = results.some(delivered);
     await recordRun({ store, log }, task, {
       promptVersion: 'brief.1',
       summary: reached ? `Sent the morning brief: ${content.headline}` : `The morning brief was written but not delivered (${delivery.join(', ')}).`,

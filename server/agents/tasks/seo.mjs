@@ -8,6 +8,7 @@
  */
 import { auditSite, summarizeFindings } from '../seo/audit.mjs';
 import { sites as defaultSites } from '../seo/sites.mjs';
+import { delivered } from '../notify.mjs';
 import { plural, recordRun } from './shared.mjs';
 
 const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' });
@@ -77,7 +78,7 @@ export function seoHandlers({ store, notifier, publicOrigin, fetchImpl = fetch, 
       dedupeKey: task.sourceKind === 'owner' ? `seo:${date}:${task.id}` : `seo:${date}`, agentKey: task.agentKey, taskId: task.id,
     });
     const delivery = results.map(item => `${item.channel}:${item.delivery}`);
-    const reached = results.some(item => item.delivery === 'sent' || item.delivery === 'duplicate');
+    const reached = results.some(delivered);
     await recordRun({ store, log }, task, {
       promptVersion: 'seo.1',
       summary: reached ? `Sent the SEO report: ${report.headline}` : `The SEO report was written but not delivered (${delivery.join(', ')}).`,

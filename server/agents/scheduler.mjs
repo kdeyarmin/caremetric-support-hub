@@ -114,11 +114,14 @@ export function agentScheduler({
     if (typeof sessionToken !== 'string' || sessionToken.length === 0) throw new TypeError('A session token is required.');
     const handled = new Set(kinds());
     const wanted = Array.isArray(only) ? new Set(only) : null;
-    const waiting = (await guarded('session_tasks', () => store.sessionTasks(20))) ?? [];
+    // Tasks the owner named are claimed directly: they must not depend on being among the first 20 in the queue, which is
+    // ordered by priority and age and can hold older waiting tasks. A named task for a kind with no handler is claimed too
+    // and fails visibly as `no_handler`, which is better than sitting there unexplained.
+    const waiting = wanted ? [...wanted].map(id => ({ id, kind: null })) : (await guarded('session_tasks', () => store.sessionTasks(20))) ?? [];
     const claimed = [];
     for (const item of waiting) {
       if (claimed.length >= Math.min(Math.max(limit, 1), 5)) break;
-      if (!handled.has(item.kind) || (wanted && !wanted.has(item.id))) continue;
+      if (!wanted && !handled.has(item.kind)) continue;
       const task = await guarded('session_claim', () => store.claimSessionTask(item.id, leaseSeconds));
       if (task) claimed.push(task);
     }

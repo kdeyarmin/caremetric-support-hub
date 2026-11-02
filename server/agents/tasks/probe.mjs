@@ -113,6 +113,13 @@ export function probeHandlers({
     };
   }
 
+  // A provider that refuses a message (a temporary 429, say) is reported by the notifier as `failed`, not thrown. Finishing the task
+  // then would leave the owner without the alert for the whole outage, because nothing enqueues a second incident task. Retry instead:
+  // the notifier resends only the channels that failed, a bounded number of times, and skips the ones that went.
+  function mustHaveReached(results) {
+    if (results.some(item => item.delivery === 'failed')) throw Object.assign(new Error('The owner could not be told.'), { code: 'notification_failed', transient: true });
+  }
+
   // An observe-only agent still tells the owner (that is a report), but proposes no action.
   async function recordAction(task, { kind, target, incident, preview, input }) {
     if (task.agent?.autonomy === 'observe') return 'observe_only';
@@ -149,6 +156,7 @@ export function probeHandlers({
       kind: 'incident.open', target, incident: payload.incident, preview: subject,
       input: { target: target.key, incident: payload.incident, since: payload.since ?? null, failures, statusCode: last.statusCode, failure: last.failure, flapping },
     });
+    mustHaveReached(results);
     return { result: { target: target.key, incident: payload.incident, severity: urgent ? 'urgent' : 'warning', delivery: results.map(item => `${item.channel}:${item.delivery}`), action } };
   }
 
@@ -170,6 +178,7 @@ export function probeHandlers({
       kind: 'incident.resolve', target, incident: payload.incident, preview: subject,
       input: { target: target.key, incident: payload.incident, downSince: payload.downSince ?? null, recoveredAt: payload.recoveredAt ?? null },
     });
+    mustHaveReached(results);
     return { result: { target: target.key, incident: payload.incident, delivery: results.map(item => `${item.channel}:${item.delivery}`), action } };
   }
 

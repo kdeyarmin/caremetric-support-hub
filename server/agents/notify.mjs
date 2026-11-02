@@ -45,6 +45,9 @@ export function renderOwnerEmail({ subject, body, severity = 'info', publicOrigi
   });
 }
 
+/** True when the owner has the message: it was sent now, or an earlier attempt under the same key was sent. */
+export const delivered = item => item.delivery === 'sent' || (item.delivery === 'duplicate' && item.original === 'sent');
+
 export function ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log = line => console.warn(line) }) {
   const channelsFor = severity => (severity === 'urgent' ? ['sms', 'email'] : ['email']);
 
@@ -61,7 +64,8 @@ export function ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log
 
   async function deliver(channel, input) {
     const begun = await store.notifyBegin({ ...input, channel });
-    if (begun.duplicate) return { channel, delivery: 'duplicate' };
+    // A duplicate says what became of the original: a handler that is run again must not take "already recorded" for "already sent".
+    if (begun.duplicate) return { channel, delivery: 'duplicate', original: begun.status ?? null };
     let outcome;
     try {
       outcome = await transport(channel, input);
@@ -79,7 +83,7 @@ export function ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log
 
   return {
     channelsFor,
-    /** Returns one { channel, delivery } per channel; delivery is sent, failed, unknown, suppressed or duplicate. */
+    /** Returns one { channel, delivery } per channel; delivery is sent, failed, unknown, suppressed or duplicate (with `original`, the status of the earlier attempt). */
     async send({ severity = 'info', subject, body, dedupeKey, agentKey = null, taskId = null, blocks = null }) {
       if (!severities.has(severity)) throw new TypeError('Unsupported notification severity.');
       if (!subject || !body || !dedupeKey) throw new TypeError('A notification needs a subject, a body and a dedupe key.');
