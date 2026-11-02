@@ -183,7 +183,8 @@ or it is an automatic reply or an empty message.
 
 Triage reads a minimal view of the conversation (`private.agent_communication_snapshot`: no contact name,
 email address, phone number, organization or assignee, no internal notes, and the subject only for email,
-because the subject of a phone-line message names the caller and a text's carries the number). It then:
+because the subject of a phone-line message names the caller and a text's carries the number; it does say how
+many times each side has written). It then:
 
 1. **Screens for personal identifiers**: a Social Security number, a date of birth next to a birth word, a
    record, member, policy, patient or resident number, a Medicare number, a payment card number that passes

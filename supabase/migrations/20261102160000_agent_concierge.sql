@@ -113,7 +113,11 @@ begin
     'canText', coalesce(c.contact_phone ~ '^\+[1-9][0-9]{7,14}$', false),
     -- Subjects of phone and web-form conversations name the caller, and a text's carries the number.
     'subject', case when c.channel = 'email' then c.subject end,
-    'headMessageId', v_head, 'latestInboundId', v_inbound_id, 'answered', v_answered, 'messages', v_messages);
+    'headMessageId', v_head, 'latestInboundId', v_inbound_id, 'answered', v_answered,
+    -- How many times each side has written, so a first message (nobody has replied yet) can be told from a follow-up.
+    'inboundCount', (select count(*) from private.communication_messages x where x.communication_id = c.id and x.direction = 'inbound'),
+    'outboundCount', (select count(*) from private.communication_messages x where x.communication_id = c.id and x.direction = 'outbound'),
+    'messages', v_messages);
 end;
 $$;
 

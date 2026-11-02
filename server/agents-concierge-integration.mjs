@@ -131,7 +131,7 @@ try {
   assert.equal(await snapshot(randomUUID()), null, 'a conversation that does not exist is null, not an error');
   const rich = await conversation({ messages: [{ ago: 30, body: 'First question', direction: 'inbound' }, { ago: 28, direction: 'note', body: secrets.note }, { ago: 25, direction: 'outbound', body: 'Our answer', requestKey: randomUUID() }, { ago: 5, body: `${secrets.body} ${'x'.repeat(300)}` }] });
   const full = await snapshot(rich.id, null, 10, 200);
-  assert.deepEqual(Object.keys(full).sort(), ['answered', 'canEmail', 'canText', 'channel', 'createdAt', 'headMessageId', 'id', 'inquiryType', 'latestInboundId', 'messages', 'productSlug', 'reference', 'status', 'subject', 'updatedAt']);
+  assert.deepEqual(Object.keys(full).sort(), ['answered', 'canEmail', 'canText', 'channel', 'createdAt', 'headMessageId', 'id', 'inboundCount', 'inquiryType', 'latestInboundId', 'messages', 'outboundCount', 'productSlug', 'reference', 'status', 'subject', 'updatedAt']);
   const serialized = JSON.stringify(full);
   for (const secret of [secrets.name, secrets.email, secrets.phone, secrets.organization, secrets.note]) assert.ok(!serialized.includes(secret), `the snapshot never carries ${secret.slice(0, 8)}…`);
   assert.deepEqual([full.canEmail, full.canText, full.productSlug, full.subject, full.answered], [true, true, 'carebase', 'A question', false]);
@@ -139,6 +139,7 @@ try {
   assert.equal(full.messages[2].body.length, 200, 'a body is clipped to the length asked for');
   assert.equal(full.messages[2].body.startsWith(secrets.body), true);
   assert.deepEqual([full.latestInboundId, full.headMessageId], [rich.messages[3], rich.messages[3]]);
+  assert.deepEqual([full.inboundCount, full.outboundCount], [2, 1], 'the counts ignore internal notes');
   assert.deepEqual((await snapshot(rich.id, null, 1, 200)).messages.map(message => message.id), [rich.messages[3]], 'only the newest message when one is asked for');
   assert.deepEqual((await snapshot(rich.id, null, 0, 200)).messages, [], 'heads only when none are asked for');
   const aside = await conversation({ messages: [{ ago: 10 }, { ago: 5, direction: 'outbound', requestKey: randomUUID() }] });
