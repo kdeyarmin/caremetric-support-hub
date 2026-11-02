@@ -25,6 +25,7 @@ appUrl.password = 'ephemeral-test-only';
 const pool = new pg.Pool({ connectionString: appUrl.href });
 const api = gateway(pool);
 const contractMigration = await readFile(new URL('../supabase/migrations/20261102120100_agent_control_plane_contract.sql', import.meta.url), 'utf8');
+const probesMigration = await readFile(new URL('../supabase/migrations/20261102130100_agent_probes_contract.sql', import.meta.url), 'utf8');
 
 const aiAssistant = 'a1a00000-a1a0-4000-8000-000000000001';
 const owner = randomUUID(), other = randomUUID(), secondAdmin = randomUUID();
@@ -95,6 +96,7 @@ try {
   await assert.rejects(withSession(pool, null, db => db.query('select hub.get_agent_team()'), false), refused('42501'));
   assertBackendContract(await api.rpc('get_backend_contract', {}));
   assert.ok((await api.rpc('get_backend_contract', {})).features.includes('platform.agents.v1'));
+  assert.ok((await api.rpc('get_backend_contract', {})).features.includes('platform.agents.probes.v1'));
 
   // The owner sees the three seeded agents, paused.
   let view = await team();
@@ -471,7 +473,7 @@ try {
       while (Date.now() < deadline) { if ((await task(id)).status === status) return task(id); await new Promise(resolve => setTimeout(resolve, 25)); }
       assert.fail(`task ${id} never reached ${status}`);
     };
-    assert.deepEqual(team2.scheduler.kinds().sort(), ['concierge.communication', 'probe.incident', 'probe.sweep']);
+    assert.deepEqual(team2.scheduler.kinds().sort(), ['concierge.communication', 'probe.incident', 'probe.recovery', 'probe.sweep'], 'the shipped handlers are registered beside the caller\'s');
 
     // A due schedule becomes a task and runs; a schedule for a kind with no handler stays due and untouched.
     // A firing's key carries its scheduled instant to the second, so give this firing an instant no earlier section used.
@@ -523,7 +525,7 @@ try {
     const proposed = (await rows('select * from private.agent_actions where task_id = $1', [draft]))[0];
     assert.deepEqual([proposed.status, (await task(draft)).status], ['proposed', 'awaiting_approval']);
     const overview = overviewSchema.parse(await team2.admin.overview(ownerToken, {}));
-    assert.deepEqual(overview.services, { enabled: true, handlers: ['concierge.communication', 'probe.incident', 'probe.sweep'], sms: true, email: true, ownerEmail: true });
+    assert.deepEqual(overview.services, { enabled: true, handlers: ['concierge.communication', 'probe.incident', 'probe.recovery', 'probe.sweep'], sms: true, email: true, ownerEmail: true });
     assert.equal(overview.team.approvals[0].id, proposed.id);
     const decision = decisionSchema.parse(await team2.admin.decide(ownerToken, { actionId: proposed.id, decision: 'approve', note: 'Send it' }));
     assert.deepEqual(decision, { id: proposed.id, kind: 'communication.reply', status: 'executed', decided: true });
@@ -589,12 +591,192 @@ try {
   await assert.rejects(ownerCall('hub.list_audit_events', [null, 0, 99]), refused('22023'));
   await assert.rejects(ownerCall('hub.list_agent_activity', ['runs', null, 0, 5], otherToken), refused('28000'));
 
+  {
+    // The on-call agent end to end: the real store and scheduler, the handlers the server ships with, and a scripted network.
+    await clearWork();
+    await admin.query('delete from private.agent_probe_state');
+    for (const [key, status] of [['platform_engineer', 'active'], ['support_concierge', 'paused'], ['chief_of_staff', 'paused']]) {
+      if ((await agentRow(key)).status !== status) await setStatus(key, status);
+    }
+    if ((await agentRow('platform_engineer')).autonomy !== 'act') await setAutonomy('platform_engineer', 'act');
+    await admin.query("update private.agent_schedules set next_run_at = now() + interval '1 day', enabled = true");
+    const sent = { sms: [], email: [] };
+    const probeLogs = [];
+    const network = new Map();
+    const fetchImpl = async url => {
+      const behaviour = network.get(url) ?? 200;
+      if (behaviour === 'down') throw new TypeError('fetch failed');
+      return new Response('ok', { status: behaviour });
+    };
+    const probes = agentTeam({
+      pool, enabled: true, ownerEmail: 'owner@example.test', publicOrigin: 'https://hub.test', fetchImpl, log: line => probeLogs.push(line),
+      sms: { configured: true, send: async (to, body) => { sent.sms.push([to, body]); return { delivery: 'sent', id: 'SM' + '1'.repeat(32) }; } },
+      email: { configured: true, send: async (to, subject, content) => { sent.email.push([to, subject, content]); return { delivery: 'sent', id: 'fixture-probe-message' }; } },
+    });
+    assert.deepEqual(probes.scheduler.kinds(), ['probe.incident', 'probe.recovery', 'probe.sweep']);
+    const carebase = 'https://cmcarebase.com/health';
+    let sweeps = 0;
+    const sweep = async () => {
+      const queued = await enqueue('platform_engineer', 'probe.sweep', `it:${run}:on-call:${sweeps++}`);
+      assert.ok(queued, 'a new sweep is queued');
+      const result = await probes.tick();
+      if (result.claimed !== 1) assert.fail(`the sweep is claimed and run (${JSON.stringify(result)} ${probeLogs.join(' | ')})`);
+      return result;
+    };
+    const state = key => row('select * from private.agent_probe_state where target_key = $1', [key]);
+    const count = async sql => Number((await row(sql)).count);
+
+    // Healthy: every product is recorded as up and nobody is told anything.
+    let tick = await sweep();
+    assert.equal(tick.claimed, 1);
+    assert.deepEqual((await rows('select target_key, state, consecutive_failures from private.agent_probe_state order by target_key')).map(entry => [entry.target_key, entry.state, entry.consecutive_failures]),
+      [['advisors', 'up', 0], ['carebase', 'up', 0], ['hub', 'up', 0], ['intel', 'up', 0]]);
+    assert.deepEqual([sent.sms.length, sent.email.length], [0, 0]);
+    assert.equal(await count("select count(*) from private.agent_tasks where request_key like 'probe.incident:%' or request_key like 'probe.recovery:%'"), 0);
+
+    // One failed check is a blip: the state stays up, nobody is told, and the sweep's run shows what it saw.
+    network.set(carebase, 503);
+    await sweep();
+    let current = await state('carebase');
+    assert.deepEqual([current.state, current.consecutive_failures, current.last_status_code, current.last_failure], ['up', 1, 503, 'status']);
+    assert.equal(await count("select count(*) from private.agent_tasks where request_key like 'probe.incident:%'"), 0);
+    const blip = await row("select * from private.agent_runs where agent_key = 'platform_engineer' and summary like '%CareBase returned 503%' order by started_at desc limit 1");
+    assert.deepEqual([blip.model, blip.outcome, Number(blip.cost_cents), blip.error_code], ['none', 'completed', 0, null]);
+    assert.deepEqual([sent.sms.length, sent.email.length], [0, 0]);
+
+    // The second failure in a row opens one incident. The next tick tells the owner by text and email and records it.
+    await sweep();
+    current = await state('carebase');
+    assert.deepEqual([current.state, current.incident_seq], ['down', 1]);
+    const incidentTask = await row("select * from private.agent_tasks where request_key = 'probe.incident:carebase:1'");
+    assert.deepEqual([incidentTask.request_key, incidentTask.priority, incidentTask.source_kind, incidentTask.agent_key], ['probe.incident:carebase:1', 1, 'probe', 'platform_engineer']);
+    assert.equal(incidentTask.payload.flapping, false);
+    tick = await probes.tick();
+    assert.deepEqual([tick.claimed, tick.executedActions], [1, 1]);
+    assert.deepEqual(sent.sms, [['+12025550701', 'CareMetric: CareBase is down. CareBase has not passed 2 health checks in a row. The last check answered with status 503.']]);
+    assert.equal(sent.email[0][1], 'CareBase is down');
+    assert.match(sent.email[0][2].text, /Nothing has been restarted or changed/);
+    const opened = await row("select * from private.agent_actions where kind = 'incident.open' and target_id = 'carebase:1'");
+    assert.deepEqual([opened.status, opened.target_kind, opened.result], ['executed', 'probe_target', { recorded: true }]);
+    assert.equal((await auditFor('agent.action.executed', opened.id)).length, 1);
+    assert.equal((await task(incidentTask.id)).status, 'done');
+
+    // Still down: no second incident and no second alert, however long it lasts.
+    await sweep();
+    await probes.tick();
+    assert.deepEqual([await count("select count(*) from private.agent_tasks where request_key like 'probe.incident:carebase:%'"), sent.sms.length, sent.email.length], [1, 1, 1]);
+    assert.equal((await state('carebase')).consecutive_failures, 3);
+
+    // The first healthy check closes it: one recovery note by email only, and the record is closed.
+    network.delete(carebase);
+    await sweep();
+    current = await state('carebase');
+    assert.deepEqual([current.state, current.consecutive_failures, current.failing_since], ['up', 0, null]);
+    tick = await probes.tick();
+    assert.deepEqual([tick.claimed, tick.executedActions], [1, 1]);
+    assert.equal(sent.sms.length, 1, 'a recovery never texts');
+    assert.equal(sent.email[1][1], 'CareBase is answering again');
+    assert.match(sent.email[1][2].text, /about \d+ minutes? earlier/);
+    assert.equal((await row("select status from private.agent_actions where kind = 'incident.resolve' and target_id = 'carebase:1'")).status, 'executed');
+
+    // A relapse within half an hour is flagged and sent by email only, so it cannot wake the owner twice.
+    network.set(carebase, 500);
+    await sweep();
+    await sweep();
+    assert.equal((await state('carebase')).incident_seq, 2);
+    assert.equal((await row("select payload from private.agent_tasks where request_key = 'probe.incident:carebase:2'")).payload.flapping, true);
+    await probes.tick();
+    assert.equal(sent.sms.length, 1, 'a relapse does not text');
+    network.delete(carebase);
+    await sweep();
+    await probes.tick();
+    assert.deepEqual(sent.email.map(message => message[1]), ['CareBase is down', 'CareBase is answering again', 'CareBase is unstable again', 'CareBase is answering again']);
+
+    // Two sweeps reporting at the same moment (a restart, a second replica) open one incident, not two.
+    const record = (target, status, failure) => call('private.agent_probe_record', [target, false, status, 20, failure, 2, 'platform_engineer']);
+    const both = await Promise.all([record('advisors', 500, 'status'), record('advisors', 500, 'status')]);
+    assert.deepEqual(both.map(result => result.transition).sort(), ['down', 'none']);
+    assert.equal(await count("select count(*) from private.agent_tasks where request_key like 'probe.incident:advisors:%'"), 1);
+
+    // An observe-only agent still tells the owner about an incident, but proposes no action.
+    await setAutonomy('platform_engineer', 'observe');
+    tick = await probes.tick();
+    assert.deepEqual([tick.claimed, tick.executedActions], [1, 0]);
+    assert.equal(sent.sms.length, 2);
+    assert.match(sent.sms[1][1], /^CareMetric: Healthcare Advisors is down\./);
+    assert.equal(await count("select count(*) from private.agent_actions where target_id = 'advisors:1'"), 0, 'an observe-only agent proposes nothing');
+    assert.equal((await row("select result from private.agent_tasks where request_key = 'probe.incident:advisors:1'")).result.action, 'observe_only');
+    await setAutonomy('platform_engineer', 'act');
+
+    // An alert that waited more than an hour for the agent goes by email only, and says it is late.
+    await record('intel', 0, 'timeout');
+    await record('intel', 0, 'timeout');
+    await admin.query("update private.agent_tasks set payload = jsonb_set(payload, '{since}', to_jsonb($1::text)) where request_key = 'probe.incident:intel:1'", [new Date(Date.now() - 3 * 3_600_000).toISOString()]);
+    await probes.tick();
+    assert.equal(sent.sms.length, 2, 'a late alert never texts');
+    assert.equal(sent.email.at(-1)[1], 'CareMetric Intel was down');
+    assert.match(sent.email.at(-1)[2].text, /reached you late/);
+
+    // A paused agent hands out nothing, so a queued alert waits for the owner to resume it.
+    await record('hub', 0, 'timeout');
+    await record('hub', 0, 'timeout');
+    await setStatus('platform_engineer', 'paused');
+    tick = await probes.tick();
+    assert.equal(tick.claimed, 0);
+    assert.equal((await row("select status from private.agent_tasks where request_key = 'probe.incident:hub:1'")).status, 'queued');
+    await setStatus('platform_engineer', 'active');
+    tick = await probes.tick();
+    assert.equal(tick.claimed, 1);
+    assert.equal(sent.sms.length, 3);
+
+    // The database accepts only a fixed vocabulary, never page content, and only from the Hub server.
+    for (const [args, code] of [
+      [['Bad Key', true, 200, 10, null, 2, 'platform_engineer'], '22023'],
+      [['hub', true, 200, 10, 'status', 2, 'platform_engineer'], '22023'],
+      [['hub', false, 503, 10, null, 2, 'platform_engineer'], '22023'],
+      [['hub', false, 503, 10, 'The page said <html>', 2, 'platform_engineer'], '22023'],
+      [['hub', false, 1000, 10, 'status', 2, 'platform_engineer'], '22023'],
+      [['hub', false, 503, -1, 'status', 2, 'platform_engineer'], '22023'],
+      [['hub', false, 503, 10, 'status', 0, 'platform_engineer'], '22023'],
+      [['hub', false, 503, 10, 'status', 11, 'platform_engineer'], '22023'],
+      [['hub', false, 503, 10, 'status', 2, 'no_such_agent'], 'P0002'],
+    ]) await assert.rejects(call('private.agent_probe_record', args), refused(code), JSON.stringify(args));
+    await assert.rejects(admin.query('select private.agent_probe_record($1, $2, $3, $4)', ['hub', true, 200, 1]), refused('42501', /Application server required/));
+    await assert.rejects(pool.query('select count(*) from private.agent_probe_state'), refused('42501'));
+
+    // The owner's screen accepts what the on-call agent leaves behind.
+    for (const kind of ['runs', 'tasks', 'actions', 'notifications']) {
+      const page = activitySchemas[kind].parse(await ownerCall('hub.list_agent_activity', [kind, 'platform_engineer', 0, 25]));
+      assert.ok(page.items.length > 0, `the owner sees the on-call agent's ${kind}`);
+    }
+    await team();
+    await clearWork();
+    await admin.query('delete from private.agent_probe_state');
+  }
+
   // The deployment gate re-runs cleanly, and refuses to declare the feature once the boundary drifts.
   const client = await admin.connect();
   try {
     await client.query('begin');
     await client.query(contractMigration);
     await client.query('rollback');
+    await client.query('begin');
+    await client.query(probesMigration);
+    await client.query('rollback');
+    for (const [sql, message] of [
+      ['grant select on private.agent_probe_state to hub_app_server', /must remain closed/],
+      ['grant update (state) on private.agent_probe_state to authenticated', /must remain closed/],
+      ['alter table private.agent_probe_state disable row level security', /row level security/],
+      ['grant execute on function private.agent_probe_record(text,boolean,integer,integer,text,integer,text) to authenticated', /executable by the Hub server only/],
+      ['revoke execute on function private.agent_probe_record(text,boolean,integer,integer,text,integer,text) from hub_app_server', /executable by the Hub server only/],
+      ['alter function private.agent_probe_record(text,boolean,integer,integer,text,integer,text) security invoker', /security definer/],
+    ]) {
+      await client.query('begin');
+      try {
+        await client.query(sql);
+        await assert.rejects(client.query(probesMigration), rejection => rejection.code === '55000' && message.test(rejection.message), sql);
+      } finally { await client.query('rollback'); }
+    }
     for (const [sql, message] of [
       ['grant select on private.agent_tasks to hub_app_server', /must remain closed/],
       ['grant update (status) on private.agents to authenticated', /must remain closed/],
@@ -617,10 +799,11 @@ try {
   } finally { client.release(); }
   assertBackendContract(await api.rpc('get_backend_contract', {}));
 
-  console.log('AI team control plane: the closed boundary, owner changes and reads, enqueue, claim, lease recovery, retry, session tasks, schedules, budget, actions and approvals, notifications, the owner contact and the deployment gate all behave through hub_app_server and real sessions.');
+  console.log('AI team control plane: the closed boundary, owner changes and reads, enqueue, claim, lease recovery, retry, session tasks, schedules, budget, actions and approvals, notifications, the owner contact, the on-call agent health probes with their incidents and recoveries, and the deployment gates all behave through hub_app_server and real sessions.');
 } finally {
   await admin.query("delete from private.audit_events where action like 'agent.%' or actor_id in ($1,$2,$3)", [owner, other, secondAdmin]);
   await admin.query('delete from private.agent_actions');
+  await admin.query('delete from private.agent_probe_state');
   await admin.query('delete from private.agent_runs');
   await admin.query('delete from private.owner_notifications');
   await admin.query('delete from private.agent_tasks');

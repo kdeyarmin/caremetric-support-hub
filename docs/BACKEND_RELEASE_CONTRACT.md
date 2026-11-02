@@ -49,7 +49,15 @@ browser, service or server role, that every server operation is a security defin
 pinned empty search path executable by `hub_app_server` alone, that its helpers are
 executable by no role, and that each owner operation authorizes the current administrator
 session (reads) or command session (changes) itself. The feature is declared ahead of the Hub
-build that will require it, so the migrations can be applied before that build ships. The table above is not exhaustive:
+build that will require it, so the migrations can be applied before that build ships.
+
+`20261102130100_agent_probes_contract.sql` declares `platform.agents.probes.v1` only after
+`platform.agents.v1` is declared and the probe state table keeps row level security with no
+privilege for any browser, service or server role, and `private.agent_probe_record(...)`
+stays a security definer with a pinned empty search path executable by `hub_app_server`
+alone. Like the feature above it is declared ahead of any build that requires it.
+
+The table above is not exhaustive:
 later features such as the `billing.*` and `customer.self-service.v1` boundaries are declared
 by their own migrations and listed in `src/lib/backendContract.ts`. See [AI_TEAM.md](AI_TEAM.md).
 

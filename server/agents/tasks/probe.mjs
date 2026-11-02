@@ -1,0 +1,198 @@
+/**
+ * The Platform Engineer's model-free work: check every product's health endpoint, and tell the
+ * owner when one stops answering and when it comes back.
+ *
+ * `probe.sweep` runs every five minutes. It checks each fixed target (see targets.mjs) and
+ * reports the result to the database, which owns the rules: a product that fails two checks in
+ * a row opens one incident, and its first healthy check closes it (private.agent_probe_record).
+ * Those transitions arrive here as `probe.incident` and `probe.recovery` tasks, which alert the
+ * owner and record the incident as an action in the agent's log.
+ *
+ * Nothing a product returns is kept: a check yields a status code, a latency and one fixed
+ * failure word. A response body is read for at most 4 KB so a slow or endless one cannot hold
+ * the sweep, then thrown away. Redirects are never followed.
+ */
+const timeoutMs = 8000;
+const bodyLimitBytes = 4096;
+const failureThreshold = 2;
+// An alert that reaches the owner more than an hour after the failure began (the agent was paused,
+// the server was down) is a report, not a page: it goes by email only.
+const staleAlertMs = 60 * 60 * 1000;
+const eastern = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+const permanent = code => Object.assign(new Error('The probe task cannot be run.'), { code });
+const when = value => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'an unknown time' : `${eastern.format(date)} Eastern`;
+};
+const minutesBetween = (from, to) => {
+  const span = new Date(to).getTime() - new Date(from).getTime();
+  return Number.isFinite(span) && span >= 0 ? Math.max(1, Math.round(span / 60_000)) : null;
+};
+const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
+
+async function readLimited(reader) {
+  let total = 0;
+  while (total < bodyLimitBytes) {
+    const { done, value } = await reader.read();
+    if (done) return;
+    total += value.byteLength;
+  }
+}
+
+// Rejects when the signal fires, so a body that stalls cannot outlive the time limit whatever the fetch implementation does.
+const abortion = signal => new Promise((resolve, reject) => {
+  if (signal.aborted) reject(signal.reason);
+  else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+});
+
+/** One check. Never throws: returns { ok, statusCode, latencyMs, failure } with statusCode 0 when nothing answered. */
+export async function checkTarget(target, { fetchImpl = fetch, signal, limitMs = timeoutMs, clock = () => performance.now() } = {}) {
+  const started = clock();
+  const limit = AbortSignal.timeout(limitMs);
+  const combined = signal ? AbortSignal.any([signal, limit]) : limit;
+  const result = (ok, statusCode, failure) => ({ ok, statusCode, failure, latencyMs: Math.min(Math.max(Math.round(clock() - started), 0), 600_000) });
+  let statusCode = 0;
+  let reader;
+  try {
+    const response = await fetchImpl(target.url, {
+      method: 'GET', redirect: 'manual', signal: combined,
+      headers: { accept: 'application/json, text/plain;q=0.9, */*;q=0.1', 'user-agent': 'CareMetric-Hub-Probe/1' },
+    });
+    statusCode = response.status;
+    reader = response.body?.getReader();
+    if (reader) await Promise.race([readLimited(reader), abortion(combined)]);
+  } catch (error) {
+    return result(false, statusCode, limit.aborted || error?.name === 'TimeoutError' ? 'timeout' : 'network');
+  } finally {
+    await reader?.cancel().catch(() => {});
+  }
+  if (statusCode >= 200 && statusCode < 300) return result(true, statusCode, null);
+  return result(false, statusCode, statusCode >= 300 && statusCode < 400 ? 'redirect' : 'status');
+}
+
+const shortFailure = ({ failure, statusCode }) => ({
+  timeout: 'timed out', network: 'could not be reached', redirect: `redirected (${statusCode})`, status: `returned ${statusCode}`,
+}[failure] ?? 'failed');
+const longFailure = ({ failure, statusCode }) => ({
+  timeout: 'did not answer within 8 seconds', network: 'could not be reached', redirect: `answered with a redirect (status ${statusCode})`,
+  status: `answered with status ${statusCode}`,
+}[failure] ?? 'failed');
+
+export function summarizeSweep(rows) {
+  const failing = rows.filter(row => !row.check.ok);
+  if (!failing.length) return `All ${rows.length} products answered, the slowest in ${Math.max(...rows.map(row => row.check.latencyMs))} ms.`;
+  return `${failing.map(row => `${row.target.label} ${shortFailure(row.check)}`).join('; ')}. ${rows.length - failing.length} of ${rows.length} answered.`;
+}
+
+export function probeHandlers({
+  store, notifier, targets, fetchImpl = fetch, limitMs = timeoutMs, threshold = failureThreshold, staleMs = staleAlertMs,
+  log = line => console.warn(line),
+}) {
+  const byKey = new Map(targets.map(target => [target.key, target]));
+
+  const targetOf = payload => {
+    const target = byKey.get(typeof payload?.target === 'string' ? payload.target : '');
+    if (!target) throw permanent('unknown_target');
+    if (!Number.isInteger(payload.incident) || payload.incident < 1) throw permanent('invalid_payload');
+    return target;
+  };
+
+  // The run row is for the owner's screen only (a visible heartbeat). It must never fail the sweep after the
+  // results were already recorded.
+  async function recordRun(task, summary) {
+    try {
+      const runId = await store.startRun(task.id, 'none', 'probe.1');
+      await store.finishRun(runId, 'completed', {}, summary);
+    } catch {
+      log(JSON.stringify({ event: 'hub_agent_run_unrecorded', agent: task.agentKey, kind: task.kind }));
+    }
+  }
+
+  async function sweep(task, { signal, now = () => new Date() } = {}) {
+    const checked = await Promise.all(targets.map(async target => ({ target, check: await checkTarget(target, { fetchImpl, signal, limitMs }) })));
+    const rows = [];
+    for (const { target, check } of checked) {
+      if (signal?.aborted) throw Object.assign(new Error('The sweep was stopped.'), { code: 'task_timeout', transient: true });
+      const outcome = await store.probeRecord({
+        targetKey: target.key, ok: check.ok, statusCode: check.statusCode, latencyMs: check.latencyMs,
+        failure: check.failure, threshold, agentKey: task.agentKey,
+      });
+      rows.push({ target, check, outcome });
+    }
+    const summary = summarizeSweep(rows);
+    const changed = rows.some(row => row.outcome.transition !== 'none');
+    const unhealthy = rows.some(row => !row.check.ok);
+    // A run row for every sweep that saw something, and one an hour otherwise, so the screen shows a pulse without 288 rows a day.
+    if (changed || unhealthy || now().getUTCMinutes() < 5) await recordRun(task, summary);
+    return {
+      result: {
+        checked: rows.length, answered: rows.filter(row => row.check.ok).length, summary,
+        failing: rows.filter(row => !row.check.ok).map(row => ({ target: row.target.key, failure: row.check.failure, statusCode: row.check.statusCode })),
+        transitions: rows.filter(row => row.outcome.transition !== 'none').map(row => ({ target: row.target.key, transition: row.outcome.transition, incident: row.outcome.incident })),
+      },
+    };
+  }
+
+  // An observe-only agent still tells the owner (that is a report), but proposes no action.
+  async function recordAction(task, { kind, target, incident, preview, input }) {
+    if (task.agent?.autonomy === 'observe') return 'observe_only';
+    try {
+      await store.proposeAction({ taskId: task.id, kind, targetKind: 'probe_target', targetId: `${target.key}:${incident}`, preview, input });
+      return 'recorded';
+    } catch (error) {
+      if (error?.code === '42501') return 'observe_only';
+      throw error;
+    }
+  }
+
+  async function incident(task, { now = () => new Date() } = {}) {
+    const payload = task.payload ?? {};
+    const target = targetOf(payload);
+    const stale = payload.since && now().getTime() - new Date(payload.since).getTime() > staleMs;
+    const flapping = payload.flapping === true;
+    const urgent = !stale && !flapping;
+    const failures = Number.isInteger(payload.failures) ? payload.failures : threshold;
+    const last = { failure: typeof payload.failure === 'string' ? payload.failure : 'status', statusCode: Number.isInteger(payload.statusCode) ? payload.statusCode : 0 };
+    const subject = stale ? `${target.label} was down` : flapping ? `${target.label} is unstable again` : `${target.label} is down`;
+    const body = [
+      `${target.label} has not passed ${plural(failures, 'health check')} in a row. The last check ${longFailure(last)}.`,
+      `The first failed check was at ${when(payload.since)}. Checks run every five minutes.`,
+      stale ? 'This report reached you late, so it did not go by text. Check whether it is still happening.'
+        : flapping ? 'It also failed within half an hour of its last recovery, so this came by email only.'
+          : 'Customers of this product may be affected. Nothing has been restarted or changed, and you will get one more message when it answers again.',
+    ].join('\n\n');
+    const results = await notifier.send({
+      severity: urgent ? 'urgent' : 'warning', subject, body, dedupeKey: `probe.incident:${target.key}:${payload.incident}`,
+      agentKey: task.agentKey, taskId: task.id,
+    });
+    const action = await recordAction(task, {
+      kind: 'incident.open', target, incident: payload.incident, preview: subject,
+      input: { target: target.key, incident: payload.incident, since: payload.since ?? null, failures, statusCode: last.statusCode, failure: last.failure, flapping },
+    });
+    return { result: { target: target.key, incident: payload.incident, severity: urgent ? 'urgent' : 'warning', delivery: results.map(item => `${item.channel}:${item.delivery}`), action } };
+  }
+
+  async function recovery(task) {
+    const payload = task.payload ?? {};
+    const target = targetOf(payload);
+    const minutes = payload.downSince && payload.recoveredAt ? minutesBetween(payload.downSince, payload.recoveredAt) : null;
+    const subject = `${target.label} is answering again`;
+    const body = [
+      `${target.label} passed its health check again at ${when(payload.recoveredAt)}.`,
+      payload.downSince
+        ? `It first failed at ${when(payload.downSince)}${minutes ? `, about ${plural(minutes, 'minute')} earlier` : ''}.`
+        : 'It had been reported down.',
+    ].join('\n\n');
+    const results = await notifier.send({
+      severity: 'info', subject, body, dedupeKey: `probe.recovery:${target.key}:${payload.incident}`, agentKey: task.agentKey, taskId: task.id,
+    });
+    const action = await recordAction(task, {
+      kind: 'incident.resolve', target, incident: payload.incident, preview: subject,
+      input: { target: target.key, incident: payload.incident, downSince: payload.downSince ?? null, recoveredAt: payload.recoveredAt ?? null },
+    });
+    return { result: { target: target.key, incident: payload.incident, delivery: results.map(item => `${item.channel}:${item.delivery}`), action } };
+  }
+
+  return { 'probe.sweep': sweep, 'probe.incident': incident, 'probe.recovery': recovery };
+}
