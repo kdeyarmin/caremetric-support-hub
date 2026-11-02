@@ -12,24 +12,14 @@
  * failure word. A response body is read for at most 4 KB so a slow or endless one cannot hold
  * the sweep, then thrown away. Redirects are never followed.
  */
+import { minutesBetween, permanent, plural, recordRun, when } from './shared.mjs';
+
 const timeoutMs = 8000;
 const bodyLimitBytes = 4096;
 const failureThreshold = 2;
 // An alert that reaches the owner more than an hour after the failure began (the agent was paused,
 // the server was down) is a report, not a page: it goes by email only.
 const staleAlertMs = 60 * 60 * 1000;
-const eastern = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-
-const permanent = code => Object.assign(new Error('The probe task cannot be run.'), { code });
-const when = value => {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'an unknown time' : `${eastern.format(date)} Eastern`;
-};
-const minutesBetween = (from, to) => {
-  const span = new Date(to).getTime() - new Date(from).getTime();
-  return Number.isFinite(span) && span >= 0 ? Math.max(1, Math.round(span / 60_000)) : null;
-};
-const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
 async function readLimited(reader) {
   let total = 0;
@@ -98,17 +88,6 @@ export function probeHandlers({
     return target;
   };
 
-  // The run row is for the owner's screen only (a visible heartbeat). It must never fail the sweep after the
-  // results were already recorded.
-  async function recordRun(task, summary) {
-    try {
-      const runId = await store.startRun(task.id, 'none', 'probe.1');
-      await store.finishRun(runId, 'completed', {}, summary);
-    } catch {
-      log(JSON.stringify({ event: 'hub_agent_run_unrecorded', agent: task.agentKey, kind: task.kind }));
-    }
-  }
-
   async function sweep(task, { signal, now = () => new Date() } = {}) {
     const checked = await Promise.all(targets.map(async target => ({ target, check: await checkTarget(target, { fetchImpl, signal, limitMs }) })));
     const rows = [];
@@ -124,7 +103,7 @@ export function probeHandlers({
     const changed = rows.some(row => row.outcome.transition !== 'none');
     const unhealthy = rows.some(row => !row.check.ok);
     // A run row for every sweep that saw something, and one an hour otherwise, so the screen shows a pulse without 288 rows a day.
-    if (changed || unhealthy || now().getUTCMinutes() < 5) await recordRun(task, summary);
+    if (changed || unhealthy || now().getUTCMinutes() < 5) await recordRun({ store, log }, task, { promptVersion: 'probe.1', summary });
     return {
       result: {
         checked: rows.length, answered: rows.filter(row => row.check.ok).length, summary,

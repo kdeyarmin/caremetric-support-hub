@@ -22,8 +22,12 @@ const clip = (value, limit) => {
 };
 const paragraphs = body => String(body).split(/\n{2,}/).map(part => part.trim()).filter(Boolean);
 
-/** The owner email for a notification: a callout for anything that needs attention, then the body. */
-export function renderOwnerEmail({ subject, body, severity = 'info', publicOrigin }) {
+/**
+ * The owner email for a notification: a callout for anything that needs attention, then the body.
+ * A caller that wants richer layout (the morning brief) passes its own `blocks`; the body is still
+ * what is stored, shown on the Team screen and used for the preview.
+ */
+export function renderOwnerEmail({ subject, body, severity = 'info', publicOrigin, blocks: custom = null }) {
   const [first = '', ...rest] = paragraphs(body);
   const tone = tones[severity];
   const link = /^https:\/\//i.test(publicOrigin ?? '') ? { label: 'Open the AI team', url: `${publicOrigin.replace(/\/+$/, '')}/admin/team` } : null;
@@ -32,7 +36,7 @@ export function renderOwnerEmail({ subject, body, severity = 'info', publicOrigi
     title: subject,
     preheader: clip(first || subject, 110),
     heading: subject,
-    blocks: [
+    blocks: custom ?? [
       tone ? { type: 'callout', tone, title: severity === 'urgent' ? 'Needs your attention' : 'Worth a look', text: first } : { type: 'paragraph', text: first },
       ...rest.map(text => ({ type: 'paragraph', text })),
     ].filter(block => block.text),
@@ -44,14 +48,14 @@ export function renderOwnerEmail({ subject, body, severity = 'info', publicOrigi
 export function ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log = line => console.warn(line) }) {
   const channelsFor = severity => (severity === 'urgent' ? ['sms', 'email'] : ['email']);
 
-  async function transport(channel, { subject, body, severity }) {
+  async function transport(channel, { subject, body, severity, blocks }) {
     if (channel === 'sms') {
       const contact = await store.ownerContact();
       if (!sms?.configured || !contact?.phone) return { delivery: 'suppressed', id: null };
       return sms.send(contact.phone, clip(`CareMetric: ${subject}. ${paragraphs(body)[0] ?? ''}`, smsLimit));
     }
     if (!email?.configured || !emailAddress.test(ownerEmail ?? '')) return { delivery: 'suppressed', id: null };
-    const { html, text } = renderOwnerEmail({ subject, body, severity, publicOrigin });
+    const { html, text } = renderOwnerEmail({ subject, body, severity, publicOrigin, blocks });
     return email.send(ownerEmail, subject, { text, html });
   }
 
@@ -76,10 +80,11 @@ export function ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log
   return {
     channelsFor,
     /** Returns one { channel, delivery } per channel; delivery is sent, failed, unknown, suppressed or duplicate. */
-    async send({ severity = 'info', subject, body, dedupeKey, agentKey = null, taskId = null }) {
+    async send({ severity = 'info', subject, body, dedupeKey, agentKey = null, taskId = null, blocks = null }) {
       if (!severities.has(severity)) throw new TypeError('Unsupported notification severity.');
       if (!subject || !body || !dedupeKey) throw new TypeError('A notification needs a subject, a body and a dedupe key.');
-      const input = { severity, subject: clip(subject, 200), body: clip(body, 4000), dedupeKey, agentKey, taskId };
+      if (blocks !== null && (!Array.isArray(blocks) || blocks.length === 0)) throw new TypeError('Email blocks must be a non-empty list.');
+      const input = { severity, subject: clip(subject, 200), body: clip(body, 4000), dedupeKey, agentKey, taskId, blocks };
       const results = [];
       for (const channel of channelsFor(severity)) results.push(await deliver(channel, input));
       return results;

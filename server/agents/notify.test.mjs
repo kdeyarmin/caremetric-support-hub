@@ -35,6 +35,24 @@ describe('owner notifier', () => {
     expect(calls.indexOf('send sms')).toBeGreaterThan(calls.indexOf('begin sms'));
   });
 
+  it('emails the caller\'s own layout when it provides one, and stores the plain body', async () => {
+    const { notifier, senders, store } = fixture();
+    const blocks = [{ type: 'callout', tone: 'success', title: 'All clear.', text: 'Nothing needs you.' }, { type: 'details', rows: [['Runs', '12']] }];
+    await notifier.send({ severity: 'info', subject: 'Brief', body: 'Nothing needs you.\n\nYesterday: 12 runs.', dedupeKey: 'k-blocks', blocks });
+    const [, , content] = senders.email.send.mock.calls[0];
+    expect(content.html).toContain('All clear.');
+    expect(content.html).toContain('Runs');
+    expect(content.text).toContain('Runs: 12');
+    expect(store.notifyBegin).toHaveBeenCalledWith(expect.objectContaining({ body: 'Nothing needs you.\n\nYesterday: 12 runs.', channel: 'email' }));
+  });
+
+  it('refuses blocks that are not a non-empty list', async () => {
+    const { notifier } = fixture();
+    for (const blocks of [[], 'x', {}, 3]) {
+      await expect(notifier.send({ severity: 'info', subject: 'S', body: 'B', dedupeKey: 'k-bad', blocks }), JSON.stringify(blocks)).rejects.toThrow(TypeError);
+    }
+  });
+
   it('keeps a text within two segments', async () => {
     const { notifier, senders } = fixture();
     await notifier.send({ severity: 'urgent', subject: 'S'.repeat(100), body: 'B'.repeat(900), dedupeKey: 'k3' });
