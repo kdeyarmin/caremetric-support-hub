@@ -141,7 +141,11 @@ current SMS session, and add each source message once. When more remain, an
 (up to the applications' 10,000-record paging limit).
 Re-importing never changes a conversation staff have already worked. Imports
 are manual because every application read requires a live administrator
-session; there is no unattended background sync.
+session; there is no unattended background sync. The AI team keeps the same
+rule: its two import tasks (see [AI_TEAM.md](AI_TEAM.md), "Work that needs the
+owner's session") wait until the administrator presses **Run what's waiting**
+on the AI team screen, then call this same import with that session, at most
+600 messages per run.
 
 ## Deployment
 

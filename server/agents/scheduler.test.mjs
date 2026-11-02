@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { agentScheduler } from './scheduler.mjs';
 
 const task = (overrides = {}) => ({ id: 't1', agentKey: 'platform_engineer', kind: 'probe.sweep', attempts: 1, ...overrides });
-const fixture = ({ tasks = [], handlers = {}, ...options } = {}) => {
+const fixture = ({ tasks = [], handlers = {}, waiting = [], claimable = {}, ...options } = {}) => {
   const logs = [];
   const store = {
     maintenance: vi.fn(async () => ({})),
@@ -10,6 +10,8 @@ const fixture = ({ tasks = [], handlers = {}, ...options } = {}) => {
     claim: vi.fn(async () => tasks),
     heartbeat: vi.fn(async () => true),
     finish: vi.fn(async (id, status) => status),
+    sessionTasks: vi.fn(async () => waiting),
+    claimSessionTask: vi.fn(async id => claimable[id] ?? null),
   };
   const actions = { executeReady: vi.fn(async () => ({ executed: 2, failed: 0 })) };
   const clock = new Date('2026-11-02T12:00:00Z');
@@ -150,5 +152,102 @@ describe('agent scheduler', () => {
     const { scheduler } = fixture({ tasks: [task({ id: 'a' }), task({ id: 'b' })], handlers: { 'probe.sweep': handler } });
     await scheduler.tick();
     expect(order.slice(0, 2)).toEqual(['start a', 'start b']);
+  });
+
+  it('never gives the tick a session: handlers see only the signal and the clock', async () => {
+    const seen = [];
+    const { scheduler } = fixture({ tasks: [task({ id: 'a' }), task({ id: 'b' })], handlers: { 'probe.sweep': async (_task, context) => { seen.push(Object.keys(context).sort()); return {}; } } });
+    await scheduler.tick();
+    expect(seen).toEqual([['now', 'signal'], ['now', 'signal']]);
+  });
+});
+
+describe('work that waits for the owner\'s session', () => {
+  const sessionToken = 'S'.repeat(43);
+  const imported = id => task({ id, agentKey: 'support_concierge', kind: 'import.advisors', requiresSession: true });
+  const waitingItem = (id, kind = 'import.advisors') => ({ id, agentKey: 'support_concierge', kind, priority: 5, createdAt: '2026-11-02T12:00:00Z' });
+
+  it('claims what is waiting and runs it with the session, answering before the work finishes', async () => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const handler = vi.fn(async () => { await gate; return { result: { created: 3 } }; });
+    const { scheduler, store } = fixture({ handlers: { 'import.advisors': handler }, waiting: [waitingItem('s1')], claimable: { s1: imported('s1') } });
+    const run = await scheduler.runWaiting({ sessionToken });
+    expect(run).toMatchObject({ skipped: false, started: 1 });
+    expect(store.claimSessionTask).toHaveBeenCalledWith('s1', 600);
+    expect(store.finish).not.toHaveBeenCalled();
+    release();
+    await run.done;
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ id: 's1' }), expect.objectContaining({ sessionToken, signal: expect.any(AbortSignal) }));
+    expect(store.finish).toHaveBeenCalledWith('s1', 'done', { result: { created: 3 }, errorCode: null, retryAt: null });
+  });
+
+  it('gives the session only to a task that is marked as needing it', async () => {
+    const seen = [];
+    const handler = async (_task, context) => { seen.push(Object.keys(context).sort()); return {}; };
+    const plain = task({ id: 's2', agentKey: 'support_concierge', kind: 'import.advisors', requiresSession: false });
+    const { scheduler } = fixture({ handlers: { 'import.advisors': handler }, waiting: [waitingItem('s1'), waitingItem('s2')], claimable: { s1: imported('s1'), s2: plain } });
+    await (await scheduler.runWaiting({ sessionToken })).done;
+    expect(seen.sort()).toEqual([['now', 'sessionToken', 'signal'], ['now', 'signal']]);
+  });
+
+  it('claims only kinds it can handle, only the ids asked for, and no more than the limit', async () => {
+    const handler = vi.fn(async () => ({}));
+    const waiting = [waitingItem('a', 'mystery.kind'), waitingItem('b'), waitingItem('c'), waitingItem('d'), waitingItem('e')];
+    const claimable = Object.fromEntries(['b', 'c', 'd', 'e'].map(id => [id, imported(id)]));
+    const { scheduler, store } = fixture({ handlers: { 'import.advisors': handler }, waiting, claimable });
+    expect((await scheduler.runWaiting({ sessionToken, limit: 2 })).started).toBe(2);
+    expect(store.claimSessionTask.mock.calls.map(call => call[0])).toEqual(['b', 'c']);
+    store.claimSessionTask.mockClear();
+    expect((await scheduler.runWaiting({ sessionToken, only: ['d'] })).started).toBe(1);
+    expect(store.claimSessionTask.mock.calls.map(call => call[0])).toEqual(['d']);
+    store.claimSessionTask.mockClear();
+    // Even an absurd limit stops at five, and the unhandled kind is never claimed.
+    await scheduler.runWaiting({ sessionToken, limit: 99 });
+    expect(store.claimSessionTask.mock.calls.map(call => call[0])).toEqual(['b', 'c', 'd', 'e']);
+  });
+
+  it('skips a task another caller claimed first, so a double click runs nothing twice', async () => {
+    const handler = vi.fn(async () => ({}));
+    const { scheduler, store } = fixture({ handlers: { 'import.advisors': handler }, waiting: [waitingItem('s1')], claimable: {} });
+    const run = await scheduler.runWaiting({ sessionToken });
+    expect(run.started).toBe(0);
+    await run.done;
+    expect(handler).not.toHaveBeenCalled();
+    expect(store.finish).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when switched off, and insists on a session token', async () => {
+    const off = fixture({ enabled: false, handlers: { 'import.advisors': async () => ({}) }, waiting: [waitingItem('s1')] });
+    expect(await off.scheduler.runWaiting({ sessionToken })).toMatchObject({ skipped: true, started: 0 });
+    expect(off.store.sessionTasks).not.toHaveBeenCalled();
+    const { scheduler } = fixture({ handlers: { 'import.advisors': async () => ({}) } });
+    for (const bad of [undefined, '', 42]) await expect(scheduler.runWaiting({ sessionToken: bad })).rejects.toThrow(TypeError);
+  });
+
+  it('refuses to store a result that carries the session token', async () => {
+    const { scheduler, store, logs } = fixture({ handlers: { 'import.advisors': async () => ({ result: { echoed: sessionToken } }) }, waiting: [waitingItem('s1')], claimable: { s1: imported('s1') } });
+    await (await scheduler.runWaiting({ sessionToken })).done;
+    expect(store.finish).toHaveBeenCalledTimes(1);
+    expect(store.finish).toHaveBeenCalledWith('s1', 'queued', expect.objectContaining({ errorCode: 'secret_in_result' }));
+    expect(JSON.stringify(store.finish.mock.calls)).not.toContain(sessionToken);
+    expect(logs.join()).not.toContain(sessionToken);
+  });
+
+  it('lets a failing task fail alone, never logging the token or the message, and never rejects', async () => {
+    const boom = async () => { throw new Error(`Bearer ${sessionToken} was refused`); };
+    const { scheduler, store, logs } = fixture({ handlers: { 'import.advisors': boom }, waiting: [waitingItem('s1'), waitingItem('s2')], claimable: { s1: imported('s1'), s2: imported('s2') } });
+    const results = await (await scheduler.runWaiting({ sessionToken })).done;
+    expect(results).toHaveLength(2);
+    expect(store.finish).toHaveBeenCalledWith('s1', 'queued', expect.objectContaining({ errorCode: 'handler_error' }));
+    expect(store.finish).toHaveBeenCalledWith('s2', 'queued', expect.objectContaining({ errorCode: 'handler_error' }));
+    expect(logs.join()).not.toContain(sessionToken);
+    expect(JSON.stringify(store.finish.mock.calls)).not.toContain(sessionToken);
+  });
+
+  it('survives a database blip while looking for waiting work', async () => {
+    const { scheduler, store } = fixture({ handlers: { 'import.advisors': async () => ({}) } });
+    store.sessionTasks.mockRejectedValue(new Error('db down'));
+    expect(await scheduler.runWaiting({ sessionToken })).toMatchObject({ skipped: false, started: 0 });
   });
 });

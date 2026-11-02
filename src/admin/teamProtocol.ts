@@ -36,6 +36,8 @@ export const servicesSchema = z.object({ enabled: z.boolean(), handlers: z.array
 export const overviewSchema = z.object({ team: teamSchema, services: servicesSchema });
 export const decisionSchema = z.object({ id: z.uuid(), kind: z.string(), status: z.string(), decided: z.boolean() });
 export const taskResultSchema = z.object({ id: z.uuid(), status: z.string() });
+/** How many waiting tasks were started; they finish in the background. */
+export const waitingSchema = z.object({ started: z.number().int().min(0) });
 
 const page = <T extends z.ZodType>(item: T) => z.object({ items: z.array(item), total: z.number().int(), offset: z.number().int(), limit: z.number().int() });
 const runItem = z.object({

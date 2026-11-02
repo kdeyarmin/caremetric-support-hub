@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { config } from "../lib/config";
 import { sessionEvent } from "../lib/appSession";
-import { activitySchemas, agentSchema, auditSchema, decisionSchema, overviewSchema, taskResultSchema } from "./teamProtocol";
+import { activitySchemas, agentSchema, auditSchema, decisionSchema, overviewSchema, taskResultSchema, waitingSchema } from "./teamProtocol";
 import type { ActivityKind, ActivityPage, AuditPage, Decision, TeamAgent, TeamOverview } from "./teamProtocol";
 
 /**
@@ -43,6 +43,8 @@ export interface TeamClient {
   decide(input: { actionId: string; decision: "approve" | "reject"; note?: string }): Promise<Decision>;
   run(input: { agentKey: string; taskKind: string }): Promise<{ id: string; status: string }>;
   cancel(input: { taskId: string }): Promise<{ id: string; status: string }>;
+  /** Runs the work that was waiting for the owner's sign-in. Answers at once; the work finishes in the background. */
+  waiting(): Promise<{ started: number }>;
   activity<K extends ActivityKind>(input: { kind: K; agentKey: string | null; offset: number; limit: number }, options: { signal: AbortSignal }): Promise<ActivityPage<K>>;
   audit(input: { prefix: string | null; offset: number; limit: number }, options: { signal: AbortSignal }): Promise<AuditPage>;
 }
@@ -55,6 +57,7 @@ export const teamClient: TeamClient = {
   decide: ({ note, ...input }) => post("admin/team/decide", note ? { ...input, note } : input, decisionSchema),
   run: input => post("admin/team/run", input, taskResultSchema),
   cancel: input => post("admin/team/cancel", input, taskResultSchema),
+  waiting: () => post("admin/team/waiting", {}, waitingSchema),
   activity: (input, { signal }) => post("rpc/list_agent_activity", { p_kind: input.kind, p_agent_key: input.agentKey, p_offset: input.offset, p_limit: input.limit }, activitySchemas[input.kind], signal) as never,
   audit: (input, { signal }) => post("rpc/list_audit_events", { p_action_prefix: input.prefix, p_offset: input.offset, p_limit: input.limit }, auditSchema, signal),
 };

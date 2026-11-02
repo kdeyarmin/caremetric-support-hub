@@ -216,8 +216,13 @@ command session (under eight hours old). Unknown keys in a body are refused with
   `{ id, kind, status, decided }`. An approval is carried out straight away (`status` becomes `executed` or
   `failed`); deciding twice, or after the proposal expired, changes nothing and reports `decided: false`.
 - `POST /api/admin/team/run` — `{ agentKey, taskKind }` → `{ id, status }`. Queues one of the agent's own
-  scheduled tasks ("Run now"); the agent must be active.
+  scheduled tasks ("Run now"); the agent must be active. A task that reads another application needs the
+  owner's session, so it starts at once and answers `status: "running"`.
 - `POST /api/admin/team/cancel` — `{ taskId }` → `{ id, status }`.
+- `POST /api/admin/team/waiting` — `{}` → `{ started }`. Runs the work that was waiting for the owner's
+  sign-in (imports from Advisors and Breathe). It confirms a current administrator session first (401
+  otherwise), claims up to three tasks, answers at once and lets them finish in the background; 409 when
+  the scheduler is off.
 
 The history pages are reads through the browser RPC allowlist (`POST /api/rpc/<name>`):
 `get_agent_team`, `list_agent_activity` (`p_kind`: `runs`, `tasks`, `actions` or `notifications`, optional

@@ -39,7 +39,8 @@ function fakeClient(data: TeamOverview = overview(), overrides: Partial<TeamClie
   return {
     overview: vi.fn(async () => data), setStatus: vi.fn(async () => engineer), setAutonomy: vi.fn(async () => engineer), setBudget: vi.fn(async () => engineer),
     decide: vi.fn(async () => ({ id: ids.action, kind: "communication.reply", status: "executed", decided: true })), run: vi.fn(async () => ({ id: ids.task, status: "queued" })),
-    cancel: vi.fn(async () => ({ id: ids.task, status: "cancelled" })), activity: vi.fn(async () => emptyPage) as TeamClient["activity"], audit: vi.fn(async () => emptyPage), ...overrides,
+    cancel: vi.fn(async () => ({ id: ids.task, status: "cancelled" })), waiting: vi.fn(async () => ({ started: 2 })),
+    activity: vi.fn(async () => emptyPage) as TeamClient["activity"], audit: vi.fn(async () => emptyPage), ...overrides,
   };
 }
 const card = (name: string) => screen.getByRole("article", { name });
@@ -72,6 +73,39 @@ describe("AI team screen", () => {
     expect(within(services).getByText(/2 tasks are waiting for you to be signed in/)).toBeTruthy();
     expect(screen.getByText("Nothing is waiting for your approval.")).toBeTruthy();
     expect(screen.getAllByText("No code behind it yet").length).toBeGreaterThan(0);
+  });
+
+  it("runs the work that was waiting for the owner's sign-in, and says how much started", async () => {
+    const client = fakeClient(overview({ awaitingSessionCount: 2 }));
+    render(<Team client={client} />);
+    const services = await screen.findByRole("region", { name: "What the team can use" });
+    expect(within(services).getByText(/Run them now while you are signed in/)).toBeTruthy();
+    fireEvent.click(within(services).getByRole("button", { name: "Run what's waiting" }));
+    expect(client.waiting).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(/Started 2 tasks\. They finish in the background/)).toBeTruthy();
+    await waitFor(() => expect(client.overview).toHaveBeenCalledTimes(2));
+  });
+
+  it("says when nothing was waiting, shows no button when nothing is, and disables it while the team is off", async () => {
+    const client = fakeClient(overview({ awaitingSessionCount: 1 }), {});
+    (client.waiting as ReturnType<typeof vi.fn>).mockResolvedValue({ started: 0 });
+    render(<Team client={client} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run what's waiting" }));
+    expect(await screen.findByText("Nothing was waiting to run.")).toBeTruthy();
+    cleanup();
+    render(<Team client={fakeClient(overview({ awaitingSessionCount: 0 }))} />);
+    await screen.findByRole("region", { name: "What the team can use" });
+    expect(screen.queryByRole("button", { name: "Run what's waiting" })).toBeNull();
+    cleanup();
+    render(<Team client={fakeClient(overview({ awaitingSessionCount: 1 }, { enabled: false }))} />);
+    expect((await screen.findByRole("button", { name: "Run what's waiting" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("shows the server's reason when the waiting work could not be started", async () => {
+    const client = fakeClient(overview({ awaitingSessionCount: 1 }), { waiting: vi.fn(async () => { throw new TeamApiError(401, "Current administrator session required."); }) });
+    render(<Team client={client} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run what's waiting" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Current administrator session required.");
   });
 
   it("resumes an agent, naming the version it saw, and refreshes", async () => {

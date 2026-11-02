@@ -23,6 +23,20 @@ describe('the AI team', () => {
     expect(fake.finish).toHaveBeenCalledWith('t1', 'done', { result: { custom: true }, errorCode: null, retryAt: null });
   });
 
+  it('can copy other applications\' messages only when the inbox service is given', async () => {
+    const without = agentTeam({ store: store(), publicOrigin: origin, enabled: true });
+    expect(without.scheduler.kinds()).not.toContain('import.advisors');
+    const sync = vi.fn(async () => ({ read: 1, created: 1, skipped: 0, nextOffset: null }));
+    const fake = { ...store(), sessionTasks: vi.fn(async () => [{ id: 's1', agentKey: 'support_concierge', kind: 'import.breathe', priority: 5, createdAt: '2026-11-02T12:00:00Z' }]),
+      claimSessionTask: vi.fn(async () => ({ id: 's1', agentKey: 'support_concierge', kind: 'import.breathe', attempts: 1, requiresSession: true, payload: {} })) };
+    const team = agentTeam({ store: fake, publicOrigin: origin, enabled: true, communications: { sync } });
+    expect(team.scheduler.kinds()).toEqual(['brief.daily', 'import.advisors', 'import.breathe', 'probe.incident', 'probe.recovery', 'probe.sweep', 'seo.weekly']);
+    const run = await team.runWaiting({ sessionToken: 'T'.repeat(43) });
+    await run.done;
+    expect(sync).toHaveBeenCalledWith('T'.repeat(43), { source: 'breathe.phone', offset: 0 });
+    expect(fake.finish).toHaveBeenCalledWith('s1', 'done', expect.objectContaining({ result: expect.objectContaining({ source: 'breathe.phone', created: 1 }) }));
+  });
+
   it('hands a function of handlers the shared services', () => {
     const seen = [];
     agentTeam({ store: store(), publicOrigin: origin, handlers: services => { seen.push(Object.keys(services).sort()); return {}; } });

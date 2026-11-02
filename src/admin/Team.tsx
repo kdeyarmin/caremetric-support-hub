@@ -12,7 +12,7 @@ import type { ActivityKind, ActivityPage, AuditPage, TeamAgent, TeamApproval, Te
 import "./admin.css";
 
 type Notice = { ok: boolean; text: string } | null;
-type Change = (id: string, work: () => Promise<unknown>, success: string) => Promise<void>;
+type Change = (id: string, work: () => Promise<unknown>, success: string | (() => string)) => Promise<void>;
 
 const failureText = (error: unknown) => error instanceof TeamApiError ? error.message : "The change could not be completed. Nothing was changed.";
 const clip = (value: string, limit: number) => (value.length <= limit ? value : `${value.slice(0, limit - 1)}…`);
@@ -22,7 +22,7 @@ function Pill({ good, children }: { good: boolean; children: string }) {
   return <span className={`admin-status ${good ? "admin-status-connected" : "admin-status-muted"}`}>{children}</span>;
 }
 
-function ServicesPanel({ services, awaitingSession }: { services: TeamServices; awaitingSession: number }) {
+function ServicesPanel({ services, awaitingSession, busy, onRunWaiting }: { services: TeamServices; awaitingSession: number; busy: string; onRunWaiting: () => void }) {
   const handled = services.handlers.map(taskLabel);
   const rows: Array<{ name: string; good: boolean; state: string; detail: string }> = [
     { name: "Scheduler", good: services.enabled, state: services.enabled ? "On" : "Off",
@@ -38,7 +38,10 @@ function ServicesPanel({ services, awaitingSession }: { services: TeamServices; 
     <ul className="team-service-list">
       {rows.map(row => <li key={row.name}><span className="team-service-name">{row.name}</span><Pill good={row.good}>{row.state}</Pill><span className="muted">{row.detail}</span></li>)}
     </ul>
-    {awaitingSession > 0 && <p className="admin-explanation" role="status">{awaitingSession === 1 ? "1 task is" : `${awaitingSession} tasks are`} waiting for you to be signed in, because reading another product needs your live session.</p>}
+    {awaitingSession > 0 && <div className="team-waiting">
+      <p className="admin-explanation" role="status">{awaitingSession === 1 ? "1 task is" : `${awaitingSession} tasks are`} waiting for you to be signed in, because reading another product needs your live session. Run {awaitingSession === 1 ? "it" : "them"} now while you are signed in.</p>
+      <button type="button" className="button button-primary button-small" disabled={Boolean(busy) || !services.enabled} onClick={onRunWaiting}>Run what's waiting</button>
+    </div>}
   </section>;
 }
 
@@ -228,7 +231,7 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
   const change: Change = async (id, work, success) => {
     if (busy) return;
     setBusy(id); setNotice(null);
-    try { await work(); setNotice({ ok: true, text: success }); }
+    try { await work(); setNotice({ ok: true, text: typeof success === "function" ? success() : success }); }
     catch (error) { setNotice({ ok: false, text: failureText(error) }); }
     finally { setBusy(""); reload(); }
   };
@@ -240,6 +243,11 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
     () => client.setBudget({ key: agent.key, dailyBudgetCents: cents, expectedUpdatedAt: agent.updatedAt }), `${agent.displayName}'s daily budget is ${centsLabel(cents)}.`);
   const onRun = (agent: TeamAgent, taskKind: string) => void change(`run:${agent.key}:${taskKind}`,
     () => client.run({ agentKey: agent.key, taskKind }), `${taskLabel(taskKind)} is queued for ${agent.displayName}.`);
+  const onRunWaiting = () => {
+    let started = 0;
+    void change("waiting", async () => { started = (await client.waiting()).started; },
+      () => started === 0 ? "Nothing was waiting to run." : `Started ${plural(started, "task")}. They finish in the background; refresh in a minute to see the result.`);
+  };
   const onDecide = (approval: TeamApproval, decision: "approve" | "reject", note: string) => void change(`decide:${approval.id}`,
     async () => {
       const result = await client.decide({ actionId: approval.id, decision, note: note.trim() || undefined });
@@ -257,7 +265,7 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
     {state.status === "error" && shown && <ReadFailure error={state.error} retry={reload} />}
     {shown && <>
       <p className="admin-read-time">Loaded {timeLabel(shown.receivedAt)}.</p>
-      <ServicesPanel services={shown.data.services} awaitingSession={shown.data.team.awaitingSessionCount} />
+      <ServicesPanel services={shown.data.services} awaitingSession={shown.data.team.awaitingSessionCount} busy={busy} onRunWaiting={onRunWaiting} />
       <ApprovalsPanel approvals={shown.data.team.approvals} count={shown.data.team.approvalCount} busy={busy} onDecide={onDecide} />
       <section aria-labelledby="team-agents-title"><h2 id="team-agents-title" className="team-section-heading">Agents</h2>
         <div className="team-agent-grid">
