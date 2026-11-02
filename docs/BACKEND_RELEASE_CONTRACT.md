@@ -43,6 +43,16 @@ integer alone does not establish compatibility. Both entry points require these
 | `support.bulk-email.v1` | Governed bulk email preparation and delivery |
 | `learning.catalog-authoring.v1` | Reviewed course unpublish and published-lesson corrections |
 
+`20261102120100_agent_control_plane_contract.sql` declares `platform.agents.v1` only after
+verifying that the six AI team tables keep row level security and grant nothing to any
+browser, service or server role, that every server operation is a security definer with a
+pinned empty search path executable by `hub_app_server` alone, that its helpers are
+executable by no role, and that each owner operation authorizes the current administrator
+session (reads) or command session (changes) itself. The feature is declared ahead of the Hub
+build that will require it, so the migrations can be applied before that build ships. The table above is not exhaustive:
+later features such as the `billing.*` and `customer.self-service.v1` boundaries are declared
+by their own migrations and listed in `src/lib/backendContract.ts`. See [AI_TEAM.md](AI_TEAM.md).
+
 `20261022210000_retire_docstudio.sql` removes the retired DocStudio tables,
 functions and triggers after PR #85 removed their application callers. It removes
 only `knowledge.docstudio.v1` from the latest 36-feature declaration, preserving
