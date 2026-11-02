@@ -11,10 +11,15 @@
  *
  * Budget: a call is allowed only if the agent's remaining cents for the Eastern day, less what
  * other calls in this process have reserved and not yet booked, cover the worst case of this one
- * (every input character a token, every output token up to max_tokens). The cost reaches the
- * database only when the run row is closed, so the row is closed immediately after the response,
- * before anything else can go wrong, and a call whose outcome is unknown (a timeout, an abort, a
- * dropped connection) is booked at its input estimate rather than at nothing.
+ * (an upper bound on the prompt, see `inputTokenBound`, and every output token up to max_tokens).
+ * The cost reaches the database only when the run row is closed, so the row is closed immediately
+ * after the response, before anything else can go wrong, and a call whose outcome is unknown (a
+ * timeout, an abort, a dropped connection) is booked at its input bound rather than at nothing.
+ * Reading the budget and reserving against it happen alone among one agent's calls (a lane), and a
+ * reservation is released through the same lane after its cost is booked, so a call that finishes
+ * while another is reading the budget is always counted once: as a reservation or as booked cost.
+ * A cost whose write failed is kept as a debit and retried until the database has it, so the money
+ * is never spent twice while the write is failing.
  *
  * Privacy: the request text is the caller's and may be customer text. It is never logged, never
  * put in a run summary or an error, and never stored here; the provider's error messages (which
@@ -37,6 +42,27 @@ const configurationAlerts = {
 };
 const easternDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
 const ours = new Set([...transientCodes, ...permanentCodes]);
+// How many times a closing write that keeps failing is tried again, one try per later call, before the debt is given up.
+const writeAttempts = 5;
+
+// What the provider wraps around a request (role markers, the structured-output instructions): a fixed margin on top of the bytes.
+const requestOverheadTokens = 512;
+
+/**
+ * An upper bound on the tokens in a request. No tokenizer produces more tokens than the text has bytes
+ * (every token stands for at least one byte), so the serialized request's UTF-8 length plus a margin
+ * cannot be too small, whatever the script, symbols or emoji. It is far above the real count for English;
+ * the money it reserves is released as soon as the call is booked at its real usage.
+ */
+export const inputTokenBound = body => Buffer.byteLength(JSON.stringify(body), 'utf8') + requestOverheadTokens;
+
+/** The request sent to the Messages API for a checked spec: one user message, a closed JSON schema for the answer, no tools. */
+export const requestBody = (model, spec) => ({
+  model, max_tokens: spec.maxTokens,
+  system: spec.system.map(block => ({ type: 'text', text: block.text, ...(block.cache ? { cache_control: { type: 'ephemeral' } } : {}) })),
+  messages: [{ role: 'user', content: spec.user }],
+  output_config: { effort: spec.effort, format: { type: 'json_schema', schema: spec.schema } },
+});
 
 const count = value => (Number.isFinite(value) && value >= 0 ? Math.round(value) : 0);
 
@@ -96,15 +122,55 @@ export function modelRunner({
   // Cents reserved by calls in flight in this process, per agent. The database only learns a call's cost when its run is closed.
   const held = new Map();
   const heldFor = agentKey => held.get(agentKey) ?? 0;
+  // Costs whose run could not be closed (the write failed): still owed to the budget, retried at the next admission. Each belongs to the
+  // Eastern day its run started, which is the day the database counts it in, so only today's count against today's money; a write that keeps
+  // failing is given up after a few tries, because nothing else would ever clear it.
+  const owed = new Map();
+  const today = () => easternDate.format(now());
+  const owedFor = agentKey => (owed.get(agentKey) ?? []).filter(debt => debt.day === today()).reduce((total, debt) => total + (Number(debt.usage?.costCents) || 0), 0);
+  // One queue per agent: the budget read and the reservation (and every release) happen alone, in order.
+  const lanes = new Map();
+  async function exclusive(agentKey, work) {
+    const before = lanes.get(agentKey) ?? Promise.resolve();
+    let open;
+    const gate = new Promise(resolve => { open = resolve; });
+    const tail = before.then(() => gate);
+    lanes.set(agentKey, tail);
+    await before;
+    try { return await work(); } finally { open(); if (lanes.get(agentKey) === tail) lanes.delete(agentKey); }
+  }
   const hold = (agentKey, cents) => {
     held.set(agentKey, heldFor(agentKey) + cents);
     let released = false;
-    return () => {
+    // Releasing waits its turn in the lane, so it cannot slip between another call's budget read and its reservation.
+    return () => exclusive(agentKey, async () => {
       if (released) return;
       released = true;
       held.set(agentKey, Math.max(heldFor(agentKey) - cents, 0));
-    };
+    });
   };
+  /** Tries again to close the runs whose cost write failed. A run the database says is already closed was written after all. */
+  async function settleOwed(agentKey) {
+    const list = [...(owed.get(agentKey) ?? [])];
+    if (!list.length) return;
+    const done = new Set();
+    for (const debt of list) {
+      try {
+        await store.finishRun(debt.runId, debt.outcome, debt.usage, debt.summary, debt.errorCode);
+        done.add(debt);
+      } catch (error) {
+        debt.tries += 1;
+        if (error?.code === 'P0002') done.add(debt);
+        else if (debt.tries >= writeAttempts) {
+          done.add(debt);
+          log(JSON.stringify({ event: 'hub_agent_run_unbooked_dropped', agent: agentKey, run_id: debt.runId }));
+        }
+      }
+    }
+    // A call that is still in flight can add a debt while a write above is waiting, so the list is read again: only what was settled goes.
+    const current = (owed.get(agentKey) ?? []).filter(debt => !done.has(debt));
+    if (current.length) owed.set(agentKey, current); else owed.delete(agentKey);
+  }
 
   /** Bookkeeping that must never fail or delay the task: the ledger row and the once-a-day owner alert. */
   async function afterwards({ task, model, outcome, usage, latencyMs, failure }) {
@@ -144,37 +210,41 @@ export function modelRunner({
     // The scheduler has already given up on this task: start nothing, book nothing.
     if (signal?.aborted) throw aiError('run_aborted', true);
 
-    const inputChars = spec.system.reduce((total, block) => total + block.text.length, 0) + spec.user.length + JSON.stringify(spec.schema).length;
-    const reserve = worstCaseCents(model, { inputChars, maxTokens: spec.maxTokens, cached: spec.system.some(block => block.cache) });
-    const heldBefore = heldFor(agentKey);
-    const budget = await store.budget(agentKey);
-    // No await from here to the reservation, so two calls cannot both pass the check on the same cents. The larger of what was held
-    // before and after the budget read covers a call that finished (and released) while the read was in flight.
-    const remaining = Number(budget?.remainingCents ?? 0) - Math.max(heldBefore, heldFor(agentKey));
-    if (!(remaining >= reserve)) {
+    const body = requestBody(model, spec);
+    const inputBound = inputTokenBound(body);
+    const reserve = worstCaseCents(model, { inputTokens: inputBound, maxTokens: spec.maxTokens, cached: spec.system.some(block => block.cache) });
+    // Alone among this agent's calls: settle what is still owed, read the budget, and reserve. Nothing can finish and release between the
+    // read and the reservation, so no call is judged against money another call has already spent or is holding.
+    const admission = await exclusive(agentKey, async () => {
+      await settleOwed(agentKey);
+      const budget = await store.budget(agentKey);
+      const left = Number(budget?.remainingCents ?? 0) - heldFor(agentKey) - owedFor(agentKey);
+      return left >= reserve ? { admitted: true, remaining: left, release: hold(agentKey, reserve) } : { admitted: false, remaining: left };
+    });
+    const remaining = admission.remaining;
+    if (!admission.admitted) {
       try {
         const runId = await store.startRun(task.id, model, spec.promptVersion);
         await store.finishRun(runId, 'budget_exhausted', {}, 'Today\'s budget does not cover this call, so it was not made.', null);
       } catch { log(JSON.stringify({ event: 'hub_agent_run_unrecorded', agent: agentKey, kind: task.kind })); }
       return { outcome: 'budget_exhausted', neededCents: reserve, remainingCents: Math.max(remaining, 0) };
     }
-    const release = hold(agentKey, reserve);
+    const { release } = admission;
+    const budgetDay = today();
     let runId = null;
     let finished = false;
     const finish = async (outcome, usage, summary, errorCode = null) => {
       if (finished || runId === null) return;
       finished = true;
-      try { await store.finishRun(runId, outcome, usage, summary, errorCode); } catch { log(JSON.stringify({ event: 'hub_agent_run_unrecorded', agent: agentKey, kind: task.kind })); }
+      try { await store.finishRun(runId, outcome, usage, summary, errorCode); } catch {
+        // Not booked. The cost stays against the budget (and the write is retried) until the database has it.
+        owed.set(agentKey, [...(owed.get(agentKey) ?? []), { runId, outcome, usage, summary, errorCode, day: budgetDay, tries: 0 }]);
+        log(JSON.stringify({ event: 'hub_agent_run_unrecorded', agent: agentKey, kind: task.kind }));
+      }
     };
 
     try {
       runId = await store.startRun(task.id, model, spec.promptVersion);
-      const body = {
-        model, max_tokens: spec.maxTokens,
-        system: spec.system.map(block => ({ type: 'text', text: block.text, ...(block.cache ? { cache_control: { type: 'ephemeral' } } : {}) })),
-        messages: [{ role: 'user', content: spec.user }],
-        output_config: { effort: spec.effort, format: { type: 'json_schema', schema: spec.schema } },
-      };
       const deadline = AbortSignal.timeout(callDeadlineMs);
       const startedAt = Date.now();
       let reply = null;
@@ -191,7 +261,7 @@ export function modelRunner({
       if (failure) {
         // An HTTP status means the provider answered and did not process the call. Anything else (a timeout, an abort, a dropped
         // connection) leaves its outcome unknown, so it is booked at its input estimate.
-        const cost = failure.status === null ? inputOnlyCents(model, inputChars) : 0;
+        const cost = failure.status === null ? inputOnlyCents(model, inputBound) : 0;
         await finish(failure.code === 'run_aborted' ? 'cancelled' : 'failed', { rounds: 1, costCents: cost }, `The model call failed (${failure.code.replaceAll('_', ' ')}).`, failure.code);
         await afterwards({ task, model, outcome: 'failed', usage: null, latencyMs, failure });
         throw aiError(failure.code, failure.transient, { status: failure.status });
@@ -220,10 +290,10 @@ export function modelRunner({
       }
     } finally {
       // Normally closed above. Reaching here unclosed means something unexpected threw after the call started.
-      await finish('failed', { rounds: 1, costCents: inputOnlyCents(model, inputChars) }, 'The run ended unexpectedly.', 'ai_error');
-      release();
+      await finish('failed', { rounds: 1, costCents: inputOnlyCents(model, inputBound) }, 'The run ended unexpectedly.', 'ai_error');
+      await release();
     }
   }
 
-  return { run, reserved: heldFor, configured: client.configured };
+  return { run, reserved: heldFor, owing: owedFor, configured: client.configured };
 }

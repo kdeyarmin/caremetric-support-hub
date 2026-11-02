@@ -445,8 +445,10 @@ an agent's handler asks for it (`model.run(task, request, { signal })`), so the 
 the Account Manager and the Content Marketer can be built on one metered path. It adds the official
 Anthropic SDK (`@anthropic-ai/sdk`, pinned to an exact version) beside the Hub's older case assistant,
 which keeps its own small client. The SDK's origin is fixed to `https://api.anthropic.com` (a base URL
-variable on the host cannot redirect it), its logger is off, and it retries once with a 90 second timeout,
-so a call can never outlive the scheduler's four-minute limit for a task.
+variable on the host cannot redirect it), its logger is off, it never retries and it times out after 90
+seconds, so a call can never outlive the scheduler's four-minute limit for a task. A retry inside the SDK
+would be a second billable request that the run (one reservation, one booked call) never sees; the
+scheduler's own retry starts a separate run with its own budget check.
 
 **One call per task.** The loop is written by hand rather than handed to the SDK's tool runner, because
 the Hub keeps its own budget, deadline and accounting. A run makes one call and has no tools: a model that
@@ -458,21 +460,34 @@ covers the model's thinking as well as its answer. The answer is checked again i
 and against the agent's own `validate`; the model never causes a side effect, the handler does.
 
 **Budget.** A call is allowed only if the agent's remaining cents for the Eastern day, less what other
-calls in this process have reserved and not yet booked, cover its worst case: every input character taken
-as a token (two and a half characters to a token, on purpose too few) at the cache-write price, and every
-output token up to `max_tokens`. A call that is refused makes no request, leaves a `budget_exhausted` run
-for the owner to see and tells the handler, which should put the task off until the next Eastern day. The
-cost of a run reaches the database only when its run row is closed, and up to three tasks run at once, so
-the row is closed straight after the response, before anything can fail, and the reservation is released
-only after that. A call whose outcome is unknown (a timeout, an abort, a dropped connection) is booked at
-its input estimate instead of at nothing, and a response that reports no usage is booked at the reserve.
-A server that stops mid-call loses that call's cost: at most the three reserves it held.
+calls in this process have reserved and not yet booked, cover its worst case: an upper bound on the prompt
+at the cache-write price, and every output token up to `max_tokens`. The bound is the UTF-8 length in bytes
+of the serialized request plus a margin of 512 tokens. No tokenizer produces more tokens than the text has
+bytes, so the bound cannot be too small whatever the script, symbols or emoji (a characters-per-token guess
+can: Japanese and emoji run denser). It is several times the real count for English, and the money it holds
+is released when the call is booked at its real usage. A call that is refused makes no request, leaves a
+`budget_exhausted` run for the owner to see and tells the handler, which should put the task off until the
+next Eastern day.
+
+The cost of a run reaches the database only when its run row is closed, and up to three tasks run at once.
+For one agent, reading the budget and reserving against it happen alone, and a reservation is released
+through the same queue after its cost is booked. A call that finishes while another is reading the budget
+is therefore counted once, as a reservation or as booked cost, and never not at all. The row is closed
+straight after the response, before anything can fail. A call whose outcome is unknown (a timeout, an
+abort, a dropped connection) is booked at its input bound instead of at nothing, and a response that
+reports no usage is booked at the reserve. If closing the row fails, the answer is still returned, the cost
+stays against the agent's budget in memory and the write is retried at the next call, so the money is not
+spent twice while the database is failing; a retry the database answers with "already closed" counts as
+booked. A cost counts only against the Eastern day its run started in (the day the database counts it in), and
+a write that fails five times is given up with a log line, so a failure that never clears cannot shrink every
+later day's budget. Settling removes only the costs it settled, so one that went unbooked in the meantime stays. A server that stops mid-call loses that call's cost: at most the three reserves it held.
 
 **Prices** are per million tokens: Haiku 5.5 $0.10 in and $0.50 out (above a 100,000-token prompt, $0.50
 and $2.50 for the whole call), Sonnet 5.5 $2 and $10, Opus 5.5 $4 and $20; a cache read costs $0.01 (Haiku
 at the short rate) or $0.20 and a five-minute cache write 1.25 times the input price. A model with no price
-in the table is refused, and a test holds the table to the tiers the Hub names, so changing a tier cannot
-leave the agents spending unmetered. Costs are rounded up at the fourth decimal of a cent.
+in the table is refused. The table is keyed by the literal model ids, and a test holds it to the tiers the
+Hub names, so pointing a tier at a new model cannot quietly give it the old model's rates: it stops the
+agents until the new model is priced. Costs are rounded up at the fourth decimal of a cent.
 
 **How a run ends**, in `private.agent_runs`: `completed`; `refused` (the model declined; not retried);
 `budget_exhausted`; `no_result` (the answer was cut off, or was not valid JSON, did not fit the schema or

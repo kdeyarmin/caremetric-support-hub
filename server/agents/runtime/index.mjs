@@ -3,6 +3,7 @@ import { modelRunner } from './run.mjs';
 
 export { aiError, classify } from './errors.mjs';
 export { costCents, prices, worstCaseCents } from './pricing.mjs';
+export { inputTokenBound, requestBody } from './run.mjs';
 
 /**
  * The model runtime the AI team shares: `run(task, request, { signal })` makes one budgeted,

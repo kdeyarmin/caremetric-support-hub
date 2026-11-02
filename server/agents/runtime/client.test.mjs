@@ -71,6 +71,13 @@ describe('the Anthropic client', () => {
     expect(requestTimeoutMs).toBe(90_000);
   });
 
+  it('does not retry by default: a second request after a timeout or a rate limit would be billable and unseen by the run', async () => {
+    const net = network([respond({ type: 'error', error: { type: 'rate_limit_error', message: 'slow down' } }, 429, { 'retry-after-ms': '1' }), respond(reply())]);
+    const client = anthropicClient({ apiKey: 'sk-test-key', fetchImpl: net.fetchImpl });
+    expect(classify(await rejection(client.create(request))).code).toBe('rate_limited');
+    expect(net.seen).toHaveLength(1);
+  });
+
   it('maps every failure to a lowercase code and says whether trying again can help', async () => {
     const table = [
       [429, 'rate_limit_error', 'rate_limited', true],

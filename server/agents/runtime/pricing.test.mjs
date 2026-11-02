@@ -10,6 +10,13 @@ describe('model prices', () => {
     expect(Object.keys(prices).sort()).toEqual(Object.values(aiModels).sort());
   });
 
+  it('is keyed by the model ids themselves, so pointing a tier at a new model cannot inherit the old model\'s rates', () => {
+    // If the keys followed `aiModels`, a new model name would arrive already priced (at the old rates) and the test above would still pass.
+    expect(Object.keys(prices).sort()).toEqual(['claude-haiku-5-5', 'claude-opus-5-5', 'claude-sonnet-5-5']);
+    expect(prices['claude-sonnet-5-5'].short).toMatchObject({ input: 2, output: 10 });
+    expect(() => costCents('claude-sonnet-5-6', { inputTokens: 1 })).toThrow(expect.objectContaining({ code: 'unknown_model' }));
+  });
+
   it('prices input and output per million tokens, in cents', () => {
     // $2 and $10 per million: 1,000 in is 0.2 cents, 500 out is 0.5 cents.
     expect(costCents(draft, { inputTokens: 1000, outputTokens: 500 })).toBe(0.7);
@@ -54,12 +61,12 @@ describe('model prices', () => {
 
   it('refuses a model it has no price for', () => {
     expect(() => costCents('claude-unpriced-9', { inputTokens: 1 })).toThrow(expect.objectContaining({ code: 'unknown_model', transient: false }));
-    expect(() => worstCaseCents('nope', { inputChars: 10, maxTokens: 10 })).toThrow(expect.objectContaining({ code: 'unknown_model' }));
+    expect(() => worstCaseCents('nope', { inputTokens: 10, maxTokens: 10 })).toThrow(expect.objectContaining({ code: 'unknown_model' }));
   });
 });
 
 describe('the worst case a call is reserved at', () => {
-  it('counts every character as a token at two and a half characters each, rounding up', () => {
+  it('estimates tokens from characters at two and a half to a token, rounding up (a size guide, never what a call is admitted against)', () => {
     expect(charsPerToken).toBe(2.5);
     expect(estimateTokens(10)).toBe(4);
     expect(estimateTokens(11)).toBe(5);
@@ -69,14 +76,21 @@ describe('the worst case a call is reserved at', () => {
   });
 
   it('adds the input at the cache-write rate when a breakpoint is requested, and every output token', () => {
-    // 12,000 characters are 4,800 tokens: 1.2 cents written to the cache plus 3,000 output tokens at $10 per million.
-    expect(worstCaseCents(draft, { inputChars: 12_000, maxTokens: 3000, cached: true })).toBe(4.2);
-    expect(worstCaseCents(draft, { inputChars: 12_000, maxTokens: 3000 })).toBe(3.96);
-    expect(worstCaseCents(fast, { inputChars: 12_000, maxTokens: 3000, cached: true })).toBe(0.21);
+    // 4,800 input tokens are 1.2 cents written to the cache, plus 3,000 output tokens at $10 per million.
+    expect(worstCaseCents(draft, { inputTokens: 4_800, maxTokens: 3000, cached: true })).toBe(4.2);
+    expect(worstCaseCents(draft, { inputTokens: 4_800, maxTokens: 3000 })).toBe(3.96);
+    expect(worstCaseCents(fast, { inputTokens: 4_800, maxTokens: 3000, cached: true })).toBe(0.21);
+  });
+
+  it('prices a prompt bound that crosses Haiku\'s long-prompt threshold at the long rate, so the reserve cannot be too low', () => {
+    // 100,000 tokens at $0.10 per million are 1 cent and 1,000 output tokens at $0.50 are 0.05 cents; one token more and the whole call is
+    // at $0.50 and $2.50: 5.00005 + 0.25 cents, rounded up at the fourth decimal.
+    expect(worstCaseCents(fast, { inputTokens: 100_000, maxTokens: 1000 })).toBe(1.05);
+    expect(worstCaseCents(fast, { inputTokens: 100_001, maxTokens: 1000 })).toBe(5.2501);
   });
 
   it('books a call with an unknown outcome at its input estimate only', () => {
-    expect(inputOnlyCents(draft, 12_000)).toBe(0.96);
+    expect(inputOnlyCents(draft, 4_800)).toBe(0.96);
     expect(inputOnlyCents(draft, 0)).toBe(0);
   });
 });
