@@ -7,10 +7,11 @@ is built so far.
 > **Status.** The database layer, the server scheduler, the `/admin/team` screen, the Platform
 > Engineer's health probes, the Chief of Staff's morning brief, the SEO Analyst's weekly report and the
 > Support Concierge's triage of new conversations, with the fixed replies it offers the owner, are in
-> place, and so is the model runtime they will share (see "The model runtime"). The scheduler is inert
-> unless `HUB_AGENTS_ENABLED` is exactly `true` and every agent is seeded **paused**. None of the working
-> agents calls a model yet, and customer message text never leaves the Hub. The Concierge's drafted answers
-> arrive in a following change.
+> place, and so is the model runtime they share (see "The model runtime"). The scheduler is inert
+> unless `HUB_AGENTS_ENABLED` is exactly `true` and every agent is seeded **paused**. Only the Concierge
+> can call a model, only to draft an answer to a plain question, and only while the owner has set
+> `HUB_AGENTS_CUSTOMER_TEXT_TO_AI` to `true` ("Drafted answers"); otherwise customer message text never
+> leaves the Hub.
 
 ## The model
 
@@ -170,9 +171,10 @@ and proposes no actions. Turning findings into issues for the coder bot is a lat
 
 ## The Support Concierge
 
-Notices every new conversation in the Communications inbox within minutes and tells the owner. It uses no
-model and keeps no message text: this is customer service by simple rules, so the owner finds out quickly
-and nothing a customer wrote leaves the Hub.
+Notices every new conversation in the Communications inbox within minutes and tells the owner. By default
+it uses no model and keeps no message text: this is customer service by simple rules, so the owner finds out
+quickly and nothing a customer wrote leaves the Hub. The owner can switch on drafted answers (see "Drafted
+answers" below), which adds one model call for the plainest questions.
 
 Every five minutes (task `concierge.sweep`, "Look for new messages") it asks the database which
 conversations have a newest inbound message that has **settled** (90 seconds old, so a burst of texts counts
@@ -228,8 +230,65 @@ if the customer wrote again, or the conversation was closed, it sends nothing an
 approved is refused even for an agent trusted to act. A send the provider did not confirm is never
 reported as sent and is not retried; it warns the owner to look at the thread first.
 
-Drafted answers from the published guides, with the model, come only after the owner confirms an Anthropic
-agreement that covers support messages.
+### Drafted answers
+
+The Concierge can draft an answer from CareMetric's published help articles for the owner to approve, in
+place of the fixed acknowledgment. It is **off** until the owner sets `HUB_AGENTS_CUSTOMER_TEXT_TO_AI` to
+exactly `true` on the Hub service (with `ANTHROPIC_API_KEY` set and the Concierge in **Propose**); the Team
+screen's "Customer text to AI" row says whether it is on. The owner confirmed on 2026-11-02 that the
+Anthropic agreement covers support messages. The Hub cannot verify that, which is why the switch is a
+separate step and nothing turns it on by merging or deploying.
+
+**What goes to the model.** Only a message that the rules call a plain question (not billing, a
+cancellation, an outage, a security or legal matter, a sale or anything from the Advisors form), that the
+identifier screen did not flag, that is the first message in its conversation with nothing yet sent to the
+customer, that can be answered, and that matches at least one published guide. Everything the owner answers
+personally stays in the Hub, and so does everything with an identifier. **Observe** mode never calls the
+model. What is sent is the message with links, email addresses, phone numbers, dates, runs of six or more
+digits, street addresses, post office boxes and state-and-ZIP endings replaced by words such as `[phone]`,
+and `<`, `>` and `&` escaped (`redact.mjs`); an email's subject, scrubbed the same way, and no other
+conversation's subject; the channel, the product and how many messages the customer has sent; and up to
+three guides. Contact name, address, phone number, organization, assignee, internal notes and the reference
+number are never sent. Names cannot be found by pattern, so they stay in; the checks below look for a draft
+that repeats one.
+
+**What the model returns** is one object (`prompt.mjs`, prompt version `concierge.2`, a constant that the
+request's own text is never part of): a category, an inquiry type, an urgency, whether it thinks the message
+carries personal information, whether the owner must act, whether the guides answer the question, which
+guides it used and a draft. The customer's message sits in a block the prompt calls untrusted data, so a
+message that tells it to ignore its rules or promise something is read as part of the question.
+
+**What the code does with it.** The model never causes anything. Its reading can only add caution: an
+ordinary question it calls urgent, or an outage, a security or legal matter, raises a second alert (text and
+email, under the same caps) and offers no reply; billing or a cancellation raises a warning and offers none;
+a sale offers none; personal information it finds gets the fixed notice that asks the sender to resend
+without it, and a warning. A draft is offered only if every check in `draft.mjs` passes: it cites a guide
+it was given; fits its channel (320 characters including the greeting for a text message, 1,500 otherwise);
+has no markup, link, email address or phone number; passes the same identifier screen as the inbound
+message; states no dollar amount or percentage the guides do not; mentions no call, phone, voicemail,
+meeting or demo; promises no refund, credit, time frame or day; gives no legal, compliance or medical
+advice; does not call itself an AI or mention its instructions; does not repeat a name or an
+identifier-like word from the message that the guides do not use; and does not quote the message at
+length. Assisted Living Residence and ALR become Assisted Living Facility and ALF, and auditor becomes
+surveyor, instead of failing. A draft that fails is dropped and the fixed acknowledgment is offered
+instead; only the name of the check is recorded, never the draft or the message.
+
+**What the owner sees.** The same approval as any reply, with the exact text that will be sent (the greeting,
+then the draft). It goes out as the owner, with no mention of AI, and is never auto-approved. The approval card
+does not yet say that a text was drafted by the model: the Activity tab's run "Read CM-1042 …" and the task's
+result (`draft: drafted`) do. The owner's alert is sent before the model is asked, so it is never delayed.
+
+**When the model cannot help.** A used-up budget, an unusable or cut-off answer, a refused key and a model
+that is down all end in the fixed acknowledgment, as does a transient failure on its third try (the first two
+are retried with the scheduler's backoff). A refusal by the model's safety systems offers nothing at all, for
+the owner to read. A refused key, account or model also emails the owner once a day.
+
+**Cost.** Each drafted question is one call: the guides and the scrubbed message in, a short JSON object out,
+at the agent's effort (`effort` in its settings: low, medium or high; the seeded value is medium). Expect a
+cent or two on the draft tier; look at "Spent today" on the Team screen after the first day, and size the
+budget from that. Messages that do not qualify cost nothing. Anyone who can write to the support address can
+cause a call, so the agent's daily budget is the cap: once it is used up, drafting pauses until the next
+Eastern day and every message still gets its alert and its fixed acknowledgment.
 
 **What it watches** is set in the agent's `config`, which only SQL changes (the Team screen has no settings
 editor): `channels` (default email, chat, web form and phone-line messages; text messages stay off until the

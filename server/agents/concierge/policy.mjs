@@ -11,11 +11,14 @@
 import { plural } from '../tasks/shared.mjs';
 
 const severities = {
-  security: 'urgent', legal: 'urgent', outage: 'urgent', cancellation: 'warning', billing: 'warning', sales: 'info', general: 'info',
+  security: 'urgent', legal: 'urgent', outage: 'urgent', urgent: 'urgent', cancellation: 'warning', billing: 'warning', sales: 'info', general: 'info',
 };
+/** How much attention each severity asks for, so a second reading can be compared with the first. */
+export const severityRank = { info: 1, warning: 2, urgent: 3 };
 
+// `urgent` is not a topic: it is how the model's reading of an ordinary question is recorded when it calls it urgent.
 const categoryWords = {
-  security: 'possible security concern', legal: 'possible legal matter', outage: 'possible outage report',
+  security: 'possible security concern', legal: 'possible legal matter', outage: 'possible outage report', urgent: 'possible urgent matter',
   cancellation: 'possible cancellation', billing: 'billing question', sales: 'sales or consulting inquiry', general: 'general question',
 };
 const channelWords = { phone: 'phone-line message', sms: 'text message', email: 'email', chat: 'chat', web_form: 'web form message' };
@@ -36,7 +39,7 @@ export function decide({ category, phi = false }) {
 }
 
 /** The subject and body of the owner's alert. */
-export function alertWords({ category, phi, severity, channel, productSlug, reference, minutes }) {
+export function alertWords({ category, phi, severity, channel, productSlug, reference, minutes, source = 'rules' }) {
   const kind = categoryWords[category] ?? categoryWords.general;
   const product = productWord(productSlug);
   const via = channelWord(channel);
@@ -49,7 +52,9 @@ export function alertWords({ category, phi, severity, channel, productSlug, refe
     phi
       ? `Open CM-${reference} in Communications. Please do not forward or copy it: it may contain patient or resident information.`
       : `Open CM-${reference} in Communications. Nothing has been sent to the customer.`,
-    severity === 'urgent' ? 'This was flagged by simple word matching, so it may be a false alarm.' : null,
+    source === 'model'
+      ? (severity === 'urgent' ? 'This was flagged by the AI team\'s reading of the message, so it may be a false alarm.' : 'This comes from the AI team\'s reading of the message.')
+      : (severity === 'urgent' ? 'This was flagged by simple word matching, so it may be a false alarm.' : null),
   ].filter(Boolean).join('\n\n');
   return { subject, body };
 }

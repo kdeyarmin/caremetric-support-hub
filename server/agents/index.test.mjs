@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { agentTeam } from './index.mjs';
+import { draftingFor } from './concierge/index.mjs';
 
 const store = (tasks = []) => ({
   maintenance: vi.fn(async () => ({})), fireSchedules: vi.fn(async () => []), claim: vi.fn(async () => tasks),
@@ -87,6 +88,18 @@ describe('the AI team', () => {
     const injected = agentTeam({ store: store(), publicOrigin: origin, model: given, anthropicApiKey: 'sk-test-key', handlers: services => { shared.push(services.model); return {}; } });
     expect(injected.model).toBe(given);
     expect(shared).toEqual([given]);
+  });
+
+  it('lets customer text go to the model only with the owner\'s switch, a model key and the guide library', () => {
+    const model = { configured: true, run: vi.fn() };
+    const guides = { top: vi.fn() };
+    expect(draftingFor({ model, guides, customerTextToAi: true })).toEqual({ model, guides });
+    for (const over of [
+      { customerTextToAi: false }, { customerTextToAi: 'true' }, { customerTextToAi: 1 }, { customerTextToAi: undefined }, { model: { configured: false, run() {} } },
+      { model: { configured: true } }, { model: null }, { guides: null }, { guides: {} },
+    ]) expect(draftingFor({ model, guides, customerTextToAi: true, ...over }), JSON.stringify(over)).toBeNull();
+    expect(draftingFor()).toBeNull();
+    expect(draftingFor({ model, guides })).toBeNull();
   });
 
   it('registers no work that uses the model, with or without a key', () => {

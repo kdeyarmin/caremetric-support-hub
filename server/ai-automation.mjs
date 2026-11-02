@@ -80,7 +80,7 @@ function stripHtml(value) {
   return String(value ?? '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
 }
 
-function rankKnowledge(items, sourceText) {
+export function rankKnowledge(items, sourceText) {
   const terms = new Set(String(sourceText ?? '').toLowerCase().split(/[^a-z0-9]+/).filter((term) => term.length >= 4));
   return items.map((item) => {
     const text = `${item.title ?? ''} ${item.summary ?? ''}`.toLowerCase();
