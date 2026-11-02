@@ -65,7 +65,11 @@ const trialEndsSoon = (subscription, nowTime) => {
 const renewsSoon = (subscription, nowTime) => {
   if (subscription.status !== 'active' || subscription.cancel_at_period_end || !(subscription.items ?? []).some(isLongPlan)) return false;
   const end = instant(subscription.current_period_end);
-  return end !== null && end >= nowTime && end - nowTime <= thresholds.renewalDays * day;
+  if (end === null || end < nowTime || end - nowTime > thresholds.renewalDays * day) return false;
+  // A cancellation date at or before the period end means the subscription stops instead of renewing (one after it renews once more first).
+  // As for `cancel_scheduled`, a date that has already passed is stale data and does not count.
+  const cancelAt = instant(subscription.cancel_at);
+  return !(cancelAt !== null && cancelAt > nowTime && cancelAt <= end);
 };
 const soonest = (list, key) => list.reduce((best, entry) => (best === null || (instant(entry[key]) ?? Infinity) < (instant(best[key]) ?? Infinity) ? entry : best), null);
 

@@ -99,6 +99,15 @@ describe('how an account is doing', () => {
     expect(renews({ items: [item({ interval: 'year' })] }, 31)).toEqual([]);
     expect(renews({ items: [item({ interval: 'year' })] }, -2)).toEqual([]);
     expect(renews({ items: [item({ interval: 'year' })], cancel_at_period_end: true })).toEqual([]);
+    // An explicit cancellation date at or before the period end means it stops instead of renewing; one after it renews once more first.
+    expect(renews({ items: [item({ interval: 'year' })], cancel_at: iso(10) })).toEqual([]);
+    expect(renews({ items: [item({ interval: 'year' })], cancel_at: iso(20) })).toEqual([]);
+    expect(renews({ items: [item({ interval: 'year' })], cancel_at: iso(60) })).toEqual(['renewing_soon']);
+    expect(renews({ items: [item({ interval: 'year' })], cancel_at: iso(-5) })).toEqual(['renewing_soon']);
+    // The same account is cancelling, not renewing: never both.
+    const both = rated({ subscriptions: [subscription({ current_period_end: iso(20), items: [item({ interval: 'year' })], cancel_at: iso(10) })] });
+    expect(both.reasons).toContain('cancel_scheduled');
+    expect(both.flags).not.toContain('renewing_soon');
     expect(renews({ items: [item({ interval: 'year' })], status: 'trialing' })).toEqual([]);
   });
 
