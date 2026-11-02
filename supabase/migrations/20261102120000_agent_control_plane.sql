@@ -333,8 +333,11 @@ $$;
 
 -- Turns every due schedule of an active agent into a task, then moves the schedule to its
 -- next run. A schedule whose previous task is still unfinished is skipped, not stacked, so
--- a stuck run is never buried under more of the same. Returns the tasks it created.
-create function private.agent_schedule_fire(p_limit integer default 10) returns uuid[]
+-- a stuck run is never buried under more of the same. p_kinds names the task kinds the
+-- running server has a handler for: a schedule for any other kind stays due and untouched,
+-- so schedules seeded ahead of the code that handles them (or after a rollback of that code)
+-- never fire tasks nobody can run. Null fires every kind. Returns the tasks it created.
+create function private.agent_schedule_fire(p_limit integer default 10, p_kinds text[] default null) returns uuid[]
 language plpgsql security definer set search_path = '' as $$
 declare
   s private.agent_schedules%rowtype;
@@ -350,6 +353,7 @@ begin
     from private.agent_schedules sc
     join private.agents a on a.key = sc.agent_key
     where sc.enabled and a.status = 'active' and sc.next_run_at <= now()
+      and (p_kinds is null or sc.task_kind = any (p_kinds))
     order by sc.next_run_at, sc.id
     limit p_limit
     for update of sc skip locked
@@ -1189,7 +1193,7 @@ revoke all on function
   private.agent_summary_json(text),
   private.agent_close_task_if_settled(uuid),
   private.agent_budget(text),
-  private.agent_schedule_fire(integer),
+  private.agent_schedule_fire(integer, text[]),
   private.agent_maintenance(),
   private.agent_task_enqueue(text, text, text, jsonb, integer, timestamp with time zone, text, text, boolean),
   private.agent_task_claim(integer, integer),
@@ -1210,7 +1214,7 @@ from public, anon, authenticated, service_role, hub_app_server;
 
 grant execute on function
   private.agent_budget(text),
-  private.agent_schedule_fire(integer),
+  private.agent_schedule_fire(integer, text[]),
   private.agent_maintenance(),
   private.agent_task_enqueue(text, text, text, jsonb, integer, timestamp with time zone, text, text, boolean),
   private.agent_task_claim(integer, integer),

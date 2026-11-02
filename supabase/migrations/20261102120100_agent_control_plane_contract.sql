@@ -31,7 +31,7 @@ begin
 
   foreach signature in array array[
     'private.agent_budget(text)',
-    'private.agent_schedule_fire(integer)',
+    'private.agent_schedule_fire(integer,text[])',
     'private.agent_maintenance()',
     'private.agent_task_enqueue(text,text,text,jsonb,integer,timestamp with time zone,text,text,boolean)',
     'private.agent_task_claim(integer,integer)',

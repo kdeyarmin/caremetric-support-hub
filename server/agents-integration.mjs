@@ -230,12 +230,18 @@ try {
   assert.ok(Number((await row("select extract(epoch from next_run_at - now()) as ahead from private.agent_schedules where task_kind = 'probe.sweep'")).ahead) > 0, 'but the schedule still advances');
   await claim();
   await call('private.agent_task_finish', [fired[0], 'done', null, null, null]);
+  // Only the kinds the running server can handle fire; any other schedule stays due and untouched.
+  await admin.query("update private.agent_schedules set next_run_at = now() - interval '5 minutes' where task_kind = 'probe.sweep'");
+  const waitingSchedule = await row("select next_run_at from private.agent_schedules where task_kind = 'probe.sweep'");
+  assert.deepEqual(await call('private.agent_schedule_fire', [10, ['something.else']]), [], 'a kind the server does not handle does not fire');
+  assert.deepEqual(await call('private.agent_schedule_fire', [10, []]), [], 'an empty list fires nothing');
+  assert.deepEqual((await row("select next_run_at from private.agent_schedules where task_kind = 'probe.sweep'")).next_run_at, waitingSchedule.next_run_at, 'and its schedule is left due');
   // A firing's request key carries the scheduled instant to the second, so a repeated firing of the
   // same instant is a no-op; schedules are at least a minute apart, so the next instant differs.
   await admin.query("update private.agent_schedules set next_run_at = (select (regexp_match(request_key, ':(\\d{8}T\\d{6}Z)$'))[1]::text::timestamptz from private.agent_tasks where id = $1) where task_kind = 'probe.sweep'", [fired[0]]);
   assert.deepEqual(await call('private.agent_schedule_fire', [10]), [], 'the same scheduled instant never enqueues twice');
   await admin.query("update private.agent_schedules set next_run_at = now() - interval '2 minutes' where task_kind = 'probe.sweep'");
-  const refired = await call('private.agent_schedule_fire', [10]);
+  const refired = await call('private.agent_schedule_fire', [10, ['probe.sweep']]);
   assert.equal(refired.length, 1);
   assert.notEqual((await task(refired[0])).request_key, probe.request_key);
   await admin.query("update private.agent_schedules set enabled = false, next_run_at = now() - interval '3 minutes' where task_kind = 'probe.sweep'");

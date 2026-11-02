@@ -7,7 +7,7 @@ insert into agent_tables values ('private.agents'), ('private.agent_schedules'),
 
 create temporary table agent_server_operations(signature text primary key) on commit drop;
 insert into agent_server_operations values
-  ('private.agent_budget(text)'), ('private.agent_schedule_fire(integer)'), ('private.agent_maintenance()'),
+  ('private.agent_budget(text)'), ('private.agent_schedule_fire(integer,text[])'), ('private.agent_maintenance()'),
   ('private.agent_task_enqueue(text,text,text,jsonb,integer,timestamp with time zone,text,text,boolean)'),
   ('private.agent_task_claim(integer,integer)'), ('private.agent_task_heartbeat(uuid,integer)'),
   ('private.agent_task_finish(uuid,text,jsonb,text,timestamp with time zone)'),
