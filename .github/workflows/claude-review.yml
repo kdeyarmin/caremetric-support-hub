@@ -1,0 +1,79 @@
+name: Claude review
+
+# The reviewer bot for this repository, part of the CareMetric AI team the owner runs from the Support
+# Hub. It reviews a pull request when the request is opened or marked ready for review. Drafts are
+# skipped, so the owner chooses when a review is worth its cost. It only comments: it never approves,
+# requests changes, pushes or merges. Ask for another pass with "@claude review again" (the coder
+# workflow answers that).
+#
+# It needs the Claude GitHub App installed on this repository and the repository secret
+# ANTHROPIC_API_KEY. Without the secret it skips quietly. Pull requests from forks and from Dependabot
+# are skipped too, because they cannot use the secret.
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+      actions: read
+    steps:
+      - name: Check for the Anthropic key
+        id: key
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No ANTHROPIC_API_KEY secret is set, so there is no review."
+          fi
+      - name: Checkout
+        if: steps.key.outputs.present == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Review
+        if: steps.key.outputs.present == 'true'
+        uses: anthropics/claude-code-action@d535f5172dec02b204866b393d6b20b9b2aaf98d # v1.0.266
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          track_progress: true
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Review this pull request as a careful senior engineer who knows this repository. Read
+            CLAUDE.md first and judge the change against it.
+
+            Focus on what the automated checks cannot see: a bug a test would not catch, a missing
+            case, a security or privacy problem, a change that breaks a rule in CLAUDE.md, a missing or
+            weak test, and documentation that is now wrong. Do not repeat what lint, the type checker
+            or the existing tests already verify, and do not comment on style.
+
+            This is the CareMetric Support Hub, a non-PHI release (SECURITY.md). Pay particular attention to:
+            - Customer or inbound text (possible PHI) reaching a log, an audit event, an error response or a stored summary.
+            - Database changes: a new migration (never an edit to an applied one), idempotent, row level security on with every browser, service and server privilege revoked, security definer functions with an empty search_path, server-only operations that call private.require_hub_app_server(), owner operations that call hub.authorize_app_admin() or hub.authorize_app_command(), and a contract gate plus the exact feature list in supabase/tests/006_backend_contract.test.sql when a feature is declared.
+            - AI team code: no money movement, plan changes, merges, deploys or messages to new recipients; side effects idempotent under a request key; budgets and approvals respected; the assistant stays text only.
+            - Tests that actually exercise the new behavior, and docs that match it.
+
+            Post specific problems as inline comments and one short summary comment. Start every inline
+            comment with Blocking: or Optional:, and say why it matters. If you find nothing important,
+            say so in one sentence. You only comment: never approve, request changes, push commits or
+            merge.
+          claude_args: |
+            --max-turns 15
+            --model claude-sonnet-5-5
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
