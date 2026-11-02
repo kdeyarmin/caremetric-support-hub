@@ -140,6 +140,32 @@ describe('agent scheduler', () => {
     expect(store.heartbeat).toHaveBeenCalledWith('t1', 600, 1);
   });
 
+  it('stops a task whose heartbeat says it is no longer running, and tells the handler', async () => {
+    // The owner cancelled it, or another worker took it over: the database answers false to the heartbeat.
+    let signalled = false;
+    const work = (_task, { signal }) => new Promise(() => { signal.addEventListener('abort', () => { signalled = true; }); });
+    const { scheduler, store, logs } = fixture({ tasks: [task()], handlers: { 'probe.sweep': work }, heartbeatMs: 10 });
+    store.heartbeat.mockResolvedValue(false);
+    const started = Date.now();
+    const outcome = await scheduler.tick();
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(signalled).toBe(true);
+    expect(JSON.parse(logs[0])).toMatchObject({ event: 'hub_agent_task_error', code: 'task_cancelled', transient: false });
+    // Its own finish is quoted with its attempt, so the database ignores it for a task it no longer owns.
+    expect(store.finish).toHaveBeenCalledWith('t1', 'queued', expect.objectContaining({ errorCode: 'task_cancelled', attempt: 1 }));
+    expect(outcome.results).toHaveLength(1);
+  });
+
+  it('keeps going when a heartbeat fails or says the task is still running', async () => {
+    const slow = () => new Promise(resolve => setTimeout(() => resolve({ result: { ok: true } }), 60));
+    for (const answer of [true, undefined, new Error('database blip')]) {
+      const { scheduler, store } = fixture({ tasks: [task()], handlers: { 'probe.sweep': slow }, heartbeatMs: 10 });
+      if (answer instanceof Error) store.heartbeat.mockRejectedValue(answer); else store.heartbeat.mockResolvedValue(answer);
+      await scheduler.tick();
+      expect(store.finish, String(answer)).toHaveBeenCalledWith('t1', 'done', expect.objectContaining({ result: { ok: true } }));
+    }
+  });
+
   it('never runs two ticks at once', async () => {
     let release;
     const gate = new Promise(resolve => { release = resolve; });

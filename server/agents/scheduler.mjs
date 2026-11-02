@@ -46,13 +46,26 @@ export function agentScheduler({
       await guarded('finish', () => store.finish(task.id, 'failed', { errorCode: 'no_handler', attempt: task.attempts }));
       return { id: task.id, status: 'failed' };
     }
-    const beat = setInterval(() => { store.heartbeat(task.id, leaseSeconds, task.attempts).catch(() => {}); }, heartbeatMs);
-    beat.unref?.();
     const controller = new AbortController();
+    // The heartbeat is also how a worker learns that the task is no longer its own: the owner cancelled it, or another worker took it over
+    // after the lease lapsed. It stops waiting at once and tells the handler (its signal), so one that honors the signal stops sending
+    // alerts or making model calls for work nobody wants any more. The database leaves a cancelled or taken-over task as it is.
+    let release;
+    const gone = new Promise((_, reject) => { release = reject; });
+    gone.catch(() => {});
+    const beat = setInterval(() => {
+      store.heartbeat(task.id, leaseSeconds, task.attempts).then(alive => {
+        if (alive !== false) return;
+        controller.abort();
+        release(Object.assign(new Error('The agent task is no longer running.'), { code: 'task_cancelled' }));
+      }, () => {});
+    }, heartbeatMs);
+    beat.unref?.();
     let timer;
     try {
       const outcome = await Promise.race([
         Promise.resolve().then(() => handler(task, { signal: controller.signal, now, ...context })),
+        gone,
         new Promise((_, reject) => {
           timer = setTimeout(() => {
             controller.abort();
