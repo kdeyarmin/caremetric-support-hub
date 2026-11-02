@@ -43,8 +43,8 @@ export interface TeamClient {
   decide(input: { actionId: string; decision: "approve" | "reject"; note?: string }): Promise<Decision>;
   run(input: { agentKey: string; taskKind: string }): Promise<{ id: string; status: string }>;
   cancel(input: { taskId: string }): Promise<{ id: string; status: string }>;
-  /** Runs the work that was waiting for the owner's sign-in. Answers at once; the work finishes in the background. */
-  waiting(): Promise<{ started: number }>;
+  /** Runs the work that was waiting for the owner's sign-in (imports, and approved replies that never went out). Answers at once; the work finishes in the background. */
+  waiting(): Promise<{ started: number; actions: number }>;
   activity<K extends ActivityKind>(input: { kind: K; agentKey: string | null; offset: number; limit: number }, options: { signal: AbortSignal }): Promise<ActivityPage<K>>;
   audit(input: { prefix: string | null; offset: number; limit: number }, options: { signal: AbortSignal }): Promise<AuditPage>;
 }

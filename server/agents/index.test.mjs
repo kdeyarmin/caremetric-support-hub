@@ -47,6 +47,29 @@ describe('the AI team', () => {
     }
   });
 
+  it('sends approved replies only when the inbox service and the Concierge\'s feature are both there', async () => {
+    const feature = new Set(['platform.agents.concierge.v1']);
+    const reply = vi.fn(async () => ({ delivery: 'sent', deliveryChannel: 'email', replay: false }));
+    const execution = { id: 'a1', agentKey: 'support_concierge', taskId: 't1', kind: 'communication.reply', requestKey: '44444444-4444-4444-8444-444444444444', autoApproved: false,
+      input: { communicationId: '11111111-1111-4111-8111-111111111111', reference: 1, basedOnMessageId: '22222222-2222-4222-8222-222222222222', body: 'Hello' } };
+    const fake = () => ({ ...store(), readyActions: vi.fn(async () => [{ id: 'a1', kind: 'communication.reply' }]), beginExecution: vi.fn(async () => execution), completeExecution: vi.fn(async () => undefined),
+      communicationSnapshot: vi.fn(async () => ({ status: 'new', headMessageId: '22222222-2222-4222-8222-222222222222' })) });
+    const token = 'T'.repeat(43);
+    const ready = fake();
+    const team = agentTeam({ store: ready, publicOrigin: origin, enabled: true, communications: { reply }, features: feature });
+    // The tick leaves the reply alone: it needs the owner's session.
+    expect(await team.tick()).toMatchObject({ executedActions: 0 });
+    expect(ready.beginExecution).not.toHaveBeenCalled();
+    expect(await team.actions.sessionActions()).toEqual([{ id: 'a1', kind: 'communication.reply' }]);
+    expect(await team.actions.executeOne('a1', { kind: 'communication.reply', sessionToken: token })).toEqual({ executed: true, failed: false, skipped: false });
+    expect(reply).toHaveBeenCalledWith(token, { id: '11111111-1111-4111-8111-111111111111', body: 'Hello', requestKey: '44444444-4444-4444-8444-444444444444' });
+    for (const options of [{ communications: { reply } }, { features: feature }, { communications: {}, features: feature }]) {
+      const bare = agentTeam({ store: fake(), publicOrigin: origin, enabled: true, ...options });
+      expect(await bare.actions.sessionActions()).toEqual([]);
+      expect(await bare.actions.executeOne('a1', { kind: 'communication.reply', sessionToken: token })).toMatchObject({ failed: true, error: 'no_executor' });
+    }
+  });
+
   it('hands a function of handlers the shared services', () => {
     const seen = [];
     agentTeam({ store: store(), publicOrigin: origin, handlers: services => { seen.push(Object.keys(services).sort()); return {}; } });

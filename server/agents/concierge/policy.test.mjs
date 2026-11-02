@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alertWords, categoryWord, channelWord, decide, productWord } from './policy.mjs';
+import { alertWords, categoryWord, channelWord, decide, productWord, replyFor, replyRoute } from './policy.mjs';
 
 describe('how loudly the owner is told', () => {
   it('texts the owner about an outage, a security concern and a legal matter', () => {
@@ -68,5 +68,45 @@ describe('the words of an alert', () => {
     expect(categoryWord('mystery')).toBe('general question');
     expect(productWord('advisors')).toBe('Healthcare Advisors');
     expect(productWord(null)).toBeNull();
+  });
+});
+
+describe('which reply to offer the owner', () => {
+  it('offers the acknowledgment for a plain question, and the identifier notice when it carries identifiers', () => {
+    expect(replyFor({ category: 'general' })).toBe('standard');
+    expect(replyFor({ category: 'general', phi: true })).toBe('phi');
+    expect(replyFor({ category: 'general', productSlug: 'carebase', inquiryType: 'technical_support' })).toBe('standard');
+  });
+
+  it('leaves everything but a plain question to the owner', () => {
+    for (const category of ['outage', 'security', 'legal', 'billing', 'cancellation', 'sales', 'auto_reply', 'mystery']) {
+      expect(replyFor({ category }), category).toBeNull();
+      expect(replyFor({ category, phi: true }), `${category} with identifiers`).toBeNull();
+    }
+  });
+
+  it('leaves an Advisors or sales conversation to the owner, even a plain one', () => {
+    expect(replyFor({ category: 'general', productSlug: 'advisors' })).toBeNull();
+    expect(replyFor({ category: 'general', inquiryType: 'advisors' })).toBeNull();
+    expect(replyFor({ category: 'general', inquiryType: 'sales', phi: true })).toBeNull();
+  });
+});
+
+describe('how a reply would travel', () => {
+  it('answers chat, text and email in their own channel, when they can be reached', () => {
+    expect(replyRoute({ channel: 'chat' })).toBe('chat');
+    expect(replyRoute({ channel: 'sms', canText: true })).toBe('sms');
+    expect(replyRoute({ channel: 'email', canEmail: true })).toBe('email');
+    expect(replyRoute({ channel: 'sms', canText: false })).toBeNull();
+    expect(replyRoute({ channel: 'email', canEmail: false, canText: true })).toBeNull();
+  });
+
+  it('answers a phone-line message or a web form by email when there is an address, else by text', () => {
+    for (const channel of ['phone', 'web_form']) {
+      expect(replyRoute({ channel, canEmail: true, canText: true })).toBe('email');
+      expect(replyRoute({ channel, canEmail: true })).toBe('email');
+      expect(replyRoute({ channel, canText: true })).toBe('sms');
+      expect(replyRoute({ channel })).toBeNull();
+    }
   });
 });

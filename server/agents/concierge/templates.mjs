@@ -1,0 +1,32 @@
+/**
+ * The fixed replies the Concierge offers the owner to send. They are written once, here, and reviewed like
+ * any other copy; nothing a customer wrote is ever repeated in them. They say nothing about AI (the owner reads
+ * and approves each one, and it goes out under their name), promise no time, refund or outcome, and never offer a
+ * phone call. A text message gets a shorter version that fits one message of 320 characters.
+ *
+ * - standard: the message arrived and a person will review it.
+ * - phi: the message appears to carry patient or resident information, which these channels are not set up
+ *   for. It does not quote, confirm or deny anything the customer wrote, and makes no claim about what happens to it.
+ */
+export const smsLimit = 320;
+
+const greeting = 'Hello,';
+const bodies = {
+  standard: {
+    long: 'Thank you for contacting CareMetric Support. We have your message and a member of our team will review it and reply here.',
+    short: 'Thanks for contacting CareMetric Support. We have your message and will reply here.',
+  },
+  phi: {
+    long: 'Thank you for contacting CareMetric Support. Our support channels are not set up to receive patient or resident information, so we have not acted on the details in your message. Please send your question again without names, dates of birth, record numbers or health details, and a member of our team will review it.',
+    short: 'CareMetric Support: please do not send patient or resident details here. Send your question again without names, birth dates or record numbers and we will review it.',
+  },
+};
+
+export const templateNames = Object.keys(bodies);
+
+/** The whole message for a template, ready to send by the route it will travel (sms, email or chat). */
+export function replyBody(template, route) {
+  const words = bodies[template];
+  if (!words) throw new TypeError('Unknown reply template.');
+  return route === 'sms' ? `${greeting} ${words.short}` : `${greeting}\n\n${words.long}`;
+}

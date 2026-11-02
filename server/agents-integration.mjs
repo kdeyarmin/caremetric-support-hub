@@ -1022,12 +1022,12 @@ try {
     assert.equal(Number((await row("select count(*) from private.agent_tasks where kind = 'import.breathe'")).count), breatheBefore, 'a refused Run now creates no task');
 
     // The owner's session starts it. The answer comes at once and the import finishes in the background.
-    assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 1 });
+    assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 1, actions: 0 });
     const finished = await reached(waiting.id, ['done']);
     assert.deepEqual(finished.result, { source: 'advisors.web', read: 3, created: 2, skipped: 1, calls: 1, complete: true, nextOffset: null });
     assert.deepEqual([finished.attempts, finished.last_error_code], [1, null]);
     assert.deepEqual(reads, [[ownerToken, { source: 'advisors.web', offset: 0 }]]);
-    assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 0 }, 'a second press finds nothing left');
+    assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 0, actions: 0 }, 'a second press finds nothing left');
 
     // The session is borrowed, never kept: no table, log line or alert holds it.
     const everything = JSON.stringify([
@@ -1046,16 +1046,16 @@ try {
     // A lapsed session mid-run parks the task for the next press; a bridge that is off finishes quietly; an outage waits as a session task.
     const parked = await enqueue('support_concierge', 'import.advisors', `it:${run}:session:parked`, { requiresSession: true });
     behavior = async () => { throw new HttpError(401, 'Sign in with an SMS code to continue.'); };
-    assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 1 });
+    assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 1, actions: 0 });
     const lapsed = await reached(parked, ['awaiting_session']);
     assert.deepEqual([lapsed.last_error_code, lapsed.attempts], ['session_required', 1]);
     behavior = async () => { throw new HttpError(503, 'This application has not connected its administrator session.', 'unconfigured'); };
-    assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 1 });
+    assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 1, actions: 0 });
     const off = await reached(parked, ['done']);
     assert.deepEqual([off.result.skipped, off.attempts], ['not_connected', 2]);
     const outage = await enqueue('support_concierge', 'import.breathe', `it:${run}:session:outage`, { requiresSession: true });
     behavior = async () => { throw new HttpError(503, 'Administrator connection is unavailable.', 'upstream'); };
-    assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 1 });
+    assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 1, actions: 0 });
     const waited = await reached(outage, ['awaiting_session']);
     assert.deepEqual([waited.last_error_code, waited.requires_session], ['bridge_unavailable', true]);
 
@@ -1070,7 +1070,7 @@ try {
     // A paused agent's waiting task is not offered or run.
     await setStatus('support_concierge', 'paused');
     const idle = await enqueue('support_concierge', 'import.advisors', `it:${run}:session:paused`, { requiresSession: true });
-    assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 0 });
+    assert.deepEqual(await sessionTeam.admin.waiting(ownerToken, {}), { started: 0, actions: 0 });
     assert.equal((await task(idle)).status, 'awaiting_session');
     await clearWork();
   }

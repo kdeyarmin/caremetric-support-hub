@@ -53,3 +53,23 @@ export function alertWords({ category, phi, severity, channel, productSlug, refe
   ].filter(Boolean).join('\n\n');
   return { subject, body };
 }
+
+/**
+ * Which fixed reply, if any, to offer the owner for a message. Only a plain question gets one: the owner answers
+ * an outage, a security or legal matter, billing, a cancellation and a sales or consulting inquiry personally.
+ * A plain question that carries identifiers gets the notice that asks the sender to resend without them.
+ */
+export function replyFor({ category, phi = false, productSlug = null, inquiryType = null }) {
+  if (category !== 'general') return null;
+  if (productSlug === 'advisors' || inquiryType === 'sales' || inquiryType === 'advisors') return null;
+  return phi ? 'phi' : 'standard';
+}
+
+/** How a reply to the conversation would travel, from what its snapshot says it can reach; null when it cannot be answered. */
+export function replyRoute({ channel, canEmail = false, canText = false }) {
+  if (channel === 'chat') return 'chat';
+  if (channel === 'sms') return canText ? 'sms' : null;
+  if (channel === 'email') return canEmail ? 'email' : null;
+  // A phone-line message or a web form: by email if there is an address, else by text.
+  return canEmail ? 'email' : canText ? 'sms' : null;
+}

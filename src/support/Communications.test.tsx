@@ -52,6 +52,16 @@ describe("unified communications inbox", () => {
     expect(fake.reply.mock.calls[0][2]).toMatch(/^[0-9a-f-]{36}$/);
     expect(await screen.findByText(/delivery is not confirmed/)).toBeTruthy();
   });
+  it("opens on a reference from the AI team screen, across every status", async () => {
+    const fake = client();
+    const list = vi.fn(fake.list);
+    render(<Communications products={products} actor={actor} client={{ ...fake, list }} initialFilter={{ search: "CM-1001", status: "" }} />);
+    await waitFor(() => expect(list).toHaveBeenCalled());
+    expect(list.mock.calls[0][0]).toMatchObject({ search: "CM-1001" });
+    expect(list.mock.calls[0][0]).not.toHaveProperty("status");
+    expect((screen.getByPlaceholderText(/CM-1001/) as HTMLInputElement).value).toBe("CM-1001");
+    expect((screen.getByLabelText("Status") as HTMLSelectElement).value).toBe("");
+  });
   it("opens with the filters a control-center link carries", async () => {
     render(<Communications products={products} actor={actor} client={client()} initialFilter={{ channel: "sms", productId: products[0].id }} />);
     const list = await screen.findByRole("region", { name: "Conversations" });
