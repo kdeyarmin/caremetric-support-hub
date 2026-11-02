@@ -10,6 +10,8 @@ import { digest, withSession } from './sms-auth.mjs';
 import { gateway } from './gateway.mjs';
 import { assertBackendContract } from '../src/lib/backendContract.ts';
 import { agentTeam } from './agents/index.mjs';
+// The Team screen's own schemas: what the real database returns must be exactly what the screen accepts.
+import { activitySchemas, agentSchema, auditSchema, decisionSchema, overviewSchema, taskResultSchema } from '../src/admin/teamProtocol.ts';
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -36,10 +38,10 @@ const ownerCall = (fn, args = [], token = ownerToken) => withSession(pool, token
 const refused = (code, pattern) => error => { assert.equal(error.code, code, error.message); if (pattern) assert.match(error.message, pattern); return true; };
 const row = async (sql, params = []) => (await admin.query(sql, params)).rows[0];
 const rows = async (sql, params = []) => (await admin.query(sql, params)).rows;
-const team = () => ownerCall('hub.get_agent_team');
+const team = async () => overviewSchema.shape.team.parse(await ownerCall('hub.get_agent_team'));
 const agentRow = async key => (await team()).agents.find(agent => agent.key === key);
-const setStatus = async (key, status) => ownerCall('hub.set_agent_status', [key, status, (await agentRow(key)).updatedAt]);
-const setAutonomy = async (key, autonomy) => ownerCall('hub.set_agent_autonomy', [key, autonomy, (await agentRow(key)).updatedAt]);
+const setStatus = async (key, status) => agentSchema.parse(await ownerCall('hub.set_agent_status', [key, status, (await agentRow(key)).updatedAt]));
+const setAutonomy = async (key, autonomy) => agentSchema.parse(await ownerCall('hub.set_agent_autonomy', [key, autonomy, (await agentRow(key)).updatedAt]));
 // Leaves no unfinished work behind, so the next step's claim sees only its own tasks.
 const clearWork = async () => {
   await admin.query("update private.agent_actions set status = 'rejected' where status in ('proposed', 'approved', 'auto_approved', 'executing')");
@@ -520,10 +522,10 @@ try {
     await team2.tick();
     const proposed = (await rows('select * from private.agent_actions where task_id = $1', [draft]))[0];
     assert.deepEqual([proposed.status, (await task(draft)).status], ['proposed', 'awaiting_approval']);
-    const overview = await team2.admin.overview(ownerToken, {});
+    const overview = overviewSchema.parse(await team2.admin.overview(ownerToken, {}));
     assert.deepEqual(overview.services, { enabled: true, handlers: ['concierge.communication', 'probe.incident', 'probe.sweep'], sms: true, email: true, ownerEmail: true });
     assert.equal(overview.team.approvals[0].id, proposed.id);
-    const decision = await team2.admin.decide(ownerToken, { actionId: proposed.id, decision: 'approve', note: 'Send it' });
+    const decision = decisionSchema.parse(await team2.admin.decide(ownerToken, { actionId: proposed.id, decision: 'approve', note: 'Send it' }));
     assert.deepEqual(decision, { id: proposed.id, kind: 'communication.reply', status: 'executed', decided: true });
     assert.deepEqual(executed.map(entry => [entry.requestKey, entry.input, entry.autoApproved]), [[proposed.request_key, { body: 'Here is how to export by month.' }, false]]);
     assert.deepEqual([(await action(proposed.id)).status, (await action(proposed.id)).result, (await task(draft)).status], ['executed', { delivery: 'sent' }, 'done']);
@@ -549,7 +551,7 @@ try {
     await assert.rejects(team2.admin.run(ownerToken, { agentKey: 'platform_engineer', taskKind: 'probe.sweep' }), error => error.status === 409 && /Resume this agent/.test(error.message));
     await team2.admin.status(ownerToken, { key: 'platform_engineer', status: 'active', expectedUpdatedAt: (await agentRow('platform_engineer')).updatedAt });
     probeFails = false;
-    const requested = await team2.admin.run(ownerToken, { agentKey: 'platform_engineer', taskKind: 'probe.sweep' });
+    const requested = taskResultSchema.parse(await team2.admin.run(ownerToken, { agentKey: 'platform_engineer', taskKind: 'probe.sweep' }));
     assert.equal((await settle(requested.id, 'done')).source_kind, 'owner', '"Run now" starts without waiting for the next tick');
     await assert.rejects(team2.admin.overview(otherToken, {}), error => error.status === 401, 'a session without administrator rights is refused');
     await assert.rejects(team2.admin.cancel(ownerToken, { taskId: randomUUID() }), error => error.status === 404);
@@ -560,6 +562,11 @@ try {
   }
 
   // The owner's history: runs, tasks, actions, notifications, and the audit log.
+  for (const kind of ['runs', 'tasks', 'actions', 'notifications']) {
+    const page = activitySchemas[kind].parse(await ownerCall('hub.list_agent_activity', [kind, null, 0, 50]));
+    assert.ok(page.total > 0, `the ${kind} history has rows for the screen to show`);
+  }
+  assert.ok(auditSchema.parse(await ownerCall('hub.list_audit_events', [null, 0, 50])).items.length > 0);
   const runs = await ownerCall('hub.list_agent_activity', ['runs', null, 0, 50]);
   assert.ok(runs.total >= 3 && runs.items.length === runs.total);
   assert.ok(runs.items.every((entry, index, all) => index === 0 || all[index - 1].startedAt >= entry.startedAt), 'newest first');
