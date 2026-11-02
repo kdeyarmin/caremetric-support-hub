@@ -59,6 +59,15 @@ describe('the checks on a drafted reply', () => {
     for (const [reason, replies] of Object.entries(cases)) for (const reply of replies) expect(check({ reply }), reply).toEqual({ ok: false, reason });
   });
 
+  it('rejects a phone number written any way the inbound redactor would remove', () => {
+    for (const reply of [
+      'Open Reports and select Export. Support is reachable at (555) 010-0142.', 'Open Reports, or use (555)010-0142.', 'Open Reports. Try +1 555 010 0142.',
+      'Open Reports; 555.010.0142 is the number.', 'Open Reports, then 1-800-555-0142.',
+    ]) expect(check({ reply }), reply).toEqual({ ok: false, reason: 'contact_detail' });
+    // A year, a count or a short code is not a phone number.
+    expect(check({ reply: 'Open Reports, choose Staff roster, pick the month and select Export. Roster exports have been available since 2024 for up to 250 staff.' })).toMatchObject({ ok: true });
+  });
+
   it('rejects identifiers the way the inbound screen would', () => {
     for (const reply of ['Your resident DOB 01/01/1900 is on the roster.', 'Use member number 12345678 in Reports.', 'MRN 00123456 can be exported.', 'The SSN 000-12-3456 is hidden.']) {
       expect(check({ reply }), reply).toMatchObject({ ok: false });

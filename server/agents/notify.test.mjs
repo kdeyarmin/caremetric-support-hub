@@ -63,7 +63,7 @@ describe('owner notifier', () => {
 
   it('does not send a duplicate', async () => {
     const { notifier, senders, store } = fixture({ duplicate: true });
-    expect(await notifier.send({ severity: 'urgent', subject: 'Hub is down', body: 'Down.', dedupeKey: 'k4' })).toEqual([{ channel: 'sms', delivery: 'duplicate' }, { channel: 'email', delivery: 'duplicate' }]);
+    expect(await notifier.send({ severity: 'urgent', subject: 'Hub is down', body: 'Down.', dedupeKey: 'k4' })).toEqual([{ channel: 'sms', delivery: 'duplicate', original: 'pending' }, { channel: 'email', delivery: 'duplicate', original: 'pending' }]);
     expect(senders.sms.send).not.toHaveBeenCalled();
     expect(senders.email.send).not.toHaveBeenCalled();
     expect(store.notifyFinish).not.toHaveBeenCalled();

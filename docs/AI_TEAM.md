@@ -205,16 +205,34 @@ many times each side has written). It then:
    kinds it found, never the text.
 2. **Categorizes by word matching**: security, legal, outage, cancellation, billing, sales or general, or an
    automatic reply (`server/agents/concierge/rules.mjs`). The rules favour catching the urgent kinds over
-   being right about the rest.
+   being right about the rest. A message counts as an automatic reply only when it opens like one: a label a
+   mail system adds ("Automatic reply:", "Out of office:", "Undeliverable:") at the start of the subject or the
+   message, a message that opens with a sender line from a bounce address ("From: ... mailer-daemon@..."), or an
+   out-of-office opening sentence. An address that a person merely mentions ("send it to postmaster@...") or a
+   notice they forward after a note of their own proves nothing. An urgent kind always wins over that guess ("our account was
+   hacked while I was out of the office" is a security report), and so does a cancellation or a billing matter
+   when only an opening sentence suggests an automatic reply.
+   Only the first 4,000 characters of a message are read. A message that fills them is never quieter than a
+   warning, the alert says the rest was not screened, and nothing is offered to the customer or sent to the
+   model for it: it is yours to read. That holds even for a long message that opens like an automatic reply.
 3. **Tells the owner**: an outage, a security concern or a legal matter is **urgent** (text and email);
    billing, a cancellation or a message with identifiers is a **warning** (email); anything else is
    **information** (email). Alerts say the kind of message, the channel, the product, the reference and how
    long ago it arrived, and "nothing has been sent to the customer". Never what the customer wrote.
 
-Alerts are capped so that anyone who can write to the support address cannot flood the owner: at most 20
+Alerts are capped so that anyone who can write to the support address cannot flood the owner (the count and the
+send go through one at a time, so tasks running together cannot all read the same count): at most 20
 individual emails a day at each level (the next one becomes a single rollup email for the day), at most
 three urgent texts an hour (after that, urgent alerts go by email only), and one urgent alert per
 conversation per day.
+
+If the provider definitely refuses an alert (the delivery fails), the task is retried by the scheduler a few
+minutes later, before anything else is done for that message. The retry goes out under the same key, so only
+the channel that failed is tried again and one that was sent is never repeated; the notifier makes up to three
+attempts per channel. A delivery the provider did not confirm is not retried, because it may have arrived. A
+retry resumes the alert under its own key and channels, whatever the caps say by then (a refused try counts toward
+them, and it must not turn the alert into an email-only one or a rollup because of itself). If the three tries are
+used up and nothing reached you, the task fails and shows on the Team screen, instead of passing for an alert.
 
 It leaves a run on the owner's screen for each message it triaged (model `none`, prompt version `rules.1`,
 a summary that names the reference, the channel and the category).
@@ -250,10 +268,12 @@ separate step and nothing turns it on by merging or deploying.
 
 **What goes to the model.** Only a message that the rules call a plain question (not billing, a
 cancellation, an outage, a security or legal matter, a sale or anything from the Advisors form), that the
-identifier screen did not flag, that is the first message in its conversation with nothing yet sent to the
+identifier screen did not flag, that is the only message the customer has sent in its conversation so far
+(a follow-up that arrives before anyone has replied is not a first message), with nothing yet sent to the
 customer, that can be answered, and that matches at least one published guide. Everything the owner answers
 personally stays in the Hub, and so does everything with an identifier. **Observe** mode never calls the
-model. What is sent is the message with links, email addresses, phone numbers, dates, runs of six or more
+model. What is sent is the message, after spaces, tabs and non-breaking spaces are collapsed (so an address typed with extra
+spaces is still found), with links, email addresses, phone numbers, dates, runs of six or more
 digits, street addresses, post office boxes and state-and-ZIP endings replaced by words such as `[phone]`,
 and `<`, `>` and `&` escaped (`redact.mjs`); an email's subject, scrubbed the same way, and no other
 conversation's subject; the channel, the product and how many messages the customer has sent; and up to
@@ -269,7 +289,8 @@ message that tells it to ignore its rules or promise something is read as part o
 
 **What the code does with it.** The model never causes anything. Its reading can only add caution: an
 ordinary question it calls urgent, or an outage, a security or legal matter, raises a second alert (text and
-email, under the same caps) and offers no reply; billing or a cancellation raises a warning and offers none;
+email, under the same caps) and offers no reply; an urgent reading raises that alert whatever the topic, so a
+billing question it calls urgent is texted too; billing or a cancellation otherwise raises a warning and offers none;
 a sale offers none; personal information it finds gets the fixed notice that asks the sender to resend
 without it, and a warning. A draft is offered only if every check in `draft.mjs` passes: it cites a guide
 it was given; fits its channel (320 characters including the greeting for a text message, 1,500 otherwise);

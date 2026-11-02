@@ -23,6 +23,25 @@ describe('scrubbing a customer\'s words before they go to the model', () => {
     expect(scrub('Our 3 staff use 2 devices')).toBe('Our 3 staff use 2 devices');
   });
 
+  it('looks through extra spaces, tabs and non-breaking spaces, so a pasted address or number cannot slip past a single-space pattern', () => {
+    expect(scrub('Send it to 1200  Example   Street, Springfield.')).toBe('Send it to [address], Springfield.');
+    expect(scrub('We are at 1200\tExample\u00a0Street today')).toBe('We are at [address] today');
+    expect(scrub('Mail goes to PO  Box 77 and P.O.\u00a0Box 12.')).toBe('Mail goes to [address] and [address].');
+    expect(scrub('Born  March   5,  1950 and Nov\u00a02,\t2026')).toBe('Born [date] and [date]');
+    expect(scrub('Call 555  010  0142 or (555)\u00a0010-0142')).toBe('Call [phone] or [phone]');
+    expect(scrub('Harrisburg  PA  17101')).toBe('Harrisburg [address]');
+    // Line breaks are kept (a paragraph is still a paragraph) and ordinary text is unchanged.
+    expect(scrub('First line\n\nSecond   line with  two  gaps')).toBe('First line\n\nSecond line with two gaps');
+  });
+
+  it('removes a very long link whole, so a token at the end cannot survive', () => {
+    const long = `https://app.example.test/reset?x=${'a'.repeat(3000)}&token=TAILSECRET123`;
+    expect(scrub(`Open ${long} now`)).toBe('Open [link] now');
+    const started = performance.now();
+    expect(scrub(`${'https://example.test/'.repeat(500)} done`)).toBe('[link] done');
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
   it('removes the link before it looks inside it, so a token in a path or query cannot survive', () => {
     expect(scrub('Open https://x.example.test/reset/9f8e7d6c5b4a?email=pat@example.test&code=123456 now')).toBe('Open [link] now');
   });

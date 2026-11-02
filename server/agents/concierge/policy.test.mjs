@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { alertWords, categoryWord, channelWord, decide, productWord, replyFor, replyRoute } from './policy.mjs';
 
+describe('a second reading of how pressing a message is', () => {
+  it('can raise any topic to urgent, and never hides an automatic reply', () => {
+    for (const category of ['billing', 'cancellation', 'sales', 'general', 'urgent']) expect(decide({ category, urgent: true }), category).toEqual({ severity: 'urgent' });
+    expect(decide({ category: 'billing', urgent: false })).toEqual({ severity: 'warning' });
+    expect(decide({ category: 'auto_reply', urgent: true })).toEqual({ severity: null });
+  });
+
+  it('says in the alert when only the start of a long message was read', () => {
+    const base = { category: 'general', phi: false, severity: 'warning', channel: 'email', productSlug: 'carebase', reference: 1042, minutes: 3 };
+    expect(alertWords({ ...base, unread: true }).body).toContain('It is longer than the part the AI team reads (the first 4,000 characters), so the rest was not screened. Please read all of it.');
+    expect(alertWords(base).body).not.toContain('longer than the part');
+  });
+});
+
 describe('how loudly the owner is told', () => {
   it('texts the owner about an outage, a security concern and a legal matter', () => {
     for (const category of ['outage', 'security', 'legal']) expect(decide({ category }), category).toEqual({ severity: 'urgent' });

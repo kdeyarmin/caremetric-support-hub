@@ -22,6 +22,11 @@ describe('message categories by word matching', () => {
     for (const text of ['My attorney will contact you.', 'We will sue if this is not fixed.', 'This is a HIPAA complaint.', 'I will be reporting you to the attorney general', 'We received a subpoena for your records']) expect(category(text), text).toBe('legal');
   });
 
+  it('reads every form of the word sue, and nothing that only contains it', () => {
+    for (const text of ['We are suing your company.', 'They sued us last year and we want out.', 'Suing is the next step.', 'If it is not fixed we will sue.']) expect(category(text), text).toBe('legal');
+    for (const text of ['We are pursuing the issue with a suite of tools.', 'Is this suitable for a small facility?', 'The tissue box report is wrong.']) expect(category(text), text).toBe('general');
+  });
+
   it('spots a cancellation and a billing question', () => {
     for (const text of ['We will cancel our subscription unless this is fixed today.', 'Please close our account.', 'We are switching to a competitor.', 'I want to cancel the service', 'We will cancel unless this is fixed today.', 'We\'ll have to cancel']) expect(category(text), text).toBe('cancellation');
     for (const text of ['We were charged twice this month.', 'I need a refund.', 'Our payment failed again.', 'Where do I find the invoice?', 'There is a billing error on our statement']) expect(category(text), text).toBe('billing');
@@ -50,6 +55,36 @@ describe('message categories by word matching', () => {
     for (const text of ['[Empty text message]', '[Empty email]', 'Automatic reply: I am out of the office until Monday.', 'Out of office: back Nov 9', 'Mail Delivery Subsystem: Undeliverable', 'Please do not reply to this message.']) expect(category(text), text).toBe('auto_reply');
     expect(category(`${'x '.repeat(300)} automatic reply`)).toBe('general');
     expect(category('[Empty email]', 'Re: Your question')).toBe('auto_reply');
+  });
+
+  it('never lets a guess that a message is automatic hide an urgent report', () => {
+    expect(category('Our account was hacked while I was out of the office. Please help.')).toBe('security');
+    expect(category('My attorney will contact you. I am out of the office until Monday.')).toBe('legal');
+    expect(category('Everyone can\'t log in.', 'Automatic reply: Re: hello')).toBe('outage');
+  });
+
+  it('does not mistake a person for a machine', () => {
+    expect(category('We will be out of the office next week. Please cancel our subscription.')).toBe('cancellation');
+    expect(category('We are out of the office on Friday. We were charged twice this month.')).toBe('billing');
+    expect(category('Our emails to customers are undeliverable, can you help?')).toBe('general');
+    expect(category('How do I export the roster? Please do not reply by phone, only by email.')).toBe('general');
+    expect(category('We are away from the office, so please answer by email: how do I reset a password?', 'Re: Hello')).toBe('auto_reply');
+  });
+
+  it('still trusts the labels a mail system adds', () => {
+    expect(category('Thanks. Invoice attached.', 'Automatic reply: Invoice from CareMetric')).toBe('auto_reply');
+    expect(category('We were charged twice.', 'Out of office: back Nov 9')).toBe('auto_reply');
+    expect(category('x', 'RE: Undeliverable: Your question')).toBe('auto_reply');
+    expect(category('From: MAILER-DAEMON@mail.example.test\nDelivery has failed to these recipients.')).toBe('auto_reply');
+    expect(category('From: Mail Delivery Subsystem <mailer-daemon@mail.example.test>\nWe could not deliver your message.')).toBe('auto_reply');
+    expect(category('Please see the attached.', 'Fwd: Auto-reply')).toBe('auto_reply');
+  });
+
+  it('is not fooled by a machine address that a person mentions or forwards', () => {
+    expect(category('Please cancel our subscription. Send the confirmation to postmaster@example.test.')).toBe('cancellation');
+    expect(category('How do I export the roster? Send the file to noreply@example.test please.')).toBe('general');
+    expect(category('Hi, my password reset does not work. The message is below.\n\nFrom: noreply@example.test\nSubject: Reset your password')).toBe('general');
+    expect(category('Our emails from no-reply@example.test never arrive, and the account was hacked.')).toBe('security');
   });
 
   it('names the rules that matched and never the words', () => {
