@@ -52,6 +52,11 @@ export const integrationCatalog = Object.freeze([
       { name: 'STRIPE_WEBHOOK_SECRET', secret: true, required: true, purpose: 'Signing secret of the Hub webhook endpoint (/api/webhooks/stripe). Separate several with commas while rotating.' },
       { name: 'STRIPE_PORTAL_CONFIGURATION_ID', secret: false, required: false, purpose: 'Customer portal configuration (bpc_…) customers see; the account default otherwise.' },
     ] },
+  { id: 'ai-team', name: 'AI team', purpose: 'Runs the agents on the Team screen: the scheduler, owner alerts by text and email, and the daily brief. Every agent also stays paused until the owner resumes it.', docs: 'docs/AI_TEAM.md',
+    variables: [
+      { name: 'HUB_AGENTS_ENABLED', secret: false, required: true, flag: true, purpose: 'Exactly "true" turns the scheduler on.' },
+      { name: 'HUB_OWNER_EMAIL', secret: false, required: true, purpose: 'Where the AI team emails alerts and the morning brief. Urgent items are also texted to the administrator\'s verified number.' },
+    ] },
   { id: 'carebase-distribution', name: 'CareBase course distribution observer', purpose: 'Lets the Hub observe shared course availability in CareBase.', docs: 'docs/SHARED_COURSE_DISTRIBUTION.md',
     variables: [{ name: 'CAREBASE_DISTRIBUTION_OBSERVER_TOKEN', secret: true, required: true, purpose: 'Token CareBase issued to the Hub observer.' }] },
 ]);

@@ -4,9 +4,10 @@ The Hub is where the CareMetric AI team lives. This document describes the contr
 runs it: who the agents are, what each is allowed to do, how the owner stays in charge, and what
 is built so far.
 
-> **Status.** The database layer is in place (this change). **Nothing runs yet:** the agent
-> runtime, the scheduler, the `/admin/team` screen and the first agents arrive in the following
-> changes, behind `HUB_AGENTS_ENABLED`. Every agent is seeded **paused**.
+> **Status.** The database layer and the server scheduler are in place. The scheduler is inert
+> unless `HUB_AGENTS_ENABLED` is exactly `true`, every agent is seeded **paused**, and no agent has
+> a handler yet, so nothing runs. The `/admin/team` screen, the Platform Engineer, the model
+> runtime, the Chief of Staff and the Support Concierge arrive in the following changes.
 
 ## The model
 
@@ -58,6 +59,36 @@ Server (`hub_app_server` only): `agent_schedule_fire`, `agent_maintenance`, `age
 Owner (current administrator session): `get_agent_team`, `list_agent_activity`,
 `list_audit_events` (reads) and `set_agent_status`, `set_agent_autonomy`, `set_agent_budget`,
 `decide_agent_action`, `request_agent_task`, `cancel_agent_task` (changes).
+
+## What runs on the server
+
+`server/agents/` is wired into `server/main.mjs` as one timer, once a minute (`team.tick()`):
+
+1. **Housekeeping**: expired proposals, executions the server never finished, session tasks that lost
+   their lease, tasks waiting on approval that have nothing left open, notifications never settled.
+2. **Fire schedules**: due schedules of active agents become tasks, but only for task kinds that have a
+   handler in this server. A schedule for a kind with no handler stays due, so a schedule seeded ahead of
+   its code never fires tasks nobody can run.
+3. **Claim and run**: up to three tasks under a ten-minute lease, extended every minute while a handler
+   works. A handler that does not finish in four minutes is stopped. A failure is retried after five,
+   ten, twenty and then thirty minutes; an error that is not a provider outage stops after the third
+   attempt, and the database fails any task after five.
+4. **Carry out actions**: approved and auto-approved actions run through their executor, once.
+
+A handler is `async (task, { signal }) => { status?, result?, errorCode?, retryAt? }`; a status of
+`awaiting_approval` leaves the task waiting for the owner. Logs name the task, the agent, the kind and an
+error code, never an error message. The service environment is `HUB_AGENTS_ENABLED` and `HUB_OWNER_EMAIL`
+(see `.env.example`); the integration setup panel shows whether they are set.
+
+**Owner alerts** are recorded before they are sent, under a dedupe key, so a retried task never texts or
+emails twice. An urgent item goes by text (to the administrator's verified number, through the Hub's
+Twilio settings) and by email; everything else by email. A channel that is not configured is recorded as
+suppressed instead of failing the task. Alert text carries counts, names and references, never inbound
+customer text.
+
+**The Hub cannot watch itself.** A probe that runs inside the Hub reports a database or network problem
+from the Hub's point of view, but nothing inside a stopped process can notice that it stopped. Keep one
+external check on `GET /api/health` (an uptime monitor, or a scheduled workflow that opens an issue).
 
 ## Budgets
 

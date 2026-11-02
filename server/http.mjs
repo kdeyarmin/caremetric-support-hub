@@ -9,6 +9,7 @@ import { parseMediaUploadHeader } from './learning-media.mjs';
 import { parsePackageUploadHeader } from './learning-packages.mjs';
 import { chatCookie } from './communications.mjs';
 import { bulkEmailActions } from './bulk-email.mjs';
+import { agentAdminActions } from './agents/admin.mjs';
 
 export const securityHeaders = {
   'X-Content-Type-Options':'nosniff','X-Frame-Options':'SAMEORIGIN',
@@ -44,7 +45,7 @@ export const privateHubMessage='This Hub is private. Only its owner can sign in.
  * treated as signed out, a sign-in that fails it is revoked at once, and the routes that create
  * sign-ins for anyone else (invitation claims and application self-service) are closed.
  */
-export function appServer({auth,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,selfService,owner,origins,dist=resolve('dist')}) {
+export function appServer({auth,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,selfService,agents,health,owner,origins,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -59,6 +60,12 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
       const session=owner && cookieSession && path.startsWith('/api/') && !(await owner.allows(cookieSession)) ? undefined : cookieSession;
       if (path.startsWith('/api/')) {
         res.setHeader('Cache-Control','no-store');
+        // Public liveness for uptime probes: whether this process can reach its database. It reveals nothing else.
+        if(path==='/api/health') {
+          if(!['GET','HEAD'].includes(req.method)) throw new HttpError(405,'Method not allowed.');
+          if(health) { try { await health(); } catch { throw new HttpError(503,'Unavailable.'); } }
+          return json({ok:true});
+        }
         if (path.startsWith('/api/internal/')) {
           if(req.method!=='POST' || req.headers.origin || req.headers.cookie) throw new HttpError(403,'Forbidden.');
           const customerCapability=/^\/api\/internal\/self-service\/([a-z-]+)\/authorize$/.exec(path);
@@ -279,6 +286,14 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
           const input=await jsonBody(req,2048); if(Object.keys(input).length) throw new HttpError(400,'Invalid integration setup request.');
           if(!integrationSetup) throw new HttpError(503,'Integration setup is not configured.');
           return json(await integrationSetup.handle(session));
+        }
+        // The AI team's controls. Approving an action also carries it out, so changes are routes here, not browser RPCs.
+        if(path.startsWith('/api/admin/team/')) {
+          if(url.search) throw new HttpError(400,'AI team query parameters are not supported.');
+          if(!agents) throw new HttpError(503,'The AI team is not configured.');
+          const action=path.slice('/api/admin/team/'.length);
+          if(!agentAdminActions.has(action) || req.method!=='POST') throw new HttpError(404,'AI team resource unavailable.');
+          return json(await agents[action](session,await jsonBody(req,8192)));
         }
         if(path.startsWith('/api/admin/bulk-email/')) {
           if(url.search) throw new HttpError(400,'Bulk email query parameters are not supported.');
