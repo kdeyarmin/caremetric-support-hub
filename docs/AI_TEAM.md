@@ -439,7 +439,9 @@ Owner (current administrator session): `get_agent_team`, `list_agent_activity`,
    handler in this server. A schedule for a kind with no handler stays due, so a schedule seeded ahead of
    its code never fires tasks nobody can run.
 3. **Claim and run**: up to three tasks under a ten-minute lease, extended every minute while a handler
-   works. A handler that does not finish in four minutes is stopped. A failure is retried after five,
+   works. A handler that does not finish in four minutes is stopped, and so is one whose task the owner
+   cancelled or another worker took over: the heartbeat tells the worker the task is no longer its own, and the
+   handler's signal is aborted so it stops sending alerts or making model calls. A failure is retried after five,
    ten, twenty and then thirty minutes; an error that is not a provider outage stops after the third
    attempt, and the database fails any task after five.
 4. **Carry out actions**: approved and auto-approved actions run through their executor, once.
