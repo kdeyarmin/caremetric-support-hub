@@ -161,6 +161,15 @@ describe('the weekly SEO task', () => {
     await expect(handlers['seo.weekly'](task(), at(monday))).rejects.toThrow('database down');
   });
 
+  it('bounds each example address it stores, not just the number of groups', async () => {
+    const huge = Array.from({ length: 24 }, (_, index) => finding(`code_${index}`, 'low', `/${'p'.repeat(100_000)}${index}`));
+    const { handlers } = fixture({ audit: vi.fn(async site => result(site.key, site.label, huge)) });
+    const { result: outcome } = await handlers['seo.weekly'](task(), at(monday));
+    expect(JSON.stringify(outcome).length).toBeLessThan(8000);
+    for (const entry of outcome.sites) for (const top of entry.top) expect(top.page.length).toBeLessThanOrEqual(160);
+    expect(outcome.sites[0].top).toHaveLength(8);
+  });
+
   it('keeps its stored result small', async () => {
     const many = Array.from({ length: 40 }, (_, index) => finding(`code_${index}`, 'low', `/${'p'.repeat(100)}${index}`));
     const { handlers } = fixture({ audit: vi.fn(async site => result(site.key, site.label, many)) });

@@ -158,7 +158,12 @@ page and about two and a half minutes a site.
   to when there is no sitemap): reachable, HTML, not marked noindex, a title and a description of a
   sensible length that no other page shares, a canonical link, one main heading, enough text before
   scripts run, a language, a phone viewport, social sharing tags, structured data that parses, image
-  descriptions, and links that work.
+  descriptions, and links that work. Two addresses are the same page only when they match exactly: the
+  path, the query and a trailing slash are case-sensitive (`/About` and `/about` are two pages, and so are
+  `/pricing` and `/pricing/`), and only the site root is written either way. A canonical link that differs
+  from the page's address only by case or a trailing slash is therefore reported. Each address and detail in a
+  finding is cut to a fixed length (160 and 240 characters), so a very long address in a sitemap cannot make
+  the email or the stored result large.
 
 Each finding is **urgent** (it could keep pages out of search results), **worth fixing** or **minor**. The
 email lists each site's worst problems with an example page and scores each site out of 100 by how many

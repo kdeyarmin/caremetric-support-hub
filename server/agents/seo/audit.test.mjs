@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { auditSite, catalog, fetchPage, pageFindings, summarizeFindings } from './audit.mjs';
+import { auditSite, catalog, clip, detailLimit, fetchPage, pageFindings, pageLimit, summarizeFindings } from './audit.mjs';
 import { analyzeHtml } from './html.mjs';
 
 const origin = 'https://www.example.test';
@@ -204,6 +204,40 @@ describe('page level problems', () => {
     expect(result.findings).toEqual([expect.objectContaining({ code: 'canonical_mismatch', page: '/about', detail: 'points to https://other.test/about' })]);
   });
 
+  it('compares a canonical link with the page address exactly: case and a trailing slash count, the host and the fragment do not', async () => {
+    const mismatch = async canonical => {
+      const routes = healthy();
+      routes[`${origin}/pricing`] = reply(goodPage({ path: '/pricing', canonical }));
+      return (await audit(routes)).result.findings.map(item => [item.code, item.detail]);
+    };
+    expect(await mismatch(`${origin}/Pricing`)).toEqual([['canonical_mismatch', `points to ${origin}/Pricing`]]);
+    expect(await mismatch(`${origin}/pricing/`)).toEqual([['canonical_mismatch', `points to ${origin}/pricing/`]]);
+    expect(await mismatch(`${origin}/pricing?plan=team`)).toEqual([['canonical_mismatch', `points to ${origin}/pricing?plan=team`]]);
+    expect(await mismatch('HTTPS://WWW.EXAMPLE.TEST/pricing#plans')).toEqual([]);
+    // The site root is one address whether or not it is written with its slash.
+    const routes = healthy();
+    routes[`${origin}/`] = reply(goodPage({ path: '/', canonical: origin, extra: '<a href="/pricing">Pricing</a><a href="/about">About</a>' }));
+    expect((await audit(routes)).result.findings).toEqual([]);
+  });
+
+  it('treats addresses that differ only by case as different pages, so a broken link to one is not hidden by a page at the other', async () => {
+    const routes = healthy();
+    routes[`${origin}/sitemap.xml`] = reply(sitemapOf([`${origin}/`, `${origin}/pricing`, `${origin}/About`]), { type: 'application/xml' });
+    delete routes[`${origin}/about`];
+    routes[`${origin}/About`] = reply(goodPage({ path: '/About' }));
+    const { result, requests } = await audit(routes);
+    expect(result.findings).toEqual([expect.objectContaining({ code: 'broken_link', page: '/', detail: '404 on /about' })]);
+    expect(requests.some(request => request.url === `${origin}/about`)).toBe(true);
+  });
+
+  it('treats a page with a trailing slash and the same page without one as two addresses', async () => {
+    const routes = healthy();
+    routes[`${origin}/`] = reply(goodPage({ path: '/', extra: '<a href="/pricing">Pricing</a><a href="/about/">About</a>' }));
+    const { result, requests } = await audit(routes);
+    expect(requests.some(request => request.url === `${origin}/about/`)).toBe(true);
+    expect(result.findings).toEqual([expect.objectContaining({ code: 'broken_link', detail: '404 on /about/' })]);
+  });
+
   it('checks the links between pages once each and reports the broken ones on the page that has them', async () => {
     const routes = healthy();
     routes[`${origin}/`] = reply(goodPage({ path: '/', extra: '<a href="/pricing">p</a><a href="/missing">m</a><a href="/missing">again</a><a href="/fine">f</a><a href="https://other.test/x">x</a>' }));
@@ -220,6 +254,36 @@ describe('page level problems', () => {
     const { result } = await audit(routes);
     expect(codes(result)).toEqual(['sitemap_missing']);
     expect(result.checked).toBe(3);
+  });
+});
+
+describe('what a finding keeps of an address', () => {
+  it('clips a very long address and detail where the finding is recorded, so an email and a stored result stay small', async () => {
+    const long = `${origin}/${'a'.repeat(50_000)}?q=${'b'.repeat(50_000)}`;
+    const routes = healthy();
+    routes[`${origin}/sitemap.xml`] = reply(sitemapOf([`${origin}/`, long, `${origin}/pricing`]), { type: 'application/xml' });
+    routes[long] = reply('boom', { status: 500, type: 'text/plain' });
+    const { result } = await audit(routes);
+    const error = result.findings.find(item => item.code === 'page_error');
+    expect(error.page).toHaveLength(pageLimit);
+    expect(error.page.endsWith('…')).toBe(true);
+    expect(error.page.startsWith('/aaaa')).toBe(true);
+    for (const item of result.findings) { expect(item.page.length).toBeLessThanOrEqual(pageLimit); expect(item.detail.length).toBeLessThanOrEqual(detailLimit); }
+    const other = healthy();
+    other[`${origin}/sitemap.xml`] = reply(sitemapOf([`${origin}/`, `https://elsewhere.test/${'c'.repeat(50_000)}`]), { type: 'application/xml' });
+    const { result: foreign } = await audit(other);
+    expect(foreign.findings.find(item => item.code === 'sitemap_other_host').detail).toHaveLength(detailLimit);
+  });
+
+  it('clips at a limit, marks the cut, and never splits a character pair', () => {
+    expect(clip('short', 10)).toBe('short');
+    expect(clip('abcdefghij', 10)).toBe('abcdefghij');
+    expect(clip('abcdefghijk', 10)).toBe('abcdefghi…');
+    // Cutting 😀 (two code units) after its first unit would leave half a pair, which JSON and the database refuse.
+    const cut = clip(`aaaa😀bbbb`, 6);
+    expect(cut).toBe('aaaa…');
+    expect(() => JSON.parse(JSON.stringify({ cut }))).not.toThrow();
+    expect(clip(undefined, 5)).toBe('');
   });
 });
 

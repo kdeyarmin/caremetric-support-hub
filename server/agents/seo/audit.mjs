@@ -120,7 +120,30 @@ async function mapLimit(items, limit, work) {
 }
 
 const hostOf = value => { try { return new URL(value).host.toLowerCase(); } catch { return ''; } };
-const tidy = value => { try { const url = new URL(value); url.hash = ''; return url.toString().replace(/\/$/, '').toLowerCase(); } catch { return String(value).toLowerCase(); } };
+// How two addresses are compared to decide whether they are the same page. A parsed address already has a lower-case scheme and host, and the
+// fragment is never sent to a server. The path and the query are case-sensitive, and so is a trailing slash: /About and /about, or /pricing and
+// /pricing/, can be different pages, so folding them together would hide a broken link or a canonical that points at the wrong one. Only the
+// site root is folded (https://example.test and https://example.test/ are one address, and it always has a slash).
+const tidy = value => {
+  try {
+    const url = new URL(value);
+    url.hash = '';
+    return url.pathname === '/' && url.search === '' ? url.origin : url.toString();
+  } catch { return String(value); }
+};
+
+// A finding's page and detail go into an email and into a stored task result, and a sitemap or a link can carry an address of any length.
+// They are clipped where a finding is recorded, so nothing downstream has to be bounded again.
+export const pageLimit = 160;
+export const detailLimit = 240;
+export function clip(value, limit) {
+  const text = String(value ?? '');
+  if (text.length <= limit) return text;
+  const cut = text.slice(0, limit - 1);
+  const last = cut.charCodeAt(cut.length - 1);
+  // Never leave half of a character pair at the end.
+  return `${last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut}…`;
+}
 const path = url => { try { const parsed = new URL(url); return `${parsed.pathname}${parsed.search}` || '/'; } catch { return String(url); } };
 
 /** Findings for one fetched, analyzed page. */
@@ -155,7 +178,7 @@ export async function auditSite(site, { fetchImpl = fetch, signal, now = () => D
   const deadline = now() + config.deadlineMs;
   let incomplete = false;
   const findings = [];
-  const add = (code, detail, page = '/') => findings.push({ severity: catalog[code][0], code, title: catalog[code][1], detail, page });
+  const add = (code, detail, page = '/') => findings.push({ severity: catalog[code][0], code, title: catalog[code][1], detail: clip(detail, detailLimit), page: clip(page, pageLimit) });
   const host = hostOf(site.origin);
   const get = async (url, maxBytes) => {
     if (now() > deadline || signal?.aborted) { incomplete = true; return null; }

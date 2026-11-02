@@ -6,7 +6,7 @@
  * The report carries counts, page addresses on the company's own sites and fixed-vocabulary findings. It never
  * quotes anything a page says beyond a length or a count.
  */
-import { auditSite, summarizeFindings } from '../seo/audit.mjs';
+import { auditSite, clip, pageLimit, summarizeFindings } from '../seo/audit.mjs';
 import { sites as defaultSites } from '../seo/sites.mjs';
 import { plural, recordRun } from './shared.mjs';
 
@@ -95,7 +95,7 @@ export function seoHandlers({ store, notifier, publicOrigin, fetchImpl = fetch, 
       result: {
         date, delivery, headline: report.headline,
         sites: audits.map(entry => ({ key: entry.key, score: entry.score, checked: entry.checked, incomplete: entry.incomplete, counts: entry.counts,
-          top: summarizeFindings(entry.findings).slice(0, 8).map(group => ({ code: group.code, severity: group.severity, count: group.count, page: group.example.page })) })),
+          top: summarizeFindings(entry.findings).slice(0, 8).map(group => ({ code: group.code, severity: group.severity, count: group.count, page: clip(group.example.page, pageLimit) })) })),
       },
     };
   }
