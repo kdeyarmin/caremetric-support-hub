@@ -50,6 +50,19 @@ describe('composing the SEO report', () => {
     expect(rows.find(([label]) => label.includes('Title of y'))[1]).toBe('/c (detail)');
   });
 
+  it('is never an all-clear when a check did not finish', () => {
+    const failed = compose([result('a', 'Alpha'), result('b', 'Beta', [], { failed: true, score: 0, checked: 0, incomplete: true })]);
+    expect(failed).toMatchObject({ subject: 'Weekly SEO report: nothing found, but not every check finished', headline: 'Nothing found in what was checked. 1 site could not be fully checked.', total: 0 });
+    expect(failed.blocks[0]).toEqual({ type: 'callout', tone: 'info', title: 'SEO check.', text: 'Nothing found in what was checked. 1 site could not be fully checked.' });
+    expect(compose([result('a', 'Alpha', [], { incomplete: true }), result('b', 'Beta', [], { incomplete: true })]).headline).toBe('Nothing found in what was checked. 2 sites could not be fully checked.');
+    // With findings, they lead and the note follows.
+    const mixed = compose([result('a', 'Alpha', [finding('noindex', 'high', '/x')]), result('b', 'Beta', [], { incomplete: true })]);
+    expect(mixed.headline).toBe('1 problem could keep pages out of search results. 1 site could not be fully checked.');
+    expect(mixed.subject).toBe('Weekly SEO report: 1 thing to fix across 2 sites, 1 urgent');
+    // A complete clean check is still the all-clear.
+    expect(compose([result('a', 'Alpha')]).blocks[0]).toMatchObject({ tone: 'success', title: 'All clear.' });
+  });
+
   it('says when a site could not be checked or was slow, rather than saying nothing is wrong', () => {
     const report = compose([result('a', 'Alpha', [], { failed: true, score: 0, checked: 0, incomplete: true }), result('b', 'Beta', [finding('x', 'low')], { incomplete: true })]);
     expect(report.body).toContain('Alpha: the check could not run this week.');
@@ -146,6 +159,15 @@ describe('the weekly SEO task', () => {
     const { handlers, notifier } = fixture();
     notifier.send.mockRejectedValue(new Error('database down'));
     await expect(handlers['seo.weekly'](task(), at(monday))).rejects.toThrow('database down');
+  });
+
+  it('bounds each example address it stores, not just the number of groups', async () => {
+    const huge = Array.from({ length: 24 }, (_, index) => finding(`code_${index}`, 'low', `/${'p'.repeat(100_000)}${index}`));
+    const { handlers } = fixture({ audit: vi.fn(async site => result(site.key, site.label, huge)) });
+    const { result: outcome } = await handlers['seo.weekly'](task(), at(monday));
+    expect(JSON.stringify(outcome).length).toBeLessThan(8000);
+    for (const entry of outcome.sites) for (const top of entry.top) expect(top.page.length).toBeLessThanOrEqual(160);
+    expect(outcome.sites[0].top).toHaveLength(8);
   });
 
   it('keeps its stored result small', async () => {

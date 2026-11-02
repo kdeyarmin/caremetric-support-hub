@@ -3,10 +3,14 @@
  * It does not run scripts, which is the point: it sees a page the way a crawler that does not run
  * JavaScript sees it. Input is capped by the caller; every pattern here is linear in the input.
  */
-const entities = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&apos;': "'", '&nbsp;': ' ' };
-export const decode = text => String(text ?? '')
-  .replace(/&(?:amp|lt|gt|quot|apos|nbsp|#39);/g, match => entities[match])
-  .replace(/&#(\d{1,6});/g, (match, code) => { const value = Number(code); return value > 0 && value < 0x110000 ? String.fromCodePoint(value) : match; });
+const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+// One pass over the original text, so a reference that decodes to the start of another (&amp;#65;) is not decoded twice, and decimal
+// (&#38;) and hexadecimal (&#x26;) references read alike. Anything that is not a known, valid character is left as it was written.
+export const decode = text => String(text ?? '').replace(/&(?:#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|([a-z]{2,6}));/g, (match, decimal, hex, name) => {
+  if (name) return Object.hasOwn(named, name) ? named[name] : match;
+  const value = decimal === undefined ? Number.parseInt(hex, 16) : Number(decimal);
+  return value > 0 && value < 0x110000 && !(value >= 0xd800 && value <= 0xdfff) ? String.fromCodePoint(value) : match;
+});
 const squash = text => decode(text).replace(/\s+/g, ' ').trim();
 
 /** The attributes of one start tag, names lower-cased. */
@@ -162,15 +166,17 @@ export function analyzeHtml(html, pageUrl) {
   const links = [];
   const seen = new Set();
   for (const attrs of ofKind('a')) {
-    if (!attrs.href || skippable.test(attrs.href.trim()) || asset.test(attrs.href)) continue;
-    const absolute = resolve(attrs.href.trim(), pageUrl);
+    // An attribute holds HTML text: href="/a?b=1&amp;c=2" is the address /a?b=1&c=2, which is what a browser requests.
+    const href = decode(attrs.href ?? '').trim();
+    if (!href || skippable.test(href) || asset.test(href)) continue;
+    const absolute = resolve(href, pageUrl);
     if (absolute && !seen.has(absolute)) { seen.add(absolute); links.push(absolute); }
   }
 
   return {
     title: title === undefined ? null : squash(title),
     description: named('description') === undefined ? null : squash(named('description')),
-    canonical: canonicalTag?.href?.trim() ? canonicalTag.href.trim() : null,
+    canonical: decode(canonicalTag?.href ?? '').trim() || null,
     robotsMeta: (named('robots') ?? '').toLowerCase(),
     openGraph: { title: Boolean(property('og:title')), description: Boolean(property('og:description')), image: Boolean(property('og:image')), url: Boolean(property('og:url')) },
     twitterCard: Boolean(named('twitter:card') ?? property('twitter:card')),
@@ -184,21 +190,54 @@ export function analyzeHtml(html, pageUrl) {
   };
 }
 
-/** The Sitemap lines and the "block everything" rule of a robots.txt, or null when the text is not a robots file. */
+const robotsFields = new Set(['user-agent', 'sitemap', 'disallow', 'allow', 'crawl-delay']);
+
+/**
+ * One robots.txt line as [field, value]: the field in lower case, the value without a trailing comment, or null when the
+ * line has no field. It cuts at the first # and the first colon with indexOf and never uses a pattern that can rescan the
+ * line (or the lines after it), so a response of blank lines, spaces or colons costs the same as an ordinary file.
+ */
+function robotsLine(line) {
+  const hash = line.indexOf('#');
+  const text = hash === -1 ? line : line.slice(0, hash);
+  const colon = text.indexOf(':');
+  if (colon === -1) return null;
+  // Whatever precedes the colon is trimmed before it is judged, so indentation or spaces before it do not hide a directive. Each line is
+  // sliced, trimmed and tested once, which is linear however long the line is.
+  const name = text.slice(0, colon).trim().toLowerCase();
+  return /^[a-z-]+$/.test(name) ? [name, text.slice(colon + 1).trim()] : null;
+}
+
+/**
+ * The Sitemap lines and the "block everything" rule of a robots.txt, or null when the text is not a robots file.
+ * User-agent lines that follow one another form one group (RFC 9309), so a rule applies to everyone when any of them is *.
+ */
 export function analyzeRobots(text) {
   const body = String(text ?? '');
-  if (/^\s*<(?:!doctype|html)\b/i.test(body) || !/^\s*(?:user-agent|sitemap|disallow|allow|crawl-delay)\s*:/im.test(body)) return null;
-  const sitemaps = [...body.matchAll(/^\s*sitemap\s*:\s*(\S+)/gim)].map(match => match[1]);
+  const start = body.trimStart().slice(0, 16).toLowerCase();
+  if (start.startsWith('<!doctype') || start.startsWith('<html')) return null;
+  const sitemaps = [];
+  let found = false;
   let blocksAll = false;
   let applies = false;
+  let ruled = false; // a rule has been read since the last User-agent line, so the next User-agent starts a new group
   for (const line of body.split(/\r?\n/)) {
-    const field = /^\s*([a-z-]+)\s*:\s*(.*?)\s*(?:#.*)?$/i.exec(line);
-    if (!field) continue;
-    const [, name, value] = field;
-    if (name.toLowerCase() === 'user-agent') applies = value === '*';
-    else if (applies && name.toLowerCase() === 'disallow' && value === '/') blocksAll = true;
+    const parsed = robotsLine(line);
+    if (!parsed || !robotsFields.has(parsed[0])) continue;
+    found = true;
+    const [name, value] = parsed;
+    if (name === 'sitemap') {
+      const address = value.split(/\s/, 1)[0];
+      if (address) sitemaps.push(address);
+    } else if (name === 'user-agent') {
+      if (ruled) { applies = false; ruled = false; }
+      if (value === '*') applies = true;
+    } else {
+      ruled = true;
+      if (applies && name === 'disallow' && value === '/') blocksAll = true;
+    }
   }
-  return { sitemaps, blocksAll };
+  return found ? { sitemaps, blocksAll } : null;
 }
 
 /** The addresses in a sitemap, and whether it is an index of other sitemaps. null when the text is not a sitemap. */

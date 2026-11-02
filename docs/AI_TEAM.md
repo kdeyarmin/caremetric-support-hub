@@ -149,19 +149,27 @@ It reads each site the way a crawler that does not run scripts (and most AI assi
 requests that follow no redirect, at most 20 pages and 30 links a site, 8 seconds a request, 600 KB a
 page and about two and a half minutes a site.
 
-- **The site**: robots.txt exists and does not block everything, a sitemap exists and lists pages on the
-  site, plain http redirects to https, and the other addresses for the site redirect to it with a
-  permanent redirect (or name it as canonical).
+- **The site**: robots.txt exists and does not block everything (User-agent lines that follow one another
+  are one group, as in RFC 9309), a sitemap exists and lists pages on the site, plain http redirects
+  permanently to the site's own https address (an error answer, or a redirect to http or to another site, is
+  a problem), and the other addresses for the site redirect to it with a permanent redirect (or name it as
+  canonical).
 - **Its pages**, which are the home page and the pages in the sitemap (or the pages the home page links
   to when there is no sitemap): reachable, HTML, not marked noindex, a title and a description of a
   sensible length that no other page shares, a canonical link, one main heading, enough text before
   scripts run, a language, a phone viewport, social sharing tags, structured data that parses, image
-  descriptions, and links that work.
+  descriptions, and links that work. Two addresses are the same page only when they match exactly: the
+  path, the query and a trailing slash are case-sensitive (`/About` and `/about` are two pages, and so are
+  `/pricing` and `/pricing/`), and only the site root is written either way. A canonical link that differs
+  from the page's address only by case or a trailing slash is therefore reported. Each address and detail in a
+  finding is cut to a fixed length (160 and 240 characters), so a very long address in a sitemap cannot make
+  the email or the stored result large.
 
 Each finding is **urgent** (it could keep pages out of search results), **worth fixing** or **minor**. The
 email lists each site's worst problems with an example page and scores each site out of 100 by how many
 kinds of problem it has, so a problem on twenty pages counts once. It says when a site was slow or could
-not be checked, and it quotes nothing a page says. A page that looks empty to the check may look fine in
+not be checked, and it quotes nothing a page says. A site that failed or stopped early is never reported as an
+all-clear: with nothing found the email says "nothing found, but not every check finished". A page that looks empty to the check may look fine in
 a browser, which is itself worth knowing: many crawlers and AI assistants see only what is there before
 scripts run.
 

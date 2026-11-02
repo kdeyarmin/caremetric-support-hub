@@ -6,7 +6,7 @@
  * The report carries counts, page addresses on the company's own sites and fixed-vocabulary findings. It never
  * quotes anything a page says beyond a length or a count.
  */
-import { auditSite, summarizeFindings } from '../seo/audit.mjs';
+import { auditSite, clip, pageLimit, summarizeFindings } from '../seo/audit.mjs';
 import { sites as defaultSites } from '../seo/sites.mjs';
 import { plural, recordRun } from './shared.mjs';
 
@@ -26,10 +26,16 @@ export function composeSeoReport(audits, { now = new Date(), publicOrigin } = {}
   const worth = countGroups(all, 'medium');
   const minor = countGroups(all, 'low');
   const total = all.length;
-  const headline = total === 0
+  // A site that failed or stopped early has told us nothing about the pages it never reached: no findings is not "all clear".
+  const unfinished = summaries.filter(({ audit }) => audit.failed || audit.incomplete).length;
+  const clear = total === 0 && unfinished === 0;
+  const unfinishedNote = unfinished ? `${plural(unfinished, 'site')} could not be fully checked.` : null;
+  const headline = clear
     ? 'Nothing to fix this week.'
-    : [urgent ? `${plural(urgent, 'problem')} could keep pages out of search results` : null, worth ? `${worth} worth fixing` : null, minor ? `${minor} minor` : null]
-      .filter(Boolean).join(', ').replace(/^(.)/, letter => letter.toUpperCase()).concat('.');
+    : total === 0
+      ? `Nothing found in what was checked. ${unfinishedNote}`
+      : [[urgent ? `${plural(urgent, 'problem')} could keep pages out of search results` : null, worth ? `${worth} worth fixing` : null, minor ? `${minor} minor` : null]
+        .filter(Boolean).join(', ').replace(/^(.)/, letter => letter.toUpperCase()).concat('.'), unfinishedNote].filter(Boolean).join(' ');
   const link = /^https:\/\//i.test(publicOrigin ?? '') ? `${publicOrigin.replace(/\/+$/, '')}/admin/team` : null;
 
   const lines = summaries.map(({ audit, groups }) => {
@@ -41,10 +47,12 @@ export function composeSeoReport(audits, { now = new Date(), publicOrigin } = {}
 
   return {
     headline, urgent, total, groups: all,
-    subject: total === 0 ? 'Weekly SEO report: nothing to fix' : `Weekly SEO report: ${plural(total, 'thing')} to fix across ${plural(audits.length, 'site')}${urgent ? `, ${urgent} urgent` : ''}`,
+    subject: clear ? 'Weekly SEO report: nothing to fix'
+      : total === 0 ? 'Weekly SEO report: nothing found, but not every check finished'
+        : `Weekly SEO report: ${plural(total, 'thing')} to fix across ${plural(audits.length, 'site')}${urgent ? `, ${urgent} urgent` : ''}`,
     body,
     blocks: [
-      { type: 'callout', tone: urgent ? 'warning' : total ? 'info' : 'success', title: total ? 'SEO check.' : 'All clear.', text: headline },
+      { type: 'callout', tone: urgent ? 'warning' : clear ? 'success' : 'info', title: clear ? 'All clear.' : 'SEO check.', text: headline },
       ...summaries.flatMap(({ audit, groups }) => audit.failed ? [{ type: 'paragraph', text: `${audit.label}: the check could not run this week.` }] : [
         { type: 'paragraph', text: `${audit.label}: score ${audit.score} of 100, ${plural(audit.checked, 'page')} checked${audit.incomplete ? '. The check stopped early because the site was slow.' : '.'}` },
         ...(groups.length ? [{ type: 'details', rows: [
@@ -87,7 +95,7 @@ export function seoHandlers({ store, notifier, publicOrigin, fetchImpl = fetch, 
       result: {
         date, delivery, headline: report.headline,
         sites: audits.map(entry => ({ key: entry.key, score: entry.score, checked: entry.checked, incomplete: entry.incomplete, counts: entry.counts,
-          top: summarizeFindings(entry.findings).slice(0, 8).map(group => ({ code: group.code, severity: group.severity, count: group.count, page: group.example.page })) })),
+          top: summarizeFindings(entry.findings).slice(0, 8).map(group => ({ code: group.code, severity: group.severity, count: group.count, page: clip(group.example.page, pageLimit) })) })),
       },
     };
   }
