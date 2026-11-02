@@ -53,6 +53,29 @@ function isLongPlan(item) {
   return item.interval === 'year' || (item.interval === 'month' && (item.interval_count ?? 1) >= thresholds.longPlanMonths);
 }
 
+// The date-based tests below are the ones `assess` scores with. The report asks the same functions which subscription raised a
+// flag, so the date in the email is the date that earned the flag, not the first one the account happens to have.
+const liveOf = account => (account.subscriptions ?? []).filter(subscription => liveStatuses.includes(subscription.status));
+const cancelsSoon = (subscription, nowTime) => subscription.cancel_at_period_end === true || (instant(subscription.cancel_at) ?? 0) > nowTime;
+const trialEndsSoon = (subscription, nowTime) => {
+  if (subscription.status !== 'trialing') return false;
+  const end = instant(subscription.trial_end);
+  return end !== null && end - nowTime <= thresholds.trialDays * day && end - nowTime >= -day;
+};
+const renewsSoon = (subscription, nowTime) => {
+  if (subscription.status !== 'active' || subscription.cancel_at_period_end || !(subscription.items ?? []).some(isLongPlan)) return false;
+  const end = instant(subscription.current_period_end);
+  return end !== null && end >= nowTime && end - nowTime <= thresholds.renewalDays * day;
+};
+const soonest = (list, key) => list.reduce((best, entry) => (best === null || (instant(entry[key]) ?? Infinity) < (instant(best[key]) ?? Infinity) ? entry : best), null);
+
+/** The live subscription whose scheduled cancellation raised `cancel_scheduled`, the earliest first, or null. */
+export const cancelingSubscription = (account, now = new Date()) => soonest(liveOf(account).filter(subscription => cancelsSoon(subscription, now.getTime())), 'cancel_at');
+/** The trialing subscription whose end raised `trial_ending`, the earliest first, or null. */
+export const endingTrial = (account, now = new Date()) => soonest(liveOf(account).filter(subscription => trialEndsSoon(subscription, now.getTime())), 'trial_end');
+/** The subscription that raised `renewing_soon`, the earliest renewal first, or null. */
+export const renewingSubscription = (account, now = new Date()) => soonest(liveOf(account).filter(subscription => renewsSoon(subscription, now.getTime())), 'current_period_end');
+
 /**
  * How long the account has been billing, in days: from its earliest subscription or, with none, from when the tenant was created.
  * A tenant that existed for months before its first subscription is still new to billing, which is what the score reads.
@@ -87,13 +110,10 @@ export function assess(account, now = new Date()) {
   const add = (reason, amount = weights[reason]) => { reasons.push(reason); penalty += amount; };
   const nowTime = now.getTime();
 
-  if (live.some(subscription => subscription.cancel_at_period_end === true || (instant(subscription.cancel_at) ?? 0) > nowTime)) add('cancel_scheduled');
+  if (live.some(subscription => cancelsSoon(subscription, nowTime))) add('cancel_scheduled');
   if (account.status === 'closed' && live.length > 0) add('closed_but_billing');
   if (account.status === 'suspended') add('suspended');
-  if (live.some(subscription => subscription.status === 'trialing' && (() => {
-    const end = instant(subscription.trial_end);
-    return end !== null && end - nowTime <= thresholds.trialDays * day && end - nowTime >= -day;
-  })())) add('trial_ending');
+  if (live.some(subscription => trialEndsSoon(subscription, nowTime))) add('trial_ending');
   if (has('paused')) add('paused');
 
   // Usage, where the app reports it: the latest report against the newest one at or before 28 days earlier.
@@ -119,8 +139,7 @@ export function assess(account, now = new Date()) {
     add('no_billing_email', paymentReasons.length || has('trialing') ? weights.no_billing_email_exposed : weights.no_billing_email);
   }
 
-  if (live.some(subscription => subscription.status === 'active' && !subscription.cancel_at_period_end && (subscription.items ?? []).some(isLongPlan)
-    && (() => { const end = instant(subscription.current_period_end); return end !== null && end >= nowTime && end - nowTime <= thresholds.renewalDays * day; })())) flags.push('renewing_soon');
+  if (live.some(subscription => renewsSoon(subscription, nowTime))) flags.push('renewing_soon');
   if (up && has('active')) flags.push('usage_up');
 
   const age = ageDays(account, now);
