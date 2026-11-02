@@ -1,8 +1,9 @@
 // The AI team hardening through the actual Hub server role and a real owner session, on disposable local fixtures only. The server
 // pool logs in as hub_app_server exactly like production. Each section is a way the control plane used to misbehave, and fails on the
 // code this migration replaced: a superseded worker finishing a reclaimed task, an approved action surviving its task's cancellation,
-// a proposal slipping in behind a cancellation, two owner commands waiting on each other, a retried alert marked unknown at once, a
-// session task ignoring its backoff, a waiting task's schedule firing a second one, replies hiding an incident record, a reset
+// a proposal slipping in behind a cancellation, two owner commands waiting on each other, the housekeeping sweep holding a proposal while
+// it waits for the task a decision holds, a retried alert marked unknown at once, a session task ignoring its backoff (in the list and in the
+// claim), a waiting task's schedule firing a second one, replies hiding an incident record, a reset
 // execution settled by its first starter, a relapse judged by the wrong failure, and a brief that counted the wrong incidents and
 // alerts. The last section runs the deployment gate against drift, including a function whose search_path was reset.
 import assert from 'node:assert/strict';
@@ -122,6 +123,8 @@ try {
     const waiting = await taskStatus(id);
     assert.ok(Math.abs(waiting.due_at.getTime() - later.getTime()) < 5_000, 'it is not due until its retry time');
     assert.ok(!(await call('private.agent_session_tasks', [50])).some(item => item.id === id), 'so it is not offered yet');
+    assert.equal(await call('private.agent_session_task_claim', [id, 600]), null, 'and a press that listed it earlier cannot claim it before then');
+    assert.equal((await taskStatus(id)).status, 'awaiting_session', 'the refused claim changed nothing');
     await admin.query('update private.agent_tasks set due_at = now() where id = $1', [id]);
     assert.ok((await call('private.agent_session_tasks', [50])).some(item => item.id === id), 'and it is offered once the backoff has passed');
     assert.ok(await call('private.agent_session_task_claim', [id, 600]));
@@ -221,6 +224,53 @@ try {
     const results = await Promise.allSettled(Array.from({ length: 12 }, (_, index) => (index % 2 === 0
       ? ownerCall('hub.cancel_agent_task', [first]) : ownerCall('hub.decide_agent_action', [second.id, 'reject']))));
     assert.deepEqual(results.filter(result => result.status === 'rejected').map(result => result.reason.code), [], 'no deadlock between cancelling and deciding');
+  }
+
+  // ---- The housekeeping sweep takes the task's lock before the proposals it expires ------------------------------------------------
+  {
+    // Expiring a task's last open proposal settles the task, so the sweep and the owner's decision on that proposal meet on the same two rows.
+    const id = await runningTask('sweep-order');
+    const action = await propose(id, 'communication.reply', 'CM-H8');
+    await admin.query("update private.agent_tasks set status = 'awaiting_approval' where id = $1", [id]);
+    await admin.query("update private.agent_actions set expires_at = now() - interval '1 minute' where id = $1", [action.id]);
+    const holder = await admin.connect();
+    try {
+      // A decision in flight holds the task. The sweep must queue behind it WITHOUT having taken the proposal first, or the decision's own
+      // wait for the proposal would be a deadlock: the database aborts one of the two (40P01) and the sweep or the owner's command fails.
+      await holder.query('begin');
+      await holder.query('select 1 from private.agent_tasks where id = $1 for update', [id]);
+      const sweeping = call('private.agent_maintenance');
+      await sleep(400);
+      await holder.query('set local lock_timeout = \'1500ms\'');
+      await holder.query('select 1 from private.agent_actions where id = $1 for update', [action.id]);
+      await holder.query('commit');
+      const swept = await sweeping;
+      assert.equal(swept.expiredActions, 1, 'the sweep completes once the task is free, and expires the proposal');
+      assert.equal(swept.settledTasks, 1, 'and settles the task whose last proposal it expired');
+    } finally { await holder.query('rollback').catch(() => {}); holder.release(); }
+    assert.equal((await actionRow(action.id)).status, 'expired');
+    assert.equal((await taskStatus(id)).status, 'done');
+    // A proposal the owner decides while the sweep waits is not expired afterwards.
+    const decided = await runningTask('sweep-decided');
+    const open = await propose(decided, 'communication.reply', 'CM-H9');
+    await admin.query("update private.agent_tasks set status = 'awaiting_approval' where id = $1", [decided]);
+    await admin.query("update private.agent_actions set expires_at = now() - interval '1 minute' where id = $1", [open.id]);
+    const waiter = await admin.connect();
+    try {
+      await waiter.query('begin');
+      await waiter.query('select 1 from private.agent_tasks where id = $1 for update', [decided]);
+      const sweeping = call('private.agent_maintenance');
+      await sleep(400);
+      await waiter.query("update private.agent_actions set status = 'approved', decided_by = $2, decided_at = now(), updated_at = now() where id = $1", [open.id, owner]);
+      await waiter.query('commit');
+      const swept = await sweeping;
+      assert.equal(swept.expiredActions, 0, 'a proposal decided while the sweep waited is no longer proposed, so it is not expired');
+    } finally { await waiter.query('rollback').catch(() => {}); waiter.release(); }
+    assert.equal((await actionRow(open.id)).status, 'approved');
+    assert.equal((await taskStatus(decided)).status, 'awaiting_approval', 'and its task is still waiting');
+    // Leave nothing approved behind for the sections that count ready actions.
+    await admin.query('delete from private.agent_actions where task_id = any($1::uuid[])', [[id, decided]]);
+    await admin.query('delete from private.agent_tasks where id = any($1::uuid[])', [[id, decided]]);
   }
 
   // ---- A retried alert is not unsettled the moment it starts ------------------------------------------------------------------------
