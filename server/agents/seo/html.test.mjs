@@ -122,6 +122,17 @@ describe('attributes, entities and addresses', () => {
   it('decodes the common entities and numeric ones, and leaves nonsense alone', () => {
     expect(decode('Tom &amp; Jerry &lt;3 &#8217;s &#0; &#99999999; &bogus;')).toBe('Tom & Jerry <3 ’s &#0; &#99999999; &bogus;');
   });
+  it('decodes hexadecimal references, and decodes each reference once', () => {
+    expect(decode('a&#x26;b &#X3C; &#x1F600; &#x110000; &#xD800;')).toBe('a&b < 😀 &#x110000; &#xD800;');
+    // &amp;#65; is the text "&#65;", not the letter A, and &amp;amp; is the text "&amp;".
+    expect(decode('&amp;#65; &amp;amp; &#65;')).toBe('&#65; &amp; A');
+  });
+  it('requests the address a browser would when a link or a canonical uses a hexadecimal reference', () => {
+    const facts = analyzeHtml('<link rel="canonical" href="https://example.test/a?x=1&#x26;y=2"><a href="/p?a=1&#x26;b=2">p</a><a href="/q?c=1&amp;#38;d=2">q</a>', page);
+    expect(facts.canonical).toBe('https://example.test/a?x=1&y=2');
+    // &amp;#38; is the text &#38; inside the address, which is not decoded a second time.
+    expect(facts.links).toEqual([resolve('/p?a=1&b=2', page), resolve('/q?c=1&#38;d=2', page)]);
+  });
   it('resolves relative addresses and refuses anything that is not a web page address', () => {
     expect(resolve('../x?y=1#z', 'https://example.test/a/b/')).toBe('https://example.test/a/x?y=1');
     expect(resolve('javascript:alert(1)', page)).toBeNull();
@@ -150,6 +161,12 @@ describe('reading robots.txt', () => {
     expect(analyzeRobots('User-agent: Bingbot\nDisallow: /\nUser-agent: Googlebot\nUser-agent: *\nAllow: /\n').blocksAll).toBe(false);
     // Sitemap lines belong to no group.
     expect(analyzeRobots('User-agent: Bingbot\nSitemap: https://example.test/s.xml\nUser-agent: *\nDisallow: /\n')).toEqual({ sitemaps: ['https://example.test/s.xml'], blocksAll: true });
+  });
+  it('finds a directive however much whitespace precedes it or its colon', () => {
+    expect(analyzeRobots(`User-agent: *\nDisallow${' '.repeat(60)}: /\n`).blocksAll).toBe(true);
+    expect(analyzeRobots(`${' '.repeat(80)}User-agent${' '.repeat(80)}: *\n\t\t Disallow : /\n`).blocksAll).toBe(true);
+    // A name that is not a field is still not one, however it is spaced.
+    expect(analyzeRobots(`User-agent: *\n${'Disallow'.repeat(4)}${' '.repeat(60)}: /\n`).blocksAll).toBe(false);
   });
   it('reads CRLF files, any letter case and a sitemap address followed by words', () => {
     expect(analyzeRobots('USER-AGENT: *\r\nDISALLOW: /\r\nSitemap: https://example.test/s.xml (main)\r\n')).toEqual({ sitemaps: ['https://example.test/s.xml'], blocksAll: true });

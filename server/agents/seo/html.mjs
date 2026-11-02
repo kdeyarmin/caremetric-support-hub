@@ -3,10 +3,14 @@
  * It does not run scripts, which is the point: it sees a page the way a crawler that does not run
  * JavaScript sees it. Input is capped by the caller; every pattern here is linear in the input.
  */
-const entities = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&apos;': "'", '&nbsp;': ' ' };
-export const decode = text => String(text ?? '')
-  .replace(/&(?:amp|lt|gt|quot|apos|nbsp|#39);/g, match => entities[match])
-  .replace(/&#(\d{1,6});/g, (match, code) => { const value = Number(code); return value > 0 && value < 0x110000 ? String.fromCodePoint(value) : match; });
+const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+// One pass over the original text, so a reference that decodes to the start of another (&amp;#65;) is not decoded twice, and decimal
+// (&#38;) and hexadecimal (&#x26;) references read alike. Anything that is not a known, valid character is left as it was written.
+export const decode = text => String(text ?? '').replace(/&(?:#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|([a-z]{2,6}));/g, (match, decimal, hex, name) => {
+  if (name) return Object.hasOwn(named, name) ? named[name] : match;
+  const value = decimal === undefined ? Number.parseInt(hex, 16) : Number(decimal);
+  return value > 0 && value < 0x110000 && !(value >= 0xd800 && value <= 0xdfff) ? String.fromCodePoint(value) : match;
+});
 const squash = text => decode(text).replace(/\s+/g, ' ').trim();
 
 /** The attributes of one start tag, names lower-cased. */
@@ -197,7 +201,9 @@ function robotsLine(line) {
   const hash = line.indexOf('#');
   const text = hash === -1 ? line : line.slice(0, hash);
   const colon = text.indexOf(':');
-  if (colon === -1 || colon > 40) return null;
+  if (colon === -1) return null;
+  // Whatever precedes the colon is trimmed before it is judged, so indentation or spaces before it do not hide a directive. Each line is
+  // sliced, trimmed and tested once, which is linear however long the line is.
   const name = text.slice(0, colon).trim().toLowerCase();
   return /^[a-z-]+$/.test(name) ? [name, text.slice(colon + 1).trim()] : null;
 }
