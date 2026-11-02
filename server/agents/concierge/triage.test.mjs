@@ -143,6 +143,32 @@ describe('triaging one message', () => {
   });
 });
 
+describe('a message longer than what is read', () => {
+  const long = (start = 'How do I export the staff roster by month? ') => (start + 'word '.repeat(1000)).slice(0, 4000);
+
+  it('is never quieter than a warning, says so, and offers nothing to the customer', async () => {
+    const harness = fixture({ snapshot: snapshotOf(long()) });
+    const outcome = await harness.run();
+    expect(harness.store.communicationSnapshot).toHaveBeenCalledWith({ id: ids.communication, messages: 1, chars: 4000 });
+    expect(harness.sent).toHaveLength(1);
+    expect(harness.sent[0]).toMatchObject({ severity: 'warning' });
+    expect(harness.sent[0].body).toContain('It is longer than the part the AI team reads');
+    expect(outcome).toMatchObject({ status: 'done', result: { outcome: 'alerted', severity: 'warning', reply: 'owner_only', unread: true } });
+    expect(harness.store.proposeAction).not.toHaveBeenCalled();
+  });
+
+  it('stays urgent when the part that was read is urgent, and a short message is unaffected', async () => {
+    const urgent = fixture({ snapshot: snapshotOf(long('Everything is down for every user. ')) });
+    const outcome = await urgent.run();
+    expect(outcome.result).toMatchObject({ severity: 'urgent', unread: true });
+    expect(urgent.sent[0].body).toContain('It is longer than the part the AI team reads');
+    const short = fixture({ snapshot: snapshotOf('How do I export the staff roster by month?') });
+    const quiet = await short.run();
+    expect(quiet.result).not.toHaveProperty('unread');
+    expect(short.sent[0].severity).toBe('info');
+  });
+});
+
 describe('proposing a fixed reply', () => {
   const ack = 'Hello,\n\nThank you for contacting CareMetric Support. We have your message and a member of our team will review it and reply here.';
 
@@ -237,6 +263,26 @@ describe('the caps on alerts', () => {
       expect(harness.sent[0].body).toContain('no longer emailed one at a time');
       expect(outcome.result.severity).toBe(level === 'info' ? 'info' : level);
     }
+  });
+
+  it('keeps the caps when several tasks run at once, because alerts go through the count one at a time', async () => {
+    const harness = fixture({ snapshot: snapshotOf('Everything is down for every user.') });
+    const wait = () => new Promise(resolve => setTimeout(resolve, 5));
+    // A real count and a real send each take time. That window is where tasks used to read one shared count and all send.
+    harness.store.notificationCount.mockImplementation(async ({ prefix, channel }) => {
+      await wait();
+      return prefix === 'concierge:urgent:' && channel === 'sms' ? 2 + harness.sent.filter(item => item.severity === 'urgent').length : 0;
+    });
+    harness.notifier.send.mockImplementation(async input => { await wait(); harness.sent.push(input); return (input.severity === 'urgent' ? ['sms', 'email'] : ['email']).map(channel => ({ channel, delivery: 'sent' })); });
+    await Promise.all([harness.run(), harness.run(), harness.run()]);
+    expect(harness.sent.map(item => item.severity)).toEqual(['urgent', 'warning', 'warning']);
+  });
+
+  it('goes on to the next alert after one fails, and still reports the failure', async () => {
+    const harness = fixture();
+    harness.notifier.send.mockRejectedValueOnce(new Error('database down'));
+    const [first, second] = await Promise.allSettled([harness.run(), harness.run()]);
+    expect([first.status, second.status]).toEqual(['rejected', 'fulfilled']);
   });
 
   it('keeps counting from the start of the Eastern day, or the last 24 hours if the task does not say', async () => {
@@ -423,6 +469,29 @@ describe('triaging with the model', () => {
     const salesOutcome = await sales.run();
     expect(salesOutcome.result).toMatchObject({ category: 'sales', severity: 'info', reply: 'owner_only', draft: 'owner_only' });
     expect(sales.sent).toHaveLength(1);
+  });
+
+  it('honors an urgent reading whatever the topic, and never sends a message too long to have been screened', async () => {
+    const harness = withModel({ result: done(reading({ category: 'billing', urgency: 'urgent', canAnswerFromGuides: false, citations: [], reply: '' })) });
+    const outcome = await harness.run();
+    expect(outcome.result).toMatchObject({ category: 'billing', severity: 'urgent', reply: 'owner_only' });
+    expect(harness.sent.map(alert => alert.severity)).toEqual(['info', 'urgent']);
+    expect(harness.sent[1].subject).toBe('Urgent: billing question (CM-1042, email)');
+
+    const long = withModel({ snapshot: snapshotOf(('How do I export the staff roster by month? ' + 'word '.repeat(1000)).slice(0, 4000)) });
+    await long.run();
+    expect(long.model.run).not.toHaveBeenCalled();
+    expect(long.store.proposeAction).not.toHaveBeenCalled();
+  });
+
+  it('checks a draft against the subject as well as the body', async () => {
+    const harness = withModel({
+      snapshot: snapshotOf('How do I export the staff roster by month?', { subject: 'Roster question for Pat Example' }),
+      result: done(reading({ reply: 'Pat Example, open Reports, choose Staff roster, pick the month you need and select Export. You will get a CSV file.' })),
+    });
+    const outcome = await harness.run();
+    expect(outcome.result).toMatchObject({ draft: 'rejected', draftReason: 'name_echo', reply: 'proposed', template: 'standard' });
+    expect(JSON.stringify(harness.store.proposeAction.mock.calls)).not.toContain('Pat Example');
   });
 
   it('offers the fixed acknowledgment when the guides do not answer, or the model wants the owner', async () => {

@@ -31,15 +31,17 @@ export const categoryWord = category => categoryWords[category] ?? categoryWords
 export const channelWord = channel => channelWords[channel] ?? 'message';
 export const productWord = slug => (slug ? productWords[slug] ?? slug : null);
 
-/** { severity } for a message, or { severity: null } when it should not be triaged (an automatic reply). */
-export function decide({ category, phi = false }) {
+/** { severity } for a message, or { severity: null } when it should not be triaged (an automatic reply). `urgent` is the model's reading, which can only raise the severity. */
+export function decide({ category, phi = false, urgent = false }) {
   if (category === 'auto_reply') return { severity: null };
+  // `urgent` is a reading of how pressing the message is, separate from its topic: a billing question that cannot wait is still urgent.
+  if (urgent) return { severity: 'urgent' };
   const base = severities[category] ?? 'info';
   return { severity: phi && base === 'info' ? 'warning' : base };
 }
 
 /** The subject and body of the owner's alert. */
-export function alertWords({ category, phi, severity, channel, productSlug, reference, minutes, source = 'rules' }) {
+export function alertWords({ category, phi, severity, channel, productSlug, reference, minutes, source = 'rules', unread = false }) {
   const kind = categoryWords[category] ?? categoryWords.general;
   const product = productWord(productSlug);
   const via = channelWord(channel);
@@ -52,6 +54,7 @@ export function alertWords({ category, phi, severity, channel, productSlug, refe
     phi
       ? `Open CM-${reference} in Communications. Please do not forward or copy it: it may contain patient or resident information.`
       : `Open CM-${reference} in Communications. Nothing has been sent to the customer.`,
+    unread ? 'It is longer than the part the AI team reads (the first 4,000 characters), so the rest was not screened. Please read all of it.' : null,
     source === 'model'
       ? (severity === 'urgent' ? 'This was flagged by the AI team\'s reading of the message, so it may be a false alarm.' : 'This comes from the AI team\'s reading of the message.')
       : (severity === 'urgent' ? 'This was flagged by simple word matching, so it may be a false alarm.' : null),

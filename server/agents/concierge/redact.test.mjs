@@ -23,6 +23,14 @@ describe('scrubbing a customer\'s words before they go to the model', () => {
     expect(scrub('Our 3 staff use 2 devices')).toBe('Our 3 staff use 2 devices');
   });
 
+  it('removes a very long link whole, so a token at the end cannot survive', () => {
+    const long = `https://app.example.test/reset?x=${'a'.repeat(3000)}&token=TAILSECRET123`;
+    expect(scrub(`Open ${long} now`)).toBe('Open [link] now');
+    const started = performance.now();
+    expect(scrub(`${'https://example.test/'.repeat(500)} done`)).toBe('[link] done');
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
   it('removes the link before it looks inside it, so a token in a path or query cannot survive', () => {
     expect(scrub('Open https://x.example.test/reset/9f8e7d6c5b4a?email=pat@example.test&code=123456 now')).toBe('Open [link] now');
   });

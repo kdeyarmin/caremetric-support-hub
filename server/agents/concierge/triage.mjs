@@ -34,6 +34,8 @@ import { replyBody } from './templates.mjs';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const dailyEmailCap = 20;
 const hourlyTextCap = 3;
+// How much of a message the snapshot returns, and so how much is screened and categorized. A message that fills it may be longer.
+const readChars = 4000;
 // A transient model failure is retried by the scheduler; from this attempt on the fixed acknowledgment is offered instead.
 const modelAttempts = 3;
 const efforts = new Set(['low', 'medium', 'high']);
@@ -58,7 +60,7 @@ function skipReason(snapshot, payload, settings) {
  * and the guide library), and null otherwise, which keeps the handler exactly as it is without a model.
  */
 export function triageHandler({ store, notifier, drafting = null, log = line => console.warn(line) }) {
-  async function sendAlert({ task, snapshot, payload, words, severity, now }) {
+  async function deliverAlert({ task, snapshot, payload, words, severity, now }) {
     const day = easternDate.format(now());
     const dayStart = task.budget?.dayStart ? new Date(task.budget.dayStart) : new Date(now().getTime() - 24 * 3_600_000);
     const base = { subject: words.subject, body: words.body, agentKey: task.agentKey, taskId: task.id };
@@ -80,6 +82,15 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
     if (await store.notificationCount({ prefix, channel: 'email', since: dayStart }) >= dailyEmailCap) return rollup(severity);
     return notifier.send({ ...base, severity, dedupeKey: `${prefix}${payload.messageId}` });
   }
+
+  // The caps are a count followed by a send, and up to three tasks run at once in this process: left alone, each would read the same
+  // count and all would send. Alerts go one at a time through the counting and the sending, so the caps say what they mean.
+  let alertQueue = Promise.resolve();
+  const sendAlert = input => {
+    const turn = alertQueue.then(() => deliverAlert(input), () => deliverAlert(input));
+    alertQueue = turn.catch(() => {});
+    return turn;
+  };
 
   /**
    * One call to the model for a message that qualifies (the caller decides that). Returns what happened as a `state` and what
@@ -114,18 +125,22 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
     let category = reading.category;
     if (category === 'general' && reading.inquiryType === 'sales') category = 'sales';
     if (category === 'general' && reading.urgency === 'urgent') category = 'urgent';
-    const found = { category: category === 'general' ? null : category, phi: reading.possiblePhi === true };
+    // How pressing the message is stays separate from what it is about: a billing question that cannot wait is still urgent.
+    const found = { category: category === 'general' ? null : category, phi: reading.possiblePhi === true, urgent: reading.urgency === 'urgent' };
     if (found.phi) return { state: 'phi', ...found };
     if (category !== 'general') return { state: 'owner_only', ...found };
     if (reading.needsOwner || !reading.canAnswerFromGuides || !reading.reply.trim()) return { state: 'no_answer', ...found };
-    const checked = checkDraft({ reply: reading.reply, citations: reading.citations, guides, text: text.text, route });
+    // The model saw the subject as well as the body, so a name or a quotation taken from either is caught.
+    const checked = checkDraft({ reply: reading.reply, citations: reading.citations, guides, text: subject ? `${subject}\n${text.text}` : text.text, route });
     if (!checked.ok) return { state: 'rejected', reason: checked.reason, ...found };
     return { state: 'drafted', draft: { ...checked, sources: checked.citations.map(id => guides[Number(id.slice(1)) - 1].title) }, ...found };
   }
 
   // The owner approves the exact text. A fixed template is written here from words that repeat nothing the customer wrote; a draft was
   // checked in draft.mjs and is shown to the owner as it will be sent.
-  async function proposeReply({ task, snapshot, category, phi, draft = null }) {
+  async function proposeReply({ task, snapshot, category, phi, unread = false, draft = null }) {
+    // A message too long to have been screened is the owner's to read and answer.
+    if (unread) return { reply: 'owner_only' };
     const template = draft ? 'drafted' : replyFor({ category, phi, productSlug: snapshot.productSlug, inquiryType: snapshot.inquiryType });
     if (!template) return { reply: 'owner_only' };
     if ((snapshot.outboundCount ?? 0) > 0) return { reply: 'follow_up', template };
@@ -152,7 +167,7 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
     const payload = task.payload ?? {};
     if (!uuid.test(payload.communicationId ?? '') || !uuid.test(payload.messageId ?? '')) throw permanent('invalid_payload');
     const settings = conciergeSettings(task.agent?.config);
-    const snapshot = await store.communicationSnapshot({ id: payload.communicationId, messages: 1, chars: 4000 });
+    const snapshot = await store.communicationSnapshot({ id: payload.communicationId, messages: 1, chars: readChars });
     const skip = skipReason(snapshot, payload, settings);
     if (skip) return { result: { outcome: 'skipped', reason: skip, reference: snapshot?.reference ?? null } };
     const inbound = (snapshot.messages ?? []).find(message => message.id === snapshot.latestInboundId);
@@ -163,9 +178,13 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
     const { category: ruleCategory, reasons } = categorize({ text: inbound.body, subject: snapshot.subject });
     let { severity } = decide({ category: ruleCategory, phi: screen.flagged });
     if (severity === null) return { result: { outcome: 'skipped', reason: ruleCategory, reference: snapshot.reference } };
+    // Only the first readChars characters were screened and categorized. A message that fills them may say more, so it is never
+    // quieter than a warning, and nothing is offered to the customer or sent to the model for it.
+    const unread = inbound.body.length >= readChars;
+    if (unread && severityRank[severity] < severityRank.warning) severity = 'warning';
 
     const minutes = minutesBetween(inbound.at, now());
-    const words = alertWords({ category: ruleCategory, phi: screen.flagged, severity, channel: snapshot.channel, productSlug: snapshot.productSlug, reference: snapshot.reference, minutes });
+    const words = alertWords({ category: ruleCategory, phi: screen.flagged, severity, channel: snapshot.channel, productSlug: snapshot.productSlug, reference: snapshot.reference, minutes, unread });
     const results = await sendAlert({ task, snapshot, payload, words, severity, now });
     const delivery = results.map(item => `${item.channel}:${item.delivery}`);
 
@@ -176,7 +195,7 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
     let phi = screen.flagged;
     let asked = null;
     const route = replyRoute(snapshot);
-    const eligible = drafting && !screen.flagged && route !== null && task.agent?.autonomy !== 'observe' && (snapshot.outboundCount ?? 0) === 0
+    const eligible = drafting && !screen.flagged && !unread && route !== null && task.agent?.autonomy !== 'observe' && (snapshot.outboundCount ?? 0) === 0
       && replyFor({ category: ruleCategory, phi: false, productSlug: snapshot.productSlug, inquiryType: snapshot.inquiryType }) === 'standard';
     if (eligible) {
       asked = await askModel({ task, snapshot, inbound, route, signal });
@@ -184,7 +203,7 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
       if (signal?.aborted) throw Object.assign(new Error('The task was stopped.'), { code: 'task_timeout', transient: true });
       if (asked.category) category = asked.category;
       if (asked.phi) phi = true;
-      const reread = decide({ category, phi }).severity;
+      const reread = decide({ category, phi, urgent: asked.urgent === true }).severity;
       if (severityRank[reread] > severityRank[severity]) {
         const louder = alertWords({ category, phi, severity: reread, channel: snapshot.channel, productSlug: snapshot.productSlug, reference: snapshot.reference, minutes, source: 'model' });
         delivery.push(...(await sendAlert({ task, snapshot, payload, words: louder, severity: reread, now })).map(item => `${item.channel}:${item.delivery}`));
@@ -193,7 +212,7 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
     }
 
     // A model that declined saw something its provider objected to: a person should read it, so nothing is offered automatically.
-    const proposal = asked?.state === 'refused' ? { reply: 'model_refused' } : await proposeReply({ task, snapshot, category, phi, draft: asked?.draft ?? null });
+    const proposal = asked?.state === 'refused' ? { reply: 'model_refused' } : await proposeReply({ task, snapshot, category, phi, unread, draft: asked?.draft ?? null });
     const proposed = proposal.reply === 'proposed' || proposal.reply === 'already_proposed';
     const proposedWords = proposal.template === 'drafted' ? 'drafted reply' : proposal.template === 'phi' ? 'identifier notice' : 'acknowledgment';
     const modelWords = asked && asked.state !== 'drafted' ? `; ${asked.state === 'rejected' ? `draft not used (${asked.reason.replaceAll('_', ' ')})` : asked.state === 'unavailable' ? `the model was unavailable (${asked.reason.replaceAll('_', ' ')})` : draftWords[asked.state]}` : '';
@@ -207,6 +226,7 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
       result: {
         outcome: 'alerted', reference: snapshot.reference, channel: snapshot.channel, product: snapshot.productSlug ?? null, category, phi,
         severity, delivery, reply: proposal.reply, ...(proposal.template ? { template: proposal.template } : {}), screen: screen.kinds, rules: reasons,
+        ...(unread ? { unread: true } : {}),
         ...(asked ? { draft: asked.state, ...(asked.reason ? { draftReason: asked.reason } : {}) } : {}),
       },
     };

@@ -52,6 +52,28 @@ describe('message categories by word matching', () => {
     expect(category('[Empty email]', 'Re: Your question')).toBe('auto_reply');
   });
 
+  it('never lets a guess that a message is automatic hide an urgent report', () => {
+    expect(category('Our account was hacked while I was out of the office. Please help.')).toBe('security');
+    expect(category('My attorney will contact you. I am out of the office until Monday.')).toBe('legal');
+    expect(category('Everyone can\'t log in.', 'Automatic reply: Re: hello')).toBe('outage');
+  });
+
+  it('does not mistake a person for a machine', () => {
+    expect(category('We will be out of the office next week. Please cancel our subscription.')).toBe('cancellation');
+    expect(category('We are out of the office on Friday. We were charged twice this month.')).toBe('billing');
+    expect(category('Our emails to customers are undeliverable, can you help?')).toBe('general');
+    expect(category('How do I export the roster? Please do not reply by phone, only by email.')).toBe('general');
+    expect(category('We are away from the office, so please answer by email: how do I reset a password?', 'Re: Hello')).toBe('auto_reply');
+  });
+
+  it('still trusts the labels a mail system adds', () => {
+    expect(category('Thanks. Invoice attached.', 'Automatic reply: Invoice from CareMetric')).toBe('auto_reply');
+    expect(category('We were charged twice.', 'Out of office: back Nov 9')).toBe('auto_reply');
+    expect(category('x', 'RE: Undeliverable: Your question')).toBe('auto_reply');
+    expect(category('Delivery has failed. From: MAILER-DAEMON@mail.example.test')).toBe('auto_reply');
+    expect(category('Please see the attached.', 'Fwd: Auto-reply')).toBe('auto_reply');
+  });
+
   it('names the rules that matched and never the words', () => {
     const result = categorize({ text: 'Someone logged in as me. Our account was hacked, an unauthorized login.' });
     expect(result.category).toBe('security');
