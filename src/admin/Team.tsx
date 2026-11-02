@@ -176,8 +176,13 @@ function ActivityRows({ tab, data, names }: { tab: Tab; data: unknown; names: Re
   if (tab === "actions") {
     const { items } = data as ActivityPage<"actions">;
     return <Table caption="Proposed actions" head={["Proposed", "Agent", "Action", "For", "Status", "Decision"]}>
-      {items.map(item => <tr key={item.id}><td>{timeLabel(item.createdAt)}</td><td>{who(item.agentKey)}</td><td>{actionLabel(item.kind)}</td><td>{item.targetId || "—"}</td><td>{statusLabel(item.status)}</td>
-        <td className="team-wide">{item.decidedAt ? `${timeLabel(item.decidedAt)}${item.decisionNote ? ` — ${item.decisionNote}` : ""}` : "—"}</td></tr>)}
+      {items.map(item => {
+        // Why a carried-out action failed: the code its executor stored, in plain words, so a refused send is not just "Failed".
+        const failure = item.status === "failed" && typeof item.result?.error === "string" ? errorLabel(item.result.error) : "";
+        const decision = item.decidedAt ? `${timeLabel(item.decidedAt)}${item.decisionNote ? ` — ${item.decisionNote}` : ""}` : "";
+        return <tr key={item.id}><td>{timeLabel(item.createdAt)}</td><td>{who(item.agentKey)}</td><td>{actionLabel(item.kind)}</td><td>{item.targetId || "—"}</td><td>{statusLabel(item.status)}</td>
+          <td className="team-wide">{[decision, failure].filter(Boolean).join(" · ") || "—"}</td></tr>;
+      })}
     </Table>;
   }
   if (tab === "notifications") {

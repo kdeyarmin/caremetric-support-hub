@@ -66,6 +66,11 @@ describe('agent administration', () => {
       const { admin } = fixture({ results: { 'hub.set_agent_status': databaseError(code, 'Reviewed message.') } });
       await expect(admin.status('token', { key: 'platform_engineer', status: 'active', expectedUpdatedAt: version })).rejects.toMatchObject({ status, message: 'Reviewed message.' });
     }
+    // A day that is not on the calendar passes the shape check and is refused by the database: a bad request, not a server error.
+    for (const code of ['22007', '22008']) {
+      const bad = fixture({ results: { 'hub.set_agent_status': databaseError(code, 'date/time field value out of range: "2026-02-30T12:00:00Z"') } });
+      await expect(bad.admin.status('token', { key: 'platform_engineer', status: 'active', expectedUpdatedAt: '2026-02-30T12:00:00Z' })).rejects.toMatchObject({ status: 400, message: 'Invalid date or time.' });
+    }
     const { admin } = fixture({ results: { 'hub.set_agent_status': databaseError('XX000', 'internal detail') } });
     await expect(admin.status('token', { key: 'platform_engineer', status: 'active', expectedUpdatedAt: version })).rejects.not.toBeInstanceOf(HttpError);
   });

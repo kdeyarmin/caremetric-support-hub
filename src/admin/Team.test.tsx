@@ -350,6 +350,29 @@ describe("AI team screen", () => {
     await waitFor(() => expect(activity).toHaveBeenLastCalledWith({ kind: "runs", agentKey: "support_concierge", offset: 0, limit: 15 }, expect.any(Object)));
   });
 
+  it("says why an action failed in the history, from the code its executor stored", async () => {
+    const action = (n: number, status: string, result: Record<string, unknown> | null) => ({
+      id: `77777777-7777-4777-8777-77777777777${n}`, taskId: ids.task, agentKey: "support_concierge", kind: "communication.reply", targetKind: "communication", targetId: `CM-100${n}`,
+      status, preview: "Here is how to export by month.", decisionNote: null, createdAt: "2026-11-02T11:30:00+00:00", expiresAt: "2026-11-09T11:30:00+00:00",
+      decidedAt: status === "failed" ? "2026-11-02T11:40:00+00:00" : null, executedAt: null, result,
+    });
+    const activity = vi.fn(async (input: { kind: string }) => (input.kind === "actions"
+      ? { items: [action(1, "failed", { error: "thread_changed" }), action(2, "failed", null), action(3, "proposed", null)], total: 3, offset: 0, limit: 15 }
+      : emptyPage)) as unknown as TeamClient["activity"];
+    render(<Team client={fakeClient(overview(), { activity })} />);
+    await screen.findByRole("region", { name: "What the team has done" });
+    fireEvent.click(screen.getByRole("tab", { name: "Proposed actions" }));
+    const rows = await screen.findAllByRole("row");
+    const text = (id: string) => rows.find(row => row.textContent?.includes(id))?.textContent ?? "";
+    expect(text("CM-1001")).toContain("Failed");
+    expect(text("CM-1001")).toContain("The customer wrote again after this reply was written, so nothing was sent.");
+    expect(text("CM-1001")).not.toContain("thread_changed");
+    // A failure with no stored code, and an action that has not failed, show nothing extra.
+    expect(text("CM-1002")).toContain("Failed");
+    expect(text("CM-1002")).not.toContain("nothing was sent");
+    expect(text("CM-1003")).toContain("Waiting for approval");
+  });
+
   it("switches between kinds of activity and the audit log", async () => {
     const client = fakeClient();
     render(<Team client={client} />);

@@ -62,7 +62,8 @@ SMS sign-in; a lapsed session signs the owner out, as everywhere else in Admin.
   overwrites another.
 - **What the team has done** has five tabs: runs, tasks, proposed actions, the alerts sent to the owner,
   and the Hub's audit log. Each shows 15 at a time, newest first. All but the audit log can be filtered
-  by agent. Message text is never kept in any of them.
+  by agent. Message text is never kept in any of them. An action that failed shows why, in plain words, next
+  to its status (for example that the customer wrote again before the reply could be sent).
 
 The screen checks every answer against the schemas in `src/admin/teamProtocol.ts`, and the server
 integration test (`server/agents-integration.mjs`) parses the real database output with the same

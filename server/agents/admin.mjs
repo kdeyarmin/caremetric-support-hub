@@ -21,6 +21,9 @@ export const agentAdminActions = new Set(['overview', 'status', 'autonomy', 'bud
 
 function reviewed(error) {
   if (error instanceof HttpError) return error;
+  // A date the pattern accepts but the calendar does not (2026-02-30) reaches the database, which refuses it. That is the request's
+  // fault, and the database's own wording is not shown.
+  if (error?.code === '22007' || error?.code === '22008') return new HttpError(400, 'Invalid date or time.');
   const status = reviewedErrors[error?.code];
   return status ? new HttpError(status, error.message) : error;
 }
