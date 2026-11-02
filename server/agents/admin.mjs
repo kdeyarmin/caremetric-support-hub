@@ -21,6 +21,9 @@ export const agentAdminActions = new Set(['overview', 'status', 'autonomy', 'bud
 
 function reviewed(error) {
   if (error instanceof HttpError) return error;
+  // A date the pattern accepts but the calendar does not (2026-02-30) reaches the database, which refuses it. That is the request's
+  // fault, and the database's own wording is not shown.
+  if (error?.code === '22007' || error?.code === '22008') return new HttpError(400, 'Invalid date or time.');
   const status = reviewedErrors[error?.code];
   return status ? new HttpError(status, error.message) : error;
 }
@@ -101,7 +104,12 @@ export function agentAdmin({ pool, actions, services = () => ({}), kick = null, 
       exactly(input, ['taskId']);
       return query(token, 'hub.cancel_agent_task', [matching(input.taskId, uuid, 'task')]);
     },
-    /** Approve or reject one proposal. An approval is carried out straight away; if that fails the action records it. */
+    /**
+     * Approve or reject one proposal. An approval is carried out straight away; if that fails the action records it.
+     * A status of `approved` after an approval is not proof that nothing happened: a failure after the work was done (recording
+     * the result) leaves it too. So `needsSession: true` is the only word that nothing was started, and it is said only when the
+     * executor confirmed it skipped or handed the action back for want of the owner's session.
+     */
     async decide(token, input) {
       exactly(input, ['actionId', 'decision'], ['note']);
       const note = input.note ?? null;
@@ -109,14 +117,16 @@ export function agentAdmin({ pool, actions, services = () => ({}), kick = null, 
       const decided = await query(token, 'hub.decide_agent_action', [matching(input.actionId, uuid, 'action'), oneOf(input.decision, ['approve', 'reject'], 'decision'), note]);
       let status = decided.status;
       let error = null;
+      let needsSession = false;
       if (decided.decided && decided.status === 'approved') {
         // The database already holds the approval; a failure here leaves it approved. An action that needs the owner's session
         // runs now, with theirs; one the tick can carry out is picked up on the next tick.
         const outcome = await actions.executeOne(decided.id, { kind: decided.kind, sessionToken: token }).catch(() => null);
         if (outcome?.executed) status = 'executed';
         else if (outcome?.failed) { status = 'failed'; error = outcome.error ?? null; }
+        else if (outcome?.skipped === true && outcome.needsSession === true) needsSession = true;
       }
-      return { id: decided.id, kind: decided.kind, status, decided: decided.decided, ...(error ? { error } : {}) };
+      return { id: decided.id, kind: decided.kind, status, decided: decided.decided, ...(error ? { error } : {}), ...(needsSession ? { needsSession } : {}) };
     },
   };
 }

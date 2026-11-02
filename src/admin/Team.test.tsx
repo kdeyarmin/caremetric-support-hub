@@ -125,6 +125,20 @@ describe("AI team screen", () => {
     expect((await screen.findByRole("button", { name: "Run what's waiting" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("lets approved replies be sent with the scheduler off, since they need only the owner's session", async () => {
+    const off = { enabled: false };
+    const withReplies = fakeClient({ ...overview({ awaitingSessionCount: 1 }, off), waitingActions: 2 }, { waiting: vi.fn(async () => ({ started: 0, actions: 2 })) });
+    render(<Team client={withReplies} />);
+    const button = await screen.findByRole("button", { name: "Run what's waiting" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+    expect(await screen.findByText(/Sending 2 approved replies/)).toBeTruthy();
+    cleanup();
+    // Waiting tasks alone cannot run with the scheduler off, so the button stays disabled then.
+    render(<Team client={fakeClient({ ...overview({ awaitingSessionCount: 1 }, off), waitingActions: 0 })} />);
+    expect((await screen.findByRole("button", { name: "Run what's waiting" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("shows the server's reason when the waiting work could not be started", async () => {
     const client = fakeClient(overview({ awaitingSessionCount: 1 }), { waiting: vi.fn(async () => { throw new TeamApiError(401, "Current administrator session required."); }) });
     render(<Team client={client} />);
@@ -258,7 +272,53 @@ describe("AI team screen", () => {
     cleanup();
     render(<Team client={unknown} />);
     fireEvent.click(await screen.findByRole("button", { name: "Resume Support Concierge" }));
-    expect((await screen.findByRole("alert")).textContent).toBe("The change could not be completed. Nothing was changed.");
+    const text = (await screen.findByRole("alert")).textContent ?? "";
+    // A dropped connection or a timeout can come after the server has acted, so the screen never says nothing changed.
+    expect(text).toBe("The result could not be confirmed, so the change may have gone through. Refresh and check the lists below before you try again.");
+    expect(text).not.toMatch(/nothing was changed/i);
+  });
+
+  it("reloads the activity history when the page is refreshed or something changes, keeping its tab", async () => {
+    const client = fakeClient();
+    render(<Team client={client} />);
+    await screen.findByRole("region", { name: "What the team has done" });
+    await waitFor(() => expect(client.activity).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("tab", { name: "Proposed actions" }));
+    await waitFor(() => expect(client.activity).toHaveBeenCalledTimes(2));
+    expect((client.activity as ReturnType<typeof vi.fn>).mock.calls[1][0]).toMatchObject({ kind: "actions", offset: 0 });
+    fireEvent.click(screen.getByRole("button", { name: /Refresh/ }));
+    await waitFor(() => expect(client.activity).toHaveBeenCalledTimes(3));
+    expect((client.activity as ReturnType<typeof vi.fn>).mock.calls[2][0]).toMatchObject({ kind: "actions", offset: 0 });
+    expect(screen.getByRole("tab", { name: "Proposed actions" }).getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(await screen.findByRole("button", { name: "Resume Support Concierge" }));
+    await waitFor(() => expect(client.activity).toHaveBeenCalledTimes(4));
+  });
+
+  it("says an approved reply has not been sent yet only when the server confirmed it was waiting for the owner's session", async () => {
+    const client = fakeClient(overview(), { decide: vi.fn(async () => ({ id: ids.action, kind: "communication.reply", status: "approved", decided: true, needsSession: true })) });
+    render(<Team client={client} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Approve and send/ }));
+    expect(await screen.findByText("Approved. It has not been sent yet. Press Run what's waiting while you are signed in.")).toBeTruthy();
+  });
+
+  it("does not say a reply was not sent when the approval came back without a confirmation either way", async () => {
+    // The server also answers a bare "approved" when the reply went out and only its record was lost.
+    const client = fakeClient(overview(), { decide: vi.fn(async () => ({ id: ids.action, kind: "communication.reply", status: "approved", decided: true })) });
+    render(<Team client={client} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Approve and send/ }));
+    const text = (await screen.findByRole("status")).textContent ?? "";
+    expect(text).toContain("could not confirm what happened next");
+    expect(text).toContain("open the conversation before answering again");
+    expect(text).not.toMatch(/not been sent|Run what's waiting/);
+  });
+
+  it("does not send the owner to Run what's waiting for a reply that failed because the sign-in lapsed", async () => {
+    const client = fakeClient(overview(), { decide: vi.fn(async () => ({ id: ids.action, kind: "communication.reply", status: "failed", decided: true, error: "session_required" })) });
+    render(<Team client={client} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Approve and send/ }));
+    const text = (await screen.findByRole("alert")).textContent ?? "";
+    expect(text).toContain("nothing was sent");
+    expect(text).not.toMatch(/Run what's waiting/);
   });
 
   it("keeps showing the team while it refreshes after a change", async () => {
@@ -299,6 +359,33 @@ describe("AI team screen", () => {
     expect(activity).toHaveBeenLastCalledWith({ kind: "runs", agentKey: null, offset: 15, limit: 15 }, expect.any(Object));
     fireEvent.change(within(panel).getByLabelText("Agent"), { target: { value: "support_concierge" } });
     await waitFor(() => expect(activity).toHaveBeenLastCalledWith({ kind: "runs", agentKey: "support_concierge", offset: 0, limit: 15 }, expect.any(Object)));
+  });
+
+  it("says why an action failed in the history, from the code its executor stored", async () => {
+    const action = (n: number, status: string, result: Record<string, unknown> | null) => ({
+      id: `77777777-7777-4777-8777-77777777777${n}`, taskId: ids.task, agentKey: "support_concierge", kind: "communication.reply", targetKind: "communication", targetId: `CM-100${n}`,
+      status, preview: "Here is how to export by month.", decisionNote: null, createdAt: "2026-11-02T11:30:00+00:00", expiresAt: "2026-11-09T11:30:00+00:00",
+      decidedAt: status === "failed" ? "2026-11-02T11:40:00+00:00" : null, executedAt: null, result,
+    });
+    const activity = vi.fn(async (input: { kind: string }) => (input.kind === "actions"
+      ? { items: [action(1, "failed", { error: "thread_changed" }), action(2, "failed", null), action(3, "proposed", null), action(4, "failed", { error: "session_required" })], total: 4, offset: 0, limit: 15 }
+      : emptyPage)) as unknown as TeamClient["activity"];
+    render(<Team client={fakeClient(overview(), { activity })} />);
+    await screen.findByRole("region", { name: "What the team has done" });
+    fireEvent.click(screen.getByRole("tab", { name: "Proposed actions" }));
+    const rows = await screen.findAllByRole("row");
+    const text = (id: string) => rows.find(row => row.textContent?.includes(id))?.textContent ?? "";
+    expect(text("CM-1001")).toContain("Failed");
+    expect(text("CM-1001")).toContain("The customer wrote again after this reply was written, so nothing was sent.");
+    expect(text("CM-1001")).not.toContain("thread_changed");
+    // A failure with no stored code, and an action that has not failed, show nothing extra.
+    expect(text("CM-1002")).toContain("Failed");
+    expect(text("CM-1002")).not.toContain("nothing was sent");
+    expect(text("CM-1003")).toContain("Waiting for approval");
+    // A failed action is final: the button picks up only approved ones, so a lapsed sign-in is not sent there for a retry.
+    expect(text("CM-1004")).toContain("Failed");
+    expect(text("CM-1004")).toContain("Your sign-in lapsed before the reply was sent, so nothing was sent. Sign in again and answer from the conversation.");
+    expect(text("CM-1004")).not.toMatch(/Run what's waiting/);
   });
 
   it("switches between kinds of activity and the audit log", async () => {

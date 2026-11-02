@@ -68,9 +68,10 @@ export function replySubject(subject, reference) {
 export const PHONE_REPLY_SUBJECT = 'Your phone message to CareMetric';
 /** The email a staff reply sends: the agent's words exactly as written, signed by
     CareMetric Support, in the shared person-to-person layout with a matching text part.
-    `channel` is where the conversation started; a database without it keeps the stored subject. */
-export function supportReplyEmail({ subject, reference, body, channel }) {
-  const title = replySubject(channel === 'phone' ? PHONE_REPLY_SUBJECT : subject, reference);
+    `channel` is where the conversation started; a database without it keeps the stored subject.
+    `override` is a subject the caller chose (server code only): it wins over both the stored subject and the phone title. */
+export function supportReplyEmail({ subject, reference, body, channel, override = null }) {
+  const title = replySubject(override ?? (channel === 'phone' ? PHONE_REPLY_SUBJECT : subject), reference);
   const { html, text } = renderEmail({
     layout: 'personal',
     title,
@@ -174,15 +175,21 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
   const requestKey = value => { if (typeof value !== 'string' || !uuid.test(value)) throw new HttpError(400, 'Reload the conversation and try again.'); return value; };
   const only = (input, keys) => { if (!input || Object.keys(input).some(key => !keys.includes(key))) throw new HttpError(400, 'Unsupported request.'); };
 
-  async function deliver(started, body) {
+  async function deliver(started, body, subject = null) {
     if (started.replay || started.deliveryChannel === 'chat') return { delivery: started.delivery, deliveryChannel: started.deliveryChannel, replay: started.replay };
     let outcome;
     if (started.deliveryChannel === 'sms') outcome = await sms.send(started.to, body);
     else {
-      const message = supportReplyEmail({ subject: started.subject, reference: started.reference, body, channel: started.channel });
+      const message = supportReplyEmail({ subject: started.subject, reference: started.reference, body, channel: started.channel, override: subject });
       outcome = await email.send(started.to, message.subject, message);
     }
-    await server('select private.finish_communication_delivery($1,$2,$3) as result', [started.messageId, outcome.delivery, outcome.id]);
+    try {
+      await server('select private.finish_communication_delivery($1,$2,$3) as result', [started.messageId, outcome.delivery, outcome.id]);
+    } catch {
+      // The provider has answered (it may well have delivered), but the record still says pending. Say so with a code, so a caller can tell
+      // this from a failure before anything was sent and warn instead of reporting that nothing happened.
+      throw new HttpError(502, 'The provider answered, but the delivery could not be recorded. Check the conversation before sending again.', 'delivery_unsettled');
+    }
     return { delivery: outcome.delivery, deliveryChannel: started.deliveryChannel, replay: false };
   }
 
@@ -278,11 +285,14 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
       only(input, ['id', 'body', 'requestKey']);
       return staff(sessionToken, 'select hub.add_communication_note($1,$2,$3) as result', [id(input.id), input.body, requestKey(input.requestKey)]);
     },
-    async reply(sessionToken, input) {
+    /** `options.subject` is for callers inside the server only (the browser's input cannot carry it): an email's subject in place of the conversation's own. */
+    async reply(sessionToken, input, options = {}) {
       only(input, ['id', 'body', 'requestKey']);
       if (typeof input.body !== 'string') throw new HttpError(400, 'Write a reply.');
+      const subject = options?.subject ?? null;
+      if (subject !== null && (typeof subject !== 'string' || !/^[^\u0000-\u001f\u007f]{1,150}$/.test(subject))) throw new HttpError(400, 'Invalid subject.');
       const started = await staff(sessionToken, 'select hub.begin_communication_reply($1,$2,$3,$4) as result', [id(input.id), input.body, requestKey(input.requestKey), available()]);
-      return deliver(started, clean(input.body));
+      return deliver(started, clean(input.body), subject);
     },
     /** Copy up to 200 messages another application received into the Hub, resuming at offset. Requires the platform administrator session. */
     async sync(sessionToken, input) {

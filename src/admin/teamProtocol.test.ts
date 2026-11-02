@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionLabel, cadenceLabel, centsLabel, decisionSchema, errorLabel, outcomeLabel, statusLabel, taskLabel, waitingSchema } from "./teamProtocol";
+import { actionLabel, cadenceLabel, centsLabel, decisionSchema, errorLabel, failedActionLabel, outcomeLabel, statusLabel, taskLabel, waitingSchema } from "./teamProtocol";
 
 describe("AI team display", () => {
   it("shows money in whole cents", () => {
@@ -49,10 +49,20 @@ describe("AI team display", () => {
     expect(errorLabel(undefined)).toBe("");
   });
 
+  it("explains a failed action as final: a lapsed sign-in there is not put right by Run what's waiting", () => {
+    expect(failedActionLabel("session_required")).toBe("Your sign-in lapsed before the reply was sent, so nothing was sent. Sign in again and answer from the conversation.");
+    expect(failedActionLabel("session_required")).not.toMatch(/Run what's waiting/);
+    expect(failedActionLabel("thread_changed")).toBe(errorLabel("thread_changed"));
+    expect(failedActionLabel("brand_new_code")).toBe("brand_new_code");
+    expect(failedActionLabel(null)).toBe("");
+  });
+
   it("accepts a decision with or without a failure code, and a count of both kinds of waiting work", () => {
     const decision = { id: "11111111-1111-4111-8111-111111111111", kind: "communication.reply", status: "failed", decided: true };
     expect(decisionSchema.parse(decision)).toEqual(decision);
     expect(decisionSchema.parse({ ...decision, error: "thread_changed" }).error).toBe("thread_changed");
+    expect(decisionSchema.parse({ ...decision, status: "approved", needsSession: true }).needsSession).toBe(true);
+    expect(decisionSchema.parse(decision).needsSession).toBeUndefined();
     expect(waitingSchema.parse({ started: 1, actions: 2 })).toEqual({ started: 1, actions: 2 });
     expect(() => waitingSchema.parse({ started: 1 })).toThrow();
   });

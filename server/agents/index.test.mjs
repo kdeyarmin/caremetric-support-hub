@@ -63,7 +63,7 @@ describe('the AI team', () => {
     expect(ready.beginExecution).not.toHaveBeenCalled();
     expect(await team.actions.sessionActions()).toEqual([{ id: 'a1', kind: 'communication.reply' }]);
     expect(await team.actions.executeOne('a1', { kind: 'communication.reply', sessionToken: token })).toEqual({ executed: true, failed: false, skipped: false });
-    expect(reply).toHaveBeenCalledWith(token, { id: '11111111-1111-4111-8111-111111111111', body: 'Hello', requestKey: '44444444-4444-4444-8444-444444444444' });
+    expect(reply).toHaveBeenCalledWith(token, { id: '11111111-1111-4111-8111-111111111111', body: 'Hello', requestKey: '44444444-4444-4444-8444-444444444444' }, { subject: 'Your message to CareMetric support' });
     for (const options of [{ communications: { reply } }, { features: feature }, { communications: {}, features: feature }]) {
       const bare = agentTeam({ store: fake(), publicOrigin: origin, enabled: true, ...options });
       expect(await bare.actions.sessionActions()).toEqual([]);

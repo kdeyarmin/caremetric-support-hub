@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { replyExecutor } from './executor.mjs';
+import { replyExecutor, replySubject } from './executor.mjs';
 import { HttpError } from '../../sms-auth.mjs';
 
 const ids = { communication: '11111111-1111-4111-8111-111111111111', message: '22222222-2222-4222-8222-222222222222', other: '33333333-3333-4333-8333-333333333333' };
@@ -29,7 +29,45 @@ describe('sending an approved reply', () => {
     const { executor, store, communications } = fixture();
     expect(await executor(execution(), { sessionToken })).toEqual({ delivery: 'sent', channel: 'email', replay: false });
     expect(store.communicationSnapshot).toHaveBeenCalledWith({ id: ids.communication, requestKey: '44444444-4444-4444-8444-444444444444', messages: 0, chars: 100 });
-    expect(communications.reply).toHaveBeenCalledWith(sessionToken, { id: ids.communication, body, requestKey: '44444444-4444-4444-8444-444444444444' });
+    expect(communications.reply).toHaveBeenCalledWith(sessionToken, { id: ids.communication, body, requestKey: '44444444-4444-4444-8444-444444444444' }, { subject: 'Your message to CareMetric support' });
+  });
+
+  it('titles every email with a fixed subject, never the customer\'s, so an identifier in theirs is not echoed back', async () => {
+    expect(replySubject).toBe('Your message to CareMetric support');
+    const { executor, communications } = fixture({ snapshot: { id: ids.communication, status: 'new', headMessageId: ids.message, subject: 'Roster for Pat Example, SSN 000-12-3456' } });
+    await executor(execution(), { sessionToken });
+    const [, input, options] = communications.reply.mock.calls[0];
+    expect(options).toEqual({ subject: replySubject });
+    expect(JSON.stringify([input, options])).not.toMatch(/Pat Example|000-12-3456/);
+  });
+
+  it('settles a reply already recorded under its key without judging a thread that has moved on since', async () => {
+    for (const delivery of ['sent', 'pending', 'failed', 'unknown']) {
+      // The customer wrote again and the conversation was then closed, but the reply had been recorded first.
+      const { executor, communications } = fixture({ snapshot: { id: ids.communication, status: 'closed', headMessageId: ids.other, ownReplyDelivery: delivery },
+        reply: { messageId: 'm1', replay: true, delivery, deliveryChannel: 'email' } });
+      const settled = executor(execution(), { sessionToken });
+      if (delivery === 'sent') expect(await settled).toEqual({ delivery: 'sent', channel: 'email', replay: true });
+      else await refusal(settled, { failed: 'delivery_failed', pending: 'delivery_unconfirmed', unknown: 'delivery_unknown' }[delivery]);
+      expect(communications.reply, delivery).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('still judges the thread for a reply that was never recorded, even when the snapshot has the field', async () => {
+    for (const [snapshot, code] of [
+      [{ status: 'open', headMessageId: ids.other, ownReplyDelivery: null }, 'thread_changed'], [{ status: 'closed', headMessageId: ids.message, ownReplyDelivery: null }, 'conversation_closed'],
+    ]) {
+      const { executor, communications } = fixture({ snapshot });
+      await refusal(executor(execution(), { sessionToken }), code);
+      expect(communications.reply).not.toHaveBeenCalled();
+    }
+  });
+
+  it('warns the owner, rather than reporting nothing happened, when the provider answered but the delivery could not be recorded', async () => {
+    const { executor, communications, notifier } = fixture();
+    communications.reply.mockRejectedValue(new HttpError(502, 'The provider answered, but the delivery could not be recorded.', 'delivery_unsettled'));
+    await refusal(executor(execution(), { sessionToken }), 'delivery_unconfirmed');
+    expect(notifier.send).toHaveBeenCalledWith(expect.objectContaining({ severity: 'warning', subject: 'Check CM-1042 before sending again', dedupeKey: 'concierge:reply-check:action-1' }));
   });
 
   it('treats a replay of a reply that was already sent as done, sending nothing new', async () => {

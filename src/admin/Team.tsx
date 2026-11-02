@@ -7,7 +7,7 @@ import { useAdminRead } from "./useAdminRead";
 import { TeamApiError, teamClient } from "./teamClient";
 import type { TeamClient } from "./teamClient";
 import {
-  actionLabel, autonomyHelp, autonomyLabels, cadenceLabel, centsLabel, errorLabel, outcomeLabel, statusLabel, taskLabel, tierLabels,
+  actionLabel, autonomyHelp, autonomyLabels, cadenceLabel, centsLabel, errorLabel, failedActionLabel, outcomeLabel, statusLabel, taskLabel, tierLabels,
 } from "./teamProtocol";
 import type { ActivityKind, ActivityPage, AuditPage, TeamAgent, TeamApproval, TeamOverview, TeamServices } from "./teamProtocol";
 import "./admin.css";
@@ -15,7 +15,10 @@ import "./admin.css";
 type Notice = { ok: boolean; text: string } | null;
 type Change = (id: string, work: () => Promise<unknown>, success: string | (() => string)) => Promise<void>;
 
-const failureText = (error: unknown) => error instanceof TeamApiError ? error.message : "The change could not be completed. Nothing was changed.";
+// A refusal from the server carries its reviewed text. Anything else (a timeout, a dropped connection, an answer the screen could not read)
+// can happen after the server has acted, so it never claims that nothing changed: a second press could queue the same work again.
+const failureText = (error: unknown) => error instanceof TeamApiError ? error.message
+  : "The result could not be confirmed, so the change may have gone through. Refresh and check the lists below before you try again.";
 const clip = (value: string, limit: number) => (value.length <= limit ? value : `${value.slice(0, limit - 1)}…`);
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
@@ -47,7 +50,8 @@ function ServicesPanel({ services, awaitingSession, waitingActions, busy, onRunW
         {awaitingSession > 0 && <>{awaitingSession === 1 ? "1 task is" : `${awaitingSession} tasks are`} waiting for you to be signed in, because reading another product needs your live session. </>}
         {waitingActions > 0 && <>{waitingActions === 1 ? "1 reply you approved has" : `${waitingActions} replies you approved have`} not been sent yet. </>}
         Run {awaitingSession + waitingActions === 1 ? "it" : "them"} now while you are signed in.</p>
-      <button type="button" className="button button-primary button-small" disabled={Boolean(busy) || !services.enabled} onClick={onRunWaiting}>Run what's waiting</button>
+      {/* Approved replies go out with this session whether or not the scheduler is on; only the waiting tasks need it. */}
+      <button type="button" className="button button-primary button-small" disabled={Boolean(busy) || (!services.enabled && waitingActions === 0)} onClick={onRunWaiting}>Run what's waiting</button>
     </div>}
   </section>;
 }
@@ -172,8 +176,13 @@ function ActivityRows({ tab, data, names }: { tab: Tab; data: unknown; names: Re
   if (tab === "actions") {
     const { items } = data as ActivityPage<"actions">;
     return <Table caption="Proposed actions" head={["Proposed", "Agent", "Action", "For", "Status", "Decision"]}>
-      {items.map(item => <tr key={item.id}><td>{timeLabel(item.createdAt)}</td><td>{who(item.agentKey)}</td><td>{actionLabel(item.kind)}</td><td>{item.targetId || "—"}</td><td>{statusLabel(item.status)}</td>
-        <td className="team-wide">{item.decidedAt ? `${timeLabel(item.decidedAt)}${item.decisionNote ? ` — ${item.decisionNote}` : ""}` : "—"}</td></tr>)}
+      {items.map(item => {
+        // Why a carried-out action failed: the code its executor stored, in plain words, so a refused send is not just "Failed".
+        const failure = item.status === "failed" && typeof item.result?.error === "string" ? failedActionLabel(item.result.error) : "";
+        const decision = item.decidedAt ? `${timeLabel(item.decidedAt)}${item.decisionNote ? ` — ${item.decisionNote}` : ""}` : "";
+        return <tr key={item.id}><td>{timeLabel(item.createdAt)}</td><td>{who(item.agentKey)}</td><td>{actionLabel(item.kind)}</td><td>{item.targetId || "—"}</td><td>{statusLabel(item.status)}</td>
+          <td className="team-wide">{[decision, failure].filter(Boolean).join(" · ") || "—"}</td></tr>;
+      })}
     </Table>;
   }
   if (tab === "notifications") {
@@ -188,19 +197,19 @@ function ActivityRows({ tab, data, names }: { tab: Tab; data: unknown; names: Re
   </Table>;
 }
 
-function ActivityPanel({ client, agents }: { client: TeamClient; agents: TeamAgent[] }) {
+function ActivityPanel({ client, agents, refresh }: { client: TeamClient; agents: TeamAgent[]; refresh: number }) {
   const [tab, setTab] = useState<Tab>("runs");
   const [agentKey, setAgentKey] = useState("");
   const [offset, setOffset] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const names = Object.fromEntries(agents.map(agent => [agent.key, agent.displayName]));
   const reader = useCallback(async (signal: AbortSignal) => {
-    void attempt;
+    void attempt; void refresh;
     const page = tab === "audit"
       ? await client.audit({ prefix: null, offset, limit: pageSize }, { signal })
       : await client.activity({ kind: tab as ActivityKind, agentKey: agentKey || null, offset, limit: pageSize }, { signal });
     return { tab, page };
-  }, [client, tab, agentKey, offset, attempt]);
+  }, [client, tab, agentKey, offset, attempt, refresh]);
   const state = useAdminRead(reader);
   const choose = (next: Tab) => { setTab(next); setOffset(0); };
   return <section className="panel team-activity" aria-labelledby="team-activity-title">
@@ -263,12 +272,24 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
     void change("waiting", async () => { const result = await client.waiting(); started = result.started; sending = result.actions; },
       () => started === 0 && sending === 0 ? "Nothing was waiting to run." : `${[started > 0 ? `Started ${plural(started, "task")}` : "", sending > 0 ? `${started > 0 ? "sending" : "Sending"} ${plural(sending, "approved reply").replace("replys", "replies")}` : ""].filter(Boolean).join(" and ")}. ${started + sending === 1 ? "It finishes" : "They finish"} in the background; refresh in a minute to see the result.`);
   };
-  const onDecide = (approval: TeamApproval, decision: "approve" | "reject", note: string) => void change(`decide:${approval.id}`,
+  const onDecide = (approval: TeamApproval, decision: "approve" | "reject", note: string) => {
+    let outcome: "sent" | "waiting" | "unconfirmed" = "unconfirmed";
+    void change(`decide:${approval.id}`,
     async () => {
       const result = await client.decide({ actionId: approval.id, decision, note: note.trim() || undefined });
       if (!result.decided) throw new TeamApiError(409, "That was already decided or has expired. The list has been refreshed.");
-      if (result.status === "failed") throw new TeamApiError(500, result.error ? errorLabel(result.error) : "It was approved but could not be carried out. See the activity below.");
-    }, decision === "approve" ? "Approved." : "Rejected.");
+      // A failed reply is final, so "press Run what's waiting" (the label a waiting task gets) would send the owner the wrong way.
+      if (result.status === "failed") throw new TeamApiError(500, result.error ? failedActionLabel(result.error) : "It was approved but could not be carried out. See the activity below.");
+      // Only the server can say a reply was not started. A plain "approved" may be an action whose work was done and whose result could not
+      // be recorded, so it is never reported as unsent.
+      outcome = result.status === "executed" ? "sent" : result.needsSession ? "waiting" : "unconfirmed";
+    }, () => {
+      if (decision === "reject") return "Rejected.";
+      if (outcome === "sent") return "Approved.";
+      if (outcome === "waiting") return "Approved. It has not been sent yet. Press Run what's waiting while you are signed in.";
+      return "Approved, but the Hub could not confirm what happened next. Check the Proposed actions below, and for a reply open the conversation before answering again.";
+    });
+  };
 
   return <div className="team">
     <div className="page-heading"><div><span className="eyebrow">CareMetric Admin</span><h1><Bot size={22} aria-hidden="true" /> AI team</h1>
@@ -286,7 +307,7 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
         <div className="team-agent-grid">
           {shown.data.team.agents.map(agent => <AgentCard key={`${agent.key}:${agent.updatedAt}`} agent={agent} services={shown.data.services} busy={busy} onStatus={onStatus} onAutonomy={onAutonomy} onBudget={onBudget} onRun={onRun} />)}
         </div></section>
-      <ActivityPanel client={client} agents={shown.data.team.agents} />
+      <ActivityPanel client={client} agents={shown.data.team.agents} refresh={refresh} />
     </>}
   </div>;
 }

@@ -35,8 +35,11 @@ export const teamSchema = z.object({
 export const servicesSchema = z.object({ enabled: z.boolean(), handlers: z.array(taskKind), sms: z.boolean(), email: z.boolean(), ownerEmail: z.boolean(), ai: z.boolean(), customerTextToAi: z.boolean() });
 /** `waitingActions` is how many approved replies could not be sent yet and wait for the owner's next "Run what's waiting". */
 export const overviewSchema = z.object({ team: teamSchema, services: servicesSchema, waitingActions: z.number().int().min(0) });
-/** `error` is the code of why an approved action could not be carried out (see `errorLabel`). */
-export const decisionSchema = z.object({ id: z.uuid(), kind: z.string(), status: z.string(), decided: z.boolean(), error: z.string().optional() });
+/**
+ * `error` is the code of why an approved action could not be carried out (see `errorLabel`). `needsSession` is the server saying it
+ * confirmed that nothing was started for want of the owner's session; an approval without it, still `approved`, is not confirmed either way.
+ */
+export const decisionSchema = z.object({ id: z.uuid(), kind: z.string(), status: z.string(), decided: z.boolean(), error: z.string().optional(), needsSession: z.boolean().optional() });
 export const taskResultSchema = z.object({ id: z.uuid(), status: z.string() });
 /** How many waiting tasks were started and how many approved replies are being sent; both finish in the background. */
 export const waitingSchema = z.object({ started: z.number().int().min(0), actions: z.number().int().min(0) });
@@ -125,6 +128,12 @@ const errorLabels: Record<string, string> = {
 };
 /** What a stored error code means for the owner; an unknown code is shown as it is. */
 export const errorLabel = (code: string | null | undefined) => (code ? errorLabels[code] ?? code : "");
+/**
+ * Why an action that ended `failed` did not go out. A failed action is final, and the "Run what's waiting" button picks up only approved
+ * ones, so a lapsed sign-in here is not something that button can put right (a task waiting for the sign-in is: see `errorLabel`).
+ */
+export const failedActionLabel = (code: string | null | undefined) =>
+  code === "session_required" ? "Your sign-in lapsed before the reply was sent, so nothing was sent. Sign in again and answer from the conversation." : errorLabel(code);
 
 const outcomeLabels: Record<string, string> = {
   completed: "Completed", failed: "Failed", budget_exhausted: "Stopped at the daily budget", no_result: "No result", refused: "Declined by the model", cancelled: "Cancelled",

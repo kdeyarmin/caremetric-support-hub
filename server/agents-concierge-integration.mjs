@@ -337,7 +337,7 @@ try {
   assert.deepEqual(await replyTeam.admin.decide(ownerToken, { actionId: proposals.ok.id, decision: 'approve' }), { id: proposals.ok.id, kind: 'communication.reply', status: 'executed', decided: true });
   assert.equal(toCustomers().length, mailBefore + 1);
   const [to, subject, content] = toCustomers().at(-1);
-  assert.deepEqual([to, subject.endsWith(`[CM-${reply.ok.reference}]`), content.text.includes('We have your message and a member of our team will review it')], [secrets.email, true, true]);
+  assert.deepEqual([to, subject, content.text.includes('We have your message and a member of our team will review it')], [secrets.email, `Re: Your message to CareMetric support [CM-${reply.ok.reference}]`, true]);
   assert.ok(!/\bAI\b|assistant/i.test(content.text), 'the reply says nothing about AI');
   const sentRow = await row("select m.*, c.status as conversation_status from private.communication_messages m join private.communications c on c.id = m.communication_id where m.communication_id = $1 and m.direction = 'outbound'", [reply.ok.id]);
   assert.deepEqual([sentRow.body, sentRow.delivery, sentRow.delivery_channel, sentRow.request_key, sentRow.author_id, sentRow.conversation_status], [ackText, 'sent', 'email', proposals.ok.request_key, owner, 'waiting'], 'recorded under the action\'s own key, authored by the owner');
@@ -380,6 +380,43 @@ try {
   await reached(lateProposal.id, ['executed']);
   assert.equal(toCustomers().length, lateMail + 1, 'pressing the button sent it');
   assert.equal((await replyTeam.admin.overview(ownerToken, {})).waitingActions, 0);
+
+  // A session that lapsed after the approval and before anything was sent is not a failure: the reply waits, and pressing the button sends it once.
+  const lapse = await conversation({ messages: [{ ago: 6, body: `Could you reset my password? ${canary}` }] });
+  await sweepAndTriage();
+  const lapseProposal = await proposalFor(lapse);
+  assert.equal((await ownerCall('hub.decide_agent_action', [lapseProposal.id, 'approve', null])).status, 'approved');
+  const lapseMail = toCustomers().length;
+  assert.deepEqual(await replyTeam.actions.executeSessionActions([{ id: lapseProposal.id, kind: 'communication.reply' }], { sessionToken: `concierge-lapsed-${randomUUID()}` }), { executed: 0, failed: 0 }, 'a session the Hub no longer knows sends nothing and records no failure');
+  const handedBack = await action(lapseProposal.id);
+  assert.deepEqual([handedBack.status, handedBack.result, handedBack.executions, toCustomers().length], ['approved', null, 1, lapseMail], 'the action went back to approved (it was started once)');
+  assert.equal((await replyTeam.admin.overview(ownerToken, {})).waitingActions, 1, 'and the screen says it is waiting');
+  assert.deepEqual(await replyTeam.admin.waiting(ownerToken, {}), { started: 0, actions: 1 });
+  const resent = await reached(lapseProposal.id, ['executed']);
+  assert.deepEqual([resent.executions, toCustomers().length], [2, lapseMail + 1], 'signing in again sent it, once');
+
+  // A reply the server recorded and sent, whose action then never settled, is settled on replay however the thread has moved since.
+  const recorded = await conversation({ subject: `Roster for ${secrets.name}, SSN 000-12-3456`, messages: [{ ago: 6, body: `How do I export the roster? ${canary}` }] });
+  const unsettled = await conversation({ messages: [{ ago: 6, body: `Where do I find reports? ${canary}` }] });
+  await sweepAndTriage();
+  const recordedProposal = await proposalFor(recorded);
+  const unsettledProposal = await proposalFor(unsettled);
+  for (const [fixture, proposal, delivery] of [[recorded, recordedProposal, 'sent'], [unsettled, unsettledProposal, 'pending']]) {
+    await admin.query(`insert into private.communication_messages(communication_id, direction, body, delivery, delivery_channel, request_key, author_id, created_at)
+      values ($1, 'outbound', $2, $3, 'email', $4, $5, now() - interval '2 minutes')`, [fixture.id, proposal.input.body, delivery, proposal.request_key, owner]);
+    await admin.query("insert into private.communication_messages(communication_id, direction, body, delivery, created_at) values ($1, 'inbound', 'Thanks! One more thing.', 'received', now() - interval '1 minute')", [fixture.id]);
+    await admin.query("update private.communications set status = 'closed' where id = $1", [fixture.id]);
+  }
+  const replayMail = toCustomers().length;
+  assert.deepEqual(await replyTeam.admin.decide(ownerToken, { actionId: recordedProposal.id, decision: 'approve' }), { id: recordedProposal.id, kind: 'communication.reply', status: 'executed', decided: true },
+    'a sent reply is not judged against the closed thread it was written for: it is settled');
+  assert.deepEqual((await action(recordedProposal.id)).result, { delivery: 'sent', channel: 'email', replay: true });
+  assert.equal(toCustomers().length, replayMail, 'and nothing is sent again');
+  const alertMark = outbox.filter(entry => entry[0] === 'owner@example.test').length;
+  const stuck = await replyTeam.admin.decide(ownerToken, { actionId: unsettledProposal.id, decision: 'approve' });
+  assert.deepEqual([stuck.status, stuck.error], ['failed', 'delivery_unconfirmed'], 'a recorded reply nobody settled says so instead of being refused as a moved thread');
+  assert.ok(outbox.filter(entry => entry[0] === 'owner@example.test').slice(alertMark).some(entry => entry[1] === `Check CM-${unsettled.reference} before sending again`), 'and the owner is told to look at the thread');
+  assert.equal(toCustomers().length, replayMail, 'still nothing is sent again');
 
   // A send that did not go through is reported with its code, never retried, never recorded as sent; an unconfirmed one warns the owner.
   const refusedConv = await conversation({ messages: [{ ago: 6, body: `Hello ${canary}` }] });
