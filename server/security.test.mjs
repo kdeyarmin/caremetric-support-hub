@@ -54,6 +54,16 @@ describe('application request boundary',()=>{
     expect(rpcQuery('get_support_case_thread',{p_case_id:id}).text).toContain('jsonb_agg');
     expect(rpcQuery('create_support_case').text).toContain('to_jsonb');
   });
+  it('serves the AI team reads through the gateway and keeps every change out of it',()=>{
+    const page=rpcQuery('list_agent_activity',{p_kind:'runs',p_agent_key:null,p_offset:0,p_limit:5});
+    expect(page.text).toBe('select to_jsonb(hub.list_agent_activity(p_kind => $1,p_agent_key => $2,p_offset => $3,p_limit => $4)) as data');
+    expect(page.values).toEqual(['runs',null,0,5]);
+    expect(rpcQuery('get_agent_team').text).toBe('select to_jsonb(hub.get_agent_team()) as data');
+    expect(rpcQuery('list_audit_events',{p_action_prefix:'agent.',p_offset:0,p_limit:5}).values).toEqual(['agent.',0,5]);
+    expect(()=>rpcQuery('list_agent_activity',{p_kind:'runs',sql:'select 1'})).toThrow();
+    // Approving an action also carries it out, so changes run only through the owner routes, never the browser RPC allowlist.
+    for(const name of ['set_agent_status','set_agent_autonomy','set_agent_budget','decide_agent_action','request_agent_task','cancel_agent_task','agent_task_claim','owner_contact']) expect(()=>rpcQuery(name,{})).toThrow();
+  });
   it('limits media capabilities to known objects and rejects traversal',()=>{
     for(const path of ['../secret','learning/../../secret','https://evil.test/file',`learning/${id}/answer.json`,`learning/${id}/videoxmp4`]) expect(()=>validateMedia(path,'sign')).toThrow();
     expect(()=>validateMedia(`learning/${id}/video.mp4`,'sign')).not.toThrow();

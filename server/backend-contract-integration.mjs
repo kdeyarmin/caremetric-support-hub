@@ -22,6 +22,7 @@ const checkoutMigration=await readFile(new URL('../supabase/migrations/202610272
 const checkoutContract=checkoutMigration.slice(checkoutMigration.indexOf('do $$ declare contract'));
 const facilityMigration=await readFile(new URL('../supabase/migrations/20261028023422_facility_entitlement_snapshots.sql',import.meta.url),'utf8');
 const facilityContract=facilityMigration.slice(facilityMigration.indexOf('do $$ declare contract'));
+const agentsContract=await readFile(new URL('../supabase/migrations/20261102120100_agent_control_plane_contract.sql',import.meta.url),'utf8');
 const diagnosticSupportContract=diagnosticSupportMigration.slice(diagnosticSupportMigration.indexOf('do $$ declare contract'));
 assert.ok(selfServiceContract.startsWith('-- Contract publication is last:'),'Recognize the self-service contract declaration');
 const structureMigration=await readFile(new URL('../supabase/migrations/20260911202823_learning_structure_backend_contract.sql',import.meta.url),'utf8');
@@ -93,7 +94,9 @@ try {
   }
   await client.query('begin');
   try {
-    const current=await readContract();
+    const latest=await readContract();
+    // The AI team declaration is the newest feature (declared ahead of the build that will require it): replay history without it, then replay its gate last.
+    const current={...latest,features:latest.features.filter(feature=>feature!=='platform.agents.v1')};
     // Platform billing replaced three app-specific billing features. Replay history with them in their original places.
     const before={...current,features:current.features.filter(feature=>!['billing.platform.v1','customer.self-service.v1','support.manual-escalation.v1','support.customer-diagnostics.v1','billing.customer-checkout.v1','billing.facility-entitlements.v1'].includes(feature)).flatMap(feature=>
       feature==='learning.draft-editing.v1'?[feature,'billing.portal.v1']
@@ -194,9 +197,11 @@ try {
     await client.query(checkoutContract);
     assert.deepEqual(await readContract(),{...current,features:current.features.filter(feature=>feature!=='billing.facility-entitlements.v1')},'Checkout restores its historical feature set');
     await client.query(facilityContract);
-    assert.deepEqual(await readContract(),current,'Facility entitlements restore the exact current feature set');
+    assert.deepEqual(await readContract(),current,'Facility entitlements restore the exact pre-agents feature set');
+    await client.query(agentsContract);
+    assert.deepEqual(await readContract(),latest,'The AI team declaration restores the exact current feature set');
     assertBackendContract(await readContract());
-    assert.throws(()=>assertBackendContract({...current,features:current.features.filter(feature=>feature!=='billing.platform.v1')}),/incompatible/);
+    assert.throws(()=>assertBackendContract({...latest,features:latest.features.filter(feature=>feature!=='billing.platform.v1')}),/incompatible/);
   } finally { await client.query('rollback'); }
   for(const sql of [
     'alter function private.learning_authoring_actions() rename to test_missing_editing_actions',
