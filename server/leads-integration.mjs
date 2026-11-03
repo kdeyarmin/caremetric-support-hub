@@ -167,6 +167,16 @@ try {
   const invalid = await send('carebase', lead('carebase', 'demo_request', external('invalid'), { contact: { email: 'not an address' } }));
   assert.deepEqual(invalid, { status: 400, body: { error: 'invalid_lead' } });
   assert.deepEqual(await send('advisors', lead('advisors', 'consultation', external('advisors-key'))), { status: 400, body: { error: 'invalid_lead' } }, 'an Advisors inquiry needs its CM- reference');
+  // An address and nothing else: nothing a mailto: link could read as headers or another recipient is accepted.
+  const unsafeAddresses = { 'mailto-bcc': `visitor-${run}@example.org?bcc=other%40example.net`, 'mailto-and': `visitor-${run}&co@example.org`,
+    'mailto-comma': `visitor-${run}@example.org,other@example.net`, 'mailto-slash': `visitor/${run}@example.org` };
+  for (const [name, email] of Object.entries(unsafeAddresses)) {
+    assert.deepEqual(await send('carebase', lead('carebase', 'contact', external(name), { contact: { email } })), { status: 400, body: { error: 'invalid_lead' } }, `refused: ${name}`);
+  }
+  assert.equal(Number((await row('select count(*) from private.leads where external_id = any($1)', [Object.keys(unsafeAddresses).map(external)])).count), 0);
+  const punctuated = await send('intel', lead('intel', 'newsletter', external('punctuated'), { contact: { email: ` O'Brien.Visitor+${run}@Example.org ` } }));
+  assert.equal(punctuated.status, 202, 'an address with an apostrophe and a plus is accepted');
+  assert.equal((await row('select contact_email from private.leads where id = $1', [punctuated.body.id])).contact_email, `o'brien.visitor+${run}@example.org`);
   const tooLarge = await send('carebase', null, { raw: JSON.stringify(lead('carebase', 'contact', external('large'), { message: 'x'.repeat(4000), details: { notes: 'é'.repeat(200) } })).padEnd(16385, ' ') });
   assert.deepEqual(tooLarge, { status: 413, body: { error: 'too_large' } });
   const partly = leadIntake({ pool, secrets: { carebase: secrets.carebase }, enabled: true, limit: 1, log: line => console.info(line) });
@@ -210,6 +220,11 @@ try {
   const page = await listing({});
   assert.equal(page.status, 200);
   const parsed = leadPageSchema.parse(page.body);
+  // Every page reports the deepest offset the list serves; that page is served and the database refuses one past it.
+  assert.equal(parsed.maxOffset, 10000);
+  assert.equal((await listing({ p_offset: parsed.maxOffset })).status, 200, 'the deepest page is served');
+  await assert.rejects(withSession(pool, ownerToken, db => db.query('select hub.list_leads(null, null, false, $1, 25)', [parsed.maxOffset + 1])),
+    error => error.code === '22023', 'a page past it is refused');
   const mine = parsed.items.filter(item => leadIds.has(item.id));
   assert.ok(mine.some(item => item.id === demo.body.id), 'the demo request is listed');
   assert.ok(!mine.some(item => item.id === probe.body.id), 'a test lead is left out by default');

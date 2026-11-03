@@ -210,8 +210,9 @@ Implemented in `server/leads.mjs` (backend feature `support.leads.v1`, migration
 
 Owner (same-origin, SMS session):
 
-- `POST /api/rpc/list_leads` — `{ p_kind, p_source, p_include_test, p_offset, p_limit ≤ 50 }` → `{ items, total,
-  offset, limit }`, newest first; test leads only when `p_include_test` is true. Needs the administrator session.
+- `POST /api/rpc/list_leads` — `{ p_kind, p_source, p_include_test, p_offset ≤ maxOffset, p_limit ≤ 50 }` → `{ items,
+  total, offset, limit, maxOffset }`, newest first; test leads only when `p_include_test` is true. `maxOffset` (10000)
+  is the deepest offset the function serves; the Leads screen stops paging there. Needs the administrator session.
 - `POST /api/admin/leads/status` — `{ id, status: "new" | "contacted" | "qualified" | "won" | "lost" | "spam",
   expectedUpdatedAt }` → the lead. Needs the command session (under eight hours old); a stale `expectedUpdatedAt`
   returns 409, a lapsed session 401, an unknown lead 404. Unknown keys are refused with 400.

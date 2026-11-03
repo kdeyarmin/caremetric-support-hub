@@ -22,6 +22,13 @@ export const leadStatusLabels: Record<LeadStatus, string> = {
   new: "New", contacted: "Contacted", qualified: "Qualified", won: "Won", lost: "Lost", spam: "Spam",
 };
 
+/**
+ * A lead's address, exactly as the Hub's intake and its table check it (20261103120000_lead_desk.sql): lowercase letters,
+ * digits and . _ ' + - in dot-separated parts before one @, and dot-separated labels of letters, digits and hyphens
+ * after it. Nothing that means something in a URL or a mailto: link (? & # % / \ , ; : = and the like).
+ */
+export const leadEmailPattern = /^[a-z0-9_'+-]+(\.[a-z0-9_'+-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)+$/;
+
 const instant = z.string().min(10).max(64);
 const optional = z.string().nullable();
 export const leadSchema = z.object({
@@ -33,7 +40,7 @@ export const leadSchema = z.object({
   test: z.boolean(),
   occurredAt: instant,
   receivedAt: instant,
-  contact: z.object({ name: optional, email: z.string().min(3).max(320), phone: optional, organization: optional, role: optional }),
+  contact: z.object({ name: optional, email: z.string().min(3).max(320).regex(leadEmailPattern), phone: optional, organization: optional, role: optional }),
   details: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
   attribution: z.object({
     utmSource: optional, utmMedium: optional, utmCampaign: optional, utmTerm: optional, utmContent: optional,
@@ -48,6 +55,8 @@ export const leadSchema = z.object({
 });
 export const leadPageSchema = z.object({
   items: z.array(leadSchema), total: z.number().int().nonnegative(), offset: z.number().int().nonnegative(), limit: z.number().int().positive(),
+  /** The deepest offset hub.list_leads serves. The screen reads it from each page and stops paging there. */
+  maxOffset: z.number().int().nonnegative(),
 });
 export type Lead = z.infer<typeof leadSchema>;
 export type LeadPage = z.infer<typeof leadPageSchema>;

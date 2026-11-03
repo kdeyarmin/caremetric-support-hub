@@ -21,10 +21,11 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("Leads client", () => {
   it("reads a page through the RPC allowlist with the database's parameter names", async () => {
-    const fetcher = respond({ items: [lead], total: 1, offset: 0, limit: 25 });
+    const fetcher = respond({ items: [lead], total: 1, offset: 0, limit: 25, maxOffset: 10000 });
     vi.stubGlobal("fetch", fetcher);
     const result = await leadsClient.list({ kind: "consultation", source: null, includeTest: false, offset: 0, limit: 25 }, { signal: new AbortController().signal });
     expect(result.items[0].conversation?.reference).toBe("CM-1001");
+    expect(result.maxOffset).toBe(10000);
     const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("/api/rpc/list_leads");
     expect(init).toMatchObject({ method: "POST", credentials: "same-origin", cache: "no-store", redirect: "error", headers: { "Content-Type": "application/json" } });
@@ -59,8 +60,14 @@ describe("Leads client", () => {
   it("does not trust an answer that is not the shape it expects", async () => {
     vi.stubGlobal("fetch", respond({ ...lead, status: "maybe" }));
     await expect(leadsClient.setStatus({ id: lead.id, status: "won", expectedUpdatedAt: lead.updatedAt })).rejects.toThrow();
-    vi.stubGlobal("fetch", respond({ items: [{ ...lead, message: undefined, details: { nested: { no: true } } }], total: 1, offset: 0, limit: 25 }));
-    await expect(leadsClient.list({ kind: null, source: null, includeTest: false, offset: 0, limit: 25 }, { signal: new AbortController().signal })).rejects.toThrow();
+    const list = () => leadsClient.list({ kind: null, source: null, includeTest: false, offset: 0, limit: 25 }, { signal: new AbortController().signal });
+    vi.stubGlobal("fetch", respond({ items: [{ ...lead, message: undefined, details: { nested: { no: true } } }], total: 1, offset: 0, limit: 25, maxOffset: 10000 }));
+    await expect(list()).rejects.toThrow();
+    // A page must say how deep the list goes, and an address must be an address and nothing more.
+    vi.stubGlobal("fetch", respond({ items: [lead], total: 1, offset: 0, limit: 25 }));
+    await expect(list()).rejects.toThrow();
+    vi.stubGlobal("fetch", respond({ items: [{ ...lead, contact: { ...lead.contact, email: "robin@lakeside.example?bcc=other%40example.net" } }], total: 1, offset: 0, limit: 25, maxOffset: 10000 }));
+    await expect(list()).rejects.toThrow();
     vi.stubGlobal("fetch", vi.fn(async () => new Response("<html>", { status: 502 })));
     await expect(leadsClient.setStatus({ id: lead.id, status: "won", expectedUpdatedAt: lead.updatedAt })).rejects.toMatchObject({ message: "The request could not be completed." });
   });

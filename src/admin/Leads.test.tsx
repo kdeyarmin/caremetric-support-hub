@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Leads } from "./Leads";
 import { LeadsApiError } from "./leadsClient";
-import type { LeadsClient } from "./leadsClient";
+import type { LeadFilter, LeadsClient } from "./leadsClient";
 import { attributionSummary, detailLabel, detailValue } from "./leadsProtocol";
 import type { Lead, LeadPage } from "./leadsProtocol";
 
@@ -26,7 +26,11 @@ const newsletter: Lead = {
   ...demo, id: "33333333-3333-4333-8333-333333333333", source: "intel", kind: "newsletter", externalId: "intel-7",
   contact: { name: null, email: "reader@agency.example", phone: null, organization: null, role: null }, details: {}, attribution: noAttribution, conversation: null,
 };
-const page = (items: Lead[], total = items.length, offset = 0): LeadPage => ({ items, total, offset, limit: 25 });
+const page = (items: Lead[], total = items.length, offset = 0, maxOffset = 10000): LeadPage => ({ items, total, offset, limit: 25, maxOffset });
+/** A full page of 25 distinct leads. */
+const fullPage = () => Array.from({ length: 25 }, (_, n): Lead => ({
+  ...newsletter, id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`, contact: { ...newsletter.contact, email: `reader${n}@agency.example` },
+}));
 function fakeClient(data: LeadPage = page([demo, newsletter]), overrides: Partial<LeadsClient> = {}): LeadsClient {
   return { list: vi.fn(async () => data), setStatus: vi.fn(async input => ({ ...demo, status: input.status, updatedAt: "2026-11-03T12:05:00.000001+00:00" })), ...overrides };
 }
@@ -113,6 +117,45 @@ describe("Leads screen", () => {
     await table();
     fireEvent.change(screen.getByLabelText("Status for Jordan Rivera"), { target: { value: "new" } });
     expect(client.setStatus).not.toHaveBeenCalled();
+  });
+
+  it("opens a message to the lead's address only, whatever the stored value holds", async () => {
+    const odd: Lead = { ...demo, id: "44444444-4444-4444-8444-444444444444", contact: { ...demo.contact, name: "Odd Address", email: "jordan@example.org?bcc=other%40example.net" } };
+    render(<Leads client={fakeClient(page([demo, odd]))} />);
+    await table();
+    expect(within(rowOf("Jordan Rivera")).getByRole("link", { name: "jordan@sunrise.example" }).getAttribute("href")).toBe("mailto:jordan@sunrise.example");
+    const link = within(rowOf("Odd Address")).getByRole("link", { name: "jordan@example.org?bcc=other%40example.net" });
+    expect(link.getAttribute("href")).toBe("mailto:jordan@example.org%3Fbcc%3Dother%2540example.net");
+    expect(link.getAttribute("href")).not.toMatch(/[?&,;]/);
+  });
+
+  it("offers the first page when the page it is on has emptied, as when retention deletes its last lead", async () => {
+    const list = vi.fn(async (filter: LeadFilter) => filter.offset === 0 ? page(fullPage(), 26, 0) : page([], 25, filter.offset));
+    render(<Leads client={fakeClient(undefined, { list })} />);
+    await table();
+    fireEvent.click(screen.getByRole("button", { name: "Older" }));
+    expect(await screen.findByText("No leads on this page now (25 leads in all).")).toBeTruthy();
+    expect(screen.queryByText(/No leads yet/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "First page" }));
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 0 }), expect.anything()));
+    expect(await screen.findByText("Showing 1–25 of 26")).toBeTruthy();
+  });
+
+  it("stops paging at the deepest page the database serves, as each page reports it", async () => {
+    const list = vi.fn(async (filter: LeadFilter) => page(fullPage(), 500, filter.offset, 50));
+    render(<Leads client={fakeClient(undefined, { list })} />);
+    await table();
+    const older = () => screen.getByRole("button", { name: "Older" }) as HTMLButtonElement;
+    fireEvent.click(older());
+    expect(await screen.findByText("Showing 26–50 of 500")).toBeTruthy();
+    expect(older().disabled).toBe(false);
+    expect(screen.queryByText(/as far back as the list pages/)).toBeNull();
+    fireEvent.click(older());
+    expect(await screen.findByText("Showing 51–75 of 500")).toBeTruthy();
+    expect(older().disabled).toBe(true);
+    expect(screen.getByText("This is as far back as the list pages. Choose a kind or product to see older leads.")).toBeTruthy();
+    fireEvent.click(older());
+    expect(list.mock.calls.map(([filter]) => filter.offset)).toEqual([0, 25, 50]);
   });
 
   it("says plainly when there are no leads yet, and when filters match none", async () => {
