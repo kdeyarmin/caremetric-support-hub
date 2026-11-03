@@ -89,6 +89,50 @@ a pinned empty search path on all of them. Each test fails closed, so a function
 was reset (which leaves it null) is refused. The Hub server uses the fenced operations only when the feature is
 declared.
 
+`20261103120100_lead_desk_contract.sql` declares `support.leads.v1` only after `support.communications.v1` is
+declared and the lead desk keeps its boundary: `private.leads` exists with row level security and grants nothing to any
+browser, service or server role; the conversation table's source check accepts `carebase.web`, `intel.web` and
+`advisors.web`; `private.lead_intake(text,jsonb)` and `private.lead_retention(integer)` (which deletes leads and website
+conversations twelve months on) are security definers with a pinned empty search path, executable by `hub_app_server`
+alone and calling `private.require_hub_app_server()`; their helpers (`private.lead_text`, `private.lead_instant`,
+`private.lead_json`, `private.lead_record`, `private.lead_retention_batch`) pin an empty search path and are executable
+by no application role; and `hub.list_leads(...)` authorizes the administrator session and
+`hub.update_lead_status(...)` the command session themselves. Every test fails closed. The Hub server answers
+`POST /api/leads` and runs lead retention only when the feature is declared (read at boot);
+`src/lib/backendContract.ts` does not require it, so the migrations can be applied before or after the build that uses
+them. See [LEAD_INTAKE.md](LEAD_INTAKE.md).
+
+`20261103130100_agent_growth_contract.sql` declares `platform.agents.growth.v1` only after `platform.agents.v1`,
+`platform.agents.probes.v1` and `support.leads.v1` are declared and the Growth Manager keeps its boundary: `private.leads`
+still has row level security, grants nothing to any browser, service or server role and has its `growth_seen_at` column;
+`private.agent_growth_pending`, `agent_growth_lead`, `agent_growth_mark_seen`, `agent_growth_unanswered`,
+`agent_growth_facts`, `agent_lead_probe_seen` and the conversation snapshot they extend are security definers with a pinned
+empty search path, executable by `hub_app_server` alone and calling `private.require_hub_app_server()`; their helpers pin an
+empty search path and are executable by no application role; and the Growth Manager, its three schedules and the Platform
+Engineer's lead form check exist. Every test fails closed. The Hub server registers the Growth Manager's handlers only when the
+feature is declared (read at boot); `src/lib/backendContract.ts` does not require it. See [AI_TEAM.md](AI_TEAM.md).
+
+`20261103140100_agent_lifecycle_contract.sql` declares `platform.agents.lifecycle.v1` only after
+`platform.agents.accounts.v1`, `platform.agents.hardening.v1` and `support.bulk-email.v1` are declared, the
+customer email ledger keeps row level security with no privilege for any browser, service or server role, the
+`email.send` action kind has its shape check and its once-per-period unique index, the three new operations
+(`private.agent_lifecycle_snapshot(...)`, `private.agent_lifecycle_begin_send(...)`,
+`private.agent_lifecycle_finish_send(...)`) and the two it replaced (`private.agent_action_propose(...)`, which must
+carry the per-template rule, and `private.email_unsubscribe(...)`) are security definers with a pinned empty search
+path executable by `hub_app_server` alone, the facts helper is executable by no role, and the Account Manager has its
+`auto_send_templates` setting and its daily customer email schedule. Each test fails closed. The Hub server registers
+the customer email handler and executor only when the feature is declared.
+
+`20261103150100_agent_content_contract.sql` declares `platform.agents.content.v1` only after `platform.agents.v1`,
+`platform.agents.hardening.v1`, `knowledge.publications.v1` and `support.communications.v1` are declared, the
+`content.publish` action kind (aimed at a `content_item`) has its shape check and its once-per-address and
+once-per-topic unique indexes, `private.agent_content_state(...)` and `private.agent_content_publish(...)` are
+security definers with a pinned empty search path executable by `hub_app_server` alone (publishing must refuse an
+action the owner did not decide and author as the AI assistant profile, which must exist), and the Content Marketer
+has its settings and its two daily schedules. Each test fails closed. The Hub server registers the Content Marketer's
+handlers only when the feature is declared and a model key is set, and its publish executor only when the feature is
+declared.
+
 The table above is not exhaustive:
 later features such as the `billing.*` and `customer.self-service.v1` boundaries are declared
 by their own migrations and listed in `src/lib/backendContract.ts`. See [AI_TEAM.md](AI_TEAM.md).

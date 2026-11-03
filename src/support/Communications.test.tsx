@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { Communications } from "./Communications";
 import { ChatPanel } from "./ChatPanel";
 import { demoCommunicationsClient } from "./demoCommunications";
-import { replyRoute, type ChannelStatus, type ChatClient, type Conversation } from "./communicationsClient";
+import { conversationSourceLabel, replyRoute, type ChannelStatus, type ChatClient, type Conversation } from "./communicationsClient";
 import type { Product } from "../domain";
 
 afterEach(cleanup);
@@ -61,6 +61,18 @@ describe("unified communications inbox", () => {
     expect(list.mock.calls[0][0]).not.toHaveProperty("status");
     expect((screen.getByPlaceholderText(/CM-1001/) as HTMLInputElement).value).toBe("CM-1001");
     expect((screen.getByLabelText("Status") as HTMLSelectElement).value).toBe("");
+  });
+  it("names the website a lead's conversation came from", async () => {
+    render(<Communications products={products} actor={actor} client={client()} />);
+    fireEvent.click(within(await screen.findByRole("region", { name: "Conversations" })).getByText("Demo request: Maple Grove Assisted Living Facility"));
+    const thread = await screen.findByRole("region", { name: "Conversation" });
+    expect(await within(thread).findByText("Web form · CareBase website · CM-1004")).toBeTruthy();
+    expect(within(thread).getByText(/Role: Administrator/)).toBeTruthy();
+    expect(conversationSourceLabel("intel.web")).toBe("Intel website");
+    expect(conversationSourceLabel("advisors.web")).toBe("Advisors website");
+    expect(conversationSourceLabel("hub.sms")).toBeNull();
+    expect(conversationSourceLabel("breathe.phone")).toBeNull();
+    expect(conversationSourceLabel("constructor")).toBeNull();
   });
   it("opens with the filters a control-center link carries", async () => {
     render(<Communications products={products} actor={actor} client={client()} initialFilter={{ channel: "sms", productId: products[0].id }} />);

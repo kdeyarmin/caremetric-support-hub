@@ -59,7 +59,7 @@ export function sqlAgentStore(pool, { fenced = false, growth = false } = {}) {
     notifyFinish: (id, delivery, providerMessageId = null) => call('private.agent_notify_finish', [id, delivery, providerMessageId]),
     ownerContact: () => call('private.owner_contact'),
     /** Counts and times for the morning brief: what needs the owner, what the team did yesterday. No names, no text. */
-    briefFacts: async () => { const facts=await call('private.agent_brief_facts');return growth ? {...facts,growth:await call('private.growth_brief_counts')} : facts; },
+    briefFacts: async () => { const facts=await call('private.agent_brief_facts');return growth ? {...facts,customerGrowth:await call('private.growth_brief_counts')} : facts; },
     /** Conversations whose newest inbound message has settled and nobody has answered or triaged. Ids and counts only. */
     conciergePending: ({ limit = 10, settleSeconds = 90, windowHours = 72, channels = null } = {}) =>
       call('private.agent_concierge_pending', [limit, settleSeconds, windowHours, channels]),
@@ -70,8 +70,44 @@ export function sqlAgentStore(pool, { fenced = false, growth = false } = {}) {
     notificationCount: ({ prefix, channel = null, since }) => call('private.agent_notification_count', [prefix, channel, since]),
     /** A snapshot of every account's billing facts, usage and case counts for the weekly report: names and numbers, never a contact address. */
     accountsSnapshot: ({ limit = 200 } = {}) => call('private.agent_accounts_snapshot', [limit]),
+    /**
+     * The facts the customer emails need, per account and product (or one account and product): names, dates and flags, never an
+     * address. Newest first, `limit` rows from `offset`; `truncated` says more rows follow this page.
+     */
+    lifecycleSnapshot: ({ limit = 200, tenant = null, product = null, offset = 0 } = {}) => call('private.agent_lifecycle_snapshot', [limit, tenant, product, offset]),
+    /**
+     * Records one approved customer email before it is sent and returns the one address it goes to (`{ state: 'ready', to }`), or why
+     * it may not go (`no_address`, `suppressed`, `daily_limit`, `auto_send_off`), or what an earlier attempt recorded (`recorded`, `status`).
+     * With no `unsubscribeHash` it only says whether a send was recorded (`recorded` or `unrecorded`) and changes nothing.
+     */
+    lifecycleBeginSend: ({ actionId, execution = null, unsubscribeHash }) => call('private.agent_lifecycle_begin_send', [actionId, execution, unsubscribeHash]),
+    lifecycleFinishSend: ({ actionId, delivery, providerMessageId = null }) => call('private.agent_lifecycle_finish_send', [actionId, delivery, providerMessageId]),
+    /**
+     * What the Content Marketer needs to choose a topic: its latest article action per topic, which of `slugs` another content
+     * item already uses, recent inbox conversations counted by product and inquiry type (never text) and the months whose
+     * outreach email is recorded.
+     */
+    contentState: (slugs = []) => call('private.agent_content_state', [slugs]),
+    /** Publishes the article an approved content.publish action carries, as the AI assistant with the owner's approval. */
+    contentPublish: (actionId, execution = null) => call('private.agent_content_publish', [actionId, execution]),
     /** One health check for one product. The database decides when that opens or closes an incident. */
     probeRecord: ({ targetKey, ok, statusCode, latencyMs, failure = null, threshold = 2, agentKey = 'platform_engineer' }) =>
       call('private.agent_probe_record', [targetKey, ok, statusCode, latencyMs, failure, threshold, agentKey]),
+    // The Growth Manager's reads (platform.agents.growth.v1). None returns a contact's name, address, phone number or message.
+    /** Website leads the Growth Manager has not looked at yet, oldest first, from the last `windowHours`: ids, kinds and products only. Test leads never appear. */
+    growthPending: ({ limit = 50, windowHours = 24 } = {}) => call('private.agent_growth_pending', [limit, windowHours]),
+    /** One lead as an alert may name it: kind, product, organization, a few facts, where it came from and its conversation's reference. */
+    growthLead: id => call('private.agent_growth_lead', [id]),
+    /** Marks leads as looked at, so each is handled once. Returns how many were newly marked. */
+    growthMarkSeen: ids => call('private.agent_growth_mark_seen', [ids]),
+    /**
+     * Lead conversations to remind the owner about: waiting at least the smallest of `steps` (minutes) and less than `maxMinutes`, whose
+     * current step has not been reminded yet, the most recent first, each with its step. Reminded steps are left out before the limit.
+     */
+    growthUnanswered: ({ steps, maxMinutes, limit = 50 }) => call('private.agent_growth_unanswered', [steps, maxMinutes, limit]),
+    /** Counts for the reports: leads by kind, product and source, trials, replies and what is still unanswered, between `since` and `until`. */
+    growthFacts: ({ since, until }) => call('private.agent_growth_facts', [since, until]),
+    /** Whether a test lead from `source` reached the Hub at or after `since`: the end of a lead form check. */
+    leadProbeSeen: ({ source, since }) => call('private.agent_lead_probe_seen', [source, since]),
   };
 }

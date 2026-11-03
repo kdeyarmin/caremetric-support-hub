@@ -6,13 +6,19 @@ is built so far.
 
 > **Status.** The database layer, the server scheduler, the `/admin/team` screen, the Platform
 > Engineer's health probes, the Chief of Staff's morning brief, the SEO Analyst's weekly report, the
-> Support Concierge's triage of new conversations, with the fixed replies it offers the owner, and the
-> Account Manager's weekly report on how each customer account is doing are in
-> place, and so is the model runtime they share (see "The model runtime"). The scheduler is inert
-> unless `HUB_AGENTS_ENABLED` is exactly `true` and every agent is seeded **paused**. The Concierge
-> drafts an answer to a plain question only while the owner has set
+> Support Concierge's triage of new conversations, with the fixed replies it offers the owner, the
+> Account Manager's weekly report on how each customer account is doing, with the short customer emails it
+> proposes for the owner to approve (see "Customer emails"), and the Growth Manager, which makes sure no website
+> lead waits (see "The Growth Manager"), are in
+> place, and so is the model runtime they share (see "The model runtime"). The Content Marketer drafts one public
+> help-center article a week for the owner to approve and a month's outreach drafts for the owner to send (see "The
+> Content Marketer"); its model calls carry no customer text. The scheduler is inert
+> unless `HUB_AGENTS_ENABLED` is exactly `true` and every agent is seeded **paused**. Only the Concierge
+> can send customer text to a model, only to draft an answer to a plain question, and only while the owner has set
 > `HUB_AGENTS_CUSTOMER_TEXT_TO_AI` to `true` ("Drafted answers"); otherwise customer message text never
-> leaves the Hub. The new Marketing Manager and customer-success workflows use structured business evidence; see [Customer growth](CUSTOMER_GROWTH.md) for their controls and activation. Growth is limited to CareBase and Intel.
+> leaves the Hub. The SEO Analyst also calls the model, with the company's own public pages only, to suggest
+> titles and descriptions ("The SEO Analyst").
+> The Marketing Manager and shared customer-success workspace add CareBase and Intel prospecting, activation and retention workflows. See [Customer growth](CUSTOMER_GROWTH.md) for their separate controls and activation. Breathe remains deferred.
 
 ## The model
 
@@ -32,7 +38,9 @@ Each agent has one autonomy level, changed only by the owner:
 - **observe**: reads and reports. It cannot propose actions.
 - **propose**: drafts actions. Every one waits for the owner to approve it.
 - **act**: carries out the action kinds listed in the agent's `auto_approve_kinds` setting on its
-  own and proposes everything else.
+  own and proposes everything else. A customer email (`email.send`) is the exception: it goes out on its
+  own only when its template is listed in the agent's `auto_send_templates`, never for its kind.
+  See "Customer emails".
 
 An approved action is carried out by the server through the existing reviewed path (for a reply,
 the same staff reply operation the inbox uses, under the action's request key), so a retry can
@@ -118,6 +126,39 @@ The agent never restarts, redeploys or changes anything. Restart proposals come 
 owner's approval. A probe inside the Hub cannot see the Hub stop; keep the external check described
 under "The Hub cannot watch itself" below.
 
+### The lead forms
+
+Every six hours (task `probe.forms`, shown as "Lead form check") the Platform Engineer also checks each product's main
+lead form end to end, exactly as [LEAD_INTAKE.md](LEAD_INTAKE.md) says under "Probe mode". It runs only when the database
+declares `platform.agents.growth.v1`.
+
+| Form | Address |
+| --- | --- |
+| CareBase lead form | `https://xsqobvvreaovwibxwyvv.supabase.co/functions/v1/request-demo` |
+| Intel lead form | `https://www.caremetricintel.com/api/public/demo-request` |
+| Advisors consultation form | `https://caremetricadvisors.com/api/inquiries` |
+
+The list is fixed in `server/agents/targets.mjs`, like the health addresses. For each product whose secret is set on the
+Hub (`HUB_LEAD_SECRET_CAREBASE`, `_INTEL`, `_ADVISORS`, at least 32 characters) it posts the endpoint's own JSON body with
+invented values (name "CareMetric Form Check", address `probe@caremetric.invalid`, which can never receive mail, and a message
+that says the request is an automated check), signed with `X-CareMetric-Probe` and `X-CareMetric-Timestamp`. A product with no
+secret on the Hub is skipped, never failed. A form passes when it answers 200 with `probe: true` and `forwarded: true` **and** a
+test lead from that product reached the Hub in the last ten minutes. Otherwise the check fails with one word: `timeout` (no
+answer within 20 seconds), `network`, `redirect`, `status` (any answer but 200, which is what a form that did not recognise the
+probe, or whose secret does not match, gives back), `not_probe` (200 without `probe: true`), `not_forwarded` (the form could not
+pass the test lead on; the Hub status it reports is kept) or `not_received` (it said it did, and no test lead arrived).
+
+Each result is recorded under the form's own target (`carebase_forms`, `intel_forms`, `advisors_forms`) through
+`private.agent_probe_record`, so a form follows the rules above: one failure is a blip, two in a row open an incident ("Intel
+lead form is not working", by text and email, saying what failed and that checks run every six hours), and the first pass closes
+it with one email. Because the second failure comes six hours after the first, a form's alert counts as late only after seven
+hours. A test lead never opens a conversation, never alerts and never counts in a report. The secret, the request and the
+form's answer are never logged or kept: a check keeps a status code, a latency, one failure word and the Hub status.
+
+A form that does not recognise the probe treats it as an ordinary submission. Most need a captcha that the probe does not carry,
+so nothing is stored; one that has no captcha may record it as a request from "CareMetric Form Check", whose message says the
+form's `HUB_LEAD_SECRET` does not match the Hub's. Set each product's secret before the Hub's.
+
 ## The Chief of Staff
 
 Writes the morning brief: one email at 07:00 Eastern (task `brief.daily`, shown as "Morning brief").
@@ -147,11 +188,13 @@ screen says the brief was written but not delivered.
 
 ## The SEO Analyst
 
-Checks the company's public websites once per week and emails what to fix. It uses no model and reads
-only public pages of the sites it is told about: Healthcare Advisors (`caremetricadvisors.com`),
-CareBase (`cmcarebase.com`, with `caremetrictrain.com` as another address) and CareMetric Intel
-(`www.caremetricintel.com`). The list is fixed in `server/agents/seo/sites.mjs`, a check never leaves a
-site's own host, and nothing a customer says can add a site.
+Checks the company's public websites once per Eastern week and emails what to fix. The crawl uses no model and reads
+only public pages of the sites it is told about: Healthcare Advisors (`caremetricadvisors.com`), CareBase
+(`cmcarebase.com`, with `caremetrictrain.com` as another address), CareMetric Intel
+(`www.caremetricintel.com`), the help center (`help.caremetric.ai`) and CareBase's Framer home page
+(`home.cmcarebase.com`). The list is fixed in `server/agents/seo/sites.mjs`, a check never leaves a site's own
+host, and nothing a customer says can add a site. `outboundHosts` in the same file is everything the analyst
+may contact: those hosts, their other addresses and Google's two Search Console endpoints.
 
 It reads each site the way a crawler that does not run scripts (and most AI assistants) does: plain GET
 requests that follow no redirect, at most 20 pages and 30 links a site, 8 seconds a request, 600 KB a
@@ -161,7 +204,11 @@ page and about two and a half minutes a site.
   are one group, as in RFC 9309), a sitemap exists and lists pages on the site, plain http redirects
   permanently to the site's own https address (an error answer, or a redirect to http or to another site, is
   a problem), and the other addresses for the site redirect to it with a permanent redirect (or name it as
-  canonical).
+  canonical). The home page is read first. When it redirects to another of the company's sites (the Framer page
+  sent to `cmcarebase.com`, say), its redirects are followed across the company's sites only, at most five of
+  them: a chain that ends at a page that loads means the site is checked no further, and the report says where
+  it ends and asks only that every redirect be permanent; a loop, or a chain that ends in an error, goes nowhere
+  or leaves the company's sites, is urgent.
 - **Its pages**, which are the home page and the pages in the sitemap (or the pages the home page links
   to when there is no sitemap): reachable, HTML, not marked noindex, a title and a description of a
   sensible length that no other page shares, a canonical link, one main heading, enough text before
@@ -171,7 +218,15 @@ page and about two and a half minutes a site.
   `/pricing` and `/pricing/`), and only the site root is written either way. A canonical link that differs
   from the page's address only by case or a trailing slash is therefore reported. Each address and detail in a
   finding is cut to a fixed length (160 and 240 characters), so a very long address in a sitemap cannot make
-  the email or the stored result large.
+  the email or the stored result large. A thin page (under 50 words before scripts run) that is built to be
+  filled in by scripts (it has the element a single-page app framework renders into, such as
+  `<div id="root">`, or loads a module script) is an **app shell**, and the report says plainly that search
+  engines and AI assistants that do not run JavaScript see almost nothing on it.
+- **Across the sites**: two of the company's hosts serving the same page split what search engines credit to
+  it. Two sites that are both home pages for one product (CareBase's own site and its Framer page), a
+  canonical link on one host that names another of the company's hosts, or the same title on pages of two
+  hosts are reported once per pair of hosts as "pick one canonical home page", with an address on each, and
+  counted as worth fixing. A page marked noindex counts for none of them.
 
 Each finding is **urgent** (it could keep pages out of search results), **worth fixing** or **minor**. The
 email lists each site's worst problems with an example page and scores each site out of 100 by how many
@@ -181,10 +236,79 @@ all-clear: with nothing found the email says "nothing found, but not every check
 a browser, which is itself worth knowing: many crawlers and AI assistants see only what is there before
 scripts run.
 
+### Search Console (optional)
+
+When the Hub service has `HUB_SEARCH_CONSOLE_CREDENTIALS` (a Google service account's JSON key, pasted whole;
+a secret) and `HUB_SEARCH_CONSOLE_SITES` (the properties, separated by commas, exactly as Search Console names
+them: `sc-domain:cmcarebase.com`, `https://www.caremetricintel.com/`; an address prefix is kept as written, so
+write it with its final `/` as Search Console shows it), the analyst reads Search Console while it
+crawls (`server/agents/seo/search-console.mjs`). It signs in as the service account with a JWT it signs itself
+(RS256 with `node:crypto`, no Google library), exchanged at `https://oauth2.googleapis.com/token` for a
+read-only token (`webmasters.readonly`) that is kept in memory until a minute before it expires. Each property
+gets five `searchAnalytics.query` calls: the totals for the last 28 days of final data (ending three days back,
+in Search Console's Pacific day) and for the 28 days before, and up to 250 rows by search, by page and by both
+together. Every request goes to `oauth2.googleapis.com` or `searchconsole.googleapis.com` only, follows no
+redirect, gives up after 15 seconds and is tried once more after a timeout, a dropped connection, a rate limit
+or a server error; a token Google refuses is replaced once. A property that cannot be read does not stop the
+others, and the report says why in plain words (for example that the service account is not a user on it). The
+key, the signed assertion and the token never reach a log line, an error, a stored result or the email.
+
+The report then gives, for each property, clicks, impressions, click-through rate and average position against
+the 28 days before, with its top searches and pages, and across the properties:
+
+- **Close to the first page** (striking distance): searches at an average position of 8 to 20 with at least 20
+  impressions, most seen first. Moving these up is the cheapest win there is.
+- **Seen often, rarely clicked**: first-page pages (average position 10 or better) with at least 100
+  impressions, clicked less than half as often as a result in that position usually is. Their titles and
+  descriptions are worth rewriting.
+- **Your own sites compete** (cannibalization): searches for which pages on two of the company's hosts both
+  appear, such as `cmcarebase.com` and `home.cmcarebase.com`, with at least 10 impressions between them.
+
+A search that looks personal (an email address, or a phone number or another run of seven or more digits) is
+left out of the report and away from the model. Searches are told apart by their whole text (only the label shown
+is cut to 80 characters), and when two properties overlap (a domain property and an address prefix inside it) a
+row both report is listed once, with the first property's figures, before each list is cut to five. These are
+opportunities, not problems: they do not change the
+count of things to fix. Without Search Console the report says once that it is not connected, and how to
+connect it: in Google Cloud, create a service account and a JSON key for it, and enable the Google Search
+Console API in that project; in Search Console, add the service account's email address as a user on each
+property (Restricted is enough); then set the two variables on the Hub service and redeploy. The integration
+setup panel shows whether they are set.
+
+### Suggested titles and descriptions (optional)
+
+When the model runtime is configured (`ANTHROPIC_API_KEY` is set), the analyst makes one call a week through
+the shared runtime (the agent's `fast` tier, its daily budget, 50 cents as seeded, a run row and a usage ledger entry)
+for up to five pages chosen by code: first the pages Search Console shows are seen often but rarely clicked,
+then pages with no title, then pages whose title is too short, too long or shared, then pages whose
+description is missing, the wrong length or shared. A page is offered only if it is in search results and has
+at least 50 words of its own before scripts run, so an app shell is never guessed at. The model sees, for each
+page, the site's name, the address, why it was picked, its current title and description, the start of its
+visible text (2,000 characters) and the searches that show it: public text only, never customer data. The system
+prompt is a constant (`server/agents/seo/rewrite.mjs`, version `seo-rewrite.2`), every page's text is escaped
+into its own block, and the answer is a closed schema that names pages only by id.
+
+Code checks each suggestion and drops the ones that fail: a title of 20 to 60 characters and a description of
+70 to 155; letters, digits and ordinary punctuation only (no markup, quotation marks, emoji, symbols, links or
+addresses); no phone number, even one the page shows; no word about money ("free", "paid", "price", "pricing",
+"cost", "fee", "discount", "save" and the like); no claim about results ("best", "guaranteed", "HIPAA-compliant"
+and the like), compliance among them ("become", "stay" or "be compliant", "compliance guaranteed", "pass your
+survey" or "inspection"); no number the page itself does not use; the company's vocabulary (Assisted Living Facility or ALF and surveyor, never Assisted Living Residence, ALR or
+auditor); and not the page's current title and description again, or another suggestion's title. The email
+shows each suggestion that passes with its page and why it was picked, and says how many were dropped. Nothing
+on any site is changed: the owner copies what they want. Without a model the section is left out. A model that
+fails, declines, is over budget or would run past its deadline (the call must end within 200 seconds of the
+task's start, so the report still goes out inside the scheduler's four minutes) leaves one line instead, and the
+report goes out regardless. The call is paid for once per report: a retry in the same server reuses the checked
+suggestions, and a report that already has an email under its own dedupe key (sent, on its way or tried) gets no
+new call. The stored task result keeps scores, counts and codes only: no page text, no search and no suggestion.
+
 The schedule fires every morning at 06:30 Eastern, because an interval schedule is limited to a day. The
 weekly work catches up on the first available morning of the Eastern week; later mornings skip confirmed or uncertain attempts. **Run now** checks on any day and
-sends a report every time, while the scheduled report is attempted once per Eastern week, with bounded retries for definite failures. The analyst is observe-only
-and proposes no actions. Turning findings into issues for the coder bot is a later step.
+sends a report every time, while the scheduled report is attempted once per Eastern week, with bounded retries for definite failures.
+A task the scheduler has stopped waiting for sends nothing. The audit is read-only. With the customer-growth feature
+and Propose mode, a separate task can propose product content briefs; see [Customer growth](CUSTOMER_GROWTH.md).
+Turning audit findings into issues for the coder bot is a later step.
 
 ## The Support Concierge
 
@@ -224,9 +348,12 @@ many times each side has written). It then:
    warning, the alert says the rest was not screened, and nothing is offered to the customer or sent to the
    model for it: it is yours to read. That holds even for a long message that opens like an automatic reply.
 3. **Tells the owner**: an outage, a security concern or a legal matter is **urgent** (text and email);
-   billing, a cancellation or a message with identifiers is a **warning** (email); anything else is
+   billing, a cancellation, a sales inquiry or a message with identifiers is a **warning** (email); anything else is
    **information** (email). Alerts say the kind of message, the channel, the product, the reference and how
-   long ago it arrived, and "nothing has been sent to the customer". Never what the customer wrote.
+   long ago it arrived, and "nothing has been sent to the customer". Never what the customer wrote. A prospect's
+   message is a sales inquiry whatever its words say (a demo request may read only "Please contact me"): one in a
+   conversation a website lead form opened (source `carebase.web`, `intel.web` or `advisors.web`), or in one filed as a
+   `sales` or `advisors` inquiry, unless it reads as something urgent, billing or a cancellation. One filed as billing never is.
 
 Alerts are capped so that anyone who can write to the support address cannot flood the owner (the count and the
 send go through one at a time, so tasks running together cannot all read the same count): at most 20
@@ -246,16 +373,24 @@ It leaves a run on the owner's screen for each message it triaged (model `none`,
 a summary that names the reference, the channel and the category).
 
 **Fixed replies.** For a plain question it also proposes one reply for the owner to approve
-(`communication.reply`; the exact text is the preview). Both are written once, in
+(`communication.reply`; the exact text is the preview). All three are written once, in
 `server/agents/concierge/templates.mjs`: an **acknowledgment** (the message arrived and a member of the team
-will review it) and, when the question carries identifiers, a **notice** saying these channels are not set up
+will review it); when the question carries identifiers, a **notice** saying these channels are not set up
 for patient or resident information and asking the sender to resend without names, dates of birth, record
-numbers or health details. Neither repeats anything the customer wrote, mentions AI or a phone call, or
-promises a time or an outcome; a text message gets a shorter version that fits one message. The owner answers
-everything else personally: an outage, a security or legal matter, billing, a cancellation, a sales or
-consulting inquiry, anything from the Advisors form, and any follow-up in a thread the team already joined.
-That holds for how a conversation was filed as well as for its words: one filed as billing (a phone-line
-message may read only "Please help") never gets a fixed reply or reaches the model.
+numbers or health details; and, for a prospect's first message (above) that reads as a plain question or a sale,
+the **sales acknowledgment**, in the owner's own voice: "Thank you for reaching out to CareMetric. I have your
+request, and I will follow up with you personally today." When the owner's booking page is set (`HUB_BOOKING_URL`,
+an https address of at most 200 characters, with no user name or password) it adds "If you would like to set a time
+now, pick a time that suits you: <link>"; a text message carries the link only when it still fits one message. That
+template is the only place the Concierge ever offers a link, and the only reply that names a day, because the owner
+approves it the day it is sent. None repeats anything the customer wrote, mentions AI, a phone call or voicemail,
+names a price or promises an outcome; a text message gets a shorter version that fits one message. A prospect whose
+message carries identifiers gets only the notice. The owner answers everything else personally: an outage, a security
+or legal matter, billing, a cancellation, a sale in an ordinary conversation, anything else from Healthcare Advisors,
+and any follow-up in a thread the team already joined. That holds for how a conversation was filed as well as for its
+words: one filed as billing (a phone-line message may read only "Please help") never gets a fixed reply or reaches the
+model. The conversation snapshot names the system a conversation came from (`sourceSystem`, one of a fixed list) for
+this; a database without the Growth Manager's migration does not, and then the inquiry type alone decides.
 
 An approved reply is sent the way the owner would send it, through the inbox's own reply
 (`communications.reply`): it authorizes the owner's live session, is recorded before it is sent, goes out
@@ -311,8 +446,8 @@ message that tells it to ignore its rules or promise something is read as part o
 **What the code does with it.** The model never causes anything. Its reading can only add caution: an
 ordinary question it calls urgent, or an outage, a security or legal matter, raises a second alert (text and
 email, under the same caps) and offers no reply; an urgent reading raises that alert whatever the topic, so a
-billing question it calls urgent is texted too; billing or a cancellation otherwise raises a warning and offers none;
-a sale offers none; personal information it finds gets the fixed notice that asks the sender to resend
+billing question it calls urgent is texted too; billing, a cancellation or a sale otherwise raises a warning and offers
+none; personal information it finds gets the fixed notice that asks the sender to resend
 without it, and a warning. A draft is offered only if every check in `draft.mjs` passes: it cites a guide
 it was given; fits its channel (320 characters including the greeting for a text message, 1,500 otherwise);
 has no markup, link, email address or phone number; passes the same identifier screen as the inbound
@@ -351,10 +486,10 @@ Hub whose database lacks the migration still starts and the sweep stays due inst
 ## The Account Manager
 
 Emails the owner every Monday how the customer accounts are doing (task `accounts.weekly`, shown as "Weekly
-account report"). It uses no model, reads only what the Hub already holds, and **sends nothing to a
-customer**. Stripe's own customer emails (a failed payment, a trial ending, receipts) stay on; this agent
-never sends those and only tells the owner about them. Customer emails from the Account Manager, each one
-approved by the owner template by template, are a later step.
+account report"), and proposes a few short emails to customers that the owner approves (task `accounts.lifecycle`,
+shown as "Customer emails"; see "Customer emails" below). It uses no model and reads only what the Hub already
+holds. Stripe's own customer emails (a failed payment, a trial ending, receipts) stay on; this agent never
+sends or repeats those, and only tells the owner about them.
 
 **What it reads** is one server-only operation, `private.agent_accounts_snapshot`, over the mirrored Stripe
 data, the usage figures the applications report to the Hub and the support case counts. It never reads a
@@ -413,11 +548,255 @@ second server never sends twice. A failed delivery is retried by the notifier up
 email was switched off (not set up, so recorded as suppressed), or whose earlier attempt is stuck or unconfirmed,
 is not sent again by itself and the skipped run says `earlier_attempt_unconfirmed` instead of `already_sent`:
 press **Run now**, which always sends a fresh report under a key of its own. The agent starts paused and observe-only, and in
-observe it proposes nothing, since it has no actions yet.
+observe it proposes nothing.
 
 Its handler registers only when the database declares `platform.agents.accounts.v1`, so a Hub whose database
 lacks the migration still starts and the schedule stays due instead of failing. The declaration needs the
 control plane and the platform billing mirror.
+
+## The Growth Manager
+
+Makes sure no website lead waits, and shows the owner where customers come from. It uses no model, reads leads only
+through server-only operations that return no contact name, address, phone number or role and nothing a visitor wrote,
+and **sends nothing to a customer**. It starts paused and in Observe, and proposes no actions. Its handlers register only
+when the database declares `platform.agents.growth.v1` (which needs the control plane, the probes and the lead desk), so a
+Hub whose database lacks the migration still starts and its schedules stay due.
+
+- **New leads** (task `growth.leads`, every five minutes, "Look for new leads"). Each lead that is not a test, from the last
+  24 hours, is looked at once (`private.agent_growth_pending`, then `agent_growth_mark_seen`). A **trial sign-up** emails the
+  owner at once as a warning: "New CareBase trial: <organization>", with the product, the plan when the product sent one, the
+  other facts (the plan always among them) and where the visitor came from, and a button to Leads, under `growth:trial:<lead id>`.
+  A demo, consultation or contact request is left to the Support Concierge, which alerts on its conversation (see above). A
+  newsletter sign-up, savings model or county report waits for the morning brief and the weekly report. A trial alert the provider
+  refused leaves that lead unseen and the task fails transiently once the others are handled, so the scheduler tries it again and
+  only the refused channel is sent again; one that used up its tries is set aside (the brief still counts the lead). Marking a lead
+  seen never changes its version, so the Leads screen never refuses the owner's change because of it. A run is recorded when
+  something arrived, and once an hour otherwise.
+- **Unanswered leads** (task `growth.followup`, every fifteen minutes, "Chase unanswered leads"). A lead conversation is
+  waiting when its lead is not a test and still `new` on the Leads screen, its conversation is not closed, and nothing after the
+  lead's first message answers it: an internal note, or a reply that was not refused. A reply whose delivery failed reached nobody
+  and answers nothing; one still pending or of unknown outcome may have gone, so it counts. The owner gets one reminder per lead
+  and step of the agent's `followup_minutes` (default an hour, then a day), by email, as a warning: "Still unanswered after 1 hour:
+  demo request CM-1042", naming the product and how long it has waited, under `growth:followup:<lead id>:<step>`. A lead found
+  late gets only the largest step it has reached. `private.agent_growth_unanswered` leaves out the steps already reminded before
+  it limits its list to 50, so a longer backlog is worked through run by run and an older lead is never crowded out. A lead is
+  chased for a week (or a day past the largest step, when that is longer); after that it stays in the brief and the weekly report.
+  Nothing is sent during the agent's `quiet_hours` (default 21:00 to 07:00 America/New_York): the first run after them sends what
+  waited, and the key keeps each reminder once. A reminder the provider refused fails the task transiently once the others are
+  sent, so the scheduler tries it again under the same key, at most three times in all. Setting the lead's status on Leads
+  (contacted, qualified, won, lost or spam), answering, adding a note or closing the conversation stops the reminders.
+- **The weekly report** (task `growth.weekly`, "Weekly growth report"). The schedule fires every morning at 07:30 Eastern and
+  only Monday's run reports (the day is the one the task was due for, so a retry after midnight keeps it); every scheduled run in
+  an Eastern week uses `growth:weekly:<Monday>`, so the week is reported once, like the Account Manager's. A report the provider
+  refused fails the task transiently, so it is tried again under the same key instead of the week going unreported. **Run now**
+  reports on any day under a key of its own. It covers the seven Eastern days before the day it runs: leads by kind, product and
+  source (utm_source, else the referring host, else "direct"), trials started (trial sign-ups and live-mode Stripe trials that
+  began) and converted (live subscriptions whose trial ended in the week and that are active), the median time to a first
+  delivered reply (only a reply whose delivery is `sent` counts), the
+  lead conversations unanswered now, the top five landing pages and campaigns, and three suggestions. The suggestions are rules
+  with fixed words (`server/agents/growth/report.mjs`), first match first: leads still unanswered; a median first reply over an
+  hour; no leads at all; no lead from a search engine (connect Search Console); every lead from one source; no campaign tags;
+  trials to check in with; report downloads but no demo requests; then three that always apply (a customer quote, an article,
+  a referral). Test leads are never counted. It is information by email, with a button to Leads.
+- **The morning brief** gains a **Growth** section when the feature is declared (`private.agent_growth_facts` for yesterday):
+  new leads by kind, trials started, and the lead conversations unanswered now with the oldest wait. A lead waiting for a first
+  reply is also listed under "Needs you". If the figures cannot be read the section says so and the brief still goes out.
+
+**What it reads** (counts only, never a contact or a message): `private.agent_growth_pending` (ids, kinds and products),
+`agent_growth_lead` (kind, product, organization, up to six facts with the plan first, where the visitor came from and the
+conversation's reference), `agent_growth_unanswered` (lead id, kind, product, reference, minutes waiting and the step reached,
+for the steps the handler passes, with the steps already reminded left out), `agent_growth_facts` (the counts above, for a
+period of up to 93 days) and `agent_lead_probe_seen` (whether a test lead arrived, for the form check). Its one write is
+`agent_growth_mark_seen` (the `private.leads.growth_seen_at` column). The organization is the only name an alert carries.
+
+**Its settings** are in the agent's `config` and change by SQL only: `followup_minutes` (at most five steps, each 1 minute to
+30 days) and `quiet_hours` (`start` and `end` on a 24-hour clock and a `timezone`; a start equal to the end means none). A value
+it cannot use falls back to the default.
+
+### Customer emails
+
+A trial that hears nothing leaks: CareBase (30 days) and Intel (14 days) trials start through the Hub's billing, and
+a CareBase trial without a card cancels silently. The Account Manager proposes four short, fixed emails to the
+billing contact of a trial or a new paying account (task `accounts.lifecycle`, every morning at 08:20 Eastern).
+They are written once, in `server/agents/accounts/lifecycle.mjs`, use no model, and go out only after the owner
+approves the exact text on the Team screen, or, for an agent on **Act**, when the owner listed the template.
+
+| Email | When | What it says |
+| --- | --- | --- |
+| Welcome | Days 0 to 2 of a trial | Thank you for starting the trial, the first three steps for the product, and a button to its getting-started help (CareBase's help center, Intel's Help page) |
+| Setup help | Days 3 to 6 of a trial, only while the product has reported no positive usage for the account (a report of zero is not usage) | An offer of help with setup, and the help link |
+| Trial check-in | When 5 days or fewer (and more than 2) are left in a trial | A personal check-in asking whether anything is in the way. It says it is not a billing notice |
+| Testimonial request | 45 to 60 days after the account's first paid invoice for the product, on any subscription it has had for it, with no open high or urgent case | Would they share a sentence or two: their words are used only with their permission, in the form they approve, with or without their name, and a reply is how they say yes |
+
+They are plain, warm and short. They say nothing about AI, quote no price, promise no time or outcome, never
+mention a phone call or voicemail, and use the company's vocabulary for CareBase (Assisted Living Facility, ALF,
+surveyor). The welcome, the setup offer and the check-in add the owner's booking page as a "Pick a time" button
+when `HUB_BOOKING_URL` is an https address. Only CareBase and Intel have these emails. Stripe's own notices are
+never duplicated: the check-in never mentions a card, a price, an invoice or a date.
+
+**Who gets one.** The run reads one server-only operation, `private.agent_lifecycle_snapshot`: per account and
+product, a live trial or a live paid subscription on an account that first paid for the product at most 90 days ago
+(live-mode Stripe records only, by the Billing screen's mode rule, so nothing at all while the verified mode is
+test). The first payment is the earliest paid invoice of any live subscription the account ever had for the
+product, cancelled ones included, so replacing a subscription neither postpones the testimonial request nor makes an
+established account look new. For each it returns the tenant's slug and name, the product, the subscription's
+status and dates, that first payment's date, whether a usable billing address exists and whether it unsubscribed
+(never the address), whether the product has reported a positive usage quantity, how many high or urgent cases are
+open, and what became of each template's email before. The run reads these facts 200 at a time, newest first, up to
+2,000, and plans every page together, so newer trials never hide an older account whose email is due; a run that
+stops at 2,000 says so. Each template is proposed at most once per account and product, ever: its period key,
+`account:<template>:<tenant>:<product>`, is unique across every action, whichever run proposed it. A run proposes
+at most 20 emails, one per account (a second waits for the next run), and none to an account with no usable billing
+address, one that unsubscribed, one whose subscription is being cancelled, or a suspended or closed tenant.
+
+**What the owner approves.** Each email is an `email.send` action aimed at the account (`billing_account`, its
+slug). Its preview is the exact email: the subject line, the message and the footer (why it was sent, the
+unsubscribe line and the postal address; the personal unsubscribe link itself is made when it is sent). The card
+reads "Email to <account>: <subject>" and its button says "Approve and send". The action keeps only the facts that
+rebuild the email (template, account slug and name, product, help and booking links, the period key and a SHA-256
+hash of the wording), never an address; the database refuses an action with any other field.
+
+**Autonomy.** In **Observe** the run proposes nothing and records how many of each template it would have
+proposed. In **Propose** every email waits for the owner. On **Act** an email is approved on its own only when its
+template is listed in the agent's `auto_send_templates` (seeded empty, and only SQL changes it, for example
+`update private.agents set config = jsonb_set(config, '{auto_send_templates}', '["welcome"]') where key =
+'account_manager'`). Listing `email.send` in `auto_approve_kinds` never approves one. The database applies the rule
+when the email is proposed; the task result counts what it recorded, the audit event says `auto`, and an email
+approved on its own is refused at send time (`auto_send_off`) if its template has since left the list or the agent
+no longer acts. The run finishes once it has proposed: its proposals wait on the Team screen without holding back
+the next morning's run.
+
+**Sending.** An approved email is sent at once, or by the next tick when it was approved on its own; it needs no
+owner session. Before anything goes out the executor (`server/agents/accounts/executor.mjs`) refuses, with a code the
+Team screen explains:
+
+- `not_configured`: the Hub cannot send customer email. It needs the SendGrid key, the company's postal address
+  (`HUB_BULK_EMAIL_POSTAL_ADDRESS`, which every footer carries; without it nothing is proposed either) and a bare
+  https public origin for the unsubscribe link (`HUB_PUBLIC_ORIGIN`: no credentials, path, query or fragment, so the
+  link always reaches the unsubscribe page).
+- `wording_changed`: the email rebuilt from the action's facts no longer matches the hash of the approved wording,
+  so a newer Hub never sends different words under an old approval.
+- `no_longer_applies`: the account changed. The trial emails need a trial that is still a trial (and the setup
+  offer still no positive usage); the testimonial needs an account still paying with no open high or urgent case; neither
+  goes to a subscription being cancelled.
+- Then one database call (`private.agent_lifecycle_begin_send`) refuses `auto_send_off`, `no_address` (no usable
+  billing address), `suppressed` (the address is on the suppression list) and `daily_limit` (20 customer emails
+  already went out today, Eastern, across every account), and otherwise records the send and hands over the
+  account's one billing address. It is the only operation that ever returns one.
+
+The email goes through the same SendGrid sender as bulk email (category `hub-lifecycle-email`), from
+`HUB_SUPPORT_FROM_EMAIL` (support@caremetric.ai) with replies to the same address, tracking off, and
+`List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` headers. The outcome is sent,
+`delivery_failed` (SendGrid refused it) or `email_unconfirmed` (no answer, so it may have gone). Nothing is retried.
+An execution that is started again (the server stopped mid-send and the sweep handed the action back) finds the
+recorded send and settles it from the record, whatever has changed since, without sending again.
+
+**Unsubscribing.** The footer's link is personal: a random token whose SHA-256 hash is kept beside the address's
+hash. It opens the bulk email unsubscribe page (`/api/email/unsubscribe/<token>`), which changes nothing until its
+button or a mail client's one-click request confirms, and then adds the address to the same suppression list. One
+list stops both kinds of email. Support replies, receipts and billing notices are not affected.
+
+**What is kept.** The send ledger (`private.agent_lifecycle_emails`) holds the action, the period key, the template,
+the address's SHA-256 hash (as bulk email keeps it), the unsubscribe link's hash, the outcome and SendGrid's message
+id. The address and the email's text are never stored, logged or returned by the executor; the action's preview is
+the approved text, which names the account and holds no address. Task results and run summaries hold counts and
+template names only.
+
+The handler and the action register only when the database declares `platform.agents.lifecycle.v1`, which needs
+the Account Manager, the hardening and bulk email. To switch the emails on: apply the two migrations, restart the
+Hub, set `HUB_BULK_EMAIL_POSTAL_ADDRESS` (and `HUB_BOOKING_URL` if you want the button), resume the Account Manager,
+leave it in **Observe** for a morning and read its run ("Observe only: 3 customer emails would be proposed …"), then
+switch it to **Propose** and press **Run now** on "Customer emails".
+
+## The Content Marketer
+
+Writes the help center's public articles, one a week, for the owner to approve, and once a month drafts outreach for the
+owner to send personally. CareMetric has no blog or articles written for search; these articles are what search engines and AI
+assistants can now find at `https://help.caremetric.ai/help/articles/<address>`. Every claim comes from the fact sheet,
+[GTM_FACTS.md](GTM_FACTS.md) (machine copy `server/agents/content/facts.mjs`), and nothing is published without the owner's
+approval. No customer text ever reaches the model: the only thing the inbox contributes is a count of conversations.
+
+**Topics.** A curated backlog in code (`server/agents/content/topics.mjs`): Pennsylvania personal care home and ALF regulations
+under 55 Pa. Code Chapters 2600 and 2800 (how the two licenses differ, surveyor visits, annual inspection records, staff
+training hours, fire drills, reportable incidents, medication administration training, resident rights notices, emergency
+preparedness), Intel topics (home health referral marketing, county market data, hospice relationship plans) and Advisors
+topics (reviewing a personal care home or ALF before buying it, outside survey-readiness reviews). Each topic names its
+product (the article is published under it), its reader, its angle, the official sources it may cite and the facts it may
+state; every regulation fact was read from the cited section of the Pennsylvania Code on 2026-11-03. A topic is never written
+twice: not while an article for it is published or waiting for the owner, and not for 90 days after the owner rejects one (an
+expired or failed proposal may be tried again). Among the rest, priority leads; products whose inbox conversations were busiest
+in the last 90 days (counted by product and inquiry type, never read) come next; the product of the last article steps back.
+
+**What the model is asked for** (`prompt.mjs`, prompt version `content.1`, draft tier): one object with a title, an address
+(slug), a meta description, a summary, an outline, the body in Markdown, questions and answers, internal links (ids of the
+products' real public pages, never addresses) and citations (addresses from the topic's official sources). The system prompt is
+the instructions and the fact sheet, a constant that is cached.
+
+**What the code checks** (`validate.mjs`). Lengths and shapes (title, address, description, summary, outline, body of 1,200 to
+4,200 characters in three to eight sections, two to four questions, one to three links); citations only as https addresses on
+the allowed hosts (pa.gov and its subdomains such as dhs.pa.gov, pacodeandbulletin.gov, palegis.us, cms.gov and census.gov for
+Intel's topics, and the company's own sites) and only to the curated sources, and at least one for a regulation; any other link
+in the body, HTML, images or tables; a price, percentage or number with a unit that neither the fact sheet nor the topic's facts
+state; a guarantee; a legal or compliance assurance ("ensures compliance", "pass your inspection", survey-proof, avoiding all
+citations); a certification or endorsement claim; AI that uses voice or the phone; a call or a demo as a step; a named
+competitor; a testimonial; "prove" or "proof" about CareBase; personal or health information, an email address other than
+hello@ or support@caremetric.ai, or a phone number; and a claim to be an AI. Assisted Living Residence and ALR become Assisted
+Living Facility and ALF, and an auditor or a state audit becomes a surveyor or an inspection; an auditor of another kind (a
+financial auditor) cannot be rewritten and rejects the draft. Regulation articles end with a fixed line: general information,
+not legal advice. A draft that fails proposes nothing; the task's result and the run's summary name the checks it failed
+(`compliance_assurance, unlisted_number`), never the draft.
+
+**What the owner approves.** A `content.publish` action ("Publish a help article") whose preview is the whole article: the
+address it will live at, the product, the title and the description, then the Markdown exactly as it will be published (the
+summary, the body, the questions and answers, the sources, the links and, for a regulation, the disclaimer). It must fit the
+6,000 characters an action's preview holds, so articles are compact (about 300 to 600 words of body).
+
+**How approval publishes.** Approving runs the executor at once; it needs no owner session and no model. It checks the stored
+article once more, then `private.agent_content_publish` publishes the action's own stored input, never anything the server hands
+it: a content item whose key is the address, owned by the topic's product and the "CareMetric Marketing" team and created by the
+CareMetric AI Assistant profile; revision 1, approved by the owner at the moment they decided; a publication to the product for
+every visitor (`public`, audience `all`); and an audit event `content.published`. The article then appears in the help center,
+at its own address as HTML (see "Public articles for crawlers" below) and in the sitemap. Publishing is idempotent by address:
+an execution started again finds the article and writes nothing new (`already_published`). An article is published only with
+the owner's approval: one approved on its own (an agent on Act with the kind listed) is refused (`approval_required`). The
+other outcomes the Team screen explains: `slug_taken` (another article already uses the address), `product_unavailable`,
+`invalid_article` (the stored article fails a rule that changed since) and `publish_failed`.
+
+**Public articles for crawlers.** The help center is a single-page app, so the Hub server answers `/help/articles/<content key>`
+itself (`server/help-center.mjs`) for every public, published article, the Content Marketer's and the ones already there: real
+HTML with the title, description, canonical address, Open Graph tags, an Article in JSON-LD and the body rendered from Markdown
+by `src/lib/markdown.ts`, which escapes everything and keeps only https and same-site links, inside the app's own page so the
+app takes over. It also serves `/sitemap.xml` (the help center, the learning library and every public article) and
+`/robots.txt`. The articles are the ones an anonymous visitor's app reads, cached for five minutes; the security headers and
+Content Security Policy are unchanged. The help center's list links each public article to its address.
+
+**The outreach drafts** (`content.outreach`, "Monthly outreach drafts", `outreach.mjs`). Once a month the model drafts up to five
+listing descriptions for software directories (Capterra, G2, GetApp, Software Advice; CareBase and Intel) and up to five short
+partnership pitches (state and regional provider associations, senior-care consultants, pharmacy and therapy partners,
+compliance trainers), from the fact sheet. Each draft gets the same checks as an article (and no markup or links, only the
+company's own domains); one that fails is left out and only the name of the check is kept. The ones that pass go to the owner in
+one email, word for word, to adjust and send personally. Nothing is sent to anyone else. The stored copy of the alert (shown on
+the Team screen) holds counts only; the drafts travel only in the email.
+
+**When it runs.** `content.weekly` ("Weekly help article") fires every morning at 07:45 Eastern and writes on Tuesdays (read from
+the task's due time, so a Tuesday's work put off by the budget still runs the next day). `content.outreach` fires every morning at
+08:05 Eastern and writes once a month, from the first Wednesday on, under the month's alert key, so a server that was down that
+day writes on its next run and a month is sent once (a delivery that failed is tried again on a later day, up to the notifier's
+three tries). **Run now** works on any day and always writes. While an article waits for the owner, the weekly schedule waits too.
+
+**Cost and budget.** One draft-tier call per article (up to 8,000 output tokens; the runtime reserves about 14 cents before the
+call and books what it actually used, typically a few cents) and one per month for outreach (about 10 cents reserved). The seeded
+budget is $1.50 a day. A used-up budget puts the task off to the next Eastern day. In
+**Observe** the agent writes nothing, because it could not propose what it wrote.
+
+**Switching it on.** Apply the two migrations below, restart the Hub so it reads `platform.agents.content.v1`, make sure
+`ANTHROPIC_API_KEY` is set (the tasks register only with a key), then resume the Content Marketer on **AI team** (it starts in
+**Propose**) and press **Run now** on "Weekly help article". The proposal appears under "Waiting for you" within a minute.
+
+**Turning it off.** Pause the Content Marketer on **AI team**: nothing more is drafted or emailed, and proposals already waiting
+can still be rejected (or are left to expire after seven days). Removing `ANTHROPIC_API_KEY` stops both tasks as well. To take a
+published article down, retire it: `update hub.content_items set status = 'retired', retired_at = now() where content_key =
+'<address>';`. It leaves the help center, the sitemap and its address (which then answers 404) within five minutes.
 
 ## Boundary
 
@@ -433,6 +812,10 @@ control plane and the platform billing mirror.
   `20261102180100_agent_hardening_contract.sql` repeats every check, for every operation and helper of
   the control plane, the probes and the brief, in a form that fails closed, and declares
   `platform.agents.hardening.v1`.
+- `20261103130100_agent_growth_contract.sql` declares `platform.agents.growth.v1` only when the leads table is still closed
+  and has its `growth_seen_at` column, every Growth Manager operation (and the conversation snapshot it extends) is a security
+  definer with a pinned empty search path, executable by `hub_app_server` alone and refusing every other session user, its
+  helpers are executable by no role, and the agent, its three schedules and the lead form check exist. Every test fails closed.
 
 ## Hardening
 
@@ -477,7 +860,11 @@ Server (`hub_app_server` only): `agent_schedule_fire`, `agent_maintenance`, `age
 `agent_session_tasks`, `agent_session_task_claim`, `agent_run_start`, `agent_run_finish`,
 `agent_budget`, `agent_action_propose`, `agent_actions_ready`, `agent_action_execution`,
 `agent_action_executed`, `agent_action_release`, `agent_notify_begin`, `agent_notify_finish`, `owner_contact`, `agent_probe_record`, `agent_brief_facts`,
-`agent_concierge_pending`, `agent_communication_snapshot`, `agent_notification_count`, `agent_accounts_snapshot`.
+`agent_concierge_pending`, `agent_communication_snapshot`, `agent_notification_count`, `agent_accounts_snapshot`,
+`agent_growth_pending`, `agent_growth_lead`, `agent_growth_mark_seen`, `agent_growth_unanswered`, `agent_growth_facts`,
+`agent_lead_probe_seen`,
+`agent_lifecycle_snapshot`, `agent_lifecycle_begin_send`, `agent_lifecycle_finish_send`,
+`agent_content_state`, `agent_content_publish`.
 
 Owner (current administrator session): `get_agent_team`, `list_agent_activity`,
 `list_audit_events` (reads) and `set_agent_status`, `set_agent_autonomy`, `set_agent_budget`,
@@ -659,6 +1046,21 @@ Apply the migrations in order with the usual procedure:
    by kind, gives each alert retry its own clock and declares `platform.agents.hardening.v1` (it needs the
    control plane, the probes and the brief). Apply it before you resume any agent, and restart the Hub after
    it so the server reads the feature.
+8. `20261103130000_agent_growth.sql`, then its gate `20261103130100_agent_growth_contract.sql`, which seeds the Growth
+   Manager (paused, observe) and its three schedules, adds the Platform Engineer's lead form check every six hours, the
+   server-only lead reads and `private.leads.growth_seen_at`, names the source system in the Concierge's snapshot, and
+   declares `platform.agents.growth.v1` (it needs the control plane, the probes and the lead desk, `support.leads.v1`). Apply
+   it after the lead desk's migrations and restart the Hub so the server reads the feature.
+9. `20261103140000_agent_lifecycle.sql`, then its gate `20261103140100_agent_lifecycle_contract.sql`, which add the
+   `email.send` action with its shape check and once-per-period index, the per-template rule for an agent on Act,
+   the send ledger, the three server-only operations, a customer-email link on the shared unsubscribe page, the daily
+   schedule and the empty `auto_send_templates` setting, and declare `platform.agents.lifecycle.v1` (it needs the
+   Account Manager, the hardening and bulk email). Restart the Hub after it.
+10. `20261103150000_agent_content.sql`, then its gate `20261103150100_agent_content_contract.sql`, which adds the
+   `content.publish` action kind (widening the kind and target checks without dropping any kind another change added),
+   its shape check and its once-per-address and once-per-topic indexes, the two server-only operations, and the Content
+   Marketer (paused, Propose) with its two schedules, and declares `platform.agents.content.v1` (it needs the control
+   plane, the hardening, governed publications and the communications inbox). Restart the Hub after it.
 
 The Hub build does not require any of these features, so a Hub whose database lacks them still starts and
 serves everything else. The AI team is opt-in twice over: nothing runs unless `HUB_AGENTS_ENABLED`
@@ -674,6 +1076,16 @@ To switch the weekly account report on, apply the two Account Manager migrations
 reads the new feature, resume the Account Manager and press **Run now** on its weekly report: the first email
 arrives within a minute and the next on Monday. Check the "Test data" and "Stripe mode" notes against what you
 expect before relying on the figures.
+
+To switch the Growth Manager on: apply the lead desk's migrations and the two Growth Manager migrations, set
+`HUB_BOOKING_URL` on the Hub service if you want prospects offered your booking page (optional; an https link, for example
+a Calendly or Cal.com page), restart the Hub so it reads the new feature, then resume the Growth Manager on **AI team** and
+press **Run now** on "Weekly growth report": the first email arrives within a minute. New trials then email you within five
+minutes, unanswered lead conversations remind you after an hour and a day (never between 21:00 and 07:00 Eastern), and the
+morning brief carries a Growth section. The Concierge's sales acknowledgment needs the Concierge resumed in **Propose**.
+For the lead form check, set each product's `HUB_LEAD_SECRET` to the same value as the Hub's
+`HUB_LEAD_SECRET_CAREBASE`, `_INTEL` or `_ADVISORS` and deploy the product's probe support first; then, with the Platform
+Engineer resumed, press **Run now** on "Lead form check" and read its run: each form should say "passed".
 
 `supabase/schema.sql` is a reference snapshot that stopped being appended in October; these
 migrations are not mirrored into it.

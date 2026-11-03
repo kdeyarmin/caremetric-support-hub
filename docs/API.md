@@ -194,6 +194,29 @@ Staff (same-origin, SMS session, `case.read`/`case.write` for the application):
   `offset` (default 0); `nextOffset` is where the next batch starts, or `null` when none remain.
 - `GET /api/communications/channels` — which channels are configured, as booleans only.
 
+## Website leads (server endpoints)
+
+Implemented in `server/leads.mjs` (backend feature `support.leads.v1`, migrations `20261103120000` /
+`20261103120100`). See [LEAD_INTAKE.md](LEAD_INTAKE.md), the contract all four repositories implement.
+
+- `POST /api/leads` — server to server from CareBase, Intel and Healthcare Advisors. Signed with
+  `X-CareMetric-Source`, `X-CareMetric-Timestamp` (300-second window) and `X-CareMetric-Signature`
+  (`v1=` + hex HMAC-SHA256 of `<timestamp>.<raw body>` under that product's `HUB_LEAD_SECRET_*`); raw body at most
+  16384 bytes. Answers 202 `{ id, duplicate: false, conversation }` for a new lead, 200 with `duplicate: true` for a
+  repeat, 400 `invalid_lead`, 401 `unauthorized` (also for any `Origin`, `Cookie` or query string), 413 `too_large`,
+  429 `rate_limited` (60 signed requests a minute per product), 503 `not_configured` (no usable secret for that
+  product) or `unavailable` (feature not declared, database unreachable), 405 to anything but `POST`. It calls
+  `private.lead_intake` as `hub_app_server` and logs only the product, the outcome and the status.
+
+Owner (same-origin, SMS session):
+
+- `POST /api/rpc/list_leads` — `{ p_kind, p_source, p_include_test, p_offset ≤ maxOffset, p_limit ≤ 50 }` → `{ items,
+  total, offset, limit, maxOffset }`, newest first; test leads only when `p_include_test` is true. `maxOffset` (10000)
+  is the deepest offset the function serves; the Leads screen stops paging there. Needs the administrator session.
+- `POST /api/admin/leads/status` — `{ id, status: "new" | "contacted" | "qualified" | "won" | "lost" | "spam",
+  expectedUpdatedAt }` → the lead. Needs the command session (under eight hours old); a stale `expectedUpdatedAt`
+  returns 409, a lapsed session 401, an unknown lead 404. Unknown keys are refused with 400.
+
 ## AI team (server endpoints)
 
 Implemented in `server/agents/` (backend feature `platform.agents.v1`). See [AI_TEAM.md](AI_TEAM.md).
@@ -232,6 +255,24 @@ The history pages are reads through the browser RPC allowlist (`POST /api/rpc/<n
 `get_agent_team`, `list_agent_activity` (`p_kind`: `runs`, `tasks`, `actions` or `notifications`, optional
 `p_agent_key`, `p_offset`, `p_limit ≤ 50`) and `list_audit_events` (optional `p_action_prefix`, such as
 `agent.`, with `p_offset` and `p_limit ≤ 50`).
+
+## Public help center pages (server)
+
+Implemented in `server/help-center.mjs`; no session, GET and HEAD only, every response keeps the Hub's security
+headers and Content Security Policy. The articles are the ones `hub.list_published_content()` returns without a
+session (public, published articles), read at most once every five minutes.
+
+- `GET /help/articles/<content key>` — a public article as HTML inside the app's own `index.html`: its title,
+  description, canonical address (`https://help.caremetric.ai/help/articles/<content key>`), Open Graph and
+  Twitter tags, an Article in JSON-LD, and the body rendered from Markdown by `src/lib/markdown.ts` (every piece of
+  the source is escaped; only https and same-site links are kept). The app's script then takes over at the same
+  address. `Cache-Control: public, max-age=300`. An address with no public article answers 404 with the app shell
+  and `noindex`; the form with a trailing slash answers 301 to the one without; 503 with `Retry-After` when the
+  list cannot be read and none is cached. A read that failed is tried again at most once a minute; meanwhile every
+  request gets the last list read (or the 503).
+- `GET /sitemap.xml` — `/help`, `/learn` and every public article, at `https://help.caremetric.ai`
+  (`public, max-age=3600`).
+- `GET /robots.txt` — everything except `/api/` and `/admin`, and the sitemap's address (`public, max-age=86400`).
 
 ## Healthcare Advisors administration reads
 

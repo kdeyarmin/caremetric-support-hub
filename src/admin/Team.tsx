@@ -7,7 +7,7 @@ import { useAdminRead } from "./useAdminRead";
 import { TeamApiError, teamClient } from "./teamClient";
 import type { TeamClient } from "./teamClient";
 import {
-  actionLabel, autonomyHelp, autonomyLabels, cadenceLabel, centsLabel, errorLabel, failedActionLabel, outcomeLabel, statusLabel, taskLabel, tierLabels,
+  actionLabel, approvalTitle, autonomyHelp, autonomyLabels, cadenceLabel, centsLabel, errorLabel, failedActionLabel, outcomeLabel, statusLabel, targetLabel, taskLabel, tierLabels,
 } from "./teamProtocol";
 import type { ActivityKind, ActivityPage, AuditPage, TeamAgent, TeamApproval, TeamOverview, TeamServices } from "./teamProtocol";
 import "./admin.css";
@@ -64,10 +64,14 @@ function RecordLink({ reference }: { reference: string }) {
 
 function ApprovalCard({ approval, busy, onDecide }: { approval: TeamApproval; busy: string; onDecide: (approval: TeamApproval, decision: "approve" | "reject", note: string) => void }) {
   const [note, setNote] = useState("");
-  const what = actionLabel(approval.kind);
-  const sends = ["communication.reply","growth.message"].includes(approval.kind);
+  const email = approval.kind === "email.send";
+  // A customer email is named by its account and subject, so two waiting emails never share a name.
+  const what = email ? approvalTitle(approval) : actionLabel(approval.kind);
+  // Approving a reply or a customer email sends it.
+  const sends = ["communication.reply", "growth.message"].includes(approval.kind) || email;
   return <li className="team-approval">
-    <div className="team-approval-head"><strong>{approval.agentName}</strong> proposes: {what}{approval.targetId ? <> for <span className="team-target">{approval.targetId}</span></> : null}</div>
+    <div className="team-approval-head"><strong>{approval.agentName}</strong> proposes: {email ? what
+      : <>{what}{approval.targetId ? <> for <span className="team-target">{targetLabel(approval.targetKind, approval.targetId)}</span></> : null}</>}</div>
     {/^CM-\d+$/.test(approval.targetId) && <p className="team-record"><RecordLink reference={approval.targetId} /></p>}
     <pre className="team-preview" aria-label={`Proposed text: ${what}`}>{approval.preview}</pre>
     <label className="team-note">Note (optional)<input value={note} maxLength={1000} disabled={Boolean(busy)} onChange={event => setNote(event.target.value)} /></label>
@@ -180,7 +184,7 @@ function ActivityRows({ tab, data, names }: { tab: Tab; data: unknown; names: Re
         // Why a carried-out action failed: the code its executor stored, in plain words, so a refused send is not just "Failed".
         const failure = item.status === "failed" && typeof item.result?.error === "string" ? failedActionLabel(item.result.error) : "";
         const decision = item.decidedAt ? `${timeLabel(item.decidedAt)}${item.decisionNote ? ` — ${item.decisionNote}` : ""}` : "";
-        return <tr key={item.id}><td>{timeLabel(item.createdAt)}</td><td>{who(item.agentKey)}</td><td>{actionLabel(item.kind)}</td><td>{item.targetId || "—"}</td><td>{statusLabel(item.status)}</td>
+        return <tr key={item.id}><td>{timeLabel(item.createdAt)}</td><td>{who(item.agentKey)}</td><td>{actionLabel(item.kind)}</td><td>{item.targetId ? targetLabel(item.targetKind, item.targetId) : "—"}</td><td>{statusLabel(item.status)}</td>
           <td className="team-wide">{[decision, failure].filter(Boolean).join(" · ") || "—"}</td></tr>;
       })}
     </Table>;

@@ -314,6 +314,16 @@
   .team-facts > div { grid-template-columns: 1fr; gap: 3px; }
   .team .page-heading { align-items: flex-start; flex-direction: column; gap: 15px; }
 }
+.leads .page-heading h1 { display: flex; align-items: center; gap: 10px; }
+.leads .panel { margin-top: 18px; padding: 18px 20px; display: grid; gap: 12px; min-width: 0; }
+.leads .panel > .admin-section-title, .leads .panel > .admin-explanation, .leads .panel > .admin-read-time { margin: 0; }
+.leads-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 16px; }
+.leads-toggle { display: inline-flex; align-items: center; gap: 7px; padding: 7px 0; font-size: var(--text-sm); font-weight: 700; color: #475569; }
+.leads-table td a { overflow-wrap: anywhere; }
+.leads-table td small { display: block; margin-top: 3px; color: #526173; font-size: .78rem; }
+.leads-table td .admin-status { margin-left: 4px; padding: 2px 6px; }
+.leads-table select { font: inherit; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; min-width: 7.5rem; }
+@media (max-width: 700px) { .leads .page-heading { align-items: flex-start; flex-direction: column; gap: 15px; } }
 
 .growth-workspace form { display: grid; gap: .75rem; max-width: 52rem; margin: 1rem 0; }
 .growth-workspace label { display: grid; gap: .35rem; }

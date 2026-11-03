@@ -56,6 +56,7 @@ export const integrationCatalog = Object.freeze([
     variables: [
       { name: 'HUB_AGENTS_ENABLED', secret: false, required: true, flag: true, purpose: 'Exactly "true" turns the scheduler on.' },
       { name: 'HUB_OWNER_EMAIL', secret: false, required: true, purpose: 'Where the AI team emails alerts and the morning brief. Urgent items are also texted to the administrator\'s verified number.' },
+      { name: 'HUB_BOOKING_URL', secret: false, required: false, purpose: 'Your booking page (an https link, for example Calendly or Cal.com). The Support Concierge offers it in its sales-inquiry acknowledgment, and the Account Manager\'s customer emails show it as a "Pick a time" button. Leave it unset to offer no link.' },
       { name: 'HUB_AGENTS_CUSTOMER_TEXT_TO_AI', secret: false, required: false, flag: true, purpose: 'Exactly "true" lets the Support Concierge send a plain question\'s scrubbed text to the model to draft an answer for you to approve. Set it only when your Anthropic agreement covers support messages.' },
     ] },
   { id: 'customer-growth', name: 'Customer growth', purpose: 'CareBase and Intel prospecting, customer success, activity and delivery events.', docs: 'docs/CUSTOMER_GROWTH.md',
@@ -67,8 +68,19 @@ export const integrationCatalog = Object.freeze([
       { name: 'HUB_GROWTH_INTEL_EVENT_KEY', secret: true, required: false, purpose: 'Intel server-only activity signing key, at least 32 characters.' },
       { name: 'HUB_SENDGRID_EVENT_PUBLIC_KEY', secret: true, required: false, purpose: 'Verifies delivery, bounce, complaint and unsubscribe webhooks.' },
     ] },
+  { id: 'website-leads', name: 'Website leads', purpose: 'CareBase, Intel and Healthcare Advisors forward every lead from their public forms to the Hub (POST /api/leads), where it appears on Leads and, when the person asked to be contacted, in Communications. Each product signs its leads with its own secret; a product without one keeps its leads to itself.', docs: 'docs/LEAD_INTAKE.md',
+    variables: [
+      { name: 'HUB_LEAD_SECRET_CAREBASE', secret: true, required: false, purpose: 'The secret CareBase signs its website leads with: the same value as CareBase\'s HUB_LEAD_SECRET. Use at least 32 random characters; a shorter value counts as not set.' },
+      { name: 'HUB_LEAD_SECRET_INTEL', secret: true, required: false, purpose: 'The secret Intel signs its website leads with: the same value as Intel\'s HUB_LEAD_SECRET. Use at least 32 random characters; a shorter value counts as not set.' },
+      { name: 'HUB_LEAD_SECRET_ADVISORS', secret: true, required: false, purpose: 'The secret Healthcare Advisors signs its consultation requests with: the same value as Advisors\' HUB_LEAD_SECRET. Use at least 32 random characters; a shorter value counts as not set.' },
+    ] },
   { id: 'carebase-distribution', name: 'CareBase course distribution observer', purpose: 'Lets the Hub observe shared course availability in CareBase.', docs: 'docs/SHARED_COURSE_DISTRIBUTION.md',
     variables: [{ name: 'CAREBASE_DISTRIBUTION_OBSERVER_TOKEN', secret: true, required: true, purpose: 'Token CareBase issued to the Hub observer.' }] },
+  { id: 'search-console', name: 'Google Search Console', purpose: 'Optional. Adds clicks, impressions, click-through rate, position and searches to the SEO Analyst\'s Monday report; without it the report uses the crawl alone. To connect: in Google Cloud, create a service account with a JSON key and enable the Google Search Console API; in Search Console, add the service account\'s email as a user on each property.', docs: 'docs/AI_TEAM.md',
+    variables: [
+      { name: 'HUB_SEARCH_CONSOLE_CREDENTIALS', secret: true, required: true, purpose: 'The service account\'s JSON key file, pasted whole. The Hub uses it only to read Search Console and never shows or logs it.' },
+      { name: 'HUB_SEARCH_CONSOLE_SITES', secret: false, required: true, purpose: 'The properties to read, separated by commas, exactly as Search Console names them: sc-domain:cmcarebase.com for a domain property, https://www.caremetricintel.com/ (with its final /) for an address prefix.' },
+    ] },
 ]);
 
 export function integrationSetup({ rpc, env = process.env, now = () => new Date() }) {

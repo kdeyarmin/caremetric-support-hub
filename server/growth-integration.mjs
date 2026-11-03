@@ -24,7 +24,7 @@ const domain = `growth-${run}.example.org`, email = `buyer@${domain}`;
 const row = async (sql, values = []) => (await admin.query(sql, values)).rows[0];
 const call = async (fn, values = []) => (await pool.query(`select ${fn}(${values.map((_, i) => `$${i + 1}`).join(',')}) as r`, values)).rows[0].r;
 const ownerCall = (fn, values) => withSession(pool, token, async db => (await db.query(`select ${fn}(${values.map((_, i) => `$${i + 1}`).join(',')}) as r`, values)).rows[0].r);
-const gate = await readFile(new URL('../supabase/migrations/20261103061513_agent_growth_contract.sql', import.meta.url), 'utf8');
+const gate = await readFile(new URL('../supabase/migrations/20261103150102_customer_growth_contract.sql', import.meta.url), 'utf8');
 const seedAgents = (await admin.query('select key,status,autonomy,daily_budget_cents,config from private.agents')).rows;
 const seedPolicies = (await admin.query('select * from private.growth_policies')).rows;
 let organization, communication;

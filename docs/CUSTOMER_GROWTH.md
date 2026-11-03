@@ -23,7 +23,7 @@ The existing Billing and weekly account report remain the source of MRR/ARR. The
 
 ## Apply and configure
 
-1. Apply `20261103060608_agent_growth.sql`, then `20261103061513_agent_growth_contract.sql` through the normal migration process. The second migration verifies private tables, RPC authority and prerequisites before declaring `platform.agents.growth.v1`. Existing agent settings are preserved; the new Marketing Manager starts paused in Propose mode.
+1. Apply `20261103150101_customer_growth.sql`, then `20261103150102_customer_growth_contract.sql` through the normal migration process. The second migration verifies private tables, RPC authority and prerequisites before declaring `platform.agents.customer-growth.v1`. Existing agent settings are preserved; the new Marketing Manager starts paused in Propose mode.
 2. Deploy the server and frontend together. The server registers growth handlers only when the database advertises the feature. Use `.env.example` for setting names. No secret is sent to the browser.
 3. Set a stable `HUB_GROWTH_SIGNING_KEY` (at least 32 random characters), distinct CareBase/Intel event keys, a verified SendGrid sender, `HUB_BULK_EMAIL_POSTAL_ADDRESS`, the HTTPS public origin and the existing mail API key. Keep the signing key stable so existing unsubscribe links continue working.
 4. For automatic discovery, configure `HUB_GROWTH_SEARCH_API_KEY` for Brave Search. The adapter requests bounded public search results; snippets are unverified evidence. It does not invent emails. Owner-supplied source evidence works without this provider. Intel's tenant-owned provider lists and campaigns are not imported into CareMetric's sales audience.
@@ -78,7 +78,7 @@ Pipeline and customer-success work run every 15 minutes; discovery searches run 
 
 ## Verification and rollout limits
 
-The four implementation-review findings and their regression results are recorded in [the review-fix evidence](evidence/ai-workforce-review-fixes-2026-11-03.json).
+The four implementation-review findings and their regression results are recorded in [the review-fix evidence](evidence/ai-workforce-review-fixes-2026-11-03.json). [PR validation](evidence/ai-workforce-pr-validation-2026-11-03.json) records the combined checks after integrating the newer lead, lifecycle and content features from main.
 
 - `npm run check` runs application/UI tests, lint, types, SDK checks and the build.
 - `npm run evaluate:growth` runs both products through golden cases for source freshness, citation/link rejection, intent, stop rules and lifecycle choices.
@@ -86,3 +86,5 @@ The four implementation-review findings and their regression results are recorde
 - CI runs existing signup/registration coverage, the growth integration twice to check teardown, and pgTAP boundaries. The external workflow checks public Hub/CareBase/Intel availability every 15 minutes when installed in the repository's default branch. It does not impersonate a customer or claim to test native authenticated activation.
 
 These changes are release artifacts until migrations, deployment, provider configuration and native event wiring are completed. No production records were modified and no prospects were contacted during implementation.
+
+The Customer Growth workspace declares `platform.agents.customer-growth.v1`. The separate website-lead Growth Manager uses `platform.agents.growth.v1`; its lead alerts and reports remain independent. Native Account Manager lifecycle emails and Content Marketer publishing keep their existing approval and transport controls.

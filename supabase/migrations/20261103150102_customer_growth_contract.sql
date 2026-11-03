@@ -25,7 +25,7 @@ do $$ declare c jsonb:=hub.get_backend_contract(); n text; r text; f oid; begin
    if has_function_privilege(r,f,'EXECUTE') then raise exception 'Growth owner operation exposed: %',n using errcode='55000'; end if;
   end loop;
  end loop;
- if not(c->'features' @> '["platform.agents.growth.v1"]') then c:=jsonb_set(c,'{features}',(c->'features')||'["platform.agents.growth.v1"]'); end if;
+ if not(c->'features' @> '["platform.agents.customer-growth.v1"]') then c:=jsonb_set(c,'{features}',(c->'features')||'["platform.agents.customer-growth.v1"]'); end if;
  execute format('create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='''' as %L','select '||quote_literal(c::text)||'::jsonb');
 end $$;
 revoke all on function hub.get_backend_contract() from public;

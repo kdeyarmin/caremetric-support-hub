@@ -19,7 +19,7 @@ export { activitySchema } from './protocol.mjs';
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const equal=(a,b)=>{const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length&&timingSafeEqual(x,y);};
 export function growthService({store,research,features,enabled=false,signingKey='',eventKeys={},webhookPublicKey='',publicOrigin,postalAddress=''}) {
-  const ready=()=>{if(!features?.has('platform.agents.growth.v1'))throw new HttpError(503,'Apply the growth database migration first.');};
+  const ready=()=>{if(!features?.has('platform.agents.customer-growth.v1'))throw new HttpError(503,'Apply the growth database migration first.');};
   const safe=async work=>{try{return await work();}catch(e){if(e instanceof HttpError)throw e; if(['22023','22007','23514','23503','23505'].includes(e?.code))throw new HttpError(400,'Check the growth record and its references.'); if(e?.code==='40001')throw new HttpError(409,'This record changed. Refresh and review it again.'); if(e?.code==='28000')throw new HttpError(401,'Sign in again.'); if(e?.code==='42501')throw new HttpError(403,'Not permitted.'); throw e;}};
   const parse=(schema,input)=>{const parsed=schema.safeParse(input); if(!parsed.success)throw new HttpError(400,'Invalid growth request.');return parsed.data;};
   const unsubscribeToken=workId=>createHmac('sha256',signingKey).update(`growth:${workId}`).digest('hex');

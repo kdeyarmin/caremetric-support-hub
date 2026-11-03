@@ -143,7 +143,7 @@ try {
   assert.equal(await snapshot(randomUUID()), null, 'a conversation that does not exist is null, not an error');
   const rich = await conversation({ messages: [{ ago: 30, body: 'First question', direction: 'inbound' }, { ago: 28, direction: 'note', body: secrets.note }, { ago: 25, direction: 'outbound', body: 'Our answer', requestKey: randomUUID() }, { ago: 5, body: `${secrets.body} ${'x'.repeat(300)}` }] });
   const full = await snapshot(rich.id, null, 10, 200);
-  assert.deepEqual(Object.keys(full).sort(), ['answered', 'canEmail', 'canText', 'channel', 'createdAt', 'headMessageId', 'id', 'inboundCount', 'inquiryType', 'latestInboundId', 'messages', 'outboundCount', 'ownReplyDelivery', 'productSlug', 'reference', 'status', 'subject', 'updatedAt']);
+  assert.deepEqual(Object.keys(full).sort(), ['answered', 'canEmail', 'canText', 'channel', 'createdAt', 'headMessageId', 'id', 'inboundCount', 'inquiryType', 'latestInboundId', 'messages', 'outboundCount', 'ownReplyDelivery', 'productSlug', 'reference', 'sourceSystem', 'status', 'subject', 'updatedAt']);
   const serialized = JSON.stringify(full);
   for (const secret of [secrets.name, secrets.email, secrets.phone, secrets.organization, secrets.note]) assert.ok(!serialized.includes(secret), `the snapshot never carries ${secret.slice(0, 8)}…`);
   assert.deepEqual([full.canEmail, full.canText, full.productSlug, full.subject, full.answered], [true, true, 'carebase', 'A question', false]);
@@ -236,8 +236,12 @@ try {
   assert.deepEqual([outcomeOf(flow.outage).result.category, outcomeOf(flow.outage).result.severity, outcomeOf(flow.outage).result.delivery], ['outage', 'urgent', ['sms:sent', 'email:sent']]);
   assert.deepEqual([outcomeOf(flow.billing).result.category, outcomeOf(flow.billing).result.severity], ['billing', 'warning']);
   assert.deepEqual([outcomeOf(flow.identifiers).result.phi, outcomeOf(flow.identifiers).result.screen, outcomeOf(flow.identifiers).result.severity, outcomeOf(flow.identifiers).result.template], [true, ['ssn', 'dob'], 'warning', 'phi']);
-  assert.deepEqual([flow.outage, flow.billing, flow.lead].map(entry => outcomeOf(entry).result.reply), ['owner_only', 'owner_only', 'owner_only'], 'the owner answers an outage, billing and a sales lead personally');
-  assert.deepEqual([outcomeOf(flow.lead).result.category, outcomeOf(flow.lead).result.product], ['sales', 'advisors']);
+  assert.deepEqual([flow.outage, flow.billing].map(entry => outcomeOf(entry).result.reply), ['owner_only', 'owner_only'], 'the owner answers an outage and billing personally');
+  // A website lead (the Advisors form) is a sales inquiry: a warning, and the sales acknowledgment is proposed for the owner to approve.
+  assert.deepEqual([outcomeOf(flow.lead).result.category, outcomeOf(flow.lead).result.product, outcomeOf(flow.lead).result.severity, outcomeOf(flow.lead).result.reply, outcomeOf(flow.lead).result.template],
+    ['sales', 'advisors', 'warning', 'proposed', 'sales']);
+  assert.match((await row("select preview from private.agent_actions where target_id = $1 and kind = 'communication.reply'", [`CM-${flow.lead.reference}`])).preview,
+    /^Hello,\n\nThank you for reaching out to CareMetric\. I have your request, and I will follow up with you personally today\.$/);
   assert.deepEqual(outcomeOf(flow.autoReply).result, { outcome: 'skipped', reason: 'auto_reply', reference: flow.autoReply.reference });
   assert.deepEqual(outcomeOf(flow.handled).result, { outcome: 'skipped', reason: 'answered', reference: flow.handled.reference }, 'a conversation a person answered is left alone');
   const supersededTasks = triage.filter(entry => entry.source_ref === `CM-${flow.superseded.reference}`);

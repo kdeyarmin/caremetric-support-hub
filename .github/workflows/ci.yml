@@ -150,6 +150,16 @@ jobs:
           node server/agents-accounts-integration.mjs
           node server/agents-hardening-integration.mjs
           node server/agents-hardening-integration.mjs
+          node server/leads-integration.mjs
+          # Repeat with fresh keys to prove complete teardown.
+          node server/leads-integration.mjs
+          node server/agents-growth-integration.mjs
+          # Repeat with fresh keys to prove complete teardown.
+          node server/agents-growth-integration.mjs
+          node server/agents-lifecycle-integration.mjs
+          node server/agents-lifecycle-integration.mjs
+          node server/agents-content-integration.mjs
+          node server/agents-content-integration.mjs
           node server/growth-integration.mjs
           node server/growth-integration.mjs
       - name: Export, lose and restore disposable Hub data

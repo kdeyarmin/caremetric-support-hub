@@ -84,10 +84,27 @@ values('marketing_manager','Marketing Manager','Researches qualified CareBase an
 insert into private.agent_schedules(agent_key,task_kind,cadence,every_seconds,requires_session,next_run_at)
 values('marketing_manager','growth.pipeline','interval',900,false,now()),('account_manager','growth.success','interval',900,false,now()) on conflict do nothing;
 -- Record-only work uses its own domain. Only reviewed message actions can leave the Hub.
-alter table private.agent_actions drop constraint agent_actions_kind_check;
-alter table private.agent_actions add constraint agent_actions_kind_check check(kind in ('communication.reply','communication.note','communication.update','incident.open','incident.resolve','import.run','growth.message','growth.content'));
-alter table private.agent_actions drop constraint agent_actions_target_kind_check;
-alter table private.agent_actions add constraint agent_actions_target_kind_check check(target_kind in ('communication','probe_target','import_source','growth_message','growth_content'));
+do $$
+declare
+  v_kinds text[];
+  v_targets text[];
+begin
+  select coalesce(array_agg(distinct m[1]), array[]::text[]) into v_kinds
+  from pg_constraint c cross join lateral regexp_matches(pg_get_constraintdef(c.oid), '''([^'']+)''', 'g') m
+  where c.conrelid = 'private.agent_actions'::regclass and c.conname = 'agent_actions_kind_check';
+  select coalesce(array_agg(distinct m[1]), array[]::text[]) into v_targets
+  from pg_constraint c cross join lateral regexp_matches(pg_get_constraintdef(c.oid), '''([^'']+)''', 'g') m
+  where c.conrelid = 'private.agent_actions'::regclass and c.conname = 'agent_actions_target_kind_check';
+  if not v_kinds @> array['communication.reply', 'communication.note', 'communication.update', 'incident.open', 'incident.resolve', 'import.run']
+    or not v_targets @> array['communication', 'probe_target', 'import_source']
+    or exists (select 1 from unnest(v_kinds || v_targets) value where value !~ '^[a-z][a-z0-9_.]{1,60}$') then
+    raise exception 'The agent action kinds could not be read' using errcode = '55000';
+  end if;
+  execute format('alter table private.agent_actions drop constraint agent_actions_kind_check, add constraint agent_actions_kind_check check (kind in (%s))',
+    (select string_agg(quote_literal(k), ', ' order by k) from (select distinct unnest(v_kinds || array['growth.message', 'growth.content']) as k) x));
+  execute format('alter table private.agent_actions drop constraint agent_actions_target_kind_check, add constraint agent_actions_target_kind_check check (target_kind in (%s))',
+    (select string_agg(quote_literal(k), ', ' order by k) from (select distinct unnest(v_targets || array['growth_message', 'growth_content']) as k) x));
+end $$;
 alter table private.agent_actions add column not_before timestamptz;
 
 -- Owner reads are authorized independently of HTTP routing. Lists are paged; metrics cover the whole population.

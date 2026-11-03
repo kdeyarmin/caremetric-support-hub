@@ -1,6 +1,6 @@
 begin;
 select plan(12);
-select ok(hub.get_backend_contract()->'features' @> '["platform.agents.growth.v1"]', 'Growth feature is declared');
+select ok(hub.get_backend_contract()->'features' @> '["platform.agents.customer-growth.v1"]', 'Growth feature is declared');
 select ok((select status='paused' and autonomy='propose' from private.agents where key='marketing_manager'), 'Marketing starts paused in proposal mode');
 select is((select count(*)::integer from private.growth_policies where not enabled and not auto_send),2,'Both products start with sending disabled');
 select is((select count(*)::integer from private.growth_policies where product='breathe'),0,'Breathe has no growth policy');

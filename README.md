@@ -24,6 +24,13 @@ connections, intake, delegated actions, and purchases for those apps are disable
   replies on the original channel. Text, email and chat stay off until their
   provider settings (or `HUB_CHAT_ENABLED`) are set. See
   [unified communications](docs/UNIFIED_COMMUNICATIONS.md).
+- **Leads** (`/admin/leads`): every lead from the CareBase, Intel and Healthcare
+  Advisors websites (demo and consultation requests, contact forms, trial and
+  newsletter sign-ups, savings calculators and county reports), newest first,
+  with where each person came from and a status to work it. Products forward
+  leads server to server to the signed `POST /api/leads`; a person who asked to
+  be contacted also gets a conversation in Communications. See
+  [website leads](docs/LEAD_INTAKE.md).
 - **Knowledge** (`/knowledge`): shared and app-specific articles for every
   supported application, with per-app coverage.
 - **Billing** (`/admin/billing`): the only place CareMetric platform billing
@@ -42,6 +49,13 @@ connections, intake, delegated actions, and purchases for those apps are disable
 - **Portfolio rollup** (`/admin/portfolio`): health, subscriber and subscription
   figures, and a live **super-admin coverage** matrix showing, per application,
   what the Hub holds now and what app-side work each gap needs.
+- **Go-to-market facts** ([docs/GTM_FACTS.md](docs/GTM_FACTS.md)): the single
+  source of truth for marketing claims about CareBase, Intel and Advisors (who
+  each is for, live prices and trials, the founding-partner offer, the claims we
+  may and may not make, and the fixed vocabulary). The AI team's Content
+  Marketer writes help-center articles only from it, and nothing it drafts is
+  published until the owner approves it on **AI team** (`/admin/team`); see
+  [the AI team](docs/AI_TEAM.md#the-content-marketer).
 
 What the Hub can show depends on what each application's administration
 connection provides. As documented for each connection today:

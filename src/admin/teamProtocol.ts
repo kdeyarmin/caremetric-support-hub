@@ -95,19 +95,65 @@ export const autonomyHelp = {
 export const tierLabels = { fast: "Fast (Haiku)", draft: "Draft (Sonnet)", quality: "Quality (Opus)" } as const;
 
 const taskLabels: Record<string, string> = {
-  "probe.sweep": "Health check", "probe.incident": "Handle an incident", "probe.recovery": "Write a recovery note",
+  "content.weekly": "Weekly help article", "content.outreach": "Monthly outreach drafts",
+  "probe.sweep": "Health check", "probe.incident": "Handle an incident", "probe.recovery": "Write a recovery note", "probe.forms": "Lead form check",
   "brief.daily": "Morning brief", "seo.weekly": "Weekly SEO check", "concierge.sweep": "Look for new messages", "concierge.communication": "Triage a message",
-  "import.advisors": "Import Advisors requests", "import.breathe": "Import phone messages", "accounts.weekly": "Weekly account report", "growth.pipeline": "Review sales pipeline", "growth.success": "Review customer success", "growth.discovery": "Discover prospective organizations", "growth.content": "Propose product content",
+  "import.advisors": "Import Advisors requests", "import.breathe": "Import phone messages", "accounts.weekly": "Weekly account report",
+  "growth.leads": "Look for new leads", "growth.followup": "Chase unanswered leads", "growth.weekly": "Weekly growth report",
+  "accounts.lifecycle": "Customer emails",
+  "growth.pipeline": "Review sales pipeline", "growth.success": "Review customer success", "growth.discovery": "Discover prospective organizations", "growth.content": "Propose product content",
 };
 export const taskLabel = (kind: string) => taskLabels[kind] ?? kind;
 
+/** What the Platform Engineer checks: each product's health address, and each product's lead form (checked every six hours). */
+const probeTargetLabels: Record<string, string> = {
+  hub: "Support Hub", carebase: "CareBase", intel: "CareMetric Intel", advisors: "Healthcare Advisors",
+  carebase_forms: "CareBase lead form", intel_forms: "Intel lead form", advisors_forms: "Advisors consultation form",
+};
+/**
+ * What an action is for, in plain words: a probe target's incident ("carebase_forms:2") reads "CareBase lead form, incident 2". A
+ * conversation reference (CM-1042), an unknown target and anything else are shown as they are.
+ */
+export function targetLabel(targetKind: string | null, targetId: string): string {
+  if (targetKind !== "probe_target") return targetId;
+  const [key, incident] = targetId.split(":");
+  const label = probeTargetLabels[key];
+  if (!label) return targetId;
+  return /^\d+$/.test(incident ?? "") ? `${label}, incident ${incident}` : label;
+}
+
 const actionLabels: Record<string, string> = {
-  "growth.message": "Send a reviewed growth message", "growth.content": "Approve a product content brief", "communication.reply": "Reply to a customer", "communication.note": "Add an internal note", "communication.update": "Update a conversation",
+  "content.publish": "Publish a help article",
+  "communication.reply": "Reply to a customer", "communication.note": "Add an internal note", "communication.update": "Update a conversation",
+  "growth.message": "Send a reviewed growth message", "growth.content": "Approve a product content brief",
   "incident.open": "Open an incident", "incident.resolve": "Resolve an incident", "import.run": "Import messages",
+  "email.send": "Email a customer",
 };
 export const actionLabel = (kind: string) => actionLabels[kind] ?? kind;
 
+/** The subject a proposed customer email opens with (its preview starts "Subject: …"), or null when it has none. */
+export function emailSubject(preview: string): string | null {
+  const match = /^Subject: ([^\n]{1,200})(\n|$)/.exec(preview);
+  return match ? match[1].trim() || null : null;
+}
+/**
+ * What an approval card says is proposed: "Email to maple-grove: Welcome to CareMetric CareBase" for a customer email (the account,
+ * then the email's own subject), and the action and its target for everything else ("Reply to a customer for CM-1042").
+ */
+export function approvalTitle(approval: Pick<TeamApproval, "kind" | "targetId" | "preview">): string {
+  if (approval.kind === "email.send") {
+    const subject = emailSubject(approval.preview);
+    return `Email to ${approval.targetId || "a customer"}${subject ? `: ${subject}` : ""}`;
+  }
+  return `${actionLabel(approval.kind)}${approval.targetId ? ` for ${approval.targetId}` : ""}`;
+}
+
 const errorLabels: Record<string, string> = {
+  invalid_article: "The article no longer passes the content checks (a rule changed since it was written), so it was not published.",
+  approval_required: "Articles are published only with your approval, and this one was approved automatically, so it was not published.",
+  slug_taken: "Another article already uses this address, so nothing was published.",
+  product_unavailable: "The article's product is retired or closed to support, so it was not published.",
+  publish_failed: "The article could not be published.",
   thread_changed: "The customer wrote again after this reply was written, so nothing was sent. Open the conversation and answer their latest message.",
   conversation_closed: "The conversation was closed, so nothing was sent.",
   conversation_missing: "The conversation no longer exists, so nothing was sent.",
@@ -125,6 +171,15 @@ const errorLabels: Record<string, string> = {
   rate_limited: "The other application asked to slow down. It is tried again when you press Run what's waiting.",
   request_rejected: "The other application refused the request.",
   invalid_payload: "The task carried something the server could not use.",
+  no_longer_applies: "The account changed since this email was written (the trial ended, converted or is being cancelled, or the plan stopped paying), so nothing was sent.",
+  suppressed: "The billing contact unsubscribed from CareMetric emails, so nothing was sent.",
+  no_address: "There is no usable billing email address for this account, so nothing was sent.",
+  not_configured: "Customer email is not set up on the Hub (the SendGrid key, the postal address for the footer or the public address), so nothing was sent.",
+  daily_limit: "20 customer emails already went out today, the most the Hub sends in a day, so this one was not sent.",
+  email_unconfirmed: "SendGrid did not confirm this email. It is never sent again on its own, so the customer may or may not have it.",
+  wording_changed: "The Hub's wording for this email changed after you approved it, so nothing was sent rather than different words.",
+  auto_send_off: "This email was approved on its own, but its template is no longer one you let the agent send, so nothing was sent.",
+  invalid_email: "The Hub refused this email as invalid. Nothing was sent.",
 };
 /** What a stored error code means for the owner; an unknown code is shown as it is. */
 export const errorLabel = (code: string | null | undefined) => (code ? errorLabels[code] ?? code : "");

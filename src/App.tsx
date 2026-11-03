@@ -65,11 +65,14 @@ import { ChatPanel } from "./support/ChatPanel";
 import { KnowledgeCoverage } from "./support/KnowledgeCoverage";
 import { demoCommunicationsClient } from "./support/demoCommunications";
 import { PhoneRegistry } from "./support/PhoneRegistry";
+import { HelpArticlePage } from "./support/HelpArticle";
+import { helpArticlePath, isPublicHelpPath } from "./support/helpArticles";
 import { AdminWorkspace } from "./admin/AdminWorkspace";
 import { ControlCenter } from "./admin/ControlCenter";
 import { PortfolioRollup } from "./admin/PortfolioRollup";
 import { GoLiveReadiness } from "./admin/GoLiveReadiness";
 import { Team } from "./admin/Team";
+import { Leads } from "./admin/Leads";
 import { BillingWorkspace } from "./billing/BillingWorkspace";
 import { CustomerBilling } from "./billing/CustomerBilling";
 import { MyBilling } from "./billing/MyBilling";
@@ -290,6 +293,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
   // The preview's in-memory inbox is created once per data load so replies and notes survive navigation within the session.
   const demoCommunications = useMemo(() => config.demoMode ? demoCommunicationsClient({
     breathe: data.products.find((product) => product.slug === "breathe")?.id, advisors: data.products.find((product) => product.slug === "advisors")?.id, pennsync: data.products.find((product) => product.slug === "pennsync")?.id,
+    carebase: data.products.find((product) => product.slug === "carebase")?.id,
   }) : undefined, [data.products]);
 
   useEffect(() => {
@@ -387,6 +391,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/admin/go-live-readiness" element={data.actor.role === "platform_admin" ? <GoLiveReadiness key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/growth" element={data.actor.role === "platform_admin" ? <Growth key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/team" element={data.actor.role === "platform_admin" ? <Team key={data.actor.id} /> : <Navigate to="/overview" replace />} />
+            <Route path="/admin/leads" element={data.actor.role === "platform_admin" ? <Leads key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/communications" element={staff ? <CommunicationsRoute data={data} communications={demoCommunications} /> : <Navigate to="/overview" replace />} />
             <Route path="/overview" element={<OverviewPage data={data} />} />
             <Route path="/cases" element={<CasesPage key={`${data.actor.id}:${data.actor.role}:${location.search}`} data={data} />} />
@@ -400,6 +405,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/integration" element={<IntegrationPage data={data} />} />
             <Route path="/security" element={<SecurityPage actor={data.actor} />} />
             <Route path="/help" element={<ContextualHelpPage data={data} />} />
+            <Route path="/help/articles/:key" element={<HelpArticlePage content={data.content} />} />
             <Route path="/learn" element={<LearningCatalog products={data.products} legacyContent={data.content} canAuthor={platformAdmin} />} />
             <Route path="*" element={<Navigate to={data.actor.role === "platform_admin" ? "/admin" : "/overview"} replace />} />
           </Routes>
@@ -426,6 +432,7 @@ function PublicHelpShell({ data }: { data: HubData }) {
       <main className="public-help-wrap">
         <Routes>
           <Route path="/help" element={<ContextualHelpPage data={data} />} />
+          <Route path="/help/articles/:key" element={<HelpArticlePage content={data.content} />} />
           <Route path="/learn" element={<LearningCatalog products={data.products} legacyContent={data.content} />} />
           <Route path="*" element={<Navigate to="/help" replace />} />
         </Routes>
@@ -987,6 +994,7 @@ function ContextualHelpPage({ data }: { data: HubData }) {
                 <div>
                   <small>{item.kind} · Rev {item.revision}</small><h3>{item.title}</h3><p>{item.summary}</p>
                   {item.body && <details><summary>Read answer</summary><div>{item.body}</div></details>}
+                  {item.kind === "article" && item.accessLevel === "public" && <NavLink className="text-link contextual-action" to={helpArticlePath(item.contentKey)}>Open article <ArrowRight size={14} /></NavLink>}
                   {launchUrl && (item.sourceSystem === "support_hub"
                     ? <NavLink className="text-link contextual-action" to={launchUrl}>Open course <ArrowRight size={14} /></NavLink>
                     : <a className="text-link contextual-action" href={launchUrl} target="_blank" rel="noreferrer">Open existing course <ExternalLink size={14} /></a>)}
@@ -1112,7 +1120,7 @@ export default function App() {
         if (session.authenticated) await loadAuthenticated();
         else {
           setData(emptyData);
-          if (["/help","/learn"].includes(window.location.pathname)) await loadPublicHelp();
+          if (isPublicHelpPath(window.location.pathname)) await loadPublicHelp();
           else setLoading(false);
         }
       } catch {
@@ -1129,7 +1137,7 @@ export default function App() {
     await load();
   };
 
-  const publicPortal = !authenticated && !config.demoMode && ["/help", "/learn"].includes(location.pathname);
+  const publicPortal = !authenticated && !config.demoMode && isPublicHelpPath(location.pathname);
   // The Hub is private to its owner: the old customer account-setup links explain that instead.
   if(['/connect','/join'].includes(location.pathname)&&!config.demoMode)return <PrivateHubNotice/>;
   if (!authenticated && !config.demoMode && !publicPortal) return <SmsSignIn rememberPath={rememberPendingPortalPath} />;

@@ -6,8 +6,10 @@
  * run summary and the task result carry kinds, the channel, the product, the reference number and
  * how long ago the message arrived.
  *
- * For a plain question it also proposes one of two fixed replies for the owner to approve (see templates.mjs):
- * an acknowledgment, or a notice asking the sender to resend without the identifiers it carried. Everything
+ * For a plain question it also proposes a fixed reply for the owner to approve (see templates.mjs): an
+ * acknowledgment, or a notice asking the sender to resend without the identifiers it carried. A prospect's
+ * first message (a website lead, or a conversation filed as a sales or Advisors inquiry) is a sales inquiry, a
+ * warning, and gets the sales acknowledgment instead (with the owner's booking link when one is set). Everything
  * else is the owner's to answer, and so is a follow-up in a thread the team already joined.
  *
  * When customer text to the model is switched on (see `drafting`), one more step may follow for a plain, first
@@ -23,7 +25,7 @@
  */
 import { minutesBetween, permanent, plural, recordRun } from '../tasks/shared.mjs';
 import { checkDraft } from './draft.mjs';
-import { alertWords, categoryWord, channelWord, decide, replyFor, replyRoute, severityRank } from './policy.mjs';
+import { alertWords, categoryWord, channelWord, decide, replyFor, replyRoute, salesConversation, severityRank } from './policy.mjs';
 import { buildUserMessage, promptVersion, responseSchema, systemPrompt } from './prompt.mjs';
 import { redact } from './redact.mjs';
 import { categorize } from './rules.mjs';
@@ -73,8 +75,9 @@ function skipReason(snapshot, payload, settings) {
 /**
  * `drafting` is `{ model, guides }` when customer text may go to the model (the owner's explicit switch, a model key
  * and the guide library), and null otherwise, which keeps the handler exactly as it is without a model.
+ * `bookingUrl` is the owner's booking page (HUB_BOOKING_URL): the sales acknowledgment offers it, and nothing else does.
  */
-export function triageHandler({ store, notifier, drafting = null, log = line => console.warn(line) }) {
+export function triageHandler({ store, notifier, drafting = null, bookingUrl = null, log = line => console.warn(line) }) {
   // Whether this alert has been tried before in a channel: its key already has a row there. A refused try counts toward the caps like any
   // other, so a retry has to resume the alert under its own key and channels instead of being judged by the caps again, which would turn it
   // into an email-only alert or a rollup because of itself.
@@ -171,13 +174,13 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
   async function proposeReply({ task, snapshot, category, phi, unread = false, draft = null }) {
     // A message too long to have been screened is the owner's to read and answer.
     if (unread) return { reply: 'owner_only' };
-    const template = draft ? 'drafted' : replyFor({ category, phi, productSlug: snapshot.productSlug, inquiryType: snapshot.inquiryType });
+    const template = draft ? 'drafted' : replyFor({ category, phi, productSlug: snapshot.productSlug, inquiryType: snapshot.inquiryType, sourceSystem: snapshot.sourceSystem ?? null });
     if (!template) return { reply: 'owner_only' };
     if ((snapshot.outboundCount ?? 0) > 0 && !draft) return { reply: 'follow_up', template };
     if (task.agent?.autonomy === 'observe') return { reply: 'observe_only', template };
     const route = replyRoute(snapshot);
     if (!route) return { reply: 'no_route', template };
-    const body = draft ? draft.body : replyBody(template, route);
+    const body = draft ? draft.body : replyBody(template, route, { bookingUrl });
     try {
       const proposal = await store.proposeAction({
         taskId: task.id, kind: 'communication.reply', targetKind: 'communication', targetId: `CM-${snapshot.reference}`, preview: body,
@@ -213,7 +216,11 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
 
     // Both checks read the original text; neither keeps any of it.
     const screen = screenIdentifiers(`${snapshot.subject ?? ''}\n${inbound.body}`);
-    const { category: ruleCategory, reasons } = categorize({ text: inbound.body, subject: snapshot.subject });
+    const matched = categorize({ text: inbound.body, subject: snapshot.subject });
+    // A prospect's message is a sales inquiry whatever its words say: a demo request may read only "Please contact me".
+    const prospect = matched.category === 'general' && salesConversation({ sourceSystem: snapshot.sourceSystem ?? null, inquiryType: snapshot.inquiryType });
+    const ruleCategory = prospect ? 'sales' : matched.category;
+    const reasons = prospect ? ['sales.conversation'] : matched.reasons;
     let { severity } = decide({ category: ruleCategory, phi: screen.flagged });
     // Only the first readChars characters were screened and categorized. A message that fills them may say more, so it is never
     // quieter than a warning, and nothing is offered to the customer or sent to the model for it: not even one that opens like an
@@ -223,8 +230,8 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
     if (severity === null || (unread && severityRank[severity] < severityRank.warning)) severity = 'warning';
 
     const minutes = minutesBetween(inbound.at, now());
-    const words = alertWords({ category: ruleCategory, phi: screen.flagged, severity, channel: snapshot.channel, productSlug: snapshot.productSlug, reference: snapshot.reference, minutes, unread });
-    const delivery = await tellOwner({ task, snapshot, payload, words, severity, now });
+    const alert = alertWords({ category: ruleCategory, phi: screen.flagged, severity, channel: snapshot.channel, productSlug: snapshot.productSlug, reference: snapshot.reference, minutes, unread });
+    const delivery = await tellOwner({ task, snapshot, payload, words: alert, severity, now });
 
     // Ordinary product questions may use reviewed guides, including bounded follow-ups when the growth feature is present.
     // Pricing, cancellation, incidents and identifiers remain owner-only; the existing customer-text opt-in still applies.
@@ -234,8 +241,8 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
     const route = replyRoute(snapshot);
     const eligible = drafting && !screen.flagged && !unread && route !== null && task.agent?.autonomy !== 'observe'
       && (drafting.followups || ((snapshot.inboundCount ?? 1) === 1 && (snapshot.outboundCount ?? 0) === 0))
-      && (replyFor({ category: ruleCategory, phi: false, productSlug: snapshot.productSlug, inquiryType: snapshot.inquiryType }) === 'standard'
-        || (drafting.followups && ruleCategory==='general' && ['carebase','caremetric-intel'].includes(snapshot.productSlug) && snapshot.inquiryType==='sales'));
+      && (replyFor({ category: ruleCategory, phi: false, productSlug: snapshot.productSlug, inquiryType: snapshot.inquiryType, sourceSystem: snapshot.sourceSystem ?? null }) === 'standard'
+        || (drafting.followups && matched.category==='general' && ['carebase','caremetric-intel'].includes(snapshot.productSlug) && snapshot.inquiryType==='sales'));
     if (eligible) {
       asked = await askModel({ task, snapshot, inbound, route, signal });
       // The scheduler has stopped waiting for this task: nothing more is sent or proposed from here.
@@ -253,7 +260,7 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
     // A model that declined saw something its provider objected to: a person should read it, so nothing is offered automatically.
     const proposal = asked?.state === 'refused' ? { reply: 'model_refused' } : await proposeReply({ task, snapshot, category, phi, unread, draft: asked?.draft ?? null });
     const proposed = proposal.reply === 'proposed' || proposal.reply === 'already_proposed';
-    const proposedWords = proposal.template === 'drafted' ? 'drafted reply' : proposal.template === 'phi' ? 'identifier notice' : 'acknowledgment';
+    const proposedWords = { drafted: 'drafted reply', phi: 'identifier notice', sales: 'sales acknowledgment' }[proposal.template] ?? 'acknowledgment';
     const modelWords = asked && asked.state !== 'drafted' ? `; ${asked.state === 'rejected' ? `draft not used (${asked.reason.replaceAll('_', ' ')})` : asked.state === 'unavailable' ? `the model was unavailable (${asked.reason.replaceAll('_', ' ')})` : draftWords[asked.state]}` : '';
     await recordRun({ store, log }, task, {
       promptVersion: 'rules.1',

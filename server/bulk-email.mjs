@@ -58,9 +58,12 @@ export function bulkEmailHtml({ subject, body, applications, unsubscribeUrl, pos
   }).html;
 }
 
-/** SendGrid Mail Send for bulk email: one recipient per request, text then HTML, one-click unsubscribe headers, no tracking. */
-export function sendgridBulkMail({ apiKey, from = 'support@caremetric.ai', replyTo = from, fetchImpl = fetch }) {
-  const configured = typeof apiKey === 'string' && apiKey.startsWith('SG.') && emailAddress.test(from) && emailAddress.test(replyTo);
+/**
+ * SendGrid Mail Send for bulk email: one recipient per request, text then HTML, one-click unsubscribe headers, no tracking. The
+ * Account Manager's customer emails use the same sender under their own SendGrid category.
+ */
+export function sendgridBulkMail({ apiKey, from = 'support@caremetric.ai', replyTo = from, category = 'hub-bulk-email', fetchImpl = fetch }) {
+  const configured = typeof apiKey === 'string' && apiKey.startsWith('SG.') && emailAddress.test(from) && emailAddress.test(replyTo) && /^[a-z0-9-]{1,40}$/.test(category);
   return {
     configured,
     async send({ to, subject, text, html, unsubscribeUrl, messageId }) {
@@ -71,7 +74,7 @@ export function sendgridBulkMail({ apiKey, from = 'support@caremetric.ai', reply
           method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(15000),
           body: JSON.stringify({
             personalizations: [personalization], ...(messageId ? { custom_args: { growth_message_id: messageId } } : {}), from: { email: from, name: 'CareMetric' }, reply_to: { email: replyTo }, subject,
-            content: [{ type: 'text/plain', value: text }, ...(html ? [{ type: 'text/html', value: html }] : [])], categories: ['hub-bulk-email'],
+            content: [{ type: 'text/plain', value: text }, ...(html ? [{ type: 'text/html', value: html }] : [])], categories: [category],
             tracking_settings: { click_tracking: { enable: false }, open_tracking: { enable: false }, subscription_tracking: { enable: false } },
           }),
         });
@@ -172,12 +175,16 @@ export function bulkEmail({ pool, delegations, mail, publicOrigin, postalAddress
       })();
       return sending;
     },
-    /** The unsubscribe page. GET only shows it; POST (the button, or a mail client's one-click request) confirms. */
+    /**
+     * The unsubscribe page, for bulk announcements and for the Account Manager's check-in emails alike: one suppression list stops
+     * both, and the page says so. GET only shows it; POST (the button, or a mail client's one-click request) confirms.
+     */
     async unsubscribePage(token, confirm) {
       const result = await server('select private.email_unsubscribe($1,$2) as result', [digest(token), confirm]);
-      if (!result.valid) return page('Link not recognized', 'This unsubscribe link is not valid. If you keep receiving CareMetric announcements, reply to one and ask us to stop.', false);
-      if (result.unsubscribed) return page('You are unsubscribed', 'You will no longer receive CareMetric announcements by email. Messages about your own support requests are not affected.', false);
-      return page('Unsubscribe from CareMetric announcements', 'Select Unsubscribe to stop receiving announcement emails from CareMetric.', true);
+      if (!result.valid) return page('Link not recognized', 'This unsubscribe link is not valid. If you keep receiving CareMetric emails you did not ask for, reply to one and ask us to stop.', false);
+      if (result.unsubscribed) return page('You are unsubscribed', 'You will no longer receive announcements or check-in emails from CareMetric. Messages about your own support requests, and receipts and billing notices, are not affected.', false);
+      return page(result.purpose === 'lifecycle' ? 'Unsubscribe from CareMetric check-in emails' : 'Unsubscribe from CareMetric announcements',
+        'Select Unsubscribe to stop receiving announcements and check-in emails from CareMetric.', true);
     },
   };
   return service;

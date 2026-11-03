@@ -5,7 +5,7 @@ import {customerActivityClient} from './event-client.mjs';
 const key='synthetic-key-for-tests-only-32-characters';
 const now=Date.parse('2026-11-03T12:00:00Z');
 const event={tenantId:'11111111-1111-4111-8111-111111111111',eventKey:'event-1',kind:'first_value',occurredAt:new Date(now).toISOString(),facts:{}};
-const fixture=()=>{const store={event:vi.fn(async()=>({replay:false})),unsubscribe:vi.fn(async()=>true),manage:vi.fn()};return {store,service:growthService({store,features:new Set(['platform.agents.growth.v1']),eventKeys:{carebase:key},signingKey:key})};};
+const fixture=()=>{const store={event:vi.fn(async()=>({replay:false})),unsubscribe:vi.fn(async()=>true),manage:vi.fn()};return {store,service:growthService({store,features:new Set(['platform.agents.customer-growth.v1']),eventKeys:{carebase:key},signingKey:key})};};
 const signed=(raw,product='carebase',stamp=String(now/1000))=>({'x-caremetric-timestamp':stamp,'x-caremetric-signature':createHmac('sha256',key).update(`${stamp}.${product}.`).update(raw).digest('hex')});
 it('accepts scoped signed activity and rejects tampering, expired signatures and product swaps',async()=>{
  const {store,service}=fixture();const raw=Buffer.from(JSON.stringify(event));await service.activity('carebase',raw,signed(raw),now);expect(store.event).toHaveBeenCalledWith('carebase',event);

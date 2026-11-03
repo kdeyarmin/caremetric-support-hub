@@ -169,6 +169,21 @@ describe("AI team screen", () => {
     expect(link.getAttribute("href")).toBe("/communications?search=CM-1001&status=all");
   });
 
+  it("shows a proposed customer email by its account and subject, sends it on approval, and says why one was not sent", async () => {
+    const email = { id: ids.action, agentKey: "account_manager", agentName: "Account Manager", taskId: ids.task, kind: "email.send", targetKind: "billing_account",
+      targetId: "maple-grove", preview: "Subject: Welcome to CareMetric CareBase\n\nHello,\n\nThank you for starting a CareMetric CareBase trial for Maple Grove.",
+      createdAt: "2026-11-02T11:30:00+00:00", expiresAt: "2026-11-09T11:30:00+00:00" };
+    const client = fakeClient(overview({ approvals: [email] }), { decide: vi.fn(async () => ({ id: ids.action, kind: "email.send", status: "failed", decided: true, error: "suppressed" })) });
+    render(<Team client={client} />);
+    const waiting = await screen.findByRole("region", { name: /Waiting for you/ });
+    expect(within(waiting).getByText(/proposes: Email to maple-grove: Welcome to CareMetric CareBase/)).toBeTruthy();
+    expect(within(waiting).queryByRole("link")).toBeNull();
+    expect(within(waiting).getByLabelText("Proposed text: Email to maple-grove: Welcome to CareMetric CareBase").textContent).toBe(email.preview);
+    fireEvent.click(within(waiting).getByRole("button", { name: "Approve and send: Email to maple-grove: Welcome to CareMetric CareBase from Account Manager" }));
+    expect(client.decide).toHaveBeenCalledWith({ actionId: ids.action, decision: "approve", note: undefined });
+    expect((await screen.findByRole("alert")).textContent).toContain("The billing contact unsubscribed from CareMetric emails, so nothing was sent.");
+  });
+
   it("says why an approved reply could not be sent", async () => {
     const client = fakeClient(overview(), { decide: vi.fn(async () => ({ id: ids.action, kind: "communication.reply", status: "failed", decided: true, error: "thread_changed" })) });
     render(<Team client={client} />);
@@ -306,7 +321,8 @@ describe("AI team screen", () => {
     const client = fakeClient(overview(), { decide: vi.fn(async () => ({ id: ids.action, kind: "communication.reply", status: "approved", decided: true })) });
     render(<Team client={client} />);
     fireEvent.click(await screen.findByRole("button", { name: /Approve and send/ }));
-    const text = (await screen.findByRole("status")).textContent ?? "";
+    // Approving reloads the activity list, whose "Loading activity" indicator is also a status region: wait for the decision's own message.
+    const text = (await screen.findByText(/could not confirm what happened next/)).textContent ?? "";
     expect(text).toContain("could not confirm what happened next");
     expect(text).toContain("open the conversation before answering again");
     expect(text).not.toMatch(/not been sent|Run what's waiting/);
@@ -386,6 +402,20 @@ describe("AI team screen", () => {
     expect(text("CM-1004")).toContain("Failed");
     expect(text("CM-1004")).toContain("Your sign-in lapsed before the reply was sent, so nothing was sent. Sign in again and answer from the conversation.");
     expect(text("CM-1004")).not.toMatch(/Run what's waiting/);
+  });
+
+  it("names a lead form incident in the history instead of showing its key", async () => {
+    const incident = {
+      id: "77777777-7777-4777-8777-777777777779", taskId: ids.task, agentKey: "platform_engineer", kind: "incident.open", targetKind: "probe_target", targetId: "carebase_forms:2",
+      status: "executed", preview: "CareBase lead form is not working", decisionNote: null, createdAt: "2026-11-02T11:30:00+00:00", expiresAt: "2026-11-09T11:30:00+00:00",
+      decidedAt: null, executedAt: "2026-11-02T11:31:00+00:00", result: null,
+    };
+    const activity = vi.fn(async (input: { kind: string }) => (input.kind === "actions" ? { items: [incident], total: 1, offset: 0, limit: 15 } : emptyPage)) as unknown as TeamClient["activity"];
+    render(<Team client={fakeClient(overview(), { activity })} />);
+    await screen.findByRole("region", { name: "What the team has done" });
+    fireEvent.click(screen.getByRole("tab", { name: "Proposed actions" }));
+    expect(await screen.findByText("CareBase lead form, incident 2")).toBeTruthy();
+    expect(screen.queryByText("carebase_forms:2")).toBeNull();
   });
 
   it("switches between kinds of activity and the audit log", async () => {

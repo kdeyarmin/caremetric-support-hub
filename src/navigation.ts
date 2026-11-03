@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   UserRound,
   Voicemail,
+  UserPlus,
   type LucideIcon,
 } from "lucide-react";
 
@@ -36,6 +37,7 @@ export const navSections: readonly NavSection[] = [
   ] },
   { label: "Administration", items: [
     { to: "/admin/apps", label: "Applications", icon: Boxes, audience: "platformAdmin" },
+    { to: "/admin/leads", label: "Leads", icon: UserPlus, audience: "platformAdmin" },
     { to: "/admin/billing", label: "Billing", icon: CreditCard, audience: "platformAdmin" },
     { to: "/admin/email", label: "Bulk email", icon: MailPlus, audience: "platformAdmin" },
     { to: "/phone-numbers", label: "Phone numbers", icon: Phone, audience: "platformAdmin" },

@@ -20,13 +20,13 @@ const declared = features => (features instanceof Set ? features.has(conciergeFe
 export const draftingFor = ({ model = null, guides = null, customerTextToAi = false } = {}) =>
   (customerTextToAi === true && model?.configured === true && typeof model.run === 'function' && typeof guides?.top === 'function' ? { model, guides } : null);
 
-export function conciergeHandlers({ store, notifier, features = null, log, model = null, guides = null, customerTextToAi = false }) {
+export function conciergeHandlers({ store, notifier, features = null, log, model = null, guides = null, customerTextToAi = false, bookingUrl = null }) {
   if (!declared(features)) return {};
   const drafting=draftingFor({model,guides,customerTextToAi});
-  const followups=features?.has?.('platform.agents.growth.v1')===true || (Array.isArray(features)&&features.includes('platform.agents.growth.v1'));
+  const followups=features?.has?.('platform.agents.customer-growth.v1')===true || (Array.isArray(features)&&features.includes('platform.agents.customer-growth.v1'));
   return {
     'concierge.sweep': sweepHandler({ store }),
-    'concierge.communication': triageHandler({ store, notifier, log, drafting: drafting?{...drafting,followups}:null }),
+    'concierge.communication': triageHandler({ store, notifier, log, drafting: drafting?{...drafting,followups}:null, bookingUrl }),
   };
 }
 

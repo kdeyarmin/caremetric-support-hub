@@ -12,7 +12,8 @@ the system of record; providers only carry messages.
 | Text message | Twilio posts inbound texts to `POST /api/channels/sms/twilio`, verified with `X-Twilio-Signature`. | Off until configured |
 | Email | SendGrid Inbound Parse posts mail to `POST /api/channels/email/inbound` as a signed webhook. | Off until configured |
 | Website chat | A chat panel on every Help page (`/help`, `/help?product=<app>`). | Off until enabled |
-| Advisors web form | The platform administrator imports caremetricadvisors.com consultation requests with **Import Advisors requests**. | Available once the Advisors bridge is deployed |
+| Website forms (CareBase, Intel, Advisors) | Each website forwards a lead that asked to be contacted (a demo request, consultation or contact request) to the signed `POST /api/leads`; see [LEAD_INTAKE.md](LEAD_INTAKE.md). The conversation's source is `carebase.web`, `intel.web` or `advisors.web`, shown as "CareBase website", "Intel website" or "Advisors website". | Off for a product until its `HUB_LEAD_SECRET_*` is set |
+| Advisors web form (import) | The platform administrator imports caremetricadvisors.com consultation requests with **Import Advisors requests**. A request that already arrived as a lead is skipped, and a lead for a request already imported is linked to it: both use `advisors.web` and the `CM-` reference. | Available once the Advisors bridge is deployed |
 
 The channel strip at the top of the inbox shows which channels are live.
 
@@ -25,6 +26,7 @@ The channel strip at the top of the inbox shows which channels are live.
 - **Chat:** the application the visitor's Help page was opened for.
 - **Phone line:** the application the AI assistant recorded.
 - **Advisors form:** Healthcare Advisors.
+- **Website leads:** the product that forwarded the lead (CareBase, CareMetric Intel or Healthcare Advisors).
 - Anything else arrives with **Application not set**. Only staff with
   portfolio-wide permission (or the platform administrator) see those until
   someone sets the application; staff scoped to one application see only theirs.
@@ -33,7 +35,7 @@ The channel strip at the top of the inbox shows which channels are live.
 
 A reply goes back on the original channel: text to text, email to email, chat
 to chat. Phone and web-form inquiries are answered by email when an address was
-left, otherwise by text. If neither exists, call back and record a note.
+left (every website lead has one), otherwise by text. If neither exists, call back and record a note.
 
 Each reply and note is written to the database under a request key **before**
 a reply is sent. A key is bound to the exact text it first carried: retrying the
@@ -83,8 +85,12 @@ tells visitors to keep the page open or return to Help in the same browser.
   cookie. They see their own messages and staff replies, never internal notes.
   Abuse limits: three new chats per visitor per hour, 300 per hour overall, and
   bounded message rates per visitor and per conversation.
-- Retention is not automated. Decide a retention period before enabling text,
-  email or chat for production traffic.
+- Retention: website-lead conversations (the Advisors, CareBase and Intel
+  website sources `advisors.web`, `carebase.web` and `intel.web`, Advisors
+  imports included) are deleted, with their messages, twelve months after
+  their last message ([LEAD_INTAKE.md](LEAD_INTAKE.md), "Retention"). Retention
+  for every other channel is still not automated: decide a retention period
+  before enabling text, email or chat for production traffic.
 
 ## Before enabling text, email or chat
 
@@ -163,6 +169,11 @@ Apply `20261020163000_unified_communications.sql` and its gate
 `support.communications.v1`. The gate refuses to declare the feature if any
 communication table loses row level security or gains a direct grant, or if a
 webhook or chat function becomes executable by a browser role.
+
+`20261103120000_lead_desk.sql` adds `carebase.web` and `intel.web` to the conversation sources (the chat check is
+unchanged), and its gate `20261103120100_lead_desk_contract.sql` declares `support.leads.v1` only while the
+conversation table accepts both. Lead conversations are written by `private.lead_intake`, the Hub server's alone; the
+visitor's message is stored only as the conversation's inbound message, never on the lead or in audit metadata.
 
 `20261021130000_communication_reply_channel.sql` makes a started reply also
 return the conversation's channel, which the phone-message subject above needs.

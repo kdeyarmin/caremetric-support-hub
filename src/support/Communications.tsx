@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { Mail, MessageCircle, MessageSquareText, Phone, RefreshCw, Search, Send, StickyNote, Globe2 } from "lucide-react";
 import type { Product } from "../domain";
 import {
-  channelLabels, channels, communicationsClient, conversationStatuses, deliveryLabels, describeChannels, inquiryLabels, inquiryTypes, replyRoute, statusLabels,
+  channelLabels, channels, communicationsClient, conversationSourceLabel, conversationStatuses, deliveryLabels, describeChannels, inquiryLabels, inquiryTypes, replyRoute, statusLabels,
   type Channel, type ChannelStatus, type CommunicationsClient, type ConversationPage, type ConversationStatus, type ConversationThread, type InquiryType, type SyncSource,
 } from "./communicationsClient";
 import "./communications.css";
@@ -95,7 +95,7 @@ export function Communications({ products, actor, client = communicationsClient,
 
   return <div className="communications">
     <div className="page-heading"><div><span className="eyebrow">Every channel · every application</span><h1>Communications</h1>
-      <p>Customer service and technical support for CareBase, Breathe, and Intel, and Healthcare Advisors consultation requests, in one queue.</p></div>
+      <p>Customer service and technical support for CareBase, Breathe, and Intel, website leads that asked to be contacted, and Healthcare Advisors consultation requests, in one queue.</p></div>
       <div className="communications-actions">
         {admin && <><button className="button button-secondary" type="button" disabled={busy} onClick={() => void sync("breathe.phone")}><Phone size={15} aria-hidden="true" />Import phone-line messages</button>
           {resume["breathe.phone"] !== undefined && <button className="button button-secondary" type="button" disabled={busy} onClick={() => void sync("breathe.phone", resume["breathe.phone"])}>Import the next phone-line batch</button>}
@@ -155,7 +155,7 @@ function ThreadView({ thread, products, actorId, status, busy, client, act }: { 
   const saveNote = () => act(async () => { await client.note(thread.id, note, noteKey.keyFor(note, noteAsNew)); noteKey.settle(); setNote(""); return "Internal note saved."; });
   return <>
     <header className="communications-thread-header">
-      <div><span className="eyebrow"><ChannelIcon size={14} aria-hidden="true" /> {channelLabels[thread.channel]} · CM-{thread.reference}</span><h2>{thread.subject}</h2>
+      <div><span className="eyebrow"><ChannelIcon size={14} aria-hidden="true" /> {channelLabels[thread.channel]}{conversationSourceLabel(thread.sourceSystem) ? ` · ${conversationSourceLabel(thread.sourceSystem)}` : ""} · CM-{thread.reference}</span><h2>{thread.subject}</h2>
         <p>{[thread.contactName, thread.organization, thread.contactEmail, thread.contactPhone].filter(Boolean).join(" · ") || "No contact details were provided."}</p>
         <p className="communications-privacy">Contact details are self-reported and do not verify an account. This conversation may contain patient information: do not copy it elsewhere.</p></div>
       <div className="communications-controls">

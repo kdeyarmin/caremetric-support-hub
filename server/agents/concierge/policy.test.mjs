@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alertWords, categoryWord, channelWord, decide, productWord, replyFor, replyRoute } from './policy.mjs';
+import { alertWords, categoryWord, channelWord, decide, leadSystems, productWord, replyFor, replyRoute, salesConversation } from './policy.mjs';
 
 describe('a second reading of how pressing a message is', () => {
   it('can raise any topic to urgent, and never hides an automatic reply', () => {
@@ -20,9 +20,9 @@ describe('how loudly the owner is told', () => {
     for (const category of ['outage', 'security', 'legal']) expect(decide({ category }), category).toEqual({ severity: 'urgent' });
   });
 
-  it('emails a warning for billing and cancellation, and information for the rest', () => {
-    for (const category of ['billing', 'cancellation']) expect(decide({ category }), category).toEqual({ severity: 'warning' });
-    for (const category of ['sales', 'general']) expect(decide({ category }), category).toEqual({ severity: 'info' });
+  it('emails a warning for billing, a cancellation and a sales inquiry, and information for the rest', () => {
+    for (const category of ['billing', 'cancellation', 'sales']) expect(decide({ category }), category).toEqual({ severity: 'warning' });
+    expect(decide({ category: 'general' })).toEqual({ severity: 'info' });
   });
 
   it('never makes a message with identifiers quieter than a warning', () => {
@@ -99,10 +99,44 @@ describe('which reply to offer the owner', () => {
     }
   });
 
-  it('leaves an Advisors or sales conversation to the owner, even a plain one', () => {
+  it('offers a prospect the sales acknowledgment: a website lead, or a conversation filed as a sale or an Advisors inquiry', () => {
+    for (const sourceSystem of ['carebase.web', 'intel.web', 'advisors.web']) {
+      expect(replyFor({ category: 'general', sourceSystem, inquiryType: 'unclassified' }), sourceSystem).toBe('sales');
+      expect(replyFor({ category: 'sales', sourceSystem }), sourceSystem).toBe('sales');
+    }
+    for (const inquiryType of ['sales', 'advisors']) {
+      expect(replyFor({ category: 'general', inquiryType }), inquiryType).toBe('sales');
+      expect(replyFor({ category: 'sales', inquiryType, productSlug: 'advisors' }), inquiryType).toBe('sales');
+    }
+    expect(leadSystems).toEqual(['carebase.web', 'intel.web', 'advisors.web']);
+  });
+
+  it('gives a prospect whose message carries identifiers only the identifier notice', () => {
+    expect(replyFor({ category: 'general', inquiryType: 'sales', phi: true })).toBe('phi');
+    expect(replyFor({ category: 'sales', sourceSystem: 'advisors.web', phi: true })).toBe('phi');
+  });
+
+  it('still leaves a prospect\'s outage, security or legal matter, billing and cancellation to the owner', () => {
+    for (const category of ['outage', 'security', 'legal', 'billing', 'cancellation', 'urgent', 'auto_reply']) {
+      expect(replyFor({ category, sourceSystem: 'carebase.web', inquiryType: 'sales' }), category).toBeNull();
+    }
+    // A lead conversation the owner filed as billing is billing, whatever it came from.
+    expect(replyFor({ category: 'general', sourceSystem: 'intel.web', inquiryType: 'billing' })).toBeNull();
+  });
+
+  it('leaves anything else from Advisors, and a sale in an ordinary conversation, to the owner', () => {
     expect(replyFor({ category: 'general', productSlug: 'advisors' })).toBeNull();
-    expect(replyFor({ category: 'general', inquiryType: 'advisors' })).toBeNull();
-    expect(replyFor({ category: 'general', inquiryType: 'sales', phi: true })).toBeNull();
+    expect(replyFor({ category: 'general', productSlug: 'advisors', inquiryType: 'technical_support', sourceSystem: 'hub.email' })).toBeNull();
+    expect(replyFor({ category: 'sales' })).toBeNull();
+    expect(replyFor({ category: 'sales', inquiryType: 'customer_service', sourceSystem: 'hub.email' })).toBeNull();
+  });
+
+  it('knows a prospect by where the conversation came from or how it is filed, never by a billing filing', () => {
+    expect(salesConversation({ sourceSystem: 'carebase.web' })).toBe(true);
+    expect(salesConversation({ inquiryType: 'advisors' })).toBe(true);
+    expect(salesConversation({ sourceSystem: 'advisors.web', inquiryType: 'billing' })).toBe(false);
+    for (const sourceSystem of ['hub.email', 'hub.sms', 'hub.chat', 'breathe.phone', null, undefined, 'carebase']) expect(salesConversation({ sourceSystem }), String(sourceSystem)).toBe(false);
+    expect(salesConversation()).toBe(false);
   });
 
   it('leaves a conversation filed as billing to the owner, whatever its words say', () => {
