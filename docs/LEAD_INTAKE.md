@@ -74,8 +74,13 @@ How the Hub reads these rules, exactly (any failure is 400 `{"error":"invalid_le
   JSON `null`; `test` absent or `null` means `false`.
 - Times (`occurredAt`, `attribution.firstSeenAt`) are ISO 8601 instants with their offset, such as
   `2026-11-03T12:00:00.000Z` or `2026-11-03T07:00:00-05:00`, and must be real calendar times.
-- An email address has one `@`, no spaces, and a dot in its domain; the Hub stores it trimmed and in lowercase. Other
-  single-line fields are trimmed, and control characters in them become spaces.
+- An email address is trimmed and lowercased, then must be an address and nothing else: letters `a`-`z`, digits and
+  `.` `_` `'` `+` `-` in dot-separated parts before a single `@`, and dot-separated labels of letters, digits and
+  hyphens after it (at least two labels), for example `o'brien.ops+leads@mail-1.example.co.uk`. Characters that mean
+  something in a URL or a `mailto:` link (`?` `&` `#` `%` `/` `\` `,` `;` `:` `=` and the like), spaces, quotes, angle
+  brackets and non-ASCII letters are refused, so a stored address can never carry mail headers or another recipient.
+  The Hub stores the address trimmed and in lowercase. Other single-line fields are trimmed, and control characters in
+  them become spaces.
 - `referrerHost` is letters, digits, dots, hyphens and underscores (no scheme, port or path); `landingPath` starts with
   `/` and has no `?`, `#` or whitespace.
 - A `CM-` reference is required of Advisors for every lead that is not a test.
@@ -175,9 +180,12 @@ The Hub's Platform Engineer checks each product's main lead endpoint every few h
   body, a contact detail, a message or a secret.
 - **The Leads screen** (`/admin/leads`, platform administrator only) lists leads newest first with when each arrived,
   the product, the kind and its facts, the contact, where the person came from, its status and a link to its
-  conversation. It filters by kind and product, and shows test leads only when asked. Changing a status needs the
-  command session (signed in within eight hours); a lead changed elsewhere since the page loaded is refused, and the
-  list reloads. The list is the RPC `hub.list_leads(p_kind, p_source, p_include_test, p_offset, p_limit)`; a status
+  conversation. It filters by kind and product, and shows test leads only when asked. Each address opens a message to
+  that address alone: the link is percent-encoded on both sides of the `@` (RFC 6068). The list pages 25 at a time as
+  far back as the offset `hub.list_leads` reports as its deepest (`maxOffset`, 10,000); past that, a filter narrows it.
+  A page that empties after it was chosen (retention deleted its last lead, say) offers the first page. Changing a
+  status needs the command session (signed in within eight hours); a lead changed elsewhere since the page loaded is
+  refused, and the list reloads. The list is the RPC `hub.list_leads(p_kind, p_source, p_include_test, p_offset, p_limit)`; a status
   change is `POST /api/admin/leads/status`, which runs `hub.update_lead_status(p_id, p_status, p_expected_updated_at)`
   in the owner's session.
 

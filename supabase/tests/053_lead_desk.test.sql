@@ -1,5 +1,5 @@
 begin;
-select plan(115);
+select plan(131);
 
 -- ---- The boundary: who may reach what ------------------------------------------------------------------------------
 select ok(coalesce((select relrowsecurity from pg_class where oid = 'private.leads'::regclass), false), 'The leads table has row level security');
@@ -126,7 +126,22 @@ select n, coalesce(source, 'carebase'), doc, description from (values
   (34, null, (select jsonb_set(doc, '{attribution,utmTerm}', to_jsonb(repeat('u', 201))) from lead_base), 'A UTM value over 200 characters'),
   (35, null, (select jsonb_set(doc, '{attribution,firstSeenAt}', '"yesterday"') from lead_base), 'A first visit that is not a time'),
   (36, 'advisors', (select doc || '{"source": "advisors", "kind": "consultation", "externalId": "CM-abc"}' from lead_base), 'An Advisors inquiry without its CM- reference'),
-  (37, null, '[1, 2, 3]'::jsonb, 'A body that is not an object')
+  (37, null, '[1, 2, 3]'::jsonb, 'A body that is not an object'),
+  -- An address that would turn a mailto: link into more than one address: URL and mail-header characters.
+  (38, null, (select jsonb_set(doc, '{contact,email}', '"jordan@example.org?bcc=other%40example.net"') from lead_base), 'An address carrying mail headers'),
+  (39, null, (select jsonb_set(doc, '{contact,email}', '"jordan&co@example.org"') from lead_base), 'An address with an ampersand'),
+  (40, null, (select jsonb_set(doc, '{contact,email}', '"jordan#1@example.org"') from lead_base), 'An address with a number sign'),
+  (41, null, (select jsonb_set(doc, '{contact,email}', '"jordan%40ops@example.org"') from lead_base), 'An address with a percent sign'),
+  (42, null, (select jsonb_set(doc, '{contact,email}', '"jordan/ops@example.org"') from lead_base), 'An address with a slash'),
+  (43, null, (select jsonb_set(doc, '{contact,email}', to_jsonb('jordan\ops@example.org'::text)) from lead_base), 'An address with a backslash'),
+  (44, null, (select jsonb_set(doc, '{contact,email}', '"jordan@example.org,other@example.net"') from lead_base), 'Two addresses separated by a comma'),
+  (45, null, (select jsonb_set(doc, '{contact,email}', '"jordan@example.org;other@example.net"') from lead_base), 'Two addresses separated by a semicolon'),
+  (46, null, (select jsonb_set(doc, '{contact,email}', '"jordan=ops@example.org"') from lead_base), 'An address with an equals sign'),
+  (47, null, (select jsonb_set(doc, '{contact,email}', '"jordan@example.org:25"') from lead_base), 'An address with a port'),
+  (48, null, (select jsonb_set(doc, '{contact,email}', '"\"jordan rivera\"@example.org"') from lead_base), 'A quoted local part'),
+  (49, null, (select jsonb_set(doc, '{contact,email}', '"Jordan <jordan@example.org>"') from lead_base), 'A display name with the address'),
+  (50, null, (select jsonb_set(doc, '{contact,email}', '"jordan@[192.0.2.1]"') from lead_base), 'An address at a bracketed IP address'),
+  (51, null, (select jsonb_set(doc, '{contact,email}', '"jordan..rivera@example.org"') from lead_base), 'An address with an empty part')
 ) as cases (n, source, doc, description);
 
 select throws_ok(format('select private.lead_record(%L, %L::jsonb)', source, doc), '22023', 'Invalid lead.', 'Refused: ' || lower(left(description, 1)) || substr(description, 2))
@@ -204,6 +219,15 @@ select is((select row(c.subject, c.inquiry_type)::text || '|' || (select m.body 
     from private.communications c join private.leads l on l.communication_id = c.id join recorded r on r.label = 'minimal' and l.id = (r.result ->> 'id')::uuid),
   row('Contact request: min@example.org', 'sales')::text || '|No message was included with this request.',
   'A contact request with nothing to say still opens a conversation that says so');
+
+-- Addresses: the punctuation real addresses use is accepted, and the table itself refuses one with URL characters.
+insert into recorded select 'address', private.lead_record('intel', doc || '{"source": "intel", "kind": "newsletter", "externalId": "lead-desk-test-address",
+  "contact": {"email": " O''Brien.Ops+Leads_2026@Mail-1.Example.co.uk "}}') from lead_base;
+select is((select l.contact_email from private.leads l join recorded r on r.label = 'address' and l.id = (r.result ->> 'id')::uuid),
+  'o''brien.ops+leads_2026@mail-1.example.co.uk', 'An address with an apostrophe, plus, underscore, hyphen and subdomains is kept, trimmed and lowercased');
+select throws_ok($$insert into private.leads (source, kind, external_id, occurred_at, contact_email)
+    values ('carebase', 'contact', 'lead-desk-test-direct', now(), 'jordan@example.org?bcc=other@example.net')$$,
+  '23514', null, 'The table refuses an address with URL characters even when it is written directly');
 
 -- ---- Advisors: a consultation already imported is linked, not copied ----------------------------------------------
 -- The same rows hub.import_communications writes for an Advisors request (it needs the Hub server's administrator session).

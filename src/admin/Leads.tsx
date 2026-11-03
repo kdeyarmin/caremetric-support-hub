@@ -4,6 +4,7 @@ import { Link, useInRouterContext } from "react-router-dom";
 import { Loading, ReadFailure } from "./AdminReads";
 import { timeLabel } from "./readState";
 import { useAdminRead } from "./useAdminRead";
+import { mailtoHref } from "../lib/mailto";
 import { LeadsApiError, leadsClient } from "./leadsClient";
 import type { LeadsClient } from "./leadsClient";
 import {
@@ -34,6 +35,25 @@ function ConversationLink({ reference }: { reference: string }) {
 }
 
 const who = (lead: Lead) => lead.contact.name ?? lead.contact.email;
+const leadCount = (count: number) => `${count} lead${count === 1 ? "" : "s"}`;
+
+/**
+ * Newer and Older, from what the page itself says: Older only while more leads exist and the next page is within the
+ * deepest offset hub.list_leads serves (`maxOffset`), so the screen never asks for a page the database refuses.
+ */
+function Pager({ data, onPage }: { data: LeadPage; onPage: (offset: number) => void }) {
+  const older = data.offset + pageSize;
+  const more = data.offset + data.items.length < data.total;
+  const beyond = older > data.maxOffset;
+  return <>
+    <div className="button-row team-paging">
+      <button type="button" className="button button-secondary button-small" disabled={data.offset === 0} onClick={() => onPage(Math.max(0, data.offset - pageSize))}>Newer</button>
+      <span className="muted" role="status">Showing {data.offset + 1}–{data.offset + data.items.length} of {data.total}</span>
+      <button type="button" className="button button-secondary button-small" disabled={!more || beyond} onClick={() => onPage(older)}>Older</button>
+    </div>
+    {more && beyond && <p className="admin-explanation">This is as far back as the list pages. Choose a kind or product to see older leads.</p>}
+  </>;
+}
 
 function LeadRow({ lead, busy, onStatus }: { lead: Lead; busy: string; onStatus: (lead: Lead, status: LeadStatus) => void }) {
   const facts = Object.entries(lead.details).map(([key, value]) => `${detailLabel(key)}: ${detailValue(value)}`).join(" · ");
@@ -43,7 +63,7 @@ function LeadRow({ lead, busy, onStatus }: { lead: Lead; busy: string; onStatus:
     <td>{leadKindLabels[lead.kind]}{facts && <small className="leads-facts">{facts}</small>}</td>
     <td>{lead.contact.name ?? "—"}{lead.contact.role && <small>{lead.contact.role}</small>}</td>
     <td>{lead.contact.organization ?? "—"}</td>
-    <td><a href={`mailto:${lead.contact.email}`}>{lead.contact.email}</a>{lead.contact.phone && <small>{lead.contact.phone}</small>}</td>
+    <td><a href={mailtoHref(lead.contact.email)}>{lead.contact.email}</a>{lead.contact.phone && <small>{lead.contact.phone}</small>}</td>
     <td className="team-wide">{attributionSummary(lead.attribution)}</td>
     <td>
       <select value={lead.status} disabled={Boolean(busy)} aria-label={`Status for ${who(lead)}`}
@@ -113,18 +133,20 @@ export function Leads({ client = leadsClient }: { client?: LeadsClient }) {
       {state.status === "error" && <ReadFailure error={state.error} retry={reload} />}
       {shown && <>
         <p className="admin-read-time">Loaded {timeLabel(shown.receivedAt)}.</p>
-        {shown.data.items.length === 0
+        {shown.data.items.length === 0 && shown.data.offset > 0
+          // Leads were deleted since this page was chosen (retention, for one), so nothing is left this far back.
+          ? <div className="button-row team-paging">
+            <span className="muted" role="status">No leads on this page now ({leadCount(shown.data.total)} in all).</span>
+            <button type="button" className="button button-secondary button-small" onClick={() => page(0)}>First page</button>
+          </div>
+          : shown.data.items.length === 0
           ? <p className="admin-explanation">{filtered || includeTest ? "No leads match these filters." : "No leads yet. They appear here as soon as CareBase, Intel or Advisors forwards one."}</p>
           : <>
             <div className="portfolio-table-wrap"><table className="coverage-matrix team-table leads-table"><caption className="sr-only">Leads, newest first</caption>
               <thead><tr>{["Received", "Product", "Kind", "Name", "Organization", "Email", "Source", "Status", "Conversation"].map(label => <th key={label} scope="col">{label}</th>)}</tr></thead>
               <tbody>{shown.data.items.map(lead => <LeadRow key={`${lead.id}:${lead.updatedAt}`} lead={lead} busy={busy} onStatus={(item, status) => void onStatus(item, status)} />)}</tbody>
             </table></div>
-            <div className="button-row team-paging">
-              <button type="button" className="button button-secondary button-small" disabled={offset === 0} onClick={() => page(Math.max(0, offset - pageSize))}>Newer</button>
-              <span className="muted" role="status">Showing {shown.data.offset + 1}–{shown.data.offset + shown.data.items.length} of {shown.data.total}</span>
-              <button type="button" className="button button-secondary button-small" disabled={shown.data.offset + shown.data.items.length >= shown.data.total} onClick={() => page(offset + pageSize)}>Older</button>
-            </div>
+            <Pager data={shown.data} onPage={page} />
           </>}
       </>}
     </section>

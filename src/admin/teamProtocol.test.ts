@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionLabel, cadenceLabel, centsLabel, decisionSchema, errorLabel, failedActionLabel, outcomeLabel, statusLabel, targetLabel, taskLabel, waitingSchema } from "./teamProtocol";
+import { actionLabel, approvalTitle, cadenceLabel, centsLabel, decisionSchema, emailSubject, errorLabel, failedActionLabel, outcomeLabel, statusLabel, targetLabel, taskLabel, waitingSchema } from "./teamProtocol";
 
 describe("AI team display", () => {
   it("shows money in whole cents", () => {
@@ -56,6 +56,39 @@ describe("AI team display", () => {
     expect(outcomeLabel("new_outcome")).toBe("new_outcome");
   });
 
+  it("names the customer emails and their approval card by the account and the email's own subject", () => {
+    expect(taskLabel("accounts.lifecycle")).toBe("Customer emails");
+    expect(actionLabel("email.send")).toBe("Email a customer");
+    const preview = "Subject: Welcome to CareMetric CareBase\n\nHello,\n\nThank you for starting a CareMetric CareBase trial for Maple Grove.";
+    expect(emailSubject(preview)).toBe("Welcome to CareMetric CareBase");
+    expect(approvalTitle({ kind: "email.send", targetId: "maple-grove", preview })).toBe("Email to maple-grove: Welcome to CareMetric CareBase");
+    expect(approvalTitle({ kind: "email.send", targetId: "maple-grove", preview: "Subject: How is your CareMetric Intel trial going?" }))
+      .toBe("Email to maple-grove: How is your CareMetric Intel trial going?");
+    // A preview that does not open with a subject still names the account; one that names none still reads.
+    for (const odd of ["Hello,\n\nSubject: not first", "Subject: ", "Subject:\nHello", ""]) expect(emailSubject(odd), odd).toBeNull();
+    expect(approvalTitle({ kind: "email.send", targetId: "maple-grove", preview: "Hello," })).toBe("Email to maple-grove");
+    expect(approvalTitle({ kind: "email.send", targetId: "", preview: "Hello," })).toBe("Email to a customer");
+    expect(emailSubject(`Subject: ${"x".repeat(201)}`)).toBeNull();
+    // Every other kind reads as before.
+    expect(approvalTitle({ kind: "communication.reply", targetId: "CM-1042", preview: "Subject: ignored" })).toBe("Reply to a customer for CM-1042");
+    expect(approvalTitle({ kind: "incident.open", targetId: "", preview: "x" })).toBe("Open an incident");
+  });
+
+  it("explains in plain words why a customer email was not sent", () => {
+    expect(errorLabel("no_longer_applies")).toMatch(/account changed since this email was written/);
+    expect(errorLabel("suppressed")).toMatch(/unsubscribed/);
+    expect(errorLabel("no_address")).toMatch(/no usable billing email address/);
+    expect(errorLabel("not_configured")).toMatch(/postal address/);
+    expect(errorLabel("daily_limit")).toMatch(/^20 customer emails already went out today/);
+    expect(errorLabel("email_unconfirmed")).toMatch(/never sent again on its own/);
+    expect(errorLabel("wording_changed")).toMatch(/wording for this email changed/);
+    expect(errorLabel("auto_send_off")).toMatch(/no longer one you let the agent send/);
+    expect(errorLabel("delivery_failed")).toBe("The provider refused the message, so it did not reach the customer.");
+    for (const code of ["no_longer_applies", "suppressed", "no_address", "not_configured", "daily_limit", "wording_changed", "auto_send_off", "invalid_email"]) {
+      expect(failedActionLabel(code), code).toMatch(/nothing was sent|was not sent/i);
+    }
+  });
+
   it("explains why an action could not be carried out, and shows an unknown code as it is", () => {
     expect(errorLabel("thread_changed")).toMatch(/customer wrote again/);
     expect(errorLabel("conversation_closed")).toBe("The conversation was closed, so nothing was sent.");
@@ -82,5 +115,18 @@ describe("AI team display", () => {
     expect(decisionSchema.parse(decision).needsSession).toBeUndefined();
     expect(waitingSchema.parse({ started: 1, actions: 2 })).toEqual({ started: 1, actions: 2 });
     expect(() => waitingSchema.parse({ started: 1 })).toThrow();
+  });
+
+  it("names the Content Marketer's work and explains why an article was not published", () => {
+    expect(taskLabel("content.weekly")).toBe("Weekly help article");
+    expect(taskLabel("content.outreach")).toBe("Monthly outreach drafts");
+    expect(actionLabel("content.publish")).toBe("Publish a help article");
+    expect(errorLabel("slug_taken")).toMatch(/already uses this address/);
+    expect(errorLabel("approval_required")).toMatch(/only with your approval/);
+    expect(errorLabel("invalid_article")).toMatch(/content checks/);
+    expect(errorLabel("product_unavailable")).toMatch(/retired or closed/);
+    for (const code of ["invalid_article", "approval_required", "slug_taken", "product_unavailable", "publish_failed"]) {
+      expect(failedActionLabel(code), code).toMatch(/not published|nothing was published|could not be published/);
+    }
   });
 });

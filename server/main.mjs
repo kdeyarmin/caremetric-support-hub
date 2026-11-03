@@ -23,6 +23,8 @@ import { guideLibrary } from './agents/concierge/knowledge.mjs';
 import { bookingLink } from './agents/concierge/templates.mjs';
 import { leadAdmin, leadFeature, leadIntake, leadSecrets } from './leads.mjs';
 import { leadRetention } from './lead-retention.mjs';
+import { helpCenter } from './help-center.mjs';
+import { helpCenterOrigin } from './agents/content/facts.mjs';
 
 const storageUrl='https://xgauehtwksmnoqhgqegm.supabase.co';
 const pool=new pg.Pool(databaseConfig());
@@ -49,9 +51,12 @@ const messaging=communications({pool,delegations:capabilities,publicOrigin,
   chatEnabled:process.env.HUB_CHAT_ENABLED==='true'});
 // The owner's booking page, which the Concierge's sales acknowledgment may offer. A value it cannot use offers no link, and says so once.
 if(process.env.HUB_BOOKING_URL&&!bookingLink(process.env.HUB_BOOKING_URL)) console.warn('HUB_BOOKING_URL is not an https link of at most 200 characters, so the sales acknowledgment offers no booking link.');
+// The Account Manager's customer emails: from the support address, replies to it, one-click unsubscribe headers, and the postal address in every footer.
+const customerMail=sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai',replyTo:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai',category:'hub-lifecycle-email'});
 // The AI team: inert unless HUB_AGENTS_ENABLED is exactly "true", and every agent starts paused until the owner resumes it.
 const team=agentTeam({pool,sms:textSender,email:mailSender,ownerEmail:process.env.HUB_OWNER_EMAIL,publicOrigin,enabled:process.env.HUB_AGENTS_ENABLED==='true',communications:messaging,features,anthropicApiKey:process.env.ANTHROPIC_API_KEY,record:sqlAiUsageRecorder(pool).record,guides:guideLibrary({load:()=>api.rpc('list_published_content',{})}),customerTextToAi:process.env.HUB_AGENTS_CUSTOMER_TEXT_TO_AI==='true',
-  bookingUrl:process.env.HUB_BOOKING_URL||null,leadSecrets:leadSecrets(process.env)});
+  bookingUrl:process.env.HUB_BOOKING_URL||null,leadSecrets:leadSecrets(process.env),
+  lifecycle:{mail:customerMail,postalAddress:(process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS||'').trim(),bookingUrl:process.env.HUB_BOOKING_URL||null}});
 const announcements=bulkEmail({pool,delegations:capabilities,publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin,postalAddress:(process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS||'').trim(),
   mail:sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_BULK_EMAIL_FROM||process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai',replyTo:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai'})});
 // Platform billing: the Hub is the only Stripe client for every application's subscriptions.
@@ -77,7 +82,9 @@ const leadDesk=leadAdmin({pool,enabled:features.has(leadFeature)});
 const leadRetentionJob=leadRetention({pool,enabled:features.has(leadFeature)});
 console.info(`Website leads: ${leads.enabled()?'database ready':'waiting for the support.leads.v1 migration'}; secrets set for ${leads.configured().join(', ')||'no product'}.`);
 const setup=integrationSetup({rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
-const server=appServer({auth:smsAuth({pool,provider}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,leads,leadAdmin:leadDesk,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
+// Public articles as HTML for crawlers, read exactly as an anonymous visitor's app reads them, at their canonical address.
+const help=helpCenter({load:()=>api.rpc('list_published_content',{}),origin:helpCenterOrigin});
+const server=appServer({auth:smsAuth({pool,provider}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,leads,leadAdmin:leadDesk,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help});
 let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;

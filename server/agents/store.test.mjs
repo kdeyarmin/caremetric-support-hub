@@ -41,6 +41,13 @@ describe('agent store', () => {
     await store.notificationCount({ prefix: 'concierge:new:', since: when });
     await store.accountsSnapshot();
     await store.accountsSnapshot({ limit: 50 });
+    await store.lifecycleSnapshot();
+    await store.lifecycleSnapshot({ limit: 1, tenant: 'maple-grove', product: 'carebase' });
+    await store.lifecycleSnapshot({ limit: 200, offset: 400 });
+    await store.lifecycleBeginSend({ actionId: 'a1', execution: 2, unsubscribeHash: 'h'.repeat(64) });
+    await store.lifecycleBeginSend({ actionId: 'a1', unsubscribeHash: null });
+    await store.lifecycleFinishSend({ actionId: 'a1', delivery: 'sent', providerMessageId: 'SG1' });
+    await store.lifecycleFinishSend({ actionId: 'a1', delivery: 'unknown' });
     expect(calls).toEqual([
       ['select private.agent_schedule_fire($1, $2) as result', [10, ['probe.sweep', 'brief.daily']]],
       ['select private.agent_maintenance() as result', []],
@@ -72,6 +79,13 @@ describe('agent store', () => {
       ['select private.agent_notification_count($1, $2, $3) as result', ['concierge:new:', null, when]],
       ['select private.agent_accounts_snapshot($1) as result', [200]],
       ['select private.agent_accounts_snapshot($1) as result', [50]],
+      ['select private.agent_lifecycle_snapshot($1, $2, $3, $4) as result', [200, null, null, 0]],
+      ['select private.agent_lifecycle_snapshot($1, $2, $3, $4) as result', [1, 'maple-grove', 'carebase', 0]],
+      ['select private.agent_lifecycle_snapshot($1, $2, $3, $4) as result', [200, null, null, 400]],
+      ['select private.agent_lifecycle_begin_send($1, $2, $3) as result', ['a1', 2, 'h'.repeat(64)]],
+      ['select private.agent_lifecycle_begin_send($1, $2, $3) as result', ['a1', null, null]],
+      ['select private.agent_lifecycle_finish_send($1, $2, $3) as result', ['a1', 'sent', 'SG1']],
+      ['select private.agent_lifecycle_finish_send($1, $2, $3) as result', ['a1', 'unknown', null]],
     ]);
   });
 
@@ -139,6 +153,20 @@ describe('agent store', () => {
       ['select private.agent_growth_unanswered($1, $2, $3) as result', [[30], 1500, 10]],
       ['select private.agent_growth_facts($1, $2) as result', [since, when]],
       ['select private.agent_lead_probe_seen($1, $2) as result', ['carebase', since]],
+    ]);
+  });
+
+  it('reads the Content Marketer\'s state and publishes an approved article through its two server-only operations', async () => {
+    const { store, calls } = harness({ outcome: 'published' });
+    await store.contentState(['pa-fire-drills']);
+    await store.contentState();
+    expect(await store.contentPublish('a1', 2)).toEqual({ outcome: 'published' });
+    await store.contentPublish('a1');
+    expect(calls).toEqual([
+      ['select private.agent_content_state($1) as result', [['pa-fire-drills']]],
+      ['select private.agent_content_state($1) as result', [[]]],
+      ['select private.agent_content_publish($1, $2) as result', ['a1', 2]],
+      ['select private.agent_content_publish($1, $2) as result', ['a1', null]],
     ]);
   });
 

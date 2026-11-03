@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { LAYOUT_MARKER, PRODUCT_WORDMARK, calloutTones, escapeHtml, palette, renderEmail } from './email-layout.mjs';
 import { htmlToText, replySubject, supportReplyEmail } from './communications.mjs';
 import { bulkEmailHtml, composeBulkEmail } from './bulk-email.mjs';
+import { lifecycleInput, renderLifecycleEmail } from './agents/accounts/lifecycle.mjs';
 
 const hostile = '<script>alert(1)</script>';
 const allowedColors = new Set([...Object.values(palette), ...Object.values(calloutTones).flatMap(tone => Object.values(tone))].map(color => color.toUpperCase()));
@@ -13,6 +14,9 @@ const emails = {
     const message = { subject: `Maintenance ${hostile}`, body: `Hello ${hostile},\n\nWe will be down Saturday.`, applications: `PennSync ${hostile}`, unsubscribeUrl: `https://hub.example/api/email/unsubscribe/${'a'.repeat(64)}`, postalAddress: `1 Main St ${hostile}` };
     return { html: bulkEmailHtml(message), text: composeBulkEmail(message) };
   },
+  'customer check-in email': () => renderLifecycleEmail(
+    lifecycleInput({ tenant: 'maple-grove', tenantName: `Maple ${hostile}`, product: 'carebase', productName: 'CareMetric CareBase' }, 'welcome', { bookingUrl: 'https://cal.example.com/owner' }),
+    { unsubscribeUrl: `https://hub.example/api/email/unsubscribe/${'a'.repeat(64)}`, postalAddress: `1 Main St ${hostile}` }),
   'branded notification layout': () => renderEmail({
     title: `Update for ${hostile}`, preheader: `A summary for ${hostile}.`, heading: `Your request ${hostile}`, recipientName: hostile,
     blocks: [

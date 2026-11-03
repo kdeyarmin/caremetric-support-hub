@@ -36,8 +36,9 @@ create table private.leads (
   occurred_at timestamptz not null,
   received_at timestamptz not null default now(),
   contact_name text check (char_length(contact_name) between 1 and 200 and contact_name !~ '[[:cntrl:]]'),
+  -- An address and nothing else: the allowlist private.lead_record applies (no URL or mail-header characters).
   contact_email text not null check (char_length(contact_email) between 3 and 320 and contact_email = lower(contact_email)
-    and contact_email ~ '^[^[:space:][:cntrl:]@]+@[^[:space:][:cntrl:]@]+\.[^[:space:][:cntrl:]@]+$'),
+    and contact_email ~ '^[a-z0-9_''+-]+(\.[a-z0-9_''+-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)+$'),
   contact_phone text check (char_length(contact_phone) between 1 and 40 and contact_phone !~ '[[:cntrl:]]'),
   organization text check (char_length(organization) between 1 and 200 and organization !~ '[[:cntrl:]]'),
   role text check (char_length(role) between 1 and 100 and role !~ '[[:cntrl:]]'),
@@ -194,8 +195,12 @@ begin
     or char_length(v_contact ->> 'email') > 320 then
     raise exception 'Invalid lead.' using errcode = '22023';
   end if;
+  -- An address and nothing else: letters, digits and . _ ' + - in dot-separated parts before one @, and dot-separated
+  -- labels of letters, digits and hyphens after it. Characters that mean something in a URL or a mailto: link
+  -- (? & # % / \ , ; : = and the like), spaces and anything else are refused, so a stored address can never carry mail
+  -- headers or another recipient.
   v_email := lower(btrim(v_contact ->> 'email'));
-  if char_length(v_email) < 3 or v_email !~ '^[^[:space:][:cntrl:]@]+@[^[:space:][:cntrl:]@]+\.[^[:space:][:cntrl:]@]+$' then
+  if char_length(v_email) < 3 or v_email !~ '^[a-z0-9_''+-]+(\.[a-z0-9_''+-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)+$' then
     raise exception 'Invalid lead.' using errcode = '22023';
   end if;
   v_name := private.lead_text(v_contact -> 'name', 200);
@@ -325,20 +330,22 @@ $$;
 -- status needs the command session (under eight hours old), the bar every other Hub change uses.
 -- ---------------------------------------------------------------------------------------
 
--- One page of leads, newest first. Test leads (probes) are left out unless asked for.
+-- One page of leads, newest first. Test leads (probes) are left out unless asked for. Each page also carries the
+-- deepest offset this function serves (maxOffset), which the Leads screen reads instead of keeping its own copy.
 create function hub.list_leads(
   p_kind text default null, p_source text default null, p_include_test boolean default false,
   p_offset integer default 0, p_limit integer default 25
 ) returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
 declare
+  v_max_offset constant integer := 10000;
   v_items jsonb;
   v_total bigint;
 begin
   perform hub.authorize_app_admin();
   if (p_kind is not null and p_kind not in ('demo_request','consultation','contact','trial_signup','newsletter','savings_model','county_report'))
     or (p_source is not null and p_source not in ('carebase','intel','advisors'))
-    or p_offset is null or p_offset < 0 or p_offset > 10000 or p_limit is null or p_limit < 1 or p_limit > 50 then
+    or p_offset is null or p_offset < 0 or p_offset > v_max_offset or p_limit is null or p_limit < 1 or p_limit > 50 then
     raise exception 'Choose a valid filter and page.' using errcode = '22023';
   end if;
   select count(*) into v_total from private.leads l
@@ -349,7 +356,7 @@ begin
     where (p_kind is null or l.kind = p_kind) and (p_source is null or l.source = p_source) and (coalesce(p_include_test, false) or not l.test)
     order by l.received_at desc, l.id offset p_offset limit p_limit
   ) x;
-  return jsonb_build_object('items', v_items, 'total', v_total, 'offset', p_offset, 'limit', p_limit);
+  return jsonb_build_object('items', v_items, 'total', v_total, 'offset', p_offset, 'limit', p_limit, 'maxOffset', v_max_offset);
 end;
 $$;
 

@@ -357,3 +357,121 @@ describe('findings', () => {
     ]);
   });
 });
+
+describe('what the later steps get from the crawl', () => {
+  it('lists each HTML page in the order it was queued, with what the rewrite and duplicate checks need, and asks for the home page once', async () => {
+    const routes = healthy();
+    routes[`${origin}/about`] = reply(goodPage({ path: '/about' }), { headers: { 'x-robots-tag': 'noindex' } });
+    const { result, requests } = await audit(routes);
+    expect(result.pages.map(page => [page.url, page.noindex, page.appShell])).toEqual([[`${origin}/`, false, false], [`${origin}/pricing`, false, false], [`${origin}/about`, true, false]]);
+    expect(result.pages[1]).toMatchObject({ title: 'Compliance training for care homes /pricing', canonical: `${origin}/pricing`, words: 81 });
+    expect(result.pages[1].description).toMatch(/^Keep every home compliant/);
+    expect(result.pages[1].text).toMatch(/^Welcome word0 word1/);
+    expect(result.appShells).toEqual([]);
+    expect(requests.filter(request => request.url === `${origin}/`)).toHaveLength(1);
+  });
+
+  it('names the pages that are app shells, and says so in the thin page finding', async () => {
+    const shell = '<!doctype html><html lang="en"><head><title>Example Support Hub</title><script type="module" src="/assets/index.js"></script></head><body><div id="root"></div></body></html>';
+    const routes = { ...healthy(), [`${origin}/`]: reply(shell), [`${origin}/pricing`]: reply('<!doctype html><html><body><p>Only a few words here.</p></body></html>') };
+    const { result } = await audit(routes);
+    expect(result.appShells).toEqual(['/']);
+    const thin = result.findings.filter(finding => finding.code === 'thin_html');
+    expect(thin.map(finding => [finding.page, finding.detail])).toEqual(expect.arrayContaining([
+      ['/', '0 words before scripts run: an app shell that only scripts fill in'], ['/pricing', '5 words before scripts run'],
+    ]));
+  });
+});
+
+describe('a site that redirects to another of the company\'s sites', () => {
+  const home = { key: 'home', label: 'Home', origin: 'https://home.example.test', variants: [] };
+  const third = 'https://third.example.test';
+  const owners = [origin, home.origin, third];
+  const run = async (answer, { owned = owners, routes = {}, limits } = {}) => {
+    const net = network({ ...healthy(), 'https://home.example.test/': answer, ...routes });
+    return { result: await auditSite(home, { fetchImpl: net.fetchImpl, owners: owned, ...(limits ? { limits } : {}) }), requests: net.requests.map(request => request.url) };
+  };
+
+  it('is checked no further when its redirects end at a page of another of the sites, and says where they end', async () => {
+    for (const status of [301, 308]) {
+      const { result, requests } = await run(reply('', { status, location: `${origin}/` }));
+      expect(result).toMatchObject({ key: 'home', checked: 0, findings: [], score: 100, incomplete: false, redirectsTo: origin, pages: [], appShells: [] });
+      expect(requests).toEqual(['https://home.example.test/', `${origin}/`]);
+    }
+    expect((await run(reply('', { status: 301, location: `${origin}/welcome` }), { routes: { [`${origin}/welcome`]: reply(goodPage({ path: '/welcome' })) } })).result.redirectsTo).toBe(origin);
+    // Through another of the sites, it is where the chain ends that counts.
+    const through = await run(reply('', { status: 301, location: `${third}/` }), { routes: { [`${third}/`]: reply('', { status: 308, location: `${origin}/` }) } });
+    expect(through.result).toMatchObject({ redirectsTo: origin, findings: [], score: 100 });
+    expect(through.requests).toEqual(['https://home.example.test/', `${third}/`, `${origin}/`]);
+  });
+
+  it('asks for permanent redirects when any step of the chain is temporary', async () => {
+    const { result } = await run(reply('', { status: 302, location: `${origin}/` }));
+    expect(result.redirectsTo).toBe(origin);
+    expect(result.findings).toEqual([expect.objectContaining({ code: 'site_redirect_temporary', severity: 'low', detail: `302 to ${origin}/` })]);
+    expect(result.score).toBe(99);
+    const later = await run(reply('', { status: 301, location: `${third}/` }), { routes: { [`${third}/`]: reply('', { status: 307, location: `${origin}/` }) } });
+    expect(later.result.findings).toEqual([expect.objectContaining({ code: 'site_redirect_temporary', detail: `307 to ${origin}/` })]);
+  });
+
+  it('reports a loop as urgent instead of a finished move, on each site in it, without asking for any page twice', async () => {
+    const loop = { [`${origin}/`]: reply('', { status: 301, location: 'https://home.example.test/' }) };
+    const { result, requests } = await run(reply('', { status: 301, location: `${origin}/` }), { routes: loop });
+    expect(result.redirectsTo).toBeUndefined();
+    expect(result.findings).toEqual([expect.objectContaining({ code: 'site_redirect_loop', severity: 'high', page: '/', detail: 'home.example.test/ → www.example.test/ → home.example.test/' })]);
+    expect(result.score).toBe(85);
+    expect(requests).toEqual(['https://home.example.test/', `${origin}/`]);
+    // The other site in the loop says the same about itself.
+    const net = network({ ...healthy(), ...loop, 'https://home.example.test/': reply('', { status: 301, location: `${origin}/` }) });
+    const other = await auditSite(site, { fetchImpl: net.fetchImpl, owners });
+    expect(other.findings).toEqual([expect.objectContaining({ code: 'site_redirect_loop', detail: 'www.example.test/ → home.example.test/ → www.example.test/' })]);
+    expect(other.redirectsTo).toBeUndefined();
+    // A longer loop is found too.
+    const ring = await run(reply('', { status: 301, location: `${third}/` }), { routes: { [`${third}/`]: reply('', { status: 301, location: `${origin}/` }), ...loop } });
+    expect(ring.result.findings.map(finding => finding.code)).toEqual(['site_redirect_loop']);
+  });
+
+  it('reports a chain that ends in an error, goes nowhere, leaves the sites or runs too long, and never follows it off the sites', async () => {
+    const broken = async (answer, routes, limits) => (await run(answer, { routes, limits })).result;
+    const cases = [
+      ['an error page', reply('', { status: 301, location: `${origin}/` }), { [`${origin}/`]: reply('down', { status: 503, type: 'text/plain' }) }, 'home.example.test/ → www.example.test/, which answers 503'],
+      ['no answer', reply('', { status: 301, location: `${origin}/` }), { [`${origin}/`]: 'refuse' }, 'home.example.test/ → www.example.test/, which does not answer (network)'],
+      ['not a web page', reply('', { status: 301, location: `${origin}/` }), { [`${origin}/`]: reply('%PDF', { type: 'application/pdf' }) }, 'home.example.test/ → www.example.test/, which is not a web page'],
+      ['a redirect to nowhere', reply('', { status: 301, location: `${origin}/` }), { [`${origin}/`]: reply('', { status: 301 }) }, 'home.example.test/ → www.example.test/, which redirects nowhere'],
+      ['a step off the sites', reply('', { status: 301, location: `${origin}/` }), { [`${origin}/`]: reply('', { status: 301, location: 'https://elsewhere.test/landing' }) }, 'home.example.test/ → www.example.test/, which sends it on to elsewhere.test'],
+    ];
+    for (const [name, answer, routes, detail] of cases) {
+      const result = await broken(answer, routes);
+      expect(result.findings, name).toEqual([expect.objectContaining({ code: 'site_redirect_broken', severity: 'high', page: '/', detail })]);
+      expect(result.redirectsTo, name).toBeUndefined();
+    }
+    const offSite = await run(reply('', { status: 301, location: `${origin}/` }), { routes: { [`${origin}/`]: reply('', { status: 301, location: 'https://elsewhere.test/landing' }) } });
+    expect(offSite.requests.some(url => url.includes('elsewhere.test'))).toBe(false);
+    // Each step goes to another page of the sites, more of them than allowed.
+    const steps = Object.fromEntries(Array.from({ length: 8 }, (_, index) => [`${origin}/step${index}`, reply('', { status: 301, location: `${origin}/step${index + 1}` })]));
+    const long = await run(reply('', { status: 301, location: `${origin}/step0` }), { routes: steps, limits: { redirectHops: 3 } });
+    expect(long.result.findings).toEqual([expect.objectContaining({ code: 'site_redirect_broken', detail: expect.stringMatching(/^more than 3 redirects: home\.example\.test\/ → www\.example\.test\/step0/) })]);
+    expect(long.requests).toHaveLength(4);
+  });
+
+  it('stops where its time runs out, and says the check stopped early', async () => {
+    let time = 0;
+    const net = network({ ...healthy(), 'https://home.example.test/': reply('', { status: 301, location: `${origin}/` }) });
+    const result = await auditSite(home, { fetchImpl: net.fetchImpl, owners, now: () => { time += 60_000; return time; }, limits: { deadlineMs: 100_000 } });
+    expect(result).toMatchObject({ incomplete: true, findings: [], checked: 0 });
+    expect(result.redirectsTo).toBeUndefined();
+  });
+
+  it('is checked as usual when it redirects anywhere else, within itself, or back to itself through another site', async () => {
+    for (const location of ['https://elsewhere.test/', 'https://home.example.test/en/', `${origin}.evil.test/`]) {
+      const { result } = await run(reply('', { status: 301, location }));
+      expect(result.redirectsTo, location).toBeUndefined();
+      expect(result.findings.map(finding => finding.code), location).toContain('page_redirect');
+    }
+    // A site the caller does not count as the company's is no reason to stop either.
+    expect((await run(reply('', { status: 301, location: `${origin}/` }), { owned: [home.origin] })).result.redirectsTo).toBeUndefined();
+    const back = await run(reply('', { status: 301, location: `${origin}/` }), { routes: { [`${origin}/`]: reply('', { status: 301, location: 'https://home.example.test/welcome' }), 'https://home.example.test/welcome': reply(goodPage()) } });
+    expect(back.result.redirectsTo).toBeUndefined();
+    expect(back.result.findings.map(finding => finding.code)).toContain('page_redirect');
+  });
+});

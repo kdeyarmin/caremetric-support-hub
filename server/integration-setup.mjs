@@ -56,6 +56,7 @@ export const integrationCatalog = Object.freeze([
     variables: [
       { name: 'HUB_AGENTS_ENABLED', secret: false, required: true, flag: true, purpose: 'Exactly "true" turns the scheduler on.' },
       { name: 'HUB_OWNER_EMAIL', secret: false, required: true, purpose: 'Where the AI team emails alerts and the morning brief. Urgent items are also texted to the administrator\'s verified number.' },
+      { name: 'HUB_BOOKING_URL', secret: false, required: false, purpose: 'Your booking page (https), shown as a "Pick a time" button in the Account Manager\'s customer emails. Those emails also need HUB_BULK_EMAIL_POSTAL_ADDRESS.' },
       { name: 'HUB_AGENTS_CUSTOMER_TEXT_TO_AI', secret: false, required: false, flag: true, purpose: 'Exactly "true" lets the Support Concierge send a plain question\'s scrubbed text to the model to draft an answer for you to approve. Set it only when your Anthropic agreement covers support messages.' },
       { name: 'HUB_BOOKING_URL', secret: false, required: false, purpose: 'Your booking page (an https link, for example a Calendly or Cal.com page). The acknowledgment the Support Concierge proposes for a sales inquiry offers it, so a prospect can pick a time. Leave it unset to offer no link.' },
     ] },
@@ -67,6 +68,11 @@ export const integrationCatalog = Object.freeze([
     ] },
   { id: 'carebase-distribution', name: 'CareBase course distribution observer', purpose: 'Lets the Hub observe shared course availability in CareBase.', docs: 'docs/SHARED_COURSE_DISTRIBUTION.md',
     variables: [{ name: 'CAREBASE_DISTRIBUTION_OBSERVER_TOKEN', secret: true, required: true, purpose: 'Token CareBase issued to the Hub observer.' }] },
+  { id: 'search-console', name: 'Google Search Console', purpose: 'Optional. Adds clicks, impressions, click-through rate, position and searches to the SEO Analyst\'s Monday report; without it the report uses the crawl alone. To connect: in Google Cloud, create a service account with a JSON key and enable the Google Search Console API; in Search Console, add the service account\'s email as a user on each property.', docs: 'docs/AI_TEAM.md',
+    variables: [
+      { name: 'HUB_SEARCH_CONSOLE_CREDENTIALS', secret: true, required: true, purpose: 'The service account\'s JSON key file, pasted whole. The Hub uses it only to read Search Console and never shows or logs it.' },
+      { name: 'HUB_SEARCH_CONSOLE_SITES', secret: false, required: true, purpose: 'The properties to read, separated by commas, exactly as Search Console names them: sc-domain:cmcarebase.com for a domain property, https://www.caremetricintel.com/ (with its final /) for an address prefix.' },
+    ] },
 ]);
 
 export function integrationSetup({ rpc, env = process.env, now = () => new Date() }) {
