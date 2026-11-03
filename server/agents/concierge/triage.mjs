@@ -86,7 +86,7 @@ export function triageHandler({ store, notifier, drafting = null, bookingUrl = n
   async function deliverAlert({ task, snapshot, payload, words, severity, now }) {
     const day = easternDate.format(now());
     const dayStart = task.budget?.dayStart ? new Date(task.budget.dayStart) : new Date(now().getTime() - 24 * 3_600_000);
-    const base = { subject: words.subject, body: words.body, agentKey: task.agentKey, taskId: task.id };
+    const base = { subject: words.subject, body: words.body, agentKey: task.agentKey, taskId: task.id, communicationReference: snapshot.reference };
     const rollup = level => notifier.send({
       severity: 'warning', subject: 'Many new messages today',
       body: `More than ${dailyEmailCap} ${{ urgent: 'urgent', warning: 'flagged', info: 'new' }[level]} messages have reached the Hub today, so they are no longer emailed one at a time.\n\nOpen Communications to see all of them.`,

@@ -90,6 +90,7 @@ describe('reply providers', () => {
     const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
     expect(body.from).toEqual({ email: 'support@caremetric.ai', name: 'CareMetric Support' });
     expect(body.content).toEqual([{ type: 'text/plain', value: 'Body' }]);
+    expect(body.tracking_settings).toEqual({ click_tracking: { enable: false, enable_text: false } });
     expect(sendgridMail({ apiKey: 'not-a-key' }).configured).toBe(false);
   });
   it('sends the text part first and the HTML part second when both are given', async () => {
@@ -100,6 +101,7 @@ describe('reply providers', () => {
     expect(body.personalizations).toEqual([{ to: [{ email: 'pat@agency.test' }] }]);
     expect(body.from).toEqual({ email: 'help@caremetric.test', name: 'CareMetric Support' });
     expect(body.subject).toBe('Re: Help [CM-1001]');
+    expect(body.tracking_settings).toEqual({ click_tracking: { enable: false, enable_text: false } });
     expect(body.content).toEqual([{ type: 'text/plain', value: 'Body' }, { type: 'text/html', value: '<p>Body</p>' }]);
     expect(body).not.toHaveProperty('reply_to');
   });

@@ -140,6 +140,37 @@ describe('owner notifier', () => {
 });
 
 describe('owner email', () => {
+  it('sends a real conversation link and a copyable fallback in both email formats', async () => {
+    const { notifier, senders } = fixture();
+    await notifier.send({ subject: 'New email: CM-1002', body: 'Open CM-1002 in Communications.', dedupeKey: 'conversation-link', communicationReference: 1002 });
+    const [, , content] = senders.email.send.mock.calls[0];
+    const url = `${origin}/communications?status=all&search=CM-1002`;
+    expect(content.html).toContain(`href="${url.replace('&', '&amp;')}"`);
+    expect(content.html).toContain('Open CM-1002 in Communications</a>');
+    // Both the heading and prose reference are explicit links, rather than iOS flight-code detections.
+    expect(content.html.match(/>CM-1002<\/a>/g)).toHaveLength(2);
+    expect(content.html).toContain('copy this link into your browser');
+    expect(content.text).toContain(url);
+    expect(content.html).toContain(`href="${origin}/admin/team"`);
+  });
+
+  it('does not fabricate conversation links without a valid reference and HTTPS origin', () => {
+    for (const communicationReference of [null, '', 0, '1002&other=value', '<script>']) {
+      expect(renderOwnerEmail({ subject: 'Alert', body: 'Hello', publicOrigin: origin, communicationReference }).html).not.toContain('/communications?');
+    }
+    expect(renderOwnerEmail({ subject: 'Alert', body: 'Hello', publicOrigin: 'http://localhost', communicationReference: 1002 }).html).not.toContain('/communications?');
+    const email = renderOwnerEmail({ subject: 'Alert', body: 'Hello', publicOrigin: `${origin}/`, communicationReference: '1002' });
+    expect(email.text).toContain(`${origin}/communications?status=all&search=CM-1002`);
+  });
+
+  it('keeps linked warning copy escaped', () => {
+    const email = renderOwnerEmail({ subject: 'CM-1002 <script>', body: 'CM-1002 <img src=x>', severity: 'warning', publicOrigin: origin, communicationReference: 1002 });
+    expect(email.html.match(/>CM-1002<\/a>/g)).toHaveLength(2);
+    expect(email.html).not.toContain('<script>');
+    expect(email.html).not.toContain('<img');
+    expect(email.html).toContain('&lt;img src=x&gt;');
+  });
+
   it('marks what needs attention and links to the Team screen', () => {
     const urgent = renderOwnerEmail({ subject: 'Hub is down', body: 'The Hub probe failed twice.\n\nWe will keep checking.', severity: 'urgent', publicOrigin: origin });
     expect(urgent.html).toContain('Needs your attention');

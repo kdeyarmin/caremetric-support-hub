@@ -152,6 +152,8 @@ export function sendgridMail({ apiKey, from = 'support@caremetric.ai', fetchImpl
         response = await fetchImpl('https://api.sendgrid.com/v3/mail/send', {
           method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(15000),
           body: JSON.stringify({ personalizations: [{ to: [{ email: to }] }], from: { email: from, name: 'CareMetric Support' }, subject,
+            // Transactional support links must go straight to the Hub, independent of account-level tracking DNS.
+            tracking_settings: { click_tracking: { enable: false, enable_text: false } },
             content: [{ type: 'text/plain', value: text }, ...(html ? [{ type: 'text/html', value: html }] : [])] }),
         });
       } catch { return { delivery: 'unknown', id: null }; }

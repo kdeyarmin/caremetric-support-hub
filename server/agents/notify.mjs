@@ -27,19 +27,29 @@ const paragraphs = body => String(body).split(/\n{2,}/).map(part => part.trim())
  * A caller that wants richer layout (the morning brief) passes its own `blocks`; the body is still
  * what is stored, shown on the Team screen and used for the preview.
  */
-export function renderOwnerEmail({ subject, body, severity = 'info', publicOrigin, blocks: custom = null }) {
+export function renderOwnerEmail({ subject, body, severity = 'info', publicOrigin, blocks: custom = null, communicationReference = null }) {
   const [first = '', ...rest] = paragraphs(body);
   const tone = tones[severity];
   const link = /^https:\/\//i.test(publicOrigin ?? '') ? { label: 'Open the AI team', url: `${publicOrigin.replace(/\/+$/, '')}/admin/team` } : null;
+  const referenceLink = link && /^[1-9]\d*$/.test(String(communicationReference)) ? {
+    label: `CM-${communicationReference}`,
+    url: `${publicOrigin.replace(/\/+$/, '')}/communications?status=all&search=CM-${communicationReference}`,
+  } : null;
   return renderEmail({
     layout: 'branded',
     title: subject,
     preheader: clip(first || subject, 110),
     heading: subject,
-    blocks: custom ?? [
+    referenceLink,
+    blocks: [...(custom ?? [
       tone ? { type: 'callout', tone, title: severity === 'urgent' ? 'Needs your attention' : 'Worth a look', text: first } : { type: 'paragraph', text: first },
       ...rest.map(text => ({ type: 'paragraph', text })),
-    ].filter(block => block.text),
+    ].filter(block => block.text)),
+    ...(referenceLink ? [{
+      type: 'button',
+      label: `Open CM-${communicationReference} in Communications`,
+      url: referenceLink.url,
+    }] : [])],
     signature,
     footer: ['You are receiving this because you own this CareMetric Support Hub.', ...(link ? [link] : [])],
   });
@@ -51,7 +61,7 @@ export const delivered = item => item.delivery === 'sent' || (item.delivery === 
 export function ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log = line => console.warn(line) }) {
   const channelsFor = severity => (severity === 'urgent' ? ['sms', 'email'] : ['email']);
 
-  async function transport(channel, { subject, body, severity, blocks }) {
+  async function transport(channel, { subject, body, severity, blocks, communicationReference }) {
     if (channel === 'sms') {
       // Looking up where to text the owner happens before anything is sent. If that fails, nothing went out: that is a definite failure,
       // which a retry can put right, not an unknown outcome (which is never retried because the message may have gone).
@@ -61,7 +71,7 @@ export function ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log
       return sms.send(contact.phone, clip(`CareMetric: ${subject}. ${paragraphs(body)[0] ?? ''}`, smsLimit));
     }
     if (!email?.configured || !emailAddress.test(ownerEmail ?? '')) return { delivery: 'suppressed', id: null };
-    const { html, text } = renderOwnerEmail({ subject, body, severity, publicOrigin, blocks });
+    const { html, text } = renderOwnerEmail({ subject, body, severity, publicOrigin, blocks, communicationReference });
     return email.send(ownerEmail, subject, { text, html });
   }
 
@@ -87,11 +97,11 @@ export function ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log
   return {
     channelsFor,
     /** Returns one { channel, delivery } per channel; delivery is sent, failed, unknown, suppressed or duplicate (with `original`, the status of the earlier attempt). */
-    async send({ severity = 'info', subject, body, dedupeKey, agentKey = null, taskId = null, blocks = null }) {
+    async send({ severity = 'info', subject, body, dedupeKey, agentKey = null, taskId = null, blocks = null, communicationReference = null }) {
       if (!severities.has(severity)) throw new TypeError('Unsupported notification severity.');
       if (!subject || !body || !dedupeKey) throw new TypeError('A notification needs a subject, a body and a dedupe key.');
       if (blocks !== null && (!Array.isArray(blocks) || blocks.length === 0)) throw new TypeError('Email blocks must be a non-empty list.');
-      const input = { severity, subject: clip(subject, 200), body: clip(body, 4000), dedupeKey, agentKey, taskId, blocks };
+      const input = { severity, subject: clip(subject, 200), body: clip(body, 4000), dedupeKey, agentKey, taskId, blocks, communicationReference };
       const results = [];
       for (const channel of channelsFor(severity)) results.push(await deliver(channel, input));
       return results;
