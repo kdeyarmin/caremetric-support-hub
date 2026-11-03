@@ -321,7 +321,8 @@ describe("AI team screen", () => {
     const client = fakeClient(overview(), { decide: vi.fn(async () => ({ id: ids.action, kind: "communication.reply", status: "approved", decided: true })) });
     render(<Team client={client} />);
     fireEvent.click(await screen.findByRole("button", { name: /Approve and send/ }));
-    const text = (await screen.findByRole("status")).textContent ?? "";
+    // Approving reloads the activity list, whose "Loading activity" indicator is also a status region: wait for the decision's own message.
+    const text = (await screen.findByText(/could not confirm what happened next/)).textContent ?? "";
     expect(text).toContain("could not confirm what happened next");
     expect(text).toContain("open the conversation before answering again");
     expect(text).not.toMatch(/not been sent|Run what's waiting/);
