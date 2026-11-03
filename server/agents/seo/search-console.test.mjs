@@ -52,6 +52,13 @@ describe('reading the properties', () => {
     });
   });
 
+  it('keeps an address prefix exactly as written: a bare host always has its slash, and a slash is never added to a path', () => {
+    // The API names a property "as defined in Search Console" (its examples are http://www.example.com/ and sc-domain:example.com), and
+    // Google's help asks for the prefix "including the final / mark"; neither says a prefix without it cannot exist, so none is added.
+    expect(readProperties('https://cmcarebase.com/training,https://cmcarebase.com/guides/,https://www.caremetricintel.com').properties)
+      .toEqual(['https://cmcarebase.com/training', 'https://cmcarebase.com/guides/', 'https://www.caremetricintel.com/']);
+  });
+
   it('leaves out and counts what it cannot use, and reads at most ten', () => {
     expect(readProperties('cmcarebase.com,sc-domain:,ftp://x.test/,https://a.test/?q=1,https://user:pw@b.test/,sc-domain:cmcarebase.com,sc-domain:cmcarebase.com'))
       .toEqual({ properties: ['sc-domain:cmcarebase.com'], invalid: 5 });

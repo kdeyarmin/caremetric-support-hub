@@ -252,7 +252,7 @@ describe('the Search Console part of the report', () => {
       { property: 'https://www.caremetricintel.com/', ok: false, code: 'not_permitted', status: 403 }, { property: 'sc-domain:caremetricadvisors.com', ok: false, code: 'api_unavailable', status: 503 }] });
     const report = composeSeoReport([result('a', 'Alpha')], { now, search: connected(plain, { invalidProperties: 1 }) });
     expect(texts(report)).toContain('No quick wins stood out in Search Console this week.');
-    expect(texts(report)).toContain(`https://www.caremetricintel.com/ | Could not be read: the service account (${account}) is not a user on this property. Add it in Search Console under Settings, Users and permissions.`);
+    expect(texts(report)).toContain(`https://www.caremetricintel.com/ | Could not be read: the service account (${account}) cannot read this property. Add it in Search Console under Settings, Users and permissions. Write it in HUB_SEARCH_CONSOLE_SITES exactly as Search Console shows it: an address prefix ends with /.`);
     expect(report.body).toContain('sc-domain:caremetricadvisors.com could not be read: Google did not answer in time, or its answer could not be read.');
     expect(report.body).toContain('1 entry in HUB_SEARCH_CONSOLE_SITES was not understood and skipped.');
     expect(composeSeoReport([result('a', 'Alpha')], { now, search: connected(plain, { invalidProperties: 2 }) }).body).toContain('2 entries in HUB_SEARCH_CONSOLE_SITES were not understood and skipped.');
@@ -472,6 +472,69 @@ describe('the weekly task with Search Console and suggestions', () => {
     await expect(harness.run(task(), { now: () => new Date(monday), signal: controller.signal })).rejects.toMatchObject({ code: 'task_timeout', transient: true });
     expect(harness.notifier.send).not.toHaveBeenCalled();
     expect(harness.store.startRun).not.toHaveBeenCalled();
+  });
+});
+
+describe('paying for the suggestions once per report', () => {
+  // The database counts alerts by dedupe key prefix (private.agent_notification_count): this fake does the same over the keys it holds.
+  const counting = keys => vi.fn(async ({ prefix, channel }) => keys.filter(key => key.startsWith(prefix) && channel === 'email').length);
+  const harnessWith = ({ keys = [], count, send } = {}) => {
+    const model = fakeModel(completed([goodSuggestion]));
+    const harness = team({ model });
+    harness.store.notificationCount = count ?? counting(keys);
+    if (send) harness.notifier.send.mockImplementation(send);
+    return { ...harness, model };
+  };
+
+  it('does not call the model again for a report that already has an email under its own key', async () => {
+    const harness = harnessWith({ keys: ['seo:2026-11-02'] });
+    const { result: outcome } = await harness.run();
+    expect(harness.model.run).not.toHaveBeenCalled();
+    expect(harness.store.notificationCount).toHaveBeenCalledWith({ prefix: 'seo:2026-11-02', channel: 'email', since: new Date(0) });
+    expect(outcome.suggestions).toEqual({ state: 'already_sent', offered: 0, kept: 0, dropped: 0 });
+    // The report itself still goes to the notifier, which sends it once under the same key.
+    expect(email(harness).dedupeKey).toBe('seo:2026-11-02');
+    expect(email(harness).body).toContain('This report has already been sent or tried once, so its suggested titles and descriptions are not paid for again.');
+  });
+
+  it('tells the scheduled report from the owner\'s own reports that day, whose keys begin with its key', async () => {
+    const harness = harnessWith({ keys: ['seo:2026-11-02:owner-task-1', 'seo:2026-11-02:owner-task-2', 'seo:2026-11-01'] });
+    const { result: outcome } = await harness.run();
+    expect(harness.model.run).toHaveBeenCalledTimes(1);
+    expect(outcome.suggestions.state).toBe('ok');
+    // An owner's own report is its own key: the scheduled report that morning does not stop it, and neither does another Run now.
+    for (const id of ['owner-task-3', 'owner-task-4']) {
+      const owner = harnessWith({ keys: ['seo:2026-11-02', 'seo:2026-11-02:owner-task-1'] });
+      await owner.run(task({ sourceKind: 'owner', id }));
+      expect(owner.model.run, id).toHaveBeenCalledTimes(1);
+      expect(owner.store.notificationCount).toHaveBeenCalledWith({ prefix: `seo:2026-11-02:${id}`, channel: 'email', since: new Date(0) });
+    }
+    const again = harnessWith({ keys: ['seo:2026-11-02:owner-task-1'] });
+    await again.run(task({ sourceKind: 'owner', id: 'owner-task-1' }));
+    expect(again.model.run).not.toHaveBeenCalled();
+  });
+
+  it('reuses the checked suggestions when the same report is tried again in this process, and pays once', async () => {
+    const tries = [];
+    const harness = harnessWith({ send: async input => { tries.push(input); if (tries.length === 1) throw new Error('database down'); return [{ channel: 'email', delivery: 'sent' }]; } });
+    await expect(harness.run()).rejects.toThrow('database down');
+    const { result: outcome } = await harness.run();
+    expect(harness.model.run).toHaveBeenCalledTimes(1);
+    expect(outcome.suggestions).toEqual({ state: 'ok', offered: 2, kept: 1, dropped: 0, reused: true });
+    const shown = report => JSON.stringify(report.blocks.filter(block => block.rows?.[0]?.[0] === 'Page'));
+    expect(shown(tries[1])).toContain(goodSuggestion.title);
+    expect(shown(tries[1])).toBe(shown(tries[0]));
+    // Another day is another report.
+    await harness.run(task(), at('2026-11-09T12:00:00Z'));
+    expect(harness.model.run).toHaveBeenCalledTimes(2);
+  });
+
+  it('writes the suggestions when the check cannot be made, and says so in the log', async () => {
+    const harness = harnessWith({ count: vi.fn(async () => { throw new Error('function private.agent_notification_count does not exist'); }) });
+    await harness.run();
+    expect(harness.model.run).toHaveBeenCalledTimes(1);
+    expect(harness.logs).toContain(JSON.stringify({ event: 'hub_seo_sent_check_failed' }));
+    expect(harness.logs.join()).not.toContain('does not exist');
   });
 });
 

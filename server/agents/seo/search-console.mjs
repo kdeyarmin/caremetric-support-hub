@@ -51,8 +51,13 @@ export function readCredentials(raw) {
 
 /**
  * The properties in HUB_SEARCH_CONSOLE_SITES, separated by commas or spaces, written as Search Console names them: a domain
- * property (sc-domain:cmcarebase.com) or an address prefix (https://www.caremetricintel.com/, which gets its closing slash if
- * it lacks one). Anything else is counted and left out. At most ten are read.
+ * property (sc-domain:cmcarebase.com) or an address prefix (https://www.caremetricintel.com/). Anything else is counted and left
+ * out. At most ten are read.
+ *
+ * An address prefix is kept exactly as written, apart from the slash a bare host always has (https://example.com is
+ * https://example.com/). The API names a property "as defined in Search Console" and Google's help asks for the prefix "including
+ * the final / mark", but nothing says Search Console refuses one without it, so a slash is never added to a path: a prefix written
+ * differently from Search Console's is answered as unknown or not permitted, and the report says how to write it.
  */
 export function readProperties(raw, { limit = defaults.maxProperties } = {}) {
   const found = [];
@@ -63,7 +68,7 @@ export function readProperties(raw, { limit = defaults.maxProperties } = {}) {
     let url = null;
     try { url = new URL(item); } catch { /* counted below */ }
     if (url && (url.protocol === 'https:' || url.protocol === 'http:') && !url.username && !url.password && !url.search && !url.hash && item.includes('://')) {
-      found.push(url.href.endsWith('/') ? url.href : `${url.href}/`);
+      found.push(url.href);
       continue;
     }
     invalid += 1;

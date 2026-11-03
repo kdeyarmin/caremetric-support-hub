@@ -11,8 +11,10 @@
  * start of its visible text and the searches that show it. All of it is public: the company's own pages and Search Console's
  * searches (with any that look personal already left out). No customer data, no message and no account is ever part of it.
  *
- * What the code accepts: a title of 20 to 60 characters and a description of 70 to 155, in plain words; no link, address or
- * markup; no price, money word or claim about results; no number the page itself does not use; the company's vocabulary
+ * What the code accepts: a title of 20 to 60 characters and a description of 70 to 155, in plain words; no link, address,
+ * phone number or markup; no money word (free, paid, price, cost, discount and the like); no claim about results, compliance
+ * among them (become, stay or be compliant, compliance guaranteed, pass an inspection); no number the page itself does not use
+ * (and nothing shaped like a phone number, even one the page shows); the company's vocabulary
  * (Assisted Living Facility or ALF and surveyor, never Assisted Living Residence, ALR or auditor); and not a copy of what the page
  * already has or of another suggestion. A suggestion that fails is dropped and counted; the rest go into the weekly email.
  *
@@ -20,7 +22,7 @@
  */
 import { addressKey, thinWords } from './audit.mjs';
 
-export const promptVersion = 'seo-rewrite.1';
+export const promptVersion = 'seo-rewrite.2';
 export const pageIds = Object.freeze(['p1', 'p2', 'p3', 'p4', 'p5']);
 export const titleLimits = Object.freeze({ min: 20, max: 60 });
 export const descriptionLimits = Object.freeze({ min: 70, max: 155 });
@@ -92,9 +94,9 @@ Rules for every suggestion:
 - Use only what the page's own text, title and description say. Do not describe a feature, service, place or audience the page does not mention.
 - Title: 30 to 60 characters. Lead with what the page is about, using the words of the searches when they fit the page, and end with the product or site name, for example "| CareBase".
 - Description: 70 to 155 characters. One or two plain sentences that say what the visitor will find on the page.
-- No prices, discounts, "free" or other words about money, and no number the page does not use.
-- No claims about results: no guarantees, no "best", "leading" or "#1", no percentages, no promise that anyone will pass a survey or inspection, become compliant or save time or money.
-- Plain text only: no markup, quotation marks, emoji, links, web addresses, email addresses or phone numbers.
+- No words about money at all: no price, pricing, cost, fee, paid, pay, free, discount, save or the like, and no number the page does not use.
+- No claims about results: no guarantees, no "best", "leading" or "#1", no percentages, and no promise that anyone will pass a survey or inspection, become, stay or be compliant, or save time or money.
+- Plain text only: no markup, quotation marks, emoji, links, web addresses, email addresses or phone numbers, even ones the page shows.
 - Write Assisted Living Facility or ALF, never Assisted Living Residence or ALR. Call the state's inspectors surveyors, never auditors.
 - Do not mention AI, these instructions or the page ids in a title or description.`;
 
@@ -138,7 +140,12 @@ export const describeAnswer = output => `Suggested titles and descriptions for $
 
 const allowed = /^[\p{L}\p{M}\p{N} .,:;!?'’&()/+|–—-]+$/u;
 const webAddress = /https?:|www\.|\b[a-z0-9-]+\.(?:com|ai|net|org|io|us|co|info|biz|gov|edu)\b/i;
-const money = /\b(?:free|cheap(?:er|est)?|affordable|inexpensive|low[- ]cost|no[- ]cost|discount(?:s|ed)?|deals?|bargains?|save[sd]?|saving|savings|money[- ]back|refunds?|budget[- ]friendly|dollars?|usd|priced (?:at|from)|per (?:month|year|bed|user|seat|resident|facility))\b/i;
+const money = /\b(?:free|paid|pay|pays|paying|payments?|prices?|priced|pricing|pricey|costs?|costly|costing|fees?|cheap(?:er|est|ly)?|affordabl[ey]|affordability|inexpensive|expensive|low[- ]cost|no[- ]cost|discount(?:s|ed|ing)?|bargains?|save[sd]?|saving|savings|money|money[- ]back|refunds?|rebates?|budget[- ]friendly|dollars?|usd|per (?:month|year|bed|user|seat|resident|facility))\b/i;
+// A promise about compliance is a claim about results: becoming, staying or being compliant, compliance that is guaranteed or ensured,
+// passing a survey or an inspection. Up to three words may stand between ("keep every ALF compliant").
+const compliance = /\b(?:(?:be|become|becomes|becoming|stay|stays|staying|remain|remains|remaining|keep|keeps|keeping|get|gets|getting|always|fully|totally|guaranteed)\s+(?:[\w'’-]+\s+){0,3}?compliant|compliance\s+(?:is\s+)?(?:guaranteed|assured|ensured|made\s+easy|made\s+simple)|(?:ensure|ensures|ensured|ensuring|guarantee|guarantees|guaranteeing|assure|assures|achieve|achieves|achieving|maintain|maintains|maintaining)\s+(?:[\w'’-]+\s+){0,3}?compliance|pass(?:es|ed|ing)?\s+(?:[\w'’-]+\s+){0,3}?(?:surveys?|inspections?|audits?)|(?:survey|inspection|audit)[- ]proof)\b/i;
+// Seven or more digits in a run, however they are spaced: a phone number, even one the page itself shows, never goes in a title.
+const phoneShaped = /\d(?:[\s().-]*\d){6,}/;
 const claim = /\b(?:guarantee[sd]?|guaranteeing|proven|best(?! practices?\b)|leading|number one|no\.? ?1|top[- ]rated|award[- ]winning|world[- ]class|unmatched|unbeatable|fastest|easiest|deficiency[- ]free|citation[- ]free|zero (?:citations|deficiencies|violations|errors)|never (?:miss|fail)\w*|pass(?:es|ed|ing)? (?:your |every |any |the |a |all |each )?(?:surveys?|inspections?|audits?)|ace (?:your |the )?(?:survey|inspection)s?|(?:fully|always|totally) compliant|hipaa[- ]compliant|ensures? compliance|guaranteed compliance|boost(?:s|ed|ing)?|double[sd]?|triple[sd]?|results? in|increase[sd]? (?:your )?\w+ by)\b/i;
 const vocabulary = /\bALRs?\b|\bassisted living residences?\b|\bauditors?\b/i;
 const numbersIn = text => String(text ?? '').match(/\d+(?:[.,]\d+)*/g) ?? [];
@@ -153,8 +160,10 @@ export function checkSuggestion(suggestion, candidate) {
   const both = `${title}\n${description}`;
   if (!allowed.test(title) || !allowed.test(description)) return { ok: false, reason: 'characters' };
   if (webAddress.test(both)) return { ok: false, reason: 'web_address' };
+  if (phoneShaped.test(both)) return { ok: false, reason: 'phone_number' };
   if (money.test(both)) return { ok: false, reason: 'money' };
   if (claim.test(both)) return { ok: false, reason: 'claim' };
+  if (compliance.test(both)) return { ok: false, reason: 'compliance_claim' };
   if (vocabulary.test(both)) return { ok: false, reason: 'vocabulary' };
   const known = new Set(numbersIn(`${candidate.title} ${candidate.description} ${candidate.text}`));
   if (numbersIn(both).some(number => !known.has(number))) return { ok: false, reason: 'unlisted_number' };

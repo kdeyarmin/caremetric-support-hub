@@ -8,7 +8,7 @@
  *
  * Each pair of hosts is reported once, as "pick one canonical home page", with an address on each: choose one, and redirect the
  * other to it permanently. A site that already redirects to another of the company's sites has no pages of its own and never
- * appears here. A page marked noindex is not in search results, so its title competes with nothing.
+ * appears here. A page marked noindex is not in search results, so neither its title nor its canonical link counts.
  */
 import { addressKey } from './audit.mjs';
 
@@ -51,8 +51,9 @@ export function crossHostDuplicates(audits, sites) {
   }
 
   const pages = usable.flatMap(audit => (audit.pages ?? []).map(page => ({ ...page, host: hostOf(page.url) })));
-  // A canonical link that names another of the company's hosts.
+  // A canonical link that names another of the company's hosts. A page kept out of search results competes with nothing, whatever it names.
   for (const page of pages) {
+    if (page.noindex) continue;
     const target = page.canonical ? hostOf(page.canonical) : '';
     if (target && target !== page.host && ownerHosts.has(target)) note({ host: page.host, url: page.url }, { host: target, url: page.canonical }, 'canonical');
   }

@@ -997,6 +997,42 @@ try {
       assert.ok(page.items.length > 0, `the owner sees the analyst's ${kind}`);
     }
     await clearWork();
+
+    // Suggested titles are paid for once per report, judged by the real alert table. The help center's title is too short, so a model is
+    // asked about it. The owner's own report that Monday morning and the scheduled report are two reports and each pays once (the
+    // scheduled key is the start of the owner's, and the count tells them apart); a retry of the delivered scheduled report, on a server
+    // that has no copy of the suggestions in memory, does not pay again and sends nothing again.
+    await admin.query('delete from private.owner_notifications');
+    const shortHelp = async url => (url === 'https://help.caremetric.ai/'
+      ? new Response(homePage('https://help.caremetric.ai').replace(/<title>[^<]*<\/title>/, '<title>Help</title>'), { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } })
+      : network(url));
+    const paidFor = [];
+    const rewriter = { configured: true, run: async runTask => {
+      paidFor.push(runTask.id);
+      return { outcome: 'completed', output: { suggestions: [{ page: 'p1', title: 'Help Center for CareMetric Products | CareMetric', description: 'Answers and step by step guides for CareMetric products, written for the questions customers ask most often.' }] } };
+    } };
+    const withModel = () => agentTeam({
+      pool, enabled: true, ownerEmail: 'owner@example.test', publicOrigin: 'https://hub.test', fetchImpl: shortHelp, log: () => {}, now: () => clock.value, model: rewriter,
+      sms: { configured: false, send: async () => ({ delivery: 'sent', id: 'x' }) },
+      email: { configured: true, send: async (to, subject, content) => { mail.email.push([to, subject, content]); return { delivery: 'sent', id: 'fixture-seo-paid' }; } },
+    });
+    clock.value = new Date('2026-11-02T11:00:00Z');
+    const early = await ownerCall('hub.request_agent_task', ['seo_analyst', 'seo.weekly']);
+    await withModel().tick();
+    assert.equal((await task(early.id)).status, 'done');
+    assert.equal(paidFor.length, 1, 'the owner\'s own report pays for its suggestions');
+    assert.match(mail.email.at(-1)[2].text, /New title/);
+    await enqueue('seo_analyst', 'seo.weekly', `it:${run}:seo:paid`, { sourceKind: 'schedule' });
+    await withModel().tick();
+    assert.equal(paidFor.length, 2, 'the scheduled report is another report: the owner\'s report that morning is not taken for it');
+    const sentBefore = mail.email.length;
+    await enqueue('seo_analyst', 'seo.weekly', `it:${run}:seo:paid-retry`, { sourceKind: 'schedule' });
+    await withModel().tick();
+    assert.equal(paidFor.length, 2, 'a retry of a delivered report does not pay again');
+    assert.equal(mail.email.length, sentBefore, 'and sends nothing again');
+    const retried = await row('select result from private.agent_tasks where request_key = $1', [`it:${run}:seo:paid-retry`]);
+    assert.deepEqual(retried.result.suggestions, { state: 'already_sent', offered: 0, kept: 0, dropped: 0 });
+    await clearWork();
   }
 
   {

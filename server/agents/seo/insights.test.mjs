@@ -112,6 +112,51 @@ describe('what may be shown', () => {
     expect(result.sites[0].topQueries.map(item => item.query)).toEqual(['alf training']);
   });
 
+  it('tells searches apart by their whole text, and cuts only the label', () => {
+    const stem = 'how to train staff in a pennsylvania personal care home under chapter twenty eight hundred and keep the';
+    const [first, second] = [`${stem} records`, `${stem} binders`];
+    const pairs = [
+      row([first, 'https://cmcarebase.com/a'], 1, 60, 9), row([first, 'https://home.cmcarebase.com/a'], 1, 40, 12),
+      row([second, 'https://cmcarebase.com/b'], 1, 50, 9),
+    ];
+    const queries = [row([first], 2, 100, 10), row([second], 1, 50, 11)];
+    const result = insightsOf([property('sc-domain:cmcarebase.com', { pairs, queries })]);
+    // The second search is on one host only: it must not be merged into the first, which is on two.
+    expect(result.competing).toHaveLength(1);
+    expect(result.competing[0].hosts.map(host => host.page)).toEqual(['https://cmcarebase.com/a', 'https://home.cmcarebase.com/a']);
+    expect(result.competing[0].query).toHaveLength(80);
+    expect(result.striking.map(item => item.page)).toEqual(['https://cmcarebase.com/a', 'https://cmcarebase.com/b']);
+    expect(result.queriesFor('https://cmcarebase.com/b')).toHaveLength(1);
+    expect(JSON.stringify(result)).not.toContain('binders');
+    expect(Object.keys(result.striking[0])).not.toContain('key');
+  });
+
+  it('lists a row two overlapping properties both report once, with the first property\'s figures, before the lists are cut to five', () => {
+    const same = {
+      queries: Array.from({ length: 5 }, (_, index) => row([`search ${index}`], 1, 300 - index, 12)),
+      pages: Array.from({ length: 5 }, (_, index) => row([`https://cmcarebase.com/p${index}`], 1, 900 - index, 4)),
+      pairs: Array.from({ length: 5 }, (_, index) => row([`search ${index}`, `https://cmcarebase.com/p${index}`], 1, 300 - index, 12)),
+    };
+    const prefix = {
+      queries: [...same.queries.map(item => ({ ...item, impressions: item.impressions + 1000 })), row(['only in the prefix'], 0, 100, 15)],
+      pages: [...same.pages.map(item => ({ ...item, clicks: 0, ctr: 0 })), row(['https://cmcarebase.com/extra'], 0, 500, 3)],
+      pairs: same.pairs,
+    };
+    const result = insightsOf([property('sc-domain:cmcarebase.com', same), property('https://cmcarebase.com/', prefix)]);
+    expect(result.striking.map(item => item.query)).toEqual(['search 0', 'search 1', 'search 2', 'search 3', 'search 4']);
+    // The prefix property's own row is not crowded out by copies: the list holds five different searches either way.
+    const listed = new Set(result.striking.map(item => `${item.query} ${item.page}`));
+    expect(listed.size).toBe(5);
+    // Figures are the first property's, never added together.
+    expect(result.striking[0]).toMatchObject({ property: 'sc-domain:cmcarebase.com', impressions: 300 });
+    expect(result.lowCtr.map(item => item.page)).toEqual(['https://cmcarebase.com/p0', 'https://cmcarebase.com/p1', 'https://cmcarebase.com/p2', 'https://cmcarebase.com/p3', 'https://cmcarebase.com/p4']);
+    expect(result.lowCtr[0]).toMatchObject({ property: 'sc-domain:cmcarebase.com', impressions: 900, clicks: 1 });
+    // Copies would fill the five places (p0, p0, p1, p1, p2) and push out a page only the second property has; once each, it is listed.
+    const three = { ...same, pages: same.pages.slice(0, 3) };
+    const fewer = insightsOf([property('sc-domain:cmcarebase.com', three), property('https://cmcarebase.com/', { ...prefix, pages: [...three.pages, row(['https://cmcarebase.com/extra'], 0, 500, 3)] })]);
+    expect(fewer.lowCtr.map(item => item.page)).toEqual(['https://cmcarebase.com/p0', 'https://cmcarebase.com/p1', 'https://cmcarebase.com/p2', 'https://cmcarebase.com/extra']);
+  });
+
   it('gives the searches that show a page, most seen first', () => {
     const pairs = [row(['b', 'https://cmcarebase.com/p'], 1, 10, 5), row(['a', 'https://cmcarebase.com/p'], 1, 30, 5), row(['c', 'https://cmcarebase.com/q'], 1, 99, 5)];
     const result = insightsOf([property('sc-domain:cmcarebase.com', { pairs })]);

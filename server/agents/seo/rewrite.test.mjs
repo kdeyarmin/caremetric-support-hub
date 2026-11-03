@@ -115,6 +115,34 @@ describe('checking a suggestion', () => {
     }
   });
 
+  it('refuses every word about money, and any promise of compliance', () => {
+    for (const title of ['Paid staff training for personal care homes | CareBase', 'Plans and pricing for care homes | CareBase', 'Training at no cost for care homes | CareBase',
+      'Low fees for staff training at every home | CareBase', 'Staff training for the price of one | CareBase', 'Cut what training costs your home | CareBase',
+      'Pay once for staff training at home | CareBase', 'Expensive binders replaced for care homes | CareBase']) {
+      expect(check({ title }).reason, title).toBe('money');
+    }
+    for (const title of ['Become compliant with staff training | CareBase', 'Stay compliant all year round | CareBase', 'Keep every ALF compliant with training | CareBase',
+      'Be compliant before the surveyor comes | CareBase', 'Maintain compliance with staff training | CareBase', 'Get compliant with Chapter 2800 | CareBase',
+      'Survey-proof records for every care home | CareBase']) {
+      expect(check({ title }).reason, title).toBe('compliance_claim');
+    }
+    for (const title of ['Compliance guaranteed for care homes | CareBase', 'Pass inspection with ease at your home | CareBase']) expect(check({ title }).reason, title).toBe('claim');
+    // Words near those are fine: a topic is not a promise.
+    for (const title of ['Compliance training for personal care homes | CareBase', 'Track compliance tasks for care homes | CareBase', 'Payroll and staff records for care homes | CareBase']) {
+      expect(check({ title }).ok, title).toBe(true);
+    }
+  });
+
+  it('refuses a phone number, even one the page itself shows', () => {
+    const withPhone = { ...candidate, text: `${candidate.text} Call 717-555-0142 or (717) 555 0142, or 717.555.0142.` };
+    for (const title of ['Call 717-555-0142 for staff training | CareBase', 'Staff training help: (717) 555 0142 | CareBase', 'Staff training, 717.555.0142 | CareBase']) {
+      expect(checkSuggestion({ ...good, title }, withPhone), title).toEqual({ ok: false, reason: 'phone_number' });
+    }
+    expect(checkSuggestion({ ...good, description: 'Track staff training and survey documentation for care homes, or call us on 717 555 0142 today.' }, withPhone).reason).toBe('phone_number');
+    // A number the page uses, on its own, is still fine.
+    expect(checkSuggestion({ ...good, title: 'Chapter 2800 training for care homes | CareBase' }, withPhone).ok).toBe(true);
+  });
+
   it('holds to the company\'s vocabulary', () => {
     for (const title of ['Training for every ALR in Pennsylvania | CareBase', 'Assisted Living Residence training | CareBase', 'Get ready for the auditor | CareBase', 'What auditors check in a home | CareBase']) {
       expect(check({ title }).reason, title).toBe('vocabulary');

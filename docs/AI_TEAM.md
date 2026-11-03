@@ -164,9 +164,11 @@ page and about two and a half minutes a site.
   are one group, as in RFC 9309), a sitemap exists and lists pages on the site, plain http redirects
   permanently to the site's own https address (an error answer, or a redirect to http or to another site, is
   a problem), and the other addresses for the site redirect to it with a permanent redirect (or name it as
-  canonical). The home page is read first: a site whose home page redirects to another of the company's sites
-  (the Framer page sent to `cmcarebase.com`, say) is checked no further, and the report says where it goes and
-  asks only that the redirect be permanent.
+  canonical). The home page is read first. When it redirects to another of the company's sites (the Framer page
+  sent to `cmcarebase.com`, say), its redirects are followed across the company's sites only, at most five of
+  them: a chain that ends at a page that loads means the site is checked no further, and the report says where
+  it ends and asks only that every redirect be permanent; a loop, or a chain that ends in an error, goes nowhere
+  or leaves the company's sites, is urgent.
 - **Its pages**, which are the home page and the pages in the sitemap (or the pages the home page links
   to when there is no sitemap): reachable, HTML, not marked noindex, a title and a description of a
   sensible length that no other page shares, a canonical link, one main heading, enough text before
@@ -184,7 +186,7 @@ page and about two and a half minutes a site.
   it. Two sites that are both home pages for one product (CareBase's own site and its Framer page), a
   canonical link on one host that names another of the company's hosts, or the same title on pages of two
   hosts are reported once per pair of hosts as "pick one canonical home page", with an address on each, and
-  counted as worth fixing.
+  counted as worth fixing. A page marked noindex counts for none of them.
 
 Each finding is **urgent** (it could keep pages out of search results), **worth fixing** or **minor**. The
 email lists each site's worst problems with an example page and scores each site out of 100 by how many
@@ -197,8 +199,9 @@ scripts run.
 ### Search Console (optional)
 
 When the Hub service has `HUB_SEARCH_CONSOLE_CREDENTIALS` (a Google service account's JSON key, pasted whole;
-a secret) and `HUB_SEARCH_CONSOLE_SITES` (the properties, separated by commas, as Search Console names them:
-`sc-domain:cmcarebase.com`, `https://www.caremetricintel.com/`), the analyst reads Search Console while it
+a secret) and `HUB_SEARCH_CONSOLE_SITES` (the properties, separated by commas, exactly as Search Console names
+them: `sc-domain:cmcarebase.com`, `https://www.caremetricintel.com/`; an address prefix is kept as written, so
+write it with its final `/` as Search Console shows it), the analyst reads Search Console while it
 crawls (`server/agents/seo/search-console.mjs`). It signs in as the service account with a JWT it signs itself
 (RS256 with `node:crypto`, no Google library), exchanged at `https://oauth2.googleapis.com/token` for a
 read-only token (`webmasters.readonly`) that is kept in memory until a minute before it expires. Each property
@@ -222,7 +225,10 @@ the 28 days before, with its top searches and pages, and across the properties:
   appear, such as `cmcarebase.com` and `home.cmcarebase.com`, with at least 10 impressions between them.
 
 A search that looks personal (an email address, or a phone number or another run of seven or more digits) is
-left out of the report and away from the model. These are opportunities, not problems: they do not change the
+left out of the report and away from the model. Searches are told apart by their whole text (only the label shown
+is cut to 80 characters), and when two properties overlap (a domain property and an address prefix inside it) a
+row both report is listed once, with the first property's figures, before each list is cut to five. These are
+opportunities, not problems: they do not change the
 count of things to fix. Without Search Console the report says once that it is not connected, and how to
 connect it: in Google Cloud, create a service account and a JSON key for it, and enable the Google Search
 Console API in that project; in Search Console, add the service account's email address as a user on each
@@ -239,21 +245,23 @@ description is missing, the wrong length or shared. A page is offered only if it
 at least 50 words of its own before scripts run, so an app shell is never guessed at. The model sees, for each
 page, the site's name, the address, why it was picked, its current title and description, the start of its
 visible text (2,000 characters) and the searches that show it: public text only, never customer data. The system
-prompt is a constant (`server/agents/seo/rewrite.mjs`, version `seo-rewrite.1`), every page's text is escaped
+prompt is a constant (`server/agents/seo/rewrite.mjs`, version `seo-rewrite.2`), every page's text is escaped
 into its own block, and the answer is a closed schema that names pages only by id.
 
 Code checks each suggestion and drops the ones that fail: a title of 20 to 60 characters and a description of
 70 to 155; letters, digits and ordinary punctuation only (no markup, quotation marks, emoji, symbols, links or
-addresses); no price or money word ("free", "save", "affordable" and the like); no claim about results ("best",
-"guaranteed", "pass your survey", "HIPAA-compliant" and the like); no number the page itself does not use; the
-company's vocabulary (Assisted Living Facility or ALF and surveyor, never Assisted Living Residence, ALR or
+addresses); no phone number, even one the page shows; no word about money ("free", "paid", "price", "pricing",
+"cost", "fee", "discount", "save" and the like); no claim about results ("best", "guaranteed", "HIPAA-compliant"
+and the like), compliance among them ("become", "stay" or "be compliant", "compliance guaranteed", "pass your
+survey" or "inspection"); no number the page itself does not use; the company's vocabulary (Assisted Living Facility or ALF and surveyor, never Assisted Living Residence, ALR or
 auditor); and not the page's current title and description again, or another suggestion's title. The email
 shows each suggestion that passes with its page and why it was picked, and says how many were dropped. Nothing
 on any site is changed: the owner copies what they want. Without a model the section is left out. A model that
 fails, declines, is over budget or would run past its deadline (the call must end within 200 seconds of the
 task's start, so the report still goes out inside the scheduler's four minutes) leaves one line instead, and the
-report goes out regardless. The stored task result keeps scores, counts and codes only: no page text, no search
-and no suggestion.
+report goes out regardless. The call is paid for once per report: a retry in the same server reuses the checked
+suggestions, and a report that already has an email under its own dedupe key (sent, on its way or tried) gets no
+new call. The stored task result keeps scores, counts and codes only: no page text, no search and no suggestion.
 
 The schedule fires every morning at 06:30 Eastern, because an interval schedule is limited to a day. The
 weekly work happens only on Monday and the other mornings finish at once. **Run now** checks on any day and

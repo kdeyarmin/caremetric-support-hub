@@ -3,8 +3,9 @@
  * JavaScript (and most AI assistants) reads it: robots.txt, the sitemap, the home page and the pages the
  * sitemap lists, the links between them, and the other addresses that should reach the same site.
  *
- * Every request goes to the site's own host (a variant host for the variant check), is a plain GET without
- * credentials, follows no redirect, and reads a bounded amount of the answer. The findings are a handful of
+ * Every request goes to the site's own host (a variant host for the variant check; the company's other sites when the home
+ * page redirects to one of them, at most five hops along that chain), is a plain GET without credentials, follows no redirect
+ * by itself, and reads a bounded amount of the answer. The findings are a handful of
  * fixed-vocabulary codes. What the later steps of the weekly task need from each page (its title, description,
  * canonical link and the start of its visible text) is returned in `pages` and held only in memory: it is never
  * stored, and the report never quotes it.
@@ -12,7 +13,7 @@
 import { analyzeHtml, analyzeRobots, analyzeSitemap, resolve } from './html.mjs';
 import { sites as knownSites } from './sites.mjs';
 
-export const defaults = Object.freeze({ pages: 20, links: 30, concurrency: 4, timeoutMs: 8000, htmlBytes: 600_000, textBytes: 400_000, deadlineMs: 150_000 });
+export const defaults = Object.freeze({ pages: 20, links: 30, concurrency: 4, timeoutMs: 8000, htmlBytes: 600_000, textBytes: 400_000, deadlineMs: 150_000, redirectHops: 5 });
 const userAgent = 'CareMetric-SEO-Check/1 (+https://caremetric.ai)';
 // Fewer words than this before scripts run is a thin page.
 export const thinWords = 50;
@@ -50,6 +51,8 @@ export const catalog = Object.freeze({
   h1_multiple: ['low', 'A page has more than one main heading'],
   thin_html: ['medium', 'A page has almost no text before scripts run'],
   site_redirect_temporary: ['low', 'The site redirects to another of your sites with a temporary redirect'],
+  site_redirect_loop: ['high', 'The site redirects in a loop, so it never loads'],
+  site_redirect_broken: ['high', 'The site redirects to another of your sites, and the redirects end in an error'],
   viewport_missing: ['medium', 'A page is not set up for phones'],
   lang_missing: ['low', 'A page does not declare its language'],
   social_missing: ['low', 'A page has no social sharing preview'],
@@ -184,7 +187,8 @@ export function pageFindings(facts, url) {
  * `pages` lists each page that answered as HTML, in the order it was queued: { url, title, description, canonical (absolute, or
  * null), text (the start of its visible text), words, noindex, appShell }. `appShells` are the paths of the pages that are app
  * shells: almost no text before scripts run, on a page built to be filled in by scripts. A site whose home page redirects to
- * another of the company's sites (`owners`) is checked no further and says where it goes in `redirectsTo`.
+ * another of the company's sites (`owners`), and through at most `redirectHops` redirects on those sites ends at a page that loads,
+ * is checked no further and says where it ends in `redirectsTo`; a loop or a chain that fails is an urgent finding instead.
  */
 export async function auditSite(site, { fetchImpl = fetch, signal, now = () => Date.now(), limits = defaults, owners = ownerOrigins } = {}) {
   const config = { ...defaults, ...limits };
@@ -207,14 +211,50 @@ export async function auditSite(site, { fetchImpl = fetch, signal, now = () => D
   };
 
   // The home page first. A site that as a whole redirects to another of the company's sites is how two addresses become one: there
-  // is nothing of its own left to check, and the report says where it goes.
+  // is nothing of its own left to check, and the report says where it goes. Its redirects are followed across the company's own sites
+  // and nowhere else, at most `redirectHops` of them, so a loop, or a chain that ends in an error or leaves the company's sites, is
+  // reported as urgent instead of being taken for a finished move.
   const homeUrl = `${site.origin}/`;
   const homePage = await get(homeUrl, config.htmlBytes);
-  const away = homePage && homePage.status >= 300 && homePage.status < 400 && homePage.location ? resolve(homePage.location, homeUrl) : null;
-  const otherSite = away ? owners.find(origin => origin !== site.origin && (away === `${origin}/` || away.startsWith(`${origin}/`))) : null;
-  if (otherSite) {
-    if (homePage.status !== 301 && homePage.status !== 308) add('site_redirect_temporary', `${homePage.status} to ${away}`, '/');
-    return finish({ redirectsTo: otherSite });
+  const ownerOf = address => owners.find(origin => address === `${origin}/` || address.startsWith(`${origin}/`)) ?? null;
+  const target = (reply, base) => (reply && reply.status >= 300 && reply.status < 400 && reply.location ? resolve(reply.location, base) : null);
+  const away = target(homePage, homeUrl);
+  if (away && ownerOf(away) && ownerOf(away) !== site.origin) {
+    const hops = [{ status: homePage.status, to: away }];
+    const seen = new Set([addressKey(homeUrl)]);
+    const chain = () => [homeUrl, ...hops.map(hop => hop.to)].map(address => clip(address.replace(/^https?:\/\//i, ''), 60)).join(' → ');
+    let at = away;
+    let failure = null;
+    for (;;) {
+      if (seen.has(addressKey(at))) { failure = ['site_redirect_loop', chain()]; break; }
+      seen.add(addressKey(at));
+      const reply = await get(at, config.htmlBytes);
+      // Out of time: nothing is known about where it ends, and the result says the check stopped early.
+      if (!reply) return finish();
+      if (reply.status >= 300 && reply.status < 400) {
+        const next = target(reply, at);
+        if (!next) { failure = ['site_redirect_broken', `${chain()}, which redirects nowhere`]; break; }
+        if (!ownerOf(next)) { failure = ['site_redirect_broken', `${chain()}, which sends it on to ${hostOf(next)}`]; break; }
+        if (hops.length >= config.redirectHops) { failure = ['site_redirect_broken', `more than ${config.redirectHops} redirects: ${chain()}`]; break; }
+        hops.push({ status: reply.status, to: next });
+        at = next;
+        continue;
+      }
+      if (reply.status === 0) failure = ['site_redirect_broken', `${chain()}, which does not answer (${reply.error})`];
+      else if (reply.status !== 200) failure = ['site_redirect_broken', `${chain()}, which answers ${reply.status}`];
+      else if (!/html/.test(reply.type)) failure = ['site_redirect_broken', `${chain()}, which is not a web page`];
+      break;
+    }
+    if (failure) {
+      add(failure[0], failure[1], '/');
+      return finish();
+    }
+    // A chain that comes back to this site's own pages moved nothing away from it: the site is checked as usual below.
+    if (ownerOf(at) !== site.origin) {
+      const temporary = hops.find(hop => hop.status !== 301 && hop.status !== 308);
+      if (temporary) add('site_redirect_temporary', `${temporary.status} to ${temporary.to}`, '/');
+      return finish({ redirectsTo: ownerOf(at) });
+    }
   }
 
   // robots.txt

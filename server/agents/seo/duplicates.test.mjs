@@ -60,6 +60,12 @@ describe('two of the company\'s hosts serving the same page', () => {
     expect(crossHostDuplicates(failed, sites)).toEqual([]);
     const hidden = [...cleanWeek(), audit('carebase_home', [page('https://home.cmcarebase.com/', 'CareMetric CareBase — Survey-Ready Operations', { noindex: true })])];
     expect(crossHostDuplicates(hidden, sites)).toEqual([]);
+    // Nor does a canonical link on a page kept out of search results, which competes with nothing.
+    const hiddenCanonical = cleanWeek();
+    hiddenCanonical[2].pages.push(page('https://www.caremetricintel.com/old', 'An old Intel page', { canonical: 'https://cmcarebase.com/', noindex: true }));
+    expect(crossHostDuplicates(hiddenCanonical, sites)).toEqual([]);
+    hiddenCanonical[2].pages.at(-1).noindex = false;
+    expect(crossHostDuplicates(hiddenCanonical, sites).map(entry => entry.reasons)).toEqual([['canonical']]);
   });
 
   it('is the same for the same audits, whatever order they come in', () => {

@@ -13,7 +13,8 @@
  * - Suggested titles and descriptions, when the model runtime is configured (an Anthropic key is set): one call a week
  *   for up to five pages, from each page's own public text and its searches, checked by code (see seo/rewrite.mjs).
  *   Without a model the section is left out; a model that fails or is over budget leaves one line and never holds up
- *   the report.
+ *   the report. The call is paid for once per report: a retry in this process reuses the checked output, and a report
+ *   that already has an email under its own dedupe key gets no new call.
  *
  * The report carries counts, page addresses on the company's own sites, fixed-vocabulary findings, Search Console's
  * figures and searches, and the checked suggestions. It never quotes what a page says. The stored result holds counts
@@ -71,10 +72,11 @@ const notConnected = {
   no_properties: 'Search Console is not connected: HUB_SEARCH_CONSOLE_SITES names no property it can read. Write each one as Search Console shows it, for example sc-domain:cmcarebase.com or https://www.caremetricintel.com/, separated by commas.',
 };
 
+const writtenAsShown = 'Write it in HUB_SEARCH_CONSOLE_SITES exactly as Search Console shows it: an address prefix ends with /.';
 const failureWords = (code, account) => ({
-  not_permitted: `the service account${account ? ` (${account})` : ''} is not a user on this property. Add it in Search Console under Settings, Users and permissions.`,
-  property_not_found: 'Search Console does not know this property. Check how it is written in HUB_SEARCH_CONSOLE_SITES.',
-  request_rejected: 'Google refused the request. Check how the property is written in HUB_SEARCH_CONSOLE_SITES.',
+  not_permitted: `the service account${account ? ` (${account})` : ''} cannot read this property. Add it in Search Console under Settings, Users and permissions. ${writtenAsShown}`,
+  property_not_found: `Search Console does not know this property. ${writtenAsShown}`,
+  request_rejected: `Google refused the request. ${writtenAsShown}`,
   token_refused: 'Google refused the service account\'s key. Check HUB_SEARCH_CONSOLE_CREDENTIALS, and that the key has not been deleted or disabled.',
   rate_limited: 'Google asked the Hub to slow down. It will be read again next week.',
 }[code] ?? 'Google did not answer in time, or its answer could not be read. It will be read again next week.');
@@ -152,6 +154,7 @@ const suggestionStates = {
   no_time: 'Suggested titles and descriptions were skipped this week: the checks took too long to leave time for them.',
   too_slow: 'Suggested titles and descriptions could not be written this week: the model did not answer in time.',
   unavailable: 'Suggested titles and descriptions could not be written this week: the model was unavailable.',
+  already_sent: 'This report has already been sent or tried once, so its suggested titles and descriptions are not paid for again.',
 };
 
 /** The suggestions part of the report. Omitted entirely without a model. */
@@ -296,6 +299,35 @@ export function seoHandlers({
   const rewriter = model?.configured === true && typeof model.run === 'function' ? model : null;
   const config = { ...timing, ...limits };
   const owners = [...new Set(sites.flatMap(site => [site.origin, ...(site.variants ?? [])]).map(hostOf))];
+  // The checked suggestions of the last few reports, by the report's dedupe key. A report tried again in this process (its delivery
+  // failed, or its task was retried) reuses them instead of paying for the model again.
+  const written = new Map();
+  const remember = (key, value) => {
+    written.delete(key);
+    written.set(key, value);
+    while (written.size > 4) written.delete(written.keys().next().value);
+  };
+
+  /**
+   * Whether this report already has an email under its own dedupe key: sent, on its way, or tried. Its suggestions are then not paid
+   * for twice. The count is by prefix, and the scheduled report's key (seo:<day>) begins every key of the owner's own reports that day
+   * (seo:<day>:<task>), so those are counted on their own and taken away. A check that fails answers no: the report is then written in
+   * full, at the cost of one call.
+   */
+  async function alreadySent(dedupeKey) {
+    if (typeof store.notificationCount !== 'function') return false;
+    try {
+      const since = new Date(0);
+      const [all, longer] = await Promise.all([
+        store.notificationCount({ prefix: dedupeKey, channel: 'email', since }),
+        store.notificationCount({ prefix: `${dedupeKey}:`, channel: 'email', since }),
+      ]);
+      return Number(all) - Number(longer) > 0;
+    } catch {
+      log(JSON.stringify({ event: 'hub_seo_sent_check_failed' }));
+      return false;
+    }
+  }
 
   async function readSearch(moment, signal) {
     if (!reader) return null;
@@ -339,6 +371,8 @@ export function seoHandlers({
     // The schedule fires every morning; only Monday's is the weekly check. A check the owner asked for always runs.
     if (task.sourceKind === 'schedule' && weekday.format(moment) !== 'Mon') return { result: { skipped: 'not_monday' } };
     const started = clock();
+    const date = dayKey.format(moment);
+    const dedupeKey = task.sourceKind === 'owner' ? `seo:${date}:${task.id}` : `seo:${date}`;
 
     // The sites are different hosts, so they are checked side by side: each has its own deadline, well inside the task's.
     // Search Console is read at the same time.
@@ -350,15 +384,24 @@ export function seoHandlers({
       readSearch(moment, signal),
     ]);
     const duplicates = crossHostDuplicates(audits, sites);
-    const suggestions = rewriter ? await suggest(task, audits, search?.insights ?? null, started, signal) : null;
+    // The paid call is made once per report: not again for a retry that has the checked output in hand, nor for a report already sent.
+    let suggestions = null;
+    if (rewriter) {
+      const kept = written.get(dedupeKey);
+      if (kept) suggestions = { ...kept, reused: true };
+      else if (await alreadySent(dedupeKey)) suggestions = { state: 'already_sent', offered: 0 };
+      else {
+        suggestions = await suggest(task, audits, search?.insights ?? null, started, signal);
+        if (suggestions.state === 'ok') remember(dedupeKey, suggestions);
+      }
+    }
     // The scheduler has stopped waiting for this task (its time is up, or the owner cancelled it): nothing is sent from here.
     if (signal?.aborted) throw Object.assign(new Error('The task was stopped.'), { code: 'task_timeout', transient: true });
 
     const report = composeSeoReport(audits, { now: moment, publicOrigin, duplicates, search, suggestions });
-    const date = dayKey.format(moment);
     const results = await notifier.send({
       severity: report.urgent > 0 ? 'warning' : 'info', subject: report.subject, body: report.body, blocks: report.blocks,
-      dedupeKey: task.sourceKind === 'owner' ? `seo:${date}:${task.id}` : `seo:${date}`, agentKey: task.agentKey, taskId: task.id,
+      dedupeKey, agentKey: task.agentKey, taskId: task.id,
     });
     const delivery = results.map(item => `${item.channel}:${item.delivery}`);
     const reached = results.some(delivered);
@@ -382,7 +425,9 @@ export function seoHandlers({
         })),
         ...(duplicates.length ? { duplicates: duplicates.map(entry => entry.hosts) } : {}),
         ...(search ? { search: searchResult(search) } : {}),
-        ...(suggestions ? { suggestions: { state: suggestions.state, offered: suggestions.offered, kept: suggestions.items?.length ?? 0, dropped: suggestions.dropped ?? 0 } } : {}),
+        ...(suggestions ? { suggestions: {
+          state: suggestions.state, offered: suggestions.offered, kept: suggestions.items?.length ?? 0, dropped: suggestions.dropped ?? 0, ...(suggestions.reused ? { reused: true } : {}),
+        } } : {}),
       },
     };
   }

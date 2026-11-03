@@ -63,7 +63,7 @@ export const integrationCatalog = Object.freeze([
   { id: 'search-console', name: 'Google Search Console', purpose: 'Optional. Adds clicks, impressions, click-through rate, position and searches to the SEO Analyst\'s Monday report; without it the report uses the crawl alone. To connect: in Google Cloud, create a service account with a JSON key and enable the Google Search Console API; in Search Console, add the service account\'s email as a user on each property.', docs: 'docs/AI_TEAM.md',
     variables: [
       { name: 'HUB_SEARCH_CONSOLE_CREDENTIALS', secret: true, required: true, purpose: 'The service account\'s JSON key file, pasted whole. The Hub uses it only to read Search Console and never shows or logs it.' },
-      { name: 'HUB_SEARCH_CONSOLE_SITES', secret: false, required: true, purpose: 'The properties to read, separated by commas, as Search Console names them: sc-domain:cmcarebase.com for a domain property, https://www.caremetricintel.com/ for an address prefix.' },
+      { name: 'HUB_SEARCH_CONSOLE_SITES', secret: false, required: true, purpose: 'The properties to read, separated by commas, exactly as Search Console names them: sc-domain:cmcarebase.com for a domain property, https://www.caremetricintel.com/ (with its final /) for an address prefix.' },
     ] },
 ]);
 

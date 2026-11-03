@@ -26,11 +26,19 @@ export const typicalFor = position => typicalCtr[Math.min(Math.max(Math.round(po
 export const queryLimit = 80;
 const personal = /@|\d(?:[\s().-]?\d){6,}/;
 
-/** A search as it may appear in the report and the prompt, or null when it should not appear at all. */
-export function cleanQuery(raw) {
+/**
+ * A search with control and markup characters taken out and its spacing tidied, whole, or null when it should not appear at all.
+ * Searches are told apart by this: two long searches that begin the same are still two searches.
+ */
+export function sanitizeQuery(raw) {
   const text = String(raw ?? '').replace(/[\u0000-\u001f\u007f-\u009f<>]/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!text || personal.test(text)) return null;
-  return clip(text, queryLimit);
+  return !text || personal.test(text) ? null : text;
+}
+
+/** A search as the report and the prompt show it, cut to `queryLimit` characters. Only what is shown is cut. */
+export function cleanQuery(raw) {
+  const text = sanitizeQuery(raw);
+  return text === null ? null : clip(text, queryLimit);
 }
 
 /** A page address Search Console reported, or null when it is not an http(s) address. */
@@ -44,10 +52,23 @@ export function cleanPage(raw) {
 }
 
 const hostOf = address => { try { return new URL(address).host.toLowerCase(); } catch { return ''; } };
-const byClicks = (a, b) => b.clicks - a.clicks || b.impressions - a.impressions || (a.query ?? a.page).localeCompare(b.query ?? b.page);
-const byImpressions = (a, b) => b.impressions - a.impressions || b.clicks - a.clicks || (a.query ?? a.page).localeCompare(b.query ?? b.page);
+// Searches sort by their whole text (`key`), pages by their address, so the order never depends on how a label was cut.
+const byName = (a, b) => (a.key ?? a.page).localeCompare(b.key ?? b.page);
+const byClicks = (a, b) => b.clicks - a.clicks || b.impressions - a.impressions || byName(a, b);
+const byImpressions = (a, b) => b.impressions - a.impressions || b.clicks - a.clicks || byName(a, b);
 const metrics = row => ({ clicks: row.clicks, impressions: row.impressions, ctr: row.ctr, position: row.position });
 const percentChange = (now, before) => (before > 0 ? (now - before) / before : null);
+/** A search row: `key` is the whole search in lower case, what rows are matched and grouped by; `query` is its label. */
+const searchRow = (raw, fields) => {
+  const text = sanitizeQuery(raw);
+  return text === null ? null : { key: text.toLowerCase(), query: clip(text, queryLimit), ...fields };
+};
+const withoutKey = ({ key: _key, ...row }) => row;
+/** The rows with a key not seen before, in order: the first of each wins, and nothing is added up. */
+const firstOf = (rows, keyOf) => {
+  const seen = new Set();
+  return rows.filter(row => { const key = keyOf(row); if (seen.has(key)) return false; seen.add(key); return true; });
+};
 
 /**
  * `read` is what searchConsoleReader().read() returned; `owners` are the company's hosts (the sites and their other addresses).
@@ -66,12 +87,15 @@ export function searchInsights(read, { owners = [], limits = {} } = {}) {
   const pairs = new Map();
   for (const entry of readable) {
     const { current, previous } = entry.totals;
-    const queries = entry.queries.map(row => ({ query: cleanQuery(row.keys[0]), ...metrics(row) })).filter(row => row.query);
+    const queries = entry.queries.map(row => searchRow(row.keys[0], metrics(row))).filter(Boolean);
     const pages = entry.pages.map(row => ({ page: cleanPage(row.keys[0]), ...metrics(row) })).filter(row => row.page);
-    const ownPairs = entry.pairs.map(row => ({ query: cleanQuery(row.keys[0]), page: cleanPage(row.keys[1]), ...metrics(row) })).filter(row => row.query && row.page);
+    const ownPairs = entry.pairs.map(row => {
+      const page = cleanPage(row.keys[1]);
+      return page ? searchRow(row.keys[0], { page, ...metrics(row) }) : null;
+    }).filter(Boolean);
     // The same search and page can come from two properties (a domain property and an address prefix inside it): counted once.
-    for (const row of ownPairs) { const key = `${row.query.toLowerCase()}\n${addressKey(row.page)}`; if (!pairs.has(key)) pairs.set(key, { ...row, property: entry.property }); }
-    const bestPage = query => ownPairs.filter(row => row.query === query).sort(byImpressions)[0]?.page ?? null;
+    for (const row of ownPairs) { const key = `${row.key}\n${addressKey(row.page)}`; if (!pairs.has(key)) pairs.set(key, { ...row, property: entry.property }); }
+    const bestPage = key => ownPairs.filter(row => row.key === key).sort(byImpressions)[0]?.page ?? null;
 
     sites.push({
       property: entry.property, totals: { current, previous },
@@ -80,11 +104,11 @@ export function searchInsights(read, { owners = [], limits = {} } = {}) {
         ctr: previous.impressions > 0 && current.impressions > 0 ? current.ctr - previous.ctr : null,
         position: previous.position > 0 && current.position > 0 ? current.position - previous.position : null,
       },
-      topQueries: [...queries].sort(byClicks).slice(0, config.top),
+      topQueries: [...queries].sort(byClicks).slice(0, config.top).map(withoutKey),
       topPages: [...pages].sort(byClicks).slice(0, config.top),
     });
     for (const row of queries) {
-      if (row.position >= config.strikingFrom && row.position <= config.strikingTo && row.impressions >= config.strikingImpressions) striking.push({ property: entry.property, ...row, page: bestPage(row.query) });
+      if (row.position >= config.strikingFrom && row.position <= config.strikingTo && row.impressions >= config.strikingImpressions) striking.push({ property: entry.property, ...row, page: bestPage(row.key) });
     }
     for (const row of pages) {
       if (row.impressions < config.lowCtrImpressions || !(row.position > 0) || row.position > config.lowCtrPosition) continue;
@@ -98,16 +122,15 @@ export function searchInsights(read, { owners = [], limits = {} } = {}) {
   for (const row of pairs.values()) {
     const host = hostOf(row.page);
     if (!ownerHosts.has(host)) continue;
-    const key = row.query.toLowerCase();
-    const hosts = bySearch.get(key) ?? new Map();
+    const hosts = bySearch.get(row.key) ?? new Map();
     const best = hosts.get(host);
     if (!best || byImpressions(row, best) < 0) hosts.set(host, row);
-    bySearch.set(key, hosts);
+    bySearch.set(row.key, hosts);
   }
-  const competing = [...bySearch.values()].filter(hosts => hosts.size > 1).map(hosts => {
+  const competing = [...bySearch.entries()].filter(([, hosts]) => hosts.size > 1).map(([key, hosts]) => {
     const rows = [...hosts.entries()].map(([host, row]) => ({ host, page: row.page, clicks: row.clicks, impressions: row.impressions, position: row.position })).sort(byImpressions);
-    return { query: [...hosts.values()][0].query, impressions: rows.reduce((sum, row) => sum + row.impressions, 0), clicks: rows.reduce((sum, row) => sum + row.clicks, 0), hosts: rows };
-  }).filter(entry => entry.impressions >= config.competingImpressions).sort(byImpressions).slice(0, config.top);
+    return { key, query: [...hosts.values()][0].query, impressions: rows.reduce((sum, row) => sum + row.impressions, 0), clicks: rows.reduce((sum, row) => sum + row.clicks, 0), hosts: rows };
+  }).filter(entry => entry.impressions >= config.competingImpressions).sort(byImpressions).slice(0, config.top).map(withoutKey);
 
   const pageQueries = new Map();
   for (const row of pairs.values()) {
@@ -115,12 +138,14 @@ export function searchInsights(read, { owners = [], limits = {} } = {}) {
     pageQueries.set(key, [...(pageQueries.get(key) ?? []), row]);
   }
 
+  // Overlapping properties (a domain property and an address prefix inside it) report the same rows. Each row is listed once, with the
+  // figures of the first property in HUB_SEARCH_CONSOLE_SITES that reported it (never a sum of the two), before a list is cut to five.
   return {
     window: read?.window ?? null,
     sites, failures, competing,
-    striking: striking.sort(byImpressions).slice(0, config.top),
-    lowCtr: lowCtr.sort(byImpressions).slice(0, config.top),
-    /** The searches that show a page most often, at most five, for the rewrite suggestions. */
+    striking: firstOf(striking, row => `${row.key}\n${row.page ? addressKey(row.page) : ''}`).sort(byImpressions).slice(0, config.top).map(withoutKey),
+    lowCtr: firstOf(lowCtr, row => addressKey(row.page)).sort(byImpressions).slice(0, config.top),
+    /** The searches that show a page most often, at most five, as labels, for the rewrite suggestions. */
     queriesFor: url => [...(pageQueries.get(addressKey(url)) ?? [])].sort(byImpressions).slice(0, config.top).map(row => row.query),
   };
 }
