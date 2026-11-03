@@ -78,8 +78,11 @@ export function sqlAgentStore(pool, { fenced = false } = {}) {
     growthLead: id => call('private.agent_growth_lead', [id]),
     /** Marks leads as looked at, so each is handled once. Returns how many were newly marked. */
     growthMarkSeen: ids => call('private.agent_growth_mark_seen', [ids]),
-    /** Lead conversations still waiting for a first answer after `olderThanMinutes`, the most recent first. */
-    growthUnanswered: ({ olderThanMinutes, limit = 50 }) => call('private.agent_growth_unanswered', [olderThanMinutes, limit]),
+    /**
+     * Lead conversations to remind the owner about: waiting at least the smallest of `steps` (minutes) and less than `maxMinutes`, whose
+     * current step has not been reminded yet, the most recent first, each with its step. Reminded steps are left out before the limit.
+     */
+    growthUnanswered: ({ steps, maxMinutes, limit = 50 }) => call('private.agent_growth_unanswered', [steps, maxMinutes, limit]),
     /** Counts for the reports: leads by kind, product and source, trials, replies and what is still unanswered, between `since` and `until`. */
     growthFacts: ({ since, until }) => call('private.agent_growth_facts', [since, until]),
     /** Whether a test lead from `source` reached the Hub at or after `since`: the end of a lead form check. */

@@ -126,8 +126,8 @@ describe('agent store', () => {
     await store.growthPending({ limit: 5, windowHours: 48 });
     await store.growthLead('l1');
     await store.growthMarkSeen(['l1', 'l2']);
-    await store.growthUnanswered({ olderThanMinutes: 60 });
-    await store.growthUnanswered({ olderThanMinutes: 1440, limit: 10 });
+    await store.growthUnanswered({ steps: [60, 1440], maxMinutes: 10080 });
+    await store.growthUnanswered({ steps: [30], maxMinutes: 1500, limit: 10 });
     await store.growthFacts({ since, until: when });
     await store.leadProbeSeen({ source: 'carebase', since });
     expect(calls).toEqual([
@@ -135,8 +135,8 @@ describe('agent store', () => {
       ['select private.agent_growth_pending($1, $2) as result', [5, 48]],
       ['select private.agent_growth_lead($1) as result', ['l1']],
       ['select private.agent_growth_mark_seen($1) as result', [['l1', 'l2']]],
-      ['select private.agent_growth_unanswered($1, $2) as result', [60, 50]],
-      ['select private.agent_growth_unanswered($1, $2) as result', [1440, 10]],
+      ['select private.agent_growth_unanswered($1, $2, $3) as result', [[60, 1440], 10080, 50]],
+      ['select private.agent_growth_unanswered($1, $2, $3) as result', [[30], 1500, 10]],
       ['select private.agent_growth_facts($1, $2) as result', [since, when]],
       ['select private.agent_lead_probe_seen($1, $2) as result', ['carebase', since]],
     ]);

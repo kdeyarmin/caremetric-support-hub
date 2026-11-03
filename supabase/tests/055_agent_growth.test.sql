@@ -1,5 +1,5 @@
 begin;
-select plan(65);
+select plan(79);
 
 -- ---------------------------------------------------------------------------------------
 -- The boundary: six operations for the Hub server role, seven internal helpers for nobody.
@@ -7,12 +7,12 @@ select plan(65);
 create temp table growth_operations(signature text) on commit drop;
 insert into growth_operations values
   ('private.agent_growth_pending(integer,integer)'), ('private.agent_growth_lead(uuid)'), ('private.agent_growth_mark_seen(uuid[])'),
-  ('private.agent_growth_unanswered(integer,integer)'), ('private.agent_growth_facts(timestamp with time zone,timestamp with time zone)'),
+  ('private.agent_growth_unanswered(integer[],integer,integer)'), ('private.agent_growth_facts(timestamp with time zone,timestamp with time zone)'),
   ('private.agent_lead_probe_seen(text,timestamp with time zone)');
 create temp table growth_helpers(signature text) on commit drop;
 insert into growth_helpers values
-  ('private.agent_growth_product(text)'), ('private.agent_growth_waiting()'), ('private.agent_growth_pending_json(integer,integer)'), ('private.agent_growth_lead_json(uuid)'),
-  ('private.agent_growth_mark_seen_rows(uuid[])'), ('private.agent_growth_unanswered_json(integer,integer)'),
+  ('private.agent_growth_product(text)'), ('private.agent_growth_answers(text,text)'), ('private.agent_growth_reminded(uuid,integer)'), ('private.agent_growth_waiting()'), ('private.agent_growth_pending_json(integer,integer)'), ('private.agent_growth_lead_json(uuid)'),
+  ('private.agent_growth_mark_seen_rows(uuid[])'), ('private.agent_growth_unanswered_json(integer[],integer,integer)'),
   ('private.agent_growth_facts_json(timestamp with time zone,timestamp with time zone)'), ('private.agent_growth_probe_seen(text,timestamp with time zone)');
 
 select is((select count(*) from growth_operations o join pg_proc p on p.oid = to_regprocedure(o.signature)
@@ -26,7 +26,7 @@ select ok(not (select bool_or(has_function_privilege(role_name, o.signature, 'ex
   cross join unnest(array['public', 'anon', 'authenticated', 'service_role']) as role_name),
   'No browser, service or public role executes an operation');
 select is((select count(*) from growth_helpers h join pg_proc p on p.oid = to_regprocedure(h.signature)
-  where not p.prosecdef and p.proconfig @> array['search_path=""']), 8::bigint,
+  where not p.prosecdef and p.proconfig @> array['search_path=""']), 10::bigint,
   'Every helper pins an empty search path and runs as its caller');
 select ok(not (select bool_or(has_function_privilege(role_name, h.signature, 'execute')) from growth_helpers h
   cross join unnest(array['public', 'anon', 'authenticated', 'service_role', 'hub_app_server']) as role_name),
@@ -35,7 +35,7 @@ select ok(not (select bool_or(has_function_privilege(role_name, h.signature, 'ex
 select throws_ok('select private.agent_growth_pending(10, 24)', '42501', 'Application server required.', 'Pending leads refuse any session user but the Hub server');
 select throws_ok('select private.agent_growth_lead(gen_random_uuid())', '42501', 'Application server required.', 'A lead refuses any session user but the Hub server');
 select throws_ok('select private.agent_growth_mark_seen(array[]::uuid[])', '42501', 'Application server required.', 'Marking refuses any session user but the Hub server');
-select throws_ok('select private.agent_growth_unanswered(60, 10)', '42501', 'Application server required.', 'Unanswered leads refuse any session user but the Hub server');
+select throws_ok('select private.agent_growth_unanswered(array[60, 1440], 10080, 10)', '42501', 'Application server required.', 'Unanswered leads refuse any session user but the Hub server');
 select throws_ok($$select private.agent_growth_facts(now() - interval '1 day', now())$$, '42501', 'Application server required.', 'The facts refuse any session user but the Hub server');
 select throws_ok($$select private.agent_lead_probe_seen('carebase', now())$$, '42501', 'Application server required.', 'The probe check refuses any session user but the Hub server');
 
@@ -149,39 +149,83 @@ select is((select (j -> 'attribution' ->> 'source') || ' ' || (j ->> 'reference'
   'google true', 'A source label is lowercased, and a lead with a conversation names its reference');
 select is(private.agent_growth_lead_json(pg_temp.id('newsletter')) -> 'attribution' ->> 'source', 'direct', 'A lead with no source is a direct visit');
 select is(private.agent_growth_lead_json(gen_random_uuid()), null, 'An unknown lead is null');
+do $$
+begin
+  perform pg_temp.lead('details', 'carebase', 'trial_signup', 'growth-test-details', jsonb_build_object('details',
+    jsonb_build_object('a1', '1', 'a2', '2', 'a3', '3', 'a4', '4', 'a5', '5', 'a6', '6', 'plan', 'core')));
+end $$;
+select is((select array_agg(k order by k) from jsonb_object_keys(private.agent_growth_lead_json(pg_temp.id('details')) -> 'details') k),
+  array['a1', 'a2', 'a3', 'a4', 'a5', 'plan'], 'The plan the trial alert names is always among the six facts, however many keys sort before it');
+delete from private.leads where id = pg_temp.id('details');
+delete from lead_ids where name = 'details';
 
 -- ---------------------------------------------------------------------------------------
--- Unanswered: lead conversations nobody has answered, most recent first.
+-- Unanswered: lead conversations nobody has answered, most recent first, each at the largest step it has reached.
 -- ---------------------------------------------------------------------------------------
-select is((select array_agg(e ->> 'kind' || ':' || (e ->> 'minutesWaiting') order by ord) from jsonb_array_elements(private.agent_growth_unanswered_json(60, 100)) with ordinality as x(e, ord) where (e ->> 'leadId')::uuid in (select id from lead_ids)),
-  array['demo_request:180', 'demo_request:4320'], 'Past an hour: the demo request and the older one, never the answered consultation, the newer contact or a test');
-select is((select array_agg(e ->> 'kind' order by ord) from jsonb_array_elements(private.agent_growth_unanswered_json(1, 100)) with ordinality as x(e, ord) where (e ->> 'leadId')::uuid in (select id from lead_ids)),
-  array['contact', 'demo_request', 'demo_request'], 'Past a minute: the contact request too, the most recent first');
-select is(jsonb_array_length(private.agent_growth_unanswered_json(1, 1)), 1, 'The list stops at its limit');
-select is((select array_agg(distinct k order by k) from jsonb_array_elements(private.agent_growth_unanswered_json(1, 50)) e, jsonb_object_keys(e) k),
-  array['kind', 'leadId', 'minutesWaiting', 'product', 'reference'], 'An unanswered lead is its id, kind, product, reference and wait');
-select is((select e ->> 'product' from jsonb_array_elements(private.agent_growth_unanswered_json(1, 50)) e where e ->> 'kind' = 'contact'), 'caremetric-intel',
+create function pg_temp.chased(p_steps integer[], p_max integer default 44640, p_limit integer default 100) returns text[]
+language sql as $$
+  select coalesce(array_agg(n.name order by x.ord), array[]::text[])
+  from jsonb_array_elements(private.agent_growth_unanswered_json(p_steps, p_max, p_limit)) with ordinality as x(e, ord)
+  join lead_ids n on n.id = (x.e ->> 'leadId')::uuid;
+$$;
+select is((select array_agg((e ->> 'kind') || ':' || (e ->> 'minutesWaiting') || ':' || (e ->> 'step') order by ord)
+    from jsonb_array_elements(private.agent_growth_unanswered_json(array[60, 1440], 44640, 100)) with ordinality as x(e, ord) where (e ->> 'leadId')::uuid in (select id from lead_ids)),
+  array['demo_request:180:60', 'demo_request:4320:1440'],
+  'Past an hour: the demo request at its first step and the older one at its second, never the answered consultation, the newer contact or a test');
+select is(pg_temp.chased(array[1]), array['contact', 'demo', 'old'], 'Past a minute: the contact request too, the most recent first');
+select is(pg_temp.chased(array[60, 1440], 4000), array['demo'], 'A lead waiting longer than the window is past chasing');
+select is(jsonb_array_length(private.agent_growth_unanswered_json(array[1], 44640, 1)), 1, 'The list stops at its limit');
+select is((select array_agg(distinct k order by k) from jsonb_array_elements(private.agent_growth_unanswered_json(array[1], 44640, 50)) e, jsonb_object_keys(e) k),
+  array['kind', 'leadId', 'minutesWaiting', 'product', 'reference', 'step'], 'An unanswered lead is its id, kind, product, reference, wait and step');
+select is((select e ->> 'product' from jsonb_array_elements(private.agent_growth_unanswered_json(array[1], 44640, 50)) e where e ->> 'kind' = 'contact'), 'caremetric-intel',
   'The product is the registered product');
-select is((select (e ->> 'reference') = 'CM-' || c.reference from jsonb_array_elements(private.agent_growth_unanswered_json(60, 50)) e
+select is((select (e ->> 'reference') = 'CM-' || c.reference from jsonb_array_elements(private.agent_growth_unanswered_json(array[60], 44640, 50)) e
   join private.leads l on l.id = (e ->> 'leadId')::uuid join private.communications c on c.id = l.communication_id where l.id = pg_temp.id('demo')), true,
   'The reference is the conversation''s');
+
+-- A step already reminded is left out before the limit. A reminder the provider refused and that has tries left is not done with.
+insert into private.owner_notifications (dedupe_key, channel, severity, subject, body, status, attempts)
+  values ('growth:followup:' || pg_temp.id('demo') || ':60', 'email', 'warning', 'Still unanswered', 'Reminder', 'sent', 1),
+         ('growth:followup:' || pg_temp.id('old') || ':60', 'email', 'warning', 'Still unanswered', 'Reminder', 'sent', 1);
+select is(pg_temp.chased(array[60, 1440]), array['old'], 'A step already reminded is left out; a lead reminded at an earlier step is chased at its next');
+update private.owner_notifications set status = 'failed', attempts = 1 where dedupe_key = 'growth:followup:' || pg_temp.id('demo') || ':60';
+select is(pg_temp.chased(array[60, 1440]), array['demo', 'old'], 'A refused reminder with tries left comes back, so it is tried again under the same key');
+update private.owner_notifications set attempts = 3 where dedupe_key = 'growth:followup:' || pg_temp.id('demo') || ':60';
+select is(pg_temp.chased(array[60, 1440]), array['old'], 'One whose tries are used up is done with');
+update private.owner_notifications set status = 'pending', attempts = 1 where dedupe_key = 'growth:followup:' || pg_temp.id('demo') || ':60';
+select is(pg_temp.chased(array[60, 1440]), array['old'], 'So is one still being sent, which may have gone');
+delete from private.owner_notifications where dedupe_key like 'growth:followup:%';
 
 -- A note counts as handled; so does a lead the owner moved along, and a closed conversation.
 insert into private.communication_messages (communication_id, direction, body, delivery, created_at)
   select conversation, 'note', 'Called them.', 'recorded', now() from lead_ids where name = 'old';
 update private.leads set status = 'contacted' where id = pg_temp.id('contact');
-select is((select array_agg(e ->> 'kind' order by ord) from jsonb_array_elements(private.agent_growth_unanswered_json(1, 100)) with ordinality as x(e, ord) where (e ->> 'leadId')::uuid in (select id from lead_ids)),
-  array['demo_request'], 'An internal note after the message, or a lead marked contacted, is no longer waiting');
+select is(pg_temp.chased(array[1]), array['demo'], 'An internal note after the message, or a lead marked contacted, is no longer waiting');
 update private.communications set status = 'closed' where id = (select conversation from lead_ids where name = 'demo');
-select is((select count(*)::int from jsonb_array_elements(private.agent_growth_unanswered_json(1, 100)) e where (e ->> 'leadId')::uuid in (select id from lead_ids)), 0,
-  'A closed conversation is no longer waiting');
+select is(pg_temp.chased(array[1]), array[]::text[], 'A closed conversation is no longer waiting');
 update private.communications set status = 'open' where id = (select conversation from lead_ids where name = 'demo');
 update private.leads set status = 'new' where id = pg_temp.id('contact');
 -- A reply written before the visitor's message does not answer it.
 insert into private.communication_messages (communication_id, direction, body, delivery, delivery_channel, created_at)
   select conversation, 'outbound', 'Earlier message.', 'sent', 'email', now() - interval '5 hours' from lead_ids where name = 'demo';
-select is((select count(*)::int from jsonb_array_elements(private.agent_growth_unanswered_json(60, 100)) e where (e ->> 'leadId')::uuid in (select id from lead_ids)), 1,
-  'Only a reply after the lead''s first message counts as an answer');
+select is(pg_temp.chased(array[60]), array['demo'], 'Only a reply after the lead''s first message counts as an answer');
+-- A reply whose delivery definitely failed reached nobody; one pending or of unknown outcome may have gone, so it answers.
+create temp table attempt_reply as
+  with inserted as (
+    insert into private.communication_messages (communication_id, direction, body, delivery, delivery_channel, created_at)
+    select conversation, 'outbound', 'Thanks for asking.', 'failed', 'email', now() from lead_ids where name = 'contact' returning id)
+  select id from inserted;
+select is(pg_temp.chased(array[1]), array['contact', 'demo'], 'A reply the provider refused does not answer the lead, so the owner is still chased');
+update private.communication_messages set delivery = 'pending' where id = (select id from attempt_reply);
+select is(pg_temp.chased(array[1]), array['demo'], 'A reply still being sent answers it');
+update private.communication_messages set delivery = 'unknown' where id = (select id from attempt_reply);
+select is(pg_temp.chased(array[1]), array['demo'], 'And so does one whose delivery is unknown');
+select is((private.agent_growth_facts_json(now() - interval '35 minutes', now() - interval '25 minutes') -> 'replies'), '{"replied": 0, "medianMinutes": null}'::jsonb,
+  'But the reports count only a delivered reply: an unknown one is not a first reply');
+update private.communication_messages set delivery = 'failed' where id = (select id from attempt_reply);
+select is((private.agent_growth_facts_json(now() - interval '35 minutes', now() - interval '25 minutes') -> 'replies'), '{"replied": 0, "medianMinutes": null}'::jsonb,
+  'nor is a refused one');
+delete from private.communication_messages where id = (select id from attempt_reply);
 
 -- ---------------------------------------------------------------------------------------
 -- Facts for the reports: counts only, test leads never among them.
@@ -196,6 +240,10 @@ insert into private.billing_subscriptions(stripe_subscription_id, tenant_id, str
   ('sub_growthTestMode', '97540000-0000-4000-8000-000000000010', 'cus_growthTrials1', 'active', 'charge_automatically', now() - interval '3 days', now() - interval '1 day', false, now() - interval '3 days', now()),
   ('sub_growthOldTrial', '97540000-0000-4000-8000-000000000010', 'cus_growthTrials1', 'trialing', 'charge_automatically', now() - interval '30 days', now() + interval '1 day', true, now() - interval '30 days', now());
 
+-- Before the consultation's delivered reply, one the provider refused and one whose outcome is unknown: neither is its first reply.
+insert into private.communication_messages (communication_id, direction, body, delivery, delivery_channel, created_at)
+  select conversation, 'outbound', 'First try.', d.delivery, 'email', now() - d.age from lead_ids
+  cross join (values ('failed', interval '110 minutes'), ('unknown', interval '100 minutes')) as d(delivery, age) where name = 'consult';
 create temp table facts as select private.agent_growth_facts_json(now() - interval '7 days', now() + interval '1 minute') as j;
 -- Leads from earlier runs or other suites may share the window: compare with what the fixtures alone add.
 create temp table mine as select l.* from private.leads l where l.id in (select id from lead_ids);
@@ -220,7 +268,7 @@ select is((select j -> 'trials' from facts) - 'started', '{"subscriptions": 1, "
 select ok((select (j -> 'trials' ->> 'started')::int >= 1 from facts), 'Trial sign-ups are counted');
 select ok((select (j -> 'replies' ->> 'replied')::int >= 1 and (j -> 'replies' ->> 'medianMinutes') is not null from facts), 'The first replies are measured');
 select is((private.agent_growth_facts_json(now() - interval '150 minutes', now() - interval '90 minutes') -> 'replies'), '{"replied": 1, "medianMinutes": 45}'::jsonb,
-  'The consultation''s first reply took 45 minutes');
+  'The consultation''s first delivered reply took 45 minutes: a refused or unknown one before it does not count');
 select ok((select (j -> 'unanswered' ->> 'count')::int >= 2 and (j -> 'unanswered' ->> 'oldestMinutes')::int >= 180
     and (j -> 'unanswered' -> 'byKind' ->> 'demo_request')::int >= 1 from facts),
   'What is unanswered now is counted, with the oldest wait and the kinds');
@@ -235,8 +283,39 @@ select ok(private.agent_growth_probe_seen('carebase', now() - interval '10 minut
 select ok(not private.agent_growth_probe_seen('intel', now() - interval '10 minutes'), 'None from Intel');
 select ok(not private.agent_growth_probe_seen('carebase', now() + interval '1 minute'), 'And nothing arrived after now');
 select ok(not exists (select 1 from jsonb_array_elements(private.agent_growth_pending_json(100, 720)) e where (e ->> 'id')::uuid = pg_temp.id('probe'))
-  and not exists (select 1 from jsonb_array_elements(private.agent_growth_unanswered_json(1, 100)) e where (e ->> 'leadId')::uuid = pg_temp.id('probe')),
+  and not exists (select 1 from jsonb_array_elements(private.agent_growth_unanswered_json(array[1], 44640, 100)) e where (e ->> 'leadId')::uuid = pg_temp.id('probe')),
   'A test lead is never pending and never chased');
+
+-- ---------------------------------------------------------------------------------------
+-- A backlog longer than one list: reminded steps never crowd out the older leads.
+-- ---------------------------------------------------------------------------------------
+create temp table bulk(n integer primary key, id uuid, conversation uuid) on commit drop;
+do $$
+declare
+  v jsonb;
+begin
+  for i in 1..55 loop
+    v := private.lead_record('carebase', jsonb_build_object('version', 1, 'source', 'carebase', 'kind', 'demo_request', 'externalId', 'growth-test-bulk-' || i,
+      'occurredAt', to_jsonb(now()), 'contact', jsonb_build_object('email', 'bulk' || i || '@example.test')));
+    insert into bulk values (i, (v ->> 'id')::uuid, (select communication_id from private.leads where id = (v ->> 'id')::uuid));
+  end loop;
+  -- Lead n has waited 100 + n minutes, so lead 1 is the most recent.
+  update private.communication_messages m set created_at = now() - make_interval(mins => 100 + b.n) from bulk b where m.communication_id = b.conversation;
+end $$;
+create function pg_temp.bulk_chased() returns integer[] language sql as $$
+  select coalesce(array_agg(b.n order by x.ord), array[]::integer[])
+  from jsonb_array_elements(private.agent_growth_unanswered_json(array[60, 1440], 10080, 50)) with ordinality as x(e, ord)
+  join bulk b on b.id = (x.e ->> 'leadId')::uuid;
+$$;
+select is(pg_temp.bulk_chased(), (select array_agg(n order by n) from generate_series(1, 50) n),
+  'Fifty-five lead conversations wait: one list holds fifty, the most recent first');
+-- A run reminds the fifty it was given.
+insert into private.owner_notifications (dedupe_key, channel, severity, subject, body, status)
+  select 'growth:followup:' || b.id || ':60', 'email', 'warning', 'Still unanswered', 'Reminder', 'sent' from bulk b where b.n <= 50;
+select is(pg_temp.bulk_chased(), array[51, 52, 53, 54, 55], 'The next list holds the five older ones the limit left out: reminded steps are left out first');
+insert into private.owner_notifications (dedupe_key, channel, severity, subject, body, status)
+  select 'growth:followup:' || b.id || ':60', 'email', 'warning', 'Still unanswered', 'Reminder', 'sent' from bulk b where b.n > 50;
+select is(pg_temp.bulk_chased(), array[]::integer[], 'And once every one is reminded at its step, none comes back');
 
 select * from finish();
 rollback;

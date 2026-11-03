@@ -22,7 +22,7 @@ import { growthSettings, quietUntil } from '../growth/settings.mjs';
 import { conversationKinds, followupAlert, kindWord, trialAlert } from '../growth/words.mjs';
 import { formTargets as defaultFormTargets } from '../targets.mjs';
 import { shortFailure } from './probe.mjs';
-import { dueMoment, plural, recordRun } from './shared.mjs';
+import { dueMoment, mustHaveReached, plural, recordRun } from './shared.mjs';
 
 export const growthFeature = 'platform.agents.growth.v1';
 const declared = features => (features instanceof Set ? features.has(growthFeature) : Array.isArray(features) && features.includes(growthFeature));
@@ -31,8 +31,9 @@ const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York',
 // How far back a new lead is still news: older ones are never alerted, so resuming a paused agent cannot flood the owner.
 const pendingWindowHours = 24;
 const pendingLimit = 50;
-// A lead conversation waiting longer than a week is past chasing one by one: it stays in the brief and the weekly report.
-const chaseLimitMinutes = 7 * 1440;
+// A lead conversation is chased for a week, or a day past the largest step when that is longer; after that it is past chasing one by
+// one and stays in the brief and the weekly report. The database caps the window at 31 days.
+const chaseWindow = steps => Math.min(Math.max(7 * 1440, steps.at(-1) + 1440), 44_640);
 const unansweredLimit = 50;
 const failureThreshold = 2;
 const arrivalWindowMs = 10 * 60_000;
@@ -118,9 +119,10 @@ export function growthHandlers({
   if (!declared(features)) return {};
 
   /**
-   * `growth.leads`: each lead is looked at once. Only a trial sign-up alerts here, by email, under its own key; a lead whose alert the
-   * provider refused stays unseen, so the scheduler's retry sends it again (the notifier reopens only the channel that failed). A lead
-   * whose alert used up its tries is set aside as seen: the morning brief still counts it.
+   * `growth.leads`: each lead is looked at once. Only a trial sign-up alerts here, by email, under its own key. A lead whose alert the
+   * provider refused stays unseen and the task fails transiently once the rest are handled, so the scheduler's retry sends it again
+   * under the same key (the notifier reopens only the channel that failed, at most three times). A lead whose alert used up its tries
+   * is set aside as seen: the morning brief still counts it.
    */
   async function leads(task, { now = () => new Date(), signal } = {}) {
     const answer = await store.growthPending({ limit: pendingLimit, windowHours: pendingWindowHours });
@@ -128,19 +130,22 @@ export function growthHandlers({
     const counts = { trials: 0, conversations: 0, digest: 0 };
     const seen = [];
     const delivery = [];
+    const refusals = [];
     let refused = 0;
     let unsent = 0;
     for (const item of pending) {
       if (signal?.aborted) throw stopped();
       if (item.kind === 'trial_signup') {
         const lead = await store.growthLead(item.id);
+        // The scheduler may have stopped waiting while the lead was read: nothing is sent after that.
+        if (signal?.aborted) throw stopped();
         if (lead && lead.test !== true) {
           const words = trialAlert(lead, { publicOrigin });
           const results = await notifier.send({
             severity: 'warning', subject: words.subject, body: words.body, blocks: words.blocks, dedupeKey: `growth:trial:${item.id}`, agentKey: task.agentKey, taskId: task.id,
           });
           delivery.push(...results.map(entry => `${entry.channel}:${entry.delivery}`));
-          if (results.some(entry => entry.delivery === 'failed')) { refused += 1; continue; }
+          if (results.some(entry => entry.delivery === 'failed')) { refusals.push(...results); refused += 1; continue; }
           if (!results.some(delivered)) unsent += 1;
           counts.trials += 1;
         }
@@ -158,19 +163,22 @@ export function growthHandlers({
         promptVersion: 'growth.1',
         summary: pending.length
           ? `Looked at ${plural(pending.length, 'new lead')}: ${plural(counts.trials, 'trial')} alerted${delivery.length ? ` (${delivery.join(', ')})` : ''}, `
-            + `${counts.conversations} left to the Support Concierge, ${counts.digest} for the brief${refused ? `; ${refused} alert refused, tried again shortly` : ''}.`
+            + `${counts.conversations} left to the Support Concierge, ${counts.digest} for the brief${refused ? `; ${plural(refused, 'alert')} refused, tried again shortly` : ''}.`
           : 'No new leads.',
         outcome: refused || unsent ? 'failed' : 'completed', errorCode: refused || unsent ? 'not_delivered' : null,
       });
     }
-    if (refused) throw Object.assign(new Error('The owner could not be told.'), { code: 'notification_failed', transient: true });
+    // A refused alert is tried again by the scheduler; the run above stays as the record of this attempt.
+    mustHaveReached(refusals);
     return { result: { seen: seen.length, ...counts, delivery } };
   }
 
   /**
    * `growth.followup`: one reminder per lead conversation per step, under `growth:followup:<lead>:<step>`, for the largest step it has
-   * passed (a lead found three days late gets the one-day reminder, not both). Nothing during quiet hours: the first run after them
-   * sends what waited, and the key keeps each reminder once. A refused reminder is tried again on the next run by the notifier.
+   * reached (a lead found three days late gets the one-day reminder, not both). The database leaves out the steps already reminded before
+   * it limits the list, so a backlog longer than one run's 50 is worked through run by run. Nothing during quiet hours: the first run after
+   * them sends what waited, and the key keeps each reminder once. A refused reminder fails the task transiently once the others are sent,
+   * so the scheduler tries it again under the same key (the notifier reopens only the channel that failed, at most three times).
    */
   async function followup(task, { now = () => new Date(), signal } = {}) {
     const settings = growthSettings(task.agent?.config);
@@ -178,20 +186,22 @@ export function growthHandlers({
     const until = quietUntil(moment, settings.quietHours);
     if (until) return { result: { skipped: 'quiet_hours', resumesAt: until.toISOString() } };
     const steps = settings.followupMinutes;
-    const waiting = await store.growthUnanswered({ olderThanMinutes: steps[0], limit: unansweredLimit });
+    const answer = await store.growthUnanswered({ steps, maxMinutes: chaseWindow(steps), limit: unansweredLimit });
+    const waiting = Array.isArray(answer) ? answer : [];
     const reminded = [];
     const delivery = [];
+    const outcomes = [];
     let repeats = 0;
-    let tooOld = 0;
-    for (const item of Array.isArray(waiting) ? waiting : []) {
+    for (const item of waiting) {
       if (signal?.aborted) throw stopped();
-      if (!(item.minutesWaiting < chaseLimitMinutes)) { tooOld += 1; continue; }
-      const step = steps.filter(minutes => item.minutesWaiting >= minutes).at(-1);
+      // The database names the step; one it could not have chosen from these steps is worked out here instead.
+      const step = steps.includes(item.step) ? item.step : steps.filter(minutes => item.minutesWaiting >= minutes).at(-1);
       if (step === undefined) continue;
       const words = followupAlert(item, step);
       const results = await notifier.send({
         severity: 'warning', subject: words.subject, body: words.body, dedupeKey: `growth:followup:${item.leadId}:${step}`, agentKey: task.agentKey, taskId: task.id,
       });
+      outcomes.push(...results);
       if (results.every(entry => entry.delivery === 'duplicate')) { repeats += 1; continue; }
       delivery.push(...results.map(entry => `${entry.channel}:${entry.delivery}`));
       reminded.push({ reference: item.reference, kind: item.kind, step, minutes: item.minutesWaiting });
@@ -202,7 +212,8 @@ export function growthHandlers({
         summary: `Reminded you about ${plural(reminded.length, 'unanswered lead')}: ${reminded.slice(0, 10).map(entry => `${entry.reference} (${kindWord(entry.kind)})`).join(', ')}${reminded.length > 10 ? ', and more' : ''} (${delivery.join(', ')}).`,
       });
     }
-    return { result: { waiting: Array.isArray(waiting) ? waiting.length : 0, reminded: reminded.length, alreadyReminded: repeats, tooOld, delivery } };
+    mustHaveReached(outcomes);
+    return { result: { waiting: waiting.length, reminded: reminded.length, alreadyReminded: repeats, delivery } };
   }
 
   /**
@@ -210,7 +221,7 @@ export function growthHandlers({
    * after midnight keeps it); every scheduled run in an Eastern week uses `growth:weekly:<Monday>`, so the week is reported once. Run now
    * reports on any day, under a key of its own. The window is the seven Eastern days before the day it runs.
    */
-  async function weekly(task, { now = () => new Date() } = {}) {
+  async function weekly(task, { now = () => new Date(), signal } = {}) {
     const moment = now();
     const asked = task.sourceKind === 'owner';
     const due = asked ? moment : dueMoment(task) ?? moment;
@@ -220,8 +231,11 @@ export function growthHandlers({
     const since = easternMidnight(new Date(Date.UTC(year, month - 1, day - 7)).toISOString().slice(0, 10));
     const until = easternMidnight(today);
     const week = weekStart(due);
+    if (signal?.aborted) throw stopped();
     const facts = await store.growthFacts({ since, until });
     const report = composeGrowthReport(facts, { since, until, publicOrigin });
+    // The scheduler may have stopped waiting while the figures were read: the report is not sent after that.
+    if (signal?.aborted) throw stopped();
     const results = await notifier.send({
       severity: 'info', subject: report.subject, body: report.body, blocks: report.blocks,
       dedupeKey: asked ? `growth:run:${task.id}` : `growth:weekly:${week}`, agentKey: task.agentKey, taskId: task.id,
@@ -234,6 +248,9 @@ export function growthHandlers({
       summary: reached ? `Sent the weekly growth report: ${report.headline}` : `The weekly growth report was written but not delivered (${delivery.join(', ')}).`,
       outcome: reached ? 'completed' : 'failed', errorCode: reached ? null : 'not_delivered',
     });
+    // A report the provider refused is tried again under the same key, the same day it was due: finishing now would leave the week
+    // unreported, because the other mornings of the week do no work. The run above stays as the record of this attempt.
+    mustHaveReached(results);
     return { result: { week, since: since.toISOString(), until: until.toISOString(), delivery, ...report.result } };
   }
 

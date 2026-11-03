@@ -475,27 +475,34 @@ Hub whose database lacks the migration still starts and its schedules stay due.
 - **New leads** (task `growth.leads`, every five minutes, "Look for new leads"). Each lead that is not a test, from the last
   24 hours, is looked at once (`private.agent_growth_pending`, then `agent_growth_mark_seen`). A **trial sign-up** emails the
   owner at once as a warning: "New CareBase trial: <organization>", with the product, the plan when the product sent one, the
-  other facts and where the visitor came from, and a button to Leads, under `growth:trial:<lead id>`. A demo, consultation or
-  contact request is left to the Support Concierge, which alerts on its conversation (see above). A newsletter sign-up,
-  savings model or county report waits for the morning brief and the weekly report. A trial alert the provider refused leaves
-  that lead unseen and the task is retried, so only the refused channel is sent again; one that used up its tries is set aside
-  (the brief still counts the lead). Marking a lead seen never changes its version, so the Leads screen never refuses the owner's
-  change because of it. A run is recorded when something arrived, and once an hour otherwise.
+  other facts (the plan always among them) and where the visitor came from, and a button to Leads, under `growth:trial:<lead id>`.
+  A demo, consultation or contact request is left to the Support Concierge, which alerts on its conversation (see above). A
+  newsletter sign-up, savings model or county report waits for the morning brief and the weekly report. A trial alert the provider
+  refused leaves that lead unseen and the task fails transiently once the others are handled, so the scheduler tries it again and
+  only the refused channel is sent again; one that used up its tries is set aside (the brief still counts the lead). Marking a lead
+  seen never changes its version, so the Leads screen never refuses the owner's change because of it. A run is recorded when
+  something arrived, and once an hour otherwise.
 - **Unanswered leads** (task `growth.followup`, every fifteen minutes, "Chase unanswered leads"). A lead conversation is
-  waiting when its lead is not a test and still `new` on the Leads screen, its conversation is not closed, and it has no reply
-  or internal note after the lead's first message (`private.agent_growth_unanswered`). The owner gets one reminder per lead and
-  step of the agent's `followup_minutes` (default an hour, then a day), by email, as a warning: "Still unanswered after 1 hour:
+  waiting when its lead is not a test and still `new` on the Leads screen, its conversation is not closed, and nothing after the
+  lead's first message answers it: an internal note, or a reply that was not refused. A reply whose delivery failed reached nobody
+  and answers nothing; one still pending or of unknown outcome may have gone, so it counts. The owner gets one reminder per lead
+  and step of the agent's `followup_minutes` (default an hour, then a day), by email, as a warning: "Still unanswered after 1 hour:
   demo request CM-1042", naming the product and how long it has waited, under `growth:followup:<lead id>:<step>`. A lead found
-  late gets only the largest step it has passed; one waiting more than a week is no longer chased one by one (it stays in the
-  brief and the weekly report). Nothing is sent during the agent's `quiet_hours` (default 21:00 to 07:00 America/New_York): the
-  first run after them sends what waited, and the key keeps each reminder once. Setting the lead's status on Leads (contacted,
-  qualified, won, lost or spam), answering, adding a note or closing the conversation stops the reminders.
+  late gets only the largest step it has reached. `private.agent_growth_unanswered` leaves out the steps already reminded before
+  it limits its list to 50, so a longer backlog is worked through run by run and an older lead is never crowded out. A lead is
+  chased for a week (or a day past the largest step, when that is longer); after that it stays in the brief and the weekly report.
+  Nothing is sent during the agent's `quiet_hours` (default 21:00 to 07:00 America/New_York): the first run after them sends what
+  waited, and the key keeps each reminder once. A reminder the provider refused fails the task transiently once the others are
+  sent, so the scheduler tries it again under the same key, at most three times in all. Setting the lead's status on Leads
+  (contacted, qualified, won, lost or spam), answering, adding a note or closing the conversation stops the reminders.
 - **The weekly report** (task `growth.weekly`, "Weekly growth report"). The schedule fires every morning at 07:30 Eastern and
   only Monday's run reports (the day is the one the task was due for, so a retry after midnight keeps it); every scheduled run in
-  an Eastern week uses `growth:weekly:<Monday>`, so the week is reported once, like the Account Manager's. **Run now** reports on
-  any day under a key of its own. It covers the seven Eastern days before the day it runs: leads by kind, product and source
-  (utm_source, else the referring host, else "direct"), trials started (trial sign-ups and live-mode Stripe trials that began)
-  and converted (live subscriptions whose trial ended in the week and that are active), the median time to a first reply, the
+  an Eastern week uses `growth:weekly:<Monday>`, so the week is reported once, like the Account Manager's. A report the provider
+  refused fails the task transiently, so it is tried again under the same key instead of the week going unreported. **Run now**
+  reports on any day under a key of its own. It covers the seven Eastern days before the day it runs: leads by kind, product and
+  source (utm_source, else the referring host, else "direct"), trials started (trial sign-ups and live-mode Stripe trials that
+  began) and converted (live subscriptions whose trial ended in the week and that are active), the median time to a first
+  delivered reply (only a reply whose delivery is `sent` counts), the
   lead conversations unanswered now, the top five landing pages and campaigns, and three suggestions. The suggestions are rules
   with fixed words (`server/agents/growth/report.mjs`), first match first: leads still unanswered; a median first reply over an
   hour; no leads at all; no lead from a search engine (connect Search Console); every lead from one source; no campaign tags;
@@ -506,10 +513,11 @@ Hub whose database lacks the migration still starts and its schedules stay due.
   reply is also listed under "Needs you". If the figures cannot be read the section says so and the brief still goes out.
 
 **What it reads** (counts only, never a contact or a message): `private.agent_growth_pending` (ids, kinds and products),
-`agent_growth_lead` (kind, product, organization, up to six facts, where the visitor came from and the conversation's
-reference), `agent_growth_unanswered` (lead id, kind, product, reference, minutes waiting), `agent_growth_facts` (the counts
-above, for a period of up to 93 days) and `agent_lead_probe_seen` (whether a test lead arrived, for the form check). Its one
-write is `agent_growth_mark_seen` (the `private.leads.growth_seen_at` column). The organization is the only name an alert carries.
+`agent_growth_lead` (kind, product, organization, up to six facts with the plan first, where the visitor came from and the
+conversation's reference), `agent_growth_unanswered` (lead id, kind, product, reference, minutes waiting and the step reached,
+for the steps the handler passes, with the steps already reminded left out), `agent_growth_facts` (the counts above, for a
+period of up to 93 days) and `agent_lead_probe_seen` (whether a test lead arrived, for the form check). Its one write is
+`agent_growth_mark_seen` (the `private.leads.growth_seen_at` column). The organization is the only name an alert carries.
 
 **Its settings** are in the agent's `config` and change by SQL only: `followup_minutes` (at most five steps, each 1 minute to
 30 days) and `quiet_hours` (`start` and `end` on a 24-hour clock and a `timezone`; a start equal to the end means none). A value

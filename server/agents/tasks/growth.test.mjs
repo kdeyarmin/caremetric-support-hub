@@ -119,6 +119,16 @@ describe('new leads', () => {
     expect(pulse.store.finishRun).toHaveBeenCalledWith('run-1', 'completed', {}, 'No new leads.', null);
   });
 
+  it('sends nothing when the scheduler stops it while a lead is being read', async () => {
+    const controller = new AbortController();
+    const harness = fixture({ pending: [{ id: ids.trial, kind: 'trial_signup', source: 'carebase' }] });
+    harness.store.growthLead.mockImplementation(async () => { controller.abort(); return trialLead(); });
+    await expect(harness.handlers['growth.leads'](task('growth.leads'), { ...at('2026-11-03T14:31:00Z'), signal: controller.signal })).rejects.toMatchObject({ code: 'task_timeout', transient: true });
+    expect(harness.store.growthLead).toHaveBeenCalledTimes(1);
+    expect(harness.alerts).toHaveLength(0);
+    expect(harness.store.growthMarkSeen).not.toHaveBeenCalled();
+  });
+
   it('stops before alerting once the scheduler has stopped it, and marks nothing', async () => {
     const harness = fixture({ pending: [{ id: ids.trial, kind: 'trial_signup', source: 'carebase' }], leads: { [ids.trial]: trialLead() } });
     const controller = new AbortController();
@@ -136,48 +146,66 @@ describe('new leads', () => {
 });
 
 describe('reminders about unanswered leads', () => {
-  const waiting = (overrides = {}) => ({ leadId: ids.demo, kind: 'demo_request', product: 'carebase', reference: 'CM-1042', minutesWaiting: 75, ...overrides });
+  const waiting = (overrides = {}) => ({ leadId: ids.demo, kind: 'demo_request', product: 'carebase', reference: 'CM-1042', minutesWaiting: 75, step: 60, ...overrides });
 
   it('reminds the owner once per lead and step, by email, naming the reference, kind, product and wait', async () => {
-    const harness = fixture({ unanswered: [waiting(), waiting({ leadId: ids.trial2, kind: 'consultation', product: 'advisors', reference: 'CM-1043', minutesWaiting: 1500 })] });
+    const harness = fixture({ unanswered: [waiting(), waiting({ leadId: ids.trial2, kind: 'consultation', product: 'advisors', reference: 'CM-1043', minutesWaiting: 1500, step: 1440 })] });
     const outcome = await harness.handlers['growth.followup'](task('growth.followup'), at('2026-11-03T15:00:00Z'));
-    expect(harness.store.growthUnanswered).toHaveBeenCalledWith({ olderThanMinutes: 60, limit: 50 });
+    // The steps go to the database, which leaves out those already reminded before it limits the list; a lead is chased for a week.
+    expect(harness.store.growthUnanswered).toHaveBeenCalledWith({ steps: [60, 1440], maxMinutes: 10080, limit: 50 });
     expect(harness.alerts).toEqual([
       expect.objectContaining({ severity: 'warning', subject: 'Still unanswered after 1 hour: demo request CM-1042', dedupeKey: `growth:followup:${ids.demo}:60`, agentKey: 'growth_manager', taskId: 't1' }),
       expect.objectContaining({ severity: 'warning', subject: 'Still unanswered after 24 hours: consultation request CM-1043', dedupeKey: `growth:followup:${ids.trial2}:1440` }),
     ]);
     expect(harness.alerts[0].body).toContain('A CareBase demo request (CM-1042) has waited 1 hour 15 minutes for a first reply.');
     expect(harness.alerts[1].body).toContain('A Healthcare Advisors consultation request (CM-1043) has waited 25 hours for a first reply.');
-    expect(outcome).toEqual({ result: { waiting: 2, reminded: 2, alreadyReminded: 0, tooOld: 0, delivery: ['email:sent', 'email:sent'] } });
+    expect(outcome).toEqual({ result: { waiting: 2, reminded: 2, alreadyReminded: 0, delivery: ['email:sent', 'email:sent'] } });
     expect(harness.store.finishRun).toHaveBeenCalledWith('run-1', 'completed', {},
       'Reminded you about 2 unanswered leads: CM-1042 (demo request), CM-1043 (consultation request) (email:sent, email:sent).', null);
   });
 
-  it('sends only the largest step a lead has passed, so one found late is not reminded twice at once', async () => {
-    const harness = fixture({ unanswered: [waiting({ minutesWaiting: 3000 })] });
+  it('reminds at the step the database names, the largest a lead has reached, so one found late is not reminded twice at once', async () => {
+    const harness = fixture({ unanswered: [waiting({ minutesWaiting: 3000, step: 1440 })] });
     await harness.handlers['growth.followup'](task('growth.followup'), at('2026-11-03T15:00:00Z'));
     expect(harness.alerts.map(alert => alert.dedupeKey)).toEqual([`growth:followup:${ids.demo}:1440`]);
+    // A step the database could not have chosen from these steps is worked out here instead.
+    const odd = fixture({ unanswered: [waiting({ minutesWaiting: 3000, step: 999 }), waiting({ leadId: ids.trial2, minutesWaiting: 70, step: undefined })] });
+    await odd.handlers['growth.followup'](task('growth.followup'), at('2026-11-03T15:00:00Z'));
+    expect(odd.alerts.map(alert => alert.dedupeKey)).toEqual([`growth:followup:${ids.demo}:1440`, `growth:followup:${ids.trial2}:60`]);
   });
 
-  it('follows the agent\'s own steps', async () => {
-    const harness = fixture({ unanswered: [waiting({ minutesWaiting: 35 })] });
+  it('follows the agent\'s own steps, and chases for a week or a day past the largest step', async () => {
+    const harness = fixture({ unanswered: [waiting({ minutesWaiting: 35, step: 30 })] });
     await harness.handlers['growth.followup'](task('growth.followup', { agent: { config: { followup_minutes: [30, 240] } } }), at('2026-11-03T15:00:00Z'));
-    expect(harness.store.growthUnanswered).toHaveBeenCalledWith({ olderThanMinutes: 30, limit: 50 });
+    expect(harness.store.growthUnanswered).toHaveBeenCalledWith({ steps: [30, 240], maxMinutes: 10080, limit: 50 });
     expect(harness.alerts[0]).toMatchObject({ subject: 'Still unanswered after 30 minutes: demo request CM-1042', dedupeKey: `growth:followup:${ids.demo}:30` });
+    for (const [steps, maxMinutes] of [[[60, 20160], 21600], [[43200], 44640]]) {
+      const long = fixture();
+      await long.handlers['growth.followup'](task('growth.followup', { agent: { config: { followup_minutes: steps } } }), at('2026-11-03T15:00:00Z'));
+      expect(long.store.growthUnanswered, JSON.stringify(steps)).toHaveBeenCalledWith({ steps, maxMinutes, limit: 50 });
+    }
   });
 
-  it('records no run and says so when every reminder was sent before', async () => {
+  it('records no run when another run sent the same reminders first', async () => {
     const harness = fixture({ unanswered: [waiting()], deliveries: { [`growth:followup:${ids.demo}:60`]: ['email:duplicate:sent'] } });
     const outcome = await harness.handlers['growth.followup'](task('growth.followup'), at('2026-11-03T15:00:00Z'));
-    expect(outcome.result).toEqual({ waiting: 1, reminded: 0, alreadyReminded: 1, tooOld: 0, delivery: [] });
+    expect(outcome.result).toEqual({ waiting: 1, reminded: 0, alreadyReminded: 1, delivery: [] });
     expect(harness.store.startRun).not.toHaveBeenCalled();
   });
 
-  it('stops chasing a lead after a week: it stays in the brief and the weekly report', async () => {
-    const harness = fixture({ unanswered: [waiting({ minutesWaiting: 7 * 1440 }), waiting({ leadId: ids.trial2, minutesWaiting: 7 * 1440 - 1 })] });
-    const outcome = await harness.handlers['growth.followup'](task('growth.followup'), at('2026-11-03T15:00:00Z'));
-    expect(harness.alerts.map(alert => alert.dedupeKey)).toEqual([`growth:followup:${ids.trial2}:1440`]);
-    expect(outcome.result.tooOld).toBe(1);
+  it('works through more than one run\'s worth of waiting leads, because reminded steps no longer come back', async () => {
+    // Fifty-five lead conversations wait. The database lists at most fifty, never one whose step was reminded.
+    const all = Array.from({ length: 55 }, (_, index) => waiting({ leadId: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`, reference: `CM-${2000 + index}`, minutesWaiting: 100 + index }));
+    const reminded = new Set();
+    const harness = fixture();
+    harness.store.growthUnanswered.mockImplementation(async ({ limit }) => all.filter(item => !reminded.has(item.leadId)).slice(0, limit));
+    harness.notifier.send.mockImplementation(async input => { reminded.add(input.dedupeKey.split(':')[2]); return sent(); });
+    const first = await harness.handlers['growth.followup'](task('growth.followup'), at('2026-11-03T15:00:00Z'));
+    const second = await harness.handlers['growth.followup'](task('growth.followup'), at('2026-11-03T15:15:00Z'));
+    const third = await harness.handlers['growth.followup'](task('growth.followup'), at('2026-11-03T15:30:00Z'));
+    expect([first.result.reminded, second.result.reminded, third.result.reminded]).toEqual([50, 5, 0]);
+    expect(new Set(harness.notifier.send.mock.calls.map(([input]) => input.dedupeKey)).size).toBe(55);
+    expect(harness.store.finishRun.mock.calls[0][3]).toMatch(/^Reminded you about 50 unanswered leads: CM-2000 \(demo request\), .+, and more \(email:sent/);
   });
 
   it('sends nothing during quiet hours and says when they end, without even asking the database', async () => {
@@ -193,10 +221,19 @@ describe('reminders about unanswered leads', () => {
     expect((await late.handlers['growth.followup'](task('growth.followup', own), at('2026-11-04T08:00:00Z'))).result).toEqual({ skipped: 'quiet_hours', resumesAt: '2026-11-04T14:00:00.000Z' });
   });
 
-  it('does not fail when a reminder is refused: the next run tries it again under the same key', async () => {
-    const harness = fixture({ unanswered: [waiting()], deliveries: { [`growth:followup:${ids.demo}:60`]: ['email:failed'] } });
-    const outcome = await harness.handlers['growth.followup'](task('growth.followup'), at('2026-11-03T15:00:00Z'));
-    expect(outcome.result).toMatchObject({ reminded: 1, delivery: ['email:failed'] });
+  it('fails transiently when a reminder is refused, after sending the others, so the scheduler tries it again under the same key', async () => {
+    const harness = fixture({
+      unanswered: [waiting(), waiting({ leadId: ids.trial2, reference: 'CM-1043' })],
+      deliveries: { [`growth:followup:${ids.demo}:60`]: ['email:failed'] },
+    });
+    await expect(harness.handlers['growth.followup'](task('growth.followup'), at('2026-11-03T15:00:00Z'))).rejects.toMatchObject({ code: 'notification_failed', transient: true });
+    expect(harness.alerts.map(alert => alert.dedupeKey)).toEqual([`growth:followup:${ids.demo}:60`, `growth:followup:${ids.trial2}:60`]);
+    expect(harness.store.finishRun.mock.calls[0][3]).toContain('(email:failed, email:sent)');
+    // A reminder that used up its tries, or had nowhere to go, is not a reason to try again.
+    for (const result of [['email:duplicate:failed'], ['email:suppressed'], ['email:unknown']]) {
+      const settled = fixture({ unanswered: [waiting()], deliveries: { [`growth:followup:${ids.demo}:60`]: result } });
+      await expect(settled.handlers['growth.followup'](task('growth.followup'), at('2026-11-03T15:00:00Z')), result[0]).resolves.toMatchObject({ result: expect.any(Object) });
+    }
   });
 });
 
@@ -248,6 +285,42 @@ describe('the weekly growth report', () => {
     const harness = fixture({ facts, deliveries: { 'growth:weekly:2026-11-09': ['email:suppressed'] } });
     await harness.handlers['growth.weekly'](task('growth.weekly', { requestKey: monday }), at('2026-11-09T12:31:00Z'));
     expect(harness.store.finishRun).toHaveBeenCalledWith('run-1', 'failed', {}, 'The weekly growth report was written but not delivered (email:suppressed).', 'not_delivered');
+  });
+
+  it('reads and sends nothing once the scheduler has stopped it, and nothing after it stopped during the read', async () => {
+    const stoppedBefore = new AbortController();
+    stoppedBefore.abort();
+    const before = fixture({ facts });
+    await expect(before.handlers['growth.weekly'](task('growth.weekly', { requestKey: monday }), { ...at('2026-11-09T12:31:00Z'), signal: stoppedBefore.signal }))
+      .rejects.toMatchObject({ code: 'task_timeout', transient: true });
+    expect(before.store.growthFacts).not.toHaveBeenCalled();
+    const during = new AbortController();
+    const reading = fixture({ facts });
+    reading.store.growthFacts.mockImplementation(async () => { during.abort(); return facts; });
+    await expect(reading.handlers['growth.weekly'](task('growth.weekly', { requestKey: monday }), { ...at('2026-11-09T12:31:00Z'), signal: during.signal }))
+      .rejects.toMatchObject({ code: 'task_timeout' });
+    expect(reading.alerts).toHaveLength(0);
+    expect(reading.store.startRun).not.toHaveBeenCalled();
+  });
+
+  it('fails transiently when the provider refuses the report, so the week is retried under its own key instead of lost', async () => {
+    const harness = fixture({ facts });
+    harness.notifier.send.mockResolvedValueOnce(sent(['email:failed']));
+    await expect(harness.handlers['growth.weekly'](task('growth.weekly', { requestKey: monday }), at('2026-11-09T12:31:00Z')))
+      .rejects.toMatchObject({ code: 'notification_failed', transient: true });
+    expect(harness.store.finishRun).toHaveBeenCalledWith('run-1', 'failed', {}, 'The weekly growth report was written but not delivered (email:failed).', 'not_delivered');
+    // The retry is still Monday's task, whatever the clock says, and goes out under the same key.
+    const retried = await harness.handlers['growth.weekly'](task('growth.weekly', { requestKey: monday, attempts: 2 }), at('2026-11-10T05:10:00Z'));
+    expect(retried.result).toMatchObject({ week: '2026-11-09', delivery: ['email:sent'] });
+    expect(harness.notifier.send.mock.calls.map(([input]) => input.dedupeKey)).toEqual(['growth:weekly:2026-11-09', 'growth:weekly:2026-11-09']);
+    // Once the notifier has used up its tries, a later run says so and stops.
+    const spent = fixture({ facts, deliveries: { 'growth:weekly:2026-11-09': ['email:duplicate:failed'] } });
+    expect((await spent.handlers['growth.weekly'](task('growth.weekly', { requestKey: monday, attempts: 4 }), at('2026-11-09T12:50:00Z'))).result)
+      .toEqual({ skipped: 'earlier_attempt_unconfirmed', week: '2026-11-09' });
+    // Run now is retried the same way.
+    const asked = fixture({ facts, deliveries: { 'growth:run:t9': ['email:failed'] } });
+    await expect(asked.handlers['growth.weekly'](task('growth.weekly', { id: 't9', sourceKind: 'owner', requestKey: 'owner:x' }), at('2026-11-04T18:00:00Z')))
+      .rejects.toMatchObject({ code: 'notification_failed', transient: true });
   });
 });
 

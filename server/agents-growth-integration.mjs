@@ -132,7 +132,7 @@ try {
   assert.ok(features.includes('platform.agents.growth.v1'), 'the feature is declared');
   const operations = [
     ['private.agent_growth_pending', [10, 24]], ['private.agent_growth_lead', [randomUUID()]], ['private.agent_growth_mark_seen', [[]]],
-    ['private.agent_growth_unanswered', [60, 10]], ['private.agent_growth_facts', [new Date(Date.now() - 86_400_000), new Date()]],
+    ['private.agent_growth_unanswered', [[60, 1440], 10080, 10]], ['private.agent_growth_facts', [new Date(Date.now() - 86_400_000), new Date()]],
     ['private.agent_lead_probe_seen', ['carebase', new Date()]],
   ];
   for (const [fn, args] of operations) {
@@ -147,8 +147,9 @@ try {
     }
   }
   for (const helper of ['private.agent_growth_waiting()', 'private.agent_growth_pending_json(10, 24)', `private.agent_growth_lead_json('${randomUUID()}')`,
-    "private.agent_growth_mark_seen_rows('{}'::uuid[])", 'private.agent_growth_unanswered_json(60, 10)', "private.agent_growth_facts_json(now() - interval '1 day', now())",
-    "private.agent_growth_probe_seen('carebase', now())", "private.agent_growth_product('intel')"]) {
+    "private.agent_growth_mark_seen_rows('{}'::uuid[])", 'private.agent_growth_unanswered_json(array[60], 10080, 10)', "private.agent_growth_facts_json(now() - interval '1 day', now())",
+    "private.agent_growth_probe_seen('carebase', now())", "private.agent_growth_product('intel')", "private.agent_growth_answers('note', 'recorded')",
+    `private.agent_growth_reminded('${randomUUID()}', 60)`]) {
     await assert.rejects(pool.query(`select * from ${helper}`), refused('42501'), `the helper ${helper} is not callable, even by the server role`);
   }
   await assert.rejects(pool.query('select count(*) from private.leads'), refused('42501'), 'the server role has no direct access to the leads');
@@ -160,8 +161,12 @@ try {
     ['private.agent_growth_pending', [10, 721], /between 1 and 720 hours/], ['private.agent_growth_lead', [null], /Choose a lead/],
     ['private.agent_growth_mark_seen', [null], /between 0 and 100 leads/], ['private.agent_growth_mark_seen', [Array.from({ length: 101 }, () => randomUUID())], /between 0 and 100 leads/],
     ['private.agent_growth_mark_seen', [[randomUUID(), null]], /between 0 and 100 leads/],
-    ['private.agent_growth_unanswered', [0, 10], /between 1 and 43200 minutes/], ['private.agent_growth_unanswered', [43_201, 10], /between 1 and 43200 minutes/],
-    ['private.agent_growth_unanswered', [60, 0], /between 1 and 100 conversations/], ['private.agent_growth_unanswered', [60, 101], /between 1 and 100 conversations/],
+    ['private.agent_growth_unanswered', [null, 10080, 10], /one to five reminder steps/], ['private.agent_growth_unanswered', [[], 10080, 10], /one to five reminder steps/],
+    ['private.agent_growth_unanswered', [[1, 2, 3, 4, 5, 6], 10080, 10], /one to five reminder steps/], ['private.agent_growth_unanswered', [[0], 10080, 10], /one to five reminder steps/],
+    ['private.agent_growth_unanswered', [[43_201], 10080, 10], /one to five reminder steps/], ['private.agent_growth_unanswered', [[60, null], 10080, 10], /one to five reminder steps/],
+    ['private.agent_growth_unanswered', [[60], 0, 10], /longest wait between 1 and 44640/], ['private.agent_growth_unanswered', [[60], 44_641, 10], /longest wait between 1 and 44640/],
+    ['private.agent_growth_unanswered', [[60], null, 10], /longest wait between 1 and 44640/],
+    ['private.agent_growth_unanswered', [[60], 10080, 0], /between 1 and 100 conversations/], ['private.agent_growth_unanswered', [[60], 10080, 101], /between 1 and 100 conversations/],
     ['private.agent_growth_facts', [null, new Date()], /up to 93 days/], ['private.agent_growth_facts', [new Date(), new Date()], /up to 93 days/],
     ['private.agent_growth_facts', [new Date(), new Date(Date.now() - day)], /up to 93 days/], ['private.agent_growth_facts', [new Date(Date.now() - 94 * day), new Date()], /up to 93 days/],
     ['private.agent_lead_probe_seen', ['breathe', new Date()], /carebase, intel or advisors/], ['private.agent_lead_probe_seen', [null, new Date()], /carebase, intel or advisors/],
@@ -271,8 +276,9 @@ try {
   const age = (conversation, hours) => admin.query('update private.communication_messages set created_at = now() - make_interval(hours => $2::int) where communication_id = $1', [conversation.id, hours]);
   await age(demoConversation, 2);
   await age(consultationConversation, 2);
-  // The consultation was answered; the demo request was not.
+  // The consultation was answered; the demo request was not: its only reply was refused by the provider, so it reached nobody.
   await admin.query("insert into private.communication_messages(communication_id, direction, body, delivery, delivery_channel, request_key, created_at) values ($1, 'outbound', 'Thanks, I will be in touch.', 'sent', 'email', gen_random_uuid(), now() - interval '1 hour')", [consultationConversation.id]);
+  await admin.query("insert into private.communication_messages(communication_id, direction, body, delivery, delivery_channel, request_key, created_at) values ($1, 'outbound', 'Thanks for your request.', 'failed', 'email', gen_random_uuid(), now() - interval '90 minutes')", [demoConversation.id]);
   const daytime = new Date(`${easternDate(new Date())}T17:00:00Z`);
   clock.value = daytime;
   const followupTask = await fire('growth.followup');
@@ -281,7 +287,7 @@ try {
   assert.deepEqual(reminders.map(entry => [entry.dedupe_key, entry.severity, entry.status]), [[`growth:followup:${demo.body.id}:60`, 'warning', 'sent']]);
   assert.equal(reminders[0].subject, `Still unanswered after 1 hour: demo request ${demo.body.conversation}`);
   assert.match(reminders[0].body, new RegExp(`^A CareMetric Intel demo request \\(${demo.body.conversation}\\) has waited 2 hours for a first reply\\.`));
-  assert.equal((await notificationsLike(`growth:followup:${consultation.body.id}:`)).length, 0, 'an answered lead is not chased');
+  assert.equal((await notificationsLike(`growth:followup:${consultation.body.id}:`)).length, 0, 'an answered lead is not chased, and a refused reply answers nothing');
   assert.equal((await notificationsLike(`growth:followup:${probeLead.body.id}:`)).length, 0, 'a test lead is not chased');
   await fire('growth.followup');
   assert.equal((await notificationsLike(`growth:followup:${demo.body.id}:`)).length, 1, 'the same step is reminded once');
@@ -299,7 +305,7 @@ try {
   // look never made that version stale, and the reminders stop.
   const marked = await ownerCall('hub.update_lead_status', [demo.body.id, 'contacted', versionsBefore[demo.body.id]]);
   assert.equal(marked.status, 'contacted');
-  assert.ok(!(await call('private.agent_growth_unanswered', [1, 100])).some(entry => entry.leadId === demo.body.id), 'a lead marked contacted is no longer waiting');
+  assert.ok(!(await call('private.agent_growth_unanswered', [[1], 44640, 100])).some(entry => entry.leadId === demo.body.id), 'a lead marked contacted is no longer waiting');
   await ownerCall('hub.update_lead_status', [demo.body.id, 'new', marked.updatedAt]);
   clock.value = null;
 
@@ -335,12 +341,19 @@ try {
   assert.ok(facts.replies.replied - baseline.replies.replied >= 1, 'the answered consultation counts as a first reply');
   assert.ok(!JSON.stringify(facts).includes(contact.email) && !JSON.stringify(facts).includes(organization) && !JSON.stringify(facts).includes(canary), 'the facts hold no contact, organization or message');
 
-  // Monday's scheduled report, under the week's key.
+  // Monday's scheduled report, under the week's key. The provider refuses it first: the task is retried under the same key, not lost.
   const mondayRun = new Date(`${monday}T12:30:00Z`);
   await admin.query("update private.agent_schedules set next_run_at = $1 where task_kind = 'growth.weekly'", [mondayRun]);
+  const refusing = teamFor({ email: { configured: true, send: async () => ({ delivery: 'failed', id: null }) } });
+  await refusing.tick();
+  const refusedTask = await row("select * from private.agent_tasks where kind = 'growth.weekly' order by created_at desc, id limit 1");
+  assert.deepEqual([refusedTask.status, refusedTask.last_error_code], ['queued', 'notification_failed'], 'a refused report waits to be tried again');
+  assert.deepEqual((await notificationsLike(`growth:weekly:${monday}`)).map(entry => [entry.status, entry.attempts]), [['failed', 1]]);
+  await admin.query("update private.agent_tasks set due_at = now() - interval '1 second' where id = $1", [refusedTask.id]);
   await team.tick();
-  const weekly = await row("select * from private.agent_tasks where kind = 'growth.weekly' order by created_at desc, id limit 1");
+  const weekly = await row('select * from private.agent_tasks where id = $1', [refusedTask.id]);
   assert.equal(weekly.status, 'done', JSON.stringify(weekly.result));
+  assert.deepEqual((await notificationsLike(`growth:weekly:${monday}`)).map(entry => [entry.status, entry.attempts]), [['sent', 2]], 'the retry sent it under the same key');
   assert.equal(weekly.result.week, monday, 'the report is for the week of the Monday it was due on');
   const expected = composeGrowthReport(await call('private.agent_growth_facts', [weekBefore, weekEnd]), { since: weekBefore, until: weekEnd, publicOrigin: hubOrigin });
   const weeklyAlert = (await notificationsLike(`growth:weekly:${monday}`))[0];
@@ -423,6 +436,28 @@ try {
   assert.equal(mail.filter(entry => entry.subject === 'Intel lead form is working again').length, 1);
   assert.equal(texts.length, textsBefore, 'a recovery never texts');
 
+  // ---- A backlog longer than one run: fifty-five waiting leads are each reminded once, over two runs -------------------------------
+  const bulk = [];
+  for (let index = 1; index <= 55; index += 1) {
+    const recorded = (await row('select private.lead_record($1, $2::jsonb) as r', ['carebase', JSON.stringify({
+      version: 1, source: 'carebase', kind: 'demo_request', externalId: external(`bulk-${index}`), occurredAt: new Date().toISOString(),
+      contact: { email: `growth-bulk-${run}-${index}@example.test` } })])).r;
+    leadIds.add(recorded.id);
+    bulk.push(recorded.id);
+  }
+  // Lead n has waited 100 + n minutes, so the first is the most recent.
+  await admin.query(`update private.communication_messages m set created_at = now() - make_interval(mins => 100 + b.n::int)
+    from (select l.communication_id, b.n from unnest($1::uuid[]) with ordinality as b(id, n) join private.leads l on l.id = b.id) b where m.communication_id = b.communication_id`, [bulk]);
+  clock.value = daytime;
+  const firstBacklog = await fire('growth.followup');
+  const secondBacklog = await fire('growth.followup');
+  const thirdBacklog = await fire('growth.followup');
+  clock.value = null;
+  assert.deepEqual([firstBacklog.result.reminded, secondBacklog.result.reminded, thirdBacklog.result.reminded], [50, 5, 0], 'fifty in the first run, the five older ones in the next');
+  const backlogKeys = (await rows("select dedupe_key from private.owner_notifications where dedupe_key like 'growth:followup:%' and split_part(dedupe_key, ':', 3) = any($1::text[])", [bulk])).map(entry => entry.dedupe_key);
+  assert.deepEqual([backlogKeys.length, new Set(backlogKeys).size], [55, 55], 'each of the fifty-five was reminded once');
+  assert.ok(backlogKeys.every(key => key.endsWith(':60')));
+
   // ---- Nothing a visitor gave is anywhere but the lead desk and its conversations ----------------------------------------------
   const everything = JSON.stringify([
     await rows('select to_jsonb(t) as r from private.agent_tasks t'), await rows('select to_jsonb(r) as r from private.agent_runs r'),
@@ -430,7 +465,7 @@ try {
     await rows("select metadata from private.audit_events where action like 'agent.%' or action like 'lead.%'"), logs, texts,
     mail.map(entry => [entry.subject, entry.content.text]),
   ]);
-  for (const secret of [canary, contact.email, contact.name, contact.phone, contact.role, ...Object.values(secrets), ownerToken]) {
+  for (const secret of [canary, contact.email, contact.name, contact.phone, contact.role, `growth-bulk-${run}`, ...Object.values(secrets), ownerToken]) {
     for (const form of new Set([secret, JSON.stringify(secret).slice(1, -1)])) assert.ok(!everything.includes(form), `${secret.slice(0, 14)}… appears in no task, run, alert, audit event, log line, text or email`);
   }
 
@@ -467,7 +502,7 @@ try {
     }
   } finally { gateClient.release(); }
 
-  console.log('Growth Manager: six server-only reads that refuse every other caller and check their input, leads through the signed intake, one trial alert, reminders after each step and never in quiet hours, a lead the owner marked contacted left alone with its version intact, the brief\'s Growth section, a weekly report that never counts a test lead (once a week, and Run now), a lead form check round trip through a fake product with its blip, incident and recovery, a visitor\'s details in nothing the agent keeps, and a deployment gate that fails closed.');
+  console.log('Growth Manager: six server-only reads that refuse every other caller and check their input, leads through the signed intake, one trial alert, reminders after each step and never in quiet hours (a refused reply answers nothing), a lead the owner marked contacted left alone with its version intact, the brief\'s Growth section, a weekly report that never counts a test lead (retried under its key when refused, once a week, and Run now), a lead form check round trip through a fake product with its blip, incident and recovery, a backlog of 55 waiting leads each reminded once over two runs, a visitor\'s details in nothing the agent keeps, and a deployment gate that fails closed.');
 } finally {
   const problems = [];
   const attempt = async (sql, params = []) => { try { await admin.query(sql, params); } catch (error) { problems.push(`${error.message} [${sql.slice(0, 70)}]`); } };

@@ -5,7 +5,8 @@
 --     consultation or contact request is left to the Support Concierge, which alerts on its conversation; the rest waits for
 --     the brief and the weekly report;
 --   * growth.followup (every fifteen minutes): a lead conversation nobody has answered is chased, once per step of the agent's
---     followup_minutes, never in its quiet hours;
+--     followup_minutes, never in its quiet hours (a step already reminded is left out before the list is limited, so a long
+--     backlog is worked through run by run and none is crowded out);
 --   * growth.weekly (every morning at 07:30 Eastern; the work is Monday's): the week's leads, trials, replies and suggestions.
 -- The Platform Engineer gains probe.forms (every six hours): a signed probe to each product's lead form, and a check that its
 -- test lead reached the Hub, recorded like a health check so two failures in a row open an incident.
@@ -55,9 +56,17 @@ language sql immutable set search_path = '' as $$
   select case p_source when 'intel' then 'caremetric-intel' else p_source end;
 $$;
 
+-- Whether a message answers a lead: an internal note (the owner's explicit "dealt with"), or a reply that was not refused. A reply
+-- whose delivery definitely failed reached nobody, so it answers nothing; one still pending, or whose outcome is unknown, may have
+-- gone out, so it counts, and the owner is never chased about a reply that may have arrived.
+create function private.agent_growth_answers(p_direction text, p_delivery text) returns boolean
+language sql immutable set search_path = '' as $$
+  select p_direction = 'note' or (p_direction = 'outbound' and p_delivery <> 'failed');
+$$;
+
 -- The lead conversations still waiting for their first answer: a lead that is not a test, still `new` on the Leads screen (a
--- lead the owner moved along, or marked as spam, has been dealt with), whose conversation is not closed and has no reply or
--- internal note after the lead's first inbound message.
+-- lead the owner moved along, or marked as spam, has been dealt with), whose conversation is not closed and has no answer (see
+-- above) after the lead's first inbound message.
 create function private.agent_growth_waiting()
 returns table (lead_id uuid, kind text, product text, reference bigint, first_inbound_at timestamptz)
 language sql stable set search_path = '' as $$
@@ -72,7 +81,7 @@ language sql stable set search_path = '' as $$
   where not l.test and l.status = 'new' and c.status <> 'closed'
     and not exists (
       select 1 from private.communication_messages a
-      where a.communication_id = c.id and a.direction in ('outbound', 'note') and (a.created_at, a.id) > (f.created_at, f.id));
+      where a.communication_id = c.id and private.agent_growth_answers(a.direction, a.delivery) and (a.created_at, a.id) > (f.created_at, f.id));
 $$;
 
 -- New leads, oldest first, from the last p_window_hours: ids, kinds and products only.
@@ -87,7 +96,8 @@ language sql stable set search_path = '' as $$
 $$;
 
 -- One lead as an alert may name it. Never the contact's name, address, phone number or role, and never the message (which is
--- stored only in its conversation). Facts are the first six, by key, each string clipped to 80 characters.
+-- stored only in its conversation). Facts are six at most, each string clipped to 80 characters: the plan first, which the trial
+-- alert names, so it is never cut, then the others by key.
 create function private.agent_growth_lead_json(p_id uuid) returns jsonb
 language sql stable set search_path = '' as $$
   select jsonb_build_object(
@@ -95,7 +105,7 @@ language sql stable set search_path = '' as $$
     'productSlug', p.slug,
     'organization', l.organization,
     'details', (select coalesce(jsonb_object_agg(d.key, case when jsonb_typeof(d.value) = 'string' then to_jsonb(left(d.value #>> '{}', 80)) else d.value end), '{}'::jsonb)
-                from (select e.key, e.value from jsonb_each(l.details) e order by e.key limit 6) d),
+                from (select e.key, e.value from jsonb_each(l.details) e order by e.key = 'plan' desc, e.key limit 6) d),
     'attribution', jsonb_build_object(
       'source', lower(coalesce(l.utm_source, l.referrer_host, 'direct')), 'medium', l.utm_medium, 'campaign', l.utm_campaign, 'landingPath', l.landing_path),
     'reference', case when c.id is null then null else 'CM-' || c.reference end)
@@ -117,17 +127,35 @@ begin
 end;
 $$;
 
--- Lead conversations waiting longer than p_older_than_minutes, the most recent first (so the newest crossings are never crowded out).
-create function private.agent_growth_unanswered_json(p_older_than_minutes integer, p_limit integer) returns jsonb
+-- Whether the owner has been reminded about a lead at a step: its reminder (dedupe key growth:followup:<lead>:<step>) was recorded,
+-- and no channel of it is a refusal the notifier will still try again (failed, with fewer than its three attempts used; the same
+-- rule as private.agent_notify_begin). A reminder sent, pending, of unknown outcome, switched off or out of tries is done with.
+create function private.agent_growth_reminded(p_lead uuid, p_step integer) returns boolean
+language sql stable set search_path = '' as $$
+  select exists (select 1 from private.owner_notifications n where n.dedupe_key = 'growth:followup:' || p_lead::text || ':' || p_step::text)
+    and not exists (select 1 from private.owner_notifications n
+                    where n.dedupe_key = 'growth:followup:' || p_lead::text || ':' || p_step::text and n.status = 'failed' and n.attempts < 3);
+$$;
+
+-- Lead conversations to remind the owner about: waiting at least the smallest of p_steps (minutes) and less than p_max_minutes,
+-- whose current step (the largest step they have reached) has not been reminded yet. Steps already reminded are left out before the
+-- limit, so a backlog longer than the limit is worked through run by run and none is crowded out for good. The most recent come
+-- first. Each names its current step.
+create function private.agent_growth_unanswered_json(p_steps integer[], p_max_minutes integer, p_limit integer) returns jsonb
 language sql stable set search_path = '' as $$
   select coalesce(jsonb_agg(jsonb_build_object(
-      'leadId', w.lead_id, 'kind', w.kind, 'product', w.product, 'reference', 'CM-' || w.reference, 'minutesWaiting', w.minutes)
+      'leadId', w.lead_id, 'kind', w.kind, 'product', w.product, 'reference', 'CM-' || w.reference, 'minutesWaiting', w.minutes, 'step', w.step)
     order by w.minutes, w.lead_id), '[]'::jsonb)
   from (
-    select x.lead_id, x.kind, x.product, x.reference, floor(extract(epoch from now() - x.first_inbound_at) / 60)::integer as minutes
-    from private.agent_growth_waiting() x
-    where x.first_inbound_at <= now() - make_interval(mins => p_older_than_minutes)
-    order by x.first_inbound_at desc, x.lead_id
+    select x.lead_id, x.kind, x.product, x.reference, x.minutes, s.step
+    from (
+      select y.lead_id, y.kind, y.product, y.reference, floor(extract(epoch from now() - y.first_inbound_at) / 60)::integer as minutes
+      from private.agent_growth_waiting() y
+    ) x
+    cross join lateral (select max(t.step) as step from unnest(p_steps) as t(step) where t.step <= x.minutes) s
+    where s.step is not null and x.minutes < p_max_minutes
+      and not private.agent_growth_reminded(x.lead_id, s.step)
+    order by x.minutes, x.lead_id
     limit p_limit) w;
 $$;
 
@@ -135,7 +163,9 @@ $$;
 -- (the registered product's slug, else the website's) and source (utm_source, else the referring host, else 'direct'; the top 20 and
 -- how many more), the top five landing pages and campaigns, trials started (trial sign-up leads, and live-mode Stripe trials
 -- that began in the window), trials converted (live-mode subscriptions whose trial ended in the window and that are active),
--- the median minutes to the first reply on those leads' conversations, and the lead conversations unanswered now.
+-- the median minutes to the first delivered reply on those leads' conversations (a reply counts here only once its delivery is
+-- sent: one that failed, is still pending or whose outcome is unknown is not a reply the lead had), and the lead conversations
+-- unanswered now.
 create function private.agent_growth_facts_json(p_since timestamptz, p_until timestamptz) returns jsonb
 language sql stable set search_path = '' as $$
   with window_leads as (
@@ -156,7 +186,7 @@ language sql stable set search_path = '' as $$
       where m.communication_id = w.communication_id and m.direction = 'inbound' order by m.created_at, m.id limit 1) f
     cross join lateral (
       select m.created_at from private.communication_messages m
-      where m.communication_id = w.communication_id and m.direction = 'outbound' and (m.created_at, m.id) > (f.created_at, f.id)
+      where m.communication_id = w.communication_id and m.direction = 'outbound' and m.delivery = 'sent' and (m.created_at, m.id) > (f.created_at, f.id)
       order by m.created_at, m.id limit 1) o
   ),
   waiting as (
@@ -241,17 +271,21 @@ begin
 end;
 $$;
 
-create function private.agent_growth_unanswered(p_older_than_minutes integer, p_limit integer) returns jsonb
+create function private.agent_growth_unanswered(p_steps integer[], p_max_minutes integer, p_limit integer) returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
 begin
   perform private.require_hub_app_server();
-  if p_older_than_minutes is null or p_older_than_minutes < 1 or p_older_than_minutes > 43200 then
-    raise exception 'Choose a wait between 1 and 43200 minutes.' using errcode = '22023';
+  if p_steps is null or cardinality(p_steps) not between 1 and 5 or array_position(p_steps, null) is not null
+    or exists (select 1 from unnest(p_steps) as t(step) where t.step < 1 or t.step > 43200) then
+    raise exception 'Choose one to five reminder steps of 1 to 43200 minutes.' using errcode = '22023';
+  end if;
+  if p_max_minutes is null or p_max_minutes < 1 or p_max_minutes > 44640 then
+    raise exception 'Choose a longest wait between 1 and 44640 minutes.' using errcode = '22023';
   end if;
   if p_limit is null or p_limit < 1 or p_limit > 100 then
     raise exception 'List between 1 and 100 conversations.' using errcode = '22023';
   end if;
-  return private.agent_growth_unanswered_json(p_older_than_minutes, p_limit);
+  return private.agent_growth_unanswered_json(p_steps, p_max_minutes, p_limit);
 end;
 $$;
 
@@ -352,17 +386,19 @@ $$;
 -- ---------------------------------------------------------------------------------------
 revoke all on function
   private.agent_growth_product(text),
+  private.agent_growth_answers(text, text),
+  private.agent_growth_reminded(uuid, integer),
   private.agent_growth_waiting(),
   private.agent_growth_pending_json(integer, integer),
   private.agent_growth_lead_json(uuid),
   private.agent_growth_mark_seen_rows(uuid[]),
-  private.agent_growth_unanswered_json(integer, integer),
+  private.agent_growth_unanswered_json(integer[], integer, integer),
   private.agent_growth_facts_json(timestamp with time zone, timestamp with time zone),
   private.agent_growth_probe_seen(text, timestamp with time zone),
   private.agent_growth_pending(integer, integer),
   private.agent_growth_lead(uuid),
   private.agent_growth_mark_seen(uuid[]),
-  private.agent_growth_unanswered(integer, integer),
+  private.agent_growth_unanswered(integer[], integer, integer),
   private.agent_growth_facts(timestamp with time zone, timestamp with time zone),
   private.agent_lead_probe_seen(text, timestamp with time zone)
 from public, anon, authenticated, service_role, hub_app_server;
@@ -371,7 +407,7 @@ grant execute on function
   private.agent_growth_pending(integer, integer),
   private.agent_growth_lead(uuid),
   private.agent_growth_mark_seen(uuid[]),
-  private.agent_growth_unanswered(integer, integer),
+  private.agent_growth_unanswered(integer[], integer, integer),
   private.agent_growth_facts(timestamp with time zone, timestamp with time zone),
   private.agent_lead_probe_seen(text, timestamp with time zone)
 to hub_app_server;

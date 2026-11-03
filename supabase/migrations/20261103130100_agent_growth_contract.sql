@@ -34,7 +34,7 @@ begin
     'private.agent_growth_pending(integer,integer)',
     'private.agent_growth_lead(uuid)',
     'private.agent_growth_mark_seen(uuid[])',
-    'private.agent_growth_unanswered(integer,integer)',
+    'private.agent_growth_unanswered(integer[],integer,integer)',
     'private.agent_growth_facts(timestamp with time zone,timestamp with time zone)',
     'private.agent_lead_probe_seen(text,timestamp with time zone)',
     'private.agent_communication_snapshot(uuid,uuid,integer,integer)'
@@ -52,11 +52,13 @@ begin
   -- The helpers those operations call: no role may run them directly, and each pins its search path.
   foreach signature in array array[
     'private.agent_growth_product(text)',
+    'private.agent_growth_answers(text,text)',
+    'private.agent_growth_reminded(uuid,integer)',
     'private.agent_growth_waiting()',
     'private.agent_growth_pending_json(integer,integer)',
     'private.agent_growth_lead_json(uuid)',
     'private.agent_growth_mark_seen_rows(uuid[])',
-    'private.agent_growth_unanswered_json(integer,integer)',
+    'private.agent_growth_unanswered_json(integer[],integer,integer)',
     'private.agent_growth_facts_json(timestamp with time zone,timestamp with time zone)',
     'private.agent_growth_probe_seen(text,timestamp with time zone)'
   ] loop
