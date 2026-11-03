@@ -110,7 +110,7 @@ try {
 
   // The owner sees the seeded agents, paused.
   let view = await team();
-  assert.deepEqual(view.agents.map(agent => agent.key), ['account_manager', 'chief_of_staff', 'content_marketer', 'growth_manager', 'platform_engineer', 'seo_analyst', 'support_concierge']);
+  assert.deepEqual(view.agents.map(agent => agent.key), ['account_manager', 'chief_of_staff', 'content_marketer', 'growth_manager', 'marketing_manager', 'platform_engineer', 'seo_analyst', 'support_concierge']);
   assert.ok(view.agents.every(agent => agent.status === 'paused'));
   assert.deepEqual([view.approvalCount, view.awaitingSessionCount], [0, 0]);
   assert.deepEqual((await api.rpc('get_agent_team', {}, ownerToken)).agents.map(agent => agent.key), view.agents.map(agent => agent.key), 'the gateway serves the team view');
@@ -130,7 +130,7 @@ try {
   assert.deepEqual(statusAudit.metadata, { agent: 'platform_engineer', status: 'active' });
   await assert.rejects(ownerCall('hub.set_agent_status', ['platform_engineer', 'paused', activated.updatedAt], staleToken), refused('28000', /Current administrator session required/),
     'a session older than eight hours can read but not change');
-  assert.equal((await ownerCall('hub.get_agent_team', [], staleToken)).agents.length, 7);
+  assert.equal((await ownerCall('hub.get_agent_team', [], staleToken)).agents.length, 8);
   const budgeted = await ownerCall('hub.set_agent_budget', ['platform_engineer', 75, activated.updatedAt]);
   assert.equal(budgeted.dailyBudgetCents, 75);
   await assert.rejects(ownerCall('hub.set_agent_budget', ['platform_engineer', -1, budgeted.updatedAt]), refused('22023'));
@@ -938,26 +938,20 @@ try {
     const mail = { email: [] };
     const clock = { value: new Date('2026-11-03T12:00:00Z') };
     const seoTeam = agentTeam({
-      pool, enabled: true, ownerEmail: 'owner@example.test', publicOrigin: 'https://hub.test', fetchImpl: network, log: () => {}, now: () => clock.value,
+      pool, enabled: true, features: new Set(['platform.agents.customer-growth.v1','platform.agents.hardening.v1']), ownerEmail: 'owner@example.test', publicOrigin: 'https://hub.test', fetchImpl: network, log: () => {}, now: () => clock.value,
       sms: { configured: false, send: async () => ({ delivery: 'sent', id: 'x' }) },
       email: { configured: true, send: async (to, subject, content) => { mail.email.push([to, subject, content]); return { delivery: 'sent', id: 'fixture-seo' }; } },
     });
     assert.ok(seoTeam.scheduler.kinds().includes('seo.weekly'));
     await admin.query("update private.agent_schedules set next_run_at = now() + interval '1 day', enabled = true");
 
-    // The schedule fires every morning, but only Monday's is the weekly check: on a Tuesday it does nothing and says nothing.
+    // A missed Monday catches up on Tuesday and records one audit for the Eastern week.
     await admin.query("update private.agent_schedules set next_run_at = now() - interval '2 minutes' where task_kind = 'seo.weekly'");
     let tick = await seoTeam.tick();
     assert.deepEqual([tick.fired, tick.claimed], [1, 1]);
-    const skipped = await row("select * from private.agent_tasks where agent_key = 'seo_analyst' order by created_at desc limit 1");
-    assert.deepEqual([skipped.kind, skipped.source_kind, skipped.status, skipped.result], ['seo.weekly', 'schedule', 'done', { skipped: 'not_monday' }]);
-    assert.deepEqual([mail.email.length, requested.length], [0, 0], 'a Tuesday sends no email and fetches nothing');
-
-    // On Monday the same scheduled task audits all five sites, emails the report once and records a run.
-    clock.value = new Date('2026-11-02T12:00:00Z');
-    await enqueue('seo_analyst', 'seo.weekly', `it:${run}:seo:monday`, { sourceKind: 'schedule' });
-    tick = await seoTeam.tick();
-    assert.equal(tick.claimed, 1);
+    const firstAudit = await row("select * from private.agent_tasks where agent_key = 'seo_analyst' order by created_at desc limit 1");
+    assert.deepEqual([firstAudit.kind, firstAudit.source_kind, firstAudit.status], ['seo.weekly', 'schedule', 'done']);
+    assert.deepEqual(firstAudit.result.delivery, ['email:sent']);
     assert.equal(mail.email.length, 1);
     assert.equal(mail.email[0][0], 'owner@example.test');
     assert.equal(mail.email[0][1], 'Weekly SEO report: 1 thing to fix across 5 sites, 1 urgent');
@@ -974,7 +968,7 @@ try {
     const seoRun = await row("select * from private.agent_runs where agent_key = 'seo_analyst' order by started_at desc limit 1");
     assert.deepEqual([seoRun.model, seoRun.outcome, Number(seoRun.cost_cents)], ['none', 'completed', 0]);
     assert.equal(seoRun.summary, 'Sent the SEO report: 1 problem could keep pages out of search results.');
-    const finished = await row("select result from private.agent_tasks where request_key = $1", [`it:${run}:seo:monday`]);
+    const finished = firstAudit;
     assert.deepEqual(finished.result.sites.map(site => [site.key, site.score, site.checked]), [['advisors', 85, 1], ['carebase', 100, 1], ['intel', 100, 1], ['help', 100, 1], ['carebase_home', 100, 0]]);
     assert.deepEqual(finished.result.sites[0].top, [{ code: 'noindex', severity: 'high', count: 1, page: '/' }]);
     assert.equal(finished.result.sites[4].redirectsTo, 'https://cmcarebase.com');
@@ -988,7 +982,7 @@ try {
     tick = await seoTeam.tick();
     assert.equal(tick.claimed, 1);
     assert.equal(mail.email.length, 1, 'the weekly report is sent once');
-    assert.ok(requested.length > requestsBefore, 'the retry still audited the sites');
+    assert.equal(requested.length, requestsBefore, 'a confirmed weekly report skips the repeated crawl');
     clock.value = new Date('2026-11-04T12:00:00Z');
     const asked = await ownerCall('hub.request_agent_task', ['seo_analyst', 'seo.weekly']);
     tick = await seoTeam.tick();

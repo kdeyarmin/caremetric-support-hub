@@ -68,7 +68,7 @@ function ApprovalCard({ approval, busy, onDecide }: { approval: TeamApproval; bu
   // A customer email is named by its account and subject, so two waiting emails never share a name.
   const what = email ? approvalTitle(approval) : actionLabel(approval.kind);
   // Approving a reply or a customer email sends it.
-  const sends = approval.kind === "communication.reply" || email;
+  const sends = ["communication.reply", "growth.message"].includes(approval.kind) || email;
   return <li className="team-approval">
     <div className="team-approval-head"><strong>{approval.agentName}</strong> proposes: {email ? what
       : <>{what}{approval.targetId ? <> for <span className="team-target">{targetLabel(approval.targetKind, approval.targetId)}</span></> : null}</>}</div>

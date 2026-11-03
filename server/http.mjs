@@ -45,7 +45,7 @@ export const privateHubMessage='This Hub is private. Only its owner can sign in.
  * treated as signed out, a sign-in that fails it is revoked at once, and the routes that create
  * sign-ins for anyone else (invitation claims and application self-service) are closed.
  */
-export function appServer({auth,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,selfService,agents,leads,leadAdmin,health,owner,origins,helpCenter=null,dist=resolve('dist')}) {
+export function appServer({auth,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,selfService,agents,growth,leads,leadAdmin,health,owner,origins,helpCenter=null,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -114,6 +114,21 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
           }
           if(path==='/api/channels/email/inbound') return json(await communications.emailWebhook(req));
           throw new HttpError(404,'Unavailable.');
+        }
+        const growthEvent=/^\/api\/growth\/events\/(carebase|caremetric-intel)$/.exec(path);
+        if(growthEvent || path==='/api/growth/delivery') {
+          if(req.method!=='POST'||req.headers.origin||req.headers.cookie||url.search) throw new HttpError(403,'Forbidden.');
+          if(!growth) throw new HttpError(503,'Growth is unavailable.');
+          const raw=await rawBody(req,growthEvent?8192:262144);
+          return json(growthEvent?await growth.activity(growthEvent[1],raw,req.headers):await growth.delivery(raw,req.headers));
+        }
+        const growthUnsubscribe=/^\/api\/growth\/unsubscribe\/([a-f0-9]{64})$/.exec(path);
+        if(growthUnsubscribe) {
+          if(!growth)throw new HttpError(503,'Growth is unavailable.');
+          if(!['GET','POST'].includes(req.method))throw new HttpError(405,'Method not allowed.');
+          if(req.method==='POST')await rawBody(req,4096);
+          const html=await growth.unsubscribe(growthUnsubscribe[1],req.method==='POST');
+          res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(html);
         }
         // Stripe calls the billing webhook; its signature over the exact raw body is the only authority.
         if(path==='/api/webhooks/stripe') {
@@ -294,6 +309,11 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
           const input=await jsonBody(req,2048); if(Object.keys(input).length) throw new HttpError(400,'Invalid integration setup request.');
           if(!integrationSetup) throw new HttpError(503,'Integration setup is not configured.');
           return json(await integrationSetup.handle(session));
+        }
+        if(path==='/api/admin/growth') {
+          if(req.method!=='POST'||url.search)throw new HttpError(400,'Use the growth workspace.');
+          if(!growth)throw new HttpError(503,'Growth is unavailable.');
+          return json(await growth.admin(session,await jsonBody(req,32768)));
         }
         // The AI team's controls. Approving an action also carries it out, so changes are routes here, not browser RPCs.
         if(path.startsWith('/api/admin/team/')) {

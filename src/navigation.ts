@@ -43,6 +43,7 @@ export const navSections: readonly NavSection[] = [
     { to: "/phone-numbers", label: "Phone numbers", icon: Phone, audience: "platformAdmin" },
     { to: "/admin/portfolio", label: "Portfolio rollup", icon: Activity, audience: "platformAdmin" },
     { to: "/admin/go-live-readiness", label: "AI go-live readiness", icon: Rocket, audience: "platformAdmin" },
+    { to: "/admin/growth", label: "Customer growth", icon: Bot, audience: "platformAdmin" },
     { to: "/admin/team", label: "AI team", icon: Bot, audience: "platformAdmin" },
   ] },
   { label: "Support", items: [

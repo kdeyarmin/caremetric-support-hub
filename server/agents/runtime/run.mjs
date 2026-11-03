@@ -127,7 +127,7 @@ export function modelRunner({
   // failing is given up after a few tries, because nothing else would ever clear it.
   const owed = new Map();
   const today = () => easternDate.format(now());
-  const owedFor = agentKey => (owed.get(agentKey) ?? []).filter(debt => debt.day === today()).reduce((total, debt) => total + (Number(debt.usage?.costCents) || 0), 0);
+  const owedFor = agentKey => (owed.get(agentKey) ?? []).filter(debt => !debt.booked && debt.day === today()).reduce((total, debt) => total + (Number(debt.usage?.costCents) || 0), 0);
   // One queue per agent: the budget read and the reservation (and every release) happen alone, in order.
   const lanes = new Map();
   async function exclusive(agentKey, work) {
@@ -155,16 +155,26 @@ export function modelRunner({
     if (!list.length) return;
     const done = new Set();
     for (const debt of list) {
-      try {
-        await store.finishRun(debt.runId, debt.outcome, debt.usage, debt.summary, debt.errorCode);
-        done.add(debt);
-      } catch (error) {
-        debt.tries += 1;
-        if (error?.code === 'P0002') done.add(debt);
-        else if (debt.tries >= writeAttempts) {
-          done.add(debt);
-          log(JSON.stringify({ event: 'hub_agent_run_unbooked_dropped', agent: agentKey, run_id: debt.runId }));
+      if (!debt.booked) {
+        try {
+          await store.finishRun(debt.runId, debt.outcome, debt.usage, debt.summary, debt.errorCode);
+          debt.booked = true;
+        } catch (error) {
+          debt.tries += 1;
+          if (error?.code === 'P0002') debt.booked = true;
+          else if (debt.tries >= writeAttempts) {
+            done.add(debt);
+            log(JSON.stringify({ event: 'hub_agent_run_unbooked_dropped', agent: agentKey, run_id: debt.runId }));
+          }
         }
+      }
+      if (debt.booked) {
+        // The persisted reservation is retained until the cost is known to be booked. A failed release is retried
+        // without writing the cost twice; other replicas continue counting the reservation in the meantime.
+        try {
+          if (debt.reservation) await store.releaseBudget(debt.reservation);
+          done.add(debt);
+        } catch { /* keep the confirmed booking's release pending */ }
       }
     }
     // A call that is still in flight can add a debt while a write above is waiting, so the list is read again: only what was settled goes.
@@ -230,15 +240,22 @@ export function modelRunner({
       return { outcome: 'budget_exhausted', neededCents: reserve, remainingCents: Math.max(remaining, 0) };
     }
     const { release } = admission;
+    let reservation = null;
+    if (store.reserveBudget) {
+      try { reservation = await store.reserveBudget(task.id, reserve); }
+      catch (error) { await release(); throw error; }
+      if (!reservation) { await release(); return {outcome:'budget_exhausted',neededCents:reserve,remainingCents:0}; }
+    }
+    let booked = false;
     const budgetDay = today();
     let runId = null;
     let finished = false;
     const finish = async (outcome, usage, summary, errorCode = null) => {
       if (finished || runId === null) return;
       finished = true;
-      try { await store.finishRun(runId, outcome, usage, summary, errorCode); } catch {
+      try { await store.finishRun(runId, outcome, usage, summary, errorCode); booked = true; } catch {
         // Not booked. The cost stays against the budget (and the write is retried) until the database has it.
-        owed.set(agentKey, [...(owed.get(agentKey) ?? []), { runId, outcome, usage, summary, errorCode, day: budgetDay, tries: 0 }]);
+        owed.set(agentKey, [...(owed.get(agentKey) ?? []), { runId, outcome, usage, summary, errorCode, day: budgetDay, tries: 0, reservation, booked: false }]);
         log(JSON.stringify({ event: 'hub_agent_run_unrecorded', agent: agentKey, kind: task.kind }));
       }
     };
@@ -291,6 +308,10 @@ export function modelRunner({
     } finally {
       // Normally closed above. Reaching here unclosed means something unexpected threw after the call started.
       await finish('failed', { rounds: 1, costCents: inputOnlyCents(model, inputBound) }, 'The run ended unexpectedly.', 'ai_error');
+      if (reservation && (booked || runId === null)) {
+        try { await store.releaseBudget(reservation); }
+        catch { owed.set(agentKey, [...(owed.get(agentKey) ?? []), { runId, reservation, day: budgetDay, booked: true }]); }
+      }
       await release();
     }
   }

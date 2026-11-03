@@ -59,6 +59,7 @@ export function composeAccountsReport({ snapshot, now = new Date(), publicOrigin
   const accounts = everyone.filter(account => !(account.status === 'closed' && !(account.subscriptions ?? []).some(subscription => liveStatuses.includes(subscription.status))));
   const assessed = accounts.map(account => ({ account, health: assess(account, now), mrrCents: monthlyTotals(account.subscriptions ?? [], coupons).mrrCents }));
   const byBand = band => assessed.filter(entry => entry.health.band === band).length;
+  const evidenceGaps = assessed.filter(entry => ['missing','stale','billing_only','partial'].includes(entry.health.evidence)).length;
 
   const needs = assessed.filter(entry => entry.health.attention)
     .sort((a, b) => b.health.penalty - a.health.penalty || a.account.name.localeCompare(b.account.name));
@@ -76,11 +77,12 @@ export function composeAccountsReport({ snapshot, now = new Date(), publicOrigin
 
   const trialsEnding = assessed.filter(entry => entry.health.reasons.includes('trial_ending')).length;
   const counts = {
-    accounts: accounts.length, needsYou: needs.length, healthy: byBand('healthy'), watch: byBand('watch'), atRisk: byBand('at_risk'),
+    accounts: accounts.length, needsYou: needs.length, healthy: byBand('healthy'), unknown: byBand('unknown'), watch: byBand('watch'), atRisk: byBand('at_risk'),
     newAccounts: byBand('new'), inactive: byBand('inactive'), renewals: renewals.length, expansion: growing.length, trialsEnding, truncated: snapshot.truncated === true,
   };
 
   const headline = counts.accounts === 0 ? 'There are no accounts to report yet.'
+    : counts.needsYou === 0 && counts.unknown ? `Adoption evidence is missing for ${plural(counts.unknown, 'account')}. Review the activity feed.`
     : counts.needsYou === 0 ? `Nothing needs you this week across ${plural(counts.accounts, 'account')}.`
       : `${plural(counts.needsYou, 'account')} ${counts.needsYou === 1 ? 'needs' : 'need'} you this week, out of ${counts.accounts}.`;
   const origin = /^https:\/\//i.test(publicOrigin ?? '') ? publicOrigin.replace(/\/+$/, '') : null;
@@ -89,7 +91,7 @@ export function composeAccountsReport({ snapshot, now = new Date(), publicOrigin
     ...(snapshot.mode === 'test' ? [{ type: 'callout', tone: 'warning', title: 'Test data.', text: 'These figures come from Stripe test mode, not from customers.' }] : []),
     ...(snapshot.mode === 'unverified' ? [{ type: 'callout', tone: 'warning', title: 'Stripe mode not verified.', text: 'The Hub has not verified which Stripe mode it is reading, so test and live data may be mixed.' }] : []),
     ...(snapshot.truncated ? [{ type: 'callout', tone: 'info', title: 'Partial list.', text: `Showing ${everyone.length} of ${snapshot.total ?? everyone.length} accounts. The figures below cover only these.` }] : []),
-    { type: 'callout', tone: counts.needsYou ? 'warning' : 'success', title: counts.needsYou ? 'Heads up.' : 'All clear.', text: headline },
+    { type: 'callout', tone: counts.needsYou || counts.unknown ? 'warning' : 'success', title: counts.needsYou ? 'Heads up.' : counts.unknown ? 'Usage evidence needed.' : 'Account summary.', text: headline },
     ...section('Needs you', needs.map(entry => [clip(entry.account.name, nameLimit), reasonLine(entry.account, entry.health, now)])),
     ...section('Renewing in the next 30 days', renewals.map(entry => {
       // The date is the first renewal's, and the amount covers every plan that renews in the window, so a second plan is not left out of it.
@@ -104,18 +106,18 @@ export function composeAccountsReport({ snapshot, now = new Date(), publicOrigin
     ] },
     { type: 'paragraph', text: 'Accounts' },
     { type: 'details', rows: [
-      ['Healthy', String(counts.healthy)], ['Watch', String(counts.watch)], ['At risk', String(counts.atRisk)], ['New, not scored', String(counts.newAccounts)],
+      ['Healthy', String(counts.healthy)], ['Adoption unknown', String(counts.unknown)], ['Watch', String(counts.watch)], ['At risk', String(counts.atRisk)], ['New, not scored', String(counts.newAccounts)],
       ['No live subscription', String(counts.inactive)],
     ] },
     { type: 'paragraph', text: `Revenue uses the same figures as the Billing screen: paying and past-due subscriptions after discounts, with trials counted apart.${currencies.size > 1 ? ' Some amounts are in more than one currency and are added as if equal.' : ''}` },
-    { type: 'paragraph', text: `Scores are advice only and never change a plan, a price or anyone's access. Scoring version ${healthVersion}.` },
+    { type: 'paragraph', text: `${plural(evidenceGaps, 'account')} ${evidenceGaps===1?'lacks':'lack'} fresh adoption evidence. Missing activity is not proof of inactivity. Scores are advice only and never change a plan, a price or anyone's access. Scoring version ${healthVersion}.` },
     ...(needs.length && origin ? [{ type: 'button', label: 'Open the AI team', url: `${origin}/admin/team` }] : []),
   ];
 
   return {
     subject: `Weekly accounts: ${plural(counts.accounts, 'account')}, ${counts.needsYou === 0 ? 'none need you' : `${counts.needsYou} ${counts.needsYou === 1 ? 'needs' : 'need'} you`}`,
     // Counts only: this is what the notification log keeps and what an inbox shows beside the subject.
-    body: `${plural(counts.accounts, 'account')}: ${counts.healthy} healthy, ${counts.watch} watch, ${counts.atRisk} at risk, ${counts.newAccounts} new. ${counts.needsYou} ${counts.needsYou === 1 ? 'needs' : 'need'} you.`,
+    body: `${plural(counts.accounts, 'account')}: ${counts.healthy} healthy, ${counts.unknown?`${counts.unknown} adoption unknown, `:''}${counts.watch} watch, ${counts.atRisk} at risk, ${counts.newAccounts} new. ${counts.needsYou} ${counts.needsYou === 1 ? 'needs' : 'need'} you.`,
     blocks,
     result: counts,
   };

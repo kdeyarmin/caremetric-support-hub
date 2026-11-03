@@ -59,6 +59,15 @@ export const integrationCatalog = Object.freeze([
       { name: 'HUB_BOOKING_URL', secret: false, required: false, purpose: 'Your booking page (an https link, for example Calendly or Cal.com). The Support Concierge offers it in its sales-inquiry acknowledgment, and the Account Manager\'s customer emails show it as a "Pick a time" button. Leave it unset to offer no link.' },
       { name: 'HUB_AGENTS_CUSTOMER_TEXT_TO_AI', secret: false, required: false, flag: true, purpose: 'Exactly "true" lets the Support Concierge send a plain question\'s scrubbed text to the model to draft an answer for you to approve. Set it only when your Anthropic agreement covers support messages.' },
     ] },
+  { id: 'customer-growth', name: 'Customer growth', purpose: 'CareBase and Intel prospecting, customer success, activity and delivery events.', docs: 'docs/CUSTOMER_GROWTH.md',
+    variables: [
+      { name: 'HUB_GROWTH_SEND_ENABLED', secret: false, required: false, flag: true, purpose: 'Master switch for sending reviewed growth messages.' },
+      { name: 'HUB_GROWTH_SIGNING_KEY', secret: true, required: true, purpose: 'At least 32 characters; signs stable unsubscribe links. Keep it across releases.' },
+      { name: 'HUB_GROWTH_SEARCH_API_KEY', secret: true, required: false, purpose: 'Brave Search API key for attributable organization discovery; manual evidence also works.' },
+      { name: 'HUB_GROWTH_CAREBASE_EVENT_KEY', secret: true, required: false, purpose: 'CareBase server-only activity signing key, at least 32 characters.' },
+      { name: 'HUB_GROWTH_INTEL_EVENT_KEY', secret: true, required: false, purpose: 'Intel server-only activity signing key, at least 32 characters.' },
+      { name: 'HUB_SENDGRID_EVENT_PUBLIC_KEY', secret: true, required: false, purpose: 'Verifies delivery, bounce, complaint and unsubscribe webhooks.' },
+    ] },
   { id: 'website-leads', name: 'Website leads', purpose: 'CareBase, Intel and Healthcare Advisors forward every lead from their public forms to the Hub (POST /api/leads), where it appears on Leads and, when the person asked to be contacted, in Communications. Each product signs its leads with its own secret; a product without one keeps its leads to itself.', docs: 'docs/LEAD_INTAKE.md',
     variables: [
       { name: 'HUB_LEAD_SECRET_CAREBASE', secret: true, required: false, purpose: 'The secret CareBase signs its website leads with: the same value as CareBase\'s HUB_LEAD_SECRET. Use at least 32 random characters; a shorter value counts as not set.' },

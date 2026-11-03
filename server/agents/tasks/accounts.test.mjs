@@ -38,7 +38,7 @@ describe('the weekly account report task', () => {
     expect(sent).toMatchObject({ severity: 'info', dedupeKey: 'accounts:weekly:2026-11-02', agentKey: 'account_manager', taskId: 't1', subject: 'Weekly accounts: 2 accounts, 1 needs you' });
     expect(JSON.stringify(sent.blocks)).toContain('Cedar Ridge Care');
     expect(JSON.stringify(sent.blocks)).toContain('$313.37');
-    expect(outcome).toEqual({ result: { week: '2026-11-02', delivery: ['email:sent'], accounts: 2, needsYou: 1, healthy: 1, watch: 1, atRisk: 0, newAccounts: 0, inactive: 0, renewals: 0, expansion: 0, trialsEnding: 0, truncated: false } });
+    expect(outcome).toEqual({ result: { week: '2026-11-02', delivery: ['email:sent'], accounts: 2, needsYou: 1, healthy: 1, unknown: 0, watch: 1, atRisk: 0, newAccounts: 0, inactive: 0, renewals: 0, expansion: 0, trialsEnding: 0, truncated: false } });
     expect(store.startRun).toHaveBeenCalledWith('t1', 'none', 'accounts.1');
     expect(store.finishRun).toHaveBeenCalledWith('run-1', 'completed', {}, 'Sent the weekly accounts report: 2 accounts: 1 healthy, 1 watch, 0 at risk, 0 new. 1 needs you.', null);
   });

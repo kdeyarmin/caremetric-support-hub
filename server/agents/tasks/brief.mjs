@@ -68,6 +68,7 @@ export function composeBrief(facts, { now = new Date(), publicOrigin, services =
   const incidents = Array.isArray(facts?.incidents) ? facts.incidents : [];
   const billing = facts?.billing ?? {};
   const yesterday = facts?.yesterday ?? {};
+  const customerGrowth = facts?.customerGrowth;
   const agents = Array.isArray(facts?.agents) ? facts.agents : [];
 
   const needs = [];
@@ -80,6 +81,10 @@ export function composeBrief(facts, { now = new Date(), publicOrigin, services =
   const growthPart = growthSection(growth);
   if (growthPart) needs.push(...growthPart.needs);
 
+  if (count(customerGrowth?.overdue)) needs.push(['Overdue customer follow-ups',String(customerGrowth.overdue)]);
+  if (count(customerGrowth?.unmappedTenants)) needs.push(['Billing accounts needing a growth mapping',String(customerGrowth.unmappedTenants)]);
+  if (count(customerGrowth?.missingContact)) needs.push(['Opportunities missing a contact',String(customerGrowth.missingContact)]);
+
   const yesterdayRows = [
     ['Runs recorded', String(count(yesterday.runs))],
     ['Tasks finished', `${count(yesterday.tasksDone)} done, ${count(yesterday.tasksFailed)} failed`],
@@ -89,6 +94,7 @@ export function composeBrief(facts, { now = new Date(), publicOrigin, services =
   ];
 
   const watch = [];
+  if(customerGrowth)watch.push(`Customer growth: ${count(customerGrowth.prospects)} prospects, ${count(customerGrowth.trials)} trials, ${count(customerGrowth.activated)} activated and ${count(customerGrowth.paid)} paid accounts recorded.`);
   if (count(billing.trialsEnding)) watch.push(`${plural(count(billing.trialsEnding), 'trial')} end${count(billing.trialsEnding) === 1 ? 's' : ''} within a week.`);
   const paused = agents.filter(agent => agent.status === 'paused').map(agent => agent.name);
   if (paused.length) watch.push(`Paused, so ${paused.length === 1 ? 'it does' : 'they do'} nothing until you resume ${paused.length === 1 ? 'it' : 'them'}: ${paused.join(', ')}.`);

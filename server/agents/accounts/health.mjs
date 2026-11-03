@@ -10,7 +10,7 @@
  * a gap in usage reports means nothing unless the app reported before: usage is compared with the newest report at or
  * before 28 days earlier, and no baseline means no comparison.
  */
-export const healthVersion = 'health.1';
+export const healthVersion = 'health.2';
 
 export const liveStatuses = Object.freeze(['trialing', 'active', 'past_due', 'paused', 'unpaid', 'incomplete']);
 
@@ -36,7 +36,7 @@ export const thresholds = Object.freeze({
 });
 
 /** What each reason asks the owner to look at; these also decide who appears under "needs you". */
-export const attentionReasons = Object.freeze(['unpaid', 'past_due', 'invoice_overdue', 'delinquent', 'cancel_scheduled', 'closed_but_billing', 'suspended', 'trial_ending', 'urgent_case_waiting']);
+export const attentionReasons = Object.freeze(['unpaid', 'past_due', 'invoice_overdue', 'delinquent', 'cancel_scheduled', 'closed_but_billing', 'suspended', 'trial_ending', 'urgent_case_waiting', 'usage_stopped', 'usage_dropped']);
 
 export const reasonWords = Object.freeze({
   unpaid: 'subscription unpaid', past_due: 'payment past due', invoice_overdue: 'an invoice is overdue', delinquent: 'marked delinquent in Stripe',
@@ -111,7 +111,7 @@ export function ageDays(account, now) {
 /**
  * @param account one entry of the account snapshot (see supabase/migrations/20261102170000_agent_accounts.sql)
  * @param {Date} now
- * @returns {{ version: string, band: 'healthy'|'watch'|'at_risk'|'new'|'inactive', score: number|null, penalty: number, reasons: string[], flags: string[], attention: boolean, ageDays: number|null }}
+ * @returns {{ version: string, band: 'healthy'|'unknown'|'watch'|'at_risk'|'new'|'inactive', score: number|null, penalty: number, reasons: string[], flags: string[], attention: boolean, ageDays: number|null }}
  */
 export function assess(account, now = new Date()) {
   const live = (account.subscriptions ?? []).filter(subscription => liveStatuses.includes(subscription.status));
@@ -142,9 +142,32 @@ export function assess(account, now = new Date()) {
   let dropped = false;
   let stopped = false;
   let up = false;
-  for (const entry of account.usage ?? []) {
+  // Native events and usage reports cover different products and metrics. Keep both; for the same metric use
+  // its newest valid observation, so an older mirror cannot override a newer native reading (or vice versa).
+  const latestObservations = new Map();
+  const observationTime = entry => { const at=instant(entry.latestAt);return at!==null&&at<=nowTime?at:-Infinity; };
+  for(const entry of [...(account.activity??[]),...(account.usage??[])]) {
+    const key=`${entry.app}:${entry.metric}`,previous=latestObservations.get(key);
+    if(!previous||observationTime(entry)>observationTime(previous))latestObservations.set(key,entry);
+  }
+  const observations = [...latestObservations.values()];
+  const fresh = observations.filter(entry => {
+    const at = instant(entry.latestAt);
+    return at !== null && at <= nowTime && nowTime - at <= 7 * day;
+  });
+  const meaningful = entry => ['active_users','active_days','value_events','completed_training','provider_lists','outreach_replies'].includes(entry.metric);
+  const productNames = [...new Set([...(account.products??[]).filter(p=>p.status==='active').map(p=>p.slug), ...live.map(s=>s.app).filter(Boolean)])];
+  const byProduct = Object.fromEntries(productNames.map(product=> {
+    const all=observations.filter(e=>e.app===product), recent=fresh.filter(e=>e.app===product);
+    return [product,!all.length?'missing':!recent.length?'stale':recent.some(e=>meaningful(e)&&e.latest>0)?'fresh':recent.some(meaningful)?'no_activity':'billing_only'];
+  }));
+  let evidence = observations.length === 0 ? 'missing' : fresh.length === 0 ? 'stale' : fresh.some(e=>meaningful(e)&&e.latest>0) ? 'fresh' : fresh.some(meaningful) ? 'no_activity' : 'billing_only';
+  if(evidence==='fresh' && Object.values(byProduct).some(state=>state!=='fresh')) evidence='partial';
+  for (const entry of fresh.filter(meaningful)) {
     const latest = number(entry.latest);
     const baseline = number(entry.baseline);
+    const baselineTime = instant(entry.baselineAt);
+    if (baselineTime === null || baselineTime >= instant(entry.latestAt) || nowTime - baselineTime > 42 * day) continue;
     if (latest === null || baseline === null || baseline < thresholds.usageMinChange) continue;
     if (latest === 0) stopped = true;
     else if (latest <= baseline * thresholds.usageDropRatio && baseline - latest >= thresholds.usageMinChange) dropped = true;
@@ -173,6 +196,8 @@ export function assess(account, now = new Date()) {
     score = Math.max(0, Math.min(100, Math.round(100 - penalty)));
     band = score >= thresholds.healthy ? 'healthy' : score >= thresholds.watch ? 'watch' : 'at_risk';
   }
+  if (band === 'healthy' && (stopped || dropped)) band = 'watch';
+  if (band === 'healthy' && evidence !== 'fresh') { band = 'unknown'; score = null; }
   const attention = band === 'at_risk' || reasons.some(reason => attentionReasons.includes(reason));
-  return { version: healthVersion, band, score, penalty, reasons, flags, attention, ageDays: age };
+  return { version: healthVersion, band, score, penalty, reasons, flags, attention, ageDays: age, evidence, evidenceByProduct: byProduct };
 }

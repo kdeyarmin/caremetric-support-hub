@@ -1,7 +1,6 @@
 /**
  * The SEO Analyst's weekly check: audit each public website from the outside and email the owner what to fix.
- * The scheduled task runs every morning but does its work only on Mondays (Eastern time), so the report arrives
- * once a week; a check the owner starts with Run now runs on any day.
+ * The scheduled task runs every morning and catches up once per Eastern week; owner-requested checks run on any day.
  *
  * Three parts, each optional except the first:
  * - The crawl (no model): each site's findings, the pages that are app shells, and any two of the company's hosts that
@@ -28,10 +27,10 @@ import {
 } from '../seo/rewrite.mjs';
 import { searchConsoleReader } from '../seo/search-console.mjs';
 import { sites as defaultSites } from '../seo/sites.mjs';
+import { weekStart } from '../accounts/week.mjs';
 import { delivered } from '../notify.mjs';
 import { plural, recordRun } from './shared.mjs';
 
-const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' });
 const dayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
 const dayLabel = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' });
 const searchDay = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' });
@@ -368,11 +367,11 @@ export function seoHandlers({
 
   async function weekly(task, { signal, now = () => new Date() } = {}) {
     const moment = now();
-    // The schedule fires every morning; only Monday's is the weekly check. A check the owner asked for always runs.
-    if (task.sourceKind === 'schedule' && weekday.format(moment) !== 'Mon') return { result: { skipped: 'not_monday' } };
+    const week = weekStart(moment);
     const started = clock();
     const date = dayKey.format(moment);
-    const dedupeKey = task.sourceKind === 'owner' ? `seo:${date}:${task.id}` : `seo:${date}`;
+    const dedupeKey = task.sourceKind === 'owner' ? `seo:${date}:${task.id}` : `seo:${week}`;
+    if (task.sourceKind === 'schedule' && store.notificationStatus && ['sent','unknown','pending','suppressed'].includes(await store.notificationStatus(dedupeKey))) return { result: { skipped: 'already_attempted', week } };
 
     // The sites are different hosts, so they are checked side by side: each has its own deadline, well inside the task's.
     // Search Console is read at the same time.

@@ -35,7 +35,7 @@ describe('the published guides', () => {
     expect(long.summary.length).toBeLessThanOrEqual(401);
     expect(long.body.length).toBeLessThanOrEqual(2001);
     expect(long.summary.endsWith('…')).toBe(true);
-    expect(long.body.endsWith('…')).toBe(true);
+    expect(long.body).toContain('Roster steps.');
   });
 
   it('offers nothing when no article shares words with the question', async () => {
@@ -81,4 +81,18 @@ describe('the published guides', () => {
     odd.load.mockResolvedValue({ not: 'a list' });
     expect(await odd.instance.top('export roster')).toEqual([]);
   });
+});
+
+it('retrieves a late answer from the correct product and retains its revision',async()=>{
+ const instance=guideLibrary({load:async()=>[
+  {id:'a',revision_no:2,kind:'article',title:'Getting started',summary:'Welcome',body_markdown:'Introduction. '.repeat(300)+'Export the roster using Reports.',product_slugs:['carebase']},
+  {id:'b',revision_no:1,kind:'article',title:'Export roster',summary:'Intel only',body_markdown:'A different procedure.',product_slugs:['caremetric-intel']},
+ ]});
+ const results=await instance.top('export the roster',{productSlug:'carebase'});
+ expect(results).toHaveLength(1);expect(results[0]).toMatchObject({sourceId:'a',revision:2});expect(results[0].body).toContain('Export the roster');
+ expect(await instance.top('export roster',{productSlug:'breathe'})).toEqual([]);
+});
+it('expires cached evidence after the maximum stale interval despite repeated refresh failures',async()=>{
+ const h=library({maxStaleMs:700000});await h.instance.top('roster');h.load.mockRejectedValue(new Error('offline'));h.advance(701000);
+ expect(await h.instance.top('roster')).toEqual([]);
 });

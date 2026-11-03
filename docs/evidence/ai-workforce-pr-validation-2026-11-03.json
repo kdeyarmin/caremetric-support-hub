@@ -1,0 +1,54 @@
+{
+  "date": "2026-11-03",
+  "scope": [
+    "carebase",
+    "caremetric-intel"
+  ],
+  "deferred": [
+    "breathe"
+  ],
+  "integratedMain": "ae413368c38337b9796cc341a1e8b8a6232d6dd3",
+  "compatibility": [
+    "Customer growth uses platform.agents.customer-growth.v1 independently of the website-lead Growth Manager feature.",
+    "Customer growth migrations follow the lead, lifecycle and content migrations and preserve their action kinds and target constraints.",
+    "Sales alerts and booking acknowledgments coexist with opt-in, reviewed guide answers for priority-product questions.",
+    "SEO catch-up retains existing Monday report deduplication keys and the newer Search Console and rewrite capabilities."
+  ],
+  "validation": {
+    "applicationTestsPassed": 2407,
+    "applicationTestFilesPassed": 216,
+    "sdkTestsPassed": 24,
+    "types": "passed",
+    "lint": "passed",
+    "docs": "passed",
+    "build": "passed",
+    "database": "isolated local Supabase PostgreSQL 15.1 with official auth and storage schema prerequisites",
+    "migrationChain": "passed",
+    "migrationFilesApplied": 140,
+    "sqlAssertionsPassed": 992,
+    "securityAdvisors": "no issues found",
+    "growthIntegration": "passed twice, including review regressions and teardown",
+    "compatibilityIntegrationsPassed": [
+      "backend contract",
+      "agent control plane",
+      "concierge",
+      "concierge drafting",
+      "account reports",
+      "agent hardening",
+      "model runtime",
+      "lead intake",
+      "website Growth Manager",
+      "lifecycle emails",
+      "Content Marketer"
+    ],
+    "syntheticEvaluationCasesPassed": 30,
+    "diffWhitespaceCheck": "passed"
+  },
+  "production": {
+    "modified": false,
+    "messagesSent": 0,
+    "deploymentRequired": true,
+    "nativeEventInstrumentationRequired": true,
+    "providerConfigurationRequired": true
+  }
+}

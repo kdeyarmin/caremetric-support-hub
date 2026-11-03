@@ -111,23 +111,22 @@ describe('the weekly SEO task', () => {
     expect(outcome).toMatchObject({ date: '2026-11-02', delivery: ['email:sent'], sites: [{ key: 'a', score: 90, top: [{ code: 'noindex', severity: 'high', count: 1, page: '/x' }] }, { key: 'b', top: [] }] });
   });
 
-  it('does nothing on the other mornings, so the report arrives once a week', async () => {
-    for (const iso of [tuesday, '2026-11-04T12:00:00Z', '2026-11-08T12:00:00Z']) {
-      const { handlers, notifier, audits } = fixture();
-      expect((await handlers['seo.weekly'](task(), at(iso))).result).toEqual({ skipped: 'not_monday' });
-      expect(audits).not.toHaveBeenCalled();
-      expect(notifier.send).not.toHaveBeenCalled();
-    }
+  it('catches up after Monday and skips a confirmed weekly delivery', async () => {
+    const caught=fixture();
+    await caught.handlers['seo.weekly'](task(),at(tuesday));
+    expect(caught.notifier.send.mock.calls[0][0].dedupeKey).toBe('seo:2026-11-02');
+    const done=fixture();done.store.notificationStatus=vi.fn(async()=> 'sent');
+    expect((await done.handlers['seo.weekly'](task(),at(tuesday))).result.skipped).toBe('already_attempted');
+    expect(done.audits).not.toHaveBeenCalled();
+    const failed=fixture();failed.store.notificationStatus=vi.fn(async()=> 'failed');
+    await failed.handlers['seo.weekly'](task(),at(tuesday));
+    expect(failed.notifier.send).toHaveBeenCalled();
   });
 
-  it('decides the weekday by Eastern time, not UTC', async () => {
-    // 03:30 UTC on Tuesday is still Monday evening in New York.
-    const { handlers, audits } = fixture();
-    await handlers['seo.weekly'](task(), at('2026-11-03T03:30:00Z'));
-    expect(audits).toHaveBeenCalledTimes(2);
-    const late = fixture();
-    // 03:30 UTC on Monday is still Sunday evening in New York.
-    expect((await late.handlers['seo.weekly'](task(), at('2026-11-02T03:30:00Z'))).result).toEqual({ skipped: 'not_monday' });
+  it('uses the Eastern week at the UTC Monday boundary', async () => {
+    const late=fixture();
+    await late.handlers['seo.weekly'](task(),at('2026-11-02T03:30:00Z'));
+    expect(late.notifier.send.mock.calls[0][0].dedupeKey).toBe('seo:2026-10-26');
   });
 
   it('runs on any day when the owner asks, and sends every time', async () => {

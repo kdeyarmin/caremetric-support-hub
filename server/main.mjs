@@ -25,6 +25,9 @@ import { leadAdmin, leadFeature, leadIntake, leadSecrets } from './leads.mjs';
 import { leadRetention } from './lead-retention.mjs';
 import { helpCenter } from './help-center.mjs';
 import { helpCenterOrigin } from './agents/content/facts.mjs';
+import { growthStore } from './growth/store.mjs';
+import { growthService } from './growth/service.mjs';
+import { growthResearch } from './growth/research.mjs';
 
 const storageUrl='https://xgauehtwksmnoqhgqegm.supabase.co';
 const pool=new pg.Pool(databaseConfig());
@@ -49,12 +52,14 @@ const messaging=communications({pool,delegations:capabilities,publicOrigin,
   twilioAuthToken:process.env.HUB_TWILIO_AUTH_TOKEN,sendgridInboundPublicKey:process.env.HUB_SENDGRID_INBOUND_PUBLIC_KEY,
   sms:textSender,email:mailSender,
   chatEnabled:process.env.HUB_CHAT_ENABLED==='true'});
+const growth=growthService({store:growthStore(pool),research:growthResearch({apiKey:process.env.HUB_GROWTH_SEARCH_API_KEY}),features:new Set(contract.features),enabled:process.env.HUB_GROWTH_SEND_ENABLED==='true',signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,publicOrigin,postalAddress:process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS});
+const growthMail=sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_BULK_EMAIL_FROM||'support@caremetric.ai',replyTo:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai'});
 // The owner's booking page, which the Concierge's sales acknowledgment may offer. A value it cannot use offers no link, and says so once.
 if(process.env.HUB_BOOKING_URL&&!bookingLink(process.env.HUB_BOOKING_URL)) console.warn('HUB_BOOKING_URL is not an https link of at most 200 characters, so the sales acknowledgment offers no booking link.');
 // The Account Manager's customer emails: from the support address, replies to it, one-click unsubscribe headers, and the postal address in every footer.
 const customerMail=sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai',replyTo:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai',category:'hub-lifecycle-email'});
 // The AI team: inert unless HUB_AGENTS_ENABLED is exactly "true", and every agent starts paused until the owner resumes it.
-const team=agentTeam({pool,sms:textSender,email:mailSender,ownerEmail:process.env.HUB_OWNER_EMAIL,publicOrigin,enabled:process.env.HUB_AGENTS_ENABLED==='true',communications:messaging,features,anthropicApiKey:process.env.ANTHROPIC_API_KEY,record:sqlAiUsageRecorder(pool).record,guides:guideLibrary({load:()=>api.rpc('list_published_content',{})}),customerTextToAi:process.env.HUB_AGENTS_CUSTOMER_TEXT_TO_AI==='true',
+const team=agentTeam({pool,growth,growthMail,postalAddress:process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS,sms:textSender,email:mailSender,ownerEmail:process.env.HUB_OWNER_EMAIL,publicOrigin,enabled:process.env.HUB_AGENTS_ENABLED==='true',communications:messaging,features,anthropicApiKey:process.env.ANTHROPIC_API_KEY,record:sqlAiUsageRecorder(pool).record,guides:guideLibrary({load:()=>api.rpc('list_published_content',{}),loadProducts:()=>api.rows('products')}),customerTextToAi:process.env.HUB_AGENTS_CUSTOMER_TEXT_TO_AI==='true',
   bookingUrl:process.env.HUB_BOOKING_URL||null,leadSecrets:leadSecrets(process.env),
   lifecycle:{mail:customerMail,postalAddress:(process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS||'').trim(),bookingUrl:process.env.HUB_BOOKING_URL||null}});
 const announcements=bulkEmail({pool,delegations:capabilities,publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin,postalAddress:(process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS||'').trim(),
@@ -84,7 +89,7 @@ console.info(`Website leads: ${leads.enabled()?'database ready':'waiting for the
 const setup=integrationSetup({rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
 // Public articles as HTML for crawlers, read exactly as an anonymous visitor's app reads them, at their canonical address.
 const help=helpCenter({load:()=>api.rpc('list_published_content',{}),origin:helpCenterOrigin});
-const server=appServer({auth:smsAuth({pool,provider}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,leads,leadAdmin:leadDesk,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help});
+const server=appServer({auth:smsAuth({pool,provider}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,growth,leads,leadAdmin:leadDesk,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help});
 let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;

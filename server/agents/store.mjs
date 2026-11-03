@@ -14,11 +14,13 @@ import { transaction } from '../sms-auth.mjs';
  * work can be handed back. Against a database without those operations the calls keep their old shape
  * and the extras are ignored, so a server can be deployed before the migration is applied.
  */
-export function sqlAgentStore(pool, { fenced = false } = {}) {
+export function sqlAgentStore(pool, { fenced = false, growth = false } = {}) {
   const call = (operation, args = []) => transaction(pool, async client =>
     (await client.query(`select ${operation}(${args.map((_, index) => `$${index + 1}`).join(', ')}) as result`, args)).rows[0].result);
   return {
     fenced,
+    ...(growth ? { deferExecution:(actionId,execution)=>call('private.growth_defer_action',[actionId,execution]) } : {}),
+    ...(growth ? { reserveBudget:(taskId,cents)=>call('private.growth_budget_reserve',[taskId,cents]),releaseBudget:id=>call('private.growth_budget_release',[id]),accountsPage: ({limit=200,offset=0}={})=>call('private.agent_accounts_page',[limit,offset]), notificationStatus: key=>call('private.growth_notification_status',[key]) } : {}),
     /** Turns due schedules of the given task kinds (the ones this server can handle) into tasks. */
     fireSchedules: (kinds, limit = 10) => call('private.agent_schedule_fire', [limit, kinds]),
     maintenance: () => call('private.agent_maintenance'),
@@ -57,7 +59,7 @@ export function sqlAgentStore(pool, { fenced = false } = {}) {
     notifyFinish: (id, delivery, providerMessageId = null) => call('private.agent_notify_finish', [id, delivery, providerMessageId]),
     ownerContact: () => call('private.owner_contact'),
     /** Counts and times for the morning brief: what needs the owner, what the team did yesterday. No names, no text. */
-    briefFacts: () => call('private.agent_brief_facts'),
+    briefFacts: async () => { const facts=await call('private.agent_brief_facts');return growth ? {...facts,customerGrowth:await call('private.growth_brief_counts')} : facts; },
     /** Conversations whose newest inbound message has settled and nobody has answered or triaged. Ids and counts only. */
     conciergePending: ({ limit = 10, settleSeconds = 90, windowHours = 72, channels = null } = {}) =>
       call('private.agent_concierge_pending', [limit, settleSeconds, windowHours, channels]),

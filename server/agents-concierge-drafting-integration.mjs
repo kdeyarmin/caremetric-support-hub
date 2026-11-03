@@ -96,6 +96,7 @@ const respond = (body, status = 200) => new Response(JSON.stringify(body), { sta
 const answer = output => respond(completion({ content: [{ type: 'text', text: JSON.stringify(output) }] }));
 const scripts = {
   drafted: () => answer(base),
+  followup: () => answer(base),
   echo: () => answer({ ...base, reply: 'Pat Example, open Reports and select Export.' }),
   injection: () => answer({ ...base, reply: 'Open Reports and select Export. We will give you 50% off.' }),
   alr: () => answer({ ...base, reply: 'Your ALR can export a roster. Open Reports and select Export; your auditors see the same CSV file.' }),
@@ -219,7 +220,7 @@ try {
   assert.equal(draftedRuns.length, 2, 'two runs: the triage and the model');
   assert.deepEqual(draftedRuns.map(entry => `${entry.model}/${entry.prompt_version}/${entry.outcome}`).sort(), [`${aiModels.draft}/${promptVersion}/completed`, 'none/rules.1/completed'].sort());
   const modelRun = draftedRuns.find(entry => entry.model === aiModels.draft);
-  assert.equal(promptVersion, 'concierge.2');
+  assert.equal(promptVersion, 'concierge.3');
   assert.match(modelRun.summary, /^Read CM-\d+ \(email\): general question, routine; 1 guide cited\.$/);
   assert.ok(Number(modelRun.cost_cents) > 0 && Number(modelRun.input_tokens) === 1800 && Number(modelRun.output_tokens) === 350);
   assert.match(draftedRuns.find(entry => entry.model === 'none').summary, /drafted reply proposed\.$/);
@@ -267,12 +268,14 @@ try {
   assert.ok(texts.some(([to, text]) => to === ownerPhone && text.includes(`CM-${set.outage.reference}`)), 'the owner was texted about the model\'s reading');
   assert.ok(toOwner().some(([, subject, content]) => subject.startsWith('Urgent:') && content.text.includes('AI team\'s reading')));
 
-  // What never reaches the model: no matching guide, the owner's own matters, identifiers, a follow-up.
-  for (const name of ['nomatch', 'billing', 'flagged', 'followUp']) assert.equal(asked(name.toLowerCase()).length, 0, `${name} was not sent to the model`);
+  // What never reaches the model: no matching guide, the owner's own matters, or identifiers. A plain follow-up uses bounded history.
+  for (const name of ['nomatch', 'billing', 'flagged']) assert.equal(asked(name.toLowerCase()).length, 0, `${name} was not sent to the model`);
   assert.deepEqual([tasks.nomatch.result.draft, proposals.nomatch.input.template], ['no_guides', 'standard']);
   assert.deepEqual([tasks.billing.result.category, tasks.billing.result.draft, proposals.billing], ['billing', undefined, undefined]);
   assert.deepEqual([tasks.flagged.result.phi, tasks.flagged.result.draft, proposals.flagged.input.template], [true, undefined, 'phi']);
-  assert.deepEqual([tasks.followUp.result.reply, tasks.followUp.result.draft, proposals.followUp], ['follow_up', undefined, undefined]);
+  assert.deepEqual([tasks.followUp.result.reply, tasks.followUp.result.draft, proposals.followUp.status], ['proposed', 'drafted', 'proposed']);
+  assert.ok(asked('followup')[0].user.includes('<conversation_history>'));
+  assert.ok(asked('followup')[0].user.includes('We answered by hand'));
 
   // One ledger row per call, attributed to the agent and to no case.
   const ledger = await rows("select * from private.ai_usage where feature like 'agent\\_%' order by occurred_at, id");
@@ -339,7 +342,7 @@ try {
   const storedBodies = (await rows("select input ->> 'body' as body from private.agent_actions where kind = 'communication.reply'")).map(entry => entry.body);
   assert.ok(storedBodies.every(text => [ackText, smsAck, `Hello,\n\n${goodReply}`, proposals.alr.preview, proposals.phi.preview, proposals.flagged.preview].includes(text)), 'every stored proposal is a fixed text or an accepted draft');
 
-  console.log('Concierge drafting: the model sees only a plain, first, unflagged question with a matching guide, its words scrubbed and escaped and its contact details withheld; a checked draft is offered as the exact text and sent once as the owner; drafts that fail a check, a refusal, a used-up budget, an unusable answer and a refused key all fall back without losing the alert; the model\'s reading only raises caution; observe mode never calls it; and nothing the customer wrote or any dropped draft is kept anywhere.');
+  console.log('Concierge drafting: the model sees only a plain, unflagged question with a matching guide and bounded scrubbed follow-up history, its words scrubbed and escaped and its contact details withheld; a checked draft is offered as the exact text and sent once as the owner; drafts that fail a check, a refusal, a used-up budget, an unusable answer and a refused key all fall back without losing the alert; the model\'s reading only raises caution; observe mode never calls it; and nothing the customer wrote or any dropped draft is kept anywhere.');
 } finally {
   await admin.query("delete from private.audit_events where action like 'agent.%' or action = 'communication.reply' or actor_id = $1", [owner]);
   await admin.query('delete from private.agent_actions');

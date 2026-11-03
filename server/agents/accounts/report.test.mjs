@@ -4,6 +4,11 @@ import { account, iso, item, now, snapshot, subscription } from './fixtures.mjs'
 import { composeAccountsReport, rowLimit } from './report.mjs';
 
 const origin = 'https://hub.example.test';
+it('reports missing adoption evidence independently of a financial watch band',()=>{
+ const report=composeAccountsReport({snapshot:snapshot([account({usage:[],subscriptions:[subscription({cancel_at_period_end:true})]})]),now,publicOrigin:origin});
+ expect(report.result).toMatchObject({watch:1,unknown:0});
+ expect(report.blocks.find(b=>b.type==='paragraph'&&b.text.includes('fresh adoption evidence')).text).toContain('1 account lacks fresh adoption evidence');
+});
 // Names and an amount distinctive enough that finding them anywhere they should not be is unmistakable.
 const book = [
   account({ slug: 'maple-grove', name: 'Maple Grove Senior Living', subscriptions: [subscription({ items: [item({ quantity: 2 })] })] }),
@@ -11,7 +16,7 @@ const book = [
   account({ slug: 'birch-hollow', name: 'Birch Hollow Manor', createdAt: iso(-5), subscriptions: [subscription({ status: 'trialing', trial_end: iso(3), created: iso(-5) })] }),
   account({ slug: 'oak-meadow', name: 'Oak Meadow Residence', subscriptions: [subscription({ cancel_at_period_end: true })] }),
   account({ slug: 'pine-court', name: 'Pine Court Homes', subscriptions: [subscription({ items: [item({ unit_amount: 120000, interval: 'year' })], current_period_end: iso(20) })] }),
-  account({ slug: 'elm-street', name: 'Elm Street Home', usage: [{ app: 'carebase', metric: 'facility', latest: 15, baseline: 10 }] }),
+  account({ slug: 'elm-street', name: 'Elm Street Home', usage: [{ app: 'carebase', metric: 'active_users', latest: 15, baseline: 10 }] }),
   account({ slug: 'old-tenant', name: 'Closed And Gone', status: 'closed', subscriptions: [subscription({ status: 'canceled', canceled_at: iso(-90), ended_at: iso(-90) })] }),
   account({ slug: 'zombie', name: 'Closed But Billing', status: 'closed' }),
   account({ slug: 'left-us', name: 'Walnut Place', subscriptions: [subscription({ status: 'canceled', canceled_at: iso(-3), ended_at: iso(-3) })] }),
@@ -92,7 +97,7 @@ describe('the weekly account report', () => {
       ['MRR', '$443.00'], ['ARR', '$5,316.00'], ['Trial MRR, not yet paying', '$49.00'],
       ['New subscriptions this week', '2'], ['Lost this week', '1'], ['Past due', '1'],
     ]);
-    expect(rowsOf(report, 'Accounts')).toEqual([['Healthy', '3'], ['Watch', '3'], ['At risk', '0'], ['New, not scored', '2'], ['No live subscription', '1']]);
+    expect(rowsOf(report, 'Accounts')).toEqual([['Healthy', '3'], ['Adoption unknown', '0'], ['Watch', '3'], ['At risk', '0'], ['New, not scored', '2'], ['No live subscription', '1']]);
   });
 
   it('leaves a closed account with nothing live out, and keeps one that still bills', () => {
@@ -107,7 +112,7 @@ describe('the weekly account report', () => {
     expect(report.subject).toBe('Weekly accounts: 9 accounts, 4 need you');
     expect(report.body).toBe('9 accounts: 3 healthy, 3 watch, 0 at risk, 2 new. 4 need you.');
     expect(report.result).toEqual({
-      accounts: 9, needsYou: 4, healthy: 3, watch: 3, atRisk: 0, newAccounts: 2, inactive: 1, renewals: 1, expansion: 1, trialsEnding: 1, truncated: false,
+      accounts: 9, needsYou: 4, healthy: 3, unknown: 0, watch: 3, atRisk: 0, newAccounts: 2, inactive: 1, renewals: 1, expansion: 1, trialsEnding: 1, truncated: false,
     });
     const stored = JSON.stringify([report.subject, report.body, report.result]);
     for (const secret of ['Maple Grove', 'Cedar Ridge', 'Birch Hollow', 'Oak Meadow', 'Pine Court', 'Elm Street', 'Walnut', 'Hickory', '$', '443', '98.00', 'carebase']) expect(stored, secret).not.toContain(secret);
@@ -138,7 +143,7 @@ describe('the weekly account report', () => {
   it('notes mixed currencies and carries the Billing-screen and scoring footnotes', () => {
     const text = blocks => blocks.filter(block => block.type === 'paragraph').map(block => block.text).join('\n');
     expect(text(compose().blocks)).toContain('Revenue uses the same figures as the Billing screen');
-    expect(text(compose().blocks)).toContain('Scoring version health.1');
+    expect(text(compose().blocks)).toContain('Scoring version health.2');
     expect(text(compose().blocks)).not.toContain('more than one currency');
     const euro = account({ name: 'Euro Home', subscriptions: [subscription({ items: [item({ currency: 'eur' })] })] });
     expect(text(compose([...book, euro]).blocks)).toContain('more than one currency');

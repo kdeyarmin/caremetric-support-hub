@@ -9,6 +9,7 @@ const fixture = ({ ready = [], started = execution(), executors = {} } = {}) => 
     beginExecution: vi.fn(async () => started),
     completeExecution: vi.fn(async () => undefined),
     releaseExecution: vi.fn(async () => true),
+    deferExecution: vi.fn(async () => true),
   };
   return { store, logs, executor: actionExecutor({ store, executors, log: line => logs.push(line) }) };
 };
@@ -53,6 +54,27 @@ describe('action executor', () => {
     const { executor, store } = fixture({ executors: { 'communication.reply': async () => { throw Object.assign(new Error('x'), { code: 'channel_unavailable' }); } } });
     expect(await executor.executeOne('a1')).toMatchObject({ failed: true, error: 'channel_unavailable' });
     expect(store.completeExecution).toHaveBeenCalledWith('a1', false, { error: 'channel_unavailable' }, null);
+  });
+
+  it('persists a deferred growth action with its execution number instead of immediately releasing it', async () => {
+    const deferred = async () => { throw Object.assign(new Error('Rate limited'), { code: 'action_deferred' }); };
+    const { executor, store } = fixture({ started: execution({ kind: 'growth.message', execution: 3 }), executors: { 'growth.message': deferred } });
+    expect(await executor.executeOne('a1')).toMatchObject({ skipped: true, failed: false, needsSession: false });
+    expect(store.deferExecution).toHaveBeenCalledWith('a1', 3);
+    expect(store.releaseExecution).not.toHaveBeenCalled();
+    expect(store.completeExecution).not.toHaveBeenCalled();
+  });
+
+  it('fails visibly if a deferral cannot be persisted, without putting it back at the front of the queue', async () => {
+    for (const defer of [undefined, async () => false, async () => { throw new Error('database unavailable'); }]) {
+      const { executor, store } = fixture({ started: execution({ kind: 'growth.message', execution: 2 }), executors: {
+        'growth.message': async () => { throw Object.assign(new Error('Paused'), { code: 'action_deferred' }); },
+      } });
+      store.deferExecution = defer;
+      expect(await executor.executeOne('a1')).toMatchObject({ failed: true, error: 'action_deferred' });
+      expect(store.releaseExecution).not.toHaveBeenCalled();
+      expect(store.completeExecution).toHaveBeenCalledWith('a1', false, { error: 'action_deferred' }, 2);
+    }
   });
 
   it('drains every ready action and carries on past one that cannot be started', async () => {

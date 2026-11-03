@@ -1,0 +1,53 @@
+{
+  "review_date": "2026-11-03",
+  "source_commit": "2cae5b843ee9ad99809258bfdad8acc134ab4f35",
+  "production_snapshot_window_utc": "2026-11-03 05:57–05:59",
+  "priority_products": ["carebase", "caremetric-intel"],
+  "deferred_product": "breathe",
+  "method": "Read-only aggregate SQL, repository inspection, existing focused tests and synthetic function calls. No customer names, contact addresses or message bodies retained in this artifact.",
+  "production_observations": {
+    "active_agents": 5,
+    "all_agents_autonomy": "observe",
+    "marketing_agent_present": false,
+    "completed_probe_sweeps_at_snapshot": 72,
+    "completed_concierge_sweeps_at_snapshot": 71,
+    "completed_concierge_triage_tasks": 1,
+    "recorded_runs": 6,
+    "recorded_input_and_output_tokens": 0,
+    "agent_action_records": 0,
+    "awaiting_session_task_kinds": ["import.advisors", "import.breathe"],
+    "next_brief_utc": "2026-11-03T12:00:00Z",
+    "next_account_report_utc": "2026-11-03T12:15:00Z",
+    "billing_mode": "live",
+    "hub_tenants": 2,
+    "live_billing_customers": 2,
+    "live_billing_customers_with_email": 1,
+    "live_trial_subscriptions": 2,
+    "trial_end_utc": {
+      "carebase": "2026-11-26T05:04:00Z",
+      "caremetric-intel": "2026-11-10T05:54:26Z"
+    },
+    "usage_report_count": 1,
+    "usage_report_product": "carebase",
+    "usage_report_metric": "facility",
+    "latest_usage_report_utc": "2026-10-27T05:04:17.732695Z",
+    "intel_usage_reports": 0,
+    "bulk_email_campaign_records": 0,
+    "published_article_counts_by_placement": {"carebase": 79, "caremetric-intel": 8},
+    "latest_migration": "20261102180100_agent_hardening_contract"
+  },
+  "synthetic_reproductions": [
+    {"scenario": "Mature otherwise healthy account with no usage evidence", "score": 100, "band": "healthy", "attention": false, "reasons": []},
+    {"scenario": "Mature otherwise healthy account with latest usage 0 and baseline 10", "score": 75, "band": "healthy", "attention": false, "reasons": ["usage_stopped"]},
+    {"scenario": "Mature otherwise healthy account with equal readings 90 and 120 days old", "score": 100, "band": "healthy", "attention": false, "reasons": []},
+    {"scenario": "Export-roster instructions appear only in an article body, with generic title and summary", "retrieved_articles": 0}
+  ],
+  "test_result": {"passed_files": 38, "passed_tests": 585, "duration_seconds": 6.01},
+  "limitations": [
+    "Hub billing rows may include internal accounts and do not prove the complete portfolio customer count.",
+    "Zero recorded model tokens does not prove that the deployed model credential or drafting switch is disabled.",
+    "Native Intel prospecting features are described in historical source-derived documentation and were not production-verified.",
+    "Code tests do not establish model-answer quality or business performance.",
+    "No production configuration changes, messages or new agent capabilities were deployed."
+  ]
+}

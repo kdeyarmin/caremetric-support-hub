@@ -1,0 +1,16 @@
+begin;
+select plan(12);
+select ok(hub.get_backend_contract()->'features' @> '["platform.agents.customer-growth.v1"]', 'Growth feature is declared');
+select ok((select status='paused' and autonomy='propose' from private.agents where key='marketing_manager'), 'Marketing starts paused in proposal mode');
+select is((select count(*)::integer from private.growth_policies where not enabled and not auto_send),2,'Both products start with sending disabled');
+select is((select count(*)::integer from private.growth_policies where product='breathe'),0,'Breathe has no growth policy');
+select ok(bool_and(c.relrowsecurity), 'Every growth table has RLS') from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='private' and c.relname in ('growth_organizations','growth_contacts','growth_opportunities','growth_evidence','growth_policies','growth_messages','growth_delivery_events','customer_activity_events','customer_success_plans','agent_evaluations','agent_budget_reservations');
+select ok(not bool_or(has_table_privilege(r,t,'select,insert,update,delete')), 'Neither app role nor browser roles read private contacts or messages directly') from unnest(array['anon','authenticated','service_role','hub_app_server']) r cross join unnest(array['private.growth_contacts','private.growth_messages','private.customer_activity_events']) t;
+select throws_ok($$select private.growth_snapshot(0)$$,'42501','Application server required.','Worker operations reject the wrong session user');
+select ok(not has_function_privilege('anon','hub.growth_workspace(integer)','execute') and has_function_privilege('authenticated','hub.growth_workspace(integer)','execute'),'Owner endpoint is exposed only to authenticated sessions and checks authority inside');
+select throws_ok($$insert into private.growth_policies(product) values('breathe')$$,'23514',null,'Breathe is rejected at the data boundary');
+select has_column('private','agent_actions','not_before','Deferred actions have a durable retry time');
+select ok(has_function_privilege('hub_app_server','private.growth_defer_action(uuid,integer)','execute') and not has_function_privilege('authenticated','private.growth_defer_action(uuid,integer)','execute'),'Only the app server may defer growth actions');
+select throws_ok($$select private.growth_defer_action(gen_random_uuid(),1)$$,'42501','Application server required.','Deferral rejects the wrong session user');
+select * from finish();
+rollback;
