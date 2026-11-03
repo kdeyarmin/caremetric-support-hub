@@ -6,6 +6,7 @@ import { agentAdmin } from './admin.mjs';
 import { builtInHandlers } from './tasks/index.mjs';
 import { conciergeExecutors, draftingFor } from './concierge/index.mjs';
 import { lifecycleExecutors } from './accounts/executor.mjs';
+import { contentExecutors } from './content/executor.mjs';
 import { modelRuntime } from './runtime/index.mjs';
 
 const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
@@ -19,8 +20,9 @@ const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
  * agent also starts paused in the database until the owner resumes it.
  * `model` is the shared model runtime (runtime/): built from `anthropicApiKey` unless one is given,
  * and handed to function-style `handlers` beside the store and the notifier. `record` writes the
- * usage ledger. The only handler that calls the model is the Concierge's triage, and only when
- * `customerTextToAi` (the owner's switch) is true, a key is set and `guides` (the guide library) is given.
+ * usage ledger. The Concierge's triage calls the model only when `customerTextToAi` (the owner's switch) is true, a key is set
+ * and `guides` (the guide library) is given; the Content Marketer's tasks (no customer text at all) only when a key is set and
+ * the database declares platform.agents.content.v1.
  * `lifecycle` is how the Account Manager sends customer emails: `{ mail, postalAddress, bookingUrl }` (a SendGrid sender with
  * one-click unsubscribe headers, the footer's postal address and the owner's optional booking link); the unsubscribe link uses
  * `publicOrigin`. Without them nothing is proposed or sent, and the daily run says what is missing.
@@ -38,7 +40,7 @@ export function agentTeam({
   const customerEmail = { ...(lifecycle ?? {}), publicOrigin };
   const actions = actionExecutor({ store, executors: {
     ...recordOnlyExecutors, ...conciergeExecutors({ communications, store, notifier, features, log }), ...lifecycleExecutors({ store, features, lifecycle: customerEmail, log }),
-    ...(typeof executors === 'function' ? executors(shared) : executors),
+    ...contentExecutors({ store, features, log }), ...(typeof executors === 'function' ? executors(shared) : executors),
   }, log });
   // The handlers every server ships with, then any the caller adds (a caller's handler for the same kind wins).
   const registry = { ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, lifecycle: customerEmail, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };

@@ -20,6 +20,8 @@ import { platformBilling } from './billing.mjs';
 import { selfService } from './self-service.mjs';
 import { agentTeam } from './agents/index.mjs';
 import { guideLibrary } from './agents/concierge/knowledge.mjs';
+import { helpCenter } from './help-center.mjs';
+import { helpCenterOrigin } from './agents/content/facts.mjs';
 
 const storageUrl='https://xgauehtwksmnoqhgqegm.supabase.co';
 const pool=new pg.Pool(databaseConfig());
@@ -66,7 +68,9 @@ const billingTimer=setInterval(()=>{
 },60*1000);billingTimer.unref();
 const readiness=goLiveReadiness({pool,rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
 const setup=integrationSetup({rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
-const server=appServer({auth:smsAuth({pool,provider}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
+// Public articles as HTML for crawlers, read exactly as an anonymous visitor's app reads them, at their canonical address.
+const help=helpCenter({load:()=>api.rpc('list_published_content',{}),origin:helpCenterOrigin});
+const server=appServer({auth:smsAuth({pool,provider}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help});
 let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;

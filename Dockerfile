@@ -1,4 +1,4 @@
-FROM node:24-alpine AS build
+FROM node:24.22.1-alpine AS build
 WORKDIR /app
 ARG VITE_DEMO_MODE
 ARG VITE_SUPABASE_URL
@@ -17,7 +17,7 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:24-alpine AS runtime
+FROM node:24.22.1-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/package.json /app/package-lock.json ./
@@ -26,6 +26,7 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/server ./server
 COPY --from=build /app/src/domain.ts /app/src/hubScope.ts ./src/
 COPY --from=build /app/src/lib/backendContract.ts ./src/lib/backendContract.ts
+COPY --from=build /app/src/lib/markdown.ts ./src/lib/markdown.ts
 COPY --from=build /app/src/admin/configurationProtocol.ts ./src/admin/configurationProtocol.ts
 COPY --from=build /app/src/billing/billingProtocol.ts ./src/billing/billingProtocol.ts
 COPY --from=build /app/src/billing/billingMath.ts /app/src/billing/customerBillingProtocol.ts /app/src/billing/facilityAllocations.ts /app/src/billing/facilityEntitlements.ts /app/src/billing/planSize.ts ./src/billing/

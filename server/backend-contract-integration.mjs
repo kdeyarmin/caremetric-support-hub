@@ -30,6 +30,7 @@ const conciergeContract=await readFile(new URL('../supabase/migrations/202611021
 const accountsContract=await readFile(new URL('../supabase/migrations/20261102170100_agent_accounts_contract.sql',import.meta.url),'utf8');
 const hardeningContract=await readFile(new URL('../supabase/migrations/20261102180100_agent_hardening_contract.sql',import.meta.url),'utf8');
 const lifecycleContract=await readFile(new URL('../supabase/migrations/20261103140100_agent_lifecycle_contract.sql',import.meta.url),'utf8');
+const contentContract=await readFile(new URL('../supabase/migrations/20261103150100_agent_content_contract.sql',import.meta.url),'utf8');
 const diagnosticSupportContract=diagnosticSupportMigration.slice(diagnosticSupportMigration.indexOf('do $$ declare contract'));
 assert.ok(selfServiceContract.startsWith('-- Contract publication is last:'),'Recognize the self-service contract declaration');
 const structureMigration=await readFile(new URL('../supabase/migrations/20260911202823_learning_structure_backend_contract.sql',import.meta.url),'utf8');
@@ -103,7 +104,7 @@ try {
   try {
     const latest=await readContract();
     // The AI team declarations are the newest features (declared ahead of the build that will require them): replay history without them, then replay their gates last, in order.
-    const current={...latest,features:latest.features.filter(feature=>!['platform.agents.v1','platform.agents.probes.v1','platform.agents.brief.v1','platform.agents.seo.v1','platform.agents.concierge.v1','platform.agents.accounts.v1','platform.agents.hardening.v1','platform.agents.lifecycle.v1'].includes(feature))};
+    const current={...latest,features:latest.features.filter(feature=>!['platform.agents.v1','platform.agents.probes.v1','platform.agents.brief.v1','platform.agents.seo.v1','platform.agents.concierge.v1','platform.agents.accounts.v1','platform.agents.hardening.v1','platform.agents.lifecycle.v1','platform.agents.content.v1'].includes(feature))};
     // Platform billing replaced three app-specific billing features. Replay history with them in their original places.
     const before={...current,features:current.features.filter(feature=>!['billing.platform.v1','customer.self-service.v1','support.manual-escalation.v1','support.customer-diagnostics.v1','billing.customer-checkout.v1','billing.facility-entitlements.v1'].includes(feature)).flatMap(feature=>
       feature==='learning.draft-editing.v1'?[feature,'billing.portal.v1']
@@ -220,7 +221,9 @@ try {
     await client.query(hardeningContract);
     assert.deepEqual(await readContract(),{...current,features:[...current.features,'platform.agents.v1','platform.agents.probes.v1','platform.agents.brief.v1','platform.agents.seo.v1','platform.agents.concierge.v1','platform.agents.accounts.v1','platform.agents.hardening.v1']},'The AI team hardening declaration adds only its own feature');
     await client.query(lifecycleContract);
-    assert.deepEqual(await readContract(),latest,'The customer email declaration restores the exact current feature set');
+    assert.deepEqual(await readContract(),{...current,features:[...current.features,'platform.agents.v1','platform.agents.probes.v1','platform.agents.brief.v1','platform.agents.seo.v1','platform.agents.concierge.v1','platform.agents.accounts.v1','platform.agents.hardening.v1','platform.agents.lifecycle.v1']},'The customer email declaration adds only its own feature');
+    await client.query(contentContract);
+    assert.deepEqual(await readContract(),latest,'The Content Marketer declaration restores the exact current feature set');
     assertBackendContract(await readContract());
     assert.throws(()=>assertBackendContract({...latest,features:latest.features.filter(feature=>feature!=='billing.platform.v1')}),/incompatible/);
   } finally { await client.query('rollback'); }
