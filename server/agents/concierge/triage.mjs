@@ -124,19 +124,24 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
    * scheduler retries it; any other failure ends in `unavailable`, and the fixed acknowledgment is offered instead.
    */
   async function askModel({ task, snapshot, inbound, route, signal }) {
+    const prior=drafting.followups?(snapshot.messages??[]).filter(m=>m.id!==inbound.id).slice(-2):[];
+    if(prior.some(m=>m.body.length>=readChars))return {state:'unavailable',reason:'thread_truncated'};
+    if(prior.some(m=>screenIdentifiers(m.body).flagged))return {state:'phi',phi:true};
+    if(prior.some(m=>{const c=categorize({text:m.body}).category;return c && c!=='general' && c!=='sales';}))return {state:'owner_only'};
+    const history=prior.map(m=>({direction:m.direction,text:redact(m.body,{limit:1000}).text}));
     const text = redact(inbound.body);
     if (text.text.length < 8) return { state: 'no_text' };
     const subject = snapshot.channel === 'email' && snapshot.subject ? redact(snapshot.subject, { limit: 300 }).text : null;
     // The alert is already sent: whatever goes wrong here, the message still gets its acknowledgment.
     let guides = [];
-    try { guides = await drafting.guides.top(`${subject ?? ''} ${text.text}`); } catch { return { state: 'no_guides' }; }
+    try { guides = await drafting.guides.top(`${subject ?? ''} ${text.text}`, { productSlug: snapshot.productSlug }); } catch { return { state: 'no_guides' }; }
     if (!Array.isArray(guides) || guides.length === 0) return { state: 'no_guides' };
     const effort = efforts.has(task.agent?.config?.effort) ? task.agent.config.effort : 'low';
     let result;
     try {
       result = await drafting.model.run(task, {
         promptVersion, system: [{ text: systemPrompt, cache: true }], schema: responseSchema, effort, maxTokens: 4000,
-        user: buildUserMessage({ channel: snapshot.channel, productSlug: snapshot.productSlug, inboundCount: snapshot.inboundCount ?? 1, subject, text: text.text, guides }),
+        user: buildUserMessage({ channel: snapshot.channel, productSlug: snapshot.productSlug, inboundCount: snapshot.inboundCount ?? 1, subject, text: text.text, guides, history }),
         describe: output => `Read CM-${snapshot.reference} (${channelWord(snapshot.channel)}): ${categoryWord(output.category)}, ${output.urgency}${output.possiblePhi ? ', possible identifiers' : ''}; ${plural(output.citations.length, 'guide')} cited.`,
       }, { signal });
     } catch (error) {
@@ -156,7 +161,7 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
     if (category !== 'general') return { state: 'owner_only', ...found };
     if (reading.needsOwner || !reading.canAnswerFromGuides || !reading.reply.trim()) return { state: 'no_answer', ...found };
     // The model saw the subject as well as the body, so a name or a quotation taken from either is caught.
-    const checked = checkDraft({ reply: reading.reply, citations: reading.citations, guides, text: subject ? `${subject}\n${text.text}` : text.text, route });
+    const checked = checkDraft({ reply: reading.reply, citations: reading.citations, guides, text: [subject,text.text,...history.map(m=>m.text)].filter(Boolean).join('\n'), route });
     if (!checked.ok) return { state: 'rejected', reason: checked.reason, ...found };
     return { state: 'drafted', draft: { ...checked, sources: checked.citations.map(id => guides[Number(id.slice(1)) - 1].title) }, ...found };
   }
@@ -168,7 +173,7 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
     if (unread) return { reply: 'owner_only' };
     const template = draft ? 'drafted' : replyFor({ category, phi, productSlug: snapshot.productSlug, inquiryType: snapshot.inquiryType });
     if (!template) return { reply: 'owner_only' };
-    if ((snapshot.outboundCount ?? 0) > 0) return { reply: 'follow_up', template };
+    if ((snapshot.outboundCount ?? 0) > 0 && !draft) return { reply: 'follow_up', template };
     if (task.agent?.autonomy === 'observe') return { reply: 'observe_only', template };
     const route = replyRoute(snapshot);
     if (!route) return { reply: 'no_route', template };
@@ -200,7 +205,7 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
     const payload = task.payload ?? {};
     if (!uuid.test(payload.communicationId ?? '') || !uuid.test(payload.messageId ?? '')) throw permanent('invalid_payload');
     const settings = conciergeSettings(task.agent?.config);
-    const snapshot = await store.communicationSnapshot({ id: payload.communicationId, messages: 1, chars: readChars });
+    const snapshot = await store.communicationSnapshot({ id: payload.communicationId, messages: drafting?.followups ? 3 : 1, chars: readChars });
     const skip = skipReason(snapshot, payload, settings);
     if (skip) return { result: { outcome: 'skipped', reason: skip, reference: snapshot?.reference ?? null } };
     const inbound = (snapshot.messages ?? []).find(message => message.id === snapshot.latestInboundId);
@@ -221,16 +226,16 @@ export function triageHandler({ store, notifier, drafting = null, log = line => 
     const words = alertWords({ category: ruleCategory, phi: screen.flagged, severity, channel: snapshot.channel, productSlug: snapshot.productSlug, reference: snapshot.reference, minutes, unread });
     const delivery = await tellOwner({ task, snapshot, payload, words, severity, now });
 
-    // The model sees a message only if it is one the Concierge would offer a fixed acknowledgment for anyway: a plain, first, unflagged
-    // question the owner has not taken over, to a conversation that can be answered, from an agent allowed to propose. The owner's own
-    // matters (an outage, billing, a sale, anything with identifiers) never leave the Hub.
+    // Ordinary product questions may use reviewed guides, including bounded follow-ups when the growth feature is present.
+    // Pricing, cancellation, incidents and identifiers remain owner-only; the existing customer-text opt-in still applies.
     let category = ruleCategory;
     let phi = screen.flagged;
     let asked = null;
     const route = replyRoute(snapshot);
     const eligible = drafting && !screen.flagged && !unread && route !== null && task.agent?.autonomy !== 'observe'
-      && (snapshot.inboundCount ?? 1) === 1 && (snapshot.outboundCount ?? 0) === 0
-      && replyFor({ category: ruleCategory, phi: false, productSlug: snapshot.productSlug, inquiryType: snapshot.inquiryType }) === 'standard';
+      && (drafting.followups || ((snapshot.inboundCount ?? 1) === 1 && (snapshot.outboundCount ?? 0) === 0))
+      && (replyFor({ category: ruleCategory, phi: false, productSlug: snapshot.productSlug, inquiryType: snapshot.inquiryType }) === 'standard'
+        || (drafting.followups && ruleCategory==='general' && ['carebase','caremetric-intel'].includes(snapshot.productSlug) && snapshot.inquiryType==='sales'));
     if (eligible) {
       asked = await askModel({ task, snapshot, inbound, route, signal });
       // The scheduler has stopped waiting for this task: nothing more is sent or proposed from here.

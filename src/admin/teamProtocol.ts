@@ -97,12 +97,12 @@ export const tierLabels = { fast: "Fast (Haiku)", draft: "Draft (Sonnet)", quali
 const taskLabels: Record<string, string> = {
   "probe.sweep": "Health check", "probe.incident": "Handle an incident", "probe.recovery": "Write a recovery note",
   "brief.daily": "Morning brief", "seo.weekly": "Weekly SEO check", "concierge.sweep": "Look for new messages", "concierge.communication": "Triage a message",
-  "import.advisors": "Import Advisors requests", "import.breathe": "Import phone messages", "accounts.weekly": "Weekly account report",
+  "import.advisors": "Import Advisors requests", "import.breathe": "Import phone messages", "accounts.weekly": "Weekly account report", "growth.pipeline": "Review sales pipeline", "growth.success": "Review customer success", "growth.discovery": "Discover prospective organizations", "growth.content": "Propose product content",
 };
 export const taskLabel = (kind: string) => taskLabels[kind] ?? kind;
 
 const actionLabels: Record<string, string> = {
-  "communication.reply": "Reply to a customer", "communication.note": "Add an internal note", "communication.update": "Update a conversation",
+  "growth.message": "Send a reviewed growth message", "growth.content": "Approve a product content brief", "communication.reply": "Reply to a customer", "communication.note": "Add an internal note", "communication.update": "Update a conversation",
   "incident.open": "Open an incident", "incident.resolve": "Resolve an incident", "import.run": "Import messages",
 };
 export const actionLabel = (kind: string) => actionLabels[kind] ?? kind;

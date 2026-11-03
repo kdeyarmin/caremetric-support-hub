@@ -12,5 +12,6 @@ export const account = (over = {}) => ({
   customer: { delinquent: false, balanceCents: 0, hasEmail: true }, subscriptions: [subscription()],
   invoices: { open: 0, overdue: 0, remainingCents: 0, oldestOverdueDue: null, latestPaidAt: iso(-5) },
   usage: [], cases: { waitingOnYou: 0, highOrUrgent: 0, waitingOnCustomer: 0, oldestOpenAt: null }, ...over,
+  usage: (over.usage ?? [{app:'carebase',metric:'active_users',latest:10,baseline:10}]).map(entry=>({latestAt:iso(-1),baselineAt:iso(-29),...entry})),
 });
 export const snapshot = (accounts, over = {}) => ({ generatedAt: now.toISOString(), mode: 'live', total: accounts.length, truncated: false, coupons: [], accounts, ...over });

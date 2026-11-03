@@ -1,0 +1,184 @@
+{
+  "date": "2026-11-03",
+  "baseCommit": "2cae5b843ee9ad99809258bfdad8acc134ab4f35",
+  "scope": [
+    "carebase",
+    "caremetric-intel"
+  ],
+  "deferred": [
+    "breathe"
+  ],
+  "application": {
+    "testsPassed": 1999,
+    "filesPassed": 189,
+    "sdkTestsPassed": 24,
+    "types": "passed",
+    "lint": "passed",
+    "build": "passed",
+    "docs": "passed"
+  },
+  "database": {
+    "environment": "isolated local Supabase PostgreSQL 15.1; official auth and storage schema migrations",
+    "cleanMigrationChain": "passed",
+    "sqlAssertionsPassed": 686,
+    "integrationsPassed": [
+      "growth (including repeated teardown)",
+      "agent control plane",
+      "account report and 300-account pagination",
+      "agent hardening",
+      "concierge drafting and bounded follow-ups",
+      "signed communications",
+      "backend contract"
+    ],
+    "finalEvidenceRefreshRegression": "passed after the owner-evidence upsert change"
+  },
+  "evaluations": [
+    {
+      "product": "carebase",
+      "version": "growth.1",
+      "passed": true,
+      "results": [
+        {
+          "name": "initial outreach",
+          "passed": true
+        },
+        {
+          "name": "reply stops sequence",
+          "passed": true
+        },
+        {
+          "name": "touch cap",
+          "passed": true
+        },
+        {
+          "name": "internal excluded",
+          "passed": true
+        },
+        {
+          "name": "Breathe excluded",
+          "passed": true
+        },
+        {
+          "name": "stale sources rejected",
+          "passed": true
+        },
+        {
+          "name": "missing telemetry is unknown",
+          "passed": true
+        },
+        {
+          "name": "fresh feed and stalled use triggers recovery",
+          "passed": true
+        },
+        {
+          "name": "cancellation routes to recovery",
+          "passed": true
+        },
+        {
+          "name": "cited output requires review",
+          "passed": true
+        },
+        {
+          "name": "invented citation rejected",
+          "passed": true
+        },
+        {
+          "name": "unapproved link rejected",
+          "passed": true
+        },
+        {
+          "name": "unsupported commitment abstains",
+          "passed": true
+        },
+        {
+          "name": "missing approved claim abstains",
+          "passed": true
+        },
+        {
+          "name": "intent stays unknown without customer action",
+          "passed": true
+        }
+      ],
+      "scope": "synthetic behavioral guardrails; live model quality and conversion require reviewed pilot results"
+    },
+    {
+      "product": "caremetric-intel",
+      "version": "growth.1",
+      "passed": true,
+      "results": [
+        {
+          "name": "initial outreach",
+          "passed": true
+        },
+        {
+          "name": "reply stops sequence",
+          "passed": true
+        },
+        {
+          "name": "touch cap",
+          "passed": true
+        },
+        {
+          "name": "internal excluded",
+          "passed": true
+        },
+        {
+          "name": "Breathe excluded",
+          "passed": true
+        },
+        {
+          "name": "stale sources rejected",
+          "passed": true
+        },
+        {
+          "name": "missing telemetry is unknown",
+          "passed": true
+        },
+        {
+          "name": "fresh feed and stalled use triggers recovery",
+          "passed": true
+        },
+        {
+          "name": "cancellation routes to recovery",
+          "passed": true
+        },
+        {
+          "name": "cited output requires review",
+          "passed": true
+        },
+        {
+          "name": "invented citation rejected",
+          "passed": true
+        },
+        {
+          "name": "unapproved link rejected",
+          "passed": true
+        },
+        {
+          "name": "unsupported commitment abstains",
+          "passed": true
+        },
+        {
+          "name": "missing approved claim abstains",
+          "passed": true
+        },
+        {
+          "name": "intent stays unknown without customer action",
+          "passed": true
+        }
+      ],
+      "scope": "synthetic behavioral guardrails; live model quality and conversion require reviewed pilot results"
+    }
+  ],
+  "production": {
+    "modified": false,
+    "messagesSent": 0,
+    "deploymentRequired": true,
+    "nativeEventInstrumentationRequired": true,
+    "providerConfigurationRequired": true
+  },
+  "limits": [
+    "Synthetic evaluations test behavioral boundaries, not live-model quality or campaign conversion.",
+    "Native authenticated product journeys and provider delivery require configured deployment and a reviewed pilot."
+  ]
+}

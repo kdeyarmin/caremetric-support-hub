@@ -55,8 +55,12 @@ export function actionExecutor({ store, executors = {}, log = line => console.wa
         ok = true;
       } catch (error) {
         const code = codeOf(error);
-        // A session that lapsed before anything was sent is not a failure: the action goes back to the state it was approved in
-        // and waits for the owner's next press. If the database cannot hand it back, it is recorded as failed, as it always was.
+        // Growth deferrals get a durable retry time; immediately releasing them would starve later ready actions.
+        if (code === 'action_deferred'
+          && await Promise.resolve(store.deferExecution?.(execution.id, execution.execution ?? null)).catch(() => false) === true) {
+          return { executed: false, failed: false, skipped: true, needsSession: false };
+        }
+        // A session that lapsed before anything was sent waits for the owner's next press.
         if (code === 'session_required' && executor.requiresSession === true
           && await Promise.resolve(store.releaseExecution?.(execution.id, execution.execution ?? null)).catch(() => false) === true) {
           return { executed: false, failed: false, skipped: true, needsSession: true };

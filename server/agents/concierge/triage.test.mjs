@@ -320,11 +320,11 @@ const reading = (over = {}) => ({
 });
 const done = (output = reading()) => ({ outcome: 'completed', output, costCents: 1.2, model: 'm', runId: 'run-9', requestId: 'req_1' });
 
-const withModel = ({ snapshot = snapshotOf(`How do I export the staff roster by month? ${canary}`), result = done(), guides = guideList, counts = {}, drafting = true } = {}) => {
+const withModel = ({ snapshot = snapshotOf(`How do I export the staff roster by month? ${canary}`), result = done(), guides = guideList, counts = {}, drafting = true, followups = false } = {}) => {
   const base = fixture({ snapshot, counts });
   const model = { configured: true, run: vi.fn(async () => (typeof result === 'function' ? result() : result)) };
   const library = { top: vi.fn(async () => guides) };
-  const handler = triageHandler({ store: base.store, notifier: base.notifier, drafting: drafting ? { model, guides: library } : null, log: line => base.logs.push(line) });
+  const handler = triageHandler({ store: base.store, notifier: base.notifier, drafting: drafting ? { model, guides: library, followups } : null, log: line => base.logs.push(line) });
   return { ...base, model, library, run: (task = taskOf(), context = {}) => handler(task, { now, ...context }) };
 };
 const proposals = harness => harness.store.proposeAction.mock.calls.map(([call]) => call);
@@ -722,4 +722,21 @@ describe('a long message that opens like an automatic reply', () => {
     expect((await short.run()).result).toMatchObject({ outcome: 'skipped', reason: 'auto_reply' });
     expect(short.sent).toHaveLength(0);
   });
+});
+
+it('uses bounded scrubbed history for a reviewed follow-up when the growth capability is enabled',async()=>{
+ const snapshot=snapshotOf('How do I export the staff roster by month?',{inboundCount:2,outboundCount:1});
+ snapshot.messages.unshift({id:'prior',direction:'outbound',body:'Open Reports to find the staff roster. Contact pat@example.test if needed.'});
+ const h=withModel({snapshot,followups:true});const result=await h.run();
+ expect(result.result.reply).toBe('proposed');expect(h.store.communicationSnapshot).toHaveBeenCalledWith({id:ids.communication,messages:3,chars:4000});
+ expect(h.model.run.mock.calls[0][1].user).toContain('<conversation_history>');expect(h.model.run.mock.calls[0][1].user).not.toContain('pat@example.test');
+});
+it('does not send earlier identifiers from a follow-up thread to the model',async()=>{
+ const snapshot=snapshotOf('How do I export the staff roster by month?',{inboundCount:2,outboundCount:1});
+ snapshot.messages.unshift({id:'prior',direction:'inbound',body:'DOB 01/01/1900, MRN 1234567'});
+ const h=withModel({snapshot,followups:true});await h.run();expect(h.model.run).not.toHaveBeenCalled();
+});
+it('can propose a grounded how-to answer within a priority-product sales conversation',async()=>{
+ const h=withModel({snapshot:snapshotOf('How do I export the staff roster by month?',{inquiryType:'sales'}),followups:true});
+ expect((await h.run()).result.reply).toBe('proposed');expect(h.model.run).toHaveBeenCalledTimes(1);
 });

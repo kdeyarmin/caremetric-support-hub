@@ -34,6 +34,7 @@ export function composeBrief(facts, { now = new Date(), publicOrigin, services =
   const incidents = Array.isArray(facts?.incidents) ? facts.incidents : [];
   const billing = facts?.billing ?? {};
   const yesterday = facts?.yesterday ?? {};
+  const growth = facts?.growth;
   const agents = Array.isArray(facts?.agents) ? facts.agents : [];
 
   const needs = [];
@@ -44,6 +45,10 @@ export function composeBrief(facts, { now = new Date(), publicOrigin, services =
   if (count(facts?.undeliveredAlerts)) needs.push(['Urgent alerts that did not reach you', String(count(facts.undeliveredAlerts))]);
   if (count(billing.pastDue)) needs.push(['Subscriptions past due', String(count(billing.pastDue))]);
 
+  if (count(growth?.overdue)) needs.push(['Overdue customer follow-ups',String(growth.overdue)]);
+  if (count(growth?.unmappedTenants)) needs.push(['Billing accounts needing a growth mapping',String(growth.unmappedTenants)]);
+  if (count(growth?.missingContact)) needs.push(['Opportunities missing a contact',String(growth.missingContact)]);
+
   const yesterdayRows = [
     ['Runs recorded', String(count(yesterday.runs))],
     ['Tasks finished', `${count(yesterday.tasksDone)} done, ${count(yesterday.tasksFailed)} failed`],
@@ -53,6 +58,7 @@ export function composeBrief(facts, { now = new Date(), publicOrigin, services =
   ];
 
   const watch = [];
+  if(growth)watch.push(`Customer growth: ${count(growth.prospects)} prospects, ${count(growth.trials)} trials, ${count(growth.activated)} activated and ${count(growth.paid)} paid accounts recorded.`);
   if (count(billing.trialsEnding)) watch.push(`${plural(count(billing.trialsEnding), 'trial')} end${count(billing.trialsEnding) === 1 ? 's' : ''} within a week.`);
   const paused = agents.filter(agent => agent.status === 'paused').map(agent => agent.name);
   if (paused.length) watch.push(`Paused, so ${paused.length === 1 ? 'it does' : 'they do'} nothing until you resume ${paused.length === 1 ? 'it' : 'them'}: ${paused.join(', ')}.`);

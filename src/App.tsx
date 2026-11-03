@@ -1,3 +1,4 @@
+import { Growth } from './admin/Growth';
 import { isCentralHubApp, isHubAdminApp } from './hubScope';
 import {
   AlertCircle,
@@ -384,6 +385,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/admin/email" element={data.actor.role === "platform_admin" ? <BulkEmail key={data.actor.id} products={data.products} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/portfolio" element={data.actor.role === "platform_admin" ? <PortfolioRollup key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/go-live-readiness" element={data.actor.role === "platform_admin" ? <GoLiveReadiness key={data.actor.id} /> : <Navigate to="/overview" replace />} />
+            <Route path="/admin/growth" element={data.actor.role === "platform_admin" ? <Growth key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/team" element={data.actor.role === "platform_admin" ? <Team key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/communications" element={staff ? <CommunicationsRoute data={data} communications={demoCommunications} /> : <Navigate to="/overview" replace />} />
             <Route path="/overview" element={<OverviewPage data={data} />} />

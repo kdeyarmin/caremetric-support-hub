@@ -10,7 +10,7 @@ const guides = [
 
 describe('the Concierge prompt', () => {
   it('is a constant with a version, free of anything about a request', () => {
-    expect(promptVersion).toBe('concierge.2');
+    expect(promptVersion).toBe('concierge.3');
     expect(promptVersion).toMatch(/^[a-z0-9.-]{1,20}$/);
     expect(typeof systemPrompt).toBe('string');
     expect(systemPrompt).not.toMatch(/\bCM-\d|\$\{|undefined|\bnull\b/);

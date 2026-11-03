@@ -1,6 +1,6 @@
 /**
  * The SEO Analyst's weekly check: audit each public website from the outside and email the owner what to fix.
- * It uses no model. The scheduled task runs every morning but does its work only on Mondays (Eastern time), so
+ * It uses no model. The scheduled task runs every morning but catches up once per Eastern week, so
  * the report arrives once a week; a check the owner starts with Run now runs on any day.
  *
  * The report carries counts, page addresses on the company's own sites and fixed-vocabulary findings. It never
@@ -8,10 +8,10 @@
  */
 import { auditSite, clip, pageLimit, summarizeFindings } from '../seo/audit.mjs';
 import { sites as defaultSites } from '../seo/sites.mjs';
+import { weekStart } from '../accounts/week.mjs';
 import { delivered } from '../notify.mjs';
 import { plural, recordRun } from './shared.mjs';
 
-const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' });
 const dayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
 const dayLabel = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' });
 const wording = { high: 'Urgent', medium: 'Worth fixing', low: 'Minor' };
@@ -71,8 +71,9 @@ export function composeSeoReport(audits, { now = new Date(), publicOrigin } = {}
 export function seoHandlers({ store, notifier, publicOrigin, fetchImpl = fetch, sites = defaultSites, audit = auditSite, log = line => console.warn(line) }) {
   async function weekly(task, { signal, now = () => new Date() } = {}) {
     const moment = now();
-    // The schedule fires every morning; only Monday's is the weekly check. A check the owner asked for always runs.
-    if (task.sourceKind === 'schedule' && weekday.format(moment) !== 'Mon') return { result: { skipped: 'not_monday' } };
+    // Catch up on any day; one confirmed/uncertain attempt per week. Owner-requested checks always run.
+    const week = weekStart(moment);
+    if (task.sourceKind === 'schedule' && store.notificationStatus && ['sent','unknown','pending','suppressed'].includes(await store.notificationStatus(`seo:weekly:${week}`))) return { result: { skipped: 'already_attempted', week } };
 
     // The sites are different hosts, so they are checked side by side: each has its own deadline, well inside the task's.
     const audits = await Promise.all(sites.map(site => audit(site, { fetchImpl, signal }).catch(() => {
@@ -83,7 +84,7 @@ export function seoHandlers({ store, notifier, publicOrigin, fetchImpl = fetch, 
     const date = dayKey.format(moment);
     const results = await notifier.send({
       severity: report.urgent > 0 ? 'warning' : 'info', subject: report.subject, body: report.body, blocks: report.blocks,
-      dedupeKey: task.sourceKind === 'owner' ? `seo:${date}:${task.id}` : `seo:${date}`, agentKey: task.agentKey, taskId: task.id,
+      dedupeKey: task.sourceKind === 'owner' ? `seo:${date}:${task.id}` : `seo:weekly:${week}`, agentKey: task.agentKey, taskId: task.id,
     });
     const delivery = results.map(item => `${item.channel}:${item.delivery}`);
     const reached = results.some(delivered);

@@ -230,13 +230,20 @@ export function modelRunner({
       return { outcome: 'budget_exhausted', neededCents: reserve, remainingCents: Math.max(remaining, 0) };
     }
     const { release } = admission;
+    let reservation = null;
+    if (store.reserveBudget) {
+      try { reservation = await store.reserveBudget(task.id, reserve); }
+      catch (error) { await release(); throw error; }
+      if (!reservation) { await release(); return {outcome:'budget_exhausted',neededCents:reserve,remainingCents:0}; }
+    }
+    let booked = false;
     const budgetDay = today();
     let runId = null;
     let finished = false;
     const finish = async (outcome, usage, summary, errorCode = null) => {
       if (finished || runId === null) return;
       finished = true;
-      try { await store.finishRun(runId, outcome, usage, summary, errorCode); } catch {
+      try { await store.finishRun(runId, outcome, usage, summary, errorCode); booked = true; } catch {
         // Not booked. The cost stays against the budget (and the write is retried) until the database has it.
         owed.set(agentKey, [...(owed.get(agentKey) ?? []), { runId, outcome, usage, summary, errorCode, day: budgetDay, tries: 0 }]);
         log(JSON.stringify({ event: 'hub_agent_run_unrecorded', agent: agentKey, kind: task.kind }));
@@ -291,6 +298,7 @@ export function modelRunner({
     } finally {
       // Normally closed above. Reaching here unclosed means something unexpected threw after the call started.
       await finish('failed', { rounds: 1, costCents: inputOnlyCents(model, inputBound) }, 'The run ended unexpectedly.', 'ai_error');
+      if (reservation && (booked || runId === null)) await store.releaseBudget(reservation).catch(() => {});
       await release();
     }
   }

@@ -217,9 +217,9 @@ try {
   const asOf = new Date();
   const health = Object.fromEntries(Object.entries(byKey).map(([key, entry]) => [key, assess(entry, asOf)]));
   assert.deepEqual([health.payer.band, health.payer.score, health.payer.reasons], ['at_risk', 45, ['past_due', 'invoice_overdue', 'delinquent', 'urgent_case_waiting']]);
-  assert.deepEqual([health.trial.band, health.trial.score, health.trial.reasons], ['healthy', 75, ['trial_ending', 'no_billing_email']]);
-  assert.deepEqual([health.renewing.band, health.renewing.reasons, health.renewing.flags], ['healthy', [], ['renewing_soon']]);
-  assert.deepEqual([health.growing.band, health.growing.reasons, health.growing.flags], ['healthy', [], ['usage_up']]);
+  assert.deepEqual([health.trial.band, health.trial.score, health.trial.reasons], ['unknown', null, ['trial_ending', 'no_billing_email']]);
+  assert.deepEqual([health.renewing.band, health.renewing.reasons, health.renewing.flags], ['unknown', [], ['renewing_soon']]);
+  assert.deepEqual([health.growing.band, health.growing.reasons, health.growing.flags], ['unknown', [], []]);
   assert.deepEqual([health.long.band, health.long.reasons], ['watch', ['cancel_scheduled']]);
   assert.deepEqual([health.closedbilling.band, health.closedbilling.reasons], ['watch', ['closed_but_billing']]);
   assert.equal(health.customeronly.band, 'inactive');
@@ -301,7 +301,7 @@ try {
   const renewDate = shortDay.format(new Date(Date.now() + 20 * day));
   for (const phrase of [
     `Payment past due; 1 overdue invoice, ${amounts.overdue} remaining; marked delinquent in Stripe`, `Trial ends ${trialEnd}; no billing email on file`, 'Account closed but still billing',
-    `Cancels ${cancelDate}`, `Renews ${renewDate}, ${amounts.annual} a year`, 'Usage is growing', 'Needs you', 'Renewing in the next 30 days', 'Growing', 'Revenue',
+    `Cancels ${cancelDate}`, `Renews ${renewDate}, ${amounts.annual} a year`, 'Adoption unknown', 'Needs you', 'Renewing in the next 30 days', 'Revenue',
   ]) assert.ok(text.includes(phrase), `the email says "${phrase}"`);
   assert.ok(text.includes(clip(names.long, 60)) && !text.includes(names.long), 'a long name is clipped');
   assert.ok(html.includes('https://hub.test/admin/team'), 'the button opens the Team screen');
@@ -358,7 +358,7 @@ try {
   }
   assert.ok(mail.length === 7);
 
-  // ---- A big book: 300 more accounts, inside the statement timeout, reported as a partial list ----------------------------------------
+  // ---- A big book: 300 more accounts, inside the statement timeout, paged before reporting the complete population ----------------------------------------
   const bulk = (await rows(`insert into hub.tenants(slug, name) select '${prefix}-bulk-' || n, 'A1 Bulk Account ${run} ' || lpad(n::text, 4, '0') from generate_series(1, 300) n returning id`)).map(entry => entry.id);
   tenants.push(...bulk);
   await admin.query(`with t as (select id, row_number() over (order by slug) as n from hub.tenants where id = any($1::uuid[]))
@@ -397,10 +397,13 @@ try {
   assert.deepEqual([capped.accounts.length, capped.truncated, capped.total], [200, true, large.total], 'a list longer than the limit is cut at the limit and says so');
 
   const huge = await runNow();
-  assert.deepEqual([huge.result.accounts, huge.result.truncated], [200, true]);
+  assert.deepEqual([huge.result.accounts, huge.result.truncated], [composeAccountsReport({snapshot:large}).result.accounts, false]);
+  const firstPage=await call('private.agent_accounts_page',[200,0]),secondPage=await call('private.agent_accounts_page',[200,200]);
+  assert.ok(secondPage.accounts.length>0,'the new growth reader reaches accounts beyond the legacy cap');
+  assert.equal(new Set([...firstPage.accounts,...secondPage.accounts].map(a=>a.slug)).size,firstPage.total,'the complete population is paged without duplicates');
   const { html: partial, text: partialText } = mail.at(-1).content;
-  assert.match(partialText, new RegExp(`Showing 200 of ${large.total} accounts`));
-  assert.ok(partial.includes('Partial list.'));
+  assert.doesNotMatch(partialText, /Showing 200 of/);
+  assert.ok(!partial.includes('Partial list.'));
   assert.ok(partial.length < 80_000, `the email stays small however many accounts there are (${partial.length} characters)`);
   assert.ok((partialText.match(/And \d+ more\./g) ?? []).length >= 1, 'and each section says how many rows it left out');
   await removeAccounts(bulk);
@@ -445,7 +448,7 @@ try {
     }
   } finally { gateClient.release(); }
 
-  console.log(`Account Manager: the server-only snapshot (no billing address, name or customer, subscription or invoice identifier; three Stripe modes; a 300-account book in ${Math.round(took)} ms), the health scores read from real rows, one weekly report through the real store, queue and notifier, the weekly key and Run now, suppressed and partial-list reports, the privacy of every stored record, and the deployment gate all behave through hub_app_server.`);
+  console.log(`Account Manager: the server-only snapshot (no billing address, name or customer, subscription or invoice identifier; three Stripe modes; a 300-account book in ${Math.round(took)} ms), the health scores read from real rows, one weekly report through the real store, queue and notifier, the weekly key and Run now, suppressed reports and complete paginated reports, the privacy of every stored record, and the deployment gate all behave through hub_app_server.`);
 } finally {
   const problems = [];
   const attempt = async (sql, params = []) => { try { await admin.query(sql, params); } catch (error) { problems.push(`${error.message} [${sql.slice(0, 70)}]`); } };

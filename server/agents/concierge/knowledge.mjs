@@ -1,48 +1,48 @@
-/**
- * The published guides the Concierge may draw an answer from: CareMetric's own help articles, the same
- * public list the Help center shows (`hub.list_published_content`, callable without a session). The list
- * is kept for ten minutes, so a busy inbox does not read it for every message, and a failed read keeps
- * whatever was loaded before. `top(text)` picks up to three articles whose title or summary shares words
- * with the text (the ranking the case assistant already uses) and clips each, so what goes into a request
- * has a known size. Videos and courses are not guides.
- */
-import { rankKnowledge } from '../../ai-automation.mjs';
-
+/** Published, revision-aware, product-scoped retrieval. Failure never extends the maximum cache age. */
 const clip = (text, limit) => {
   const value = String(text ?? '').trim();
   if (value.length <= limit) return value;
   const cut = value.slice(0, limit).search(/\s\S*$/);
   return `${value.slice(0, cut > limit / 2 ? cut : limit).trimEnd()}…`;
 };
-
-export function guideLibrary({ load, ttlMs = 600_000, retryMs = 60_000, now = () => Date.now(), log = line => console.warn(line) }) {
-  let items = [];
-  let expiresAt = Number.NEGATIVE_INFINITY;
-  let loading = null;
-
+const termsOf = text => [...new Set(String(text ?? '').toLowerCase().match(/[a-z0-9]{4,}/g) ?? [])]
+  .filter(term => !['what', 'when', 'where', 'with', 'this', 'that', 'have', 'does', 'your', 'please'].includes(term));
+const score = (text, terms) => terms.filter(term => text.toLowerCase().includes(term)).length;
+export function guideLibrary({ load, loadProducts = async () => [], ttlMs = 600_000, retryMs = 60_000, maxStaleMs = 3_600_000, now = () => Date.now(), log = line => console.warn(line) }) {
+  let items = [], expiresAt = -Infinity, loadedAt = -Infinity, loading = null;
   async function refresh() {
     try {
-      const rows = await load();
+      const [rows, products] = await Promise.all([load(), loadProducts()]);
+      const slugs = new Map(products.map(product => [product.id, product.slug]));
       const seen = new Set();
-      items = (Array.isArray(rows) ? rows : [])
-        .filter(row => row?.kind === 'article' && typeof row.title === 'string' && row.title.trim())
-        .map(row => ({ title: row.title.trim(), summary: String(row.summary ?? ''), body: String(row.body_markdown ?? '') }))
-        .filter(item => { const key = `${item.title}\n${item.summary}`; if (seen.has(key)) return false; seen.add(key); return true; });
-      expiresAt = now() + ttlMs;
+      items = (Array.isArray(rows) ? rows : []).filter(row => row?.kind === 'article' && row.title?.trim())
+        .map(row => ({ title: row.title.trim(), summary: String(row.summary ?? ''), body: String(row.body_markdown ?? ''),
+          id: row.id, revision: row.revision_no, audience: row.audience ?? [],
+          products: row.product_slugs ?? (row.product_ids ?? []).map(id => slugs.get(id) ?? id),
+        })).filter(item => { const key = item.id ?? `${item.title}\n${item.summary}\n${item.products.join(',')}`; if (seen.has(key)) return false; seen.add(key); return true; });
+      loadedAt = now(); expiresAt = loadedAt + ttlMs;
     } catch {
-      // Keep the last good list, and look again soon.
       log(JSON.stringify({ event: 'hub_agent_guides_unavailable', kept: items.length }));
       expiresAt = now() + retryMs;
-    } finally {
-      loading = null;
-    }
+    } finally { loading = null; }
   }
-
   return {
-    /** Up to three guides for `text`, best match first: { title, summary, body }, each clipped. Empty when nothing matches. */
-    async top(text) {
+    async top(text, { productSlug = null, audience = null } = {}) {
       if (now() >= expiresAt) { loading ??= refresh(); await loading; }
-      return rankKnowledge(items, text).map(guide => ({ title: clip(guide.title, 150), summary: clip(guide.summary, 400), body: clip(guide.body, 2000) }));
+      if (now() - loadedAt > maxStaleMs) return [];
+      const terms = termsOf(text);
+      return items.filter(item => (!item.products.length || item.products.includes(productSlug))
+        && (!audience || !item.audience.length || item.audience.includes(audience)))
+        .map(item => {
+          // Score bounded overlapping sections, so an answer near the end of a long guide is retrievable.
+          const sections = [];
+          for (let i = 0; i < Math.min(item.body.length, 200_000); i += 1500) sections.push(item.body.slice(i, i + 2000));
+          const best = sections.sort((a, b) => score(b, terms) - score(a, terms))[0] ?? '';
+          return { item, best, rank: 3 * score(item.title, terms) + 2 * score(item.summary, terms) + score(best, terms) };
+        }).filter(row => row.rank > 0).sort((a,b) => b.rank - a.rank).slice(0,3)
+        .map(({ item, best }) => ({ title: clip(item.title,150), summary: clip(item.summary,400), body: clip(best,2000),
+          ...(item.id ? { sourceId: item.id, revision: item.revision, products: item.products } : {}),
+        }));
     },
   };
 }

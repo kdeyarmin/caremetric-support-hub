@@ -6,8 +6,8 @@ const rated = (over, at = now) => assess(account(over), at);
 
 describe('how an account is doing', () => {
   it('scores a quiet, paying account 100 and says nothing about it', () => {
-    expect(rated({})).toEqual({ version: healthVersion, band: 'healthy', score: 100, penalty: 0, reasons: [], flags: [], attention: false, ageDays: 120 });
-    expect(healthVersion).toBe('health.1');
+    expect(rated({})).toEqual({ version: healthVersion, band: 'healthy', score: 100, penalty: 0, reasons: [], flags: [], attention: false, ageDays: 120, evidence: 'fresh', evidenceByProduct:{carebase:'fresh'} });
+    expect(healthVersion).toBe('health.2');
   });
 
   it('gives an account under 14 days old no score, but still reports what is wrong', () => {
@@ -58,7 +58,7 @@ describe('how an account is doing', () => {
   });
 
   it('compares usage with the newest report at or before 28 days earlier, needing both a ratio and a real change', () => {
-    const usage = (latest, baseline) => rated({ usage: [{ app: 'carebase', metric: 'facility', latest, baseline }] });
+    const usage = (latest, baseline) => rated({ usage: [{ app: 'carebase', metric: 'active_users', latest, baseline }] });
     expect(usage(0, 12)).toMatchObject({ reasons: ['usage_stopped'], penalty: 25 });
     expect(usage(8, 12)).toMatchObject({ reasons: ['usage_dropped'], penalty: 15 });
     expect(usage(9, 12).reasons).toEqual(['usage_dropped']);
@@ -168,3 +168,20 @@ describe('which subscription and date raised a flag', () => {
     expect(renewingSubscriptions({ subscriptions: [] }, at)).toEqual([]);
   });
 });
+
+describe('adoption confidence and recovery',()=>{
+ it('never reports missing or stale data as proven healthy adoption',()=>{
+  expect(rated({usage:[]})).toMatchObject({band:'unknown',score:null,evidence:'missing'});
+  expect(rated({usage:[{metric:'active_users',latest:10,baseline:10,latestAt:iso(-90),baselineAt:iso(-120)}]})).toMatchObject({band:'unknown',score:null,evidence:'stale',reasons:[]});
+  expect(rated({usage:[{metric:'facility',latest:10,baseline:10}]})).toMatchObject({band:'unknown',evidence:'billing_only'});
+ });
+ it('requires action when fresh meaningful usage stops, independently of a score threshold',()=>{
+  expect(rated({usage:[{app:'carebase',metric:'active_users',latest:0,baseline:10}]})).toMatchObject({score:75,band:'watch',attention:true,reasons:['usage_stopped'],evidence:'no_activity'});
+ });
+ it('does not infer a decline from an invalid or very old comparison window',()=>{
+  expect(rated({usage:[{metric:'active_users',latest:0,baseline:10,baselineAt:iso(-200)}]}).reasons).toEqual([]);
+  expect(rated({usage:[{metric:'active_users',latest:0,baseline:10,baselineAt:iso(1)}]}).reasons).toEqual([]);
+ });
+});
+
+it('does not let one product mask missing adoption in another',()=>{expect(rated({products:[{slug:'carebase',status:'active'},{slug:'caremetric-intel',status:'active'}]})).toMatchObject({band:'unknown',evidence:'partial',evidenceByProduct:{carebase:'fresh','caremetric-intel':'missing'}});});

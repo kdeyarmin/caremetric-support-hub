@@ -58,6 +58,15 @@ export const integrationCatalog = Object.freeze([
       { name: 'HUB_OWNER_EMAIL', secret: false, required: true, purpose: 'Where the AI team emails alerts and the morning brief. Urgent items are also texted to the administrator\'s verified number.' },
       { name: 'HUB_AGENTS_CUSTOMER_TEXT_TO_AI', secret: false, required: false, flag: true, purpose: 'Exactly "true" lets the Support Concierge send a plain question\'s scrubbed text to the model to draft an answer for you to approve. Set it only when your Anthropic agreement covers support messages.' },
     ] },
+  { id: 'customer-growth', name: 'Customer growth', purpose: 'CareBase and Intel prospecting, customer success, activity and delivery events.', docs: 'docs/CUSTOMER_GROWTH.md',
+    variables: [
+      { name: 'HUB_GROWTH_SEND_ENABLED', secret: false, required: false, flag: true, purpose: 'Master switch for sending reviewed growth messages.' },
+      { name: 'HUB_GROWTH_SIGNING_KEY', secret: true, required: true, purpose: 'At least 32 characters; signs stable unsubscribe links. Keep it across releases.' },
+      { name: 'HUB_GROWTH_SEARCH_API_KEY', secret: true, required: false, purpose: 'Brave Search API key for attributable organization discovery; manual evidence also works.' },
+      { name: 'HUB_GROWTH_CAREBASE_EVENT_KEY', secret: true, required: false, purpose: 'CareBase server-only activity signing key, at least 32 characters.' },
+      { name: 'HUB_GROWTH_INTEL_EVENT_KEY', secret: true, required: false, purpose: 'Intel server-only activity signing key, at least 32 characters.' },
+      { name: 'HUB_SENDGRID_EVENT_PUBLIC_KEY', secret: true, required: false, purpose: 'Verifies delivery, bounce, complaint and unsubscribe webhooks.' },
+    ] },
   { id: 'carebase-distribution', name: 'CareBase course distribution observer', purpose: 'Lets the Hub observe shared course availability in CareBase.', docs: 'docs/SHARED_COURSE_DISTRIBUTION.md',
     variables: [{ name: 'CAREBASE_DISTRIBUTION_OBSERVER_TOKEN', secret: true, required: true, purpose: 'Token CareBase issued to the Hub observer.' }] },
 ]);

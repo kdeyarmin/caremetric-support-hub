@@ -65,7 +65,7 @@ function RecordLink({ reference }: { reference: string }) {
 function ApprovalCard({ approval, busy, onDecide }: { approval: TeamApproval; busy: string; onDecide: (approval: TeamApproval, decision: "approve" | "reject", note: string) => void }) {
   const [note, setNote] = useState("");
   const what = actionLabel(approval.kind);
-  const sends = approval.kind === "communication.reply";
+  const sends = ["communication.reply","growth.message"].includes(approval.kind);
   return <li className="team-approval">
     <div className="team-approval-head"><strong>{approval.agentName}</strong> proposes: {what}{approval.targetId ? <> for <span className="team-target">{approval.targetId}</span></> : null}</div>
     {/^CM-\d+$/.test(approval.targetId) && <p className="team-record"><RecordLink reference={approval.targetId} /></p>}

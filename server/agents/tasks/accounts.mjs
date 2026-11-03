@@ -30,7 +30,14 @@ export function accountsHandlers({ store, notifier, publicOrigin, features = nul
     const moment = now();
     const week = weekStart(moment);
     const asked = task.sourceKind === 'owner';
-    const snapshot = await store.accountsSnapshot({ limit: snapshotLimit });
+    let snapshot = store.accountsPage ? await store.accountsPage({limit:snapshotLimit,offset:0}) : await store.accountsSnapshot({limit:snapshotLimit});
+    if (store.accountsPage) {
+      while (snapshot.accounts.length < snapshot.total && snapshot.truncated) {
+        const page = await store.accountsPage({limit:snapshotLimit,offset:snapshot.accounts.length});
+        if (!page.accounts.length) break;
+        snapshot = {...snapshot,accounts:[...snapshot.accounts,...page.accounts],total:page.total,truncated:page.truncated};
+      }
+    }
     const report = composeAccountsReport({ snapshot, now: moment, publicOrigin });
     if (report.result.accounts === 0) return { result: { skipped: 'no_accounts', week } };
 

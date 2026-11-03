@@ -17,6 +17,7 @@ connections, intake, delegated actions, and purchases for those apps are disable
   (secrets by presence only). Every figure is read live and links into the
   workspace that manages it. The per-application workspace moved to
   `/admin/apps`. See [the control center](docs/CONTROL_CENTER.md).
+- **Customer growth** (`/admin/growth`): CareBase and CareMetric Intel prospect research, reviewed outreach, onboarding and retention work, contact suppression, and cohort outcomes. Breathe is deferred. See [setup and operation](docs/CUSTOMER_GROWTH.md).
 - **Communications** (`/communications`): customer service and technical
   support from the (877) 521-2890 phone line, text messages, email, website chat
   land in one queue with triage, internal notes and

@@ -9,10 +9,10 @@ is built so far.
 > Support Concierge's triage of new conversations, with the fixed replies it offers the owner, and the
 > Account Manager's weekly report on how each customer account is doing are in
 > place, and so is the model runtime they share (see "The model runtime"). The scheduler is inert
-> unless `HUB_AGENTS_ENABLED` is exactly `true` and every agent is seeded **paused**. Only the Concierge
-> can call a model, only to draft an answer to a plain question, and only while the owner has set
+> unless `HUB_AGENTS_ENABLED` is exactly `true` and every agent is seeded **paused**. The Concierge
+> drafts an answer to a plain question only while the owner has set
 > `HUB_AGENTS_CUSTOMER_TEXT_TO_AI` to `true` ("Drafted answers"); otherwise customer message text never
-> leaves the Hub.
+> leaves the Hub. The new Marketing Manager and customer-success workflows use structured business evidence; see [Customer growth](CUSTOMER_GROWTH.md) for their controls and activation. Growth is limited to CareBase and Intel.
 
 ## The model
 
@@ -147,7 +147,7 @@ screen says the brief was written but not delivered.
 
 ## The SEO Analyst
 
-Checks the company's public websites every Monday and emails what to fix. It uses no model and reads
+Checks the company's public websites once per week and emails what to fix. It uses no model and reads
 only public pages of the sites it is told about: Healthcare Advisors (`caremetricadvisors.com`),
 CareBase (`cmcarebase.com`, with `caremetrictrain.com` as another address) and CareMetric Intel
 (`www.caremetricintel.com`). The list is fixed in `server/agents/seo/sites.mjs`, a check never leaves a
@@ -182,8 +182,8 @@ a browser, which is itself worth knowing: many crawlers and AI assistants see on
 scripts run.
 
 The schedule fires every morning at 06:30 Eastern, because an interval schedule is limited to a day. The
-weekly work happens only on Monday and the other mornings finish at once. **Run now** checks on any day and
-sends a report every time, while the scheduled report is sent once per Monday. The analyst is observe-only
+weekly work catches up on the first available morning of the Eastern week; later mornings skip confirmed or uncertain attempts. **Run now** checks on any day and
+sends a report every time, while the scheduled report is attempted once per Eastern week, with bounded retries for definite failures. The analyst is observe-only
 and proposes no actions. Turning findings into issues for the coder bot is a later step.
 
 ## The Support Concierge
@@ -370,11 +370,11 @@ a discount to its items by them, and they never reach the email or any stored re
 is the Billing screen's: the verified mode, or everything while the mode is unverified, and the email says
 "Test data" or "Stripe mode not verified" when that applies.
 
-**The health score** (version `health.1`, every weight in `server/agents/accounts/health.mjs`) is advice for
+**The health score** (version `health.2`, every weight in `server/agents/accounts/health.mjs`) is advice for
 the owner and never changes a plan, a price or anyone's access. It runs from 0 to 100: 75 or more is healthy,
 50 to 74 is watch, below 50 is at risk. An account that has been billing for under 14 days is "new" and has no
 score, and one with no live subscription is "inactive". Each point off has a reason the email shows, so a
-score never appears without why.
+score never appears without why. Missing or stale adoption evidence produces an unknown score, and stopped or sharply dropped use requires attention even if the numeric score would otherwise be healthy.
 
 | Reason | Points off |
 | --- | --- |
@@ -388,7 +388,7 @@ score never appears without why.
 | No billing email on file | 5, or 15 while a past-due or trial customer has no other way to hear from us |
 
 A case waiting on the customer is not held against the account. Usage is compared with the newest report at
-or before 28 days earlier, so an application that never reported usage is never marked down for it. An
+or before 28 days earlier, with a fresh reading within seven days and a baseline within 42 days. Billing quantities alone do not prove adoption. Missing telemetry is shown as unknown. An
 overdue invoice is an open one more than three days past its due date, or past its creation when it has none.
 
 **The email** lists, in this order: who needs you (payment trouble, a cancellation scheduled, shown with the date it takes effect first, a trial ending
@@ -397,8 +397,7 @@ multi-month plans renewing within 30 days (a plan with a cancellation date at or
 cancelling, not renewing, and appears only under who needs you; an account with several plans renewing in the
 window shows the first date, the number of plans and their yearly total), accounts whose usage is growing, then revenue (MRR, ARR, trial MRR,
 new and lost subscriptions this week, past due) and how many accounts are in each band. Each list shows at
-most ten rows and then "And N more", names are clipped to 60 characters and escaped, and a list cut at 200
-accounts says so. The revenue figures use the same functions as the Billing screen
+most ten rows and then "And N more"; names are clipped to 60 characters and escaped. With the growth migration, reports page through the entire account population before ranking it. The revenue figures use the same functions as the Billing screen
 (`src/billing/billingMath.ts`): paying and past-due subscriptions after discounts count as MRR, trials are
 counted apart, and ARR is twelve times MRR.
 
