@@ -99,10 +99,10 @@ reset role;
 
 -- The agents exist, paused, with the starting settings the plan names.
 select is((select array_agg(key order by key) from private.agents),
-  array['account_manager', 'chief_of_staff', 'platform_engineer', 'seo_analyst', 'support_concierge'], 'The AI team''s agents are seeded');
+  array['account_manager', 'chief_of_staff', 'content_marketer', 'platform_engineer', 'seo_analyst', 'support_concierge'], 'The AI team''s agents are seeded');
 select ok((select bool_and(status = 'paused') from private.agents), 'Every seeded agent starts paused');
 select is((select jsonb_object_agg(key, jsonb_build_array(autonomy, model_tier, daily_budget_cents)) from private.agents),
-  '{"account_manager": ["observe", "fast", 50], "chief_of_staff": ["act", "draft", 100], "platform_engineer": ["act", "fast", 50], "seo_analyst": ["observe", "fast", 50], "support_concierge": ["propose", "draft", 300]}'::jsonb,
+  '{"account_manager": ["observe", "fast", 50], "chief_of_staff": ["act", "draft", 100], "content_marketer": ["propose", "draft", 150], "platform_engineer": ["act", "fast", 50], "seo_analyst": ["observe", "fast", 50], "support_concierge": ["propose", "draft", 300]}'::jsonb,
   'Autonomy, model tier and daily budget start at the planned levels');
 select is((select config -> 'auto_approve_kinds' from private.agents where key = 'platform_engineer'),
   '["incident.open", "incident.resolve"]'::jsonb, 'Only incident records are approved without the owner, and only for the on-call agent');

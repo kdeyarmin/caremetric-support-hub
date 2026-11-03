@@ -8,7 +8,9 @@ is built so far.
 > Engineer's health probes, the Chief of Staff's morning brief, the SEO Analyst's weekly report, the
 > Support Concierge's triage of new conversations, with the fixed replies it offers the owner, and the
 > Account Manager's weekly report on how each customer account is doing are in
-> place, and so is the model runtime they share (see "The model runtime"). The scheduler is inert
+> place, and so is the model runtime they share (see "The model runtime"). The Content Marketer drafts one public
+> help-center article a week for the owner to approve and a month's outreach drafts for the owner to send (see "The
+> Content Marketer"); its model calls carry no customer text. The scheduler is inert
 > unless `HUB_AGENTS_ENABLED` is exactly `true` and every agent is seeded **paused**. Only the Concierge
 > can send customer text to a model, only to draft an answer to a plain question, and only while the owner has set
 > `HUB_AGENTS_CUSTOMER_TEXT_TO_AI` to `true` ("Drafted answers"); otherwise customer message text never
@@ -503,6 +505,96 @@ Its handler registers only when the database declares `platform.agents.accounts.
 lacks the migration still starts and the schedule stays due instead of failing. The declaration needs the
 control plane and the platform billing mirror.
 
+## The Content Marketer
+
+Writes the help center's public articles, one a week, for the owner to approve, and once a month drafts outreach for the
+owner to send personally. CareMetric has no blog or articles written for search; these articles are what search engines and AI
+assistants can now find at `https://help.caremetric.ai/help/articles/<address>`. Every claim comes from the fact sheet,
+[GTM_FACTS.md](GTM_FACTS.md) (machine copy `server/agents/content/facts.mjs`), and nothing is published without the owner's
+approval. No customer text ever reaches the model: the only thing the inbox contributes is a count of conversations.
+
+**Topics.** A curated backlog in code (`server/agents/content/topics.mjs`): Pennsylvania personal care home and ALF regulations
+under 55 Pa. Code Chapters 2600 and 2800 (how the two licenses differ, surveyor visits, annual inspection records, staff
+training hours, fire drills, reportable incidents, medication administration training, resident rights notices, emergency
+preparedness), Intel topics (home health referral marketing, county market data, hospice relationship plans) and Advisors
+topics (reviewing a personal care home or ALF before buying it, outside survey-readiness reviews). Each topic names its
+product (the article is published under it), its reader, its angle, the official sources it may cite and the facts it may
+state; every regulation fact was read from the cited section of the Pennsylvania Code on 2026-11-03. A topic is never written
+twice: not while an article for it is published or waiting for the owner, and not for 90 days after the owner rejects one (an
+expired or failed proposal may be tried again). Among the rest, priority leads; products whose inbox conversations were busiest
+in the last 90 days (counted by product and inquiry type, never read) come next; the product of the last article steps back.
+
+**What the model is asked for** (`prompt.mjs`, prompt version `content.1`, draft tier): one object with a title, an address
+(slug), a meta description, a summary, an outline, the body in Markdown, questions and answers, internal links (ids of the
+products' real public pages, never addresses) and citations (addresses from the topic's official sources). The system prompt is
+the instructions and the fact sheet, a constant that is cached.
+
+**What the code checks** (`validate.mjs`). Lengths and shapes (title, address, description, summary, outline, body of 1,200 to
+4,200 characters in three to eight sections, two to four questions, one to three links); citations only as https addresses on
+the allowed hosts (pa.gov and its subdomains such as dhs.pa.gov, pacodeandbulletin.gov, palegis.us, cms.gov and census.gov for
+Intel's topics, and the company's own sites) and only to the curated sources, and at least one for a regulation; any other link
+in the body, HTML, images or tables; a price, percentage or number with a unit that neither the fact sheet nor the topic's facts
+state; a guarantee; a legal or compliance assurance ("ensures compliance", "pass your inspection", survey-proof, avoiding all
+citations); a certification or endorsement claim; AI that uses voice or the phone; a call or a demo as a step; a named
+competitor; a testimonial; "prove" or "proof" about CareBase; personal or health information, an email address other than
+hello@ or support@caremetric.ai, or a phone number; and a claim to be an AI. Assisted Living Residence and ALR become Assisted
+Living Facility and ALF, and an auditor or a state audit becomes a surveyor or an inspection; an auditor of another kind (a
+financial auditor) cannot be rewritten and rejects the draft. Regulation articles end with a fixed line: general information,
+not legal advice. A draft that fails proposes nothing; the task's result and the run's summary name the checks it failed
+(`compliance_assurance, unlisted_number`), never the draft.
+
+**What the owner approves.** A `content.publish` action ("Publish a help article") whose preview is the whole article: the
+address it will live at, the product, the title and the description, then the Markdown exactly as it will be published (the
+summary, the body, the questions and answers, the sources, the links and, for a regulation, the disclaimer). It must fit the
+6,000 characters an action's preview holds, so articles are compact (about 300 to 600 words of body).
+
+**How approval publishes.** Approving runs the executor at once; it needs no owner session and no model. It checks the stored
+article once more, then `private.agent_content_publish` publishes the action's own stored input, never anything the server hands
+it: a content item whose key is the address, owned by the topic's product and the "CareMetric Marketing" team and created by the
+CareMetric AI Assistant profile; revision 1, approved by the owner at the moment they decided; a publication to the product for
+every visitor (`public`, audience `all`); and an audit event `content.published`. The article then appears in the help center,
+at its own address as HTML (see "Public articles for crawlers" below) and in the sitemap. Publishing is idempotent by address:
+an execution started again finds the article and writes nothing new (`already_published`). An article is published only with
+the owner's approval: one approved on its own (an agent on Act with the kind listed) is refused (`approval_required`). The
+other outcomes the Team screen explains: `slug_taken` (another article already uses the address), `product_unavailable`,
+`invalid_article` (the stored article fails a rule that changed since) and `publish_failed`.
+
+**Public articles for crawlers.** The help center is a single-page app, so the Hub server answers `/help/articles/<content key>`
+itself (`server/help-center.mjs`) for every public, published article, the Content Marketer's and the ones already there: real
+HTML with the title, description, canonical address, Open Graph tags, an Article in JSON-LD and the body rendered from Markdown
+by `src/lib/markdown.ts`, which escapes everything and keeps only https and same-site links, inside the app's own page so the
+app takes over. It also serves `/sitemap.xml` (the help center, the learning library and every public article) and
+`/robots.txt`. The articles are the ones an anonymous visitor's app reads, cached for five minutes; the security headers and
+Content Security Policy are unchanged. The help center's list links each public article to its address.
+
+**The outreach drafts** (`content.outreach`, "Monthly outreach drafts", `outreach.mjs`). Once a month the model drafts up to five
+listing descriptions for software directories (Capterra, G2, GetApp, Software Advice; CareBase and Intel) and up to five short
+partnership pitches (state and regional provider associations, senior-care consultants, pharmacy and therapy partners,
+compliance trainers), from the fact sheet. Each draft gets the same checks as an article (and no markup or links, only the
+company's own domains); one that fails is left out and only the name of the check is kept. The ones that pass go to the owner in
+one email, word for word, to adjust and send personally. Nothing is sent to anyone else. The stored copy of the alert (shown on
+the Team screen) holds counts only; the drafts travel only in the email.
+
+**When it runs.** `content.weekly` ("Weekly help article") fires every morning at 07:45 Eastern and writes on Tuesdays (read from
+the task's due time, so a Tuesday's work put off by the budget still runs the next day). `content.outreach` fires every morning at
+08:05 Eastern and writes once a month, from the first Wednesday on, under the month's alert key, so a server that was down that
+day writes on its next run and a month is sent once (a delivery that failed is tried again on a later day, up to the notifier's
+three tries). **Run now** works on any day and always writes. While an article waits for the owner, the weekly schedule waits too.
+
+**Cost and budget.** One draft-tier call per article (up to 8,000 output tokens; the runtime reserves about 14 cents before the
+call and books what it actually used, typically a few cents) and one per month for outreach (about 10 cents reserved). The seeded
+budget is $1.50 a day. A used-up budget puts the task off to the next Eastern day. In
+**Observe** the agent writes nothing, because it could not propose what it wrote.
+
+**Switching it on.** Apply the two migrations below, restart the Hub so it reads `platform.agents.content.v1`, make sure
+`ANTHROPIC_API_KEY` is set (the tasks register only with a key), then resume the Content Marketer on **AI team** (it starts in
+**Propose**) and press **Run now** on "Weekly help article". The proposal appears under "Waiting for you" within a minute.
+
+**Turning it off.** Pause the Content Marketer on **AI team**: nothing more is drafted or emailed, and proposals already waiting
+can still be rejected (or are left to expire after seven days). Removing `ANTHROPIC_API_KEY` stops both tasks as well. To take a
+published article down, retire it: `update hub.content_items set status = 'retired', retired_at = now() where content_key =
+'<address>';`. It leaves the help center, the sitemap and its address (which then answers 404) within five minutes.
+
 ## Boundary
 
 - Every table has row level security and **no** privilege for any browser, service or server role.
@@ -561,7 +653,8 @@ Server (`hub_app_server` only): `agent_schedule_fire`, `agent_maintenance`, `age
 `agent_session_tasks`, `agent_session_task_claim`, `agent_run_start`, `agent_run_finish`,
 `agent_budget`, `agent_action_propose`, `agent_actions_ready`, `agent_action_execution`,
 `agent_action_executed`, `agent_action_release`, `agent_notify_begin`, `agent_notify_finish`, `owner_contact`, `agent_probe_record`, `agent_brief_facts`,
-`agent_concierge_pending`, `agent_communication_snapshot`, `agent_notification_count`, `agent_accounts_snapshot`.
+`agent_concierge_pending`, `agent_communication_snapshot`, `agent_notification_count`, `agent_accounts_snapshot`,
+`agent_content_state`, `agent_content_publish`.
 
 Owner (current administrator session): `get_agent_team`, `list_agent_activity`,
 `list_audit_events` (reads) and `set_agent_status`, `set_agent_autonomy`, `set_agent_budget`,
@@ -743,6 +836,11 @@ Apply the migrations in order with the usual procedure:
    by kind, gives each alert retry its own clock and declares `platform.agents.hardening.v1` (it needs the
    control plane, the probes and the brief). Apply it before you resume any agent, and restart the Hub after
    it so the server reads the feature.
+8. `20261103150000_agent_content.sql`, then its gate `20261103150100_agent_content_contract.sql`, which adds the
+   `content.publish` action kind (widening the kind and target checks without dropping any kind another change added),
+   its shape check and its once-per-address and once-per-topic indexes, the two server-only operations, and the Content
+   Marketer (paused, Propose) with its two schedules, and declares `platform.agents.content.v1` (it needs the control
+   plane, the hardening, governed publications and the communications inbox). Restart the Hub after it.
 
 The Hub build does not require any of these features, so a Hub whose database lacks them still starts and
 serves everything else. The AI team is opt-in twice over: nothing runs unless `HUB_AGENTS_ENABLED`

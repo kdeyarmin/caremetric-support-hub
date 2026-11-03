@@ -68,6 +68,14 @@ export function sqlAgentStore(pool, { fenced = false } = {}) {
     notificationCount: ({ prefix, channel = null, since }) => call('private.agent_notification_count', [prefix, channel, since]),
     /** A snapshot of every account's billing facts, usage and case counts for the weekly report: names and numbers, never a contact address. */
     accountsSnapshot: ({ limit = 200 } = {}) => call('private.agent_accounts_snapshot', [limit]),
+    /**
+     * What the Content Marketer needs to choose a topic: its latest article action per topic, which of `slugs` another content
+     * item already uses, recent inbox conversations counted by product and inquiry type (never text) and the months whose
+     * outreach email is recorded.
+     */
+    contentState: (slugs = []) => call('private.agent_content_state', [slugs]),
+    /** Publishes the article an approved content.publish action carries, as the AI assistant with the owner's approval. */
+    contentPublish: (actionId, execution = null) => call('private.agent_content_publish', [actionId, execution]),
     /** One health check for one product. The database decides when that opens or closes an incident. */
     probeRecord: ({ targetKey, ok, statusCode, latencyMs, failure = null, threshold = 2, agentKey = 'platform_engineer' }) =>
       call('private.agent_probe_record', [targetKey, ok, statusCode, latencyMs, failure, threshold, agentKey]),

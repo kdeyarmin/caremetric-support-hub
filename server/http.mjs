@@ -45,7 +45,7 @@ export const privateHubMessage='This Hub is private. Only its owner can sign in.
  * treated as signed out, a sign-in that fails it is revoked at once, and the routes that create
  * sign-ins for anyone else (invitation claims and application self-service) are closed.
  */
-export function appServer({auth,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,selfService,agents,health,owner,origins,dist=resolve('dist')}) {
+export function appServer({auth,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,selfService,agents,health,owner,origins,helpCenter=null,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -382,6 +382,8 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
         throw new HttpError(404,'This resource is unavailable.');
       }
       if(!['GET','HEAD'].includes(req.method)) throw new HttpError(405,'Method not allowed.');
+      // Public help articles, the sitemap and robots.txt as real HTML and text for crawlers (server/help-center.mjs); everything else is the app.
+      if(helpCenter && await helpCenter.serve(req,res,path)) return;
       let decoded; try { decoded=decodeURIComponent(path); } catch { throw new HttpError(400,'Invalid path.'); }
       let file=resolve(dist,`.${decoded}`);
       if(!file.startsWith(`${resolve(dist)}/`) && !file.startsWith(`${resolve(dist)}\\`) && file!==resolve(dist)) throw new HttpError(404,'Not found.');
