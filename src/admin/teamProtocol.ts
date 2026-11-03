@@ -95,6 +95,7 @@ export const autonomyHelp = {
 export const tierLabels = { fast: "Fast (Haiku)", draft: "Draft (Sonnet)", quality: "Quality (Opus)" } as const;
 
 const taskLabels: Record<string, string> = {
+  "content.weekly": "Weekly help article", "content.outreach": "Monthly outreach drafts",
   "probe.sweep": "Health check", "probe.incident": "Handle an incident", "probe.recovery": "Write a recovery note",
   "brief.daily": "Morning brief", "seo.weekly": "Weekly SEO check", "concierge.sweep": "Look for new messages", "concierge.communication": "Triage a message",
   "import.advisors": "Import Advisors requests", "import.breathe": "Import phone messages", "accounts.weekly": "Weekly account report",
@@ -102,12 +103,18 @@ const taskLabels: Record<string, string> = {
 export const taskLabel = (kind: string) => taskLabels[kind] ?? kind;
 
 const actionLabels: Record<string, string> = {
+  "content.publish": "Publish a help article",
   "communication.reply": "Reply to a customer", "communication.note": "Add an internal note", "communication.update": "Update a conversation",
   "incident.open": "Open an incident", "incident.resolve": "Resolve an incident", "import.run": "Import messages",
 };
 export const actionLabel = (kind: string) => actionLabels[kind] ?? kind;
 
 const errorLabels: Record<string, string> = {
+  invalid_article: "The article no longer passes the content checks (a rule changed since it was written), so it was not published.",
+  approval_required: "Articles are published only with your approval, and this one was approved automatically, so it was not published.",
+  slug_taken: "Another article already uses this address, so nothing was published.",
+  product_unavailable: "The article's product is retired or closed to support, so it was not published.",
+  publish_failed: "The article could not be published.",
   thread_changed: "The customer wrote again after this reply was written, so nothing was sent. Open the conversation and answer their latest message.",
   conversation_closed: "The conversation was closed, so nothing was sent.",
   conversation_missing: "The conversation no longer exists, so nothing was sent.",

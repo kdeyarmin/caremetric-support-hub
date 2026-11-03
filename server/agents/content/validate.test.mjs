@@ -1,0 +1,196 @@
+import { describe, expect, it } from 'vitest';
+import { legalDisclaimer, officialSources } from './facts.mjs';
+import { fireDrillDraft, referralDraft } from './fixtures.mjs';
+import { topics } from './topics.mjs';
+import { allowedNumbers, allowedUrl, checkArticle, checkDraft, limits, normalizeTerms, numbersIn, previewOf, textProblems } from './validate.mjs';
+
+const topic = key => topics.find(item => item.key === key);
+const fire = topic('pa-fire-drill-requirements');
+const referral = topic('home-health-referral-marketing');
+const check = (over = {}, which = fire) => checkDraft({ ...(which === fire ? fireDrillDraft : referralDraft), ...over }, { topic: which, promptVersion: 'content.1' });
+const reasons = (over, which) => check(over, which).reasons ?? [];
+// A sentence added to the end of the body, so one rule at a time can be made to fail.
+const withSentence = (sentence, which = fire) => ({ body: `${(which === fire ? fireDrillDraft : referralDraft).body}\n\n${sentence}` });
+
+describe('an article that passes', () => {
+  it('becomes exactly the action input: address, product, topic, kind, title, description and the assembled Markdown', () => {
+    const result = check();
+    expect(result.ok).toBe(true);
+    expect(Object.keys(result.article).sort()).toEqual(['body', 'description', 'kind', 'product', 'promptVersion', 'slug', 'title', 'topic']);
+    expect(result.article).toMatchObject({ slug: fireDrillDraft.slug, product: 'carebase', topic: 'pa-fire-drill-requirements', kind: 'regulation', title: fireDrillDraft.title, description: fireDrillDraft.metaDescription, promptVersion: 'content.1' });
+    const { body } = result.article;
+    expect(body.startsWith(`**In short:** ${fireDrillDraft.summary}\n\n${fireDrillDraft.body.slice(0, 40)}`)).toBe(true);
+    expect(body).toContain('## Frequently asked questions\n\n### How often must a Pennsylvania personal care home hold a fire drill?\n\nAt least once a month');
+    expect(body).toContain(`## Sources\n\n- [55 Pa. Code § 2600.132, fire drills](${officialSources['pacode-2600-132'].url})`);
+    expect(body).toContain('## Learn more\n\n- [CareBase features](https://cmcarebase.com/features)\n- [Free survey readiness guide](https://cmcarebase.com/survey-readiness-guide)');
+    expect(body.endsWith(`*${legalDisclaimer}*`)).toBe(true);
+    expect(checkArticle(result.article)).toEqual([]);
+  });
+
+  it('is previewed whole, with the address it will live at, and fits the action', () => {
+    const { preview, article } = check();
+    expect(preview.split('\n').slice(0, 4)).toEqual([
+      'Publish on the public help center: https://help.caremetric.ai/help/articles/pennsylvania-personal-care-home-alf-fire-drill-requirements',
+      'Product: CareMetric CareBase', `Title: ${fireDrillDraft.title}`, `Description: ${fireDrillDraft.metaDescription}`,
+    ]);
+    expect(preview.endsWith(article.body)).toBe(true);
+    expect(preview).toBe(previewOf(article));
+    expect(preview.length).toBeLessThanOrEqual(limits.preview);
+  });
+
+  it('carries the disclaimer only for a regulation, and a marketing article may say "proof" when it is not about CareBase', () => {
+    const result = check({}, referral);
+    expect(result.ok).toBe(true);
+    expect(result.article).toMatchObject({ product: 'caremetric-intel', kind: 'marketing' });
+    expect(result.article.body).not.toContain('not legal advice');
+    expect(check(withSentence('Recorded referrals are the proof that matters.', referral), referral).ok).toBe(true);
+  });
+
+  it('turns a top-level heading into a section heading, one title per page', () => {
+    const result = check({ body: fireDrillDraft.body.replace('## How often drills happen', '# How often drills happen') });
+    expect(result.ok).toBe(true);
+    expect(result.rewrites).toBe(1);
+    expect(result.article.body).toContain('\n## How often drills happen\n');
+  });
+});
+
+describe('the fixed vocabulary', () => {
+  it('rewrites Assisted Living Residence, ALR, auditors and a state audit where the meaning is plain', () => {
+    expect(normalizeTerms('Assisted Living Residences and ALR staff met the DHS auditor; two ALRs saw the auditors after the state audit. assisted living residence'))
+      .toEqual({ text: 'Assisted Living Facilities and ALF staff met the DHS surveyor; two ALFs saw the surveyors after the state inspection. assisted living facility', rewrites: 7, ambiguous: false });
+    const result = check({ title: 'Fire drill requirements for Pennsylvania personal care homes and ALRs', body: fireDrillDraft.body.replace('a surveyor can follow', 'an auditor can follow') });
+    expect(result.ok).toBe(true);
+    expect(result.rewrites).toBe(2);
+    expect(result.article.title).toBe('Fire drill requirements for Pennsylvania personal care homes and ALFs');
+    expect(result.article.body).toContain('a surveyor can follow');
+    expect(result.article.body).not.toMatch(/auditor|\bALR/);
+  });
+
+  it('rejects an auditor of another kind, which no rewrite can fix', () => {
+    expect(normalizeTerms('Ask your financial auditor.').ambiguous).toBe(true);
+    expect(reasons(withSentence('Ask your financial auditor about the records.'))).toContain('ambiguous_term');
+    expect(textProblems('The auditor left.')).toContain('vocabulary');
+  });
+});
+
+describe('each check that rejects a draft', () => {
+  it('holds the shape: title, address, description, summary, outline, body and sections', () => {
+    expect(reasons({ title: 'Fire drills' })).toEqual(['title_length']);
+    expect(reasons({ title: 'Fire drill requirements for **Pennsylvania** homes' })).toEqual(['title_format']);
+    expect(reasons({ slug: 'Fire_Drills' })).toEqual(['slug_format']);
+    expect(reasons({ slug: 'short' })).toEqual(['slug_format']);
+    expect(reasons({ metaDescription: 'Fire drills.' })).toEqual(['description_length']);
+    expect(reasons({ summary: 'Too short.' })).toEqual(['summary_length']);
+    expect(reasons({ outline: ['One', 'Two'] })).toEqual(['outline']);
+    expect(reasons({ body: '## A\n\nB\n\n## C\n\nD\n\n## E\n\nF' })).toEqual(['body_length']);
+    expect(reasons({ body: fireDrillDraft.body.replaceAll('\n## ', '\n### ') })).toEqual(['structure']);
+    expect(reasons(withSentence('## Sources\n\nSee the regulation.'))).toEqual(['structure']);
+  });
+
+  it('holds the questions, the internal links and the citations to their counts', () => {
+    expect(reasons({ faq: fireDrillDraft.faq.slice(0, 1) })).toEqual(['faq']);
+    expect(reasons({ faq: [{ ...fireDrillDraft.faq[0], question: 'Fire drills are monthly.' }, fireDrillDraft.faq[1]] })).toEqual(['faq']);
+    expect(reasons({ internalLinks: [] })).toEqual(['internal_links']);
+    expect(reasons({ internalLinks: ['carebase-features', 'somewhere-else'] })).toEqual(['internal_links']);
+    expect(reasons({ citations: [] })).toEqual(['citation_count']);
+    expect(check({ citations: [] }, referral).ok).toBe(true);
+  });
+
+  it('allows citations only to https addresses on the allowed hosts, and only the curated official sources', () => {
+    expect(reasons({ citations: ['http://www.pacodeandbulletin.gov/secure/pacode/data/055/chapter2600/s2600.132.html'] })).toEqual(['citation_host']);
+    expect(reasons({ citations: ['https://www.example.com/fire-drills'] })).toEqual(['citation_host']);
+    expect(reasons({ citations: ['https://pa.gov.example.com/fire'] })).toEqual(['citation_host']);
+    expect(reasons({ citations: ['https://user:pass@www.pa.gov/'] })).toEqual(['citation_host']);
+    expect(reasons({ citations: ['https://www.pa.gov/an-invented-page'] })).toEqual(['citation_unlisted']);
+    expect(allowedUrl('https://dhs.pa.gov/x')?.hostname).toBe('dhs.pa.gov');
+    expect(allowedUrl('https://www.pa.gov:8443/x')).toBeNull();
+  });
+
+  it('allows links in the body only to curated addresses, and no HTML, images or tables', () => {
+    expect(reasons(withSentence('See [the rule](https://www.example.com/rule).'))).toEqual(['link_not_allowed']);
+    expect(reasons(withSentence('See [the rule](javascript:alert(1)).'))).toEqual(['link_not_allowed']);
+    expect(reasons(withSentence('See https://www.pa.gov/another-page for more.'))).toEqual(['link_unlisted']);
+    expect(reasons(withSentence(`See [§ 2600.132](${officialSources['pacode-2600-132'].url}).`))).toEqual([]);
+    expect(reasons(withSentence('A <b>bold</b> claim.'))).toEqual(['html']);
+    expect(reasons(withSentence('<script>alert(1)</script>'))).toEqual(['html']);
+    expect(reasons(withSentence('![A poster](https://cmcarebase.com/poster.png)'))).toContain('unsupported_markup');
+    expect(reasons(withSentence('| Drill | Month |\n| --- | --- |\n| Fire | Monthly |'))).toEqual(['unsupported_markup']);
+  });
+
+  it('allows only the prices, percentages and numbers the fact sheet and the topic state', () => {
+    expect(reasons(withSentence('CareBase Core is $199 per facility per month.'))).toEqual([]);
+    expect(reasons(withSentence('CareBase costs $4 per resident.'))).toEqual(['unlisted_price']);
+    expect(reasons(withSentence('Teams cut survey preparation by 40%.'))).toEqual(['unlisted_number']);
+    expect(reasons(withSentence('Teams save 10 hours a week.'))).toEqual(['unlisted_number']);
+    expect(reasons(withSentence('Keep drill records for 3 years.'))).toEqual(['unlisted_number']);
+    expect(reasons(withSentence('Keep drill records for three years.'))).toEqual(['unlisted_number']);
+    // Section numbers, chapters and the topic's own numbers are not counts.
+    expect(reasons(withSentence('Chapter 2600 homes and § 2800.132 residences follow the same 6 months rule, and a CareBase trial lasts 30 days.'))).toEqual([]);
+    const allowed = allowedNumbers(['once every 6 months']);
+    expect(allowed.has('6:month')).toBe(true);
+    expect(allowed.has('30:day')).toBe(true);
+    expect(numbersIn('16-hour training, sixteen hours, 40 scheduled working hours, 3 marketer seats, 1,200 residents, 2026 rules, Chapter 2800 homes'))
+      .toEqual(['16:hour', '40:hour', '3:staff', '1200:resident']);
+  });
+
+  it('rejects guarantees, compliance assurances and certifications', () => {
+    expect(reasons(withSentence('We guarantee a clean survey.'))).toContain('guarantee');
+    for (const sentence of ['CareBase ensures compliance with Chapter 2600.', 'It keeps your home compliant.', 'Pass your next inspection with CareBase.',
+      'Become survey-proof.', 'Avoid all citations.', 'Your home will be fully compliant.', 'Never get cited again.']) {
+      expect(reasons(withSentence(sentence)), sentence).toContain('compliance_assurance');
+    }
+    for (const sentence of ['CareBase is HIPAA-certified.', 'CareBase is approved by the Department.', 'It is endorsed by the state.', '99.9% uptime.']) {
+      expect(reasons(withSentence(sentence)), sentence).toContain('certification_claim');
+    }
+  });
+
+  it('rejects voice or phone AI and a call or a demo as a step, but not a marketer who makes calls', () => {
+    expect(reasons(withSentence('Our AI answers your calls after hours.'))).toEqual(['voice_claim']);
+    expect(reasons(withSentence('A voice assistant reads the record aloud.'))).toEqual(['voice_claim']);
+    expect(reasons(withSentence('Book a demo to see it.'))).toEqual(['call_offer']);
+    expect(reasons(withSentence('Call us to get started.'))).toEqual(['call_offer']);
+    expect(reasons(withSentence('Liaisons make calls to physician offices and schedule visits.', referral), referral)).toEqual([]);
+  });
+
+  it('rejects competitors, testimonials, a claim to be an AI, and "prove" or "proof" about CareBase', () => {
+    expect(reasons(withSentence('Unlike PointClickCare, it is simple.'))).toEqual(['competitor_named']);
+    expect(reasons(withSentence('Our customers love it.'))).toEqual(['testimonial']);
+    expect(reasons(withSentence('As an AI, I recommend monthly drills.'))).toEqual(['ai_mention']);
+    expect(reasons(withSentence('Records prove the drill happened.'))).toEqual(['prove_word']);
+    expect(reasons(withSentence('Keep proof of every drill.'))).toEqual(['prove_word']);
+  });
+
+  it('rejects personal or health information and contact details', () => {
+    for (const sentence of ['A resident named Pat fell during the drill.', 'Her SSN is 123-45-6789.', 'Mrs. Example led the drill.', 'Medical record number 12345678 was misplaced.']) {
+      expect(reasons(withSentence(sentence)), sentence).toEqual(['personal_information']);
+    }
+    // The founder named on the fact sheet may be named.
+    expect(reasons(withSentence('Dr. Kevin C. Deyarmin founded CareMetric.'))).toEqual([]);
+    expect(reasons(withSentence('Email pat@example.com with questions.'))).toEqual(['contact_detail']);
+    expect(reasons(withSentence('Call 555-123-4567 for help.'))).toEqual(['contact_detail']);
+    expect(reasons(withSentence('Founding partners can email hello@caremetric.ai.'))).toEqual([]);
+  });
+
+  it('rejects an article too long to preview whole', () => {
+    const long = 'Plan each drill with the shift lead and review it with staff afterwards, writing down what went well and what to change next time. ';
+    const result = check({
+      body: `${fireDrillDraft.body}\n\n## Reviewing each drill\n\n${long.repeat(19)}`.slice(0, limits.body[1]),
+      faq: Array.from({ length: 4 }, (_, index) => ({ question: `What should drill review number ${['one', 'two', 'three', 'four'][index]} cover for staff?`, answer: long.repeat(3).slice(0, 440) })),
+    });
+    expect(result.reasons).toEqual(['too_long']);
+  });
+});
+
+describe('the last check before publishing', () => {
+  const stored = check().article;
+  it('passes the stored article as proposed', () => expect(checkArticle(stored)).toEqual([]));
+
+  it('refuses a stored article that lost its disclaimer, gained markup or a claim, or names an unknown product', () => {
+    expect(checkArticle({ ...stored, body: stored.body.replace(legalDisclaimer, 'General information only.') })).toEqual(['missing_disclaimer']);
+    expect(checkArticle({ ...stored, body: `${stored.body}\n\n<img src=x onerror=alert(1)>` })).toEqual(['html']);
+    expect(checkArticle({ ...stored, body: `${stored.body}\n\nCareBase ensures compliance.` })).toEqual(['compliance_assurance']);
+    expect(checkArticle({ ...stored, product: 'pennsync' })).toEqual(['product_unknown']);
+    expect(checkArticle({ ...stored, slug: 'Not A Slug' })).toEqual(['slug_format']);
+    expect(checkArticle(null)).toEqual(expect.arrayContaining(['slug_format', 'product_unknown', 'title_length', 'body_length']));
+  });
+});

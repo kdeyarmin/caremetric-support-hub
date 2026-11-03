@@ -119,6 +119,20 @@ describe('agent store', () => {
     ]);
   });
 
+  it('reads the Content Marketer\'s state and publishes an approved article through its two server-only operations', async () => {
+    const { store, calls } = harness({ outcome: 'published' });
+    await store.contentState(['pa-fire-drills']);
+    await store.contentState();
+    expect(await store.contentPublish('a1', 2)).toEqual({ outcome: 'published' });
+    await store.contentPublish('a1');
+    expect(calls).toEqual([
+      ['select private.agent_content_state($1) as result', [['pa-fire-drills']]],
+      ['select private.agent_content_state($1) as result', [[]]],
+      ['select private.agent_content_publish($1, $2) as result', ['a1', 2]],
+      ['select private.agent_content_publish($1, $2) as result', ['a1', null]],
+    ]);
+  });
+
   it('returns what the database returns', async () => {
     const { store } = harness([{ id: 't1' }]);
     expect(await store.claim(1, 60)).toEqual([{ id: 't1' }]);
