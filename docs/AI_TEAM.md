@@ -12,9 +12,10 @@ is built so far.
 > help-center article a week for the owner to approve and a month's outreach drafts for the owner to send (see "The
 > Content Marketer"); its model calls carry no customer text. The scheduler is inert
 > unless `HUB_AGENTS_ENABLED` is exactly `true` and every agent is seeded **paused**. Only the Concierge
-> can call a model, only to draft an answer to a plain question, and only while the owner has set
+> can send customer text to a model, only to draft an answer to a plain question, and only while the owner has set
 > `HUB_AGENTS_CUSTOMER_TEXT_TO_AI` to `true` ("Drafted answers"); otherwise customer message text never
-> leaves the Hub.
+> leaves the Hub. The SEO Analyst also calls the model, with the company's own public pages only, to suggest
+> titles and descriptions ("The SEO Analyst").
 
 ## The model
 
@@ -149,11 +150,13 @@ screen says the brief was written but not delivered.
 
 ## The SEO Analyst
 
-Checks the company's public websites every Monday and emails what to fix. It uses no model and reads
-only public pages of the sites it is told about: Healthcare Advisors (`caremetricadvisors.com`),
-CareBase (`cmcarebase.com`, with `caremetrictrain.com` as another address) and CareMetric Intel
-(`www.caremetricintel.com`). The list is fixed in `server/agents/seo/sites.mjs`, a check never leaves a
-site's own host, and nothing a customer says can add a site.
+Checks the company's public websites every Monday and emails what to fix. The crawl uses no model and reads
+only public pages of the sites it is told about: Healthcare Advisors (`caremetricadvisors.com`), CareBase
+(`cmcarebase.com`, with `caremetrictrain.com` as another address), CareMetric Intel
+(`www.caremetricintel.com`), the help center (`help.caremetric.ai`) and CareBase's Framer home page
+(`home.cmcarebase.com`). The list is fixed in `server/agents/seo/sites.mjs`, a check never leaves a site's own
+host, and nothing a customer says can add a site. `outboundHosts` in the same file is everything the analyst
+may contact: those hosts, their other addresses and Google's two Search Console endpoints.
 
 It reads each site the way a crawler that does not run scripts (and most AI assistants) does: plain GET
 requests that follow no redirect, at most 20 pages and 30 links a site, 8 seconds a request, 600 KB a
@@ -163,7 +166,11 @@ page and about two and a half minutes a site.
   are one group, as in RFC 9309), a sitemap exists and lists pages on the site, plain http redirects
   permanently to the site's own https address (an error answer, or a redirect to http or to another site, is
   a problem), and the other addresses for the site redirect to it with a permanent redirect (or name it as
-  canonical).
+  canonical). The home page is read first. When it redirects to another of the company's sites (the Framer page
+  sent to `cmcarebase.com`, say), its redirects are followed across the company's sites only, at most five of
+  them: a chain that ends at a page that loads means the site is checked no further, and the report says where
+  it ends and asks only that every redirect be permanent; a loop, or a chain that ends in an error, goes nowhere
+  or leaves the company's sites, is urgent.
 - **Its pages**, which are the home page and the pages in the sitemap (or the pages the home page links
   to when there is no sitemap): reachable, HTML, not marked noindex, a title and a description of a
   sensible length that no other page shares, a canonical link, one main heading, enough text before
@@ -173,7 +180,15 @@ page and about two and a half minutes a site.
   `/pricing` and `/pricing/`), and only the site root is written either way. A canonical link that differs
   from the page's address only by case or a trailing slash is therefore reported. Each address and detail in a
   finding is cut to a fixed length (160 and 240 characters), so a very long address in a sitemap cannot make
-  the email or the stored result large.
+  the email or the stored result large. A thin page (under 50 words before scripts run) that is built to be
+  filled in by scripts (it has the element a single-page app framework renders into, such as
+  `<div id="root">`, or loads a module script) is an **app shell**, and the report says plainly that search
+  engines and AI assistants that do not run JavaScript see almost nothing on it.
+- **Across the sites**: two of the company's hosts serving the same page split what search engines credit to
+  it. Two sites that are both home pages for one product (CareBase's own site and its Framer page), a
+  canonical link on one host that names another of the company's hosts, or the same title on pages of two
+  hosts are reported once per pair of hosts as "pick one canonical home page", with an address on each, and
+  counted as worth fixing. A page marked noindex counts for none of them.
 
 Each finding is **urgent** (it could keep pages out of search results), **worth fixing** or **minor**. The
 email lists each site's worst problems with an example page and scores each site out of 100 by how many
@@ -183,9 +198,77 @@ all-clear: with nothing found the email says "nothing found, but not every check
 a browser, which is itself worth knowing: many crawlers and AI assistants see only what is there before
 scripts run.
 
+### Search Console (optional)
+
+When the Hub service has `HUB_SEARCH_CONSOLE_CREDENTIALS` (a Google service account's JSON key, pasted whole;
+a secret) and `HUB_SEARCH_CONSOLE_SITES` (the properties, separated by commas, exactly as Search Console names
+them: `sc-domain:cmcarebase.com`, `https://www.caremetricintel.com/`; an address prefix is kept as written, so
+write it with its final `/` as Search Console shows it), the analyst reads Search Console while it
+crawls (`server/agents/seo/search-console.mjs`). It signs in as the service account with a JWT it signs itself
+(RS256 with `node:crypto`, no Google library), exchanged at `https://oauth2.googleapis.com/token` for a
+read-only token (`webmasters.readonly`) that is kept in memory until a minute before it expires. Each property
+gets five `searchAnalytics.query` calls: the totals for the last 28 days of final data (ending three days back,
+in Search Console's Pacific day) and for the 28 days before, and up to 250 rows by search, by page and by both
+together. Every request goes to `oauth2.googleapis.com` or `searchconsole.googleapis.com` only, follows no
+redirect, gives up after 15 seconds and is tried once more after a timeout, a dropped connection, a rate limit
+or a server error; a token Google refuses is replaced once. A property that cannot be read does not stop the
+others, and the report says why in plain words (for example that the service account is not a user on it). The
+key, the signed assertion and the token never reach a log line, an error, a stored result or the email.
+
+The report then gives, for each property, clicks, impressions, click-through rate and average position against
+the 28 days before, with its top searches and pages, and across the properties:
+
+- **Close to the first page** (striking distance): searches at an average position of 8 to 20 with at least 20
+  impressions, most seen first. Moving these up is the cheapest win there is.
+- **Seen often, rarely clicked**: first-page pages (average position 10 or better) with at least 100
+  impressions, clicked less than half as often as a result in that position usually is. Their titles and
+  descriptions are worth rewriting.
+- **Your own sites compete** (cannibalization): searches for which pages on two of the company's hosts both
+  appear, such as `cmcarebase.com` and `home.cmcarebase.com`, with at least 10 impressions between them.
+
+A search that looks personal (an email address, or a phone number or another run of seven or more digits) is
+left out of the report and away from the model. Searches are told apart by their whole text (only the label shown
+is cut to 80 characters), and when two properties overlap (a domain property and an address prefix inside it) a
+row both report is listed once, with the first property's figures, before each list is cut to five. These are
+opportunities, not problems: they do not change the
+count of things to fix. Without Search Console the report says once that it is not connected, and how to
+connect it: in Google Cloud, create a service account and a JSON key for it, and enable the Google Search
+Console API in that project; in Search Console, add the service account's email address as a user on each
+property (Restricted is enough); then set the two variables on the Hub service and redeploy. The integration
+setup panel shows whether they are set.
+
+### Suggested titles and descriptions (optional)
+
+When the model runtime is configured (`ANTHROPIC_API_KEY` is set), the analyst makes one call a week through
+the shared runtime (the agent's `fast` tier, its daily budget, 50 cents as seeded, a run row and a usage ledger entry)
+for up to five pages chosen by code: first the pages Search Console shows are seen often but rarely clicked,
+then pages with no title, then pages whose title is too short, too long or shared, then pages whose
+description is missing, the wrong length or shared. A page is offered only if it is in search results and has
+at least 50 words of its own before scripts run, so an app shell is never guessed at. The model sees, for each
+page, the site's name, the address, why it was picked, its current title and description, the start of its
+visible text (2,000 characters) and the searches that show it: public text only, never customer data. The system
+prompt is a constant (`server/agents/seo/rewrite.mjs`, version `seo-rewrite.2`), every page's text is escaped
+into its own block, and the answer is a closed schema that names pages only by id.
+
+Code checks each suggestion and drops the ones that fail: a title of 20 to 60 characters and a description of
+70 to 155; letters, digits and ordinary punctuation only (no markup, quotation marks, emoji, symbols, links or
+addresses); no phone number, even one the page shows; no word about money ("free", "paid", "price", "pricing",
+"cost", "fee", "discount", "save" and the like); no claim about results ("best", "guaranteed", "HIPAA-compliant"
+and the like), compliance among them ("become", "stay" or "be compliant", "compliance guaranteed", "pass your
+survey" or "inspection"); no number the page itself does not use; the company's vocabulary (Assisted Living Facility or ALF and surveyor, never Assisted Living Residence, ALR or
+auditor); and not the page's current title and description again, or another suggestion's title. The email
+shows each suggestion that passes with its page and why it was picked, and says how many were dropped. Nothing
+on any site is changed: the owner copies what they want. Without a model the section is left out. A model that
+fails, declines, is over budget or would run past its deadline (the call must end within 200 seconds of the
+task's start, so the report still goes out inside the scheduler's four minutes) leaves one line instead, and the
+report goes out regardless. The call is paid for once per report: a retry in the same server reuses the checked
+suggestions, and a report that already has an email under its own dedupe key (sent, on its way or tried) gets no
+new call. The stored task result keeps scores, counts and codes only: no page text, no search and no suggestion.
+
 The schedule fires every morning at 06:30 Eastern, because an interval schedule is limited to a day. The
 weekly work happens only on Monday and the other mornings finish at once. **Run now** checks on any day and
-sends a report every time, while the scheduled report is sent once per Monday. The analyst is observe-only
+sends a report every time, while the scheduled report is sent once per Monday. A task the scheduler has
+stopped waiting for (its time is up, or the owner cancelled it) sends nothing. The analyst is observe-only
 and proposes no actions. Turning findings into issues for the coder bot is a later step.
 
 ## The Support Concierge
