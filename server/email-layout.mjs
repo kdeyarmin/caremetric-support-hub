@@ -66,10 +66,15 @@ const font = `font-family:${fontStack};`;
 const paragraphStyle = `margin:0 0 16px;${font}font-size:16px;line-height:24px;color:${palette.body};`;
 const smallStyle = `margin:0 0 8px;${font}font-size:13px;line-height:20px;color:${palette.muted};`;
 const linkStyle = `color:${palette.brand};text-decoration:underline;`;
+// Link a caller-supplied reference without accepting raw HTML from email copy.
+function linkedText(text, link) {
+  if (!link?.label) return escapeHtml(text);
+  return String(text).split(link.label).map(escapeHtml).join(`<a href="${href(link.url)}" target="_blank" style="${linkStyle}">${escapeHtml(link.label)}</a>`);
+}
 
 const blocks = {
   paragraph: {
-    html: ({ text }) => `<p style="${paragraphStyle}">${escapeHtml(text)}</p>`,
+    html: ({ text, referenceLink }) => `<p style="${paragraphStyle}">${linkedText(text, referenceLink)}</p>`,
     text: ({ text }) => String(text),
   },
   /** Words a person wrote: shown exactly as written, paragraph by paragraph. */
@@ -93,10 +98,10 @@ ${rows.map(([label, value]) => `<tr><td valign="top" style="padding:4px 12px 4px
     text: ({ rows }) => rows.map(([label, value]) => `${label}: ${value}`).join('\n'),
   },
   callout: {
-    html: ({ tone = 'info', title, text }) => {
+    html: ({ tone = 'info', title, text, referenceLink }) => {
       const colors = calloutTones[tone] ?? calloutTones.info;
       return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;border-collapse:separate;">
-<tr><td style="padding:12px 16px;background-color:${colors.fill};border:1px solid ${colors.border};border-left:4px solid ${colors.accent};border-radius:8px;${font}font-size:15px;line-height:22px;color:${colors.text};">${title ? `<strong>${escapeHtml(title)}</strong> ` : ''}${escapeHtml(text)}</td></tr></table>`;
+<tr><td style="padding:12px 16px;background-color:${colors.fill};border:1px solid ${colors.border};border-left:4px solid ${colors.accent};border-radius:8px;${font}font-size:15px;line-height:22px;color:${colors.text};">${title ? `<strong>${escapeHtml(title)}</strong> ` : ''}${linkedText(text, referenceLink)}</td></tr></table>`;
     },
     text: ({ title, text }) => (title ? `${title} ${text}` : String(text)),
   },
@@ -121,15 +126,15 @@ function renderBlock(block, kind) {
  * @param {Array<string|{label: string, url: string}>} email.footer why they received it, how to get help;
  *   a { label, url } line is a link (an unsubscribe link, say)
  */
-export function renderEmail({ layout = 'branded', title, preheader, heading, recipientName, blocks: content, signature = [`— The ${SUPPORT_TEAM_NAME} team`], footer }) {
+export function renderEmail({ layout = 'branded', title, preheader, heading, recipientName, blocks: content, signature = [`— The ${SUPPORT_TEAM_NAME} team`], footer, referenceLink = null }) {
   const branded = layout !== 'personal';
   const greeting = branded ? (recipientName && String(recipientName).trim() ? `Hi ${String(recipientName).trim()},` : 'Hello,') : null;
   const [signer, ...signatureDetails] = signature;
 
   const body = [
-    branded && heading ? `<h1 style="margin:0 0 16px;${font}font-size:22px;line-height:30px;font-weight:700;color:${palette.heading};">${escapeHtml(heading)}</h1>` : '',
+    branded && heading ? `<h1 style="margin:0 0 16px;${font}font-size:22px;line-height:30px;font-weight:700;color:${palette.heading};">${linkedText(heading, referenceLink)}</h1>` : '',
     greeting ? `<p style="${paragraphStyle}">${escapeHtml(greeting)}</p>` : '',
-    ...content.map(block => renderBlock(block, 'html')),
+    ...content.map(block => renderBlock({ ...block, referenceLink }, 'html')),
     signer ? `<p style="margin:24px 0 0;${font}font-size:16px;line-height:24px;font-weight:600;color:${palette.heading};">${escapeHtml(signer)}</p>` : '',
     ...signatureDetails.map(line => `<p style="margin:0;${font}font-size:14px;line-height:20px;color:${palette.muted};">${escapeHtml(line)}</p>`),
   ].filter(Boolean).join('\n');
