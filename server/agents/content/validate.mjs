@@ -83,21 +83,26 @@ const numberWords = {
 const qualifiers = new Set(['more', 'fewer', 'less', 'additional', 'extra', 'full', 'new', 'scheduled', 'working', 'business', 'calendar', 'licensed',
   'marketer', 'manager', 'annual', 'direct', 'care', 'training', 'unannounced', 'separate', 'paying', 'active', 'other']);
 const chapterNumbers = new Set(['2600', '2800', '6400', '3270', '3280', '3290']);
-const numberStart = new RegExp(String.raw`(?<![\w.$§,/])(\d{1,3}(?:,\d{3})+|\d+|${Object.keys(numberWords).join('|')})(?:\.\d+)?(?=\s|[-–])`, 'gi');
+// The whole number, decimals included: "6.5 months" is 6.5 months, never 6.
+const numberStart = new RegExp(String.raw`(?<![\w.$§,/])((?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?|${Object.keys(numberWords).join('|')})(?=\s|[-–])`, 'gi');
+/** A written number as a number: "1,299.50" is 1299.5 and "199.00" is 199, so equal amounts compare equal however they are written. */
+const numberOf = text => Number(String(text).replace(/[$,%\s]/g, ''));
 
-/** Every number written with a unit, as "12:hour". A bare number (a section, a year, a list marker) is not one. */
+/** Every number written with a unit, as "12:hour" or "6.5:month". A bare number (a section, a year, a list marker) is not one. */
 export function numbersIn(value) {
   const text = String(value ?? '');
   const found = new Set();
   for (const match of text.matchAll(numberStart)) {
     // A regulation's own numbers are names, not counts: "Chapter 2600 homes", "§ 20.31", "Chapters 2600 and 2800".
-    if (chapterNumbers.has(match[1]) || /(?:chapters?|ch\.|§+|sections?|part|title|code)\s*(?:\d+\s*(?:and|or|,)\s*)?$/i.test(text.slice(Math.max(0, match.index - 24), match.index))) continue;
+    // A section is named by its chapter ("2800.132"), so the whole part is what marks it; a list of sections ("§ 2600.132(c) and 2800.132") counts too.
+    if (chapterNumbers.has(match[1].replace(/,/g, '').split('.')[0])
+      || /(?:chapters?|ch\.|§+|sections?|part|title|code)\s*(?:\d+(?:\.\d+)?(?:\([a-z0-9]+\))*\s*(?:and|or|,)\s*)?$/i.test(text.slice(Math.max(0, match.index - 32), match.index))) continue;
     const after = text.slice(match.index + match[0].length, match.index + match[0].length + 80);
     const words = /^(?:\s*[-–]\s*|\s+)([a-z' ]+)/i.exec(after)?.[1].trim().toLowerCase().split(/\s+/).slice(0, 4) ?? [];
     for (const word of words) {
       const unit = unitOf(word);
       if (unit) {
-        found.add(`${numberWords[match[1].toLowerCase()] ?? Number(match[1].replace(/,/g, ''))}:${unit}`);
+        found.add(`${numberWords[match[1].toLowerCase()] ?? numberOf(match[1])}:${unit}`);
         break;
       }
       if (!qualifiers.has(word)) break;
@@ -105,12 +110,13 @@ export function numbersIn(value) {
   }
   return [...found];
 }
-const amountPattern = /\$\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?/g;
-const percentPattern = /(\d+(?:\.\d+)?)\s?(?:%|percent\b)/gi;
-const amountsIn = value => [...String(value ?? '').matchAll(amountPattern)].map(match => `$${match[1].replace(/,/g, '')}`);
-const percentsIn = value => [...String(value ?? '').matchAll(percentPattern)].map(match => `${match[1]}%`);
-const knownAmounts = new Set(allowedAmounts.map(amount => amount.replace(/,/g, '')));
-const knownPercents = new Set(allowedPercents);
+// Amounts and percentages are read whole (decimals included) and compared as numbers: "$199.00" is the listed $199, "$199.99" is not.
+const amountPattern = /\$\s?((?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?)/g;
+const percentPattern = /((?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?)\s?(?:%|percent\b)/gi;
+const amountsIn = value => [...String(value ?? '').matchAll(amountPattern)].map(match => numberOf(match[1]));
+const percentsIn = value => [...String(value ?? '').matchAll(percentPattern)].map(match => numberOf(match[1]));
+const knownAmounts = new Set(allowedAmounts.map(numberOf));
+const knownPercents = new Set(allowedPercents.map(numberOf));
 const sheetNumbers = numbersIn(factSheetText());
 
 /** The numbers-with-units a text may state: the fact sheet's and those in the given facts. */

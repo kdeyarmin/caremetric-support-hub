@@ -245,7 +245,8 @@ session (public, published articles), read at most once every five minutes.
   the source is escaped; only https and same-site links are kept). The app's script then takes over at the same
   address. `Cache-Control: public, max-age=300`. An address with no public article answers 404 with the app shell
   and `noindex`; the form with a trailing slash answers 301 to the one without; 503 with `Retry-After` when the
-  list cannot be read and none is cached.
+  list cannot be read and none is cached. A read that failed is tried again at most once a minute; meanwhile every
+  request gets the last list read (or the 503).
 - `GET /sitemap.xml` — `/help`, `/learn` and every public article, at `https://help.caremetric.ai`
   (`public, max-age=3600`).
 - `GET /robots.txt` — everything except `/api/` and `/admin`, and the sitemap's address (`public, max-age=86400`).

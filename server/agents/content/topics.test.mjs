@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { allowedHost, officialSources } from './facts.mjs';
+import { allowedHost, officialSources, products } from './facts.mjs';
 import { backlogProblems, chooseTopic, topics } from './topics.mjs';
 import { numbersIn } from './validate.mjs';
 
 const now = new Date('2026-11-03T13:00:00Z');
 const daysAgo = days => new Date(now.getTime() - days * 86_400_000).toISOString();
 const byKey = key => topics.find(topic => topic.key === key);
-const article = (key, status, at = daysAgo(1)) => ({ topic: key, slug: byKey(key)?.slug ?? `${key}-slug`, product: byKey(key)?.product ?? 'carebase', status, at });
+// Shaped as private.agent_content_state returns it: the product is the Hub's slug (caremetric-intel), never the backlog's key (intel).
+const article = (key, status, at = daysAgo(1)) => ({ topic: key, slug: byKey(key)?.slug ?? `${key}-slug`, product: products[byKey(key)?.product ?? 'carebase'].slug, status, at });
 
 describe('the topic backlog', () => {
   it('is well formed: unique keys and slugs, known products, sources and pages', () => {
@@ -62,7 +63,7 @@ describe('choosing the next topic', () => {
   it('skips a topic whose suggested address another article already uses', () => {
     expect(chooseTopic({ takenSlugs: [byKey('pa-chapter-2600-vs-2800').slug], now }).key).toBe('pa-surveyor-visit-readiness');
     // The address a live article holds is taken too, even when it was published for another topic.
-    expect(chooseTopic({ articles: [{ topic: 'retired-topic', slug: byKey('pa-chapter-2600-vs-2800').slug, product: 'intel', status: 'executed', at: daysAgo(3) }], now }).key)
+    expect(chooseTopic({ articles: [{ topic: 'retired-topic', slug: byKey('pa-chapter-2600-vs-2800').slug, product: 'caremetric-intel', status: 'executed', at: daysAgo(3) }], now }).key)
       .toBe('pa-surveyor-visit-readiness');
   });
 
@@ -71,6 +72,17 @@ describe('choosing the next topic', () => {
     expect(chooseTopic({ questions, now }).key).toBe('home-health-referral-marketing');
     expect(chooseTopic({ questions: [{ product: 'advisors', inquiryType: 'advisors', conversations: 40 }], now }).product).toBe('advisors');
     expect(chooseTopic({ questions: [{ product: 'none', inquiryType: 'unclassified', conversations: 50 }], now }).key).toBe('pa-chapter-2600-vs-2800');
+  });
+
+  it('steps away from Intel too, whose articles the database names caremetric-intel', () => {
+    expect(article('home-health-referral-marketing', 'executed').product).toBe('caremetric-intel');
+    // A few Intel sales questions lift the next Intel topic just above the next CareBase one...
+    const questions = [{ product: 'caremetric-intel', inquiryType: 'sales', conversations: 2 }];
+    const intelFirst = [article('home-health-referral-marketing', 'executed', daysAgo(10)), article('pa-chapter-2600-vs-2800', 'executed', daysAgo(1))];
+    expect(chooseTopic({ articles: intelFirst, questions, now }).key).toBe('county-market-data-outreach');
+    // ...unless the last article was about Intel, which then steps back.
+    const intelLast = [article('pa-chapter-2600-vs-2800', 'executed', daysAgo(10)), article('home-health-referral-marketing', 'executed', daysAgo(1))];
+    expect(chooseTopic({ articles: intelLast, questions, now }).key).toBe('pa-surveyor-visit-readiness');
   });
 
   it('steps away from the product the last article was about', () => {

@@ -16,7 +16,9 @@ import { escapeHtml, renderMarkdownHtml } from '../src/lib/markdown.ts';
  *
  * The articles are the ones an anonymous visitor's app reads (`load`, the hub.list_published_content RPC without a session), so a
  * crawler is shown exactly what a visitor sees. They are cached for `ttlMs` (five minutes) and refreshed by one request at a time;
- * when the database cannot answer, the last list is served, and with no list at all the page answers 503 with the app shell.
+ * when the database cannot answer, the last list is served, and with no list at all the page answers 503 with the app shell. A
+ * refresh that failed is not tried again for `retryMs` (a minute), so crawler traffic during an outage cannot turn into a stream
+ * of database reads and failure logs: until then every request gets the last list, or the 503.
  * Responses keep every security header the server sets (including the Content Security Policy: the JSON-LD block is data, not a
  * script) and are cacheable by browsers and crawlers for a few minutes.
  */
@@ -78,27 +80,41 @@ export function pageHtml(template, { title, description = null, canonical = null
 
 const shell = main => `<div class="public-help-shell"><header class="public-help-header"><a class="brand-lockup brand-lockup-large" href="/help"><span><strong>CareMetric</strong><small>Help center</small></span></a><nav class="public-help-nav" aria-label="Public support navigation"><a href="/help">Help center</a><a href="/learn">Learning library</a></nav></header><main class="public-help-wrap">${main}</main></div>`;
 
-export function helpCenter({ load, origin = 'https://help.caremetric.ai', dist = resolve('dist'), ttlMs = 5 * 60_000, now = () => Date.now(), log = line => console.warn(line) }) {
+export function helpCenter({ load, origin = 'https://help.caremetric.ai', dist = resolve('dist'), ttlMs = 5 * 60_000, retryMs = 60_000, now = () => Date.now(), log = line => console.warn(line) }) {
   const base = String(origin).replace(/\/+$/, '');
   let cache = null;
   let loading = null;
+  // When the last read failed: until retryMs has passed no request reads the database again.
+  let failedAt = null;
   let template = null;
   // Each article's page is built once per list read, not once per request.
   let pages = new Map();
 
+  const unavailable = () => Object.assign(new Error('The help center could not be read.'), { code: 'help_unavailable' });
+
   async function articles() {
     if (cache && now() - cache.at < ttlMs) return cache.list;
+    // A read that failed a moment ago is not repeated for every request: the last list (or the 503) stands until retryMs passes.
+    if (failedAt !== null && now() - failedAt < retryMs) {
+      if (cache) return cache.list;
+      throw unavailable();
+    }
+    // One read at a time; it logs a failure once, however many requests were waiting on it.
     loading ??= Promise.resolve().then(load).then(rows => {
       cache = { at: now(), list: publicArticles(rows) };
+      failedAt = null;
       pages = new Map();
       return cache.list;
+    }, () => {
+      failedAt = now();
+      log(JSON.stringify({ event: 'hub_help_center_load_failed' }));
+      throw unavailable();
     }).finally(() => { loading = null; });
     try {
       return await loading;
     } catch {
-      log(JSON.stringify({ event: 'hub_help_center_load_failed' }));
       if (cache) return cache.list;
-      throw Object.assign(new Error('The help center could not be read.'), { code: 'help_unavailable' });
+      throw unavailable();
     }
   }
 

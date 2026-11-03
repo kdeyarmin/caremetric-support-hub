@@ -195,9 +195,9 @@ export const vocabulary = deepFreeze({
   ],
 });
 
-/** Every dollar amount on the sheet, as "$1,990"; an article may state these and no other. */
+/** Every dollar amount on the sheet, decimals included, as "$1,990"; an article may state these and no other (compared as numbers). */
 export const allowedAmounts = Object.freeze([...new Set(Object.values(products).flatMap(product => [...product.pricing, ...product.offers])
-  .flatMap(line => line.match(/\$\d{1,3}(?:,\d{3})*(?!\d)/g) ?? []))].sort());
+  .flatMap(line => line.match(/\$\d{1,3}(?:,\d{3})*(?:\.\d+)?(?!\d)/g) ?? []))].sort());
 
 /** Every percentage on the sheet. */
 export const allowedPercents = Object.freeze([...new Set(Object.values(products).flatMap(product => product.pricing)

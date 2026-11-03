@@ -302,7 +302,8 @@ export function chooseTopic({ backlog = topics, articles = [], takenSlugs = [], 
     const asked = byProduct.get(slug) ?? 0;
     const matching = item.inquiries.reduce((total, inquiry) => total + (byInquiry.get(`${slug}:${inquiry}`) ?? 0), 0);
     // Priority leads; questions nudge (a log, so a busy week cannot drown the backlog); the last article's product steps back.
-    return item.priority + Math.log2(1 + asked) * 0.5 + Math.log2(1 + matching) * 0.5 - (recent && recent.product === item.product ? 1 : 0);
+    // The database names products by their Hub slug (caremetric-intel), the backlog by its key (intel): compare the slug.
+    return item.priority + Math.log2(1 + asked) * 0.5 + Math.log2(1 + matching) * 0.5 - (recent && recent.product === slug ? 1 : 0);
   };
   // Highest score first; the backlog's own order breaks ties, so the choice is deterministic.
   return eligible.map((item, index) => ({ item, index, value: score(item) }))

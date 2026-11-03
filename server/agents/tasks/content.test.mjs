@@ -1,12 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { aiError, modelRuntime } from '../runtime/index.mjs';
 import { contentFeature } from '../content/executor.mjs';
+import { products } from '../content/facts.mjs';
 import { completion, fireDrillDraft, outreachDraft, referralDraft } from '../content/fixtures.mjs';
 import { promptVersion, systemPrompt } from '../content/prompt.mjs';
 import { topics } from '../content/topics.mjs';
 import { contentHandlers, easternDate, onOrAfterFirstWednesday } from './content.mjs';
 
 const dayStart = '2026-11-03T05:00:00.000Z';
+// As private.agent_content_state answers: products by the Hub's slug (caremetric-intel), not the backlog's key.
+const stored = (topic, status, at) => ({ topic: topic.key, slug: topic.slug, product: products[topic.product].slug, status, at });
 const tuesday = new Date('2026-11-03T12:45:00Z');
 const task = (over = {}) => ({
   id: 't1', agentKey: 'content_marketer', kind: 'content.weekly', sourceKind: 'owner', requestKey: 'owner:1', attempts: 1,
@@ -61,8 +64,8 @@ describe('the weekly help article', () => {
   const fireTopic = topics.find(topic => topic.key === 'pa-fire-drill-requirements');
   // Everything ahead of the fire drill topic in the backlog is taken, so the handler chooses it.
   const before = topics.slice(0, topics.indexOf(fireTopic)).filter(topic => topic.product === 'carebase')
-    .map(topic => ({ topic: topic.key, slug: topic.slug, product: topic.product, status: 'executed', at: '2026-10-01T00:00:00Z' }));
-  const state = { articles: [...before, ...topics.filter(topic => topic.product !== 'carebase').map(topic => ({ topic: topic.key, slug: topic.slug, product: topic.product, status: 'proposed', at: '2026-09-01T00:00:00Z' }))] };
+    .map(topic => stored(topic, 'executed', '2026-10-01T00:00:00Z'));
+  const state = { articles: [...before, ...topics.filter(topic => topic.product !== 'carebase').map(topic => stored(topic, 'proposed', '2026-09-01T00:00:00Z'))] };
 
   it('drafts the chosen topic with one cached, metered call and proposes the whole article for the owner', async () => {
     const { handlers, store, requests, logs } = fixture({ state });
@@ -129,7 +132,7 @@ describe('the weekly help article', () => {
     const observing = fixture({ state });
     expect(await observing.handlers['content.weekly'](task({ agent: { ...task().agent, autonomy: 'observe' } }), { now: () => tuesday })).toEqual({ result: { skipped: 'observe_only' } });
     expect(observing.client.messages.create).not.toHaveBeenCalled();
-    const exhausted = fixture({ state: { articles: topics.map(topic => ({ topic: topic.key, slug: topic.slug, product: topic.product, status: 'executed', at: '2026-10-01T00:00:00Z' })) } });
+    const exhausted = fixture({ state: { articles: topics.map(topic => stored(topic, 'executed', '2026-10-01T00:00:00Z')) } });
     expect(await exhausted.handlers['content.weekly'](task(), { now: () => tuesday })).toEqual({ result: { skipped: 'no_topic' } });
     expect(exhausted.client.messages.create).not.toHaveBeenCalled();
   });
@@ -142,6 +145,16 @@ describe('the weekly help article', () => {
     const cancelled = fixture({ state, answer: () => { controller.abort(); return completion(fireDrillDraft); } });
     await expect(cancelled.handlers['content.weekly'](task(), { now: () => tuesday, signal: controller.signal })).rejects.toMatchObject({ code: 'task_cancelled' });
     expect(cancelled.store.proposeAction).not.toHaveBeenCalled();
+  });
+
+  it('steps away from Intel after an Intel article, reading the products as the database names them', async () => {
+    const homeHealth = topics.find(topic => topic.key === 'home-health-referral-marketing');
+    const chapters = topics.find(topic => topic.key === 'pa-chapter-2600-vs-2800');
+    const questions = [{ product: 'caremetric-intel', inquiryType: 'sales', conversations: 2 }];
+    const afterIntel = fixture({ state: { articles: [stored(chapters, 'executed', '2026-10-01T00:00:00Z'), stored(homeHealth, 'executed', '2026-11-01T00:00:00Z')], questions } });
+    expect((await afterIntel.handlers['content.weekly'](task(), { now: () => tuesday })).result.topic).toBe('pa-surveyor-visit-readiness');
+    const afterCareBase = fixture({ state: { articles: [stored(homeHealth, 'executed', '2026-10-01T00:00:00Z'), stored(chapters, 'executed', '2026-11-01T00:00:00Z')], questions } });
+    expect((await afterCareBase.handlers['content.weekly'](task(), { now: () => tuesday })).result.topic).toBe('county-market-data-outreach');
   });
 
   it('uses the topic the inbox counts point to', async () => {

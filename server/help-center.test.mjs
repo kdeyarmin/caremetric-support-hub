@@ -151,13 +151,53 @@ describe('reading the articles', () => {
     expect(reads).toHaveBeenCalledTimes(2);
   });
 
+  it('backs off a failed refresh: one database read a minute while it fails, the last good list served meanwhile', async () => {
+    const reads = vi.fn(async () => rows);
+    const logs = [];
+    let at = 0;
+    const help = helpCenter({ load: reads, now: () => at, log: line => logs.push(line) });
+    await help.articles();
+    at = 300_000;
+    reads.mockRejectedValue(new Error('database down'));
+    // Crawler traffic during the outage: every request gets the last list, and only the first one reads the database.
+    for (let index = 0; index < 25; index += 1) expect((await help.articles()).map(article => article.key)).toEqual(['pennsylvania-fire-drills', 'support.protect-patient-information']);
+    expect(await Promise.all([help.articles(), help.articles()])).toHaveLength(2);
+    expect([reads.mock.calls.length, logs.length]).toEqual([2, 1]);
+    at = 359_999; await help.articles();
+    expect(reads).toHaveBeenCalledTimes(2);
+    at = 360_000; await help.articles();
+    expect([reads.mock.calls.length, logs.length]).toEqual([3, 2]);
+    expect(logs.every(line => line === '{"event":"hub_help_center_load_failed"}')).toBe(true);
+    // The first read that succeeds ends the back-off, and the list is fresh for five minutes again.
+    reads.mockResolvedValue(rows.slice(1));
+    at = 420_000;
+    expect((await help.articles()).map(article => article.key)).toEqual(['support.protect-patient-information']);
+    at = 719_999; await help.articles();
+    expect(reads).toHaveBeenCalledTimes(4);
+  });
+
+  it('with no list at all answers unavailable to every request, and still reads the database at most once a minute', async () => {
+    const reads = vi.fn(async () => { throw new Error('database down'); });
+    let at = 0;
+    const help = helpCenter({ load: reads, now: () => at, log: () => {} });
+    for (let index = 0; index < 5; index += 1) await expect(help.articles()).rejects.toMatchObject({ code: 'help_unavailable' });
+    expect(reads).toHaveBeenCalledTimes(1);
+    at = 60_000;
+    await expect(help.articles()).rejects.toMatchObject({ code: 'help_unavailable' });
+    expect(reads).toHaveBeenCalledTimes(2);
+    reads.mockResolvedValueOnce(rows);
+    at = 120_000;
+    expect(await help.articles()).toHaveLength(2);
+  });
+
   it('answers 503 with the app shell when there is no list at all', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'hub-help-down-'));
     try {
       await writeFile(join(dir, 'index.html'), index);
       const logs = [];
+      const failing = vi.fn(async () => { throw new Error('secret detail'); });
       const down = appServer({ auth: {}, gateway: {}, delegations: {}, origins: [], dist: dir,
-        helpCenter: helpCenter({ load: async () => { throw new Error('secret detail'); }, dist: dir, log: line => logs.push(line) }) });
+        helpCenter: helpCenter({ load: failing, dist: dir, log: line => logs.push(line) }) });
       down.listen(0, '127.0.0.1'); await once(down, 'listening');
       try {
         const address = `http://127.0.0.1:${down.address().port}`;
@@ -165,6 +205,9 @@ describe('reading the articles', () => {
         expect([page.status, page.headers.get('retry-after'), page.headers.get('cache-control')]).toEqual([503, '120', 'no-store']);
         expect(await page.text()).toBe(index);
         expect((await fetch(`${address}/sitemap.xml`)).status).toBe(503);
+        for (let index = 0; index < 5; index += 1) expect((await fetch(`${address}/help/articles/support.protect-patient-information`)).status).toBe(503);
+        // Seven requests inside a minute, one database read and one log line.
+        expect([failing.mock.calls.length, logs.length]).toEqual([1, 1]);
         expect(logs.join('\n')).not.toContain('secret detail');
       } finally { await new Promise(resolve => down.close(resolve)); }
     } finally { await rm(dir, { recursive: true, force: true }); }

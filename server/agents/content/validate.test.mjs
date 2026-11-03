@@ -124,6 +124,19 @@ describe('each check that rejects a draft', () => {
     expect(reasons(withSentence('Teams save 10 hours a week.'))).toEqual(['unlisted_number']);
     expect(reasons(withSentence('Keep drill records for 3 years.'))).toEqual(['unlisted_number']);
     expect(reasons(withSentence('Keep drill records for three years.'))).toEqual(['unlisted_number']);
+    // Decimals are part of the number: a listed $199 does not allow $199.99, and the topic's 6 months does not allow 6.5.
+    expect(reasons(withSentence('CareBase Core is $199.99 per facility per month.'))).toEqual(['unlisted_price']);
+    expect(reasons(withSentence('CareBase Core is $199.00 per facility per month.'))).toEqual([]);
+    expect(reasons(withSentence('A yearly plan costs $1,299.50.'))).toEqual(['unlisted_price']);
+    expect(reasons(withSentence('Intel Starter is $349.50 per month.', referral), referral)).toEqual(['unlisted_price']);
+    expect(reasons(withSentence('Intel Starter is $349 per month.', referral), referral)).toEqual([]);
+    expect(reasons(withSentence('A CareBase trial lasts 30.9 days.'))).toEqual(['unlisted_number']);
+    expect(reasons(withSentence('A CareBase trial lasts 30 days.'))).toEqual([]);
+    expect(reasons(withSentence('A yearly plan costs $1,990.00 per facility.'))).toEqual([]);
+    expect(reasons(withSentence('Hold a sleeping-hours drill every 6.5 months.'))).toEqual(['unlisted_number']);
+    expect(reasons(withSentence('Hold a sleeping-hours drill every 6.0 months.'))).toEqual([]);
+    expect(reasons(withSentence('Annual billing saves about 17.5% on Intel.', referral), referral)).toEqual(['unlisted_number']);
+    expect(reasons(withSentence('Annual billing saves about 17.0% on Intel.', referral), referral)).toEqual([]);
     // Section numbers, chapters and the topic's own numbers are not counts.
     expect(reasons(withSentence('Chapter 2600 homes and § 2800.132 residences follow the same 6 months rule, and a CareBase trial lasts 30 days.'))).toEqual([]);
     const allowed = allowedNumbers(['once every 6 months']);
@@ -131,6 +144,9 @@ describe('each check that rejects a draft', () => {
     expect(allowed.has('30:day')).toBe(true);
     expect(numbersIn('16-hour training, sixteen hours, 40 scheduled working hours, 3 marketer seats, 1,200 residents, 2026 rules, Chapter 2800 homes'))
       .toEqual(['16:hour', '40:hour', '3:staff', '1200:resident']);
+    expect(numbersIn('6.5 months, 6.0 months, 1,299.50 residents, § 2600.132(c) and 2800.132 homes, Chapters 2600 and 2800 homes'))
+      .toEqual(['6.5:month', '6:month', '1299.5:resident']);
+    expect(allowed.has('6.5:month')).toBe(false);
   });
 
   it('rejects guarantees, compliance assurances and certifications', () => {
