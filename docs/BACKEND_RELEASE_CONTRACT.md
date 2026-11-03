@@ -89,6 +89,16 @@ a pinned empty search path on all of them. Each test fails closed, so a function
 was reset (which leaves it null) is refused. The Hub server uses the fenced operations only when the feature is
 declared.
 
+`20261103150100_agent_content_contract.sql` declares `platform.agents.content.v1` only after `platform.agents.v1`,
+`platform.agents.hardening.v1`, `knowledge.publications.v1` and `support.communications.v1` are declared, the
+`content.publish` action kind (aimed at a `content_item`) has its shape check and its once-per-address and
+once-per-topic unique indexes, `private.agent_content_state(...)` and `private.agent_content_publish(...)` are
+security definers with a pinned empty search path executable by `hub_app_server` alone (publishing must refuse an
+action the owner did not decide and author as the AI assistant profile, which must exist), and the Content Marketer
+has its settings and its two daily schedules. Each test fails closed. The Hub server registers the Content Marketer's
+handlers only when the feature is declared and a model key is set, and its publish executor only when the feature is
+declared.
+
 The table above is not exhaustive:
 later features such as the `billing.*` and `customer.self-service.v1` boundaries are declared
 by their own migrations and listed in `src/lib/backendContract.ts`. See [AI_TEAM.md](AI_TEAM.md).

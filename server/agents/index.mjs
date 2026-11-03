@@ -5,6 +5,7 @@ import { ownerNotifier } from './notify.mjs';
 import { agentAdmin } from './admin.mjs';
 import { builtInHandlers } from './tasks/index.mjs';
 import { conciergeExecutors, draftingFor } from './concierge/index.mjs';
+import { contentExecutors } from './content/executor.mjs';
 import { modelRuntime } from './runtime/index.mjs';
 
 const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
@@ -18,8 +19,9 @@ const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
  * agent also starts paused in the database until the owner resumes it.
  * `model` is the shared model runtime (runtime/): built from `anthropicApiKey` unless one is given,
  * and handed to function-style `handlers` beside the store and the notifier. `record` writes the
- * usage ledger. The only handler that calls the model is the Concierge's triage, and only when
- * `customerTextToAi` (the owner's switch) is true, a key is set and `guides` (the guide library) is given.
+ * usage ledger. The Concierge's triage calls the model only when `customerTextToAi` (the owner's switch) is true, a key is set
+ * and `guides` (the guide library) is given; the Content Marketer's tasks (no customer text at all) only when a key is set and
+ * the database declares platform.agents.content.v1.
  */
 export function agentTeam({
   pool, store: givenStore = null, handlers = {}, executors = {}, sms, email, ownerEmail, publicOrigin,
@@ -31,7 +33,7 @@ export function agentTeam({
   const notifier = ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log });
   const runtime = model ?? modelRuntime({ apiKey: anthropicApiKey, store, record, notifier, log, now });
   const shared = { store, notifier, model: runtime };
-  const actions = actionExecutor({ store, executors: { ...recordOnlyExecutors, ...conciergeExecutors({ communications, store, notifier, features, log }), ...(typeof executors === 'function' ? executors(shared) : executors) }, log });
+  const actions = actionExecutor({ store, executors: { ...recordOnlyExecutors, ...conciergeExecutors({ communications, store, notifier, features, log }), ...contentExecutors({ store, features, log }), ...(typeof executors === 'function' ? executors(shared) : executors) }, log });
   // The handlers every server ships with, then any the caller adds (a caller's handler for the same kind wins).
   const registry = { ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   const scheduler = agentScheduler({ store, handlers: registry, actions, enabled, log, now });
