@@ -127,9 +127,10 @@ try {
       } finally { await client.query('rollback'); client.release(); }
     }
   }
-  await assert.rejects(pool.query('select private.agent_lifecycle_json(10, null, null)'), refused('42501'), 'the helper is not callable, even by the server role');
+  await assert.rejects(pool.query('select private.agent_lifecycle_json(10, null, null, 0)'), refused('42501'), 'the helper is not callable, even by the server role');
   await assert.rejects(pool.query('select count(*) from private.agent_lifecycle_emails'), refused('42501'), 'the server role has no direct access to the ledger');
   for (const limit of [0, 501, -1, null]) await assert.rejects(call('private.agent_lifecycle_snapshot', [limit, null, null]), refused('22023', /Choose a limit between 1 and 500/), `limit ${limit}`);
+  for (const offset of [-1, 10001, null]) await assert.rejects(call('private.agent_lifecycle_snapshot', [10, null, null, offset]), refused('22023', /Choose an offset between 0 and 10000/), `offset ${offset}`);
   for (const [tenant, product] of [['Not A Slug', null], [null, 'care base'], ["x'; drop table", null]]) {
     await assert.rejects(call('private.agent_lifecycle_snapshot', [10, tenant, product]), refused('22023', /by their keys/));
   }
@@ -399,6 +400,32 @@ try {
   assert.deepEqual(await team.actions.executeOne(offAction.id, { kind: 'email.send' }), { executed: false, failed: true, skipped: false, error: 'auto_send_off' });
   assert.equal(sent.length, 5);
 
+  // ---- More than a page: 205 newer trials on their tenth day cannot hide an older account whose email is due -------------------------
+  const bulk = (await rows(`insert into hub.tenants(slug, name) select '${prefix}-bulk-' || n, 'Lifecycle Bulk ${run} ' || n from generate_series(1, 205) n returning id`)).map(entry => entry.id);
+  tenants.push(...bulk);
+  await admin.query(`with t as (select id, row_number() over (order by slug) as n from hub.tenants where id = any($1::uuid[]))
+    insert into private.billing_customers(tenant_id, stripe_customer_id, email, name, livemode, seen_at) select id, 'cus_lc${run}bulk' || n, 'bulk' || n || '.${run}@example.test', '', true, now() from t`, [bulk]);
+  await admin.query(`with t as (select id, row_number() over (order by slug) as n from hub.tenants where id = any($1::uuid[]))
+    insert into private.billing_subscriptions(stripe_subscription_id, tenant_id, stripe_customer_id, product_id, status, collection_method, trial_start, trial_end, livemode, stripe_created, seen_at)
+    select 'sub_lc${run}bulk' || n, t.id, 'cus_lc${run}bulk' || n, p.id, 'trialing', 'charge_automatically', now() - interval '10 days', now() + interval '20 days', true, now() - interval '10 days', now()
+    from t cross join (select id from hub.products where slug = 'carebase') p`, [bulk]);
+  await makeAccount('paged', { subscriptions: [{ status: 'active', started: 100, ends: -70, paid: 50 }] });
+  // A trial that reported zero (the usage API accepts it) has no usage, so it still gets the setup offer.
+  await makeAccount('zerousage', { subscriptions: [{ started: 4, ends: 26 }] });
+  await admin.query(`insert into private.billing_usage_reports(product_id, tenant_id, metric, quantity, request_key, outcome, reported_at)
+    select p.id, t.id, 'facility', 0, gen_random_uuid(), 'updated', now() - interval '1 day' from hub.products p, hub.tenants t where p.slug = 'carebase' and t.slug = $1`, [slugs.zerousage]);
+  const firstPage = await call('private.agent_lifecycle_snapshot', [200, null, null, 0]);
+  assert.ok(firstPage.truncated === true && !firstPage.accounts.some(entry => entry.tenant === slugs.paged), 'the older paying account is not on the first page');
+  assert.ok((await call('private.agent_lifecycle_snapshot', [200, null, null, 200])).accounts.some(entry => entry.tenant === slugs.paged), 'it is on the second');
+  const pagedRun = await fire();
+  assert.deepEqual([pagedRun.result.outcome, pagedRun.result.proposed, pagedRun.result.truncated], ['proposed', 2, false]);
+  assert.deepEqual(pagedRun.result.byTemplate, { welcome: 0, setup_nudge: 1, trial_checkin: 0, testimonial_ask: 1 });
+  assert.ok(pagedRun.result.read > 200, `every page was read (${pagedRun.result.read} accounts)`);
+  assert.equal((await actionFor('paged')).input.template, 'testimonial_ask', 'the account on the second page gets its email');
+  assert.equal((await actionFor('zerousage')).input.template, 'setup_nudge', 'and a report of zero does not hold back the setup offer');
+  await removeAccounts(bulk);
+  tenants.splice(tenants.indexOf(bulk[0]), bulk.length);
+
   // ---- No address is anywhere but the fake sender's captured messages -------------------------------------------------------------------
   const everything = JSON.stringify([
     await rows('select to_jsonb(t) as r from private.agent_tasks t'), await rows('select to_jsonb(r) as r from private.agent_runs r'),
@@ -406,7 +433,7 @@ try {
     await rows('select to_jsonb(e) as r from private.agent_lifecycle_emails e'), await rows("select to_jsonb(e) as r from private.audit_events e where action like 'agent.%'"),
     logs, texts, ownerMail,
   ]);
-  for (const key of ['welcome', 'setup', 'checkin', 'testimonial', 'refused', 'silent', 'crash', 'replay', 'autowelcome', 'autosetup', 'autooff', 'noemail', 'unsubscribed']) {
+  for (const key of ['welcome', 'setup', 'checkin', 'testimonial', 'refused', 'silent', 'crash', 'replay', 'autowelcome', 'autosetup', 'autooff', 'noemail', 'unsubscribed', 'paged', 'zerousage']) {
     assert.ok(!everything.includes(canary(key)), `${key}'s address appears in no agent table, ledger, audit event, log line or alert`);
   }
   for (const secret of [contactName, `cus_lc${run}`, `sub_lc${run}`, ...tokens]) assert.ok(!everything.includes(secret), `${secret.slice(0, 18)}… is kept nowhere`);
@@ -420,11 +447,11 @@ try {
     await gateClient.query(gate);
     await gateClient.query('rollback');
     for (const [sql, message] of [
-      ['revoke execute on function private.agent_lifecycle_snapshot(integer,text,text) from hub_app_server', /executable by the Hub server only/],
+      ['revoke execute on function private.agent_lifecycle_snapshot(integer,text,text,integer) from hub_app_server', /executable by the Hub server only/],
       ['grant execute on function private.agent_lifecycle_begin_send(uuid,integer,text) to authenticated', /executable by the Hub server only/],
       ['alter function private.agent_lifecycle_finish_send(uuid,text,text) reset search_path', /executable by the Hub server only/],
       ['alter function private.email_unsubscribe(text,boolean) security invoker', /executable by the Hub server only/],
-      ['grant execute on function private.agent_lifecycle_json(integer,text,text) to hub_app_server', /must stay internal/],
+      ['grant execute on function private.agent_lifecycle_json(integer,text,text,integer) to hub_app_server', /must stay internal/],
       ['grant select on private.agent_lifecycle_emails to authenticated', /closed to every browser, service and server role/],
       ['alter table private.agent_lifecycle_emails disable row level security', /must exist with row level security/],
       ['drop index private.agent_actions_email_send_once', /proposed once per period/],
@@ -442,7 +469,7 @@ try {
     }
   } finally { gateClient.release(); }
 
-  console.log('Account Manager customer emails: the server-only facts (no address, contact name or Stripe identifier; live records only), observe and not-configured runs that propose nothing, ten proposals with their exact text and whitelisted facts, one per account and once per period, approval that sends once from the one address the database hands over, a working one-click unsubscribe into the shared suppression list, refusals for an unsubscribed address, a changed account and a missing address, refused and unanswered deliveries, a crash and a replay that never send twice, the daily cap, auto-send only for the listed template, and the deployment gate all behave through hub_app_server.');
+  console.log('Account Manager customer emails: the server-only facts (no address, contact name or Stripe identifier; live records only), observe and not-configured runs that propose nothing, ten proposals with their exact text and whitelisted facts, one per account and once per period, approval that sends once from the one address the database hands over, a working one-click unsubscribe into the shared suppression list, refusals for an unsubscribed address, a changed account and a missing address, refused and unanswered deliveries, a crash and a replay that never send twice, the daily cap, auto-send only for the listed template, a book of more than 200 accounts read page by page, a usage report of zero, and the deployment gate all behave through hub_app_server.');
 } finally {
   const problems = [];
   const attempt = async (sql, params = []) => { try { await admin.query(sql, params); } catch (error) { problems.push(`${error.message} [${sql.slice(0, 70)}]`); } };

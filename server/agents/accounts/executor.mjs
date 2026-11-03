@@ -6,8 +6,8 @@
  * is settled from that record first, whatever else has changed since, and never sent twice. Otherwise, before anything is sent, it
  * checks, in this order, and refuses with a code the Team screen explains:
  *   - invalid_email      the action's facts are not the shape the database also checks;
- *   - not_configured     the Hub cannot send customer email (no SendGrid sender, no postal address for the footer, or no https origin
- *                        for the unsubscribe link);
+ *   - not_configured     the Hub cannot send customer email (no SendGrid sender, no postal address for the footer, or no bare https
+ *                        origin for the unsubscribe link);
  *   - wording_changed    the email rebuilt from the action's facts no longer matches the wording the owner approved (a newer Hub
  *                        changed the template), so what was approved is never silently replaced;
  *   - no_longer_applies  the account changed since it was proposed: the trial is no longer a trial (or, for the setup offer, the product
@@ -24,7 +24,7 @@
  */
 import { randomBytes } from 'node:crypto';
 import { digest } from '../../sms-auth.mjs';
-import { lifecycleFeature, lifecycleReadiness, parseLifecycleInput, renderLifecycleEmail, stillApplies, wordingHash } from './lifecycle.mjs';
+import { httpsOrigin, lifecycleFeature, lifecycleReadiness, parseLifecycleInput, renderLifecycleEmail, stillApplies, wordingHash } from './lifecycle.mjs';
 
 const failure = code => Object.assign(new Error('The customer email was not sent.'), { code });
 const refusals = { no_address: 'no_address', suppressed: 'suppressed', daily_limit: 'daily_limit', auto_send_off: 'auto_send_off' };
@@ -55,7 +55,8 @@ export function lifecycleExecutor({ store, lifecycle = {}, log = line => console
     if (begun?.state === 'recorded') return settle(begun.status, input.template);
     if (begun?.state !== 'ready' || typeof begun.to !== 'string') throw failure(refusals[begun?.state] ?? 'executor_error');
 
-    const unsubscribeUrl = `${String(lifecycle.publicOrigin).replace(/\/+$/, '')}/api/email/unsubscribe/${token}`;
+    // Built on the parsed origin alone (readiness refused anything but a bare https origin), so nothing can come after the path.
+    const unsubscribeUrl = `${httpsOrigin(lifecycle.publicOrigin)}/api/email/unsubscribe/${token}`;
     const email = renderLifecycleEmail(input, { unsubscribeUrl, postalAddress: String(lifecycle.postalAddress).trim() });
     let outcome = null;
     try {

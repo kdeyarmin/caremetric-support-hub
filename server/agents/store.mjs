@@ -68,8 +68,11 @@ export function sqlAgentStore(pool, { fenced = false } = {}) {
     notificationCount: ({ prefix, channel = null, since }) => call('private.agent_notification_count', [prefix, channel, since]),
     /** A snapshot of every account's billing facts, usage and case counts for the weekly report: names and numbers, never a contact address. */
     accountsSnapshot: ({ limit = 200 } = {}) => call('private.agent_accounts_snapshot', [limit]),
-    /** The facts the customer emails need, per account and product (or one account and product): names, dates and flags, never an address. */
-    lifecycleSnapshot: ({ limit = 200, tenant = null, product = null } = {}) => call('private.agent_lifecycle_snapshot', [limit, tenant, product]),
+    /**
+     * The facts the customer emails need, per account and product (or one account and product): names, dates and flags, never an
+     * address. Newest first, `limit` rows from `offset`; `truncated` says more rows follow this page.
+     */
+    lifecycleSnapshot: ({ limit = 200, tenant = null, product = null, offset = 0 } = {}) => call('private.agent_lifecycle_snapshot', [limit, tenant, product, offset]),
     /**
      * Records one approved customer email before it is sent and returns the one address it goes to (`{ state: 'ready', to }`), or why
      * it may not go (`no_address`, `suppressed`, `daily_limit`, `auto_send_off`), or what an earlier attempt recorded (`recorded`, `status`).

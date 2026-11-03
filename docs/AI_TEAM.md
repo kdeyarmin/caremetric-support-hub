@@ -434,9 +434,9 @@ approves the exact text on the Team screen, or, for an agent on **Act**, when th
 | Email | When | What it says |
 | --- | --- | --- |
 | Welcome | Days 0 to 2 of a trial | Thank you for starting the trial, the first three steps for the product, and a button to its getting-started help (CareBase's help center, Intel's Help page) |
-| Setup help | Days 3 to 6 of a trial, only while the product has reported no usage for the account | An offer of help with setup, and the help link |
+| Setup help | Days 3 to 6 of a trial, only while the product has reported no positive usage for the account (a report of zero is not usage) | An offer of help with setup, and the help link |
 | Trial check-in | When 5 days or fewer (and more than 2) are left in a trial | A personal check-in asking whether anything is in the way. It says it is not a billing notice |
-| Testimonial request | 45 to 60 days after the account's first paid invoice, with no open high or urgent case | Would they share a sentence or two: their words are used only with their permission, in the form they approve, with or without their name, and a reply is how they say yes |
+| Testimonial request | 45 to 60 days after the account's first paid invoice for the product, on any subscription it has had for it, with no open high or urgent case | Would they share a sentence or two: their words are used only with their permission, in the form they approve, with or without their name, and a reply is how they say yes |
 
 They are plain, warm and short. They say nothing about AI, quote no price, promise no time or outcome, never
 mention a phone call or voicemail, and use the company's vocabulary for CareBase (Assisted Living Facility, ALF,
@@ -445,12 +445,16 @@ when `HUB_BOOKING_URL` is an https address. Only CareBase and Intel have these e
 never duplicated: the check-in never mentions a card, a price, an invoice or a date.
 
 **Who gets one.** The run reads one server-only operation, `private.agent_lifecycle_snapshot`: per account and
-product, a live trial or a live paid subscription whose first paid invoice is at most 90 days old (live-mode
-Stripe records only, by the Billing screen's mode rule, so nothing at all while the verified mode is test). For each
-it returns the tenant's slug and name, the product, the subscription's status and dates, the first paid invoice's
-date, whether a usable billing address exists and whether it unsubscribed (never the address), whether the
-product has reported usage, how many high or urgent cases are open, and what became of each template's email
-before. Each template is proposed at most once per account and product, ever: its period key,
+product, a live trial or a live paid subscription on an account that first paid for the product at most 90 days ago
+(live-mode Stripe records only, by the Billing screen's mode rule, so nothing at all while the verified mode is
+test). The first payment is the earliest paid invoice of any live subscription the account ever had for the
+product, cancelled ones included, so replacing a subscription neither postpones the testimonial request nor makes an
+established account look new. For each it returns the tenant's slug and name, the product, the subscription's
+status and dates, that first payment's date, whether a usable billing address exists and whether it unsubscribed
+(never the address), whether the product has reported a positive usage quantity, how many high or urgent cases are
+open, and what became of each template's email before. The run reads these facts 200 at a time, newest first, up to
+2,000, and plans every page together, so newer trials never hide an older account whose email is due; a run that
+stops at 2,000 says so. Each template is proposed at most once per account and product, ever: its period key,
 `account:<template>:<tenant>:<product>`, is unique across every action, whichever run proposed it. A run proposes
 at most 20 emails, one per account (a second waits for the next run), and none to an account with no usable billing
 address, one that unsubscribed, one whose subscription is being cancelled, or a suspended or closed tenant.
@@ -477,12 +481,13 @@ owner session. Before anything goes out the executor (`server/agents/accounts/ex
 Team screen explains:
 
 - `not_configured`: the Hub cannot send customer email. It needs the SendGrid key, the company's postal address
-  (`HUB_BULK_EMAIL_POSTAL_ADDRESS`, which every footer carries; without it nothing is proposed either) and an https
-  public origin for the unsubscribe link.
+  (`HUB_BULK_EMAIL_POSTAL_ADDRESS`, which every footer carries; without it nothing is proposed either) and a bare
+  https public origin for the unsubscribe link (`HUB_PUBLIC_ORIGIN`: no credentials, path, query or fragment, so the
+  link always reaches the unsubscribe page).
 - `wording_changed`: the email rebuilt from the action's facts no longer matches the hash of the approved wording,
   so a newer Hub never sends different words under an old approval.
 - `no_longer_applies`: the account changed. The trial emails need a trial that is still a trial (and the setup
-  offer still no usage); the testimonial needs an account still paying with no open high or urgent case; neither
+  offer still no positive usage); the testimonial needs an account still paying with no open high or urgent case; neither
   goes to a subscription being cancelled.
 - Then one database call (`private.agent_lifecycle_begin_send`) refuses `auto_send_off`, `no_address` (no usable
   billing address), `suppressed` (the address is on the suppression list) and `daily_limit` (20 customer emails

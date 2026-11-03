@@ -3,10 +3,12 @@
  * once, here, and reviewed like any other copy. Pure: facts go in, words come out, and the same facts always give the same words.
  *
  * - welcome          days 0 to 2 of a trial: what to do first, with a link to the product's getting-started help.
- * - setup_nudge      days 3 to 6 of a trial, only while the product has reported no usage for the account: an offer of help.
+ * - setup_nudge      days 3 to 6 of a trial, only while the product has reported no positive usage for the account: an offer of
+ *                    help (a report of zero, which the usage API accepts, is not usage).
  * - trial_checkin    when 5 days or fewer (and more than 2) are left in a trial: a personal check-in, and it says it is not a billing
  *                    notice. Stripe's own trial and payment emails stay on; nothing here repeats them.
- * - testimonial_ask  45 to 60 days after the account's first paid invoice, with no open high or urgent case: would they share a
+ * - testimonial_ask  45 to 60 days after the account's first paid invoice for the product (across every subscription it has had for
+ *                    it, so a replaced subscription changes nothing), with no open high or urgent case: would they share a
  *                    sentence, with consent wording, and a reply is how they say yes.
  *
  * Each is proposed at most once per account and product (its period key, account:<template>:<tenant>:<product>). The emails say
@@ -97,7 +99,7 @@ export function dueTemplates(fact, now = new Date()) {
 
 /**
  * Whether an approved email still fits the account when it is about to be sent: the trial is still a trial (and, for the setup
- * offer, the product has still reported no usage), or the account is still paying with no open high or urgent case. A trial or a
+ * offer, the product has still reported no positive usage), or the account is still paying with no open high or urgent case. A trial or a
  * plan that is being cancelled fits nothing.
  */
 export function stillApplies(template, fact) {
@@ -250,14 +252,30 @@ export function parseLifecycleInput(input) {
 }
 
 /**
+ * The origin the unsubscribe link is built on, or null. Only a bare https origin passes: a host (and port), at most one trailing
+ * slash, no credentials, no path, and no query or fragment, not even an empty `?` or `#` (which a parsed URL would report as
+ * empty). Anything else would put the link's path after a fragment or a query, where it never reaches the unsubscribe page.
+ */
+export function httpsOrigin(value) {
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  if (!/^https:\/\/[^\s/?#\\@]+\/?$/i.test(text)) return null;
+  let url;
+  try { url = new URL(text); } catch { return null; }
+  if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash || !url.hostname) return null;
+  return url.origin;
+}
+
+/**
  * Whether the Hub can send customer email at all: a SendGrid sender, the company's postal address (every email's footer carries
- * it, and CAN-SPAM asks for it) and an https public origin for the unsubscribe link. `missing` names what is not there.
+ * it, and CAN-SPAM asks for it) and an https public origin for the unsubscribe link (see `httpsOrigin`). `missing` names what is
+ * not there.
  */
 export function lifecycleReadiness({ mail = null, postalAddress = '', publicOrigin = '' } = {}) {
   const missing = [
     ...(mail?.configured === true && typeof mail.send === 'function' ? [] : ['mail']),
     ...(String(postalAddress ?? '').trim() ? [] : ['postal_address']),
-    ...(/^https:\/\/[^\s/"<>]+$/i.test(String(publicOrigin ?? '').replace(/\/+$/, '')) ? [] : ['public_origin']),
+    ...(httpsOrigin(publicOrigin) ? [] : ['public_origin']),
   ];
   return { ready: missing.length === 0, missing };
 }

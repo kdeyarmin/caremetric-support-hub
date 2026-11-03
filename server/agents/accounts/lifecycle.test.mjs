@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { LAYOUT_MARKER, escapeHtml } from '../../email-layout.mjs';
 import {
-  bookingLink, dueTemplates, lifecycleEmail, lifecycleInput, lifecyclePreview, lifecycleProducts, lifecycleReadiness, lifecycleTemplates,
+  bookingLink, dueTemplates, httpsOrigin, lifecycleEmail, lifecycleInput, lifecyclePreview, lifecycleProducts, lifecycleReadiness, lifecycleTemplates,
   lifecycleWording, parseLifecycleInput, periodKey, planEmails, renderLifecycleEmail, stillApplies, unsubscribeLabel, wordingHash,
 } from './lifecycle.mjs';
 
@@ -277,6 +277,22 @@ describe('whether the Hub can send customer email', () => {
     expect(lifecycleReadiness({ mail, postalAddress: '  ', publicOrigin: 'https://hub.example.test' }).missing).toEqual(['postal_address']);
     expect(lifecycleReadiness({ mail, postalAddress: postal, publicOrigin: 'http://hub.example.test' }).missing).toEqual(['public_origin']);
     expect(lifecycleReadiness({ mail, postalAddress: postal, publicOrigin: 'https://hub.example.test/path' }).missing).toEqual(['public_origin']);
+    expect(lifecycleReadiness({ mail, postalAddress: postal, publicOrigin: 'https://hub.example.test#mail' }).missing).toEqual(['public_origin']);
     expect(lifecycleReadiness().missing).toEqual(['mail', 'postal_address', 'public_origin']);
+  });
+
+  it('builds the unsubscribe link only on a bare https origin, so nothing can come between the origin and the path', () => {
+    for (const [value, origin] of [
+      ['https://hub.example.test', 'https://hub.example.test'], ['https://hub.example.test/', 'https://hub.example.test'],
+      [' https://HUB.example.test:8443/ ', 'https://hub.example.test:8443'], ['https://support-hub-web-production.up.railway.app', 'https://support-hub-web-production.up.railway.app'],
+    ]) expect(httpsOrigin(value), value).toBe(origin);
+    for (const value of [
+      // A fragment or a query, even an empty one, would swallow the link's path: the link would request "/".
+      'https://hub.example.test#mail', 'https://hub.example.test/#mail', 'https://hub.example.test#', 'https://hub.example.test?x=1', 'https://hub.example.test/?', 'https://hub.example.test?',
+      // Credentials, a path, a second slash, another scheme, or something that is not an origin at all.
+      'https://user:secret@hub.example.test', 'https://user@hub.example.test', 'https://hub.example.test/hub', 'https://hub.example.test//', 'https:///hub.example.test',
+      'https:\\\\hub.example.test', 'http://hub.example.test', 'ftp://hub.example.test', 'javascript:alert(1)', 'https://', 'https://hub example.test', 'hub.example.test', '',
+      null, undefined, 42, {},
+    ]) expect(httpsOrigin(value), String(value)).toBeNull();
   });
 });

@@ -1,8 +1,9 @@
 /**
- * `accounts.lifecycle`: the Account Manager's customer emails, every morning at 08:20 Eastern. It reads one server-only snapshot of
- * the trials and new paying accounts (names, dates and flags: never an address), works out which of the four fixed emails each
- * account and product is due (accounts/lifecycle.mjs), and proposes each one to the owner with its exact text as the preview. It
- * uses no model and sends nothing itself: an approved email is sent by its executor (accounts/executor.mjs).
+ * `accounts.lifecycle`: the Account Manager's customer emails, every morning at 08:20 Eastern. It reads the server-only facts of
+ * the trials and new paying accounts (names, dates and flags: never an address), 200 at a time and up to 2,000, works out which of
+ * the four fixed emails each account and product is due (accounts/lifecycle.mjs), and proposes each one to the owner with its
+ * exact text as the preview. Every page is planned together, so newer trials can never hide an older account whose email is due.
+ * It uses no model and sends nothing itself: an approved email is sent by its executor (accounts/executor.mjs).
  *
  * - Each email is proposed at most once per account and product, ever: the database keys it by its period
  *   (account:<template>:<tenant>:<product>) whichever run proposed it, and the snapshot says which were proposed before.
@@ -21,8 +22,10 @@ import { lifecycleFeature, lifecycleInput, lifecyclePreview, lifecycleReadiness,
 import { plural, recordRun } from './shared.mjs';
 
 export { lifecycleFeature };
-const snapshotLimit = 200;
-const missingWords = { mail: 'no SendGrid sender', postal_address: 'no postal address (HUB_BULK_EMAIL_POSTAL_ADDRESS)', public_origin: 'no https public origin' };
+// The facts are read a page at a time, newest first, and at most this many pages a run: 2,000 trials and new paying accounts.
+export const pageSize = 200;
+export const pageLimit = 10;
+const missingWords = { mail: 'no SendGrid sender', postal_address: 'no postal address (HUB_BULK_EMAIL_POSTAL_ADDRESS)', public_origin: 'no bare https public origin (HUB_PUBLIC_ORIGIN)' };
 
 const declared = features => (features instanceof Set ? features.has(lifecycleFeature) : Array.isArray(features) && features.includes(lifecycleFeature));
 const counted = list => Object.fromEntries(lifecycleTemplates.map(template => [template, list.filter(entry => entry.template === template).length]));
@@ -32,14 +35,36 @@ const listed = byTemplate => lifecycleTemplates.filter(template => byTemplate[te
 export function lifecycleHandlers({ store, features = null, lifecycle = {}, log = line => console.warn(line) }) {
   if (!declared(features)) return {};
 
+  const stopped = () => Object.assign(new Error('The run was stopped.'), { code: 'task_timeout', transient: true });
+
+  // Every page up to the limit, de-duplicated by account and product (a row can move to the next page while the run reads).
+  async function readFacts(signal) {
+    const seen = new Set();
+    const accounts = [];
+    let last = null;
+    let more = false;
+    for (let page = 0; page < pageLimit; page += 1) {
+      if (signal?.aborted) throw stopped();
+      last = await store.lifecycleSnapshot({ limit: pageSize, offset: page * pageSize });
+      const rows = last?.accounts ?? [];
+      for (const row of rows) {
+        const key = `${row.tenant}:${row.product}`;
+        if (!seen.has(key)) { seen.add(key); accounts.push(row); }
+      }
+      more = last?.truncated === true && rows.length === pageSize;
+      if (!more) break;
+    }
+    return { mode: last?.mode ?? null, total: Math.max(Number(last?.total ?? 0), accounts.length), accounts, truncated: more };
+  }
+
   async function emails(task, { now = () => new Date(), signal } = {}) {
     const moment = now();
-    const snapshot = await store.lifecycleSnapshot({ limit: snapshotLimit });
-    const { candidates, skipped } = planEmails(snapshot?.accounts ?? [], moment);
+    const facts = await readFacts(signal);
+    const { candidates, skipped } = planEmails(facts.accounts, moment);
     const chosen = candidates.slice(0, proposalLimit);
     const base = {
-      mode: snapshot?.mode ?? null, due: candidates.length, byTemplate: counted(chosen), deferred: candidates.length - chosen.length + skipped.sameAccount,
-      noAddress: skipped.noAddress, suppressed: skipped.suppressed, truncated: snapshot?.truncated === true,
+      mode: facts.mode, read: facts.accounts.length, due: candidates.length, byTemplate: counted(chosen), deferred: candidates.length - chosen.length + skipped.sameAccount,
+      noAddress: skipped.noAddress, suppressed: skipped.suppressed, truncated: facts.truncated,
     };
     const finish = async (result, summary, { outcome = 'completed', errorCode = null } = {}) => {
       await recordRun({ store, log }, task, { promptVersion: 'lifecycle.1', summary, outcome, errorCode });
@@ -49,6 +74,7 @@ export function lifecycleHandlers({ store, features = null, lifecycle = {}, log 
       ...(base.noAddress ? [`Skipped ${plural(base.noAddress, 'account')} with no billing email.`] : []),
       ...(base.suppressed ? [`Skipped ${plural(base.suppressed, 'account')} that unsubscribed.`] : []),
       ...(base.deferred ? [`${base.deferred} more ${base.deferred === 1 ? 'waits' : 'wait'} for the next run.`] : []),
+      ...(base.truncated ? [`Read the newest ${base.read} of ${facts.total} trials and new paying accounts; the rest were not considered.`] : []),
     ].map(note => ` ${note}`).join('');
 
     if (chosen.length === 0) return finish({ ...base, outcome: 'nothing_due', proposed: 0 }, `No customer email is due.${tail}`);
@@ -70,7 +96,7 @@ export function lifecycleHandlers({ store, features = null, lifecycle = {}, log 
     const made = [];
     for (const { fact, template } of chosen) {
       // The scheduler has stopped waiting for this run: nothing more is proposed.
-      if (signal?.aborted) throw Object.assign(new Error('The run was stopped.'), { code: 'task_timeout', transient: true });
+      if (signal?.aborted) throw stopped();
       const input = lifecycleInput(fact, template, { bookingUrl: lifecycle.bookingUrl ?? null });
       let proposal;
       try {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { lifecycleInput, lifecyclePreview, parseLifecycleInput, wordingHash } from '../accounts/lifecycle.mjs';
-import { lifecycleFeature, lifecycleHandlers } from './lifecycle.mjs';
+import { lifecycleFeature, lifecycleHandlers, pageLimit, pageSize } from './lifecycle.mjs';
 
 const now = new Date('2026-11-03T13:20:00Z');
 const day = 86_400_000;
@@ -18,7 +18,10 @@ const task = (over = {}) => ({ id: 't1', agentKey: 'account_manager', kind: 'acc
 const fixture = ({ accounts = [fact('alpha')], lifecycle = ready, features = new Set([lifecycleFeature]), propose = null, snapshot = {} } = {}) => {
   const logs = [];
   const store = {
-    lifecycleSnapshot: vi.fn(async () => ({ generatedAt: now.toISOString(), mode: 'live', total: accounts.length, truncated: false, accounts, ...snapshot })),
+    // Pages of the facts as the database gives them: newest first, `limit` rows from `offset`, saying whether more follow.
+    lifecycleSnapshot: vi.fn(async ({ limit = 200, offset = 0 } = {}) => ({
+      generatedAt: now.toISOString(), mode: 'live', total: accounts.length, truncated: accounts.length > offset + limit, accounts: accounts.slice(offset, offset + limit), ...snapshot,
+    })),
     proposeAction: vi.fn(propose ?? (async ({ targetId }) => ({ id: `a-${targetId}`, status: 'proposed', requestKey: '44444444-4444-4444-8444-444444444444', created: true }))),
     startRun: vi.fn(async () => 'run-1'),
     finishRun: vi.fn(async () => undefined),
@@ -39,7 +42,7 @@ describe('the customer email run', () => {
   it('proposes each due email with its exact text as the preview and the facts that rebuild it, never an address', async () => {
     const { run, store } = fixture({ accounts: [fact('alpha'), fact('beta', { trialStart: ago(25), trialEnd: ahead(4) })] });
     const outcome = await run();
-    expect(store.lifecycleSnapshot).toHaveBeenCalledWith({ limit: 200 });
+    expect(store.lifecycleSnapshot.mock.calls).toEqual([[{ limit: 200, offset: 0 }]]);
     expect(store.proposeAction).toHaveBeenCalledTimes(2);
     const [first, second] = store.proposeAction.mock.calls.map(call => call[0]);
     const expected = lifecycleInput(fact('alpha'), 'welcome', { bookingUrl: ready.bookingUrl });
@@ -50,7 +53,7 @@ describe('the customer email run', () => {
     expect([second.targetId, second.input.template, second.input.periodKey]).toEqual(['beta', 'trial_checkin', 'account:trial_checkin:beta:carebase']);
     expect(JSON.stringify(store.proposeAction.mock.calls)).not.toContain('@');
     expect(outcome).toEqual({ result: {
-      mode: 'live', due: 2, deferred: 0, noAddress: 0, suppressed: 0, truncated: false, outcome: 'proposed', proposed: 2, autoApproved: 0, alreadyProposed: 0,
+      mode: 'live', read: 2, due: 2, deferred: 0, noAddress: 0, suppressed: 0, truncated: false, outcome: 'proposed', proposed: 2, autoApproved: 0, alreadyProposed: 0,
       byTemplate: { welcome: 1, setup_nudge: 0, trial_checkin: 1, testimonial_ask: 0 },
     } });
     expect(outcome.status).toBeUndefined();
@@ -81,6 +84,54 @@ describe('the customer email run', () => {
     expect(new Set(store.proposeAction.mock.calls.map(call => call[0].targetId)).size).toBe(20);
     expect(outcome.result).toMatchObject({ due: 25, proposed: 20, deferred: 6 });
     expect(summary(store)).toBe('Proposed 20 customer emails (20 welcome) for your approval. 6 more wait for the next run.');
+  });
+
+  it('reads every page before it plans, so 200 newer trials never hide an older account whose email is due', async () => {
+    // 250 accounts, newest first: 240 trials on their tenth day (nothing due), then an account paying for 50 days, then older trials.
+    const accounts = [
+      ...Array.from({ length: 240 }, (_, index) => fact(`trial-${String(index).padStart(3, '0')}`, { trialStart: ago(10), trialEnd: ahead(20) })),
+      fact('paying', { status: 'active', trialStart: ago(80), trialEnd: ago(50), created: ago(80), firstPaidAt: ago(50) }),
+      ...Array.from({ length: 9 }, (_, index) => fact(`older-${index}`, { trialStart: ago(12), trialEnd: ahead(18) })),
+    ];
+    const { run, store } = fixture({ accounts });
+    const outcome = await run();
+    expect(store.lifecycleSnapshot.mock.calls.map(call => call[0])).toEqual([{ limit: pageSize, offset: 0 }, { limit: pageSize, offset: pageSize }]);
+    expect(store.proposeAction.mock.calls.map(call => [call[0].targetId, call[0].input.template])).toEqual([['paying', 'testimonial_ask']]);
+    expect(outcome.result).toMatchObject({ read: 250, due: 1, proposed: 1, truncated: false });
+  });
+
+  it('keeps the 20-proposal cap across pages, and stops after ten pages, saying the rest were not read', async () => {
+    const due = Array.from({ length: 30 }, (_, index) => fact(`due-${String(index).padStart(2, '0')}`));
+    const spread = [...Array.from({ length: 150 }, (_, index) => fact(`quiet-${index}`, { trialStart: ago(10) })), ...due];
+    const capped = fixture({ accounts: spread });
+    expect((await capped.run()).result).toMatchObject({ read: 180, due: 30, proposed: 20, deferred: 10 });
+    expect(capped.store.proposeAction).toHaveBeenCalledTimes(20);
+
+    const endless = Array.from({ length: pageSize * pageLimit + 5 }, (_, index) => fact(`row-${String(index).padStart(4, '0')}`, { trialStart: ago(10) }));
+    const bounded = fixture({ accounts: endless });
+    const outcome = await bounded.run();
+    expect(bounded.store.lifecycleSnapshot).toHaveBeenCalledTimes(pageLimit);
+    expect(outcome.result).toMatchObject({ read: pageSize * pageLimit, truncated: true, outcome: 'nothing_due' });
+    expect(summary(bounded.store)).toBe(`No customer email is due. Read the newest ${pageSize * pageLimit} of ${pageSize * pageLimit + 5} trials and new paying accounts; the rest were not considered.`);
+  });
+
+  it('reads an account that moves to the next page while the run reads only once', async () => {
+    const accounts = Array.from({ length: pageSize + 1 }, (_, index) => fact(`home-${String(index).padStart(3, '0')}`, { trialStart: ago(10) }));
+    accounts[pageSize] = fact('home-due');
+    const { run, store } = fixture({ accounts });
+    // A newer subscription arrives after the first page is read: the second page starts with the first page's last row again.
+    store.lifecycleSnapshot.mockImplementationOnce(async () => ({ mode: 'live', total: pageSize + 1, truncated: true, accounts: accounts.slice(0, pageSize) }));
+    store.lifecycleSnapshot.mockImplementationOnce(async () => ({ mode: 'live', total: pageSize + 2, truncated: false, accounts: [accounts[pageSize - 1], accounts[pageSize]] }));
+    const outcome = await run();
+    expect(outcome.result).toMatchObject({ read: pageSize + 1, proposed: 1 });
+  });
+
+  it('stops reading once the scheduler has stopped waiting for it', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const { run, store } = fixture();
+    await expect(run({}, { signal: controller.signal })).rejects.toMatchObject({ code: 'task_timeout', transient: true });
+    expect(store.lifecycleSnapshot).not.toHaveBeenCalled();
   });
 
   it('never proposes to an account with no usable address or one that unsubscribed, and says so', async () => {
@@ -129,8 +180,9 @@ describe('the customer email run', () => {
     for (const [lifecycle, missing, words] of [
       [{ ...ready, postalAddress: '' }, ['postal_address'], 'no postal address (HUB_BULK_EMAIL_POSTAL_ADDRESS)'],
       [{ ...ready, mail: { configured: false, send: vi.fn() } }, ['mail'], 'no SendGrid sender'],
-      [{ ...ready, publicOrigin: 'http://hub.example.test' }, ['public_origin'], 'no https public origin'],
-      [{}, ['mail', 'postal_address', 'public_origin'], 'no SendGrid sender, no postal address (HUB_BULK_EMAIL_POSTAL_ADDRESS), no https public origin'],
+      [{ ...ready, publicOrigin: 'http://hub.example.test' }, ['public_origin'], 'no bare https public origin (HUB_PUBLIC_ORIGIN)'],
+      [{ ...ready, publicOrigin: 'https://hub.example.test#mail' }, ['public_origin'], 'no bare https public origin (HUB_PUBLIC_ORIGIN)'],
+      [{}, ['mail', 'postal_address', 'public_origin'], 'no SendGrid sender, no postal address (HUB_BULK_EMAIL_POSTAL_ADDRESS), no bare https public origin (HUB_PUBLIC_ORIGIN)'],
     ]) {
       const { run, store } = fixture({ lifecycle });
       const outcome = await run();

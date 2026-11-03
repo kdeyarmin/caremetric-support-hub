@@ -53,6 +53,18 @@ describe('sending an approved customer email', () => {
     expect(store.lifecycleFinishSend).toHaveBeenCalledWith({ actionId: execution().id, delivery: 'sent', providerMessageId: 'msg-1' });
   });
 
+  it('builds the unsubscribe link on the bare origin, and refuses an origin a link cannot be built on', async () => {
+    const slash = fixture({ lifecycle: { publicOrigin: 'https://HUB.example.test/' } });
+    await slash.send(execution());
+    expect(slash.sent[0].unsubscribeUrl).toMatch(/^https:\/\/hub\.example\.test\/api\/email\/unsubscribe\/[0-9a-f]{64}$/);
+    for (const publicOrigin of ['https://hub.example.test#mail', 'https://hub.example.test?x=1', 'https://hub.example.test/hub', 'https://user@hub.example.test']) {
+      const { send, mail, store } = fixture({ lifecycle: { publicOrigin } });
+      await expect(send(execution()), publicOrigin).rejects.toSatisfy(refusal('not_configured'));
+      expect(mail.send).not.toHaveBeenCalled();
+      expect(store.lifecycleBeginSend.mock.calls.filter(call => call[0].unsubscribeHash !== null)).toEqual([]);
+    }
+  });
+
   it('makes a fresh unsubscribe link for every send', async () => {
     const a = fixture();
     const b = fixture();

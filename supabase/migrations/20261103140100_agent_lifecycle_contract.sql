@@ -38,7 +38,7 @@ begin
 
   -- The operations the Hub server calls: the three new ones and the two this change replaced.
   foreach signature in array array[
-    'private.agent_lifecycle_snapshot(integer,text,text)',
+    'private.agent_lifecycle_snapshot(integer,text,text,integer)',
     'private.agent_lifecycle_begin_send(uuid,integer,text)',
     'private.agent_lifecycle_finish_send(uuid,text,text)',
     'private.agent_action_propose(uuid,uuid,text,text,text,text,jsonb)',
@@ -59,7 +59,7 @@ begin
   end if;
 
   -- The helper the facts operation calls: a pinned search path, and no role may run it directly.
-  signature := 'private.agent_lifecycle_json(integer,text,text)';
+  signature := 'private.agent_lifecycle_json(integer,text,text,integer)';
   if to_regprocedure(signature) is null
     or not coalesce((select coalesce(p.proconfig @> array['search_path=""'], false) from pg_proc p where p.oid = to_regprocedure(signature)), false) then
     raise exception 'The customer email helper must exist with a pinned search path' using errcode = '55000';

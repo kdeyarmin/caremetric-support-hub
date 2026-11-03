@@ -3,10 +3,11 @@
 -- Account Manager now proposes four short, fixed emails to the billing contact of an account, each one at most once per
 -- account and product:
 --   * welcome          days 0 to 2 of a trial: what to do first, with the product's getting-started help;
---   * setup_nudge      days 3 to 6 of a trial, only while the product has reported no usage for the account: an offer of help;
+--   * setup_nudge      days 3 to 6 of a trial, only while the product has reported no positive usage for the account: an offer
+--                      of help;
 --   * trial_checkin    when 5 days or fewer (and more than 2) are left in a trial: a personal check-in, not a billing notice;
---   * testimonial_ask  45 to 60 days after the first paid invoice, with no open high or urgent case: a request for a sentence,
---                      with consent wording.
+--   * testimonial_ask  45 to 60 days after the account's first paid invoice for the product, with no open high or urgent case: a
+--                      request for a sentence, with consent wording.
 -- Stripe's own customer emails (a failed payment, a trial ending, receipts) stay on and are never duplicated here.
 --
 -- Every email is an action of the new kind email.send aimed at a billing_account (the tenant's slug). The owner approves the exact
@@ -151,14 +152,19 @@ comment on table private.agent_lifecycle_emails is
   'Customer emails from the Account Manager, recorded before each send. The address is kept only as its SHA-256 hash; the body is never kept here.';
 
 -- ---------------------------------------------------------------------------------------
--- 4. What the templates read. One row per account and product with a live trial, or a live paid subscription whose first paid
---    invoice is at most 90 days old. The Stripe mode rule is the Billing workspace's (the verified mode, or everything while it is
---    unverified), narrowed to live-mode records: nothing from Stripe's test mode ever reaches a customer, and while the verified
---    mode is test there is nothing at all. Facts are projected by whitelist; "hasEmail" and "suppressed" say only whether a usable
---    address exists and whether it unsubscribed, never what it is. "emails" is what became of each template's email for this
---    account and product (the action's status), read by its period key, or null when none was ever proposed.
+-- 4. What the templates read. One row per account and product with a live trial, or a live paid subscription whose account first
+--    paid for the product at most 90 days ago. The first payment is the earliest paid invoice of any live subscription the account
+--    ever had for the product, historical ones included, so replacing a subscription neither postpones the testimonial request nor
+--    makes an established account look newly paying. The Stripe mode rule is the Billing workspace's (the verified mode, or
+--    everything while it is unverified), narrowed to live-mode records: nothing from Stripe's test mode ever reaches a customer, and
+--    while the verified mode is test there is nothing at all. Facts are projected by whitelist; "hasEmail" and "suppressed" say only
+--    whether a usable address exists and whether it unsubscribed, never what it is. "hasUsage" counts only a report of a positive
+--    quantity (the usage API accepts zero, which is no usage). "emails" is what became of each template's email for this account
+--    and product (the action's status), read by its period key, or null when none was ever proposed. Rows come newest first, a
+--    page at a time (p_limit rows from p_offset), and "truncated" says more rows follow the page: the Hub server reads several
+--    pages and plans them together, so a limit never decides which account gets its email.
 -- ---------------------------------------------------------------------------------------
-create function private.agent_lifecycle_json(p_limit integer, p_tenant text, p_product text) returns jsonb
+create function private.agent_lifecycle_json(p_limit integer, p_tenant text, p_product text, p_offset integer) returns jsonb
 language plpgsql stable set search_path = '' as $$
 declare
   v_live boolean;
@@ -176,7 +182,9 @@ begin
       order by s.tenant_id, s.product_id, s.stripe_created desc, s.stripe_subscription_id
     ), paid as (
       select l.*, (select min(i.stripe_created) from private.billing_invoices i
-                   where i.stripe_subscription_id = l.stripe_subscription_id and i.status = 'paid' and i.amount_paid > 0 and i.livemode) as first_paid_at
+                   join private.billing_subscriptions hs on hs.stripe_subscription_id = i.stripe_subscription_id
+                   where hs.tenant_id = l.tenant_id and hs.product_id = l.product_id and hs.livemode
+                     and i.status = 'paid' and i.amount_paid > 0 and i.livemode) as first_paid_at
       from live l
     ), chosen as (
       select * from paid where status = 'trialing' or (status = 'active' and first_paid_at >= now() - interval '90 days')
@@ -194,7 +202,7 @@ begin
         'cancelling', ch.cancelling,
         'hasEmail', coalesce(ct.usable, false),
         'suppressed', coalesce(ct.usable and ct.suppressed, false),
-        'hasUsage', exists (select 1 from private.billing_usage_reports u where u.tenant_id = ch.tenant_id and u.product_id = ch.product_id),
+        'hasUsage', exists (select 1 from private.billing_usage_reports u where u.tenant_id = ch.tenant_id and u.product_id = ch.product_id and u.quantity > 0),
         'openUrgentCases', (select count(*) from hub.support_cases sc join hub.products cp on cp.id = sc.product_id and cp.status <> 'retired'
           where sc.tenant_id = ch.tenant_id and sc.status in ('open', 'in_progress', 'waiting_on_customer') and sc.priority in ('high', 'urgent')),
         'emails', (select jsonb_object_agg(tpl, (select a.status from private.agent_actions a
@@ -205,28 +213,31 @@ begin
       join hub.products p on p.id = ch.product_id
       left join contact ct on ct.tenant_id = ch.tenant_id
       order by ch.stripe_created desc, t.slug, p.slug
-      limit p_limit
+      offset p_offset limit p_limit
     )
     select jsonb_build_object(
       'generatedAt', now(),
       'mode', case when v_live is null then 'unverified' when v_live then 'live' else 'test' end,
       'total', (select count(*)::integer from chosen),
-      'truncated', (select count(*) from chosen) > p_limit,
+      'truncated', (select count(*) from chosen) > p_offset + p_limit,
       'accounts', coalesce((select jsonb_agg(page.fact order by page.created desc, page.tenant, page.product) from page), '[]'::jsonb)));
 end;
 $$;
 
-create function private.agent_lifecycle_snapshot(p_limit integer default 200, p_tenant text default null, p_product text default null) returns jsonb
+create function private.agent_lifecycle_snapshot(p_limit integer default 200, p_tenant text default null, p_product text default null, p_offset integer default 0) returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
 begin
   perform private.require_hub_app_server();
   if p_limit is null or p_limit < 1 or p_limit > 500 then
     raise exception 'Choose a limit between 1 and 500.' using errcode = '22023';
   end if;
+  if p_offset is null or p_offset < 0 or p_offset > 10000 then
+    raise exception 'Choose an offset between 0 and 10000.' using errcode = '22023';
+  end if;
   if (p_tenant is not null and p_tenant !~ '^[a-z0-9]+(-[a-z0-9]+)*$') or (p_product is not null and p_product !~ '^[a-z0-9]+(-[a-z0-9]+)*$') then
     raise exception 'Choose an account and a product by their keys.' using errcode = '22023';
   end if;
-  return private.agent_lifecycle_json(p_limit, p_tenant, p_product);
+  return private.agent_lifecycle_json(p_limit, p_tenant, p_product, p_offset);
 end;
 $$;
 
@@ -353,10 +364,10 @@ begin
 end;
 $$;
 
-revoke all on function private.agent_lifecycle_json(integer, text, text), private.agent_lifecycle_snapshot(integer, text, text),
+revoke all on function private.agent_lifecycle_json(integer, text, text, integer), private.agent_lifecycle_snapshot(integer, text, text, integer),
   private.agent_lifecycle_begin_send(uuid, integer, text), private.agent_lifecycle_finish_send(uuid, text, text)
   from public, anon, authenticated, service_role, hub_app_server;
-grant execute on function private.agent_lifecycle_snapshot(integer, text, text), private.agent_lifecycle_begin_send(uuid, integer, text),
+grant execute on function private.agent_lifecycle_snapshot(integer, text, text, integer), private.agent_lifecycle_begin_send(uuid, integer, text),
   private.agent_lifecycle_finish_send(uuid, text, text) to hub_app_server;
 -- The two replaced operations keep their grants; restate them so this file alone says who may call them.
 revoke all on function private.agent_action_propose(uuid, uuid, text, text, text, text, jsonb), private.email_unsubscribe(text, boolean)
