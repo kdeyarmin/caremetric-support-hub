@@ -1,7 +1,7 @@
 import type { ChannelStatus, CommunicationsClient, Conversation, ConversationMessage, ConversationThread } from "./communicationsClient";
 
 /** In-memory conversations for the credential-free implementation preview. Never a data store. */
-export function demoCommunicationsClient(productIds: { breathe?: string; advisors?: string; pennsync?: string }): CommunicationsClient {
+export function demoCommunicationsClient(productIds: { breathe?: string; advisors?: string; pennsync?: string; carebase?: string }): CommunicationsClient {
   const now = Date.now();
   const at = (minutes: number) => new Date(now - minutes * 60000).toISOString();
   const base = { assignedTo: null, assignedToName: null, organization: null, contactEmail: null, contactPhone: null, contactName: null };
@@ -19,6 +19,10 @@ export function demoCommunicationsClient(productIds: { breathe?: string; advisor
         { id: "00000000-0000-4000-8000-00000000d003", direction: "inbound", body: "How do I export OASIS data?", authorName: null, delivery: "received", deliveryChannel: null, createdAt: at(180) },
         { id: "00000000-0000-4000-8000-00000000d004", direction: "outbound", body: "Open Reports, then choose Export.", authorName: "CareMetric Support", delivery: "sent", deliveryChannel: "chat", createdAt: at(170) },
       ] },
+    { ...base, id: "00000000-0000-4000-8000-00000000c004", reference: 1004, channel: "web_form", sourceSystem: "carebase.web", productId: productIds.carebase ?? null, inquiryType: "sales", status: "new",
+      subject: "Demo request: Maple Grove Assisted Living Facility", contactName: "Dana Ortiz", organization: "Maple Grove Assisted Living Facility", contactEmail: "dana@maplegrove.test",
+      createdAt: at(30), updatedAt: at(30), lastMessageAt: at(30), messageCount: 1,
+      messages: [{ id: "00000000-0000-4000-8000-00000000d005", direction: "inbound", body: "We would like to see training records for two ALFs before our next survey.\n\nRole: Administrator\nFacility count: 2", authorName: null, delivery: "received", deliveryChannel: null, createdAt: at(30) }] },
   ];
   const summary = ({ messages, ...conversation }: ConversationThread): Conversation => ({ ...conversation, messageCount: messages.filter(message => message.direction !== "note").length });
   const find = (id: string) => { const thread = threads.find(item => item.id === id); if (!thread) throw new Error("Conversation not found."); return thread; };

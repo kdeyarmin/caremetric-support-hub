@@ -42,6 +42,18 @@ describe('integration setup report', () => {
     expect(serialized).not.toContain('twilio-secret-value');
   });
 
+  it('reports each product\'s lead secret by presence only, none of them required on its own', async () => {
+    const secret = 'lead-secret-value-'.repeat(3);
+    const report = await harness('platform_admin', { ...env, HUB_LEAD_SECRET_INTEL: secret }).handle('token');
+    const leads = report.integrations.find((integration) => integration.id === 'website-leads');
+    expect(leads.docs).toBe('docs/LEAD_INTAKE.md');
+    expect(leads.variables.map((variable) => [variable.name, variable.secret, variable.required, variable.set]))
+      .toEqual([['HUB_LEAD_SECRET_CAREBASE', true, false, false], ['HUB_LEAD_SECRET_INTEL', true, false, true], ['HUB_LEAD_SECRET_ADVISORS', true, false, false]]);
+    for (const variable of leads.variables) expect(variable).not.toHaveProperty('value');
+    expect(leads).toMatchObject({ ready: true, complete: false });
+    expect(JSON.stringify(report)).not.toContain(secret);
+  });
+
   it('refuses every role but the platform administrator', async () => {
     await expect(harness('support_manager').handle('token')).rejects.toThrow('Integration setup is available to the platform administrator only.');
   });
@@ -50,7 +62,8 @@ describe('integration setup report', () => {
     const names = integrationCatalog.flatMap((integration) => integration.variables.map((variable) => variable.name));
     expect(new Set(names).size).toBe(names.length);
     for (const name of ['ANTHROPIC_API_KEY', 'HUB_TWILIO_AUTH_TOKEN', 'HUB_TWILIO_ACCOUNT_SID', 'HUB_SENDGRID_INBOUND_PUBLIC_KEY', 'HUB_SENDGRID_API_KEY',
-      'HUB_CHAT_ENABLED', 'HUB_PUBLIC_ORIGIN', 'HUB_TELNYX_API_KEY', 'HUB_TELNYX_VERIFY_PROFILE_ID', 'CAREBASE_DISTRIBUTION_OBSERVER_TOKEN']) {
+      'HUB_CHAT_ENABLED', 'HUB_PUBLIC_ORIGIN', 'HUB_TELNYX_API_KEY', 'HUB_TELNYX_VERIFY_PROFILE_ID', 'CAREBASE_DISTRIBUTION_OBSERVER_TOKEN',
+      'HUB_LEAD_SECRET_CAREBASE', 'HUB_LEAD_SECRET_INTEL', 'HUB_LEAD_SECRET_ADVISORS']) {
       expect(names).toContain(name);
     }
     for (const integration of integrationCatalog) expect(integration.docs).toMatch(/^docs\/[A-Z0-9_]+\.md$/);

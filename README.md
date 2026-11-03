@@ -23,6 +23,13 @@ connections, intake, delegated actions, and purchases for those apps are disable
   replies on the original channel. Text, email and chat stay off until their
   provider settings (or `HUB_CHAT_ENABLED`) are set. See
   [unified communications](docs/UNIFIED_COMMUNICATIONS.md).
+- **Leads** (`/admin/leads`): every lead from the CareBase, Intel and Healthcare
+  Advisors websites (demo and consultation requests, contact forms, trial and
+  newsletter sign-ups, savings calculators and county reports), newest first,
+  with where each person came from and a status to work it. Products forward
+  leads server to server to the signed `POST /api/leads`; a person who asked to
+  be contacted also gets a conversation in Communications. See
+  [website leads](docs/LEAD_INTAKE.md).
 - **Knowledge** (`/knowledge`): shared and app-specific articles for every
   supported application, with per-app coverage.
 - **Billing** (`/admin/billing`): the only place CareMetric platform billing
