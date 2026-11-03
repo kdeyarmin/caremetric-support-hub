@@ -130,7 +130,7 @@ try {
   assert.deepEqual(statusAudit.metadata, { agent: 'platform_engineer', status: 'active' });
   await assert.rejects(ownerCall('hub.set_agent_status', ['platform_engineer', 'paused', activated.updatedAt], staleToken), refused('28000', /Current administrator session required/),
     'a session older than eight hours can read but not change');
-  assert.equal((await ownerCall('hub.get_agent_team', [], staleToken)).agents.length, 6);
+  assert.equal((await ownerCall('hub.get_agent_team', [], staleToken)).agents.length, 7);
   const budgeted = await ownerCall('hub.set_agent_budget', ['platform_engineer', 75, activated.updatedAt]);
   assert.equal(budgeted.dailyBudgetCents, 75);
   await assert.rejects(ownerCall('hub.set_agent_budget', ['platform_engineer', -1, budgeted.updatedAt]), refused('22023'));
