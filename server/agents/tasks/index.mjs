@@ -21,7 +21,7 @@ export function builtInHandlers({ store, notifier, model = null }, { publicOrigi
   return {
     ...probeHandlers({ store, notifier, targets, fetchImpl, log }),
     ...briefHandlers({ store, notifier, publicOrigin, services, labels: Object.fromEntries(targets.map(target => [target.key, target.label])), log }),
-    ...seoHandlers({ store, notifier, publicOrigin, fetchImpl, log }),
+    ...seoHandlers({ store, notifier, model, publicOrigin, fetchImpl, log }),
     ...accountsHandlers({ store, notifier, publicOrigin, features, log }),
     ...importHandlers({ communications }),
     ...conciergeHandlers({ store, notifier, features, log, model, guides, customerTextToAi }),
