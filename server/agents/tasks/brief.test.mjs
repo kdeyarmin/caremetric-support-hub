@@ -215,3 +215,66 @@ describe('the morning brief task', () => {
     expect(logs).toEqual([JSON.stringify({ event: 'hub_agent_run_unrecorded', agent: 'chief_of_staff', kind: 'brief.daily' })]);
   });
 });
+
+describe('the Growth section', () => {
+  const growth = (overrides = {}) => ({
+    leads: { total: 3, byKind: { demo_request: 2, newsletter: 1, trial_signup: 0 } }, trials: { started: 1, subscriptions: 2, converted: 0 },
+    unanswered: { count: 2, oldestMinutes: 300, byKind: { demo_request: 2 } }, ...overrides,
+  });
+
+  it('adds yesterday\'s leads by kind, the trials that started and what still waits, as counts', () => {
+    const brief = compose(quiet(), { growth: growth() });
+    expect(brief.body).toContain('Growth yesterday: 3 new leads (2 demo requests and 1 newsletter sign-up), 1 trial sign-up and 2 new trial subscriptions. Lead conversations unanswered now: 2, the oldest waiting 5 hours.');
+    expect(brief.blocks).toContainEqual({ type: 'details', rows: [
+      ['New leads', '3 (2 demo requests and 1 newsletter sign-up)'], ['Trials started', '1 sign-up, 2 new trial subscriptions'], ['Lead conversations unanswered', '2, the oldest waiting 5 hours'],
+    ] });
+  });
+
+  it('counts a lead that waits for a reply as something that needs the owner', () => {
+    const brief = compose(quiet(), { growth: growth() });
+    expect(brief.needsYou).toBe(1);
+    expect(brief.body).toContain('- Leads waiting for a first reply: 2 (oldest 5 hours)');
+    expect(compose(quiet(), { growth: growth({ unanswered: { count: 0, oldestMinutes: null } }) }).needsYou).toBe(0);
+  });
+
+  it('says plainly when there were no leads, and when the figures could not be read', () => {
+    const none = compose(quiet(), { growth: { leads: { total: 0, byKind: {} }, trials: {}, unanswered: { count: 0 } } });
+    expect(none.body).toContain('Growth yesterday: no new leads, 0 trial sign-ups and 0 new trial subscriptions. Lead conversations unanswered now: none.');
+    const unread = compose(quiet(), { growth: { unavailable: true } });
+    expect(unread.body).toContain('Growth: the figures could not be read this morning.');
+    expect(unread.needsYou).toBe(0);
+  });
+
+  it('has no Growth section without the Growth Manager', () => {
+    expect(compose(quiet()).body).not.toContain('Growth');
+    expect(compose(quiet(), { growth: null })).toEqual(compose(quiet()));
+  });
+
+  it('reads yesterday\'s figures, by the Eastern calendar, only when the database declares the feature', async () => {
+    const store = { briefFacts: vi.fn(async () => quiet()), growthFacts: vi.fn(async () => growth()), startRun: vi.fn(async () => 'run-1'), finishRun: vi.fn(async () => undefined) };
+    const notifier = { send: vi.fn(async () => [{ channel: 'email', delivery: 'sent' }]) };
+    const handlers = briefHandlers({ store, notifier, publicOrigin: origin, labels, features: new Set(['platform.agents.growth.v1']), log: () => {} });
+    const { result } = await handlers['brief.daily'](task({ requestKey: 'schedule:6c1d0000-0000-4000-8000-000000000001:20261102T120000Z' }), at('2026-11-02T12:00:00Z'));
+    // The clocks went back on Sunday, Nov 1: that day ran from 04:00 to 05:00 UTC the next day.
+    expect(store.growthFacts).toHaveBeenCalledWith({ since: new Date('2026-11-01T04:00:00Z'), until: new Date('2026-11-02T05:00:00Z') });
+    expect(result.needsYou).toBe(1);
+    expect(notifier.send.mock.calls[0][0].body).toContain('Growth yesterday: 3 new leads');
+    const without = { ...store, growthFacts: vi.fn() };
+    await briefHandlers({ store: without, notifier, publicOrigin: origin, labels, features: new Set(['platform.agents.brief.v1']), log: () => {} })['brief.daily'](task(), at('2026-11-02T12:00:00Z'));
+    expect(without.growthFacts).not.toHaveBeenCalled();
+  });
+
+  it('still sends the brief when the growth figures cannot be read, and logs only that', async () => {
+    const logs = [];
+    const store = { briefFacts: vi.fn(async () => quiet()), growthFacts: vi.fn(async () => { throw new Error('canary database message'); }), startRun: vi.fn(async () => 'run-1'), finishRun: vi.fn(async () => undefined) };
+    const notifier = { send: vi.fn(async () => [{ channel: 'email', delivery: 'sent' }]) };
+    await briefHandlers({ store, notifier, publicOrigin: origin, labels, features: ['platform.agents.growth.v1'], log: line => logs.push(line) })['brief.daily'](task(), at('2026-11-02T12:00:00Z'));
+    expect(notifier.send.mock.calls[0][0].body).toContain('Growth: the figures could not be read this morning.');
+    expect(logs).toEqual([JSON.stringify({ event: 'hub_agent_brief_growth_unread' })]);
+  });
+
+  it('names a lead form that is down by its label', () => {
+    const brief = compose(quiet({ incidents: [{ target: 'carebase_forms', since: '2026-11-02T08:05:00Z', failures: 2 }] }), { labels: { ...labels, carebase_forms: 'CareBase lead form' } });
+    expect(brief.body).toContain('- CareBase lead form is down: since Nov 2, 3:05 AM Eastern');
+  });
+});

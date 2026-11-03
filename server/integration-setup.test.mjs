@@ -54,6 +54,13 @@ describe('integration setup report', () => {
     expect(JSON.stringify(report)).not.toContain(secret);
   });
 
+  it('shows the booking page as a setting the owner can confirm, optional for the AI team', async () => {
+    const report = await harness('platform_admin', { ...env, HUB_BOOKING_URL: 'https://cal.example.test/caremetric/intro' }).handle('token');
+    const team = report.integrations.find((integration) => integration.id === 'ai-team');
+    expect(team.variables.find((variable) => variable.name === 'HUB_BOOKING_URL'))
+      .toEqual({ name: 'HUB_BOOKING_URL', secret: false, required: false, purpose: expect.stringMatching(/booking page/), set: true, satisfied: true, value: 'https://cal.example.test/caremetric/intro' });
+  });
+
   it('refuses every role but the platform administrator', async () => {
     await expect(harness('support_manager').handle('token')).rejects.toThrow('Integration setup is available to the platform administrator only.');
   });
@@ -63,7 +70,7 @@ describe('integration setup report', () => {
     expect(new Set(names).size).toBe(names.length);
     for (const name of ['ANTHROPIC_API_KEY', 'HUB_TWILIO_AUTH_TOKEN', 'HUB_TWILIO_ACCOUNT_SID', 'HUB_SENDGRID_INBOUND_PUBLIC_KEY', 'HUB_SENDGRID_API_KEY',
       'HUB_CHAT_ENABLED', 'HUB_PUBLIC_ORIGIN', 'HUB_TELNYX_API_KEY', 'HUB_TELNYX_VERIFY_PROFILE_ID', 'CAREBASE_DISTRIBUTION_OBSERVER_TOKEN',
-      'HUB_LEAD_SECRET_CAREBASE', 'HUB_LEAD_SECRET_INTEL', 'HUB_LEAD_SECRET_ADVISORS']) {
+      'HUB_LEAD_SECRET_CAREBASE', 'HUB_LEAD_SECRET_INTEL', 'HUB_LEAD_SECRET_ADVISORS', 'HUB_BOOKING_URL']) {
       expect(names).toContain(name);
     }
     for (const integration of integrationCatalog) expect(integration.docs).toMatch(/^docs\/[A-Z0-9_]+\.md$/);

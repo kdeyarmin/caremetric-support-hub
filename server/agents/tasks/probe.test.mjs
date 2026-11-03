@@ -322,3 +322,55 @@ describe('a recovery', () => {
     expect(notifier.send).not.toHaveBeenCalled();
   });
 });
+
+describe('a lead form incident', () => {
+  const form = { key: 'carebase_forms', source: 'carebase', label: 'CareBase lead form', url: 'https://forms.example.test/request-demo', form: true, every: 'every six hours', staleMs: 7 * 3_600_000, timeoutSeconds: 20 };
+  const forms = () => {
+    const base = fixture();
+    return { ...base, handlers: probeHandlers({ store: base.store, notifier: base.notifier, targets: [hub, carebase], alertTargets: [form], log: () => {} }) };
+  };
+  const formIncident = (payload = {}) => incidentTask({ target: 'carebase_forms', incident: 2, since: '2026-11-02T08:00:00Z', failures: 2, statusCode: 200, failure: 'not_forwarded', flapping: false, ...payload });
+
+  it('says the form is not working, why, and that it is checked every six hours', async () => {
+    const { handlers, notifier, store } = forms();
+    const { result } = await handlers['probe.incident'](formIncident(), at('2026-11-02T14:01:00Z'));
+    const call = notifier.send.mock.calls[0][0];
+    expect(call).toMatchObject({ severity: 'urgent', subject: 'CareBase lead form is not working', dedupeKey: 'probe.incident:carebase_forms:2' });
+    expect(call.body).toContain('CareBase lead form has not passed 2 form checks in a row. The last check answered the probe but could not forward its test lead to the Hub.');
+    expect(call.body).toContain('Checks run every six hours.');
+    expect(call.body).toContain('Website visitors may not reach you through this form.');
+    expect(call.body).not.toContain('reached you late');
+    expect(store.proposeAction).toHaveBeenCalledWith(expect.objectContaining({ kind: 'incident.open', targetId: 'carebase_forms:2', preview: 'CareBase lead form is not working' }));
+    expect(result.target).toBe('carebase_forms');
+  });
+
+  it('words each of a form\'s own failures, and a timeout by its own limit', async () => {
+    for (const [failure, words] of [
+      ['not_probe', 'answered, but not as a signed probe (check that the product\'s HUB_LEAD_SECRET matches the Hub\'s)'],
+      ['not_received', 'said it forwarded its test lead, but the lead did not reach the Hub'],
+      ['timeout', 'did not answer within 20 seconds'],
+    ]) {
+      const { handlers, notifier } = forms();
+      await handlers['probe.incident'](formIncident({ failure, statusCode: failure === 'timeout' ? 0 : 200 }), at('2026-11-02T14:01:00Z'));
+      expect(notifier.send.mock.calls[0][0].body, failure).toContain(`The last check ${words}.`);
+    }
+  });
+
+  it('is late only past its own window, and its recovery says it works again', async () => {
+    const late = forms();
+    await late.handlers['probe.incident'](formIncident(), at('2026-11-02T15:30:00Z'));
+    expect(late.notifier.send.mock.calls[0][0]).toMatchObject({ severity: 'warning', subject: 'CareBase lead form was not working' });
+    const back = forms();
+    await back.handlers['probe.recovery'](recoveryTask({ target: 'carebase_forms', incident: 2, downSince: '2026-11-02T08:00:00Z', recoveredAt: '2026-11-02T20:00:00Z' }));
+    expect(back.notifier.send.mock.calls[0][0]).toMatchObject({ severity: 'info', subject: 'CareBase lead form is working again', dedupeKey: 'probe.recovery:carebase_forms:2' });
+    expect(back.notifier.send.mock.calls[0][0].body).toContain('CareBase lead form passed its form check again at Nov 2, 3:00 PM Eastern.');
+  });
+
+  it('is never part of the five-minute sweep', async () => {
+    const fetchImpl = answer();
+    const base = fixture({ fetchImpl });
+    const handlers = probeHandlers({ store: base.store, notifier: base.notifier, targets: [hub, carebase], alertTargets: [form], fetchImpl, limitMs: 50, log: () => {} });
+    await handlers['probe.sweep'](task(), at('2026-11-02T14:30:00Z'));
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([hub.url, carebase.url]);
+  });
+});

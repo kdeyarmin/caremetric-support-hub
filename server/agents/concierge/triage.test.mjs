@@ -16,7 +16,7 @@ const taskOf = (overrides = {}) => ({
 });
 const now = () => new Date('2026-11-02T12:00:00Z');
 
-const fixture = ({ snapshot = snapshotOf('How do I export the staff roster by month?'), counts = {} } = {}) => {
+const fixture = ({ snapshot = snapshotOf('How do I export the staff roster by month?'), counts = {}, bookingUrl = null } = {}) => {
   const sent = [];
   const logs = [];
   const store = {
@@ -29,7 +29,7 @@ const fixture = ({ snapshot = snapshotOf('How do I export the staff roster by mo
   const notifier = {
     send: vi.fn(async input => { sent.push(input); return (input.severity === 'urgent' ? ['sms', 'email'] : ['email']).map(channel => ({ channel, delivery: 'sent' })); }),
   };
-  const handler = triageHandler({ store, notifier, log: line => logs.push(line) });
+  const handler = triageHandler({ store, notifier, bookingUrl, log: line => logs.push(line) });
   return { store, notifier, sent, logs, run: (task = taskOf()) => handler(task, { now }) };
 };
 const everywhere = ({ sent, store, logs }, outcome) => JSON.stringify([sent, store.finishRun.mock.calls, store.startRun.mock.calls, store.proposeAction.mock.calls, logs, outcome]);
@@ -102,11 +102,11 @@ describe('triaging one message', () => {
     expect(everywhere(harness, outcome)).not.toMatch(/instructions|prompt|\$500|CANARY/);
   });
 
-  it('tells the owner about an inquiry from the Advisors form like any other, without offering anything', async () => {
-    const harness = fixture({ snapshot: snapshotOf('We run 12 ALFs and are interested in consulting.', { channel: 'web_form', productSlug: 'advisors', inquiryType: 'advisors', subject: null }) });
+  it('tells the owner about an inquiry from the Advisors form as a sales inquiry, by email, and offers the sales acknowledgment', async () => {
+    const harness = fixture({ snapshot: snapshotOf('We run 12 ALFs and are interested in consulting.', { channel: 'web_form', productSlug: 'advisors', inquiryType: 'advisors', sourceSystem: 'advisors.web', subject: null }) });
     const outcome = await harness.run();
-    expect(harness.sent[0]).toMatchObject({ severity: 'info', subject: 'New web form message: CM-1042 for Healthcare Advisors, sales or consulting inquiry' });
-    expect(outcome.result).toMatchObject({ category: 'sales', product: 'advisors', delivery: ['email:sent'] });
+    expect(harness.sent[0]).toMatchObject({ severity: 'warning', subject: 'New web form message: CM-1042 for Healthcare Advisors, sales or consulting inquiry', dedupeKey: `concierge:warn:${ids.message}` });
+    expect(outcome).toMatchObject({ status: 'awaiting_approval', result: { category: 'sales', product: 'advisors', delivery: ['email:sent'], reply: 'proposed', template: 'sales' } });
   });
 
   it('skips what it should not triage, and says why, with no alert and no run', async () => {
@@ -212,8 +212,18 @@ describe('proposing a fixed reply', () => {
       expect(await harness.run(), body).toMatchObject({ status: 'done', result: { reply: 'owner_only' } });
       expect(harness.store.proposeAction).not.toHaveBeenCalled();
     }
-    const lead = fixture({ snapshot: snapshotOf('We run 12 ALFs and want help.', { channel: 'web_form', productSlug: 'advisors', inquiryType: 'advisors' }) });
-    expect(await lead.run()).toMatchObject({ status: 'done', result: { reply: 'owner_only' } });
+    // A website lead whose message is a billing question or a cancellation is the owner's too.
+    for (const body of ['We were charged twice by our current vendor.', 'We will cancel our contract with them.']) {
+      const lead = fixture({ snapshot: snapshotOf(body, { channel: 'web_form', productSlug: 'carebase', inquiryType: 'sales', sourceSystem: 'carebase.web', subject: null }) });
+      expect(await lead.run(), body).toMatchObject({ status: 'done', result: { reply: 'owner_only' } });
+      expect(lead.store.proposeAction).not.toHaveBeenCalled();
+    }
+  });
+
+  it('does not acknowledge a follow-up in a thread the team already joined, a prospect\'s included', async () => {
+    const lead = fixture({ snapshot: snapshotOf('Tuesday works for us.', { channel: 'web_form', inquiryType: 'sales', sourceSystem: 'intel.web', subject: null, outboundCount: 1, inboundCount: 2 }) });
+    expect(await lead.run()).toMatchObject({ status: 'done', result: { category: 'sales', severity: 'warning', reply: 'follow_up', template: 'sales' } });
+    expect(lead.store.proposeAction).not.toHaveBeenCalled();
   });
 
   it('does not acknowledge a follow-up in a thread the team already joined', async () => {
@@ -241,6 +251,77 @@ describe('proposing a fixed reply', () => {
     const broken = fixture();
     broken.store.proposeAction.mockRejectedValue(Object.assign(new Error('db down'), { code: '57014' }));
     await expect(broken.run()).rejects.toThrow('db down');
+  });
+});
+
+describe('a website lead', () => {
+  const lead = (body, overrides = {}) => snapshotOf(body, { channel: 'web_form', productSlug: 'carebase', inquiryType: 'sales', sourceSystem: 'carebase.web', subject: null, ...overrides });
+  const thanks = 'Hello,\n\nThank you for reaching out to CareMetric. I have your request, and I will follow up with you personally today.';
+  const booking = 'https://cal.example.test/caremetric/intro';
+
+  it('is a sales inquiry whatever its words say: a warning to the owner, and the sales acknowledgment proposed', async () => {
+    const harness = fixture({ snapshot: lead(`Please contact me. ${canary}\n\nRole: Administrator\nFacility count: 2`) });
+    const outcome = await harness.run();
+    expect(harness.sent).toEqual([{
+      severity: 'warning', subject: 'New web form message: CM-1042 for CareBase, sales or consulting inquiry',
+      body: 'A web form message for CareBase reached the Hub 5 minutes ago. It looks like a sales or consulting inquiry.\n\nOpen CM-1042 in Communications. Nothing has been sent to the customer.',
+      dedupeKey: `concierge:warn:${ids.message}`, agentKey: 'support_concierge', taskId: 't1',
+    }]);
+    expect(outcome).toEqual({ status: 'awaiting_approval', result: {
+      outcome: 'alerted', reference: 1042, channel: 'web_form', product: 'carebase', category: 'sales', phi: false, severity: 'warning', delivery: ['email:sent'],
+      reply: 'proposed', template: 'sales', screen: [], rules: ['sales.conversation'],
+    } });
+    expect(harness.store.proposeAction).toHaveBeenCalledWith({
+      taskId: 't1', kind: 'communication.reply', targetKind: 'communication', targetId: 'CM-1042', preview: thanks,
+      input: {
+        communicationId: ids.communication, reference: 1042, channel: 'web_form', route: 'email', basedOnMessageId: ids.message, body: thanks,
+        classification: { category: 'sales', phi: false }, template: 'sales',
+      },
+    });
+    expect(harness.store.finishRun).toHaveBeenCalledWith('run-1', 'completed', {}, 'Triaged CM-1042 (web form message): sales or consulting inquiry; warning alert (email:sent); sales acknowledgment proposed.', null);
+    expect(everywhere(harness, outcome)).not.toContain(canary);
+  });
+
+  it('offers the owner\'s booking page in the acknowledgment when one is set, and never a link otherwise', async () => {
+    const harness = fixture({ snapshot: lead('We would like a demo.'), bookingUrl: booking });
+    await harness.run();
+    const [{ preview, input }] = harness.store.proposeAction.mock.calls[0];
+    expect(preview).toBe(`${thanks}\n\nIf you would like to set a time now, pick a time that suits you: ${booking}`);
+    expect(input.body).toBe(preview);
+    for (const bookingUrl of ['http://cal.example.test/me', 'not a link', '']) {
+      const plain = fixture({ snapshot: lead('We would like a demo.'), bookingUrl });
+      await plain.run();
+      expect(plain.store.proposeAction.mock.calls[0][0].preview, bookingUrl).toBe(thanks);
+    }
+    // An ordinary plain question never gets the link.
+    const ordinary = fixture({ bookingUrl: booking });
+    await ordinary.run();
+    expect(ordinary.store.proposeAction.mock.calls[0][0].preview).not.toContain('cal.example.test');
+  });
+
+  it('is recognised by its inquiry type on a database that does not say where a conversation came from', async () => {
+    for (const inquiryType of ['sales', 'advisors']) {
+      const harness = fixture({ snapshot: snapshotOf('Please contact me.', { channel: 'web_form', inquiryType, subject: null }) });
+      expect(await harness.run(), inquiryType).toMatchObject({ result: { category: 'sales', severity: 'warning', template: 'sales', reply: 'proposed' } });
+    }
+    const filed = fixture({ snapshot: snapshotOf('Please contact me.', { channel: 'web_form', inquiryType: 'billing', sourceSystem: 'carebase.web', subject: null }) });
+    expect(await filed.run()).toMatchObject({ status: 'done', result: { category: 'general', severity: 'info', reply: 'owner_only' } });
+  });
+
+  it('gets only the identifier notice when it carries identifiers, and a louder alert', async () => {
+    const harness = fixture({ snapshot: lead(`Our resident Pat Sample, DOB 01/01/1900, needs help. ${canary}`) });
+    const outcome = await harness.run();
+    expect(outcome).toMatchObject({ result: { category: 'sales', phi: true, severity: 'warning', template: 'phi', reply: 'proposed' } });
+    expect(harness.store.proposeAction.mock.calls[0][0].preview).toContain('not set up to receive patient or resident information');
+    expect(everywhere(harness, outcome)).not.toMatch(/Sample|1900|CANARY/);
+  });
+
+  it('is never sent to the model', async () => {
+    const harness = withModel({ snapshot: lead('How do I export the staff roster by month?') });
+    const outcome = await harness.run();
+    expect(harness.model.run).not.toHaveBeenCalled();
+    expect(outcome.result).toMatchObject({ template: 'sales', reply: 'proposed' });
+    expect(outcome.result.draft).toBeUndefined();
   });
 });
 
@@ -466,10 +547,13 @@ describe('triaging with the model', () => {
     expect((await billing.run()).result).toMatchObject({ category: 'billing', severity: 'warning', reply: 'owner_only' });
     expect(billing.sent.map(alert => alert.severity)).toEqual(['info', 'warning']);
 
+    // A sale the model reads in an ordinary conversation raises a warning; the sales acknowledgment is only for a prospect's conversation.
     const sales = withModel({ result: done(reading({ inquiryType: 'sales', canAnswerFromGuides: false, citations: [], reply: '' })) });
     const salesOutcome = await sales.run();
-    expect(salesOutcome.result).toMatchObject({ category: 'sales', severity: 'info', reply: 'owner_only', draft: 'owner_only' });
-    expect(sales.sent).toHaveLength(1);
+    expect(salesOutcome.result).toMatchObject({ category: 'sales', severity: 'warning', reply: 'owner_only', draft: 'owner_only' });
+    expect(sales.sent.map(alert => alert.severity)).toEqual(['info', 'warning']);
+    expect(sales.sent[1].body).toContain('This comes from the AI team\'s reading of the message.');
+    expect(sales.store.proposeAction).not.toHaveBeenCalled();
   });
 
   it('honors an urgent reading whatever the topic, and never sends a message too long to have been screened', async () => {

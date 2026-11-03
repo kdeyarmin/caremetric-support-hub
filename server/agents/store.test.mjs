@@ -119,6 +119,29 @@ describe('agent store', () => {
     ]);
   });
 
+  it('reads the lead desk for the Growth Manager through its six operations, with their defaults', async () => {
+    const { store, calls } = harness();
+    const since = new Date('2026-11-02T05:00:00Z');
+    await store.growthPending();
+    await store.growthPending({ limit: 5, windowHours: 48 });
+    await store.growthLead('l1');
+    await store.growthMarkSeen(['l1', 'l2']);
+    await store.growthUnanswered({ olderThanMinutes: 60 });
+    await store.growthUnanswered({ olderThanMinutes: 1440, limit: 10 });
+    await store.growthFacts({ since, until: when });
+    await store.leadProbeSeen({ source: 'carebase', since });
+    expect(calls).toEqual([
+      ['select private.agent_growth_pending($1, $2) as result', [50, 24]],
+      ['select private.agent_growth_pending($1, $2) as result', [5, 48]],
+      ['select private.agent_growth_lead($1) as result', ['l1']],
+      ['select private.agent_growth_mark_seen($1) as result', [['l1', 'l2']]],
+      ['select private.agent_growth_unanswered($1, $2) as result', [60, 50]],
+      ['select private.agent_growth_unanswered($1, $2) as result', [1440, 10]],
+      ['select private.agent_growth_facts($1, $2) as result', [since, when]],
+      ['select private.agent_lead_probe_seen($1, $2) as result', ['carebase', since]],
+    ]);
+  });
+
   it('returns what the database returns', async () => {
     const { store } = harness([{ id: 't1' }]);
     expect(await store.claim(1, 60)).toEqual([{ id: 't1' }]);

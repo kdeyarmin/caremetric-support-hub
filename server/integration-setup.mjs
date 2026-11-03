@@ -57,6 +57,7 @@ export const integrationCatalog = Object.freeze([
       { name: 'HUB_AGENTS_ENABLED', secret: false, required: true, flag: true, purpose: 'Exactly "true" turns the scheduler on.' },
       { name: 'HUB_OWNER_EMAIL', secret: false, required: true, purpose: 'Where the AI team emails alerts and the morning brief. Urgent items are also texted to the administrator\'s verified number.' },
       { name: 'HUB_AGENTS_CUSTOMER_TEXT_TO_AI', secret: false, required: false, flag: true, purpose: 'Exactly "true" lets the Support Concierge send a plain question\'s scrubbed text to the model to draft an answer for you to approve. Set it only when your Anthropic agreement covers support messages.' },
+      { name: 'HUB_BOOKING_URL', secret: false, required: false, purpose: 'Your booking page (an https link, for example a Calendly or Cal.com page). The acknowledgment the Support Concierge proposes for a sales inquiry offers it, so a prospect can pick a time. Leave it unset to offer no link.' },
     ] },
   { id: 'website-leads', name: 'Website leads', purpose: 'CareBase, Intel and Healthcare Advisors forward every lead from their public forms to the Hub (POST /api/leads), where it appears on Leads and, when the person asked to be contacted, in Communications. Each product signs its leads with its own secret; a product without one keeps its leads to itself.', docs: 'docs/LEAD_INTAKE.md',
     variables: [

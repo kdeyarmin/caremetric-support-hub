@@ -90,8 +90,10 @@ What the Hub does by kind:
 | `trial_signup` | carebase, intel | no | at once |
 | `newsletter`, `savings_model`, `county_report` | carebase, intel | no | daily digest |
 
-Owner alerts arrive with the AI team change that builds on this table; until then the Support Concierge already
-notices each new web-form conversation like any other.
+The AI team's alerts follow this table ([AI_TEAM.md](AI_TEAM.md)): the Support Concierge alerts on each conversation as a
+sales inquiry and proposes a personal acknowledgment for the owner to approve; the Growth Manager emails each trial at once,
+reminds the owner about a lead conversation nobody has answered, and puts the daily-digest kinds in the morning brief and its
+weekly report.
 
 ## Responses
 
@@ -128,7 +130,8 @@ The Hub's Platform Engineer checks each product's main lead endpoint every few h
   `{"probe":true,"forwarded":true|false,"status":<Hub HTTP status, or 0 when unreachable>}`.
 - A probe header that does not verify is ignored: the request is treated as an ordinary submission (so it still
   needs the captcha). Never answer differently in a way that reveals whether the secret matched beyond that.
-- The Hub then confirms that the test lead arrived (end-to-end proof).
+- The Hub then confirms that the test lead arrived (end-to-end proof): a test lead from that product received in the last ten
+  minutes. Two failed checks in a row open an incident ([AI_TEAM.md](AI_TEAM.md), "The lead forms").
 
 ## Source attribution in the browser
 

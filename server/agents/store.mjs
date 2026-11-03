@@ -71,5 +71,18 @@ export function sqlAgentStore(pool, { fenced = false } = {}) {
     /** One health check for one product. The database decides when that opens or closes an incident. */
     probeRecord: ({ targetKey, ok, statusCode, latencyMs, failure = null, threshold = 2, agentKey = 'platform_engineer' }) =>
       call('private.agent_probe_record', [targetKey, ok, statusCode, latencyMs, failure, threshold, agentKey]),
+    // The Growth Manager's reads (platform.agents.growth.v1). None returns a contact's name, address, phone number or message.
+    /** Website leads the Growth Manager has not looked at yet, oldest first, from the last `windowHours`: ids, kinds and products only. Test leads never appear. */
+    growthPending: ({ limit = 50, windowHours = 24 } = {}) => call('private.agent_growth_pending', [limit, windowHours]),
+    /** One lead as an alert may name it: kind, product, organization, a few facts, where it came from and its conversation's reference. */
+    growthLead: id => call('private.agent_growth_lead', [id]),
+    /** Marks leads as looked at, so each is handled once. Returns how many were newly marked. */
+    growthMarkSeen: ids => call('private.agent_growth_mark_seen', [ids]),
+    /** Lead conversations still waiting for a first answer after `olderThanMinutes`, the most recent first. */
+    growthUnanswered: ({ olderThanMinutes, limit = 50 }) => call('private.agent_growth_unanswered', [olderThanMinutes, limit]),
+    /** Counts for the reports: leads by kind, product and source, trials, replies and what is still unanswered, between `since` and `until`. */
+    growthFacts: ({ since, until }) => call('private.agent_growth_facts', [since, until]),
+    /** Whether a test lead from `source` reached the Hub at or after `since`: the end of a lead form check. */
+    leadProbeSeen: ({ source, since }) => call('private.agent_lead_probe_seen', [source, since]),
   };
 }

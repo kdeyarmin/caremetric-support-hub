@@ -100,6 +100,16 @@ application role; and `hub.list_leads(...)` authorizes the administrator session
 `POST /api/leads` only when the feature is declared (read at boot); `src/lib/backendContract.ts` does not require it,
 so the migrations can be applied before or after the build that uses them. See [LEAD_INTAKE.md](LEAD_INTAKE.md).
 
+`20261103130100_agent_growth_contract.sql` declares `platform.agents.growth.v1` only after `platform.agents.v1`,
+`platform.agents.probes.v1` and `support.leads.v1` are declared and the Growth Manager keeps its boundary: `private.leads`
+still has row level security, grants nothing to any browser, service or server role and has its `growth_seen_at` column;
+`private.agent_growth_pending`, `agent_growth_lead`, `agent_growth_mark_seen`, `agent_growth_unanswered`,
+`agent_growth_facts`, `agent_lead_probe_seen` and the conversation snapshot they extend are security definers with a pinned
+empty search path, executable by `hub_app_server` alone and calling `private.require_hub_app_server()`; their helpers pin an
+empty search path and are executable by no application role; and the Growth Manager, its three schedules and the Platform
+Engineer's lead form check exist. Every test fails closed. The Hub server registers the Growth Manager's handlers only when the
+feature is declared (read at boot); `src/lib/backendContract.ts` does not require it. See [AI_TEAM.md](AI_TEAM.md).
+
 The table above is not exhaustive:
 later features such as the `billing.*` and `customer.self-service.v1` boundaries are declared
 by their own migrations and listed in `src/lib/backendContract.ts`. See [AI_TEAM.md](AI_TEAM.md).
