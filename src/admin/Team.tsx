@@ -7,7 +7,7 @@ import { useAdminRead } from "./useAdminRead";
 import { TeamApiError, teamClient } from "./teamClient";
 import type { TeamClient } from "./teamClient";
 import {
-  actionLabel, autonomyHelp, autonomyLabels, cadenceLabel, centsLabel, errorLabel, failedActionLabel, outcomeLabel, statusLabel, taskLabel, tierLabels,
+  actionLabel, approvalTitle, autonomyHelp, autonomyLabels, cadenceLabel, centsLabel, errorLabel, failedActionLabel, outcomeLabel, statusLabel, taskLabel, tierLabels,
 } from "./teamProtocol";
 import type { ActivityKind, ActivityPage, AuditPage, TeamAgent, TeamApproval, TeamOverview, TeamServices } from "./teamProtocol";
 import "./admin.css";
@@ -64,10 +64,14 @@ function RecordLink({ reference }: { reference: string }) {
 
 function ApprovalCard({ approval, busy, onDecide }: { approval: TeamApproval; busy: string; onDecide: (approval: TeamApproval, decision: "approve" | "reject", note: string) => void }) {
   const [note, setNote] = useState("");
-  const what = actionLabel(approval.kind);
-  const sends = approval.kind === "communication.reply";
+  const email = approval.kind === "email.send";
+  // A customer email is named by its account and subject, so two waiting emails never share a name.
+  const what = email ? approvalTitle(approval) : actionLabel(approval.kind);
+  // Approving a reply or a customer email sends it.
+  const sends = approval.kind === "communication.reply" || email;
   return <li className="team-approval">
-    <div className="team-approval-head"><strong>{approval.agentName}</strong> proposes: {what}{approval.targetId ? <> for <span className="team-target">{approval.targetId}</span></> : null}</div>
+    <div className="team-approval-head"><strong>{approval.agentName}</strong> proposes: {email ? what
+      : <>{what}{approval.targetId ? <> for <span className="team-target">{approval.targetId}</span></> : null}</>}</div>
     {/^CM-\d+$/.test(approval.targetId) && <p className="team-record"><RecordLink reference={approval.targetId} /></p>}
     <pre className="team-preview" aria-label={`Proposed text: ${what}`}>{approval.preview}</pre>
     <label className="team-note">Note (optional)<input value={note} maxLength={1000} disabled={Boolean(busy)} onChange={event => setNote(event.target.value)} /></label>

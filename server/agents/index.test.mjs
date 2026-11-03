@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { agentTeam } from './index.mjs';
 import { draftingFor } from './concierge/index.mjs';
+import { lifecycleInput } from './accounts/lifecycle.mjs';
 
 const store = (tasks = []) => ({
   maintenance: vi.fn(async () => ({})), fireSchedules: vi.fn(async () => []), claim: vi.fn(async () => tasks),
@@ -69,6 +70,30 @@ describe('the AI team', () => {
       expect(await bare.actions.sessionActions()).toEqual([]);
       expect(await bare.actions.executeOne('a1', { kind: 'communication.reply', sessionToken: token })).toMatchObject({ failed: true, error: 'no_executor' });
     }
+  });
+
+  it('proposes and sends customer emails only when the database declares the feature, through the sender it is given', async () => {
+    const feature = new Set(['platform.agents.lifecycle.v1']);
+    for (const features of [undefined, new Set(['platform.agents.accounts.v1'])]) {
+      expect(agentTeam({ store: store(), publicOrigin: origin, enabled: true, features }).scheduler.kinds()).not.toContain('accounts.lifecycle');
+    }
+    expect(agentTeam({ store: store(), publicOrigin: origin, enabled: true, features: feature }).scheduler.kinds()).toContain('accounts.lifecycle');
+    const fact = { tenant: 'maple-grove', tenantName: 'Maple Grove', product: 'carebase', productName: 'CareMetric CareBase', status: 'trialing' };
+    const execution = { id: 'a1', agentKey: 'account_manager', kind: 'email.send', autoApproved: false, execution: 1, input: lifecycleInput(fact, 'welcome') };
+    const mail = { configured: true, send: vi.fn(async () => ({ delivery: 'sent', id: 'm1' })) };
+    const fake = () => ({ ...store(), beginExecution: vi.fn(async () => execution), completeExecution: vi.fn(async () => undefined),
+      lifecycleSnapshot: vi.fn(async () => ({ accounts: [fact] })), lifecycleFinishSend: vi.fn(async () => true),
+      lifecycleBeginSend: vi.fn(async ({ unsubscribeHash }) => (unsubscribeHash ? { state: 'ready', to: 'billing@example.test' } : { state: 'unrecorded' })) });
+    const sending = fake();
+    const team = agentTeam({ store: sending, publicOrigin: origin, enabled: true, features: feature, lifecycle: { mail, postalAddress: '1 Main St, Altoona, PA' } });
+    expect(await team.actions.executeOne('a1', { kind: 'email.send' })).toEqual({ executed: true, failed: false, skipped: false });
+    expect(mail.send).toHaveBeenCalledWith(expect.objectContaining({ to: 'billing@example.test', unsubscribeUrl: expect.stringMatching(new RegExp(`^${origin}/api/email/unsubscribe/[0-9a-f]{64}$`)) }));
+    // It needs no owner session, so the tick's drain carries it out.
+    expect(await team.actions.sessionActions()).toEqual([]);
+    const bare = agentTeam({ store: fake(), publicOrigin: origin, enabled: true, lifecycle: { mail, postalAddress: '1 Main St' } });
+    expect(await bare.actions.executeOne('a1', { kind: 'email.send' })).toMatchObject({ failed: true, error: 'no_executor' });
+    const unconfigured = agentTeam({ store: fake(), publicOrigin: origin, enabled: true, features: feature });
+    expect(await unconfigured.actions.executeOne('a1', { kind: 'email.send' })).toMatchObject({ failed: true, error: 'not_configured' });
   });
 
   it('uses the fenced database operations only when the database declares the hardening feature', () => {

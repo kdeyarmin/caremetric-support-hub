@@ -69,6 +69,18 @@ export function sqlAgentStore(pool, { fenced = false } = {}) {
     /** A snapshot of every account's billing facts, usage and case counts for the weekly report: names and numbers, never a contact address. */
     accountsSnapshot: ({ limit = 200 } = {}) => call('private.agent_accounts_snapshot', [limit]),
     /**
+     * The facts the customer emails need, per account and product (or one account and product): names, dates and flags, never an
+     * address. Newest first, `limit` rows from `offset`; `truncated` says more rows follow this page.
+     */
+    lifecycleSnapshot: ({ limit = 200, tenant = null, product = null, offset = 0 } = {}) => call('private.agent_lifecycle_snapshot', [limit, tenant, product, offset]),
+    /**
+     * Records one approved customer email before it is sent and returns the one address it goes to (`{ state: 'ready', to }`), or why
+     * it may not go (`no_address`, `suppressed`, `daily_limit`, `auto_send_off`), or what an earlier attempt recorded (`recorded`, `status`).
+     * With no `unsubscribeHash` it only says whether a send was recorded (`recorded` or `unrecorded`) and changes nothing.
+     */
+    lifecycleBeginSend: ({ actionId, execution = null, unsubscribeHash }) => call('private.agent_lifecycle_begin_send', [actionId, execution, unsubscribeHash]),
+    lifecycleFinishSend: ({ actionId, delivery, providerMessageId = null }) => call('private.agent_lifecycle_finish_send', [actionId, delivery, providerMessageId]),
+    /**
      * What the Content Marketer needs to choose a topic: its latest article action per topic, which of `slugs` another content
      * item already uses, recent inbox conversations counted by product and inquiry type (never text) and the months whose
      * outreach email is recorded.

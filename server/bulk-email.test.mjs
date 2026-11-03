@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { appServer } from './http.mjs';
-import { applicationList, bulkEmailHtml, composeBulkEmail, sendgridBulkMail } from './bulk-email.mjs';
+import { applicationList, bulkEmail, bulkEmailHtml, composeBulkEmail, sendgridBulkMail } from './bulk-email.mjs';
 import { LAYOUT_MARKER, PRODUCT_WORDMARK } from './email-layout.mjs';
 
 const origin = 'https://support-hub-web-production.up.railway.app';
@@ -106,5 +107,42 @@ describe('bulk email messages', () => {
     expect((await mail.send({ to: 'd@agency.test', subject: 'S', text: 'T', unsubscribeUrl: null })).delivery).toBe('unknown');
     expect(sendgridBulkMail({ apiKey: 'not-a-key' }).configured).toBe(false);
     expect(sendgridBulkMail({ apiKey: 'SG.key', from: 'not an address' }).configured).toBe(false);
+  });
+  it('files bulk email under its own SendGrid category, and the Account Manager\'s customer emails under theirs', async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 202 }));
+    await sendgridBulkMail({ apiKey: 'SG.key', fetchImpl }).send({ to: 'a@agency.test', subject: 'S', text: 'T', unsubscribeUrl: 'https://hub.example/u' });
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body).categories).toEqual(['hub-bulk-email']);
+    const customer = sendgridBulkMail({ apiKey: 'SG.key', from: 'support@caremetric.ai', replyTo: 'support@caremetric.ai', category: 'hub-lifecycle-email', fetchImpl });
+    expect(customer.configured).toBe(true);
+    await customer.send({ to: 'a@agency.test', subject: 'S', text: 'T', unsubscribeUrl: 'https://hub.example/u' });
+    const body = JSON.parse(fetchImpl.mock.calls[1][1].body);
+    expect([body.categories, body.from.email, body.reply_to.email]).toEqual([['hub-lifecycle-email'], 'support@caremetric.ai', 'support@caremetric.ai']);
+    expect(body.personalizations[0].headers).toEqual({ 'List-Unsubscribe': '<https://hub.example/u>', 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' });
+    for (const category of ['', 'Hub Email', 'x'.repeat(41), 'a/b']) expect(sendgridBulkMail({ apiKey: 'SG.key', category }).configured, category).toBe(false);
+  });
+});
+
+describe('the unsubscribe page', () => {
+  const pageFor = answer => {
+    const calls = [];
+    const pool = { connect: async () => ({ query: async (sql, args) => { if (/email_unsubscribe/.test(sql)) { calls.push(args); return { rows: [{ result: answer }] }; } return { rows: [] }; }, release() {} }) };
+    return { calls, page: bulkEmail({ pool, publicOrigin: origin, mail: null }).unsubscribePage };
+  };
+  it('asks before it unsubscribes, names the kind of email the link came from, and says one list stops both', async () => {
+    const announcement = pageFor({ valid: true, purpose: 'announcements', unsubscribed: false });
+    const shown = await announcement.page(token, false);
+    expect(shown).toContain('Unsubscribe from CareMetric announcements');
+    expect(shown).toContain('stop receiving announcements and check-in emails from CareMetric');
+    expect(shown).toContain('<button type="submit">Unsubscribe</button>');
+    // The token never reaches the database, only its hash.
+    expect(announcement.calls).toEqual([[createHash('sha256').update(token).digest('hex'), false]]);
+    const checkIn = await pageFor({ valid: true, purpose: 'lifecycle', unsubscribed: false }).page(token, false);
+    expect(checkIn).toContain('Unsubscribe from CareMetric check-in emails');
+    const done = await pageFor({ valid: true, purpose: 'lifecycle', unsubscribed: true }).page(token, true);
+    expect(done).toContain('You are unsubscribed');
+    expect(done).toContain('You will no longer receive announcements or check-in emails from CareMetric.');
+    expect(done).toContain('receipts and billing notices, are not affected');
+    expect(done).not.toContain('<button');
+    expect(await pageFor({ valid: false }).page(token, true)).toContain('Link not recognized');
   });
 });

@@ -102,6 +102,17 @@ by no application role; and `hub.list_leads(...)` authorizes the administrator s
 `src/lib/backendContract.ts` does not require it, so the migrations can be applied before or after the build that uses
 them. See [LEAD_INTAKE.md](LEAD_INTAKE.md).
 
+`20261103140100_agent_lifecycle_contract.sql` declares `platform.agents.lifecycle.v1` only after
+`platform.agents.accounts.v1`, `platform.agents.hardening.v1` and `support.bulk-email.v1` are declared, the
+customer email ledger keeps row level security with no privilege for any browser, service or server role, the
+`email.send` action kind has its shape check and its once-per-period unique index, the three new operations
+(`private.agent_lifecycle_snapshot(...)`, `private.agent_lifecycle_begin_send(...)`,
+`private.agent_lifecycle_finish_send(...)`) and the two it replaced (`private.agent_action_propose(...)`, which must
+carry the per-template rule, and `private.email_unsubscribe(...)`) are security definers with a pinned empty search
+path executable by `hub_app_server` alone, the facts helper is executable by no role, and the Account Manager has its
+`auto_send_templates` setting and its daily customer email schedule. Each test fails closed. The Hub server registers
+the customer email handler and executor only when the feature is declared.
+
 `20261103150100_agent_content_contract.sql` declares `platform.agents.content.v1` only after `platform.agents.v1`,
 `platform.agents.hardening.v1`, `knowledge.publications.v1` and `support.communications.v1` are declared, the
 `content.publish` action kind (aimed at a `content_item`) has its shape check and its once-per-address and

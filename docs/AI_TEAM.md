@@ -7,7 +7,8 @@ is built so far.
 > **Status.** The database layer, the server scheduler, the `/admin/team` screen, the Platform
 > Engineer's health probes, the Chief of Staff's morning brief, the SEO Analyst's weekly report, the
 > Support Concierge's triage of new conversations, with the fixed replies it offers the owner, and the
-> Account Manager's weekly report on how each customer account is doing are in
+> Account Manager's weekly report on how each customer account is doing, with the short customer emails it
+> proposes for the owner to approve (see "Customer emails"), are in
 > place, and so is the model runtime they share (see "The model runtime"). The Content Marketer drafts one public
 > help-center article a week for the owner to approve and a month's outreach drafts for the owner to send (see "The
 > Content Marketer"); its model calls carry no customer text. The scheduler is inert
@@ -35,7 +36,9 @@ Each agent has one autonomy level, changed only by the owner:
 - **observe**: reads and reports. It cannot propose actions.
 - **propose**: drafts actions. Every one waits for the owner to approve it.
 - **act**: carries out the action kinds listed in the agent's `auto_approve_kinds` setting on its
-  own and proposes everything else.
+  own and proposes everything else. A customer email (`email.send`) is the exception: it goes out on its
+  own only when its template is listed in the agent's `auto_send_templates`, never for its kind.
+  See "Customer emails".
 
 An approved action is carried out by the server through the existing reviewed path (for a reply,
 the same staff reply operation the inbox uses, under the action's request key), so a retry can
@@ -436,10 +439,10 @@ Hub whose database lacks the migration still starts and the sweep stays due inst
 ## The Account Manager
 
 Emails the owner every Monday how the customer accounts are doing (task `accounts.weekly`, shown as "Weekly
-account report"). It uses no model, reads only what the Hub already holds, and **sends nothing to a
-customer**. Stripe's own customer emails (a failed payment, a trial ending, receipts) stay on; this agent
-never sends those and only tells the owner about them. Customer emails from the Account Manager, each one
-approved by the owner template by template, are a later step.
+account report"), and proposes a few short emails to customers that the owner approves (task `accounts.lifecycle`,
+shown as "Customer emails"; see "Customer emails" below). It uses no model and reads only what the Hub already
+holds. Stripe's own customer emails (a failed payment, a trial ending, receipts) stay on; this agent never
+sends or repeats those, and only tells the owner about them.
 
 **What it reads** is one server-only operation, `private.agent_accounts_snapshot`, over the mirrored Stripe
 data, the usage figures the applications report to the Hub and the support case counts. It never reads a
@@ -499,11 +502,106 @@ second server never sends twice. A failed delivery is retried by the notifier up
 email was switched off (not set up, so recorded as suppressed), or whose earlier attempt is stuck or unconfirmed,
 is not sent again by itself and the skipped run says `earlier_attempt_unconfirmed` instead of `already_sent`:
 press **Run now**, which always sends a fresh report under a key of its own. The agent starts paused and observe-only, and in
-observe it proposes nothing, since it has no actions yet.
+observe it proposes nothing.
 
 Its handler registers only when the database declares `platform.agents.accounts.v1`, so a Hub whose database
 lacks the migration still starts and the schedule stays due instead of failing. The declaration needs the
 control plane and the platform billing mirror.
+
+### Customer emails
+
+A trial that hears nothing leaks: CareBase (30 days) and Intel (14 days) trials start through the Hub's billing, and
+a CareBase trial without a card cancels silently. The Account Manager proposes four short, fixed emails to the
+billing contact of a trial or a new paying account (task `accounts.lifecycle`, every morning at 08:20 Eastern).
+They are written once, in `server/agents/accounts/lifecycle.mjs`, use no model, and go out only after the owner
+approves the exact text on the Team screen, or, for an agent on **Act**, when the owner listed the template.
+
+| Email | When | What it says |
+| --- | --- | --- |
+| Welcome | Days 0 to 2 of a trial | Thank you for starting the trial, the first three steps for the product, and a button to its getting-started help (CareBase's help center, Intel's Help page) |
+| Setup help | Days 3 to 6 of a trial, only while the product has reported no positive usage for the account (a report of zero is not usage) | An offer of help with setup, and the help link |
+| Trial check-in | When 5 days or fewer (and more than 2) are left in a trial | A personal check-in asking whether anything is in the way. It says it is not a billing notice |
+| Testimonial request | 45 to 60 days after the account's first paid invoice for the product, on any subscription it has had for it, with no open high or urgent case | Would they share a sentence or two: their words are used only with their permission, in the form they approve, with or without their name, and a reply is how they say yes |
+
+They are plain, warm and short. They say nothing about AI, quote no price, promise no time or outcome, never
+mention a phone call or voicemail, and use the company's vocabulary for CareBase (Assisted Living Facility, ALF,
+surveyor). The welcome, the setup offer and the check-in add the owner's booking page as a "Pick a time" button
+when `HUB_BOOKING_URL` is an https address. Only CareBase and Intel have these emails. Stripe's own notices are
+never duplicated: the check-in never mentions a card, a price, an invoice or a date.
+
+**Who gets one.** The run reads one server-only operation, `private.agent_lifecycle_snapshot`: per account and
+product, a live trial or a live paid subscription on an account that first paid for the product at most 90 days ago
+(live-mode Stripe records only, by the Billing screen's mode rule, so nothing at all while the verified mode is
+test). The first payment is the earliest paid invoice of any live subscription the account ever had for the
+product, cancelled ones included, so replacing a subscription neither postpones the testimonial request nor makes an
+established account look new. For each it returns the tenant's slug and name, the product, the subscription's
+status and dates, that first payment's date, whether a usable billing address exists and whether it unsubscribed
+(never the address), whether the product has reported a positive usage quantity, how many high or urgent cases are
+open, and what became of each template's email before. The run reads these facts 200 at a time, newest first, up to
+2,000, and plans every page together, so newer trials never hide an older account whose email is due; a run that
+stops at 2,000 says so. Each template is proposed at most once per account and product, ever: its period key,
+`account:<template>:<tenant>:<product>`, is unique across every action, whichever run proposed it. A run proposes
+at most 20 emails, one per account (a second waits for the next run), and none to an account with no usable billing
+address, one that unsubscribed, one whose subscription is being cancelled, or a suspended or closed tenant.
+
+**What the owner approves.** Each email is an `email.send` action aimed at the account (`billing_account`, its
+slug). Its preview is the exact email: the subject line, the message and the footer (why it was sent, the
+unsubscribe line and the postal address; the personal unsubscribe link itself is made when it is sent). The card
+reads "Email to <account>: <subject>" and its button says "Approve and send". The action keeps only the facts that
+rebuild the email (template, account slug and name, product, help and booking links, the period key and a SHA-256
+hash of the wording), never an address; the database refuses an action with any other field.
+
+**Autonomy.** In **Observe** the run proposes nothing and records how many of each template it would have
+proposed. In **Propose** every email waits for the owner. On **Act** an email is approved on its own only when its
+template is listed in the agent's `auto_send_templates` (seeded empty, and only SQL changes it, for example
+`update private.agents set config = jsonb_set(config, '{auto_send_templates}', '["welcome"]') where key =
+'account_manager'`). Listing `email.send` in `auto_approve_kinds` never approves one. The database applies the rule
+when the email is proposed; the task result counts what it recorded, the audit event says `auto`, and an email
+approved on its own is refused at send time (`auto_send_off`) if its template has since left the list or the agent
+no longer acts. The run finishes once it has proposed: its proposals wait on the Team screen without holding back
+the next morning's run.
+
+**Sending.** An approved email is sent at once, or by the next tick when it was approved on its own; it needs no
+owner session. Before anything goes out the executor (`server/agents/accounts/executor.mjs`) refuses, with a code the
+Team screen explains:
+
+- `not_configured`: the Hub cannot send customer email. It needs the SendGrid key, the company's postal address
+  (`HUB_BULK_EMAIL_POSTAL_ADDRESS`, which every footer carries; without it nothing is proposed either) and a bare
+  https public origin for the unsubscribe link (`HUB_PUBLIC_ORIGIN`: no credentials, path, query or fragment, so the
+  link always reaches the unsubscribe page).
+- `wording_changed`: the email rebuilt from the action's facts no longer matches the hash of the approved wording,
+  so a newer Hub never sends different words under an old approval.
+- `no_longer_applies`: the account changed. The trial emails need a trial that is still a trial (and the setup
+  offer still no positive usage); the testimonial needs an account still paying with no open high or urgent case; neither
+  goes to a subscription being cancelled.
+- Then one database call (`private.agent_lifecycle_begin_send`) refuses `auto_send_off`, `no_address` (no usable
+  billing address), `suppressed` (the address is on the suppression list) and `daily_limit` (20 customer emails
+  already went out today, Eastern, across every account), and otherwise records the send and hands over the
+  account's one billing address. It is the only operation that ever returns one.
+
+The email goes through the same SendGrid sender as bulk email (category `hub-lifecycle-email`), from
+`HUB_SUPPORT_FROM_EMAIL` (support@caremetric.ai) with replies to the same address, tracking off, and
+`List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` headers. The outcome is sent,
+`delivery_failed` (SendGrid refused it) or `email_unconfirmed` (no answer, so it may have gone). Nothing is retried.
+An execution that is started again (the server stopped mid-send and the sweep handed the action back) finds the
+recorded send and settles it from the record, whatever has changed since, without sending again.
+
+**Unsubscribing.** The footer's link is personal: a random token whose SHA-256 hash is kept beside the address's
+hash. It opens the bulk email unsubscribe page (`/api/email/unsubscribe/<token>`), which changes nothing until its
+button or a mail client's one-click request confirms, and then adds the address to the same suppression list. One
+list stops both kinds of email. Support replies, receipts and billing notices are not affected.
+
+**What is kept.** The send ledger (`private.agent_lifecycle_emails`) holds the action, the period key, the template,
+the address's SHA-256 hash (as bulk email keeps it), the unsubscribe link's hash, the outcome and SendGrid's message
+id. The address and the email's text are never stored, logged or returned by the executor; the action's preview is
+the approved text, which names the account and holds no address. Task results and run summaries hold counts and
+template names only.
+
+The handler and the action register only when the database declares `platform.agents.lifecycle.v1`, which needs
+the Account Manager, the hardening and bulk email. To switch the emails on: apply the two migrations, restart the
+Hub, set `HUB_BULK_EMAIL_POSTAL_ADDRESS` (and `HUB_BOOKING_URL` if you want the button), resume the Account Manager,
+leave it in **Observe** for a morning and read its run ("Observe only: 3 customer emails would be proposed …"), then
+switch it to **Propose** and press **Run now** on "Customer emails".
 
 ## The Content Marketer
 
@@ -654,6 +752,7 @@ Server (`hub_app_server` only): `agent_schedule_fire`, `agent_maintenance`, `age
 `agent_budget`, `agent_action_propose`, `agent_actions_ready`, `agent_action_execution`,
 `agent_action_executed`, `agent_action_release`, `agent_notify_begin`, `agent_notify_finish`, `owner_contact`, `agent_probe_record`, `agent_brief_facts`,
 `agent_concierge_pending`, `agent_communication_snapshot`, `agent_notification_count`, `agent_accounts_snapshot`,
+`agent_lifecycle_snapshot`, `agent_lifecycle_begin_send`, `agent_lifecycle_finish_send`,
 `agent_content_state`, `agent_content_publish`.
 
 Owner (current administrator session): `get_agent_team`, `list_agent_activity`,
@@ -836,7 +935,12 @@ Apply the migrations in order with the usual procedure:
    by kind, gives each alert retry its own clock and declares `platform.agents.hardening.v1` (it needs the
    control plane, the probes and the brief). Apply it before you resume any agent, and restart the Hub after
    it so the server reads the feature.
-8. `20261103150000_agent_content.sql`, then its gate `20261103150100_agent_content_contract.sql`, which adds the
+8. `20261103140000_agent_lifecycle.sql`, then its gate `20261103140100_agent_lifecycle_contract.sql`, which add the
+   `email.send` action with its shape check and once-per-period index, the per-template rule for an agent on Act,
+   the send ledger, the three server-only operations, a customer-email link on the shared unsubscribe page, the daily
+   schedule and the empty `auto_send_templates` setting, and declare `platform.agents.lifecycle.v1` (it needs the
+   Account Manager, the hardening and bulk email). Restart the Hub after it.
+9. `20261103150000_agent_content.sql`, then its gate `20261103150100_agent_content_contract.sql`, which adds the
    `content.publish` action kind (widening the kind and target checks without dropping any kind another change added),
    its shape check and its once-per-address and once-per-topic indexes, the two server-only operations, and the Content
    Marketer (paused, Propose) with its two schedules, and declares `platform.agents.content.v1` (it needs the control
