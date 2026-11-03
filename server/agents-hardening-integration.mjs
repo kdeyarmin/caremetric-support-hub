@@ -192,10 +192,13 @@ try {
       await holder.query("update private.agent_tasks set status = 'cancelled', finished_at = now() where id = $1", [id]);
       let settled = false;
       const proposing = propose(id, 'communication.reply', 'CM-H5').then(value => { settled = true; return value; }, error => { settled = true; throw error; });
+      // The expectation is attached before the commit: the refusal can arrive before the commit's own answer, and a rejection
+      // nobody was listening for yet would end the process (and skip its teardown) instead of being checked.
+      const refusal = assert.rejects(proposing, refused('55000', /Only a running task can propose/), 'and is refused once the task is cancelled');
       await sleep(400);
       assert.equal(settled, false, 'the proposal waits for the cancellation that is in flight');
       await holder.query('commit');
-      await assert.rejects(proposing, refused('55000', /Only a running task can propose/), 'and is refused once the task is cancelled');
+      await refusal;
     } finally { await holder.query('rollback').catch(() => {}); holder.release(); }
     assert.equal((await row('select count(*)::int as n from private.agent_actions where target_id = $1', ['CM-H5'])).n, 0, 'no action was left behind');
   }
