@@ -3,6 +3,15 @@ import { assess, attentionReasons, cancelDate, cancellationDate, healthVersion, 
 import { account, iso, item, now, subscription } from './fixtures.mjs';
 
 const rated = (over, at = now) => assess(account(over), at);
+it('combines native activity and usage reports across products without losing an adoption decline',()=>{
+ const result=rated({products:[{slug:'carebase',status:'active'},{slug:'caremetric-intel',status:'active'}],activity:[{app:'carebase',metric:'active_days',latest:7,baseline:7,latestAt:iso(-1),baselineAt:iso(-29)}],usage:[{app:'caremetric-intel',metric:'active_users',latest:0,baseline:10}]});
+ expect(result.reasons).toContain('usage_stopped');expect(result.attention).toBe(true);
+ expect(result.evidenceByProduct).toEqual({carebase:'fresh','caremetric-intel':'no_activity'});
+});
+it('uses the newest observation when native activity and usage both report the same metric',()=>{
+ const result=rated({activity:[{app:'carebase',metric:'active_users',latest:10,baseline:10,latestAt:iso(-1),baselineAt:iso(-29)}],usage:[{app:'carebase',metric:'active_users',latest:0,baseline:10,latestAt:iso(-2)}]});
+ expect(result.reasons).not.toContain('usage_stopped');expect(result.band).toBe('healthy');
+});
 
 describe('how an account is doing', () => {
   it('scores a quiet, paying account 100 and says nothing about it', () => {

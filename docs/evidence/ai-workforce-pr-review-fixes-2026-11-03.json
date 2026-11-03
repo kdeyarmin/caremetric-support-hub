@@ -45,10 +45,40 @@
       "issue": "An existing tenant mapping could not be cleared",
       "status": "fixed",
       "verification": "Omitted mapping stays set; explicit empty clears it; moving the tenant routes its next event to the correct organization."
+    },
+    {
+      "comment": 4456201904,
+      "issue": "Growth and native lifecycle emails had separate contact-gap checks",
+      "status": "fixed",
+      "verification": "Growth-first, lifecycle-first and concurrent database claims admit exactly one recipient reservation; the other workflow remains blocked until the configured gap elapses. Native replay and per-day caps remain intact."
+    },
+    {
+      "comment": 4456201970,
+      "issue": "Growth preview could send credentialed requests",
+      "status": "fixed",
+      "verification": "Preview read and mutation attempts are rejected before fetch; connected-mode UI behavior remains covered."
+    },
+    {
+      "comment": 4456202035,
+      "issue": "Native activity displaced usage evidence from other products",
+      "status": "fixed",
+      "verification": "Mixed CareBase activity and Intel usage retain an Intel stopped-use alert; overlapping metrics use the latest valid observation."
+    },
+    {
+      "comment": 4456202087,
+      "issue": "Financial health bands hid adoption-evidence gaps in the report",
+      "status": "fixed",
+      "verification": "A cancellation-watch account with no activity is still counted as missing fresh adoption evidence."
+    },
+    {
+      "comment": 4456202225,
+      "issue": "Selecting the same opportunity cleared its detail view",
+      "status": "fixed",
+      "verification": "Repeated selection preserves evidence and message history, including unknown delivery details."
     }
   ],
   "validation": {
-    "applicationTestsPassed": 2410,
+    "applicationTestsPassed": 2415,
     "applicationTestFilesPassed": 216,
     "sdkTestsPassed": 24,
     "types": "passed",
@@ -60,7 +90,7 @@
     "migrationFilesApplied": 140,
     "sqlAssertionsPassed": 992,
     "securityAdvisors": "no issues found",
-    "growthIntegration": "passed twice with the six PR review regressions and full teardown",
+    "growthIntegration": "passed twice with identity, chronology, event initialization, pending drafts, tenant remapping, cross-workflow contact frequency and teardown regressions",
     "compatibilityIntegrationsPassed": [
       "backend contract",
       "agent control plane",
@@ -84,5 +114,12 @@
     "deploymentRequired": true,
     "nativeEventInstrumentationRequired": true,
     "providerConfigurationRequired": true
-  }
+  },
+  "duplicateFindings": [
+    {
+      "comment": 4456202157,
+      "duplicateOf": 4456165958,
+      "status": "fixed"
+    }
+  ]
 }

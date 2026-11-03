@@ -104,7 +104,7 @@ describe('sending an approved customer email', () => {
   });
 
   it('refuses what the database refuses: no address, an unsubscribed address, the day\'s cap and an auto-approval the owner no longer allows', async () => {
-    for (const [state, code] of [['no_address', 'no_address'], ['suppressed', 'suppressed'], ['daily_limit', 'daily_limit'], ['auto_send_off', 'auto_send_off'], ['surprise', 'executor_error']]) {
+    for (const [state, code] of [['no_address', 'no_address'], ['suppressed', 'suppressed'], ['daily_limit', 'daily_limit'], ['frequency_limited', 'frequency_limited'], ['auto_send_off', 'auto_send_off'], ['surprise', 'executor_error']]) {
       const { send, mail, store } = fixture({ begun: { state } });
       await expect(send(execution()), state).rejects.toSatisfy(refusal(code));
       expect(mail.send).not.toHaveBeenCalled();

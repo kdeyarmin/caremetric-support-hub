@@ -10,6 +10,7 @@ import { evaluateGrowth } from './growth/evaluation.mjs';
 import { growthHandlers, growthExecutors } from './growth/worker.mjs';
 import { planOpportunity } from './growth/policy.mjs';
 import { actionExecutor, recordOnlyExecutors } from './agents/actions.mjs';
+import { lifecycleInput, lifecyclePreview } from './agents/accounts/lifecycle.mjs';
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -27,6 +28,7 @@ const ownerCall = (fn, values) => withSession(pool, token, async db => (await db
 const gate = await readFile(new URL('../supabase/migrations/20261103150102_customer_growth_contract.sql', import.meta.url), 'utf8');
 const seedAgents = (await admin.query('select key,status,autonomy,daily_budget_cents,config from private.agents')).rows;
 const seedPolicies = (await admin.query('select * from private.growth_policies')).rows;
+const seedBillingMode = (await row('select livemode from private.billing_settings')).livemode;
 let organization, communication;
 const regressionOrganizations = [], regressionTenants = [], regressionCommunications = [], chatClients = [];
 const tasks = [];
@@ -37,11 +39,12 @@ const task = async (agent='marketing_manager') => {
 const opportunity = id => row('select * from private.growth_opportunities where id=$1', [id]);
 const message = id => row('select * from private.growth_messages where id=$1', [id]);
 const draftVersions = id => row('select o.version,c.version as "contactVersion",p.version as "policyVersion" from private.growth_opportunities o join private.growth_contacts c on c.id=o.contact_id join private.growth_policies p on p.product=o.product where o.id=$1',[id]);
-const prepare = async (id, key) => {
+const prepare = async (id, key, purpose='marketing') => {
   const versions = await draftVersions(id);
-  const work = await store.plan(id, { key, kind: 'outreach', action: 'Offer a conversation.', success: 'Qualified reply.', owner: 'marketing_manager', dueAt: new Date().toISOString() });
-  const draft = await store.draft(id, work, { ...versions, purpose: 'marketing', subject: 'Product workflow', body: 'Would a conversation be useful?', citations: (await store.detail(token,id)).evidence.map(e=>e.id), unsubscribeHash: digest(work), modelGenerated: true });
-  const action = await store.propose(await task(), draft.id);
+  const ownerAgent=purpose==='success'?'account_manager':'marketing_manager';
+  const work = await store.plan(id, { key, kind: purpose==='success'?'onboarding':'outreach', action: 'Offer a conversation.', success: 'Qualified reply.', owner: ownerAgent, dueAt: new Date().toISOString() });
+  const draft = await store.draft(id, work, { ...versions, purpose, subject: 'Product workflow', body: 'Would a conversation be useful?', citations: (await store.detail(token,id)).evidence.map(e=>e.id), unsubscribeHash: digest(work), modelGenerated: true });
+  const action = await store.propose(await task(ownerAgent), draft.id);
   await ownerCall('hub.decide_agent_action', [action.id, 'approve', 'Reviewed synthetic message.']);
   await agents.beginExecution(action.id);
   return { id: draft.id, action: action.id, work };
@@ -315,6 +318,43 @@ try {
   assert.equal((await opportunity(mappingA.id)).stage,'qualified');
   assert.equal((await opportunity(mappingB.id)).stage,'demo');
 
+  // Native lifecycle and growth share recipient frequency, including when two replicas claim at the same time.
+  await admin.query('update private.billing_settings set livemode=true');
+  for(const order of ['growth-first','lifecycle-first','concurrent']) {
+    const shared=await regressionFixture();
+    await report(shared,`shared-trial-${order}`,'trial_started',timeAgo(1));
+    const sharedEmail=(await row('select email from private.growth_contacts where id=$1',[shared.contactId])).email;
+    const sharedTenant=(await row('select slug from hub.tenants where id=$1',[shared.tenantId])).slug;
+    await admin.query("insert into private.billing_customers(tenant_id,stripe_customer_id,email,name,livemode,seen_at) values($1,$2,$3,'Synthetic shared contact',true,now())",[shared.tenantId,`cus_growth${randomUUID().replaceAll('-','')}`,sharedEmail]);
+    const growthSend=await prepare(shared.id,'shared-onboarding','success');
+    const input=lifecycleInput({tenant:sharedTenant,tenantName:'Synthetic shared account',product:'carebase',productName:'CareBase'},'welcome');
+    const native=await agents.proposeAction({taskId:await task('account_manager'),kind:'email.send',targetKind:'billing_account',targetId:sharedTenant,preview:lifecyclePreview(input),input});
+    await ownerCall('hub.decide_agent_action',[native.id,'approve','Synthetic cross-workflow check.']);
+    const nativeExecution=await agents.beginExecution(native.id);
+    const claimNative=()=>agents.lifecycleBeginSend({actionId:native.id,execution:nativeExecution.execution,unsubscribeHash:digest(native.id)});
+    const claimGrowth=()=>store.claim(growthSend.id,growthSend.action);
+    let nativeResult,growthResult;
+    if(order==='growth-first'){growthResult=await claimGrowth();nativeResult=await claimNative();}
+    else if(order==='lifecycle-first'){nativeResult=await claimNative();growthResult=await claimGrowth();}
+    else [growthResult,nativeResult]=await Promise.all([claimGrowth(),claimNative()]);
+    assert.equal(Number(growthResult.send===true)+Number(nativeResult.state==='ready'),1,`${order}: exactly one workflow reserves the recipient`);
+    if(growthResult.send) {
+      assert.equal(nativeResult.state,'frequency_limited');
+      assert.equal((await row('select count(*)::integer as n from private.agent_lifecycle_emails where action_id=$1',[native.id])).n,0);
+      await store.finish(growthSend.id,'accepted',`recording-${order}`);
+      assert.equal((await claimNative()).state,'frequency_limited');
+      await admin.query("update private.growth_messages set attempted_at=now()-interval '31 days' where id=$1",[growthSend.id]);
+      assert.equal((await claimNative()).state,'ready','an elapsed contact gap permits the next distinct email');
+    } else {
+      assert.equal(growthResult.status,'frequency_limited');
+      await agents.lifecycleFinishSend({actionId:native.id,delivery:'sent',providerMessageId:`recording-${order}`});
+      assert.equal((await claimGrowth()).status,'frequency_limited');
+      await admin.query("update private.agent_lifecycle_emails set created_at=now()-interval '31 days' where action_id=$1",[native.id]);
+      assert.equal((await claimGrowth()).send,true,'an elapsed contact gap permits the next distinct email');
+    }
+  }
+  await admin.query('update private.billing_settings set livemode=$1',[seedBillingMode]);
+
   // Review regression: fifty deferred messages cannot monopolize subsequent ticks or bypass the persisted delay.
   const deferredActions=[];
   for(let i=0;i<50;i++) {
@@ -348,6 +388,7 @@ try {
       'alter function private.growth_claim_message(uuid,uuid) reset search_path',
       'grant execute on function private.growth_record_event(text,jsonb) to authenticated',
       'alter table private.agent_budget_reservations disable row level security',
+      'alter function private.agent_lifecycle_begin_send(uuid,integer,text) reset search_path',
       'grant update(email) on private.growth_contacts to hub_app_server',
       'revoke execute on function hub.growth_manage(text,jsonb) from authenticated',
     ]) {
@@ -356,7 +397,7 @@ try {
       finally { await client.query('rollback'); }
     }
   } finally { client.release(); }
-  console.log('Growth integration passed: session boundaries, unverified-chat exclusion, message chronology, event-based initialization, late milestones and draft preservation, tenant remapping, competing claims, reply stop, stale proposal replacement, deferred queue fairness, opt-out, shared budgets, and fail-closed deployment gates. No email sent.');
+  console.log('Growth integration passed: session boundaries, unverified-chat exclusion, message chronology, event-based initialization, late milestones and draft preservation, tenant remapping, shared lifecycle/growth recipient claims, reply stop, stale proposal replacement, deferred queue fairness, opt-out, shared budgets, and fail-closed deployment gates. No email sent.');
 } finally {
   if (!organization) organization = (await row('select id from private.growth_organizations where domain=$1', [domain]))?.id;
   for(const organizationId of [...(organization?[organization]:[]),...regressionOrganizations]) {
@@ -385,6 +426,8 @@ try {
   await admin.query('delete from hub.profiles where id=$1', [owner]);
   await admin.query('delete from auth.users where id=$1', [owner]);
   await admin.query('delete from hub.tenants where id=$1', [tenant]);
+  await admin.query('delete from private.billing_customers where tenant_id=any($1::uuid[])',[regressionTenants]);
   await admin.query('delete from hub.tenants where id=any($1::uuid[])', [regressionTenants]);
+  await admin.query('update private.billing_settings set livemode=$1',[seedBillingMode]);
   await pool.end(); await admin.end();
 }

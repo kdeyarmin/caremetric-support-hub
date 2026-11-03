@@ -8,7 +8,7 @@ The Growth workspace at `/admin/growth` adds a Marketing Manager and customer-su
 | --- | --- |
 | Prospect research and qualification | Scheduled or owner-requested public business research, dated sources, model-assisted fit rationale, separate observed intent, manual contact verification and lifecycle qualification |
 | Persistent shared customer history | One organization and contact across product opportunities; goals, promises, blockers, objections, loss reasons, owner and dated next action |
-| Marketing outreach | Versioned product claims, booking link, evidence-backed drafts, individual model-message approval, a maximum of three touches, shared contact frequency and per-product daily limits |
+| Marketing outreach | Versioned product claims, booking link, evidence-backed drafts, individual model-message approval, a maximum of three touches, shared contact frequency across growth and native lifecycle emails, and per-product daily limits |
 | Reply and cancellation handling | Signed email webhook ingestion correlates a known sender, classifies simple response signals, stops both product sequences and creates a follow-up/recovery task; complete conversations remain in Communications |
 | Conversion handoff | Scoped, signed and deduplicated product events transfer trial/customer work to the Account Manager without accepting clinical records |
 | Onboarding and retention | First-step onboarding, 48-hour activation check, trial deadlines, adoption recovery with fresh telemetry, support coordination, cancellation recovery, renewal and demonstrated expansion interest |
@@ -18,6 +18,8 @@ The Growth workspace at `/admin/growth` adds a Marketing Manager and customer-su
 | Search and content | Weekly source-backed product content briefs in the approval queue, campaign identifiers and native signup source attribution; publishing remains in the existing authoring workflow |
 | Stronger operations | Weekly SEO catch-up, overdue work in the Chief of Staff brief, shared database model-budget reservations, unknown-delivery reconciliation and external availability monitoring |
 | Learning and measurement | Optional stable standard/concise message groups, recorded approvals/rejections, product/cohort replies, meetings, trials, activation, paid conversion, mature 30/60/90-day retention, delivery outcomes and repeatable behavioral evaluation |
+
+The weekly account report combines native activity and usage reports per product and metric, keeping the newest valid observation when both cover the same metric. Telemetry gaps are counted separately from financial health bands. The Growth preview refuses backend reads and mutations.
 
 The existing Billing and weekly account report remain the source of MRR/ARR. The Growth screen reports observed outcomes, not predicted churn or invented attribution. Revenue expansion, acquisition cost allocation, search-demand performance and campaign effectiveness need measured production data before targets or automatic promotion are justified.
 
@@ -74,6 +76,8 @@ Drafts retain the opportunity, contact and policy versions used to write them. A
 
 A new product opportunity starts from the observed event: meetings become demos, while heartbeats and replies do not create trials. Late activation, payment and churn events preserve their historical milestone dates without moving the current lifecycle stage backwards. Late events that leave the current context unchanged preserve existing pending drafts. Activation arriving after payment therefore closes onboarding and contributes to conversion reporting. Clearing the Hub tenant ID explicitly removes its mapping so the owner can correct it. Persisted model-budget reservations are released after deferred cost writes settle, including a retry when reservation cleanup temporarily fails.
 
+Growth and native Account Manager email claims share a database lock and check each other’s recipient history before reserving a send. The configured contact gap applies across both workflows, including simultaneous attempts; an overlapping native email is skipped with a visible frequency-limit reason. Their existing approval and daily-volume limits still apply.
+
 Temporarily blocked messages receive a persisted 15-minute retry time; both the queue and direct execution respect it, allowing other agents’ ready actions to proceed.
 
 Pause the agent, disable the product policy, or disable `HUB_GROWTH_SEND_ENABLED` to stop new sends. An already accepted provider request cannot be recalled. The system rechecks the latest contact, policy, opportunity and suppression status immediately before reserving a send; short database mutations serialize independently of model, search and mail calls.
@@ -82,7 +86,7 @@ Pipeline and customer-success work run every 15 minutes; discovery searches run 
 
 ## Verification and rollout limits
 
-The six PR review fixes and their regression results are recorded in [PR review-fix evidence](evidence/ai-workforce-pr-review-fixes-2026-11-03.json). The four implementation-review findings and their regression results are recorded in [the review-fix evidence](evidence/ai-workforce-review-fixes-2026-11-03.json). [PR validation](evidence/ai-workforce-pr-validation-2026-11-03.json) records the combined checks after integrating the newer lead, lifecycle and content features from main.
+The eleven distinct PR review fixes and their regression results are recorded in [PR review-fix evidence](evidence/ai-workforce-pr-review-fixes-2026-11-03.json). The four implementation-review findings and their regression results are recorded in [the review-fix evidence](evidence/ai-workforce-review-fixes-2026-11-03.json). [PR validation](evidence/ai-workforce-pr-validation-2026-11-03.json) records the combined checks after integrating the newer lead, lifecycle and content features from main.
 
 - `npm run check` runs application/UI tests, lint, types, SDK checks and the build.
 - `npm run evaluate:growth` runs both products through golden cases for source freshness, citation/link rejection, intent, stop rules and lifecycle choices.

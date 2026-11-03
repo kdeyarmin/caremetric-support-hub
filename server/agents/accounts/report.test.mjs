@@ -4,6 +4,11 @@ import { account, iso, item, now, snapshot, subscription } from './fixtures.mjs'
 import { composeAccountsReport, rowLimit } from './report.mjs';
 
 const origin = 'https://hub.example.test';
+it('reports missing adoption evidence independently of a financial watch band',()=>{
+ const report=composeAccountsReport({snapshot:snapshot([account({usage:[],subscriptions:[subscription({cancel_at_period_end:true})]})]),now,publicOrigin:origin});
+ expect(report.result).toMatchObject({watch:1,unknown:0});
+ expect(report.blocks.find(b=>b.type==='paragraph'&&b.text.includes('fresh adoption evidence')).text).toContain('1 account lacks fresh adoption evidence');
+});
 // Names and an amount distinctive enough that finding them anywhere they should not be is unmistakable.
 const book = [
   account({ slug: 'maple-grove', name: 'Maple Grove Senior Living', subscriptions: [subscription({ items: [item({ quantity: 2 })] })] }),

@@ -59,6 +59,7 @@ export function composeAccountsReport({ snapshot, now = new Date(), publicOrigin
   const accounts = everyone.filter(account => !(account.status === 'closed' && !(account.subscriptions ?? []).some(subscription => liveStatuses.includes(subscription.status))));
   const assessed = accounts.map(account => ({ account, health: assess(account, now), mrrCents: monthlyTotals(account.subscriptions ?? [], coupons).mrrCents }));
   const byBand = band => assessed.filter(entry => entry.health.band === band).length;
+  const evidenceGaps = assessed.filter(entry => ['missing','stale','billing_only','partial'].includes(entry.health.evidence)).length;
 
   const needs = assessed.filter(entry => entry.health.attention)
     .sort((a, b) => b.health.penalty - a.health.penalty || a.account.name.localeCompare(b.account.name));
@@ -109,7 +110,7 @@ export function composeAccountsReport({ snapshot, now = new Date(), publicOrigin
       ['No live subscription', String(counts.inactive)],
     ] },
     { type: 'paragraph', text: `Revenue uses the same figures as the Billing screen: paying and past-due subscriptions after discounts, with trials counted apart.${currencies.size > 1 ? ' Some amounts are in more than one currency and are added as if equal.' : ''}` },
-    { type: 'paragraph', text: `${counts.unknown} accounts lack fresh adoption evidence. Missing activity is not proof of inactivity. Scores are advice only and never change a plan, a price or anyone's access. Scoring version ${healthVersion}.` },
+    { type: 'paragraph', text: `${plural(evidenceGaps, 'account')} ${evidenceGaps===1?'lacks':'lack'} fresh adoption evidence. Missing activity is not proof of inactivity. Scores are advice only and never change a plan, a price or anyone's access. Scoring version ${healthVersion}.` },
     ...(needs.length && origin ? [{ type: 'button', label: 'Open the AI team', url: `${origin}/admin/team` }] : []),
   ];
 

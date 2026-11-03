@@ -142,7 +142,15 @@ export function assess(account, now = new Date()) {
   let dropped = false;
   let stopped = false;
   let up = false;
-  const observations = account.activity ?? account.usage ?? [];
+  // Native events and usage reports cover different products and metrics. Keep both; for the same metric use
+  // its newest valid observation, so an older mirror cannot override a newer native reading (or vice versa).
+  const latestObservations = new Map();
+  const observationTime = entry => { const at=instant(entry.latestAt);return at!==null&&at<=nowTime?at:-Infinity; };
+  for(const entry of [...(account.activity??[]),...(account.usage??[])]) {
+    const key=`${entry.app}:${entry.metric}`,previous=latestObservations.get(key);
+    if(!previous||observationTime(entry)>observationTime(previous))latestObservations.set(key,entry);
+  }
+  const observations = [...latestObservations.values()];
   const fresh = observations.filter(entry => {
     const at = instant(entry.latestAt);
     return at !== null && at <= nowTime && nowTime - at <= 7 * day;

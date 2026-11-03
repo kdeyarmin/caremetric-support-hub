@@ -317,6 +317,7 @@ begin
  if a.decided_by is null and coalesce((select e.passed from private.agent_evaluations e where e.product=o.product and e.version='growth.1' and e.created_at>now()-interval '30 days' order by e.created_at desc limit 1),false) is not true then return jsonb_build_object('send',false,'status','evaluation_required'); end if;
  if exists(select 1 from private.growth_messages where contact_id=c.id and id<>m.id and status in ('unknown','sending')) then return jsonb_build_object('send',false,'status','delivery_unresolved'); end if;
  if exists(select 1 from private.growth_messages where contact_id=c.id and attempted_at>now()-make_interval(hours=>(select max(min_gap_hours) from private.growth_policies))) then return jsonb_build_object('send',false,'status','frequency_limited'); end if;
+ if exists(select 1 from private.agent_lifecycle_emails e where e.email_hash=private.email_hash(c.email) and e.created_at>now()-make_interval(hours=>(select max(min_gap_hours) from private.growth_policies))) then return jsonb_build_object('send',false,'status','frequency_limited'); end if;
  select count(*) into v_n from private.growth_messages where opportunity_id=o.id and purpose='marketing' and attempted_at is not null;
  if m.purpose='marketing' and v_n>=p.max_touches then return jsonb_build_object('send',false,'status','touch_limit'); end if;
  select count(*) into v_n from private.growth_messages x join private.growth_opportunities y on y.id=x.opportunity_id where y.product=o.product and x.attempted_at>=date_trunc('day',now());
@@ -678,3 +679,70 @@ create function private.growth_account_activity(p_tenant uuid) returns jsonb lan
  where g.tenant_id=p_tenant and e.kind in ('heartbeat','active','first_value') and e.occurred_at<=now() and e.occurred_at>now()-interval '90 days' group by e.product) x;
 $$;
 revoke all on function private.growth_account_activity(uuid) from public,anon,authenticated,service_role,hub_app_server;
+
+-- Coordinate contact frequency with the existing customer-email workflow without changing its approvals or replay rules.
+create or replace function private.agent_lifecycle_begin_send(p_action_id uuid, p_execution integer, p_unsubscribe_hash text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_action private.agent_actions%rowtype;
+  v_agent private.agents%rowtype;
+  v_recorded text;
+  v_live boolean;
+  v_email text;
+  v_hash text;
+begin
+  perform private.require_hub_app_server();
+  -- Growth and native lifecycle claims share this lock before taking any row lock or send reservation.
+  perform pg_advisory_xact_lock(hashtextextended('growth.workflow',0));
+  if p_unsubscribe_hash is not null and p_unsubscribe_hash !~ '^[0-9a-f]{64}$' then
+    raise exception 'Choose an unsubscribe link.' using errcode = '22023';
+  end if;
+  select * into v_action from private.agent_actions where id = p_action_id for update;
+  if not found or v_action.kind <> 'email.send' then
+    raise exception 'Unknown customer email.' using errcode = 'P0002';
+  end if;
+  if v_action.status <> 'executing' or (p_execution is not null and v_action.executions <> p_execution) then
+    raise exception 'That email is not being sent.' using errcode = '55000';
+  end if;
+  select e.status into v_recorded from private.agent_lifecycle_emails e where e.action_id = p_action_id;
+  if found then
+    return jsonb_build_object('state', 'recorded', 'status', v_recorded);
+  end if;
+  if p_unsubscribe_hash is null then
+    return jsonb_build_object('state', 'unrecorded');
+  end if;
+  if v_action.decided_by is null then
+    select * into v_agent from private.agents where key = v_action.agent_key;
+    if v_agent.autonomy is distinct from 'act' or jsonb_typeof(v_agent.config -> 'auto_send_templates') is distinct from 'array'
+      or not ((v_agent.config -> 'auto_send_templates') ? (v_action.input ->> 'template')) then
+      return jsonb_build_object('state', 'auto_send_off');
+    end if;
+  end if;
+  select livemode into v_live from private.billing_settings;
+  select btrim(c.email) into v_email
+  from private.billing_customers c join hub.tenants t on t.id = c.tenant_id
+  where t.slug = v_action.target_id and not c.deleted and c.livemode and coalesce(v_live, true);
+  if v_email is null or v_email !~ '^[^[:space:]@<>"]+@[^[:space:]@<>"]+\.[^[:space:]@<>"]+$' or char_length(v_email) > 320 then
+    return jsonb_build_object('state', 'no_address');
+  end if;
+  v_hash := private.email_hash(v_email);
+  if exists (select 1 from private.email_suppressions x where x.email_hash = v_hash) then
+    return jsonb_build_object('state', 'suppressed');
+  end if;
+  if exists(select 1 from private.growth_messages m join private.growth_contacts c on c.id=m.contact_id
+    where c.email=lower(btrim(v_email)) and m.attempted_at>now()-make_interval(hours=>(select max(min_gap_hours) from private.growth_policies))) then
+    return jsonb_build_object('state','frequency_limited');
+  end if;
+  -- The cap is counted and taken one send at a time, so two servers cannot both take the twentieth.
+  perform pg_advisory_xact_lock(hashtextextended('private.agent_lifecycle_emails', 0));
+  if (select count(*) from private.agent_lifecycle_emails e
+      where e.created_at >= private.agent_day_start() and e.status in ('sending', 'sent', 'unknown')) >= 20 then
+    return jsonb_build_object('state', 'daily_limit');
+  end if;
+  insert into private.agent_lifecycle_emails (action_id, period_key, template, email_hash, unsubscribe_hash)
+  values (v_action.id, v_action.input ->> 'periodKey', v_action.input ->> 'template', v_hash, p_unsubscribe_hash);
+  return jsonb_build_object('state', 'ready', 'to', v_email);
+end;
+$$;
+
+create index agent_lifecycle_emails_contact_attempt on private.agent_lifecycle_emails(email_hash,created_at desc);

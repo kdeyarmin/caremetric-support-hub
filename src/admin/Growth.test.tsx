@@ -3,9 +3,30 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Growth } from './Growth';
-vi.hoisted(() => { vi.stubEnv('VITE_DEMO_MODE','true'); });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+const settings=vi.hoisted(()=>({demoMode:false}));
+vi.mock('../lib/config',()=>({config:settings}));
+import { growthMutation } from './growthClient';
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); settings.demoMode=false; });
 const empty = { total:0,items:[],work:[],metrics:[],deliveries:[],policies:[],services:{sending:false,signing:false,postalAddress:false,research:false} };
+it('blocks reads and mutations in preview without sending a credentialed request',async()=>{
+ settings.demoMode=true;
+ const request=vi.fn();vi.stubGlobal('fetch',request);
+ render(<MemoryRouter><Growth/></MemoryRouter>);
+ expect((await screen.findByRole('alert')).textContent).toContain('not available in the preview');
+ await expect(growthMutation('policy',{enabled:true})).rejects.toThrow('not available in the preview');
+ expect(request).not.toHaveBeenCalled();
+});
+it('keeps evidence and message history when the selected organization is clicked again',async()=>{
+ const item={id:'opportunity-1',organization_id:'org-1',product:'carebase',name:'Example Care',domain:'example.org',internal:false,tenant_id:null,contact_id:null,email:null,contact_name:null,eligibility:null,verified_at:null,contact_version:null,stage:'identified',goal:'',memory:{},next_action:'Research',next_at:'2026-11-03T12:00:00Z',trial_end:null,renewal_at:null,owner_agent:'marketing_manager',fit:null,intent:null,version:1};
+ const detail={evidence:[{id:'source-1',source_url:'https://example.org/about',claim:'Verified organization source',confidence:'high',observed_at:'2026-11-03T12:00:00Z'}],messages:[{id:'message-1',subject:'Existing message history',body:'A reviewed message.',status:'unknown',model_generated:false,variant:'control'}],events:[]};
+ const request=vi.fn(async(_url:unknown,init:RequestInit)=>new Response(JSON.stringify(JSON.parse(String(init.body)).operation==='detail'?detail:{...empty,total:1,items:[item]})));
+ vi.stubGlobal('fetch',request);render(<MemoryRouter><Growth/></MemoryRouter>);
+ fireEvent.click(await screen.findByRole('button',{name:'Example Care'}));
+ await screen.findByText(/Verified organization source/);
+ fireEvent.click(screen.getByRole('button',{name:'Example Care'}));
+ expect(screen.getByText(/Verified organization source/)).toBeTruthy();
+ expect(screen.getByText(/Existing message history/)).toBeTruthy();
+});
 it('shows both priority products and paused readiness without inventing a pipeline', async () => {
   vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(empty))));
   render(<MemoryRouter><Growth/></MemoryRouter>);

@@ -16,7 +16,8 @@
  *   - auto_send_off      it was approved on its own, but the agent no longer acts or no longer lists its template;
  *   - no_address         there is no usable billing address on file;
  *   - suppressed         the address unsubscribed (bulk email's suppression list, which the email's own link also writes to);
- *   - daily_limit        20 customer emails already went out today, across every account.
+ *   - daily_limit        20 customer emails already went out today, across every account;
+ *   - frequency_limited  another growth email was attempted for this recipient within the configured contact gap.
  * Then the database records the send and hands over the one address (private.agent_lifecycle_begin_send), and SendGrid is asked once:
  * sent, delivery_failed (refused: it did not reach the customer) or email_unconfirmed (no answer: it may have, so it is never sent
  * again). Nothing is retried. The address and the email's text are never logged, stored or returned: the result is the outcome and
@@ -27,7 +28,7 @@ import { digest } from '../../sms-auth.mjs';
 import { httpsOrigin, lifecycleFeature, lifecycleReadiness, parseLifecycleInput, renderLifecycleEmail, stillApplies, wordingHash } from './lifecycle.mjs';
 
 const failure = code => Object.assign(new Error('The customer email was not sent.'), { code });
-const refusals = { no_address: 'no_address', suppressed: 'suppressed', daily_limit: 'daily_limit', auto_send_off: 'auto_send_off' };
+const refusals = { no_address: 'no_address', suppressed: 'suppressed', daily_limit: 'daily_limit', auto_send_off: 'auto_send_off', frequency_limited: 'frequency_limited' };
 const providerId = value => (typeof value === 'string' && /^[A-Za-z0-9._-]{1,200}$/.test(value) ? value : null);
 // What an earlier attempt recorded: sent stays sent; refused stays refused; anything else may have gone and is never sent again.
 const settle = (status, template) => {
