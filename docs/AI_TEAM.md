@@ -6,9 +6,10 @@ is built so far.
 
 > **Status.** The database layer, the server scheduler, the `/admin/team` screen, the Platform
 > Engineer's health probes, the Chief of Staff's morning brief, the SEO Analyst's weekly report, the
-> Support Concierge's triage of new conversations, with the fixed replies it offers the owner, and the
+> Support Concierge's triage of new conversations, with the fixed replies it offers the owner, the
 > Account Manager's weekly report on how each customer account is doing, with the short customer emails it
-> proposes for the owner to approve (see "Customer emails"), are in
+> proposes for the owner to approve (see "Customer emails"), and the Growth Manager, which makes sure no website
+> lead waits (see "The Growth Manager"), are in
 > place, and so is the model runtime they share (see "The model runtime"). The Content Marketer drafts one public
 > help-center article a week for the owner to approve and a month's outreach drafts for the owner to send (see "The
 > Content Marketer"); its model calls carry no customer text. The scheduler is inert
@@ -123,6 +124,39 @@ something or changed something, and once an hour otherwise, so the page shows a 
 The agent never restarts, redeploys or changes anything. Restart proposals come later, behind the
 owner's approval. A probe inside the Hub cannot see the Hub stop; keep the external check described
 under "The Hub cannot watch itself" below.
+
+### The lead forms
+
+Every six hours (task `probe.forms`, shown as "Lead form check") the Platform Engineer also checks each product's main
+lead form end to end, exactly as [LEAD_INTAKE.md](LEAD_INTAKE.md) says under "Probe mode". It runs only when the database
+declares `platform.agents.growth.v1`.
+
+| Form | Address |
+| --- | --- |
+| CareBase lead form | `https://xsqobvvreaovwibxwyvv.supabase.co/functions/v1/request-demo` |
+| Intel lead form | `https://www.caremetricintel.com/api/public/demo-request` |
+| Advisors consultation form | `https://caremetricadvisors.com/api/inquiries` |
+
+The list is fixed in `server/agents/targets.mjs`, like the health addresses. For each product whose secret is set on the
+Hub (`HUB_LEAD_SECRET_CAREBASE`, `_INTEL`, `_ADVISORS`, at least 32 characters) it posts the endpoint's own JSON body with
+invented values (name "CareMetric Form Check", address `probe@caremetric.invalid`, which can never receive mail, and a message
+that says the request is an automated check), signed with `X-CareMetric-Probe` and `X-CareMetric-Timestamp`. A product with no
+secret on the Hub is skipped, never failed. A form passes when it answers 200 with `probe: true` and `forwarded: true` **and** a
+test lead from that product reached the Hub in the last ten minutes. Otherwise the check fails with one word: `timeout` (no
+answer within 20 seconds), `network`, `redirect`, `status` (any answer but 200, which is what a form that did not recognise the
+probe, or whose secret does not match, gives back), `not_probe` (200 without `probe: true`), `not_forwarded` (the form could not
+pass the test lead on; the Hub status it reports is kept) or `not_received` (it said it did, and no test lead arrived).
+
+Each result is recorded under the form's own target (`carebase_forms`, `intel_forms`, `advisors_forms`) through
+`private.agent_probe_record`, so a form follows the rules above: one failure is a blip, two in a row open an incident ("Intel
+lead form is not working", by text and email, saying what failed and that checks run every six hours), and the first pass closes
+it with one email. Because the second failure comes six hours after the first, a form's alert counts as late only after seven
+hours. A test lead never opens a conversation, never alerts and never counts in a report. The secret, the request and the
+form's answer are never logged or kept: a check keeps a status code, a latency, one failure word and the Hub status.
+
+A form that does not recognise the probe treats it as an ordinary submission. Most need a captcha that the probe does not carry,
+so nothing is stored; one that has no captcha may record it as a request from "CareMetric Form Check", whose message says the
+form's `HUB_LEAD_SECRET` does not match the Hub's. Set each product's secret before the Hub's.
 
 ## The Chief of Staff
 
@@ -312,9 +346,12 @@ many times each side has written). It then:
    warning, the alert says the rest was not screened, and nothing is offered to the customer or sent to the
    model for it: it is yours to read. That holds even for a long message that opens like an automatic reply.
 3. **Tells the owner**: an outage, a security concern or a legal matter is **urgent** (text and email);
-   billing, a cancellation or a message with identifiers is a **warning** (email); anything else is
+   billing, a cancellation, a sales inquiry or a message with identifiers is a **warning** (email); anything else is
    **information** (email). Alerts say the kind of message, the channel, the product, the reference and how
-   long ago it arrived, and "nothing has been sent to the customer". Never what the customer wrote.
+   long ago it arrived, and "nothing has been sent to the customer". Never what the customer wrote. A prospect's
+   message is a sales inquiry whatever its words say (a demo request may read only "Please contact me"): one in a
+   conversation a website lead form opened (source `carebase.web`, `intel.web` or `advisors.web`), or in one filed as a
+   `sales` or `advisors` inquiry, unless it reads as something urgent, billing or a cancellation. One filed as billing never is.
 
 Alerts are capped so that anyone who can write to the support address cannot flood the owner (the count and the
 send go through one at a time, so tasks running together cannot all read the same count): at most 20
@@ -334,16 +371,24 @@ It leaves a run on the owner's screen for each message it triaged (model `none`,
 a summary that names the reference, the channel and the category).
 
 **Fixed replies.** For a plain question it also proposes one reply for the owner to approve
-(`communication.reply`; the exact text is the preview). Both are written once, in
+(`communication.reply`; the exact text is the preview). All three are written once, in
 `server/agents/concierge/templates.mjs`: an **acknowledgment** (the message arrived and a member of the team
-will review it) and, when the question carries identifiers, a **notice** saying these channels are not set up
+will review it); when the question carries identifiers, a **notice** saying these channels are not set up
 for patient or resident information and asking the sender to resend without names, dates of birth, record
-numbers or health details. Neither repeats anything the customer wrote, mentions AI or a phone call, or
-promises a time or an outcome; a text message gets a shorter version that fits one message. The owner answers
-everything else personally: an outage, a security or legal matter, billing, a cancellation, a sales or
-consulting inquiry, anything from the Advisors form, and any follow-up in a thread the team already joined.
-That holds for how a conversation was filed as well as for its words: one filed as billing (a phone-line
-message may read only "Please help") never gets a fixed reply or reaches the model.
+numbers or health details; and, for a prospect's first message (above) that reads as a plain question or a sale,
+the **sales acknowledgment**, in the owner's own voice: "Thank you for reaching out to CareMetric. I have your
+request, and I will follow up with you personally today." When the owner's booking page is set (`HUB_BOOKING_URL`,
+an https address of at most 200 characters, with no user name or password) it adds "If you would like to set a time
+now, pick a time that suits you: <link>"; a text message carries the link only when it still fits one message. That
+template is the only place the Concierge ever offers a link, and the only reply that names a day, because the owner
+approves it the day it is sent. None repeats anything the customer wrote, mentions AI, a phone call or voicemail,
+names a price or promises an outcome; a text message gets a shorter version that fits one message. A prospect whose
+message carries identifiers gets only the notice. The owner answers everything else personally: an outage, a security
+or legal matter, billing, a cancellation, a sale in an ordinary conversation, anything else from Healthcare Advisors,
+and any follow-up in a thread the team already joined. That holds for how a conversation was filed as well as for its
+words: one filed as billing (a phone-line message may read only "Please help") never gets a fixed reply or reaches the
+model. The conversation snapshot names the system a conversation came from (`sourceSystem`, one of a fixed list) for
+this; a database without the Growth Manager's migration does not, and then the inquiry type alone decides.
 
 An approved reply is sent the way the owner would send it, through the inbox's own reply
 (`communications.reply`): it authorizes the owner's live session, is recorded before it is sent, goes out
@@ -399,8 +444,8 @@ message that tells it to ignore its rules or promise something is read as part o
 **What the code does with it.** The model never causes anything. Its reading can only add caution: an
 ordinary question it calls urgent, or an outage, a security or legal matter, raises a second alert (text and
 email, under the same caps) and offers no reply; an urgent reading raises that alert whatever the topic, so a
-billing question it calls urgent is texted too; billing or a cancellation otherwise raises a warning and offers none;
-a sale offers none; personal information it finds gets the fixed notice that asks the sender to resend
+billing question it calls urgent is texted too; billing, a cancellation or a sale otherwise raises a warning and offers
+none; personal information it finds gets the fixed notice that asks the sender to resend
 without it, and a warning. A draft is offered only if every check in `draft.mjs` passes: it cites a guide
 it was given; fits its channel (320 characters including the greeting for a text message, 1,500 otherwise);
 has no markup, link, email address or phone number; passes the same identifier screen as the inbound
@@ -507,6 +552,65 @@ observe it proposes nothing.
 Its handler registers only when the database declares `platform.agents.accounts.v1`, so a Hub whose database
 lacks the migration still starts and the schedule stays due instead of failing. The declaration needs the
 control plane and the platform billing mirror.
+
+## The Growth Manager
+
+Makes sure no website lead waits, and shows the owner where customers come from. It uses no model, reads leads only
+through server-only operations that return no contact name, address, phone number or role and nothing a visitor wrote,
+and **sends nothing to a customer**. It starts paused and in Observe, and proposes no actions. Its handlers register only
+when the database declares `platform.agents.growth.v1` (which needs the control plane, the probes and the lead desk), so a
+Hub whose database lacks the migration still starts and its schedules stay due.
+
+- **New leads** (task `growth.leads`, every five minutes, "Look for new leads"). Each lead that is not a test, from the last
+  24 hours, is looked at once (`private.agent_growth_pending`, then `agent_growth_mark_seen`). A **trial sign-up** emails the
+  owner at once as a warning: "New CareBase trial: <organization>", with the product, the plan when the product sent one, the
+  other facts (the plan always among them) and where the visitor came from, and a button to Leads, under `growth:trial:<lead id>`.
+  A demo, consultation or contact request is left to the Support Concierge, which alerts on its conversation (see above). A
+  newsletter sign-up, savings model or county report waits for the morning brief and the weekly report. A trial alert the provider
+  refused leaves that lead unseen and the task fails transiently once the others are handled, so the scheduler tries it again and
+  only the refused channel is sent again; one that used up its tries is set aside (the brief still counts the lead). Marking a lead
+  seen never changes its version, so the Leads screen never refuses the owner's change because of it. A run is recorded when
+  something arrived, and once an hour otherwise.
+- **Unanswered leads** (task `growth.followup`, every fifteen minutes, "Chase unanswered leads"). A lead conversation is
+  waiting when its lead is not a test and still `new` on the Leads screen, its conversation is not closed, and nothing after the
+  lead's first message answers it: an internal note, or a reply that was not refused. A reply whose delivery failed reached nobody
+  and answers nothing; one still pending or of unknown outcome may have gone, so it counts. The owner gets one reminder per lead
+  and step of the agent's `followup_minutes` (default an hour, then a day), by email, as a warning: "Still unanswered after 1 hour:
+  demo request CM-1042", naming the product and how long it has waited, under `growth:followup:<lead id>:<step>`. A lead found
+  late gets only the largest step it has reached. `private.agent_growth_unanswered` leaves out the steps already reminded before
+  it limits its list to 50, so a longer backlog is worked through run by run and an older lead is never crowded out. A lead is
+  chased for a week (or a day past the largest step, when that is longer); after that it stays in the brief and the weekly report.
+  Nothing is sent during the agent's `quiet_hours` (default 21:00 to 07:00 America/New_York): the first run after them sends what
+  waited, and the key keeps each reminder once. A reminder the provider refused fails the task transiently once the others are
+  sent, so the scheduler tries it again under the same key, at most three times in all. Setting the lead's status on Leads
+  (contacted, qualified, won, lost or spam), answering, adding a note or closing the conversation stops the reminders.
+- **The weekly report** (task `growth.weekly`, "Weekly growth report"). The schedule fires every morning at 07:30 Eastern and
+  only Monday's run reports (the day is the one the task was due for, so a retry after midnight keeps it); every scheduled run in
+  an Eastern week uses `growth:weekly:<Monday>`, so the week is reported once, like the Account Manager's. A report the provider
+  refused fails the task transiently, so it is tried again under the same key instead of the week going unreported. **Run now**
+  reports on any day under a key of its own. It covers the seven Eastern days before the day it runs: leads by kind, product and
+  source (utm_source, else the referring host, else "direct"), trials started (trial sign-ups and live-mode Stripe trials that
+  began) and converted (live subscriptions whose trial ended in the week and that are active), the median time to a first
+  delivered reply (only a reply whose delivery is `sent` counts), the
+  lead conversations unanswered now, the top five landing pages and campaigns, and three suggestions. The suggestions are rules
+  with fixed words (`server/agents/growth/report.mjs`), first match first: leads still unanswered; a median first reply over an
+  hour; no leads at all; no lead from a search engine (connect Search Console); every lead from one source; no campaign tags;
+  trials to check in with; report downloads but no demo requests; then three that always apply (a customer quote, an article,
+  a referral). Test leads are never counted. It is information by email, with a button to Leads.
+- **The morning brief** gains a **Growth** section when the feature is declared (`private.agent_growth_facts` for yesterday):
+  new leads by kind, trials started, and the lead conversations unanswered now with the oldest wait. A lead waiting for a first
+  reply is also listed under "Needs you". If the figures cannot be read the section says so and the brief still goes out.
+
+**What it reads** (counts only, never a contact or a message): `private.agent_growth_pending` (ids, kinds and products),
+`agent_growth_lead` (kind, product, organization, up to six facts with the plan first, where the visitor came from and the
+conversation's reference), `agent_growth_unanswered` (lead id, kind, product, reference, minutes waiting and the step reached,
+for the steps the handler passes, with the steps already reminded left out), `agent_growth_facts` (the counts above, for a
+period of up to 93 days) and `agent_lead_probe_seen` (whether a test lead arrived, for the form check). Its one write is
+`agent_growth_mark_seen` (the `private.leads.growth_seen_at` column). The organization is the only name an alert carries.
+
+**Its settings** are in the agent's `config` and change by SQL only: `followup_minutes` (at most five steps, each 1 minute to
+30 days) and `quiet_hours` (`start` and `end` on a 24-hour clock and a `timezone`; a start equal to the end means none). A value
+it cannot use falls back to the default.
 
 ### Customer emails
 
@@ -707,6 +811,10 @@ published article down, retire it: `update hub.content_items set status = 'retir
   `20261102180100_agent_hardening_contract.sql` repeats every check, for every operation and helper of
   the control plane, the probes and the brief, in a form that fails closed, and declares
   `platform.agents.hardening.v1`.
+- `20261103130100_agent_growth_contract.sql` declares `platform.agents.growth.v1` only when the leads table is still closed
+  and has its `growth_seen_at` column, every Growth Manager operation (and the conversation snapshot it extends) is a security
+  definer with a pinned empty search path, executable by `hub_app_server` alone and refusing every other session user, its
+  helpers are executable by no role, and the agent, its three schedules and the lead form check exist. Every test fails closed.
 
 ## Hardening
 
@@ -752,6 +860,8 @@ Server (`hub_app_server` only): `agent_schedule_fire`, `agent_maintenance`, `age
 `agent_budget`, `agent_action_propose`, `agent_actions_ready`, `agent_action_execution`,
 `agent_action_executed`, `agent_action_release`, `agent_notify_begin`, `agent_notify_finish`, `owner_contact`, `agent_probe_record`, `agent_brief_facts`,
 `agent_concierge_pending`, `agent_communication_snapshot`, `agent_notification_count`, `agent_accounts_snapshot`,
+`agent_growth_pending`, `agent_growth_lead`, `agent_growth_mark_seen`, `agent_growth_unanswered`, `agent_growth_facts`,
+`agent_lead_probe_seen`,
 `agent_lifecycle_snapshot`, `agent_lifecycle_begin_send`, `agent_lifecycle_finish_send`,
 `agent_content_state`, `agent_content_publish`.
 
@@ -935,12 +1045,17 @@ Apply the migrations in order with the usual procedure:
    by kind, gives each alert retry its own clock and declares `platform.agents.hardening.v1` (it needs the
    control plane, the probes and the brief). Apply it before you resume any agent, and restart the Hub after
    it so the server reads the feature.
-8. `20261103140000_agent_lifecycle.sql`, then its gate `20261103140100_agent_lifecycle_contract.sql`, which add the
+8. `20261103130000_agent_growth.sql`, then its gate `20261103130100_agent_growth_contract.sql`, which seeds the Growth
+   Manager (paused, observe) and its three schedules, adds the Platform Engineer's lead form check every six hours, the
+   server-only lead reads and `private.leads.growth_seen_at`, names the source system in the Concierge's snapshot, and
+   declares `platform.agents.growth.v1` (it needs the control plane, the probes and the lead desk, `support.leads.v1`). Apply
+   it after the lead desk's migrations and restart the Hub so the server reads the feature.
+9. `20261103140000_agent_lifecycle.sql`, then its gate `20261103140100_agent_lifecycle_contract.sql`, which add the
    `email.send` action with its shape check and once-per-period index, the per-template rule for an agent on Act,
    the send ledger, the three server-only operations, a customer-email link on the shared unsubscribe page, the daily
    schedule and the empty `auto_send_templates` setting, and declare `platform.agents.lifecycle.v1` (it needs the
    Account Manager, the hardening and bulk email). Restart the Hub after it.
-9. `20261103150000_agent_content.sql`, then its gate `20261103150100_agent_content_contract.sql`, which adds the
+10. `20261103150000_agent_content.sql`, then its gate `20261103150100_agent_content_contract.sql`, which adds the
    `content.publish` action kind (widening the kind and target checks without dropping any kind another change added),
    its shape check and its once-per-address and once-per-topic indexes, the two server-only operations, and the Content
    Marketer (paused, Propose) with its two schedules, and declares `platform.agents.content.v1` (it needs the control
@@ -960,6 +1075,16 @@ To switch the weekly account report on, apply the two Account Manager migrations
 reads the new feature, resume the Account Manager and press **Run now** on its weekly report: the first email
 arrives within a minute and the next on Monday. Check the "Test data" and "Stripe mode" notes against what you
 expect before relying on the figures.
+
+To switch the Growth Manager on: apply the lead desk's migrations and the two Growth Manager migrations, set
+`HUB_BOOKING_URL` on the Hub service if you want prospects offered your booking page (optional; an https link, for example
+a Calendly or Cal.com page), restart the Hub so it reads the new feature, then resume the Growth Manager on **AI team** and
+press **Run now** on "Weekly growth report": the first email arrives within a minute. New trials then email you within five
+minutes, unanswered lead conversations remind you after an hour and a day (never between 21:00 and 07:00 Eastern), and the
+morning brief carries a Growth section. The Concierge's sales acknowledgment needs the Concierge resumed in **Propose**.
+For the lead form check, set each product's `HUB_LEAD_SECRET` to the same value as the Hub's
+`HUB_LEAD_SECRET_CAREBASE`, `_INTEL` or `_ADVISORS` and deploy the product's probe support first; then, with the Platform
+Engineer resumed, press **Run now** on "Lead form check" and read its run: each form should say "passed".
 
 `supabase/schema.sql` is a reference snapshot that stopped being appended in October; these
 migrations are not mirrored into it.

@@ -96,12 +96,30 @@ export const tierLabels = { fast: "Fast (Haiku)", draft: "Draft (Sonnet)", quali
 
 const taskLabels: Record<string, string> = {
   "content.weekly": "Weekly help article", "content.outreach": "Monthly outreach drafts",
-  "probe.sweep": "Health check", "probe.incident": "Handle an incident", "probe.recovery": "Write a recovery note",
+  "probe.sweep": "Health check", "probe.incident": "Handle an incident", "probe.recovery": "Write a recovery note", "probe.forms": "Lead form check",
   "brief.daily": "Morning brief", "seo.weekly": "Weekly SEO check", "concierge.sweep": "Look for new messages", "concierge.communication": "Triage a message",
   "import.advisors": "Import Advisors requests", "import.breathe": "Import phone messages", "accounts.weekly": "Weekly account report",
+  "growth.leads": "Look for new leads", "growth.followup": "Chase unanswered leads", "growth.weekly": "Weekly growth report",
   "accounts.lifecycle": "Customer emails",
 };
 export const taskLabel = (kind: string) => taskLabels[kind] ?? kind;
+
+/** What the Platform Engineer checks: each product's health address, and each product's lead form (checked every six hours). */
+const probeTargetLabels: Record<string, string> = {
+  hub: "Support Hub", carebase: "CareBase", intel: "CareMetric Intel", advisors: "Healthcare Advisors",
+  carebase_forms: "CareBase lead form", intel_forms: "Intel lead form", advisors_forms: "Advisors consultation form",
+};
+/**
+ * What an action is for, in plain words: a probe target's incident ("carebase_forms:2") reads "CareBase lead form, incident 2". A
+ * conversation reference (CM-1042), an unknown target and anything else are shown as they are.
+ */
+export function targetLabel(targetKind: string | null, targetId: string): string {
+  if (targetKind !== "probe_target") return targetId;
+  const [key, incident] = targetId.split(":");
+  const label = probeTargetLabels[key];
+  if (!label) return targetId;
+  return /^\d+$/.test(incident ?? "") ? `${label}, incident ${incident}` : label;
+}
 
 const actionLabels: Record<string, string> = {
   "content.publish": "Publish a help article",

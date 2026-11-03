@@ -72,6 +72,22 @@ describe('the AI team', () => {
     }
   });
 
+  it('runs the Growth Manager\'s work and the lead form check only when the database declares the Growth Manager\'s feature', () => {
+    expect(agentTeam({ store: store(), publicOrigin: origin, enabled: true, features: new Set(['platform.agents.v1']) }).scheduler.kinds()).not.toContain('growth.leads');
+    expect(agentTeam({ store: store(), publicOrigin: origin, enabled: true, features: new Set(['platform.agents.v1', 'platform.agents.growth.v1']) }).scheduler.kinds()).toEqual(
+      ['brief.daily', 'growth.followup', 'growth.leads', 'growth.weekly', 'probe.forms', 'probe.incident', 'probe.recovery', 'probe.sweep', 'seo.weekly']);
+  });
+
+  it('checks only the lead forms whose product secret it was given, and never offers a booking link it was not given', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ probe: true, forwarded: true, status: 202 }), { status: 200 }));
+    const fake = { ...store([{ id: 't1', agentKey: 'platform_engineer', kind: 'probe.forms', attempts: 1, payload: {}, sourceKind: 'schedule' }]),
+      leadProbeSeen: vi.fn(async () => true), probeRecord: vi.fn(async ({ targetKey }) => ({ target: targetKey, transition: 'none' })), startRun: vi.fn(async () => 'r1'), finishRun: vi.fn(async () => undefined) };
+    const team = agentTeam({ store: fake, publicOrigin: origin, enabled: true, fetchImpl, features: new Set(['platform.agents.growth.v1']), leadSecrets: { intel: 'i'.repeat(40), carebase: null } });
+    await team.tick();
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual(['https://www.caremetricintel.com/api/public/demo-request']);
+    expect(fake.probeRecord).toHaveBeenCalledWith(expect.objectContaining({ targetKey: 'intel_forms', ok: true }));
+  });
+
   it('proposes and sends customer emails only when the database declares the feature, through the sender it is given', async () => {
     const feature = new Set(['platform.agents.lifecycle.v1']);
     for (const features of [undefined, new Set(['platform.agents.accounts.v1'])]) {

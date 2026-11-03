@@ -404,6 +404,20 @@ describe("AI team screen", () => {
     expect(text("CM-1004")).not.toMatch(/Run what's waiting/);
   });
 
+  it("names a lead form incident in the history instead of showing its key", async () => {
+    const incident = {
+      id: "77777777-7777-4777-8777-777777777779", taskId: ids.task, agentKey: "platform_engineer", kind: "incident.open", targetKind: "probe_target", targetId: "carebase_forms:2",
+      status: "executed", preview: "CareBase lead form is not working", decisionNote: null, createdAt: "2026-11-02T11:30:00+00:00", expiresAt: "2026-11-09T11:30:00+00:00",
+      decidedAt: null, executedAt: "2026-11-02T11:31:00+00:00", result: null,
+    };
+    const activity = vi.fn(async (input: { kind: string }) => (input.kind === "actions" ? { items: [incident], total: 1, offset: 0, limit: 15 } : emptyPage)) as unknown as TeamClient["activity"];
+    render(<Team client={fakeClient(overview(), { activity })} />);
+    await screen.findByRole("region", { name: "What the team has done" });
+    fireEvent.click(screen.getByRole("tab", { name: "Proposed actions" }));
+    expect(await screen.findByText("CareBase lead form, incident 2")).toBeTruthy();
+    expect(screen.queryByText("carebase_forms:2")).toBeNull();
+  });
+
   it("switches between kinds of activity and the audit log", async () => {
     const client = fakeClient();
     render(<Team client={client} />);

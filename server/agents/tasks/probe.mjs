@@ -11,6 +11,11 @@
  * Nothing a product returns is kept: a check yields a status code, a latency and one fixed
  * failure word. A response body is read for at most 4 KB so a slow or endless one cannot hold
  * the sweep, then thrown away. Redirects are never followed.
+ *
+ * The lead forms are checked every six hours by `probe.forms` (in tasks/growth.mjs, because it needs the Growth
+ * Manager's database feature) and recorded through the same operation, so their incidents and recoveries come here
+ * too: `alertTargets` names them (they are never part of the five-minute sweep), and a form target says how often
+ * it is checked and how long it may take.
  */
 import { minutesBetween, mustHaveReached, permanent, plural, recordRun, when } from './shared.mjs';
 
@@ -61,12 +66,18 @@ export async function checkTarget(target, { fetchImpl = fetch, signal, limitMs =
   return result(false, statusCode, statusCode >= 300 && statusCode < 400 ? 'redirect' : 'status');
 }
 
-const shortFailure = ({ failure, statusCode }) => ({
+// The last three are a lead form's own failures: it answered, but not as a probe; it did not pass the test lead on; or it said it did and
+// the lead never reached the Hub.
+export const shortFailure = ({ failure, statusCode }) => ({
   timeout: 'timed out', network: 'could not be reached', redirect: `redirected (${statusCode})`, status: `returned ${statusCode}`,
+  not_probe: 'did not recognise the probe', not_forwarded: 'did not forward the test lead', not_received: 'forwarded a test lead that never arrived',
 }[failure] ?? 'failed');
-const longFailure = ({ failure, statusCode }) => ({
-  timeout: 'did not answer within 8 seconds', network: 'could not be reached', redirect: `answered with a redirect (status ${statusCode})`,
+export const longFailure = ({ failure, statusCode }, seconds = 8) => ({
+  timeout: `did not answer within ${seconds} seconds`, network: 'could not be reached', redirect: `answered with a redirect (status ${statusCode})`,
   status: `answered with status ${statusCode}`,
+  not_probe: 'answered, but not as a signed probe (check that the product\'s HUB_LEAD_SECRET matches the Hub\'s)',
+  not_forwarded: 'answered the probe but could not forward its test lead to the Hub',
+  not_received: 'said it forwarded its test lead, but the lead did not reach the Hub',
 }[failure] ?? 'failed');
 
 export function summarizeSweep(rows) {
@@ -76,10 +87,10 @@ export function summarizeSweep(rows) {
 }
 
 export function probeHandlers({
-  store, notifier, targets, fetchImpl = fetch, limitMs = timeoutMs, threshold = failureThreshold, staleMs = staleAlertMs,
+  store, notifier, targets, alertTargets = [], fetchImpl = fetch, limitMs = timeoutMs, threshold = failureThreshold, staleMs = staleAlertMs,
   log = line => console.warn(line),
 }) {
-  const byKey = new Map(targets.map(target => [target.key, target]));
+  const byKey = new Map([...alertTargets, ...targets].map(target => [target.key, target]));
 
   const targetOf = payload => {
     const target = byKey.get(typeof payload?.target === 'string' ? payload.target : '');
@@ -128,18 +139,22 @@ export function probeHandlers({
   async function incident(task, { now = () => new Date() } = {}) {
     const payload = task.payload ?? {};
     const target = targetOf(payload);
-    const stale = payload.since && now().getTime() - new Date(payload.since).getTime() > staleMs;
+    // A form is checked every six hours, so its second failure always comes hours after the first: it is late only past its own window.
+    const stale = payload.since && now().getTime() - new Date(payload.since).getTime() > (target.staleMs ?? staleMs);
     const flapping = payload.flapping === true;
     const urgent = !stale && !flapping;
     const failures = Number.isInteger(payload.failures) ? payload.failures : threshold;
     const last = { failure: typeof payload.failure === 'string' ? payload.failure : 'status', statusCode: Number.isInteger(payload.statusCode) ? payload.statusCode : 0 };
-    const subject = stale ? `${target.label} was down` : flapping ? `${target.label} is unstable again` : `${target.label} is down`;
+    const down = target.form ? 'is not working' : 'is down';
+    const subject = stale ? `${target.label} ${target.form ? 'was not working' : 'was down'}` : flapping ? `${target.label} is unstable again` : `${target.label} ${down}`;
     const body = [
-      `${target.label} has not passed ${plural(failures, 'health check')} in a row. The last check ${longFailure(last)}.`,
-      `The first failed check was at ${when(payload.since)}. Checks run every five minutes.`,
+      `${target.label} has not passed ${plural(failures, target.form ? 'form check' : 'health check')} in a row. The last check ${longFailure(last, target.timeoutSeconds ?? 8)}.`,
+      `The first failed check was at ${when(payload.since)}. Checks run ${target.every ?? 'every five minutes'}.`,
       stale ? 'This report reached you late, so it did not go by text. Check whether it is still happening.'
         : flapping ? 'It also failed within half an hour of its last recovery, so this came by email only.'
-          : 'Customers of this product may be affected. Nothing has been restarted or changed, and you will get one more message when it answers again.',
+          : target.form
+            ? 'Website visitors may not reach you through this form. Nothing has been restarted or changed, and you will get one more message when it works again.'
+            : 'Customers of this product may be affected. Nothing has been restarted or changed, and you will get one more message when it answers again.',
     ].join('\n\n');
     const results = await notifier.send({
       severity: urgent ? 'urgent' : 'warning', subject, body, dedupeKey: `probe.incident:${target.key}:${payload.incident}`,
@@ -157,9 +172,9 @@ export function probeHandlers({
     const payload = task.payload ?? {};
     const target = targetOf(payload);
     const minutes = payload.downSince && payload.recoveredAt ? minutesBetween(payload.downSince, payload.recoveredAt) : null;
-    const subject = `${target.label} is answering again`;
+    const subject = `${target.label} ${target.form ? 'is working again' : 'is answering again'}`;
     const body = [
-      `${target.label} passed its health check again at ${when(payload.recoveredAt)}.`,
+      `${target.label} passed its ${target.form ? 'form check' : 'health check'} again at ${when(payload.recoveredAt)}.`,
       payload.downSince
         ? `It first failed at ${when(payload.downSince)}${minutes ? `, about ${plural(minutes, 'minute')} earlier` : ''}.`
         : 'It had been reported down.',

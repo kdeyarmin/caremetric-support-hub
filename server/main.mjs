@@ -20,6 +20,7 @@ import { platformBilling } from './billing.mjs';
 import { selfService } from './self-service.mjs';
 import { agentTeam } from './agents/index.mjs';
 import { guideLibrary } from './agents/concierge/knowledge.mjs';
+import { bookingLink } from './agents/concierge/templates.mjs';
 import { leadAdmin, leadFeature, leadIntake, leadSecrets } from './leads.mjs';
 import { leadRetention } from './lead-retention.mjs';
 import { helpCenter } from './help-center.mjs';
@@ -48,10 +49,13 @@ const messaging=communications({pool,delegations:capabilities,publicOrigin,
   twilioAuthToken:process.env.HUB_TWILIO_AUTH_TOKEN,sendgridInboundPublicKey:process.env.HUB_SENDGRID_INBOUND_PUBLIC_KEY,
   sms:textSender,email:mailSender,
   chatEnabled:process.env.HUB_CHAT_ENABLED==='true'});
+// The owner's booking page, which the Concierge's sales acknowledgment may offer. A value it cannot use offers no link, and says so once.
+if(process.env.HUB_BOOKING_URL&&!bookingLink(process.env.HUB_BOOKING_URL)) console.warn('HUB_BOOKING_URL is not an https link of at most 200 characters, so the sales acknowledgment offers no booking link.');
 // The Account Manager's customer emails: from the support address, replies to it, one-click unsubscribe headers, and the postal address in every footer.
 const customerMail=sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai',replyTo:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai',category:'hub-lifecycle-email'});
 // The AI team: inert unless HUB_AGENTS_ENABLED is exactly "true", and every agent starts paused until the owner resumes it.
 const team=agentTeam({pool,sms:textSender,email:mailSender,ownerEmail:process.env.HUB_OWNER_EMAIL,publicOrigin,enabled:process.env.HUB_AGENTS_ENABLED==='true',communications:messaging,features,anthropicApiKey:process.env.ANTHROPIC_API_KEY,record:sqlAiUsageRecorder(pool).record,guides:guideLibrary({load:()=>api.rpc('list_published_content',{})}),customerTextToAi:process.env.HUB_AGENTS_CUSTOMER_TEXT_TO_AI==='true',
+  bookingUrl:process.env.HUB_BOOKING_URL||null,leadSecrets:leadSecrets(process.env),
   lifecycle:{mail:customerMail,postalAddress:(process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS||'').trim(),bookingUrl:process.env.HUB_BOOKING_URL||null}});
 const announcements=bulkEmail({pool,delegations:capabilities,publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin,postalAddress:(process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS||'').trim(),
   mail:sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_BULK_EMAIL_FROM||process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai',replyTo:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai'})});

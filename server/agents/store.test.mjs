@@ -133,6 +133,29 @@ describe('agent store', () => {
     ]);
   });
 
+  it('reads the lead desk for the Growth Manager through its six operations, with their defaults', async () => {
+    const { store, calls } = harness();
+    const since = new Date('2026-11-02T05:00:00Z');
+    await store.growthPending();
+    await store.growthPending({ limit: 5, windowHours: 48 });
+    await store.growthLead('l1');
+    await store.growthMarkSeen(['l1', 'l2']);
+    await store.growthUnanswered({ steps: [60, 1440], maxMinutes: 10080 });
+    await store.growthUnanswered({ steps: [30], maxMinutes: 1500, limit: 10 });
+    await store.growthFacts({ since, until: when });
+    await store.leadProbeSeen({ source: 'carebase', since });
+    expect(calls).toEqual([
+      ['select private.agent_growth_pending($1, $2) as result', [50, 24]],
+      ['select private.agent_growth_pending($1, $2) as result', [5, 48]],
+      ['select private.agent_growth_lead($1) as result', ['l1']],
+      ['select private.agent_growth_mark_seen($1) as result', [['l1', 'l2']]],
+      ['select private.agent_growth_unanswered($1, $2, $3) as result', [[60, 1440], 10080, 50]],
+      ['select private.agent_growth_unanswered($1, $2, $3) as result', [[30], 1500, 10]],
+      ['select private.agent_growth_facts($1, $2) as result', [since, when]],
+      ['select private.agent_lead_probe_seen($1, $2) as result', ['carebase', since]],
+    ]);
+  });
+
   it('reads the Content Marketer\'s state and publishes an approved article through its two server-only operations', async () => {
     const { store, calls } = harness({ outcome: 'published' });
     await store.contentState(['pa-fire-drills']);

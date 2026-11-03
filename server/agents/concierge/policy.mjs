@@ -5,14 +5,24 @@
  * reference and how long ago it arrived, and nothing the customer wrote.
  *
  * Severity: an outage, a security concern or a legal matter is urgent (the owner is texted and
- * emailed); billing, a cancellation or a message with identifiers is a warning (email); anything
- * else is information (email). A message that carries identifiers is never quieter than a warning.
+ * emailed); billing, a cancellation, a sales inquiry or a message with identifiers is a warning (email);
+ * anything else is information (email). A message that carries identifiers is never quieter than a warning.
+ * A sales inquiry is a warning because a prospect who waits goes elsewhere.
  */
 import { plural } from '../tasks/shared.mjs';
 
 const severities = {
-  security: 'urgent', legal: 'urgent', outage: 'urgent', urgent: 'urgent', cancellation: 'warning', billing: 'warning', sales: 'info', general: 'info',
+  security: 'urgent', legal: 'urgent', outage: 'urgent', urgent: 'urgent', cancellation: 'warning', billing: 'warning', sales: 'warning', general: 'info',
 };
+/** The conversations a website lead form opens (docs/LEAD_INTAKE.md): CareBase, Intel and Healthcare Advisors. */
+export const leadSystems = Object.freeze(['carebase.web', 'intel.web', 'advisors.web']);
+
+/**
+ * A prospect's conversation: one a website lead form opened, or one the inbox files as a sales or Advisors inquiry. A message in it is a
+ * sales inquiry whatever its words say (a demo request may read only "Please contact me"). One filed as billing is never one.
+ */
+export const salesConversation = ({ sourceSystem = null, inquiryType = null } = {}) =>
+  inquiryType !== 'billing' && (leadSystems.includes(sourceSystem) || inquiryType === 'sales' || inquiryType === 'advisors');
 /** How much attention each severity asks for, so a second reading can be compared with the first. */
 export const severityRank = { info: 1, warning: 2, urgent: 3 };
 
@@ -63,15 +73,16 @@ export function alertWords({ category, phi, severity, channel, productSlug, refe
 }
 
 /**
- * Which fixed reply, if any, to offer the owner for a message. Only a plain question gets one: the owner answers
- * an outage, a security or legal matter, billing, a cancellation and a sales or consulting inquiry personally.
- * That holds for how the conversation was classified as well as for what its words say: a phone-line message
- * filed as billing may read "Please help". A plain question that carries identifiers gets the notice that asks
- * the sender to resend without them.
+ * Which fixed reply, if any, to offer the owner for a message. A plain question gets the acknowledgment; a prospect's conversation (see
+ * `salesConversation`) whose message reads as a plain question or a sale gets the sales acknowledgment, in the owner's own voice. The owner
+ * answers an outage, a security or legal matter, billing and a cancellation personally, whatever the conversation, and so is anything else
+ * from Healthcare Advisors. That holds for how the conversation was classified as well as for what its words say: a phone-line message
+ * filed as billing may read "Please help". A message that carries identifiers gets only the notice that asks the sender to resend without them.
  */
-export function replyFor({ category, phi = false, productSlug = null, inquiryType = null }) {
-  if (category !== 'general') return null;
-  if (productSlug === 'advisors' || inquiryType === 'sales' || inquiryType === 'advisors' || inquiryType === 'billing') return null;
+export function replyFor({ category, phi = false, productSlug = null, inquiryType = null, sourceSystem = null }) {
+  if (inquiryType === 'billing') return null;
+  if (salesConversation({ sourceSystem, inquiryType })) return category === 'general' || category === 'sales' ? (phi ? 'phi' : 'sales') : null;
+  if (category !== 'general' || productSlug === 'advisors') return null;
   return phi ? 'phi' : 'standard';
 }
 

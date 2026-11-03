@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionLabel, approvalTitle, cadenceLabel, centsLabel, decisionSchema, emailSubject, errorLabel, failedActionLabel, outcomeLabel, statusLabel, taskLabel, waitingSchema } from "./teamProtocol";
+import { actionLabel, approvalTitle, cadenceLabel, centsLabel, decisionSchema, emailSubject, errorLabel, failedActionLabel, outcomeLabel, statusLabel, targetLabel, taskLabel, waitingSchema } from "./teamProtocol";
 
 describe("AI team display", () => {
   it("shows money in whole cents", () => {
@@ -21,6 +21,23 @@ describe("AI team display", () => {
     expect(cadenceLabel({ cadence: "interval", everySeconds: 3600, atLocal: null, timezone: zone })).toBe("Every hour");
     expect(cadenceLabel({ cadence: "interval", everySeconds: 7200, atLocal: null, timezone: zone })).toBe("Every 2 hours");
     expect(cadenceLabel({ cadence: "interval", everySeconds: 90, atLocal: null, timezone: zone })).toBe("Every 90 seconds");
+    expect(cadenceLabel({ cadence: "interval", everySeconds: 21600, atLocal: null, timezone: zone })).toBe("Every 6 hours");
+    expect(cadenceLabel({ cadence: "daily", everySeconds: null, atLocal: "07:30:00", timezone: zone })).toBe("Daily at 7:30 AM Eastern");
+  });
+
+  it("names the Growth Manager's work and the lead form check", () => {
+    expect(["growth.leads", "growth.followup", "growth.weekly", "probe.forms"].map(taskLabel)).toEqual(["Look for new leads", "Chase unanswered leads", "Weekly growth report", "Lead form check"]);
+  });
+
+  it("names what a probe incident is about, and shows any other target as it is", () => {
+    expect(targetLabel("probe_target", "carebase_forms:2")).toBe("CareBase lead form, incident 2");
+    expect(targetLabel("probe_target", "intel_forms:1")).toBe("Intel lead form, incident 1");
+    expect(targetLabel("probe_target", "advisors_forms:7")).toBe("Advisors consultation form, incident 7");
+    expect(targetLabel("probe_target", "intel:3")).toBe("CareMetric Intel, incident 3");
+    expect(targetLabel("probe_target", "hub")).toBe("Support Hub");
+    expect(targetLabel("probe_target", "newthing:4")).toBe("newthing:4");
+    expect(targetLabel("communication", "CM-1042")).toBe("CM-1042");
+    expect(targetLabel(null, "carebase:1")).toBe("carebase:1");
   });
 
   it("names the work, the actions and the states in plain words, and falls back to the raw name", () => {
