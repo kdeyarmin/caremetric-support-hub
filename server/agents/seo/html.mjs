@@ -126,16 +126,36 @@ function stripTags(html) {
   return out;
 }
 
+// The element ids the common single-page frameworks mount their app into: React and Vite (root), Vue (app), Next.js, Nuxt, Gatsby and
+// SvelteKit. Angular mounts into its own <app-root> element.
+const mountIds = new Set(['root', 'app', '__next', '__nuxt', '___gatsby', 'svelte']);
+const mountTags = new Set(['div', 'main', 'section', 'body']);
+// How much of a page's visible text is kept: enough to describe the page, never the whole of a long one.
+export const textLimit = 2000;
+const excerpt = (text, limit) => {
+  if (text.length <= limit) return text;
+  const cut = text.slice(0, limit);
+  const last = cut.charCodeAt(cut.length - 1);
+  // Never end on half of a character pair.
+  return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
+};
+
 /**
  * Everything the checks need from one page. `links` are page addresses (no assets), unique, in document
  * order and resolved against the page; the caller decides which belong to the site. `wordCount` counts the
- * words in the initial HTML only.
+ * words in the initial HTML only, and `text` is the start of that text (at most `textLimit` characters).
+ * `appRoot` says the page is built to be filled in by scripts: it has the element a single-page app
+ * framework renders into, or loads a module script. With almost no text before scripts run, such a page
+ * is an app shell, and a reader that does not run JavaScript sees almost nothing on it.
  */
 export function analyzeHtml(html, pageUrl) {
   const source = String(html ?? '').slice(0, maxInput);
 
   const jsonLd = { count: 0, invalid: 0, types: [] };
+  let moduleScripts = 0;
   for (const script of elements(source, source.toLowerCase(), 'script')) {
+    // Only the start of the tag is read, as for every other tag: its type comes long before any sane tag's end.
+    if (String(attributes(script.open.slice(0, maxTag)).type ?? '').trim().toLowerCase() === 'module') moduleScripts += 1;
     if (!/application\/ld\+json/i.test(script.open)) continue;
     jsonLd.count += 1;
     try {
@@ -186,6 +206,8 @@ export function analyzeHtml(html, pageUrl) {
     jsonLd,
     images: { total: images.length, withoutAlt: images.filter(attrs => attrs.alt === undefined).length },
     wordCount: words.length,
+    text: excerpt(text, textLimit),
+    appRoot: moduleScripts > 0 || tags.some(tag => tag.name === 'app-root' || (mountTags.has(tag.name) && mountIds.has(String(tag.attrs.id ?? '').trim().toLowerCase()))),
     links,
   };
 }

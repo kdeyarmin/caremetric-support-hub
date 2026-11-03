@@ -8,6 +8,7 @@ export const rpcArguments = Object.freeze({
   get_agent_team: [],
   list_agent_activity: ['p_kind','p_agent_key','p_offset','p_limit'],
   list_audit_events: ['p_action_prefix','p_offset','p_limit'],
+  list_leads: ['p_kind','p_source','p_include_test','p_offset','p_limit'],
   list_phone_numbers: [],
   save_phone_number: ['p_id','p_record','p_expected_version'],
   billing_workspace: [], billing_customer: ['p_tenant_id'], my_billing: [],

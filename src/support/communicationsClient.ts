@@ -9,6 +9,13 @@ export type ConversationStatus = typeof conversationStatuses[number];
 export type InquiryType = typeof inquiryTypes[number];
 
 export const channelLabels: Record<Channel, string> = { phone: "Phone", sms: "Text message", email: "Email", chat: "Chat", web_form: "Web form" };
+/** Which website a web-form conversation came from: the channel alone ("Web form") does not say. */
+const conversationSourceLabels: Record<string, string> = {
+  "carebase.web": "CareBase website", "intel.web": "Intel website", "advisors.web": "Advisors website",
+};
+export function conversationSourceLabel(sourceSystem: string): string | null {
+  return Object.hasOwn(conversationSourceLabels, sourceSystem) ? conversationSourceLabels[sourceSystem] : null;
+}
 export const statusLabels: Record<ConversationStatus, string> = { new: "New", open: "Open", waiting: "Waiting on customer", closed: "Closed" };
 export const inquiryLabels: Record<InquiryType, string> = {
   technical_support: "Technical support", customer_service: "Customer service", billing: "Billing",
@@ -75,7 +82,7 @@ export function describeChannels(status: ChannelStatus): ChannelSummary[] {
     { channel: "sms", label: "Text messages", detail: receiving(status.sms), ready: status.sms.inbound },
     { channel: "email", label: "Email", detail: receiving(status.email), ready: status.email.inbound },
     { channel: "chat", label: "Website chat", detail: status.chat.enabled ? "On every Help page" : "Off until the owner enables it", ready: status.chat.enabled },
-    { channel: "web_form", label: "Advisors web form", detail: "Imported from caremetricadvisors.com", ready: status.webForm.sync },
+    { channel: "web_form", label: "Website forms", detail: "Sent by the CareBase, Intel and Advisors websites; Advisors requests can also be imported", ready: status.webForm.sync },
   ];
 }
 

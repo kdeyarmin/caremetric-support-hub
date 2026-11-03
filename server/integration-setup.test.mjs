@@ -42,6 +42,18 @@ describe('integration setup report', () => {
     expect(serialized).not.toContain('twilio-secret-value');
   });
 
+  it('reports each product\'s lead secret by presence only, none of them required on its own', async () => {
+    const secret = 'lead-secret-value-'.repeat(3);
+    const report = await harness('platform_admin', { ...env, HUB_LEAD_SECRET_INTEL: secret }).handle('token');
+    const leads = report.integrations.find((integration) => integration.id === 'website-leads');
+    expect(leads.docs).toBe('docs/LEAD_INTAKE.md');
+    expect(leads.variables.map((variable) => [variable.name, variable.secret, variable.required, variable.set]))
+      .toEqual([['HUB_LEAD_SECRET_CAREBASE', true, false, false], ['HUB_LEAD_SECRET_INTEL', true, false, true], ['HUB_LEAD_SECRET_ADVISORS', true, false, false]]);
+    for (const variable of leads.variables) expect(variable).not.toHaveProperty('value');
+    expect(leads).toMatchObject({ ready: true, complete: false });
+    expect(JSON.stringify(report)).not.toContain(secret);
+  });
+
   it('refuses every role but the platform administrator', async () => {
     await expect(harness('support_manager').handle('token')).rejects.toThrow('Integration setup is available to the platform administrator only.');
   });
@@ -50,9 +62,30 @@ describe('integration setup report', () => {
     const names = integrationCatalog.flatMap((integration) => integration.variables.map((variable) => variable.name));
     expect(new Set(names).size).toBe(names.length);
     for (const name of ['ANTHROPIC_API_KEY', 'HUB_TWILIO_AUTH_TOKEN', 'HUB_TWILIO_ACCOUNT_SID', 'HUB_SENDGRID_INBOUND_PUBLIC_KEY', 'HUB_SENDGRID_API_KEY',
-      'HUB_CHAT_ENABLED', 'HUB_PUBLIC_ORIGIN', 'HUB_TELNYX_API_KEY', 'HUB_TELNYX_VERIFY_PROFILE_ID', 'CAREBASE_DISTRIBUTION_OBSERVER_TOKEN']) {
+      'HUB_CHAT_ENABLED', 'HUB_PUBLIC_ORIGIN', 'HUB_TELNYX_API_KEY', 'HUB_TELNYX_VERIFY_PROFILE_ID', 'CAREBASE_DISTRIBUTION_OBSERVER_TOKEN',
+      'HUB_LEAD_SECRET_CAREBASE', 'HUB_LEAD_SECRET_INTEL', 'HUB_LEAD_SECRET_ADVISORS']) {
       expect(names).toContain(name);
     }
     for (const integration of integrationCatalog) expect(integration.docs).toMatch(/^docs\/[A-Z0-9_]+\.md$/);
+  });
+
+  it('reports the Search Console key by presence only and shows the properties, with the owner\'s steps in plain words', async () => {
+    const key = JSON.stringify({ type: 'service_account', client_email: 'seo@project.iam.gserviceaccount.com', private_key: 'fixture-key-search-console-secret' });
+    const report = await harness('platform_admin', { ...env, HUB_SEARCH_CONSOLE_CREDENTIALS: key, HUB_SEARCH_CONSOLE_SITES: 'sc-domain:cmcarebase.com' }).handle('token');
+    const searchConsole = report.integrations.find((integration) => integration.id === 'search-console');
+    expect(searchConsole).toMatchObject({ ready: true, complete: true, docs: 'docs/AI_TEAM.md' });
+    expect(searchConsole.variables.map((variable) => [variable.name, variable.secret, variable.set])).toEqual([['HUB_SEARCH_CONSOLE_CREDENTIALS', true, true], ['HUB_SEARCH_CONSOLE_SITES', false, true]]);
+    expect(searchConsole.variables[0]).not.toHaveProperty('value');
+    expect(searchConsole.variables[1].value).toBe('sc-domain:cmcarebase.com');
+    expect(JSON.stringify(report)).not.toContain('search-console-secret');
+    for (const step of ['service account', 'Google Search Console API', 'as a user on each property']) expect(searchConsole.purpose).toContain(step);
+    // The browser's schema refuses a longer purpose, which would empty the whole setup panel.
+    for (const integration of integrationCatalog) {
+      expect(integration.purpose.length, integration.id).toBeLessThanOrEqual(400);
+      expect(integration.name.length, integration.id).toBeLessThanOrEqual(120);
+      for (const variable of integration.variables) expect(variable.purpose.length, variable.name).toBeLessThanOrEqual(300);
+    }
+    const unset = (await harness().handle('token')).integrations.find((integration) => integration.id === 'search-console');
+    expect(unset).toMatchObject({ ready: false, complete: false });
   });
 });

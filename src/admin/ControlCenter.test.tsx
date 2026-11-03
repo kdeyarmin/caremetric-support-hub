@@ -116,7 +116,7 @@ describe("control center", () => {
     renderCenter({ ...connectedClients(), communications: fakeCommunications() });
     const channels = screen.getByRole("region", { name: "Customer channels" });
     const rows = await within(channels).findAllByRole("listitem");
-    expect(rows.map(row => row.querySelector("strong")?.textContent)).toEqual(["Phone line (877) 521-2890", "Text messages", "Email", "Website chat", "Advisors web form"]);
+    expect(rows.map(row => row.querySelector("strong")?.textContent)).toEqual(["Phone line (877) 521-2890", "Text messages", "Email", "Website chat", "Website forms"]);
     expect(within(rows[1]).getByText("Not connected")).toBeTruthy();
     expect(within(rows[1]).getByText("Not live")).toBeTruthy();
     expect(within(rows[2]).getByText("Receiving · replies not configured")).toBeTruthy();
