@@ -48,6 +48,13 @@ connections, intake, delegated actions, and purchases for those apps are disable
 - **Portfolio rollup** (`/admin/portfolio`): health, subscriber and subscription
   figures, and a live **super-admin coverage** matrix showing, per application,
   what the Hub holds now and what app-side work each gap needs.
+- **Go-to-market facts** ([docs/GTM_FACTS.md](docs/GTM_FACTS.md)): the single
+  source of truth for marketing claims about CareBase, Intel and Advisors (who
+  each is for, live prices and trials, the founding-partner offer, the claims we
+  may and may not make, and the fixed vocabulary). The AI team's Content
+  Marketer writes help-center articles only from it, and nothing it drafts is
+  published until the owner approves it on **AI team** (`/admin/team`); see
+  [the AI team](docs/AI_TEAM.md#the-content-marketer).
 
 What the Hub can show depends on what each application's administration
 connection provides. As documented for each connection today:

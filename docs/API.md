@@ -256,6 +256,24 @@ The history pages are reads through the browser RPC allowlist (`POST /api/rpc/<n
 `p_agent_key`, `p_offset`, `p_limit ≤ 50`) and `list_audit_events` (optional `p_action_prefix`, such as
 `agent.`, with `p_offset` and `p_limit ≤ 50`).
 
+## Public help center pages (server)
+
+Implemented in `server/help-center.mjs`; no session, GET and HEAD only, every response keeps the Hub's security
+headers and Content Security Policy. The articles are the ones `hub.list_published_content()` returns without a
+session (public, published articles), read at most once every five minutes.
+
+- `GET /help/articles/<content key>` — a public article as HTML inside the app's own `index.html`: its title,
+  description, canonical address (`https://help.caremetric.ai/help/articles/<content key>`), Open Graph and
+  Twitter tags, an Article in JSON-LD, and the body rendered from Markdown by `src/lib/markdown.ts` (every piece of
+  the source is escaped; only https and same-site links are kept). The app's script then takes over at the same
+  address. `Cache-Control: public, max-age=300`. An address with no public article answers 404 with the app shell
+  and `noindex`; the form with a trailing slash answers 301 to the one without; 503 with `Retry-After` when the
+  list cannot be read and none is cached. A read that failed is tried again at most once a minute; meanwhile every
+  request gets the last list read (or the 503).
+- `GET /sitemap.xml` — `/help`, `/learn` and every public article, at `https://help.caremetric.ai`
+  (`public, max-age=3600`).
+- `GET /robots.txt` — everything except `/api/` and `/admin`, and the sitemap's address (`public, max-age=86400`).
+
 ## Healthcare Advisors administration reads
 
 `POST /api/admin/read` with `product: "advisors"` accepts only `capabilities`,
