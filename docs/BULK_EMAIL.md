@@ -66,11 +66,22 @@ subscription tracking are turned off for these messages.
 The personal link opens a page with an **Unsubscribe** button; opening the link
 alone changes nothing, so link scanners cannot unsubscribe anyone. A mail
 client's one-click request or the button suppresses that address for every
-future bulk email from the Hub. Support replies are not affected.
+future bulk email from the Hub, and for the Account Manager's customer emails
+(welcome, setup help, trial check-in and testimonial request; see
+[AI_TEAM.md](AI_TEAM.md#customer-emails)). Support replies, receipts and billing
+notices are not affected.
+
+The same page and the same suppression list serve the links in those customer
+emails. Each carries its own personal token (a random value whose SHA-256 hash is
+kept beside the address's hash in `private.agent_lifecycle_emails`), the page
+names the kind of email it came from, and confirming it suppresses the address for
+both kinds. `private.email_unsubscribe` answers either kind of link and still
+refuses every session user but the Hub server.
 
 Do not include patient information. For marketing (rather than service)
 announcements, set `HUB_BULK_EMAIL_POSTAL_ADDRESS` so every message includes a
-mailing address, as CAN-SPAM requires.
+mailing address, as CAN-SPAM requires. The Account Manager's customer emails are
+neither proposed nor sent without it.
 
 ## Data handling
 
@@ -98,7 +109,7 @@ only by the Hub server role.
 | --- | --- | --- |
 | `HUB_SENDGRID_API_KEY` | Yes | Mail Send key, shared with support replies. Without it, sending and tests are refused. |
 | `HUB_BULK_EMAIL_FROM` | No | Sender address; defaults to `HUB_SUPPORT_FROM_EMAIL`, then `support@caremetric.ai`. Must be a verified SendGrid sender. |
-| `HUB_BULK_EMAIL_POSTAL_ADDRESS` | No | Mailing address shown in every footer. |
+| `HUB_BULK_EMAIL_POSTAL_ADDRESS` | No | Mailing address shown in every footer. Required for the Account Manager's customer emails. |
 | `HUB_PUBLIC_ORIGIN` | No | Origin used in unsubscribe links (the existing webhook origin setting). |
 
 The integration setup panel in the control center lists these under Email

@@ -89,6 +89,17 @@ a pinned empty search path on all of them. Each test fails closed, so a function
 was reset (which leaves it null) is refused. The Hub server uses the fenced operations only when the feature is
 declared.
 
+`20261103140100_agent_lifecycle_contract.sql` declares `platform.agents.lifecycle.v1` only after
+`platform.agents.accounts.v1`, `platform.agents.hardening.v1` and `support.bulk-email.v1` are declared, the
+customer email ledger keeps row level security with no privilege for any browser, service or server role, the
+`email.send` action kind has its shape check and its once-per-period unique index, the three new operations
+(`private.agent_lifecycle_snapshot(...)`, `private.agent_lifecycle_begin_send(...)`,
+`private.agent_lifecycle_finish_send(...)`) and the two it replaced (`private.agent_action_propose(...)`, which must
+carry the per-template rule, and `private.email_unsubscribe(...)`) are security definers with a pinned empty search
+path executable by `hub_app_server` alone, the facts helper is executable by no role, and the Account Manager has its
+`auto_send_templates` setting and its daily customer email schedule. Each test fails closed. The Hub server registers
+the customer email handler and executor only when the feature is declared.
+
 The table above is not exhaustive:
 later features such as the `billing.*` and `customer.self-service.v1` boundaries are declared
 by their own migrations and listed in `src/lib/backendContract.ts`. See [AI_TEAM.md](AI_TEAM.md).

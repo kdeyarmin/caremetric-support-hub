@@ -5,6 +5,7 @@ import { ownerNotifier } from './notify.mjs';
 import { agentAdmin } from './admin.mjs';
 import { builtInHandlers } from './tasks/index.mjs';
 import { conciergeExecutors, draftingFor } from './concierge/index.mjs';
+import { lifecycleExecutors } from './accounts/executor.mjs';
 import { modelRuntime } from './runtime/index.mjs';
 
 const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
@@ -20,20 +21,27 @@ const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
  * and handed to function-style `handlers` beside the store and the notifier. `record` writes the
  * usage ledger. The only handler that calls the model is the Concierge's triage, and only when
  * `customerTextToAi` (the owner's switch) is true, a key is set and `guides` (the guide library) is given.
+ * `lifecycle` is how the Account Manager sends customer emails: `{ mail, postalAddress, bookingUrl }` (a SendGrid sender with
+ * one-click unsubscribe headers, the footer's postal address and the owner's optional booking link); the unsubscribe link uses
+ * `publicOrigin`. Without them nothing is proposed or sent, and the daily run says what is missing.
  */
 export function agentTeam({
   pool, store: givenStore = null, handlers = {}, executors = {}, sms, email, ownerEmail, publicOrigin,
   fetchImpl = fetch, enabled = false, log = line => console.warn(line), now = () => new Date(), communications = null, features = null,
-  anthropicApiKey = null, record = null, model = null, guides = null, customerTextToAi = false,
+  anthropicApiKey = null, record = null, model = null, guides = null, customerTextToAi = false, lifecycle = null,
 }) {
   // Fenced operations (the attempt a task was claimed under, the execution an action started) exist once the database declares the hardening feature.
   const store = givenStore ?? sqlAgentStore(pool, { fenced: features?.has?.('platform.agents.hardening.v1') === true });
   const notifier = ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log });
   const runtime = model ?? modelRuntime({ apiKey: anthropicApiKey, store, record, notifier, log, now });
   const shared = { store, notifier, model: runtime };
-  const actions = actionExecutor({ store, executors: { ...recordOnlyExecutors, ...conciergeExecutors({ communications, store, notifier, features, log }), ...(typeof executors === 'function' ? executors(shared) : executors) }, log });
+  const customerEmail = { ...(lifecycle ?? {}), publicOrigin };
+  const actions = actionExecutor({ store, executors: {
+    ...recordOnlyExecutors, ...conciergeExecutors({ communications, store, notifier, features, log }), ...lifecycleExecutors({ store, features, lifecycle: customerEmail, log }),
+    ...(typeof executors === 'function' ? executors(shared) : executors),
+  }, log });
   // The handlers every server ships with, then any the caller adds (a caller's handler for the same kind wins).
-  const registry = { ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
+  const registry = { ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, lifecycle: customerEmail, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   const scheduler = agentScheduler({ store, handlers: registry, actions, enabled, log, now });
   const admin = agentAdmin({
     pool, actions, kick: () => scheduler.tick(), waiting: scheduler.runWaiting,
