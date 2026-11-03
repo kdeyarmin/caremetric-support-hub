@@ -11,7 +11,10 @@
 --   * the owner reads and changes leads through hub.* operations that authorize the current SMS administrator
 --     session themselves (authorize_app_admin to read, authorize_app_command to change a status);
 --   * the visitor's free-text message may contain PHI. It is stored only as the conversation's inbound message,
---     never on the lead, in audit metadata or in an error. Lead rows hold contact details and short facts only.
+--     never on the lead, in audit metadata or in an error. Lead rows hold contact details and short facts only;
+--   * retention: a lead is deleted twelve months after the Hub received it, and a website conversation twelve months
+--     after its last message, by private.lead_retention (the Hub server role only, from its periodic cleanup).
+--     Conversations from every other channel are never touched by it.
 
 set local lock_timeout = '10s';
 
@@ -380,17 +383,90 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------------------
--- Grants. Helpers: nobody. Intake: the Hub server role only. Owner operations: signed-in sessions (they authorize
--- the administrator session themselves).
+-- Retention (docs/LEAD_INTAKE.md, "Retention"). A lead is deleted twelve months after the Hub received it. A website
+-- conversation (advisors.web, carebase.web or intel.web, including requests brought in by the manual Advisors import)
+-- is deleted twelve months after its last message, with its messages. Conversations from any other channel are never
+-- touched. The Hub server runs this from its periodic cleanup.
+-- ---------------------------------------------------------------------------------------
+
+-- Website conversations by last message, so a batch reads only what is due however much else the inbox keeps.
+-- Leads are read oldest first through leads_recent (received_at).
+create index communications_website_retention on private.communications (last_message_at, id)
+  where source_system in ('advisors.web', 'carebase.web', 'intel.web');
+
+-- One bounded batch, oldest first: at most p_limit leads received more than twelve months ago, then at most p_limit
+-- website conversations whose last message is more than twelve months old. A deleted conversation's messages go with
+-- it, and a lead that named it keeps no link. A row another transaction holds is left for a later batch, and a
+-- conversation is deleted only while it is still idle. `more` says whether anything due is left. A batch that deleted
+-- something writes one audit event with the two counts only: never a name, an address or the id of a deleted row.
+-- Called only by private.lead_retention; separate so the database tests can exercise it without the Hub server's login.
+create function private.lead_retention_batch(p_limit integer) returns jsonb
+language plpgsql set search_path = '' as $$
+declare
+  v_cutoff constant timestamptz := now() - interval '12 months';
+  v_leads integer;
+  v_conversations integer;
+  v_more boolean;
+begin
+  if p_limit is null or p_limit < 1 or p_limit > 5000 then
+    raise exception 'Choose a batch of 1 to 5,000 rows.' using errcode = '22023';
+  end if;
+
+  delete from private.leads l
+  where l.id = any(array(
+    select d.id from private.leads d
+    where d.received_at < v_cutoff
+    order by d.received_at, d.id
+    limit p_limit
+    for update skip locked));
+  get diagnostics v_leads = row_count;
+
+  delete from private.communications c
+  where c.id = any(array(
+      select d.id from private.communications d
+      where d.source_system in ('advisors.web', 'carebase.web', 'intel.web') and d.last_message_at < v_cutoff
+      order by d.last_message_at, d.id
+      limit p_limit
+      for update skip locked))
+    and c.source_system in ('advisors.web', 'carebase.web', 'intel.web') and c.last_message_at < v_cutoff;
+  get diagnostics v_conversations = row_count;
+
+  v_more := exists (select 1 from private.leads l where l.received_at < v_cutoff)
+    or exists (select 1 from private.communications c
+      where c.source_system in ('advisors.web', 'carebase.web', 'intel.web') and c.last_message_at < v_cutoff);
+
+  if v_leads > 0 or v_conversations > 0 then
+    insert into private.audit_events (actor_id, action, entity_type, entity_id, metadata)
+    values (null, 'lead.retention', 'lead', null, jsonb_build_object('leads', v_leads, 'conversations', v_conversations));
+  end if;
+  return jsonb_build_object('leads', v_leads, 'conversations', v_conversations, 'more', v_more);
+end;
+$$;
+
+-- The Hub server's operation: its fifteen-minute cleanup runs it at most once every six hours (server/lead-retention.mjs).
+create function private.lead_retention(p_limit integer default 500) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+begin
+  perform private.require_hub_app_server();
+  return private.lead_retention_batch(p_limit);
+end;
+$$;
+
+-- ---------------------------------------------------------------------------------------
+-- Grants. Helpers: nobody. Intake and retention: the Hub server role only. Owner operations: signed-in sessions (they
+-- authorize the administrator session themselves).
 -- ---------------------------------------------------------------------------------------
 revoke all on function
   private.lead_text(jsonb, integer),
   private.lead_instant(jsonb),
   private.lead_json(uuid),
   private.lead_record(text, jsonb),
-  private.lead_intake(text, jsonb)
+  private.lead_intake(text, jsonb),
+  private.lead_retention_batch(integer),
+  private.lead_retention(integer)
 from public, anon, authenticated, service_role, hub_app_server;
 grant execute on function private.lead_intake(text, jsonb) to hub_app_server;
+grant execute on function private.lead_retention(integer) to hub_app_server;
 
 revoke all on function
   hub.list_leads(text, text, boolean, integer, integer),

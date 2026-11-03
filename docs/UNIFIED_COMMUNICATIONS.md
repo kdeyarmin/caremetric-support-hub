@@ -85,8 +85,12 @@ tells visitors to keep the page open or return to Help in the same browser.
   cookie. They see their own messages and staff replies, never internal notes.
   Abuse limits: three new chats per visitor per hour, 300 per hour overall, and
   bounded message rates per visitor and per conversation.
-- Retention is not automated. Decide a retention period before enabling text,
-  email or chat for production traffic.
+- Retention: website-lead conversations (the Advisors, CareBase and Intel
+  website sources `advisors.web`, `carebase.web` and `intel.web`, Advisors
+  imports included) are deleted, with their messages, twelve months after
+  their last message ([LEAD_INTAKE.md](LEAD_INTAKE.md), "Retention"). Retention
+  for every other channel is still not automated: decide a retention period
+  before enabling text, email or chat for production traffic.
 
 ## Before enabling text, email or chat
 

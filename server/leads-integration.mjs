@@ -1,8 +1,10 @@
 // Website leads through the real Hub server, on disposable local fixtures only: signed requests through the actual
 // POST /api/leads route and handler, private.lead_intake run by the server pool that logs in as hub_app_server exactly
 // like production, the owner's Leads reads and status changes with a real SMS session, and the Advisors manual import.
-// A canary in a visitor's message must reach the conversation and nothing else. Every row this makes is removed at the
-// end, and every key is new per run, so CI runs it twice in a row. The last section runs the deployment gate against drift.
+// A canary in a visitor's message must reach the conversation and nothing else. Retention then deletes an old lead and
+// an idle website conversation through private.lead_retention as hub_app_server, the way the server's cleanup runs it.
+// Every row this makes is removed at the end, and every key is new per run, so CI runs it twice in a row. The last
+// section runs the deployment gate against drift.
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -12,6 +14,7 @@ import { digest, ownerAccess, sessionCookie, token, withSession } from './sms-au
 import { gateway } from './gateway.mjs';
 import { appServer } from './http.mjs';
 import { leadAdmin, leadIntake, leadSignature } from './leads.mjs';
+import { leadRetention } from './lead-retention.mjs';
 import { leadPageSchema, leadSchema } from '../src/admin/leadsProtocol.ts';
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
@@ -44,6 +47,8 @@ const external = name => `leads-int-${run}-${name}`;
 const advisorsKeys = [];
 const leadIds = new Set();
 const hubOrigin = 'https://hub.test';
+// The audit events this run's retention batches write are removed at the end too.
+let retentionAuditFloor = null;
 
 const intake = leadIntake({ pool, secrets, enabled: true, log: line => console.info(line) });
 const server = appServer({ auth: {}, owner: ownerAccess(pool), gateway: gateway(pool), delegations: {}, leads: intake, leadAdmin: leadAdmin({ pool, enabled: true }), origins: [hubOrigin] });
@@ -238,6 +243,58 @@ try {
   for (const line of logs) for (const hidden of [canary, visitorEmail, ...Object.values(secrets)]) assert.ok(!line.includes(hidden), `a log line carried something it must not: ${line.slice(0, 40)}`);
   for (const text of responses) assert.ok(!text.includes(canary), 'no answer carried the message');
 
+  // ---- Retention: a lead twelve months after it arrived, a website conversation twelve months after its last message --
+  // Old and recent rows are made directly; a disposable database has nothing else due.
+  const retentionCanary = `RETENTION-CANARY-${run}`;
+  const idleKey = advisorsKey(); advisorsKeys.push(idleKey);
+  const idle = await row(`insert into private.communications (channel, source_system, source_key, status, inquiry_type, subject, contact_email, created_at, updated_at, last_message_at)
+    values ('web_form', 'advisors.web', $1, 'closed', 'advisors', 'Consultation request from Retention Hospice', $2, now() - interval '14 months', now() - interval '13 months', now() - interval '13 months')
+    returning id`, [idleKey, visitorEmail]);
+  await admin.query(`insert into private.communication_messages (communication_id, direction, body, delivery, delivery_channel, created_at)
+    values ($1, 'inbound', $2, 'received', null, now() - interval '14 months'), ($1, 'outbound', 'Our answer, long ago.', 'sent', 'email', now() - interval '13 months')`,
+    [idle.id, `${retentionCanary} An old consultation request.`]);
+  const active = await row(`insert into private.communications (channel, source_system, source_key, subject, created_at, updated_at, last_message_at)
+    values ('web_form', 'carebase.web', $1, 'Demo request: Retention Assisted Living Facility', now() - interval '2 years', now() - interval '1 day', now() - interval '1 day')
+    returning id`, [external('retention-active')]);
+  await admin.query(`insert into private.communication_messages (communication_id, direction, body, delivery, delivery_channel, created_at)
+    values ($1, 'inbound', 'An old question.', 'received', null, now() - interval '2 years'), ($1, 'outbound', 'An answer yesterday.', 'sent', 'email', now() - interval '1 day')`,
+    [active.id]);
+  const mail = await row(`insert into private.communications (channel, source_system, source_key, subject, created_at, updated_at, last_message_at)
+    values ('email', 'hub.email', $1, 'An old email', now() - interval '3 years', now() - interval '3 years', now() - interval '3 years') returning id`, [external('retention-mail')]);
+  // Two leads 13 months old that named the conversation answered yesterday, and a recent one that named the idle one.
+  const oldLeadKeys = [external('retention-old-1'), external('retention-old-2')];
+  await admin.query(`insert into private.leads (source, kind, external_id, occurred_at, received_at, contact_email, communication_id)
+    select 'carebase', 'demo_request', k.key, now() - interval '13 months', now() - interval '13 months' + k.n * interval '1 minute', $2::text, $3::uuid
+    from unnest($1::text[]) with ordinality as k(key, n)`, [oldLeadKeys, visitorEmail, active.id]);
+  const recentLead = await row(`insert into private.leads (source, kind, external_id, occurred_at, received_at, contact_email, communication_id)
+    values ('advisors', 'consultation', $1, now() - interval '1 day', now() - interval '1 day', $2, $3) returning id`, [idleKey, visitorEmail, idle.id]);
+
+  retentionAuditFloor = Number((await row('select coalesce(max(id), 0) as id from private.audit_events')).id);
+  await assert.rejects(admin.query('select private.lead_retention(500)'), error => error.code === '42501', 'only the Hub server runs retention');
+  for (const limit of [0, 5001]) {
+    await assert.rejects(pool.query('select private.lead_retention($1)', [limit]), error => error.code === '22023', `a batch of ${limit} rows is refused`);
+  }
+  assert.deepEqual((await pool.query('select private.lead_retention(1) as result')).rows[0].result, { leads: 1, conversations: 1, more: true },
+    'a batch of one deletes one lead and one website conversation and says more are due');
+  const retention = leadRetention({ pool, enabled: true, log: line => console.info(line), warn: line => console.warn(line) });
+  const swept = await retention.tick();
+  assert.ok(swept && swept.more === false && swept.leads >= 1 && swept.batches >= 1, 'the server\'s run deletes what is still due');
+  assert.equal(await retention.tick(), null, 'and does not run again within six hours');
+  assert.equal(Number((await row('select count(*) from private.leads where external_id = any($1)', [oldLeadKeys])).count), 0, 'the old leads are gone');
+  assert.equal(Number((await row('select count(*) from private.communications where id = $1', [idle.id])).count), 0, 'the idle website conversation is gone');
+  assert.equal(Number((await row('select count(*) from private.communication_messages where communication_id = $1 or strpos(body, $2) > 0', [idle.id, retentionCanary])).count), 0,
+    'with its messages');
+  assert.deepEqual(await row('select communication_id from private.leads where id = $1', [recentLead.id]), { communication_id: null },
+    'a recent lead that named it stays, without the link');
+  assert.deepEqual((await messagesOf(active.id)).map(message => message.body), ['An old question.', 'An answer yesterday.'],
+    'a website conversation answered yesterday stays with its messages, though the old leads that named it are gone');
+  assert.ok(await row('select id from private.communications where id = $1', [mail.id]), 'an old email conversation stays');
+  const retentionEvents = (await admin.query("select actor_id, entity_id, metadata from private.audit_events where action = 'lead.retention' and id > $1 order by id", [retentionAuditFloor])).rows;
+  assert.ok(retentionEvents.length >= 2 && retentionEvents.every(event => event.actor_id === null && event.entity_id === null
+    && Object.keys(event.metadata).sort().join() === 'conversations,leads'), 'each batch that deleted something is audited with its counts only');
+  assert.ok(logs.some(line => /^Lead retention: deleted \d+ leads? and \d+ website conversations?\.$/.test(line)), 'the run logged its counts');
+  for (const line of logs) for (const hidden of [retentionCanary, visitorEmail, idleKey]) assert.ok(!line.includes(hidden), `a log line carried something it must not: ${line.slice(0, 40)}`);
+
   // ---- The deployment gate fails closed ---------------------------------------------------------------------------
   {
     const client = await admin.connect();
@@ -259,6 +316,14 @@ try {
         ['grant execute on function private.lead_intake(text,jsonb) to authenticated', /Hub server only/],
         ['revoke execute on function private.lead_intake(text,jsonb) from hub_app_server', /Hub server only/],
         ["create or replace function private.lead_intake(p_source text, p_lead jsonb) returns jsonb language plpgsql security definer set search_path = '' as $$ begin return private.lead_record(p_source, p_lead); end; $$", /Hub server only/],
+        ['alter function private.lead_retention(integer) reset search_path', /Lead retention must/],
+        ['alter function private.lead_retention(integer) security invoker', /Lead retention must/],
+        ['grant execute on function private.lead_retention(integer) to authenticated', /Lead retention must/],
+        ['grant execute on function private.lead_retention(integer) to service_role', /Lead retention must/],
+        ['revoke execute on function private.lead_retention(integer) from hub_app_server', /Lead retention must/],
+        ["create or replace function private.lead_retention(p_limit integer default 500) returns jsonb language plpgsql security definer set search_path = '' as $$ begin return private.lead_retention_batch(p_limit); end; $$", /Lead retention must/],
+        ['alter function private.lead_retention_batch(integer) reset search_path', /pinned search path/],
+        ['grant execute on function private.lead_retention_batch(integer) to hub_app_server', /internal to the operations/],
         ['alter function private.lead_record(text,jsonb) reset search_path', /pinned search path/],
         ['grant execute on function private.lead_record(text,jsonb) to hub_app_server', /internal to the operations/],
         ['grant execute on function private.lead_json(uuid) to authenticated', /internal to the operations/],
@@ -278,7 +343,7 @@ try {
     } finally { client.release(); }
   }
 
-  original.log('Website leads: every kind through the signed route as hub_app_server, duplicates, forged, stale and early signatures, size, rate and configuration refusals, probes without conversations, Advisors imports linked both ways, the owner\'s list and status changes with a real session, a message that reached only its conversation, and a deployment gate that fails closed.');
+  original.log('Website leads: every kind through the signed route as hub_app_server, duplicates, forged, stale and early signatures, size, rate and configuration refusals, probes without conversations, Advisors imports linked both ways, the owner\'s list and status changes with a real session, a message that reached only its conversation, retention of old leads and idle website conversations as hub_app_server, and a deployment gate that fails closed.');
 } finally {
   for (const [name, fn] of Object.entries(original)) console[name] = fn;
   const problems = [];
@@ -292,6 +357,7 @@ try {
   await attempt('delete from private.audit_events where (entity_type = $1 and entity_id = any($2::uuid[])) or actor_id = $3', ['lead', fromLeads.map(entry => entry.id), owner]);
   await attempt('delete from private.leads where id = any($1::uuid[])', [fromLeads.map(entry => entry.id)]);
   await attempt('delete from private.communications where id = any($1::uuid[])', [conversations]);
+  if (retentionAuditFloor !== null) await attempt("delete from private.audit_events where action = 'lead.retention' and id > $1", [retentionAuditFloor]);
   await attempt('delete from private.sms_sessions where user_id = $1', [owner]);
   await attempt('delete from private.sms_identities where user_id = $1', [owner]);
   await attempt('delete from private.staff_permissions where user_id = $1', [owner]);

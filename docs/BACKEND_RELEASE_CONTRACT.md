@@ -92,13 +92,15 @@ declared.
 `20261103120100_lead_desk_contract.sql` declares `support.leads.v1` only after `support.communications.v1` is
 declared and the lead desk keeps its boundary: `private.leads` exists with row level security and grants nothing to any
 browser, service or server role; the conversation table's source check accepts `carebase.web`, `intel.web` and
-`advisors.web`; `private.lead_intake(text,jsonb)` is a security definer with a pinned empty search path, executable by
-`hub_app_server` alone and calling `private.require_hub_app_server()`; its helpers (`private.lead_text`,
-`private.lead_instant`, `private.lead_json`, `private.lead_record`) pin an empty search path and are executable by no
-application role; and `hub.list_leads(...)` authorizes the administrator session and
+`advisors.web`; `private.lead_intake(text,jsonb)` and `private.lead_retention(integer)` (which deletes leads and website
+conversations twelve months on) are security definers with a pinned empty search path, executable by `hub_app_server`
+alone and calling `private.require_hub_app_server()`; their helpers (`private.lead_text`, `private.lead_instant`,
+`private.lead_json`, `private.lead_record`, `private.lead_retention_batch`) pin an empty search path and are executable
+by no application role; and `hub.list_leads(...)` authorizes the administrator session and
 `hub.update_lead_status(...)` the command session themselves. Every test fails closed. The Hub server answers
-`POST /api/leads` only when the feature is declared (read at boot); `src/lib/backendContract.ts` does not require it,
-so the migrations can be applied before or after the build that uses them. See [LEAD_INTAKE.md](LEAD_INTAKE.md).
+`POST /api/leads` and runs lead retention only when the feature is declared (read at boot);
+`src/lib/backendContract.ts` does not require it, so the migrations can be applied before or after the build that uses
+them. See [LEAD_INTAKE.md](LEAD_INTAKE.md).
 
 `20261103130100_agent_growth_contract.sql` declares `platform.agents.growth.v1` only after `platform.agents.v1`,
 `platform.agents.probes.v1` and `support.leads.v1` are declared and the Growth Manager keeps its boundary: `private.leads`

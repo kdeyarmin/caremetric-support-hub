@@ -181,6 +181,33 @@ The Hub's Platform Engineer checks each product's main lead endpoint every few h
   change is `POST /api/admin/leads/status`, which runs `hub.update_lead_status(p_id, p_status, p_expected_updated_at)`
   in the owner's session.
 
+## Retention
+
+- **Leads** are deleted twelve months after the Hub received them (`received_at`), probes included.
+- **Website conversations** (`advisors.web`, `carebase.web` and `intel.web`, including Advisors requests brought in with
+  **Import Advisors requests**) are deleted twelve months after their last message (`last_message_at`, which every
+  inbound message and every reply moves; an internal note does not), with all their messages. A lead that named a
+  deleted conversation keeps no link to it, and deleting a lead never deletes its conversation: each follows its own
+  clock.
+- Conversations from every other channel (text, email, chat, phone) are never deleted by this; their retention is still
+  not automated ([UNIFIED_COMMUNICATIONS.md](UNIFIED_COMMUNICATIONS.md)).
+- **How.** `private.lead_retention(p_limit)` deletes, oldest first, at most `p_limit` leads and at most `p_limit`
+  conversations that are due (`p_limit` defaults to 500; anything outside 1 to 5000 is refused with 22023), leaves a row
+  another transaction holds for a later batch, and answers `{"leads": n, "conversations": n, "more": true|false}`, where
+  `more` says whether anything due is left. Only `hub_app_server` may run it, and it refuses every other session user;
+  the work is `private.lead_retention_batch`, which no role may run. The `support.leads.v1` gate checks both.
+- **When.** The Hub server's fifteen-minute cleanup runs it while the database declares `support.leads.v1`: when the
+  server starts, then at most once every six hours per server process, in up to ten batches of 500 while `more` is
+  true. What is left waits for the next run, so a row is deleted within about six hours of falling due.
+- **Records.** Each batch that deleted something writes one `lead.retention` audit event whose metadata is the two
+  counts only, never a name, an address or the id of a deleted row. A run that deleted something logs one line with the
+  counts, for example `Lead retention: deleted 3 leads and 2 website conversations.`; a run that fails logs
+  `Lead retention could not complete; it will retry.` and is tried again at the next cleanup. The `lead.received` and
+  `lead.status` events stay; they hold no contact details.
+- This is the Hub's copy only; each product keeps its own record of a lead under its own retention. The Healthcare
+  Advisors privacy notice states both periods: a request on its website is deleted twelve months after it is received,
+  and the copy in the Hub twelve months after the last message in the conversation about the request.
+
 ## Setting it up (owner)
 
 1. Apply `20261103120000_lead_desk.sql` and its gate `20261103120100_lead_desk_contract.sql`, which declares
