@@ -64,13 +64,14 @@ describe('application request boundary',()=>{
     // Approving an action also carries it out, so changes run only through the owner routes, never the browser RPC allowlist.
     for(const name of ['set_agent_status','set_agent_autonomy','set_agent_budget','decide_agent_action','request_agent_task','cancel_agent_task','agent_task_claim','owner_contact','agent_task_heartbeat','agent_task_finish','agent_actions_ready','agent_action_executed','agent_action_release']) expect(()=>rpcQuery(name,{})).toThrow();
   });
-  it('serves the lead list through the gateway and keeps intake and status changes out of it',()=>{
+  it('serves the lead list through the gateway and keeps intake, retention and status changes out of it',()=>{
     const page=rpcQuery('list_leads',{p_kind:'demo_request',p_source:null,p_include_test:false,p_offset:0,p_limit:25});
     expect(page.text).toBe('select to_jsonb(hub.list_leads(p_kind => $1,p_source => $2,p_include_test => $3,p_offset => $4,p_limit => $5)) as data');
     expect(page.values).toEqual(['demo_request',null,false,0,25]);
     expect(()=>rpcQuery('list_leads',{p_kind:'contact',p_status:'won'})).toThrow();
-    // Intake is the signed server-to-server route; a status change is the owner route with reviewed conflict handling.
-    for(const name of ['lead_intake','lead_record','lead_json','update_lead_status']) expect(()=>rpcQuery(name,{})).toThrow();
+    // Intake is the signed server-to-server route, retention the server's own cleanup; a status change is the owner route
+    // with reviewed conflict handling.
+    for(const name of ['lead_intake','lead_record','lead_json','lead_retention','lead_retention_batch','update_lead_status']) expect(()=>rpcQuery(name,{})).toThrow();
   });
   it('limits media capabilities to known objects and rejects traversal',()=>{
     for(const path of ['../secret','learning/../../secret','https://evil.test/file',`learning/${id}/answer.json`,`learning/${id}/videoxmp4`]) expect(()=>validateMedia(path,'sign')).toThrow();

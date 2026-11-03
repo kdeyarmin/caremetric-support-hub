@@ -1,11 +1,12 @@
 -- Additive deployment gate for the lead desk. Declaring the feature changes no behavior: it states that the leads
 -- table exists with row level security and is closed to every browser, service and server role, that conversations
 -- can come from the CareBase and Intel websites, that lead intake is a security definer with a pinned empty search
--- path executable by the Hub server role alone (and refusing every other session user), that its helpers are
--- executable by no role, and that the owner's operations authorize the administrator session (reads) or command
--- session (status changes) themselves. Every test fails closed: a function whose search_path setting was reset (which
--- leaves it null) is refused. The Hub server answers POST /api/leads only when the feature is declared; the feature
--- is declared ahead of any build that requires it, and src/lib/backendContract.ts does not require it.
+-- path executable by the Hub server role alone (and refusing every other session user), that lead retention has the
+-- same shape, that their helpers are executable by no role, and that the owner's operations authorize the
+-- administrator session (reads) or command session (status changes) themselves. Every test fails closed: a function
+-- whose search_path setting was reset (which leaves it null) is refused. The Hub server answers POST /api/leads and
+-- runs lead retention only when the feature is declared; the feature is declared ahead of any build that requires it,
+-- and src/lib/backendContract.ts does not require it.
 do $$
 declare
   contract jsonb := hub.get_backend_contract();
@@ -47,9 +48,21 @@ begin
     raise exception 'Lead intake must be a security definer with a pinned search path, executable by the Hub server only' using errcode = '55000';
   end if;
 
-  -- The helpers it and the owner's operations call: no role may run them directly, and each pins its search path.
+  -- The Hub server's retention: deletes leads and website conversations twelve months on.
+  signature := 'private.lead_retention(integer)';
+  if to_regprocedure(signature) is null
+    or not coalesce((select p.prosecdef and coalesce(p.proconfig @> array['search_path=""'], false) from pg_proc p where p.oid = to_regprocedure(signature)), false)
+    or has_function_privilege('anon', signature, 'EXECUTE') or has_function_privilege('authenticated', signature, 'EXECUTE')
+    or has_function_privilege('service_role', signature, 'EXECUTE')
+    or not has_function_privilege('hub_app_server', signature, 'EXECUTE')
+    or position('private.require_hub_app_server()' in pg_get_functiondef(to_regprocedure(signature))) = 0 then
+    raise exception 'Lead retention must be a security definer with a pinned search path, executable by the Hub server only' using errcode = '55000';
+  end if;
+
+  -- The helpers they and the owner's operations call: no role may run them directly, and each pins its search path.
   foreach signature in array array[
-    'private.lead_text(jsonb,integer)', 'private.lead_instant(jsonb)', 'private.lead_json(uuid)', 'private.lead_record(text,jsonb)'
+    'private.lead_text(jsonb,integer)', 'private.lead_instant(jsonb)', 'private.lead_json(uuid)', 'private.lead_record(text,jsonb)',
+    'private.lead_retention_batch(integer)'
   ] loop
     if to_regprocedure(signature) is null
       or not coalesce((select coalesce(p.proconfig @> array['search_path=""'], false) from pg_proc p where p.oid = to_regprocedure(signature)), false) then

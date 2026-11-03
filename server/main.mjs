@@ -21,6 +21,7 @@ import { selfService } from './self-service.mjs';
 import { agentTeam } from './agents/index.mjs';
 import { guideLibrary } from './agents/concierge/knowledge.mjs';
 import { leadAdmin, leadFeature, leadIntake, leadSecrets } from './leads.mjs';
+import { leadRetention } from './lead-retention.mjs';
 
 const storageUrl='https://xgauehtwksmnoqhgqegm.supabase.co';
 const pool=new pg.Pool(databaseConfig());
@@ -68,6 +69,8 @@ const readiness=goLiveReadiness({pool,rpc:(name,args,sessionToken)=>api.rpc(name
 // Website leads: answered only when the database declares support.leads.v1 and the product's secret is set.
 const leads=leadIntake({pool,secrets:leadSecrets(process.env),enabled:features.has(leadFeature)});
 const leadDesk=leadAdmin({pool,enabled:features.has(leadFeature)});
+// Leads and website conversations are deleted twelve months on (docs/LEAD_INTAKE.md, "Retention"), from the cleanup below.
+const leadRetentionJob=leadRetention({pool,enabled:features.has(leadFeature)});
 console.info(`Website leads: ${leads.enabled()?'database ready':'waiting for the support.leads.v1 migration'}; secrets set for ${leads.configured().join(', ')||'no product'}.`);
 const setup=integrationSetup({rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
 const server=appServer({auth:smsAuth({pool,provider}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,leads,leadAdmin:leadDesk,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai']});
@@ -75,8 +78,11 @@ let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;
   cleanupRunning=true;
-  try { await publicationService.cleanupExpired(); } catch { console.warn('Private media cleanup could not complete; it will retry.'); }
-  finally { cleanupRunning=false; }
+  try {
+    try { await publicationService.cleanupExpired(); } catch { console.warn('Private media cleanup could not complete; it will retry.'); }
+    // At most once every six hours, and only while support.leads.v1 is declared; it never throws.
+    await leadRetentionJob.tick();
+  } finally { cleanupRunning=false; }
 };
 const cleanupTimer=setInterval(()=>void cleanup(),15*60*1000); cleanupTimer.unref();
 void cleanup();

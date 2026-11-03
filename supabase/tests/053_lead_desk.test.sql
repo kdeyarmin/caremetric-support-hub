@@ -1,5 +1,5 @@
 begin;
-select plan(92);
+select plan(115);
 
 -- ---- The boundary: who may reach what ------------------------------------------------------------------------------
 select ok(coalesce((select relrowsecurity from pg_class where oid = 'private.leads'::regclass), false), 'The leads table has row level security');
@@ -16,13 +16,22 @@ select ok(not bool_or(has_function_privilege(role_name, 'private.lead_intake(tex
   'No browser or service role records a lead')
 from unnest(array['public', 'anon', 'authenticated', 'service_role']) as role_name;
 
-select ok(bool_and(coalesce(p.proconfig @> array['search_path=""'], false)) and count(*) = 4,
+select ok(coalesce((select p.prosecdef and coalesce(p.proconfig @> array['search_path=""'], false) from pg_proc p where p.oid = 'private.lead_retention(integer)'::regprocedure), false),
+  'Lead retention is a security definer with a pinned empty search path');
+select ok(has_function_privilege('hub_app_server', 'private.lead_retention(integer)', 'execute'), 'The Hub server role runs lead retention');
+select ok(not bool_or(has_function_privilege(role_name, 'private.lead_retention(integer)', 'execute')),
+  'No browser or service role runs lead retention')
+from unnest(array['public', 'anon', 'authenticated', 'service_role']) as role_name;
+
+select ok(bool_and(coalesce(p.proconfig @> array['search_path=""'], false)) and count(*) = 5,
   'Every lead helper pins an empty search path')
-from unnest(array['private.lead_text(jsonb,integer)', 'private.lead_instant(jsonb)', 'private.lead_json(uuid)', 'private.lead_record(text,jsonb)']) as helper
+from unnest(array['private.lead_text(jsonb,integer)', 'private.lead_instant(jsonb)', 'private.lead_json(uuid)', 'private.lead_record(text,jsonb)',
+  'private.lead_retention_batch(integer)']) as helper
 join pg_proc p on p.oid = to_regprocedure(helper);
 select ok(not bool_or(has_function_privilege(role_name, helper, 'execute')),
   'No role, the Hub server included, runs a lead helper directly')
-from unnest(array['private.lead_text(jsonb,integer)', 'private.lead_instant(jsonb)', 'private.lead_json(uuid)', 'private.lead_record(text,jsonb)']) as helper
+from unnest(array['private.lead_text(jsonb,integer)', 'private.lead_instant(jsonb)', 'private.lead_json(uuid)', 'private.lead_record(text,jsonb)',
+  'private.lead_retention_batch(integer)']) as helper
 cross join unnest(array['public', 'anon', 'authenticated', 'service_role', 'hub_app_server']) as role_name;
 
 select ok(bool_and(p.prosecdef and coalesce(p.proconfig @> array['search_path=""'], false)
@@ -38,8 +47,11 @@ select ok(position('hub.authorize_app_admin()' in pg_get_functiondef('hub.list_l
 
 select throws_ok($$select private.lead_intake('carebase', '{}'::jsonb)$$, '42501', 'Application server required.',
   'Lead intake refuses every session user but the Hub server');
+select throws_ok($$select private.lead_retention(500)$$, '42501', 'Application server required.',
+  'Lead retention refuses every session user but the Hub server');
 set local role anon;
 select throws_ok($$select private.lead_intake('carebase', '{}'::jsonb)$$, '42501', null, 'An anonymous caller cannot record a lead');
+select throws_ok($$select private.lead_retention()$$, '42501', null, 'An anonymous caller cannot run lead retention');
 select throws_ok($$select hub.list_leads(null, null, false, 0, 25)$$, '42501', null, 'An anonymous caller cannot list leads');
 reset role;
 
@@ -47,6 +59,8 @@ insert into auth.users (id, email, is_anonymous) values ('99530000-0000-4000-800
 set local request.jwt.claims = '{"sub":"99530000-0000-4000-8000-000000000001","role":"authenticated"}';
 set local role authenticated;
 select throws_ok($$select private.lead_record('carebase', '{}'::jsonb)$$, '42501', null, 'A signed-in account cannot run the intake helper');
+select throws_ok($$select private.lead_retention(500)$$, '42501', null, 'A signed-in account cannot run lead retention');
+select throws_ok($$select private.lead_retention_batch(500)$$, '42501', null, 'nor its batch helper');
 select throws_ok($$select hub.list_leads(null, null, false, 0, 25)$$, '28000', 'Current administrator session required.',
   'Listing leads without an administrator session fails closed');
 select throws_ok($$select hub.update_lead_status(gen_random_uuid(), 'contacted', now())$$, '28000', 'Current administrator session required.',
@@ -246,6 +260,102 @@ select is((select private.lead_json((select (result ->> 'id')::uuid from recorde
   (select result ->> 'conversation' from recorded where label = 'demo'), 'It links the lead''s conversation by reference');
 select ok((select position('LEAD-DESK-CANARY' in private.lead_json((result ->> 'id')::uuid)::text) = 0 from recorded where label = 'demo'),
   'The owner''s view of a lead never carries the message');
+
+-- ---- Retention: a lead twelve months after it arrived, a website conversation twelve months after its last message --
+-- Some conversations above are dated 2026-11-01 and fall due a year later; one batch first clears whatever is already
+-- due, so the counts below are exact whenever this runs.
+select ok((private.lead_retention_batch(5000) ->> 'more')::boolean is false, 'One batch of 5,000 clears whatever was already due');
+create temporary table retention_audit_floor on commit drop as select coalesce(max(id), 0) as id from private.audit_events;
+create temporary table retention_fixture (label text primary key, id uuid not null) on commit drop;
+
+-- Website conversations, by last message: an imported Advisors request 14 months idle, a CareBase one 13 months idle, an
+-- Intel one a second past twelve months, one exactly twelve months idle, and one opened three years ago but answered last
+-- month. Then an old conversation from every other channel.
+with made as (
+  insert into private.communications (channel, source_system, source_key, subject, chat_token_hash, created_at, updated_at, last_message_at)
+  values
+    ('web_form', 'advisors.web', 'CM-0A0B0C0D0E99', 'Retention: imported request', null, now() - interval '20 months', now() - interval '20 months', now() - interval '14 months'),
+    ('web_form', 'carebase.web', 'retention-idle', 'Retention: idle request', null, now() - interval '13 months', now() - interval '13 months', now() - interval '13 months'),
+    ('web_form', 'intel.web', 'retention-edge', 'Retention: just past the line', null, now() - interval '13 months', now() - interval '13 months', now() - interval '12 months 1 second'),
+    ('web_form', 'intel.web', 'retention-line', 'Retention: on the line', null, now() - interval '13 months', now() - interval '13 months', now() - interval '12 months'),
+    ('web_form', 'carebase.web', 'retention-active', 'Retention: answered last month', null, now() - interval '3 years', now() - interval '1 month', now() - interval '1 month'),
+    ('email', 'hub.email', 'retention-mail', 'Retention: old email', null, now() - interval '3 years', now() - interval '3 years', now() - interval '3 years'),
+    ('sms', 'hub.sms', 'retention-sms', 'Retention: old text', null, now() - interval '3 years', now() - interval '3 years', now() - interval '3 years'),
+    ('chat', 'hub.chat', 'retention-chat', 'Retention: old chat', repeat('9', 64), now() - interval '3 years', now() - interval '3 years', now() - interval '3 years'),
+    ('phone', 'breathe.phone', 'retention-phone', 'Retention: old call', null, now() - interval '3 years', now() - interval '3 years', now() - interval '3 years')
+  returning id, source_key)
+insert into retention_fixture select source_key, id from made;
+insert into private.communication_messages (communication_id, direction, body, delivery, delivery_channel, created_at)
+select f.id, m.direction, m.body, m.delivery, m.delivery_channel, m.at
+from retention_fixture f join (values
+  ('CM-0A0B0C0D0E99', 'inbound', 'RETENTION-CANARY imported request', 'received', null::text, now() - interval '14 months'),
+  ('retention-idle', 'inbound', 'RETENTION-CANARY idle request', 'received', null, now() - interval '13 months 1 day'),
+  ('retention-idle', 'outbound', 'Our answer, long ago', 'sent', 'email', now() - interval '13 months'),
+  ('retention-edge', 'inbound', 'A request a second past the line', 'received', null, now() - interval '12 months 1 second'),
+  ('retention-line', 'inbound', 'A request on the line', 'received', null, now() - interval '12 months'),
+  ('retention-active', 'inbound', 'An old question', 'received', null, now() - interval '3 years'),
+  ('retention-active', 'outbound', 'An answer last month', 'sent', 'email', now() - interval '1 month'),
+  ('retention-mail', 'inbound', 'An old email', 'received', null, now() - interval '3 years')
+) as m (label, direction, body, delivery, delivery_channel, at) on m.label = f.label;
+
+-- Leads, by arrival: 25 months (it named the conversation answered last month), 13 months, a second past twelve months,
+-- exactly twelve months, eleven months, and last month (an Advisors lead linked to the imported request).
+with made as (
+  insert into private.leads (source, kind, external_id, occurred_at, received_at, contact_email, contact_name, communication_id)
+  values
+    ('carebase', 'demo_request', 'retention-oldest', now() - interval '25 months', now() - interval '25 months', 'oldest@retention.example', 'Retention Oldest',
+      (select id from retention_fixture where label = 'retention-active')),
+    ('intel', 'newsletter', 'retention-old', now() - interval '13 months', now() - interval '13 months', 'old@retention.example', null, null),
+    ('carebase', 'trial_signup', 'retention-edge', now() - interval '12 months 1 second', now() - interval '12 months 1 second', 'edge@retention.example', null, null),
+    ('intel', 'contact', 'retention-line', now() - interval '12 months', now() - interval '12 months', 'line@retention.example', null, null),
+    ('carebase', 'contact', 'retention-new', now() - interval '11 months', now() - interval '11 months', 'new@retention.example', null, null),
+    ('advisors', 'consultation', 'CM-0A0B0C0D0E99', now() - interval '1 month', now() - interval '1 month', 'linked@retention.example', 'Retention Linked',
+      (select id from retention_fixture where label = 'CM-0A0B0C0D0E99'))
+  returning id, external_id)
+insert into retention_fixture select 'lead:' || external_id, id from made;
+
+create temporary table retention_runs (n integer primary key, result jsonb) on commit drop;
+insert into retention_runs values (1, private.lead_retention_batch(2));
+select is((select result from retention_runs where n = 1), '{"leads": 2, "conversations": 2, "more": true}'::jsonb,
+  'A batch of two deletes two leads and two website conversations and says more are due');
+select is((select array_agg(f.label order by f.label collate "C") from retention_fixture f
+    where not exists (select 1 from private.leads l where l.id = f.id) and not exists (select 1 from private.communications c where c.id = f.id)),
+  array['CM-0A0B0C0D0E99', 'lead:retention-old', 'lead:retention-oldest', 'retention-idle'],
+  'They are the leads received longest ago and the conversations idle longest');
+select is((select count(*) from private.communication_messages m join retention_fixture f on f.id = m.communication_id where f.label in ('CM-0A0B0C0D0E99', 'retention-idle')),
+  0::bigint, 'The deleted conversations'' messages went with them');
+select ok(not exists (select 1 from private.communication_messages where position('RETENTION-CANARY' in body) > 0),
+  'Nothing those visitors wrote is left');
+select is((select l.communication_id from private.leads l join retention_fixture f on f.id = l.id where f.label = 'lead:CM-0A0B0C0D0E99'), null::uuid,
+  'A recent lead that named a deleted conversation stays, without the link');
+select is((select count(*) from private.communication_messages m join retention_fixture f on f.id = m.communication_id where f.label = 'retention-active'),
+  2::bigint, 'Deleting a lead leaves its conversation, answered last month, with every message');
+
+insert into retention_runs values (2, private.lead_retention_batch(2));
+select is((select result from retention_runs where n = 2), '{"leads": 1, "conversations": 1, "more": false}'::jsonb,
+  'The next batch takes what is a second past twelve months and says nothing more is due');
+insert into retention_runs values (3, private.lead_retention_batch(500));
+select is((select result from retention_runs where n = 3), '{"leads": 0, "conversations": 0, "more": false}'::jsonb, 'Then there is nothing to do');
+select is((select array_agg(f.label order by f.label collate "C") from retention_fixture f
+    where exists (select 1 from private.leads l where l.id = f.id) or exists (select 1 from private.communications c where c.id = f.id)),
+  array['lead:CM-0A0B0C0D0E99', 'lead:retention-line', 'lead:retention-new', 'retention-active', 'retention-chat', 'retention-line', 'retention-mail',
+    'retention-phone', 'retention-sms'],
+  'Kept: leads received twelve months ago or less, the website conversations with a message in that time, and every other channel''s');
+select ok(exists (select 1 from retention_fixture f join private.leads l on l.id = f.id where f.label = 'lead:retention-line')
+    and exists (select 1 from retention_fixture f join private.communications c on c.id = f.id where f.label = 'retention-line')
+    and not exists (select 1 from retention_fixture f where f.label in ('lead:retention-edge', 'retention-edge')
+      and (exists (select 1 from private.leads l where l.id = f.id) or exists (select 1 from private.communications c where c.id = f.id))),
+  'Twelve months to the second is kept and a second more is deleted');
+select is((select array_agg(a.metadata order by a.id) from private.audit_events a where a.action = 'lead.retention' and a.id > (select id from retention_audit_floor)),
+  array['{"leads": 2, "conversations": 2}'::jsonb, '{"leads": 1, "conversations": 1}'::jsonb],
+  'Each batch that deleted something wrote one audit event with the two counts only; the empty one wrote none');
+select ok((select bool_and(a.actor_id is null and a.entity_type = 'lead' and a.entity_id is null and a.product_id is null)
+    from private.audit_events a where a.action = 'lead.retention' and a.id > (select id from retention_audit_floor)),
+  'Those events name no actor, product or row');
+
+select throws_ok($$select private.lead_retention_batch(0)$$, '22023', 'Choose a batch of 1 to 5,000 rows.', 'A batch of no rows is refused');
+select throws_ok($$select private.lead_retention_batch(5001)$$, '22023', 'Choose a batch of 1 to 5,000 rows.', 'A batch of more than 5,000 rows is refused');
+select throws_ok($$select private.lead_retention_batch(null)$$, '22023', 'Choose a batch of 1 to 5,000 rows.', 'A batch without a size is refused');
 
 select * from finish();
 rollback;
