@@ -159,7 +159,7 @@ begin
  elsif p_operation='opportunity' then
   select * into v_opp from private.growth_opportunities where id=(p_data->>'id')::uuid for update;
   if not found or v_opp.version<>(p_data->>'version')::integer then raise exception 'Refresh this opportunity' using errcode='40001'; end if;
-  update private.growth_organizations set internal=coalesce((p_data->>'internal')::boolean,internal),tenant_id=coalesce(nullif(p_data->>'tenantId','')::uuid,tenant_id) where id=v_opp.organization_id;
+  update private.growth_organizations set internal=coalesce((p_data->>'internal')::boolean,internal),tenant_id=case when p_data?'tenantId' then nullif(p_data->>'tenantId','')::uuid else tenant_id end where id=v_opp.organization_id;
   update private.growth_opportunities set stage=p_data->>'stage',goal=p_data->>'goal',memory=memory||coalesce(p_data->'memory','{}'),next_action=p_data->>'nextAction',next_at=(p_data->>'nextAt')::timestamptz,
   owner_agent=case when p_data->>'stage' in ('trial','activated','paying','retained','churned') then 'account_manager' else 'marketing_manager' end,
   trial_end=nullif(p_data->>'trialEnd','')::timestamptz,renewal_at=nullif(p_data->>'renewalAt','')::timestamptz,
@@ -226,7 +226,8 @@ begin
   if v_existing.organization_id<>v_org or v_existing.kind<>v_kind or v_existing.occurred_at<>v_at or v_existing.facts<>coalesce(p_data->'facts','{}') then raise exception 'Event key already used' using errcode='22023'; end if;
   return jsonb_build_object('replay',true);
  end if;
- insert into private.growth_opportunities(organization_id,product,stage,owner_agent,next_action) values(v_org,p_product,'trial','account_manager','Establish the customer goal') on conflict do nothing;
+ -- A feed observation or meeting does not establish a trial. Lifecycle events below set the stage and owner.
+ insert into private.growth_opportunities(organization_id,product,next_action) values(v_org,p_product,'Review product activity and qualify the opportunity') on conflict do nothing;
  -- Historical milestones must survive out-of-order delivery even when a newer event owns the current stage.
  update private.growth_opportunities set
  activated_at=case when v_kind='first_value' then least(activated_at,v_at) else activated_at end,
@@ -242,12 +243,15 @@ begin
  memory=case when v_kind in ('signup','trial_started') and not(memory?'acquisitionSource') then memory||jsonb_strip_nulls(jsonb_build_object('acquisitionSource',p_data->'facts'->>'source','acquisitionCampaign',p_data->'facts'->>'campaign')) else memory end,
  owner_agent=case when v_kind in ('signup','trial_started','first_value','paid','renewed','churned','cancel_requested') then 'account_manager' else owner_agent end,
  trial_end=case when v_kind='trial_started' then coalesce(nullif(p_data->'facts'->>'trialEnd','')::timestamptz,trial_end) else trial_end end,
- next_action=case when v_kind in ('reply','positive_reply','negative_reply','not_now') then 'Review customer reply and agree the next step' when v_kind='cancel_requested' then 'Resolve cancellation concerns' else next_action end,
+ next_action=case when v_kind in ('reply','positive_reply','negative_reply','not_now') then 'Review customer reply and agree the next step' when v_kind='cancel_requested' then 'Resolve cancellation concerns' when v_kind in ('signup','trial_started') then 'Establish the customer goal' else next_action end,
  next_at=least(next_at,now()), version=version+1,updated_at=now()
  where organization_id=v_org and product=p_product and v_kind not in ('heartbeat','active')
  and not exists(select 1 from private.customer_activity_events e where e.organization_id=v_org and e.product=p_product and e.kind in ('signup','trial_started','first_value','paid','renewed','churned') and v_kind in ('signup','trial_started','first_value','paid','renewed','churned') and e.occurred_at>v_at);
  if v_kind not in ('heartbeat','active') then
-  update private.growth_messages set status='cancelled' where opportunity_id in (select id from private.growth_opportunities where organization_id=v_org and product=p_product) and status in ('draft','proposed');
+  -- A delayed event that leaves context unchanged must not strand its existing draft generation.
+  update private.growth_messages m set status='cancelled' from private.growth_opportunities o
+  where m.opportunity_id=o.id and o.organization_id=v_org and o.product=p_product
+  and m.opportunity_version<>o.version and m.status in ('draft','proposed');
  end if;
  if v_kind in ('heartbeat','active','first_value','paid','renewed','support_resolved') then
   update private.customer_success_plans set status='resolved',outcome='Verified product event: '||v_kind,resolved_at=now() where opportunity_id in(select id from private.growth_opportunities where organization_id=v_org and product=p_product)
@@ -517,13 +521,17 @@ language plpgsql security definer set search_path='' as $$ declare r jsonb; v_or
 end; $$;
 create function private.growth_inquiry(p_id uuid) returns integer
 language plpgsql security definer set search_path='' as $$
-declare c private.communications%rowtype; v_product text; v_org uuid; v_contact uuid; v_opp uuid; v_message uuid; v_body text; v_reply text; v_n integer:=0; begin
- perform private.require_hub_app_server(); perform pg_advisory_xact_lock(hashtextextended('growth.workflow',0)); select * into c from private.communications where id=p_id;
+declare c private.communications%rowtype; m private.communication_messages%rowtype; v_product text; v_org uuid; v_contact uuid; v_opp uuid; v_message uuid; v_body text; v_reply text; v_n integer:=0; begin
+ perform private.require_hub_app_server(); perform pg_advisory_xact_lock(hashtextextended('growth.workflow',0));
+ select * into m from private.communication_messages where id=p_id and direction='inbound';
+ -- Only email webhook ingestion binds this message to its sender. Chat and form addresses are visitor claims.
+ -- Check the message, not the thread: a verified email can join a thread originally opened through a public form.
+ if not found or m.provider_message_id is null or m.provider_message_id not like 'email:%' then return 0; end if;
+ select * into c from private.communications where id=m.communication_id;
  if not found or c.contact_email is null then return 0; end if;
  select id,organization_id into v_contact,v_org from private.growth_contacts where email=lower(btrim(c.contact_email));
  select slug into v_product from hub.products where id=c.product_id;
- select id,body into v_message,v_body from private.communication_messages where communication_id=c.id and direction='inbound' order by created_at desc,id desc limit 1;
- if v_message is null then return 0; end if;
+ v_message:=m.id; v_body:=m.body;
  if v_org is null and v_product in ('carebase','caremetric-intel') and (c.inquiry_type='sales' or v_body ~* '\m(demo|pricing|purchase|interested|buy)\M') and split_part(lower(c.contact_email),'@',2) not in ('gmail.com','outlook.com','hotmail.com','yahoo.com','icloud.com','aol.com','comcast.net') then
   insert into private.growth_organizations(name,domain) values(coalesce(nullif(c.organization,''),'Inbound organization'),split_part(lower(c.contact_email),'@',2)) on conflict(domain) do nothing;
   select id into v_org from private.growth_organizations where domain=split_part(lower(c.contact_email),'@',2);
@@ -541,7 +549,7 @@ declare c private.communications%rowtype; v_product text; v_org uuid; v_contact 
  update private.growth_messages set status='cancelled' where contact_id=v_contact and status in ('draft','proposed');
  for v_opp in select id from private.growth_opportunities where organization_id=v_org loop
   insert into private.customer_activity_events(product,organization_id,event_key,kind,occurred_at,facts)
-  select product,organization_id,'inquiry:'||v_message::text,v_reply,coalesce(c.last_message_at,now()),jsonb_build_object('communicationId',c.id) from private.growth_opportunities where id=v_opp on conflict do nothing;
+  select product,organization_id,'inquiry:'||v_message::text,v_reply,m.created_at,jsonb_build_object('communicationId',c.id) from private.growth_opportunities where id=v_opp on conflict do nothing;
   if found then
    update private.growth_opportunities set owner_agent=case when v_reply='cancel_requested' then 'account_manager' else owner_agent end,stage=case when v_reply in ('not_now','negative_reply') and stage in ('identified','researched','qualified','contacted','engaged') then 'nurture' when stage in ('identified','researched','qualified','contacted') then 'engaged' else stage end,next_action='Review the customer reply in Communications',next_at=now(),version=version+1,updated_at=now() where id=v_opp;
    perform private.growth_plan(v_opp,jsonb_build_object('key','reply:'||v_message::text,'kind',case when v_reply='cancel_requested' then 'recovery' else 'reply' end,'action',case when v_reply='cancel_requested' then 'Review cancellation concerns in Communications and agree a recovery plan.' else 'Review the customer reply in Communications and agree a next step.' end,'success','The customer question is resolved and the next step recorded.','owner',(select owner_agent from private.growth_opportunities where id=v_opp),'dueAt',now()));
@@ -565,7 +573,7 @@ revoke all on function hub.growth_research_target(uuid) from public,anon,authent
 grant execute on function hub.growth_research_target(uuid) to authenticated,hub_app_server;
 -- Reply capture runs in the same transaction as the inbox write: a new reply cancels queued outreach before another claim.
 create function private.growth_inbound_trigger() returns trigger language plpgsql security definer set search_path='' as $$ begin
- if new.direction='inbound' and session_user='hub_app_server' then perform private.growth_inquiry(new.communication_id); end if; return new;
+ if new.direction='inbound' and session_user='hub_app_server' then perform private.growth_inquiry(new.id); end if; return new;
 end; $$;
 revoke all on function private.growth_inbound_trigger() from public,anon,authenticated,service_role,hub_app_server;
 create trigger growth_inbound after insert on private.communication_messages for each row execute function private.growth_inbound_trigger();

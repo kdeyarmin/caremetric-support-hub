@@ -1,0 +1,88 @@
+{
+  "date": "2026-11-03",
+  "pullRequest": 131,
+  "reviewedCommit": "18c0d5c1b70b4afcebae86e408a9cddfeb826615",
+  "scope": [
+    "carebase",
+    "caremetric-intel"
+  ],
+  "deferred": [
+    "breathe"
+  ],
+  "reviewFindings": [
+    {
+      "comment": 4456165936,
+      "issue": "Unverified chat addresses could change growth records",
+      "status": "fixed",
+      "verification": "Real chat start and follow-up cannot opt out a known contact, suppress email, create lifecycle events or cancel another product draft; signed email ingestion still stops sequences."
+    },
+    {
+      "comment": 4456165958,
+      "issue": "Deferred accounting retained a settled persisted reservation",
+      "status": "fixed",
+      "verification": "Runtime tests cover successful cost retry, already-booked cost and release failure/retry without double booking."
+    },
+    {
+      "comment": 4456165988,
+      "issue": "Every first product event invented a trial",
+      "status": "fixed",
+      "verification": "Eleven first-event cases verify actual stage/owner; observations, replies and meetings do not create onboarding work."
+    },
+    {
+      "comment": 4456166026,
+      "issue": "Replies inherited the previous conversation timestamp",
+      "status": "fixed",
+      "verification": "Cancellation in an old thread records the new message timestamp and triggers recovery after a newer renewal."
+    },
+    {
+      "comment": 4456166047,
+      "issue": "Late unchanged events stranded cancelled draft generations",
+      "status": "fixed",
+      "verification": "Late signup and trial events preserve the proposed onboarding message and version; a subsequent sweep adds no duplicate and the existing approval can still claim the message."
+    },
+    {
+      "comment": 4456166064,
+      "issue": "An existing tenant mapping could not be cleared",
+      "status": "fixed",
+      "verification": "Omitted mapping stays set; explicit empty clears it; moving the tenant routes its next event to the correct organization."
+    }
+  ],
+  "validation": {
+    "applicationTestsPassed": 2410,
+    "applicationTestFilesPassed": 216,
+    "sdkTestsPassed": 24,
+    "types": "passed",
+    "lint": "passed",
+    "docs": "passed",
+    "build": "passed",
+    "database": "isolated local Supabase PostgreSQL 15.1 with official auth and storage schema prerequisites",
+    "migrationChain": "passed",
+    "migrationFilesApplied": 140,
+    "sqlAssertionsPassed": 992,
+    "securityAdvisors": "no issues found",
+    "growthIntegration": "passed twice with the six PR review regressions and full teardown",
+    "compatibilityIntegrationsPassed": [
+      "backend contract",
+      "agent control plane",
+      "concierge",
+      "concierge drafting",
+      "account reports",
+      "agent hardening",
+      "model runtime",
+      "lead intake",
+      "website Growth Manager",
+      "lifecycle emails",
+      "Content Marketer"
+    ],
+    "syntheticEvaluationCasesPassed": 30,
+    "diffWhitespaceCheck": "passed",
+    "dependencyInstall": "npm ci passed"
+  },
+  "production": {
+    "modified": false,
+    "messagesSent": 0,
+    "deploymentRequired": true,
+    "nativeEventInstrumentationRequired": true,
+    "providerConfigurationRequired": true
+  }
+}

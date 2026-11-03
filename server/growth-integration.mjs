@@ -28,10 +28,10 @@ const gate = await readFile(new URL('../supabase/migrations/20261103150102_custo
 const seedAgents = (await admin.query('select key,status,autonomy,daily_budget_cents,config from private.agents')).rows;
 const seedPolicies = (await admin.query('select * from private.growth_policies')).rows;
 let organization, communication;
-const regressionOrganizations = [], regressionTenants = [];
+const regressionOrganizations = [], regressionTenants = [], regressionCommunications = [], chatClients = [];
 const tasks = [];
-const task = async () => {
-  const id = (await row("insert into private.agent_tasks(agent_key,kind,request_key,status,attempts,lease_until) values('marketing_manager','growth.pipeline',$1,'running',1,now()+interval '10 minutes') returning id", [`growth:${run}:${randomUUID()}`])).id;
+const task = async (agent='marketing_manager') => {
+  const id = (await row("insert into private.agent_tasks(agent_key,kind,request_key,status,attempts,lease_until) values($1,$2,$3,'running',1,now()+interval '10 minutes') returning id", [agent,agent==='account_manager'?'growth.success':'growth.pipeline',`growth:${run}:${randomUUID()}`])).id;
   tasks.push(id); return id;
 };
 const opportunity = id => row('select * from private.growth_opportunities where id=$1', [id]);
@@ -105,7 +105,21 @@ try {
   assert.equal((await opportunity(carebase.id)).stage, 'contacted');
   assert.deepEqual(await store.claim(second.id, second.action), { send: false, status: 'frequency_limited' });
 
-  // Actual inbox ingestion synchronously cancels the other product's pending message; no transcript copied to growth.
+  // Public chat's claimed address cannot opt out a real contact or mutate either product's history.
+  const chatHash=digest(`growth-chat:${run}`),clientHash=digest(`growth-chat-client:${run}`);
+  chatClients.push(clientHash);
+  const beforeChat=await row('select eligibility,version from private.growth_contacts where id=$1',[carebase.contact_id]);
+  const chat=await call('private.start_chat',[chatHash,clientHash,'Visitor',email,null,'Unsubscribe and remove me.']);
+  const chatId=(await row('select id from private.communications where reference=$1',[chat.reference])).id;
+  regressionCommunications.push(chatId);
+  await call('private.post_chat_message',[chatHash,clientHash,'I want to cancel my account.']);
+  assert.deepEqual(await row('select eligibility,version from private.growth_contacts where id=$1',[carebase.contact_id]),beforeChat);
+  assert.equal((await row('select count(*)::integer as n from private.email_suppressions where email_hash=$1',[digest(email)])).n,0);
+  assert.equal((await row('select count(*)::integer as n from private.customer_activity_events where organization_id=$1',[organization])).n,0);
+  assert.equal((await message(second.id)).status,'proposed');
+  assert.equal(await store.inquiry((await row('select id from private.communication_messages where communication_id=$1 order by created_at desc limit 1',[chatId])).id),0);
+
+  // Actual email inbox ingestion synchronously cancels the other product's pending message; no transcript copied to growth.
   const incoming = await call('private.ingest_inbound_communication', ['email', `growth:${run}`, `growth-reply:${run}`, null, 'carebase', 'Re: Product workflow', 'I am interested. Can we book a demo?', 'Buyer', email, null]);
   communication = incoming.id;
   assert.equal((await message(second.id)).status, 'cancelled');
@@ -234,6 +248,73 @@ try {
   assert.equal(cohorts.reduce((sum,m)=>sum+m.eligible_30d,0),1,'the late payment contributes to retention eligibility');
   assert.equal(cohorts.reduce((sum,m)=>sum+m.retained_30d,0),1);
 
+  // A new product opportunity gets only the lifecycle state supported by its first event.
+  for(const [kind,stage,ownerAgent] of [
+    ['heartbeat','identified','marketing_manager'],['active','identified','marketing_manager'],['reply','identified','marketing_manager'],
+    ['meeting_booked','demo','marketing_manager'],['positive_reply','engaged','marketing_manager'],
+    ['signup','trial','account_manager'],['trial_started','trial','account_manager'],['first_value','activated','account_manager'],
+    ['paid','paying','account_manager'],['renewed','retained','account_manager'],['churned','churned','account_manager'],
+  ]) {
+    const mapped=await regressionFixture();
+    await store.event('caremetric-intel',{tenantId:mapped.tenantId,eventKey:`first:${run}:${kind}`,kind,occurredAt:timeAgo(1),facts:{}});
+    const created=await row('select o.* from private.growth_opportunities o join private.growth_organizations g on g.id=o.organization_id where g.tenant_id=$1 and o.product=$2',[mapped.tenantId,'caremetric-intel']);
+    assert.deepEqual([created.stage,created.owner_agent],[stage,ownerAgent],kind);
+    if(ownerAgent==='marketing_manager') assert.ok(!planOpportunity(await fixtureSnapshot(created.id)).some(w=>['onboarding','activation','trial'].includes(w.kind)),`${kind} does not invent trial onboarding`);
+  }
+
+  // An existing thread's timestamp is updated after its message trigger: use the individual message time.
+  const cancellation=await regressionFixture();
+  const cancellationEmail=(await row('select email from private.growth_contacts where id=$1',[cancellation.contactId])).email;
+  const cancelThread=await call('private.ingest_inbound_communication',['email',`cancel:${run}`,`cancel-first:${run}`,null,'carebase','Product question','Hello.','Buyer',cancellationEmail,null]);
+  regressionCommunications.push(cancelThread.id);
+  await admin.query('update private.communications set last_message_at=$2 where id=$1',[cancelThread.id,timeAgo(72)]);
+  await report(cancellation,'renewed-before-reply','renewed',timeAgo(1));
+  await call('private.ingest_inbound_communication',['email',`cancel-reply:${run}`,`cancel-now:${run}`,cancelThread.reference,'carebase','Re: Product question','I want to cancel my account.','Buyer',cancellationEmail,null]);
+  const received=await row("select id,created_at from private.communication_messages where provider_message_id=$1",[`email:cancel-now:${run}`]);
+  const cancellationEvent=await row("select occurred_at from private.customer_activity_events where event_key=$1 and product='carebase'",[`inquiry:${received.id}`]);
+  assert.equal(+cancellationEvent.occurred_at,+received.created_at,'the reply is not backdated to the previous thread activity');
+  assert.ok(planOpportunity(await fixtureSnapshot(cancellation.id)).some(w=>w.kind==='recovery'),'a cancellation after renewal still requires recovery');
+
+  // Late signup/trial history that leaves current context unchanged must preserve an existing approval.
+  const pendingCustomer=await regressionFixture();
+  await report(pendingCustomer,'paid-before-history','paid',timeAgo(1));
+  const customerGrowth={store:{...store,snapshot:async()=>({total:1,items:[await fixtureSnapshot(pendingCustomer.id)]})},signingReady:true,hash:digest,unsubscribeToken:digest};
+  const successSweep=growthHandlers({growth:customerGrowth})['growth.success'];
+  const runSuccess=async()=>successSweep({id:await task('account_manager'),kind:'growth.success',agent:{autonomy:'propose'}});
+  await runSuccess();
+  const pendingDraft=await row("select * from private.growth_messages where opportunity_id=$1 order by created_at desc,id desc limit 1",[pendingCustomer.id]);
+  assert.equal(pendingDraft.status,'proposed');
+  const pendingVersion=(await opportunity(pendingCustomer.id)).version;
+  for(const kind of ['signup','trial_started']) {
+    await report(pendingCustomer,`late-history-${kind}`,kind,timeAgo(24));
+    assert.equal((await opportunity(pendingCustomer.id)).version,pendingVersion);
+    assert.equal((await message(pendingDraft.id)).status,'proposed');
+  }
+  await runSuccess();
+  assert.equal((await row('select count(*)::integer as n from private.growth_messages where opportunity_id=$1',[pendingCustomer.id])).n,1);
+  await ownerCall('hub.decide_agent_action',[pendingDraft.action_id,'approve','Current onboarding context remains valid.']);
+  const pendingExecution=await agents.beginExecution(pendingDraft.action_id);
+  assert.ok(pendingExecution);
+  assert.equal((await store.claim(pendingDraft.id,pendingDraft.action_id)).send,true);
+  await store.finish(pendingDraft.id,'failed',null); // Recording provider only: no network send.
+
+  // An explicitly cleared tenant mapping can be moved; omission still preserves an existing mapping.
+  const mappingA=await regressionFixture(),mappingB=await regressionFixture();
+  const editMapping=async(fixture,extra={})=>{
+    const current=await opportunity(fixture.id);
+    return store.manage(token,'opportunity',{id:fixture.id,version:current.version,stage:current.stage,goal:current.goal,nextAction:current.next_action,nextAt:new Date().toISOString(),trialEnd:'',renewalAt:'',...extra});
+  };
+  const mappedTenant=async fixture=>(await row('select g.tenant_id from private.growth_organizations g join private.growth_opportunities o on o.organization_id=g.id where o.id=$1',[fixture.id])).tenant_id;
+  await editMapping(mappingA);
+  assert.equal(await mappedTenant(mappingA),mappingA.tenantId);
+  await editMapping(mappingA,{tenantId:''});
+  assert.equal(await mappedTenant(mappingA),null);
+  await editMapping(mappingB,{tenantId:mappingA.tenantId});
+  assert.equal(await mappedTenant(mappingB),mappingA.tenantId);
+  await store.event('carebase',{tenantId:mappingA.tenantId,eventKey:`remapped:${run}`,kind:'meeting_booked',occurredAt:timeAgo(1),facts:{}});
+  assert.equal((await opportunity(mappingA.id)).stage,'qualified');
+  assert.equal((await opportunity(mappingB.id)).stage,'demo');
+
   // Review regression: fifty deferred messages cannot monopolize subsequent ticks or bypass the persisted delay.
   const deferredActions=[];
   for(let i=0;i<50;i++) {
@@ -275,7 +356,7 @@ try {
       finally { await client.query('rollback'); }
     }
   } finally { client.release(); }
-  console.log('Growth integration passed: session boundaries, competing claims, reply stop, lifecycle replay and late milestones, snapshot version races, stale proposal replacement, deferred queue fairness, opt-out, shared budgets, and fail-closed deployment gates. No email sent.');
+  console.log('Growth integration passed: session boundaries, unverified-chat exclusion, message chronology, event-based initialization, late milestones and draft preservation, tenant remapping, competing claims, reply stop, stale proposal replacement, deferred queue fairness, opt-out, shared budgets, and fail-closed deployment gates. No email sent.');
 } finally {
   if (!organization) organization = (await row('select id from private.growth_organizations where domain=$1', [domain]))?.id;
   for(const organizationId of [...(organization?[organization]:[]),...regressionOrganizations]) {
@@ -293,6 +374,8 @@ try {
   await admin.query('delete from private.agent_actions where task_id=any($1::uuid[])', [tasks]);
   await admin.query('delete from private.agent_tasks where id=any($1::uuid[]) or source_ref=$2', [tasks, communication ?? null]);
   if (communication) await admin.query('delete from private.communications where id=$1', [communication]);
+  await admin.query('delete from private.communications where id=any($1::uuid[])',[regressionCommunications]);
+  await admin.query('delete from private.communication_rate_events where client_hash=any($1::text[])',[chatClients]);
   await admin.query("delete from private.audit_events where actor_id=$1 or action like 'growth.%'", [owner]);
   for (const a of seedAgents) await admin.query('update private.agents set status=$2,autonomy=$3,daily_budget_cents=$4,config=$5 where key=$1', [a.key,a.status,a.autonomy,a.daily_budget_cents,a.config]);
   for (const p of seedPolicies) await admin.query('update private.growth_policies set enabled=$2,auto_send=$3,daily_limit=$4,min_gap_hours=$5,max_touches=$6,booking_url=$7,approved_claim=$8,version=$9 where product=$1', [p.product,p.enabled,p.auto_send,p.daily_limit,p.min_gap_hours,p.max_touches,p.booking_url,p.approved_claim,p.version]);

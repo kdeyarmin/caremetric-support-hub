@@ -22,6 +22,6 @@ export function growthStore(pool) {
     finish:(id,status,provider)=>server('private.growth_finish_message',[id,status,provider]),
     delivery:(event,id,kind,at)=>server('private.growth_delivery_event',[event,id,kind,at]),
     unsubscribe:hash=>server('private.growth_unsubscribe',[hash]),
-    inquiry:(id)=>server('private.growth_inquiry',[id]),
+    inquiry:(messageId)=>server('private.growth_inquiry',[messageId]),
   };
 }

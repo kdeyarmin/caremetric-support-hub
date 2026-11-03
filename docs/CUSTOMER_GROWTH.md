@@ -9,7 +9,7 @@ The Growth workspace at `/admin/growth` adds a Marketing Manager and customer-su
 | Prospect research and qualification | Scheduled or owner-requested public business research, dated sources, model-assisted fit rationale, separate observed intent, manual contact verification and lifecycle qualification |
 | Persistent shared customer history | One organization and contact across product opportunities; goals, promises, blockers, objections, loss reasons, owner and dated next action |
 | Marketing outreach | Versioned product claims, booking link, evidence-backed drafts, individual model-message approval, a maximum of three touches, shared contact frequency and per-product daily limits |
-| Reply and cancellation handling | Signed existing inbox ingestion correlates a known sender, classifies simple response signals, stops both product sequences and creates a follow-up/recovery task; complete conversations remain in Communications |
+| Reply and cancellation handling | Signed email webhook ingestion correlates a known sender, classifies simple response signals, stops both product sequences and creates a follow-up/recovery task; complete conversations remain in Communications |
 | Conversion handoff | Scoped, signed and deduplicated product events transfer trial/customer work to the Account Manager without accepting clinical records |
 | Onboarding and retention | First-step onboarding, 48-hour activation check, trial deadlines, adoption recovery with fresh telemetry, support coordination, cancellation recovery, renewal and demonstrated expansion interest |
 | Trustworthy health | Missing/stale/billing-only evidence is separate from adoption; stopped/dropped use requires attention; complete account pagination precedes report ranking |
@@ -66,11 +66,15 @@ The native CareBase and Intel codebases are separate from this repository. Their
 
 Review the due queue and agreements, not only sent-message counts. Record the observed outcome when resolving work. Supported events close the matching task automatically; adoption recovery requires activity on two distinct days after the recovery task begins. Cancellation and support tasks remain open until a customer outcome is confirmed. Replies that require product-specific answers, pricing negotiation, or unusual commitments stay in Communications with a dated owner task; the agent never invents an answer from an absent transcript.
 
+Inbox-driven growth changes use the individual email message received through the signed provider path, including its own timestamp. Public chat and form addresses are unverified claims: they do not automatically change contacts, suppression, sequences or lifecycle history. Those inquiries remain available for owner review in Communications.
+
 Provider acceptance means the provider accepted the request. Delivery requires a signed event. An interrupted send becomes **unknown** after ten minutes, blocks later contact attempts and is never blindly retried. Reconcile an unknown message using the provider log reference in Growth, or let a signed delivery event settle it. Opt-out, bounce and complaint suppress the shared contact across both products and existing Hub bulk email. Unsubscribe links show a confirmation on GET and apply on POST to avoid accidental changes by link scanners.
 
 Drafts retain the opportunity, contact and policy versions used to write them. An edit during generation discards that output. Each sweep cancels stale unsent drafts, expires their pending approvals and prepares replacements from current context. An unchanged rejected draft is not proposed repeatedly. Accepted and uncertain deliveries remain in the history and are never regenerated merely because a policy changes.
 
-Late activation, payment and churn events preserve their historical milestone dates without moving the current lifecycle stage backwards. Activation arriving after payment therefore closes onboarding and contributes to conversion reporting. Temporarily blocked messages receive a persisted 15-minute retry time; both the queue and direct execution respect it, allowing other agents’ ready actions to proceed.
+A new product opportunity starts from the observed event: meetings become demos, while heartbeats and replies do not create trials. Late activation, payment and churn events preserve their historical milestone dates without moving the current lifecycle stage backwards. Late events that leave the current context unchanged preserve existing pending drafts. Activation arriving after payment therefore closes onboarding and contributes to conversion reporting. Clearing the Hub tenant ID explicitly removes its mapping so the owner can correct it. Persisted model-budget reservations are released after deferred cost writes settle, including a retry when reservation cleanup temporarily fails.
+
+Temporarily blocked messages receive a persisted 15-minute retry time; both the queue and direct execution respect it, allowing other agents’ ready actions to proceed.
 
 Pause the agent, disable the product policy, or disable `HUB_GROWTH_SEND_ENABLED` to stop new sends. An already accepted provider request cannot be recalled. The system rechecks the latest contact, policy, opportunity and suppression status immediately before reserving a send; short database mutations serialize independently of model, search and mail calls.
 
@@ -78,7 +82,7 @@ Pipeline and customer-success work run every 15 minutes; discovery searches run 
 
 ## Verification and rollout limits
 
-The four implementation-review findings and their regression results are recorded in [the review-fix evidence](evidence/ai-workforce-review-fixes-2026-11-03.json). [PR validation](evidence/ai-workforce-pr-validation-2026-11-03.json) records the combined checks after integrating the newer lead, lifecycle and content features from main.
+The six PR review fixes and their regression results are recorded in [PR review-fix evidence](evidence/ai-workforce-pr-review-fixes-2026-11-03.json). The four implementation-review findings and their regression results are recorded in [the review-fix evidence](evidence/ai-workforce-review-fixes-2026-11-03.json). [PR validation](evidence/ai-workforce-pr-validation-2026-11-03.json) records the combined checks after integrating the newer lead, lifecycle and content features from main.
 
 - `npm run check` runs application/UI tests, lint, types, SDK checks and the build.
 - `npm run evaluate:growth` runs both products through golden cases for source freshness, citation/link rejection, intent, stop rules and lifecycle choices.

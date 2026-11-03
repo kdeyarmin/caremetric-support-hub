@@ -453,6 +453,48 @@ describe('the budget cannot be spent twice', () => {
     expect(f.store.finishRun.mock.calls.some(call => call[0] === 'run-1')).toBe(true);
   });
 
+  it.each(['retry succeeds', 'already booked'])('releases a persisted reservation after deferred accounting: %s', async mode => {
+    const f = fixture();
+    const reservations = new Set();
+    let sequence = 0;
+    f.store.reserveBudget = vi.fn(async () => {
+      if (reservations.size) return null;
+      const id = `reservation-${++sequence}`;
+      reservations.add(id);
+      return id;
+    });
+    f.store.releaseBudget = vi.fn(async id => { reservations.delete(id); });
+    f.store.finishRun.mockRejectedValueOnce(new Error('temporary write failure'));
+    if (mode === 'already booked') f.store.finishRun.mockRejectedValueOnce(Object.assign(new Error('Already finished.'), { code: 'P0002' }));
+    expect((await f.run()).outcome).toBe('completed');
+    expect(reservations.size).toBe(1);
+    expect(f.store.releaseBudget).not.toHaveBeenCalled();
+    expect((await f.runner.run(task({ id: 't2' }), request())).outcome).toBe('completed');
+    expect(f.store.releaseBudget.mock.calls.map(([id]) => id)).toEqual(['reservation-1', 'reservation-2']);
+    expect(reservations.size).toBe(0);
+    expect(f.runner.owing('support_concierge')).toBe(0);
+  });
+
+  it('retries a failed persisted reservation release without booking the cost again', async () => {
+    const f = fixture();
+    const reservations = new Set();
+    let sequence = 0;
+    f.store.reserveBudget = vi.fn(async () => {
+      if (reservations.size) return null;
+      const id = `reservation-${++sequence}`;
+      reservations.add(id);
+      return id;
+    });
+    f.store.releaseBudget = vi.fn(async id => { reservations.delete(id); }).mockRejectedValueOnce(new Error('temporary release failure'));
+    expect((await f.run()).outcome).toBe('completed');
+    expect(reservations.size).toBe(1);
+    expect(f.runner.owing('support_concierge')).toBe(0);
+    expect((await f.runner.run(task({ id: 't2' }), request())).outcome).toBe('completed');
+    expect(f.store.finishRun).toHaveBeenCalledTimes(2);
+    expect(f.store.releaseBudget.mock.calls.map(([id]) => id)).toEqual(['reservation-1', 'reservation-1', 'reservation-2']);
+    expect(reservations.size).toBe(0);
+  });
+
   it('keeps a cost that went unbooked while another one was being settled', async () => {
     // X is in flight. A completes and its closing write fails, so A is owed. A new call then settles A, and while that write waits X comes
     // back and its own closing write fails. Settling must remove only A: X is still owed.
