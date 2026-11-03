@@ -55,4 +55,24 @@ describe('integration setup report', () => {
     }
     for (const integration of integrationCatalog) expect(integration.docs).toMatch(/^docs\/[A-Z0-9_]+\.md$/);
   });
+
+  it('reports the Search Console key by presence only and shows the properties, with the owner\'s steps in plain words', async () => {
+    const key = JSON.stringify({ type: 'service_account', client_email: 'seo@project.iam.gserviceaccount.com', private_key: 'fixture-key-search-console-secret' });
+    const report = await harness('platform_admin', { ...env, HUB_SEARCH_CONSOLE_CREDENTIALS: key, HUB_SEARCH_CONSOLE_SITES: 'sc-domain:cmcarebase.com' }).handle('token');
+    const searchConsole = report.integrations.find((integration) => integration.id === 'search-console');
+    expect(searchConsole).toMatchObject({ ready: true, complete: true, docs: 'docs/AI_TEAM.md' });
+    expect(searchConsole.variables.map((variable) => [variable.name, variable.secret, variable.set])).toEqual([['HUB_SEARCH_CONSOLE_CREDENTIALS', true, true], ['HUB_SEARCH_CONSOLE_SITES', false, true]]);
+    expect(searchConsole.variables[0]).not.toHaveProperty('value');
+    expect(searchConsole.variables[1].value).toBe('sc-domain:cmcarebase.com');
+    expect(JSON.stringify(report)).not.toContain('search-console-secret');
+    for (const step of ['service account', 'Google Search Console API', 'as a user on each property']) expect(searchConsole.purpose).toContain(step);
+    // The browser's schema refuses a longer purpose, which would empty the whole setup panel.
+    for (const integration of integrationCatalog) {
+      expect(integration.purpose.length, integration.id).toBeLessThanOrEqual(400);
+      expect(integration.name.length, integration.id).toBeLessThanOrEqual(120);
+      for (const variable of integration.variables) expect(variable.purpose.length, variable.name).toBeLessThanOrEqual(300);
+    }
+    const unset = (await harness().handle('token')).integrations.find((integration) => integration.id === 'search-console');
+    expect(unset).toMatchObject({ ready: false, complete: false });
+  });
 });

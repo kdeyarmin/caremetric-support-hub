@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeHtml, analyzeRobots, analyzeSitemap, attributes, decode, resolve } from './html.mjs';
+import { analyzeHtml, analyzeRobots, analyzeSitemap, attributes, decode, resolve, textLimit } from './html.mjs';
 
 const page = 'https://example.test/care/';
 const full = `<!doctype html>
@@ -202,5 +202,37 @@ describe('reading a sitemap', () => {
   it('says null for an app shell or anything else', () => {
     expect(analyzeSitemap('<!doctype html><html></html>')).toBeNull();
     expect(analyzeSitemap('')).toBeNull();
+  });
+});
+
+describe('a page built to be filled in by scripts', () => {
+  const url = 'https://help.example.test/';
+  // The Hub's own help center, as it is served: a head, an empty root element and a module script.
+  const vite = `<!doctype html><html lang="en"><head><meta charset="UTF-8" /><title>CareMetric Support Hub</title>
+    <script type="module" crossorigin src="/assets/index-CTHeZtc0.js"></script></head><body><div id="root"></div></body></html>`;
+
+  it('is recognised by the element a framework renders into, or a module script', () => {
+    expect(analyzeHtml(vite, url)).toMatchObject({ appRoot: true, wordCount: 0, text: '' });
+    for (const html of ['<body><div id="app"></div><script src="/app.js"></script></body>', '<body><div id=__next></div></body>', '<body><app-root></app-root></body>',
+      '<body><main id="ROOT" class="x"></main></body>', '<body><div id="___gatsby"></div></body>', '<head><script type=module src="/m.js"></script></head><body></body>']) {
+      expect(analyzeHtml(html, url).appRoot, html).toBe(true);
+    }
+  });
+
+  it('is not claimed for a plain page, or for a framework\'s name in text, a script or a span', () => {
+    for (const html of ['<body><p>Nothing here</p><script src="/analytics.js"></script></body>', '<body><p>id="root"</p></body>', '<body><span id="root"></span></body>',
+      '<body><script>document.getElementById("root")</script></body>', '<body><script type="application/ld+json">{"@type":"Thing"}</script></body>']) {
+      expect(analyzeHtml(html, url).appRoot, html).toBe(false);
+    }
+  });
+
+  it('keeps the start of the visible text only, never half a character pair', () => {
+    const long = analyzeHtml(`<body><p>${'word '.repeat(1000)}</p></body>`, url);
+    expect(long.text.length).toBe(textLimit);
+    expect(long.wordCount).toBe(1000);
+    const emoji = analyzeHtml(`<body><p>${'a'.repeat(textLimit - 1)}😀 more</p></body>`, url);
+    expect(emoji.text.length).toBe(textLimit - 1);
+    expect(() => JSON.parse(JSON.stringify({ text: emoji.text }))).not.toThrow();
+    expect(analyzeHtml('<body><h1>Title</h1><script>var hidden = "secret";</script><p>Shown text</p></body>', url).text).toBe('Title Shown text');
   });
 });

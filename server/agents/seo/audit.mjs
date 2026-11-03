@@ -4,13 +4,20 @@
  * sitemap lists, the links between them, and the other addresses that should reach the same site.
  *
  * Every request goes to the site's own host (a variant host for the variant check), is a plain GET without
- * credentials, follows no redirect, and reads a bounded amount of the answer. Nothing a page says is kept
- * except a handful of fixed-vocabulary findings.
+ * credentials, follows no redirect, and reads a bounded amount of the answer. The findings are a handful of
+ * fixed-vocabulary codes. What the later steps of the weekly task need from each page (its title, description,
+ * canonical link and the start of its visible text) is returned in `pages` and held only in memory: it is never
+ * stored, and the report never quotes it.
  */
 import { analyzeHtml, analyzeRobots, analyzeSitemap, resolve } from './html.mjs';
+import { sites as knownSites } from './sites.mjs';
 
 export const defaults = Object.freeze({ pages: 20, links: 30, concurrency: 4, timeoutMs: 8000, htmlBytes: 600_000, textBytes: 400_000, deadlineMs: 150_000 });
 const userAgent = 'CareMetric-SEO-Check/1 (+https://caremetric.ai)';
+// Fewer words than this before scripts run is a thin page.
+export const thinWords = 50;
+// The company's sites: a site whose home page redirects to one of the others has nothing of its own to check.
+const ownerOrigins = Object.freeze(knownSites.map(site => site.origin));
 
 /** [severity, one plain sentence]. The code is the stable name; the detail says where. */
 export const catalog = Object.freeze({
@@ -42,6 +49,7 @@ export const catalog = Object.freeze({
   h1_missing: ['medium', 'A page has no main heading in its HTML'],
   h1_multiple: ['low', 'A page has more than one main heading'],
   thin_html: ['medium', 'A page has almost no text before scripts run'],
+  site_redirect_temporary: ['low', 'The site redirects to another of your sites with a temporary redirect'],
   viewport_missing: ['medium', 'A page is not set up for phones'],
   lang_missing: ['low', 'A page does not declare its language'],
   social_missing: ['low', 'A page has no social sharing preview'],
@@ -124,7 +132,7 @@ const hostOf = value => { try { return new URL(value).host.toLowerCase(); } catc
 // fragment is never sent to a server. The path and the query are case-sensitive, and so is a trailing slash: /About and /about, or /pricing and
 // /pricing/, can be different pages, so folding them together would hide a broken link or a canonical that points at the wrong one. Only the
 // site root is folded (https://example.test and https://example.test/ are one address, and it always has a slash).
-const tidy = value => {
+export const addressKey = value => {
   try {
     const url = new URL(value);
     url.hash = '';
@@ -156,10 +164,10 @@ export function pageFindings(facts, url) {
   if (facts.description === null || facts.description === '') add('description_missing', 'no description');
   else if (facts.description.length < 70 || facts.description.length > 160) add('description_length', `${facts.description.length} characters`);
   if (facts.canonical === null) add('canonical_missing', 'no canonical link');
-  else if (tidy(resolve(facts.canonical, url) ?? facts.canonical) !== tidy(url)) add('canonical_mismatch', `points to ${resolve(facts.canonical, url) ?? facts.canonical}`);
+  else if (addressKey(resolve(facts.canonical, url) ?? facts.canonical) !== addressKey(url)) add('canonical_mismatch', `points to ${resolve(facts.canonical, url) ?? facts.canonical}`);
   if (facts.h1Count === 0) add('h1_missing', 'no h1 in the HTML');
   else if (facts.h1Count > 1) add('h1_multiple', `${facts.h1Count} headings`);
-  if (facts.wordCount < 50) add('thin_html', `${facts.wordCount} words before scripts run`);
+  if (facts.wordCount < thinWords) add('thin_html', `${facts.wordCount} words before scripts run${facts.appRoot ? ': an app shell that only scripts fill in' : ''}`);
   if (!facts.viewport) add('viewport_missing', 'no viewport meta tag');
   if (!facts.lang) add('lang_missing', 'no lang on the html element');
   if (!(facts.openGraph.title && facts.openGraph.description && facts.openGraph.image) || !facts.twitterCard) add('social_missing', 'missing Open Graph or Twitter card tags');
@@ -170,10 +178,15 @@ export function pageFindings(facts, url) {
 }
 
 /**
- * Checks one site. Returns { key, label, checked, findings, incomplete, score } where each finding is
+ * Checks one site. Returns { key, label, checked, findings, counts, score, incomplete, pages, appShells } where each finding is
  * { severity, code, title, detail, page }. A slow site stops at the deadline with what it has and says so.
+ *
+ * `pages` lists each page that answered as HTML, in the order it was queued: { url, title, description, canonical (absolute, or
+ * null), text (the start of its visible text), words, noindex, appShell }. `appShells` are the paths of the pages that are app
+ * shells: almost no text before scripts run, on a page built to be filled in by scripts. A site whose home page redirects to
+ * another of the company's sites (`owners`) is checked no further and says where it goes in `redirectsTo`.
  */
-export async function auditSite(site, { fetchImpl = fetch, signal, now = () => Date.now(), limits = defaults } = {}) {
+export async function auditSite(site, { fetchImpl = fetch, signal, now = () => Date.now(), limits = defaults, owners = ownerOrigins } = {}) {
   const config = { ...defaults, ...limits };
   const deadline = now() + config.deadlineMs;
   let incomplete = false;
@@ -185,6 +198,24 @@ export async function auditSite(site, { fetchImpl = fetch, signal, now = () => D
     return fetchPage(url, { fetchImpl, signal, timeoutMs: config.timeoutMs, maxBytes });
   };
   const sameSite = url => hostOf(url) === host;
+  const finish = (extra = {}) => {
+    const counts = { high: 0, medium: 0, low: 0 };
+    for (const finding of findings) counts[finding.severity] += 1;
+    const kinds = new Map(findings.map(finding => [finding.code, finding.severity]));
+    const score = Math.max(0, 100 - [...kinds.values()].reduce((sum, severity) => sum + weight[severity], 0));
+    return { key: site.key, label: site.label, checked: 0, findings, counts, score, incomplete, pages: [], appShells: [], ...extra };
+  };
+
+  // The home page first. A site that as a whole redirects to another of the company's sites is how two addresses become one: there
+  // is nothing of its own left to check, and the report says where it goes.
+  const homeUrl = `${site.origin}/`;
+  const homePage = await get(homeUrl, config.htmlBytes);
+  const away = homePage && homePage.status >= 300 && homePage.status < 400 && homePage.location ? resolve(homePage.location, homeUrl) : null;
+  const otherSite = away ? owners.find(origin => origin !== site.origin && (away === `${origin}/` || away.startsWith(`${origin}/`))) : null;
+  if (otherSite) {
+    if (homePage.status !== 301 && homePage.status !== 308) add('site_redirect_temporary', `${homePage.status} to ${away}`, '/');
+    return finish({ redirectsTo: otherSite });
+  }
 
   // robots.txt
   const robotsPage = await get(`${site.origin}/robots.txt`, config.textBytes);
@@ -212,19 +243,24 @@ export async function auditSite(site, { fetchImpl = fetch, signal, now = () => D
   const sitemapPages = [...new Set(listed.filter(sameSite))];
 
   // pages: home, then what the sitemap lists
-  const queue = [`${site.origin}/`, ...sitemapPages.filter(address => tidy(address) !== tidy(`${site.origin}/`))].slice(0, config.pages);
+  const queue = [homeUrl, ...sitemapPages.filter(address => addressKey(address) !== addressKey(homeUrl))].slice(0, config.pages);
   const analyzed = new Map();
   const fetchedPages = new Set();
+  const order = [...queue];
+  const headers = new Map();
+  let homeUsed = false;
   const checkPage = async url => {
-    const page = await get(url, config.htmlBytes);
+    // The home page was read first; it is not asked for twice.
+    const page = url === homeUrl && !homeUsed ? (homeUsed = true, homePage) : await get(url, config.htmlBytes);
     if (!page) return;
-    fetchedPages.add(tidy(url));
+    fetchedPages.add(addressKey(url));
     if (page.status === 0) { add('page_unreachable', page.error, path(url)); return; }
     if (page.status >= 300 && page.status < 400) { add('page_redirect', `${page.status} to ${page.location ?? 'nowhere'}`, path(url)); return; }
     if (page.status !== 200) { add('page_error', `status ${page.status}`, path(url)); return; }
     if (!/html/.test(page.type)) { add('not_html', page.type || 'no content type', path(url)); return; }
     const facts = analyzeHtml(page.text, url);
     analyzed.set(url, facts);
+    headers.set(url, page.robotsHeader);
     if (/noindex/.test(page.robotsHeader)) add('noindex', 'X-Robots-Tag header says noindex', path(url));
     for (const finding of pageFindings(facts, url)) add(finding.code, finding.detail, finding.page);
   };
@@ -233,7 +269,8 @@ export async function auditSite(site, { fetchImpl = fetch, signal, now = () => D
   // no sitemap: look at a few pages the home page links to, so a site without one is still checked
   if (!sitemapFound && analyzed.size === 1) {
     const home = analyzed.values().next().value;
-    const more = home.links.filter(sameSite).filter(address => !fetchedPages.has(tidy(address))).slice(0, config.pages - 1);
+    const more = home.links.filter(sameSite).filter(address => !fetchedPages.has(addressKey(address))).slice(0, config.pages - 1);
+    order.push(...more);
     await mapLimit(more, config.concurrency, checkPage);
   }
 
@@ -246,7 +283,7 @@ export async function auditSite(site, { fetchImpl = fetch, signal, now = () => D
 
   // links between pages
   const linked = new Map();
-  for (const [url, facts] of analyzed) for (const link of facts.links) if (sameSite(link) && !fetchedPages.has(tidy(link)) && !linked.has(link)) linked.set(link, url);
+  for (const [url, facts] of analyzed) for (const link of facts.links) if (sameSite(link) && !fetchedPages.has(addressKey(link)) && !linked.has(link)) linked.set(link, url);
   await mapLimit([...linked].slice(0, config.links), config.concurrency, async ([link, from]) => {
     const target = await get(link, 0);
     if (target && (target.status === 0 || target.status >= 400)) add('broken_link', `${target.status || target.error} on ${path(link)}`, path(from));
@@ -275,11 +312,14 @@ export async function auditSite(site, { fetchImpl = fetch, signal, now = () => D
     } else add('variant_broken', `${hostOf(variant)} ${reply.status || reply.error}`, hostOf(variant));
   }
 
-  const counts = { high: 0, medium: 0, low: 0 };
-  for (const finding of findings) counts[finding.severity] += 1;
-  const kinds = new Map(findings.map(finding => [finding.code, finding.severity]));
-  const score = Math.max(0, 100 - [...kinds.values()].reduce((sum, severity) => sum + weight[severity], 0));
-  return { key: site.key, label: site.label, checked: analyzed.size, findings, counts, score, incomplete };
+  const pages = order.filter(url => analyzed.has(url)).map(url => {
+    const facts = analyzed.get(url);
+    return {
+      url, title: facts.title, description: facts.description, canonical: facts.canonical ? resolve(facts.canonical, url) : null, text: facts.text,
+      words: facts.wordCount, noindex: /noindex/.test(facts.robotsMeta) || /noindex/.test(headers.get(url) ?? ''), appShell: facts.wordCount < thinWords && facts.appRoot,
+    };
+  });
+  return finish({ checked: analyzed.size, pages, appShells: pages.filter(page => page.appShell).map(page => clip(path(page.url), pageLimit)) });
 }
 
 /** The findings grouped by code, worst first: [{ code, severity, title, count, example: { page, detail } }]. */

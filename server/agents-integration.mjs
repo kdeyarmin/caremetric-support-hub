@@ -10,6 +10,7 @@ import { digest, HttpError, withSession } from './sms-auth.mjs';
 import { gateway } from './gateway.mjs';
 import { assertBackendContract } from '../src/lib/backendContract.ts';
 import { agentTeam } from './agents/index.mjs';
+import { outboundHosts as seoOutboundHosts } from './agents/seo/sites.mjs';
 // The Team screen's own schemas: what the real database returns must be exactly what the screen accepts.
 import { activitySchemas, agentSchema, auditSchema, decisionSchema, overviewSchema, taskResultSchema } from '../src/admin/teamProtocol.ts';
 
@@ -898,7 +899,9 @@ try {
 
   {
     // The SEO Analyst end to end: the real scheduler and database, the shipped handler, a scripted network for the
-    // three sites. The weekday is pinned, so this behaves the same on any day it runs.
+    // five sites (the Framer home page already redirects to CareBase). The weekday is pinned, so this behaves the same
+    // on any day it runs. No Search Console variable and no model key are set, so the report says how to connect Search
+    // Console and has no suggestions.
     await clearWork();
     await admin.query('delete from private.owner_notifications');
     for (const [key, status] of [['seo_analyst', 'active'], ['chief_of_staff', 'paused'], ['platform_engineer', 'paused'], ['support_concierge', 'paused']]) {
@@ -907,11 +910,11 @@ try {
     const seoAgent = await agentRow('seo_analyst');
     assert.deepEqual([seoAgent.autonomy, seoAgent.modelTier, seoAgent.dailyBudgetCents], ['observe', 'fast', 50], 'the SEO Analyst is observe-only');
     const requested = [];
-    const homePage = (origin, extra = '') => `<!doctype html><html lang="en"><head><title>Compliance training made simple for homes</title>
+    const homePage = (origin, extra = '') => `<!doctype html><html lang="en"><head><title>${new URL(origin).host} | Compliance training made simple</title>
       <meta name="description" content="Keep every home compliant with training, tracking and survey readiness, all in one clear place."><meta name="viewport" content="width=device-width">
       <link rel="canonical" href="${origin}/">${extra}<meta property="og:title" content="t"><meta property="og:description" content="d"><meta property="og:image" content="${origin}/i.png"><meta name="twitter:card" content="summary">
       <script type="application/ld+json">{"@type":"Organization"}</script></head><body><h1>Welcome</h1><p>${Array.from({ length: 80 }, (_, i) => `word${i}`).join(' ')}</p></body></html>`;
-    const primary = { 'caremetricadvisors.com': 'https://caremetricadvisors.com', 'cmcarebase.com': 'https://cmcarebase.com', 'www.caremetricintel.com': 'https://www.caremetricintel.com' };
+    const primary = { 'caremetricadvisors.com': 'https://caremetricadvisors.com', 'cmcarebase.com': 'https://cmcarebase.com', 'www.caremetricintel.com': 'https://www.caremetricintel.com', 'help.caremetric.ai': 'https://help.caremetric.ai' };
     const variants = { 'www.caremetricadvisors.com': 'https://caremetricadvisors.com', 'caremetrictrain.com': 'https://cmcarebase.com', 'caremetricintel.com': 'https://www.caremetricintel.com' };
     const network = async url => {
       const parsed = new URL(url);
@@ -919,6 +922,7 @@ try {
       const answer = (body, status = 200, type = 'text/html; charset=utf-8', location) => new Response(status === 301 ? null : body, { status, headers: { 'content-type': type, ...(location ? { location } : {}) } });
       if (parsed.protocol === 'http:') return answer('', 301, 'text/plain', `https://${parsed.host}/`);
       if (variants[parsed.host]) return answer('', 301, 'text/plain', `${variants[parsed.host]}/`);
+      if (parsed.host === 'home.cmcarebase.com') return answer('', 301, 'text/plain', 'https://cmcarebase.com/');
       const origin = primary[parsed.host];
       if (!origin) return answer('not a known host', 404, 'text/plain');
       if (parsed.pathname === '/robots.txt') return answer(`User-agent: *\nAllow: /\nSitemap: ${origin}/sitemap.xml\n`, 200, 'text/plain');
@@ -944,26 +948,33 @@ try {
     assert.deepEqual([skipped.kind, skipped.source_kind, skipped.status, skipped.result], ['seo.weekly', 'schedule', 'done', { skipped: 'not_monday' }]);
     assert.deepEqual([mail.email.length, requested.length], [0, 0], 'a Tuesday sends no email and fetches nothing');
 
-    // On Monday the same scheduled task audits all three sites, emails the report once and records a run.
+    // On Monday the same scheduled task audits all five sites, emails the report once and records a run.
     clock.value = new Date('2026-11-02T12:00:00Z');
     await enqueue('seo_analyst', 'seo.weekly', `it:${run}:seo:monday`, { sourceKind: 'schedule' });
     tick = await seoTeam.tick();
     assert.equal(tick.claimed, 1);
     assert.equal(mail.email.length, 1);
     assert.equal(mail.email[0][0], 'owner@example.test');
-    assert.equal(mail.email[0][1], 'Weekly SEO report: 1 thing to fix across 3 sites, 1 urgent');
+    assert.equal(mail.email[0][1], 'Weekly SEO report: 1 thing to fix across 5 sites, 1 urgent');
     assert.match(mail.email[0][2].text, /Urgent: A page tells search engines not to index it/);
     assert.match(mail.email[0][2].text, /Healthcare Advisors: score 85 of 100/);
     assert.match(mail.email[0][2].text, /CareBase: score 100 of 100, 1 page checked\.\n\nNothing to fix\./);
-    assert.deepEqual([...new Set(requested)].sort(), ['caremetrictrain.com', 'caremetricintel.com', 'cmcarebase.com', 'caremetricadvisors.com', 'www.caremetricadvisors.com', 'www.caremetricintel.com'].sort(), 'only the three sites and their other addresses are ever contacted');
+    assert.match(mail.email[0][2].text, /CareBase home \(Framer\): redirects to https:\/\/cmcarebase\.com, so search engines see one site\./);
+    assert.equal(mail.email[0][2].text.match(/Search Console is not connected/g)?.length, 1, 'the report says once how to connect Search Console');
+    assert.doesNotMatch(mail.email[0][2].text, /Suggested titles/, 'without a model key there are no suggestions');
+    assert.deepEqual([...new Set(requested)].sort(), ['caremetrictrain.com', 'caremetricintel.com', 'cmcarebase.com', 'caremetricadvisors.com', 'www.caremetricadvisors.com', 'www.caremetricintel.com', 'help.caremetric.ai', 'home.cmcarebase.com'].sort(), 'only the five sites and their other addresses are ever contacted');
+    assert.ok([...new Set(requested)].every(host => seoOutboundHosts.includes(host)), 'every host is on the analyst\'s allowlist');
     const delivered = await row("select * from private.owner_notifications where dedupe_key like 'seo:%' order by created_at desc limit 1");
     assert.deepEqual([delivered.dedupe_key, delivered.channel, delivered.severity, delivered.status, delivered.agent_key], ['seo:2026-11-02', 'email', 'warning', 'sent', 'seo_analyst']);
     const seoRun = await row("select * from private.agent_runs where agent_key = 'seo_analyst' order by started_at desc limit 1");
     assert.deepEqual([seoRun.model, seoRun.outcome, Number(seoRun.cost_cents)], ['none', 'completed', 0]);
     assert.equal(seoRun.summary, 'Sent the SEO report: 1 problem could keep pages out of search results.');
     const finished = await row("select result from private.agent_tasks where request_key = $1", [`it:${run}:seo:monday`]);
-    assert.deepEqual(finished.result.sites.map(site => [site.key, site.score, site.checked]), [['advisors', 85, 1], ['carebase', 100, 1], ['intel', 100, 1]]);
+    assert.deepEqual(finished.result.sites.map(site => [site.key, site.score, site.checked]), [['advisors', 85, 1], ['carebase', 100, 1], ['intel', 100, 1], ['help', 100, 1], ['carebase_home', 100, 0]]);
     assert.deepEqual(finished.result.sites[0].top, [{ code: 'noindex', severity: 'high', count: 1, page: '/' }]);
+    assert.equal(finished.result.sites[4].redirectsTo, 'https://cmcarebase.com');
+    assert.deepEqual(finished.result.search, { state: 'not_configured' });
+    assert.equal(finished.result.duplicates, undefined, 'one CareBase home page, so nothing competes');
     assert.ok(JSON.stringify(finished.result).length < 8000);
 
     // The same Monday's report is sent once, however often the task is retried; one the owner asks for is sent every time.

@@ -357,3 +357,63 @@ describe('findings', () => {
     ]);
   });
 });
+
+describe('what the later steps get from the crawl', () => {
+  it('lists each HTML page in the order it was queued, with what the rewrite and duplicate checks need, and asks for the home page once', async () => {
+    const routes = healthy();
+    routes[`${origin}/about`] = reply(goodPage({ path: '/about' }), { headers: { 'x-robots-tag': 'noindex' } });
+    const { result, requests } = await audit(routes);
+    expect(result.pages.map(page => [page.url, page.noindex, page.appShell])).toEqual([[`${origin}/`, false, false], [`${origin}/pricing`, false, false], [`${origin}/about`, true, false]]);
+    expect(result.pages[1]).toMatchObject({ title: 'Compliance training for care homes /pricing', canonical: `${origin}/pricing`, words: 81 });
+    expect(result.pages[1].description).toMatch(/^Keep every home compliant/);
+    expect(result.pages[1].text).toMatch(/^Welcome word0 word1/);
+    expect(result.appShells).toEqual([]);
+    expect(requests.filter(request => request.url === `${origin}/`)).toHaveLength(1);
+  });
+
+  it('names the pages that are app shells, and says so in the thin page finding', async () => {
+    const shell = '<!doctype html><html lang="en"><head><title>Example Support Hub</title><script type="module" src="/assets/index.js"></script></head><body><div id="root"></div></body></html>';
+    const routes = { ...healthy(), [`${origin}/`]: reply(shell), [`${origin}/pricing`]: reply('<!doctype html><html><body><p>Only a few words here.</p></body></html>') };
+    const { result } = await audit(routes);
+    expect(result.appShells).toEqual(['/']);
+    const thin = result.findings.filter(finding => finding.code === 'thin_html');
+    expect(thin.map(finding => [finding.page, finding.detail])).toEqual(expect.arrayContaining([
+      ['/', '0 words before scripts run: an app shell that only scripts fill in'], ['/pricing', '5 words before scripts run'],
+    ]));
+  });
+});
+
+describe('a site that redirects to another of the company\'s sites', () => {
+  const home = { key: 'home', label: 'Home', origin: 'https://home.example.test', variants: [] };
+  const owners = [origin, home.origin];
+  const run = async (answer, owned = owners) => {
+    const net = network({ ...healthy(), 'https://home.example.test/': answer });
+    return { result: await auditSite(home, { fetchImpl: net.fetchImpl, owners: owned }), requests: net.requests };
+  };
+
+  it('is checked no further when it redirects permanently, and says where it goes', async () => {
+    for (const status of [301, 308]) {
+      const { result, requests } = await run(reply('', { status, location: `${origin}/` }));
+      expect(result).toMatchObject({ key: 'home', checked: 0, findings: [], score: 100, incomplete: false, redirectsTo: origin, pages: [], appShells: [] });
+      expect(requests.map(request => request.url)).toEqual(['https://home.example.test/']);
+    }
+    expect((await run(reply('', { status: 301, location: `${origin}/welcome` }))).result.redirectsTo).toBe(origin);
+  });
+
+  it('asks for a permanent redirect when it uses a temporary one', async () => {
+    const { result } = await run(reply('', { status: 302, location: `${origin}/` }));
+    expect(result.redirectsTo).toBe(origin);
+    expect(result.findings).toEqual([expect.objectContaining({ code: 'site_redirect_temporary', severity: 'low', detail: `302 to ${origin}/` })]);
+    expect(result.score).toBe(99);
+  });
+
+  it('is checked as usual when it redirects anywhere else, or within itself', async () => {
+    for (const location of ['https://elsewhere.test/', 'https://home.example.test/en/', `${origin}.evil.test/`]) {
+      const { result } = await run(reply('', { status: 301, location }), owners);
+      expect(result.redirectsTo, location).toBeUndefined();
+      expect(result.findings.map(finding => finding.code), location).toContain('page_redirect');
+    }
+    // A site the caller does not count as the company's is no reason to stop either.
+    expect((await run(reply('', { status: 301, location: `${origin}/` }), [home.origin])).result.redirectsTo).toBeUndefined();
+  });
+});
