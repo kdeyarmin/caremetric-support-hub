@@ -69,6 +69,7 @@ import { ControlCenter } from "./admin/ControlCenter";
 import { PortfolioRollup } from "./admin/PortfolioRollup";
 import { GoLiveReadiness } from "./admin/GoLiveReadiness";
 import { Team } from "./admin/Team";
+import { Leads } from "./admin/Leads";
 import { BillingWorkspace } from "./billing/BillingWorkspace";
 import { CustomerBilling } from "./billing/CustomerBilling";
 import { MyBilling } from "./billing/MyBilling";
@@ -289,6 +290,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
   // The preview's in-memory inbox is created once per data load so replies and notes survive navigation within the session.
   const demoCommunications = useMemo(() => config.demoMode ? demoCommunicationsClient({
     breathe: data.products.find((product) => product.slug === "breathe")?.id, advisors: data.products.find((product) => product.slug === "advisors")?.id, pennsync: data.products.find((product) => product.slug === "pennsync")?.id,
+    carebase: data.products.find((product) => product.slug === "carebase")?.id,
   }) : undefined, [data.products]);
 
   useEffect(() => {
@@ -385,6 +387,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/admin/portfolio" element={data.actor.role === "platform_admin" ? <PortfolioRollup key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/go-live-readiness" element={data.actor.role === "platform_admin" ? <GoLiveReadiness key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/team" element={data.actor.role === "platform_admin" ? <Team key={data.actor.id} /> : <Navigate to="/overview" replace />} />
+            <Route path="/admin/leads" element={data.actor.role === "platform_admin" ? <Leads key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/communications" element={staff ? <CommunicationsRoute data={data} communications={demoCommunications} /> : <Navigate to="/overview" replace />} />
             <Route path="/overview" element={<OverviewPage data={data} />} />
             <Route path="/cases" element={<CasesPage key={`${data.actor.id}:${data.actor.role}:${location.search}`} data={data} />} />

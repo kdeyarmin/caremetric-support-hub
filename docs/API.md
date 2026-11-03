@@ -194,6 +194,28 @@ Staff (same-origin, SMS session, `case.read`/`case.write` for the application):
   `offset` (default 0); `nextOffset` is where the next batch starts, or `null` when none remain.
 - `GET /api/communications/channels` — which channels are configured, as booleans only.
 
+## Website leads (server endpoints)
+
+Implemented in `server/leads.mjs` (backend feature `support.leads.v1`, migrations `20261103120000` /
+`20261103120100`). See [LEAD_INTAKE.md](LEAD_INTAKE.md), the contract all four repositories implement.
+
+- `POST /api/leads` — server to server from CareBase, Intel and Healthcare Advisors. Signed with
+  `X-CareMetric-Source`, `X-CareMetric-Timestamp` (300-second window) and `X-CareMetric-Signature`
+  (`v1=` + hex HMAC-SHA256 of `<timestamp>.<raw body>` under that product's `HUB_LEAD_SECRET_*`); raw body at most
+  16384 bytes. Answers 202 `{ id, duplicate: false, conversation }` for a new lead, 200 with `duplicate: true` for a
+  repeat, 400 `invalid_lead`, 401 `unauthorized` (also for any `Origin`, `Cookie` or query string), 413 `too_large`,
+  429 `rate_limited` (60 signed requests a minute per product), 503 `not_configured` (no usable secret for that
+  product) or `unavailable` (feature not declared, database unreachable), 405 to anything but `POST`. It calls
+  `private.lead_intake` as `hub_app_server` and logs only the product, the outcome and the status.
+
+Owner (same-origin, SMS session):
+
+- `POST /api/rpc/list_leads` — `{ p_kind, p_source, p_include_test, p_offset, p_limit ≤ 50 }` → `{ items, total,
+  offset, limit }`, newest first; test leads only when `p_include_test` is true. Needs the administrator session.
+- `POST /api/admin/leads/status` — `{ id, status: "new" | "contacted" | "qualified" | "won" | "lost" | "spam",
+  expectedUpdatedAt }` → the lead. Needs the command session (under eight hours old); a stale `expectedUpdatedAt`
+  returns 409, a lapsed session 401, an unknown lead 404. Unknown keys are refused with 400.
+
 ## AI team (server endpoints)
 
 Implemented in `server/agents/` (backend feature `platform.agents.v1`). See [AI_TEAM.md](AI_TEAM.md).

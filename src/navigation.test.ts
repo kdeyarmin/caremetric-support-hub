@@ -28,14 +28,14 @@ describe('sidebar navigation', () => {
 
   it('adds the communications inbox for support staff but no administration', () => {
     expect(paths(staff)).toContain('/communications');
-    for (const path of ['/admin', '/admin/apps', '/phone', '/phone-numbers', '/library', '/billing']) expect(paths(staff)).not.toContain(path);
+    for (const path of ['/admin', '/admin/apps', '/admin/leads', '/phone', '/phone-numbers', '/library', '/billing']) expect(paths(staff)).not.toContain(path);
   });
 
   it('shows administrators the control center first, the administration workspaces, and course authoring', () => {
     const sections = visibleNavSections(admin);
     expect(sections[0]).toMatchObject({ label: 'Home', items: [{ to: '/admin' }, { to: '/overview' }] });
     expect(sections[1].label).toBe('Administration');
-    expect(paths(admin)).toEqual(expect.arrayContaining(['/admin/apps', '/admin/billing', '/admin/email', '/phone-numbers', '/phone', '/library']));
+    expect(paths(admin)).toEqual(expect.arrayContaining(['/admin/apps', '/admin/leads', '/admin/billing', '/admin/email', '/phone-numbers', '/phone', '/library']));
     // Administrators use platform billing, not the organization billing page.
     expect(paths(admin)).not.toContain('/billing');
   });
@@ -46,6 +46,7 @@ describe('current page', () => {
   it.each([
     ['/admin', 'Home', 'Control center'],
     ['/admin/apps', 'Administration', 'Applications'],
+    ['/admin/leads', 'Administration', 'Leads'],
     ['/admin/billing/customers/tenant-1', 'Administration', 'Billing'],
     ['/phone', 'Support', 'Phone messages'],
     ['/phone-numbers', 'Administration', 'Phone numbers'],

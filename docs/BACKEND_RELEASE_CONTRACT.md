@@ -89,6 +89,17 @@ a pinned empty search path on all of them. Each test fails closed, so a function
 was reset (which leaves it null) is refused. The Hub server uses the fenced operations only when the feature is
 declared.
 
+`20261103120100_lead_desk_contract.sql` declares `support.leads.v1` only after `support.communications.v1` is
+declared and the lead desk keeps its boundary: `private.leads` exists with row level security and grants nothing to any
+browser, service or server role; the conversation table's source check accepts `carebase.web`, `intel.web` and
+`advisors.web`; `private.lead_intake(text,jsonb)` is a security definer with a pinned empty search path, executable by
+`hub_app_server` alone and calling `private.require_hub_app_server()`; its helpers (`private.lead_text`,
+`private.lead_instant`, `private.lead_json`, `private.lead_record`) pin an empty search path and are executable by no
+application role; and `hub.list_leads(...)` authorizes the administrator session and
+`hub.update_lead_status(...)` the command session themselves. Every test fails closed. The Hub server answers
+`POST /api/leads` only when the feature is declared (read at boot); `src/lib/backendContract.ts` does not require it,
+so the migrations can be applied before or after the build that uses them. See [LEAD_INTAKE.md](LEAD_INTAKE.md).
+
 The table above is not exhaustive:
 later features such as the `billing.*` and `customer.self-service.v1` boundaries are declared
 by their own migrations and listed in `src/lib/backendContract.ts`. See [AI_TEAM.md](AI_TEAM.md).

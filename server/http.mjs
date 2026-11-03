@@ -45,7 +45,7 @@ export const privateHubMessage='This Hub is private. Only its owner can sign in.
  * treated as signed out, a sign-in that fails it is revoked at once, and the routes that create
  * sign-ins for anyone else (invitation claims and application self-service) are closed.
  */
-export function appServer({auth,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,selfService,agents,health,owner,origins,dist=resolve('dist')}) {
+export function appServer({auth,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,selfService,agents,leads,leadAdmin,health,owner,origins,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -120,6 +120,14 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
           if(req.method!=='POST' || req.headers.origin || req.headers.cookie || url.search) throw new HttpError(403,'Forbidden.');
           if(!billing) throw new HttpError(503,'Billing is not configured.');
           return json(await billing.webhook(await rawBody(req,1000000),req.headers['stripe-signature']));
+        }
+        // Website leads from CareBase, Intel and Advisors: server to server, signed per product, answered exactly as
+        // docs/LEAD_INTAKE.md says (the handler checks the method, browser state and query string itself).
+        if(path==='/api/leads') {
+          if(!leads) return json({error:'not_configured'},503);
+          const result=await leads.handle(req);
+          for(const [name,value] of Object.entries(result.headers??{})) res.setHeader(name,value);
+          return json(result.body,result.status);
         }
         // Application servers ask what a tenant has and report billable quantities with their application key.
         if(path==='/api/apps/connect' && selfService) {
@@ -294,6 +302,13 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
           const action=path.slice('/api/admin/team/'.length);
           if(!agentAdminActions.has(action) || req.method!=='POST') throw new HttpError(404,'AI team resource unavailable.');
           return json(await agents[action](session,await jsonBody(req,8192)));
+        }
+        // The owner's lead status change; the Leads screen reads through the RPC allowlist (list_leads).
+        if(path.startsWith('/api/admin/leads/')) {
+          if(url.search) throw new HttpError(400,'Lead query parameters are not supported.');
+          if(!leadAdmin) throw new HttpError(503,'Leads are not configured.');
+          if(path!=='/api/admin/leads/status' || req.method!=='POST') throw new HttpError(404,'Lead resource unavailable.');
+          return json(await leadAdmin.status(session,await jsonBody(req,2048)));
         }
         if(path.startsWith('/api/admin/bulk-email/')) {
           if(url.search) throw new HttpError(400,'Bulk email query parameters are not supported.');
