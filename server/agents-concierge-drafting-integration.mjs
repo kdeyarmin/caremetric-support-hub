@@ -141,7 +141,9 @@ try {
   await admin.query(`update private.agents set status = 'active', autonomy = 'propose', daily_budget_cents = 300,
     config = '{"effort": "medium", "channels": ["email", "chat", "web_form", "phone", "sms"], "auto_approve_kinds": []}'::jsonb where key = 'support_concierge'`);
   await admin.query("update private.agent_schedules set next_run_at = now() + interval '1 day', enabled = true");
-  const features = (await api.rpc('get_backend_contract', {})).features;
+  // Drafts here are replies the owner sends with their own session. Answers sent without it (platform.agents.concierge-autosend.v1) are
+  // covered by agents-answers-integration.mjs, so this team runs without that feature.
+  const features = (await api.rpc('get_backend_contract', {})).features.filter(feature => feature !== 'platform.agents.concierge-autosend.v1');
   assert.ok(features.includes('platform.agents.concierge.v1'), 'the Concierge feature is declared');
 
   // The real list the Help center reads is a list the guide library can read.

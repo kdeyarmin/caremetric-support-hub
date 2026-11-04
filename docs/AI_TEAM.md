@@ -510,6 +510,24 @@ resuming the Concierge on the **AI team** screen, preferably in **Observe**, and
 new messages". Its handlers register only when the database declares `platform.agents.concierge.v1`, so a
 Hub whose database lacks the migration still starts and the sweep stays due instead of failing.
 
+### Answers it sends on its own
+
+With `platform.agents.concierge-autosend.v1` (`supabase/migrations/20261105120000_concierge_answers.sql`), a drafted reply that
+cites the guides, for a message in which no identifier was found, going back by email or chat, is proposed as its own action
+kind, `communication.answer`, instead of `communication.reply`. The table admits nothing else as an answer (a check constraint:
+template `drafted`, `classification.phi` false, one to five sources, route `email` or `chat`, the target its own conversation).
+Fixed acknowledgments, the identifier notice, the sales acknowledgment and anything sent by text stay replies the owner sends.
+
+An answer needs no owner session. The owner approves it during the support answers supervised week; once the step is
+automatic it is approved on its own (the step adds `communication.answer` to the Concierge's `auto_approve_kinds`) and the tick's
+drain sends it. `private.agent_answer_begin` (Hub server only) records it in the conversation as written by the CareMetric AI
+Assistant, under the action's request key, before it is sent, and checks again in the same transaction that it may go: for an
+answer nobody approved, the Concierge must still be active, on Act and trusted with answers (`answers_off`); the conversation
+must not be closed (`conversation_closed`); the customer must not have written again (`thread_changed`); the drafted route must
+still be available (`reply_refused`). A restart between recording and sending settles the recorded answer instead of sending a
+second one. The email is the same as a staff reply's (fixed subject, "CareMetric Support" signature); the audit row's metadata
+says whether it was approved by the owner or automatically.
+
 ## The Account Manager
 
 Emails the owner every Monday how the customer accounts are doing (task `accounts.weekly`, shown as "Weekly
@@ -1092,6 +1110,10 @@ Apply the migrations in order with the usual procedure:
    autonomy steps (all off) and the Chief of Staff's hourly `autonomy.graduate` schedule, and declare
    `platform.agents.autonomy.v1` (it needs the control plane, the hardening and the customer emails). Restart the Hub
    after it so the server registers the hourly task and the Team screen shows the steps.
+12. `20261105120000_concierge_answers.sql`, then its gate `20261105120100_concierge_answers_contract.sql`, which add the
+   `communication.answer` action kind with its shape check and the server-only operation that records an answer, and declare
+   `platform.agents.concierge-autosend.v1` (it needs the Concierge, the hardening, the communications inbox and autonomy steps).
+   Restart the Hub after it. Answers are drafted only with `HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true` and a model key.
 
 The Hub build does not require any of these features, so a Hub whose database lacks them still starts and
 serves everything else. The AI team is opt-in twice over: nothing runs unless `HUB_AGENTS_ENABLED`

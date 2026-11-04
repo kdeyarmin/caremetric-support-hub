@@ -5,13 +5,17 @@
  * schedule simply stays due and nothing fails every five minutes. Sending an approved reply also
  * needs the inbox service.
  */
+import { answerExecutor } from './answers.mjs';
 import { replyExecutor } from './executor.mjs';
 import { sweepHandler } from './sweep.mjs';
 import { triageHandler } from './triage.mjs';
 
 export const conciergeFeature = 'platform.agents.concierge.v1';
+/** Support answers the Concierge may send without the owner's session (supabase/migrations/20261105120000_concierge_answers.sql). */
+export const answersFeature = 'platform.agents.concierge-autosend.v1';
 
-const declared = features => (features instanceof Set ? features.has(conciergeFeature) : Array.isArray(features) && features.includes(conciergeFeature));
+const has = (features, feature) => (features instanceof Set ? features.has(feature) : Array.isArray(features) && features.includes(feature));
+const declared = features => has(features, conciergeFeature);
 
 /**
  * `customerTextToAi` is the owner's explicit switch (HUB_AGENTS_CUSTOMER_TEXT_TO_AI, exactly "true"). Customer text can go to the
@@ -26,12 +30,16 @@ export function conciergeHandlers({ store, notifier, features = null, log, model
   const followups=features?.has?.('platform.agents.customer-growth.v1')===true || (Array.isArray(features)&&features.includes('platform.agents.customer-growth.v1'));
   return {
     'concierge.sweep': sweepHandler({ store }),
-    'concierge.communication': triageHandler({ store, notifier, log, drafting: drafting?{...drafting,followups}:null, bookingUrl }),
+    'concierge.communication': triageHandler({ store, notifier, log, drafting: drafting?{...drafting,followups}:null, bookingUrl, answers: has(features, answersFeature) }),
   };
 }
 
-/** The Concierge's one action: sending an approved reply. Needs the inbox service as well as the database feature. */
+/** The Concierge's actions: sending an approved reply (with the owner's session) and sending an answer (without). Both need the inbox service as well as the database feature. */
 export function conciergeExecutors({ communications = null, store, notifier, features = null, log }) {
   if (!declared(features) || typeof communications?.reply !== 'function') return {};
-  return { 'communication.reply': replyExecutor({ communications, store, notifier, log }) };
+  return {
+    'communication.reply': replyExecutor({ communications, store, notifier, log }),
+    // Answers go out without the owner's session, so they need the database's answer operation and the inbox's server path.
+    ...(has(features, answersFeature) && typeof communications.answer === 'function' ? { 'communication.answer': answerExecutor({ communications, notifier, log }) } : {}),
+  };
 }
