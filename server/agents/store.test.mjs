@@ -170,13 +170,15 @@ describe('agent store', () => {
     ]);
   });
 
-  it('reads due autonomy steps and switches one through the two server-only operations', async () => {
+  it('reads due autonomy steps, switches one and records the announcement through the server-only operations', async () => {
     const { store, calls } = harness({ due: [], soon: [] });
     await store.autonomyDue();
     await store.autonomyGraduate('account_emails');
+    await store.autonomyAnnounced('account_emails', '2026-11-11T22:00:00+00:00');
     expect(calls).toEqual([
       ['select private.agent_autonomy_due() as result', []],
       ['select private.agent_autonomy_graduate($1) as result', ['account_emails']],
+      ['select private.agent_autonomy_announced($1, $2) as result', ['account_emails', '2026-11-11T22:00:00+00:00']],
     ]);
   });
 

@@ -135,11 +135,11 @@ declared.
 
 `20261104220100_agent_autonomy_contract.sql` declares `platform.agents.autonomy.v1` only after `platform.agents.v1`,
 `platform.agents.hardening.v1` and `platform.agents.lifecycle.v1` are declared, `private.agent_autonomy_steps` has row
-level security and no privilege for any browser, service or server role, `private.agent_autonomy_due()` and
-`private.agent_autonomy_graduate(text)` are security definers with a pinned empty search path executable by
+level security and no privilege for any browser, service or server role, `private.agent_autonomy_due()`,
+`private.agent_autonomy_graduate(text)` and `private.agent_autonomy_announced(text, timestamptz)` are security definers with a pinned empty search path executable by
 `hub_app_server` alone, `hub.get_agent_autonomy()` and `hub.set_agent_autonomy_step(...)` authorize the owner's session
 (a change needs a current administrator session) and are executable by signed-in sessions only, the three internal
-helpers are executable by no role, and the four steps and the Chief of Staff's hourly schedule exist. Each test fails
+helpers are executable by no role, and the four steps and the Chief of Staff's schedule, every 3600 seconds, exist. Each test fails
 closed. The Hub server registers the hourly task only when the feature is declared, and the Team screen leaves the
 autonomy panel out when the database has no steps.
 

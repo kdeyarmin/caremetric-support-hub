@@ -18,6 +18,9 @@ create table private.agent_autonomy_steps (
   status text not null default 'off' check (status in ('off', 'supervised', 'automatic', 'held')),
   supervised_since timestamptz,
   automatic_at timestamptz,
+  -- A switch the schedule made that the owner has not been told about yet. Cleared only once the email is delivered, so a failed
+  -- send is retried on the next run instead of being lost with the task.
+  announce_pending boolean not null default false,
   changed_at timestamptz not null default now(),
   changed_by uuid,
   check (status <> 'supervised' or (supervised_since is not null and automatic_at is not null and automatic_at > supervised_since)),
@@ -98,7 +101,9 @@ end;
 $$;
 
 -- The one place a step changes. 'supervise' starts a supervised week from now; 'hold' keeps the owner approving everything;
--- 'automatic' hands the work over now (the code must be on the Hub). Every change is audited.
+-- 'automatic' hands the work over now (the code must be on the Hub). Supervising or holding always takes the step's values off the
+-- agents' lists, whatever the step's previous status (a value the owner had added by hand included), except one another automatic step
+-- also adds: during a supervised week nothing of that kind may go out unapproved. Every change is audited.
 create function private.agent_autonomy_apply(p_category text, p_action text, p_actor uuid, p_source text) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -127,7 +132,7 @@ begin
       perform 1 from private.agents where key = v_change ->> 'agent' for update;
     end loop;
     update private.agent_autonomy_steps
-    set status = 'automatic', automatic_at = now(), changed_at = now(), changed_by = p_actor
+    set status = 'automatic', automatic_at = now(), changed_at = now(), changed_by = p_actor, announce_pending = (p_source = 'schedule')
     where category = p_category;
     for v_change in select c from jsonb_array_elements(v_step.changes) c order by c ->> 'agent' loop
       perform private.agent_autonomy_change(p_category, v_change, true);
@@ -136,18 +141,16 @@ begin
     for v_change in select c from jsonb_array_elements(v_step.changes) c order by c ->> 'agent' loop
       perform 1 from private.agents where key = v_change ->> 'agent' for update;
     end loop;
-    -- Leaving automatic: the step is no longer automatic before its values are taken back, so they are not kept on its account.
+    -- The step is no longer automatic before its values are taken back, so they are not kept on its own account.
     update private.agent_autonomy_steps
     set status = case p_action when 'supervise' then 'supervised' else 'held' end,
         supervised_since = case p_action when 'supervise' then now() else supervised_since end,
         automatic_at = case p_action when 'supervise' then now() + interval '7 days' else null end,
-        changed_at = now(), changed_by = p_actor
+        changed_at = now(), changed_by = p_actor, announce_pending = false
     where category = p_category;
-    if v_step.status = 'automatic' then
-      for v_change in select c from jsonb_array_elements(v_step.changes) c order by c ->> 'agent' loop
-        perform private.agent_autonomy_change(p_category, v_change, false);
-      end loop;
-    end if;
+    for v_change in select c from jsonb_array_elements(v_step.changes) c order by c ->> 'agent' loop
+      perform private.agent_autonomy_change(p_category, v_change, false);
+    end loop;
     -- Supervision needs proposals: an agent that can only observe is moved up to propose. One already acting stays, with this
     -- step's values off its list, so it proposes this work and keeps doing anything else it was trusted with.
     update private.agents set autonomy = 'propose', updated_at = now()
@@ -161,7 +164,8 @@ begin
 end;
 $$;
 
--- Server: the supervised steps whose week has ended, and those ending within a day (for the owner's reminder).
+-- Server: the supervised steps whose week has ended; the switches the owner has not been told about yet; and the supervised steps that
+-- end within a day and whose code is on the Hub (a step without its code would not switch, so it gets no reminder that it will).
 create function private.agent_autonomy_due() returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
 begin
@@ -169,8 +173,22 @@ begin
   return jsonb_build_object(
     'due', (select coalesce(jsonb_agg(private.agent_autonomy_step_json(s) order by s.automatic_at, s.category), '[]'::jsonb)
             from private.agent_autonomy_steps s where s.status = 'supervised' and s.automatic_at <= now()),
+    'announce', (select coalesce(jsonb_agg(private.agent_autonomy_step_json(s) order by s.automatic_at, s.category), '[]'::jsonb)
+                 from private.agent_autonomy_steps s where s.status = 'automatic' and s.announce_pending),
     'soon', (select coalesce(jsonb_agg(private.agent_autonomy_step_json(s) order by s.automatic_at, s.category), '[]'::jsonb)
-             from private.agent_autonomy_steps s where s.status = 'supervised' and s.automatic_at > now() and s.automatic_at <= now() + interval '1 day'));
+             from private.agent_autonomy_steps s where s.status = 'supervised' and s.automatic_at > now() and s.automatic_at <= now() + interval '1 day'
+               and coalesce((hub.get_backend_contract() -> 'features') ? s.requires_feature, false)));
+end;
+$$;
+
+-- Server: the owner was told about this switch. Names the switch by its time, so a later switch of the same step is not cleared by it.
+create function private.agent_autonomy_announced(p_category text, p_automatic_at timestamptz) returns boolean
+language plpgsql security definer set search_path = '' as $$
+begin
+  perform private.require_hub_app_server();
+  update private.agent_autonomy_steps set announce_pending = false
+  where category = p_category and status = 'automatic' and automatic_at = p_automatic_at and announce_pending;
+  return found;
 end;
 $$;
 
@@ -213,7 +231,8 @@ declare
   v_changed timestamptz;
 begin
   v_actor := hub.authorize_app_command();
-  select changed_at into v_changed from private.agent_autonomy_steps where category = p_category;
+  -- Locked before the version is compared, so of two changes made from the same screen the second is refused instead of applied.
+  select changed_at into v_changed from private.agent_autonomy_steps where category = p_category for update;
   if not found then
     raise exception 'Unknown autonomy step.' using errcode = 'P0002';
   end if;
@@ -229,9 +248,10 @@ revoke all on function
   private.agent_autonomy_change(text, jsonb, boolean),
   private.agent_autonomy_apply(text, text, uuid, text),
   private.agent_autonomy_due(),
-  private.agent_autonomy_graduate(text)
+  private.agent_autonomy_graduate(text),
+  private.agent_autonomy_announced(text, timestamptz)
 from public, anon, authenticated, service_role, hub_app_server;
-grant execute on function private.agent_autonomy_due(), private.agent_autonomy_graduate(text) to hub_app_server;
+grant execute on function private.agent_autonomy_due(), private.agent_autonomy_graduate(text), private.agent_autonomy_announced(text, timestamptz) to hub_app_server;
 
 revoke all on function hub.get_agent_autonomy(), hub.set_agent_autonomy_step(text, text, timestamptz) from public, anon, service_role;
 grant execute on function hub.get_agent_autonomy(), hub.set_agent_autonomy_step(text, text, timestamptz) to authenticated;
