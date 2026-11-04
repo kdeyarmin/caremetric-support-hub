@@ -30,7 +30,7 @@ const seedAgents = (await admin.query('select key,status,autonomy,daily_budget_c
 const seedPolicies = (await admin.query('select * from private.growth_policies')).rows;
 const seedBillingMode = (await row('select livemode from private.billing_settings')).livemode;
 let organization, communication;
-const regressionOrganizations = [], regressionTenants = [], regressionCommunications = [], chatClients = [];
+const regressionOrganizations = [], regressionTenants = [], regressionCommunications = [], chatClients = [], regressionSuppressions = [];
 const tasks = [];
 const task = async (agent='marketing_manager') => {
   const id = (await row("insert into private.agent_tasks(agent_key,kind,request_key,status,attempts,lease_until) values($1,$2,$3,'running',1,now()+interval '10 minutes') returning id", [agent,agent==='account_manager'?'growth.success':'growth.pipeline',`growth:${run}:${randomUUID()}`])).id;
@@ -290,9 +290,11 @@ try {
   const oddMiss=await auditedMiss(oddMessage.id);
   assert.deepEqual(oddMiss,{communicationId:oddThread.id,sqlstate:'23514'},'the audit row holds the error code and ids only, never the address or text');
 
-  // Any other failure inside growth capture: the reply is saved, nothing is half-written, and it still stops queued outreach.
+  // Any other failure inside growth capture: the reply is saved, nothing is half-written, and the fallback still honours the
+  // contact's unsubscribe request (a webhook retry would skip the saved message) and stops queued outreach.
   const failing=await regressionFixture();
   const failingEmail=(await row('select email from private.growth_contacts where id=$1',[failing.contactId])).email;
+  regressionSuppressions.push(digest(failingEmail));
   const failingWork=await store.plan(failing.id,{key:'outreach:failsafe',kind:'outreach',action:'Offer a conversation.',success:'Qualified reply.',owner:'marketing_manager',dueAt:new Date().toISOString()});
   const queued=await store.draft(failing.id,failingWork,{...await draftVersions(failing.id),purpose:'marketing',subject:'Product workflow',body:'Would a conversation be useful?',citations:(await store.detail(token,failing.id)).evidence.map(e=>e.id),unsubscribeHash:digest(failingWork),modelGenerated:true});
   await store.propose(await task(),queued.id);
@@ -300,14 +302,64 @@ try {
   const injected=`growth_failsafe_${run}`;
   await admin.query(`alter table private.customer_activity_events add constraint ${injected} check (event_key not like 'inquiry:%') not valid`);
   try {
-    regressionCommunications.push((await call('private.ingest_inbound_communication',['email',`failsafe:${run}`,`failsafe-first:${run}`,null,'carebase','Re: Product workflow','Thanks, I am interested.','Buyer',failingEmail,null])).id);
+    regressionCommunications.push((await call('private.ingest_inbound_communication',['email',`failsafe:${run}`,`failsafe-first:${run}`,null,'carebase','Re: Product workflow','Thanks, but please remove me from this list.','Buyer',failingEmail,null])).id);
   } finally { await admin.query(`alter table private.customer_activity_events drop constraint ${injected}`); }
   const failedReply=await row('select id from private.communication_messages where provider_message_id=$1',[`email:failsafe-first:${run}`]);
   assert.ok(failedReply,'the reply is saved although growth capture failed');
   assert.equal((await message(queued.id)).status,'cancelled','the reply still stops queued outreach to its sender');
+  assert.equal((await row('select eligibility from private.growth_contacts where id=$1',[failing.contactId])).eligibility,'opted_out','the opt-out is kept');
+  assert.ok(await row('select 1 from private.email_suppressions where email_hash=$1',[digest(failingEmail)]),'the address is suppressed for every sender');
   assert.equal((await row('select count(*)::integer as n from private.customer_activity_events where event_key=$1',[`inquiry:${failedReply.id}`])).n,0);
   assert.equal((await opportunity(failing.id)).stage,'qualified','the failed capture left no partial update');
   assert.equal((await auditedMiss(failedReply.id))?.sqlstate,'23514');
+
+  // The growth lock is held until the inbox commits even when capture fails: a send claim queued behind the reply runs after
+  // the fallback and finds the message cancelled, instead of claiming it in the moment between capture's rollback and the fallback.
+  const lockKey="hashtextextended('growth.workflow',0)";
+  const queuedOnLock=async n=>{ for(let i=0;i<300;i++){ if((await row("select count(*)::integer as n from pg_locks where locktype='advisory' and not granted")).n>=n) return; await new Promise(r=>setTimeout(r,10)); } throw new Error('lock queue never formed'); };
+  const settle=p=>p.then(value=>({value}),error=>({error}));
+  const racing=await regressionFixture();
+  const racingEmail=(await row('select email from private.growth_contacts where id=$1',[racing.contactId])).email;
+  const racedSend=await prepare(racing.id,'outreach:race');
+  const holder=await admin.connect();
+  await admin.query(`alter table private.customer_activity_events add constraint ${injected} check (event_key not like 'inquiry:%') not valid`);
+  try {
+    await holder.query('begin'); await holder.query(`select pg_advisory_xact_lock(${lockKey})`);
+    const replying=settle(call('private.ingest_inbound_communication',['email',`race:${run}`,`race-first:${run}`,null,'carebase','Re: Product workflow','Thanks for the note.','Buyer',racingEmail,null]));
+    await queuedOnLock(1);
+    const claiming=settle(store.claim(racedSend.id,racedSend.action));
+    await queuedOnLock(2);
+    await holder.query('rollback');
+    const [reply,claimed]=await Promise.all([replying,claiming]);
+    assert.ok(reply.value,'the reply is saved');
+    regressionCommunications.push(reply.value.id);
+    assert.deepEqual(claimed.value,{send:false,status:'cancelled'},'the queued send cannot slip in between capture rollback and fallback');
+  } finally {
+    holder.release();
+    await admin.query(`alter table private.customer_activity_events drop constraint ${injected}`);
+  }
+
+  // A growth lock held past the trigger's lock timeout cannot run the webhook's 12-second statement into a rollback: capture is
+  // skipped, the email is saved, the opt-out is still kept and the miss is audited as lock_not_available.
+  const busy=await regressionFixture();
+  const busyEmail=(await row('select email from private.growth_contacts where id=$1',[busy.contactId])).email;
+  regressionSuppressions.push(digest(busyEmail));
+  const busyHolder=await admin.connect(), webhook=await pool.connect();
+  try {
+    await busyHolder.query('begin'); await busyHolder.query(`select pg_advisory_xact_lock(${lockKey})`);
+    await webhook.query('begin'); await webhook.query("set local statement_timeout='12s'");
+    const busyThread=(await webhook.query('select private.ingest_inbound_communication($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) as r',['email',`busy:${run}`,`busy-first:${run}`,null,'carebase','Re: Product workflow','Please remove me from this list.','Buyer',busyEmail,null])).rows[0].r;
+    await webhook.query('commit');
+    regressionCommunications.push(busyThread.id);
+  } finally {
+    await webhook.query('rollback').catch(()=>{}); webhook.release();
+    await busyHolder.query('rollback'); busyHolder.release();
+  }
+  const busyReply=await row('select id from private.communication_messages where provider_message_id=$1',[`email:busy-first:${run}`]);
+  assert.ok(busyReply,'the email is saved while the growth lock is busy');
+  assert.equal((await auditedMiss(busyReply.id))?.sqlstate,'55P03');
+  assert.equal((await row('select eligibility from private.growth_contacts where id=$1',[busy.contactId])).eligibility,'opted_out');
+  assert.ok(await row('select 1 from private.email_suppressions where email_hash=$1',[digest(busyEmail)]));
 
   // Late signup/trial history that leaves current context unchanged must preserve an existing approval.
   const pendingCustomer=await regressionFixture();
@@ -428,7 +480,7 @@ try {
       finally { await client.query('rollback'); }
     }
   } finally { client.release(); }
-  console.log('Growth integration passed: session boundaries, unverified-chat exclusion, message chronology, event-based initialization, late milestones and draft preservation, tenant remapping, shared lifecycle/growth recipient claims, reply stop, inbox saved when growth capture fails, stale proposal replacement, deferred queue fairness, opt-out, shared budgets, and fail-closed deployment gates. No email sent.');
+  console.log('Growth integration passed: session boundaries, unverified-chat exclusion, message chronology, event-based initialization, late milestones and draft preservation, tenant remapping, shared lifecycle/growth recipient claims, reply stop, inbox saved and opt-outs kept when growth capture fails or its lock is busy, send claims serialized behind a failed capture, stale proposal replacement, deferred queue fairness, opt-out, shared budgets, and fail-closed deployment gates. No email sent.');
 } finally {
   if (!organization) organization = (await row('select id from private.growth_organizations where domain=$1', [domain]))?.id;
   for(const organizationId of [...(organization?[organization]:[]),...regressionOrganizations]) {
@@ -442,6 +494,7 @@ try {
     await admin.query('delete from private.growth_organizations where id=$1', [organizationId]);
   }
   await admin.query('delete from private.email_suppressions where email_hash=$1', [digest(email)]);
+  await admin.query('delete from private.email_suppressions where email_hash=any($1::text[])', [regressionSuppressions]);
   await admin.query('delete from private.agent_budget_reservations where task_id=any($1::uuid[])', [tasks]);
   await admin.query('delete from private.agent_actions where task_id=any($1::uuid[])', [tasks]);
   await admin.query('delete from private.agent_tasks where id=any($1::uuid[]) or source_ref=$2', [tasks, communication ?? null]);
