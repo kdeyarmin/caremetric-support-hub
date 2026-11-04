@@ -3,7 +3,7 @@ import { once } from 'node:events';
 import { appServer } from './http.mjs';
 
 const origin = 'https://support-hub-web-production.up.railway.app';
-const agents = Object.fromEntries(['overview', 'status', 'autonomy', 'budget', 'decide', 'run', 'cancel', 'waiting'].map(name => [name, vi.fn(async () => ({ ok: name }))]));
+const agents = Object.fromEntries(['overview', 'status', 'autonomy', 'budget', 'decide', 'run', 'cancel', 'waiting', 'step'].map(name => [name, vi.fn(async () => ({ ok: name }))]));
 const health = vi.fn(async () => undefined);
 const sessionToken = 'a'.repeat(43);
 let server, base;

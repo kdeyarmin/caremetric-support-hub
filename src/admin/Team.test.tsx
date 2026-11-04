@@ -35,18 +35,52 @@ const overview = (changes: Partial<TeamOverview["team"]> = {}, services: Partial
   services: { enabled: true, handlers: ["probe.sweep"], sms: true, email: true, ownerEmail: true, ai: true, customerTextToAi: false, ...services },
   waitingActions: 0,
 });
+const steps: NonNullable<TeamOverview["autonomy"]> = [
+  { category: "account_emails", label: "Account emails", status: "supervised", supervisedSince: "2026-11-04T22:00:00+00:00", automaticAt: "2026-11-11T22:00:00+00:00",
+    changedAt: "2026-11-04T22:00:00.123456+00:00", ready: true, agents: ["account_manager"] },
+  { category: "support_answers", label: "Support answers", status: "held", supervisedSince: null, automaticAt: null, changedAt: "2026-11-04T22:00:00.5+00:00", ready: false, agents: ["support_concierge"] },
+  { category: "offers", label: "Offers", status: "off", supervisedSince: null, automaticAt: null, changedAt: "2026-11-04T22:00:00+00:00", ready: false, agents: ["account_manager"] },
+  { category: "articles", label: "Article publishing", status: "automatic", supervisedSince: "2026-11-01T00:00:00+00:00", automaticAt: "2026-11-08T00:00:00+00:00",
+    changedAt: "2026-11-08T00:00:00+00:00", ready: true, agents: ["content_marketer"] },
+];
 const emptyPage = { items: [], total: 0, offset: 0, limit: 15 };
 function fakeClient(data: TeamOverview = overview(), overrides: Partial<TeamClient> = {}): TeamClient {
   return {
     overview: vi.fn(async () => data), setStatus: vi.fn(async () => engineer), setAutonomy: vi.fn(async () => engineer), setBudget: vi.fn(async () => engineer),
     decide: vi.fn(async () => ({ id: ids.action, kind: "communication.reply", status: "executed", decided: true })), run: vi.fn(async () => ({ id: ids.task, status: "queued" })),
     cancel: vi.fn(async () => ({ id: ids.task, status: "cancelled" })), waiting: vi.fn(async () => ({ started: 2, actions: 0 })),
+    setStep: vi.fn(async () => steps[0]),
     activity: vi.fn(async () => emptyPage) as TeamClient["activity"], audit: vi.fn(async () => emptyPage), ...overrides,
   };
 }
 const card = (name: string) => screen.getByRole("article", { name });
 
 describe("AI team screen", () => {
+  it("shows each kind of work the team may do on its own, and changes one with the version it was shown", async () => {
+    const client = fakeClient({ ...overview(), autonomy: steps });
+    render(<Team client={client} />);
+    const panel = await screen.findByRole("region", { name: "Work the team does on its own" });
+    expect(within(panel).getByText(/Supervised until/)).toBeTruthy();
+    expect(within(panel).getByText(/On its own since/)).toBeTruthy();
+    expect(within(panel).getByText("You approve each one")).toBeTruthy();
+    expect(within(panel).getByText("Not started")).toBeTruthy();
+    // Support answers wait for their code: they cannot be made automatic, and the screen says why.
+    expect((within(panel).getByRole("button", { name: "Make Support answers automatic now" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(panel).getAllByText(/Its code is not on the Hub yet/).length).toBe(2);
+    fireEvent.click(within(panel).getByRole("button", { name: "Keep approving Account emails" }));
+    await waitFor(() => expect(client.setStep).toHaveBeenCalledWith({ category: "account_emails", action: "hold", expectedChangedAt: "2026-11-04T22:00:00.123456+00:00" }));
+    expect(await screen.findByText("Account emails: you approve each one from now on.")).toBeTruthy();
+    fireEvent.click(within(panel).getByRole("button", { name: "Start a supervised week for Offers" }));
+    await waitFor(() => expect(client.setStep).toHaveBeenCalledWith({ category: "offers", action: "supervise", expectedChangedAt: "2026-11-04T22:00:00+00:00" }));
+    expect(within(panel).getByRole("button", { name: "Keep approving Article publishing" })).toBeTruthy();
+  });
+
+  it("leaves the autonomy panel out against a database that has no steps yet", async () => {
+    render(<Team client={fakeClient({ ...overview(), autonomy: null })} />);
+    await screen.findByRole("region", { name: "What the team can use" });
+    expect(screen.queryByRole("region", { name: "Work the team does on its own" })).toBeNull();
+  });
+
   it("shows what the team can use, what waits for you, and each agent", async () => {
     render(<Team client={fakeClient()} />);
     const services = await screen.findByRole("region", { name: "What the team can use" });

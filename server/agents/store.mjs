@@ -90,6 +90,15 @@ export function sqlAgentStore(pool, { fenced = false, growth = false } = {}) {
     contentState: (slugs = []) => call('private.agent_content_state', [slugs]),
     /** Publishes the article an approved content.publish action carries, as the AI assistant with the owner's approval. */
     contentPublish: (actionId, execution = null) => call('private.agent_content_publish', [actionId, execution]),
+    /**
+     * Autonomy steps the hourly task acts on: supervised ones whose week has ended (`due`), switches the owner has not been told about
+     * (`announce`), and supervised ones with their code that end within a day (`soon`). Categories, labels and dates, nothing else.
+     */
+    autonomyDue: () => call('private.agent_autonomy_due'),
+    /** Switches one due step to automatic, or says why not (`{ graduated: false, reason: 'not_due' | 'code_missing' }`). */
+    autonomyGraduate: category => call('private.agent_autonomy_graduate', [category]),
+    /** Records that the owner was told about the switch a step made at `automaticAt`, so it is not announced again. */
+    autonomyAnnounced: (category, automaticAt) => call('private.agent_autonomy_announced', [category, automaticAt]),
     /** One health check for one product. The database decides when that opens or closes an incident. */
     probeRecord: ({ targetKey, ok, statusCode, latencyMs, failure = null, threshold = 2, agentKey = 'platform_engineer' }) =>
       call('private.agent_probe_record', [targetKey, ok, statusCode, latencyMs, failure, threshold, agentKey]),

@@ -50,6 +50,18 @@ describe("AI team client", () => {
     await expect(teamClient.waiting()).rejects.toMatchObject({ status: 401, message: "Current administrator session required." });
   });
 
+  it("posts an autonomy step change and checks the step it gets back", async () => {
+    const step = { category: "account_emails", label: "Account emails", status: "held", supervisedSince: null, automaticAt: null, changedAt: "2026-11-04T22:00:00.123456+00:00", ready: true, agents: ["account_manager"] };
+    const fetcher = respond(step);
+    vi.stubGlobal("fetch", fetcher);
+    expect(await teamClient.setStep({ category: "account_emails", action: "hold", expectedChangedAt: "2026-11-04T21:00:00.000001+00:00" })).toEqual(step);
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/admin/team/step");
+    expect(JSON.parse(String(init.body))).toEqual({ category: "account_emails", action: "hold", expectedChangedAt: "2026-11-04T21:00:00.000001+00:00" });
+    vi.stubGlobal("fetch", respond({ ...step, status: "sometimes" }));
+    await expect(teamClient.setStep({ category: "account_emails", action: "hold", expectedChangedAt: step.changedAt })).rejects.toThrow();
+  });
+
   it("asks the read RPCs for a page with the database's parameter names", async () => {
     const fetcher = respond({ items: [], total: 0, offset: 15, limit: 15 });
     vi.stubGlobal("fetch", fetcher);

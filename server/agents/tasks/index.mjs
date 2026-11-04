@@ -1,6 +1,7 @@
 import { formTargets, probeTargets } from '../targets.mjs';
 import { conciergeHandlers } from '../concierge/index.mjs';
 import { accountsHandlers } from './accounts.mjs';
+import { autonomyHandlers } from './autonomy.mjs';
 import { briefHandlers } from './brief.mjs';
 import { growthHandlers } from './growth.mjs';
 import { contentHandlers } from './content.mjs';
@@ -19,7 +20,8 @@ import { seoHandlers } from './seo.mjs';
  * `bookingUrl` is the owner's booking page the Concierge may offer a prospect, and `leadSecrets` the products' lead secrets the form
  * checks sign with (never logged or stored).
  * `lifecycle` is how the Account Manager's customer emails are sent ({ mail, postalAddress, bookingUrl, publicOrigin }), and
- * the Content Marketer's handlers register only when the database declares its feature and `model` has a key.
+ * the Content Marketer's handlers register only when the database declares its feature and `model` has a key, and the hourly
+ * autonomy check only when the database declares autonomy steps.
  */
 export function builtInHandlers({ store, notifier, model = null }, {
   publicOrigin, fetchImpl = fetch, log, services = {}, communications = null, features = null, guides = null, customerTextToAi = false, bookingUrl = null, leadSecrets = {}, lifecycle = {},
@@ -35,5 +37,6 @@ export function builtInHandlers({ store, notifier, model = null }, {
     ...importHandlers({ communications }),
     ...conciergeHandlers({ store, notifier, features, log, model, guides, customerTextToAi, bookingUrl }),
     ...contentHandlers({ store, notifier, model, features, log }),
+    ...autonomyHandlers({ store, notifier, publicOrigin, features, log }),
   };
 }
