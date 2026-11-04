@@ -156,7 +156,7 @@ export function approvalTitle(approval: Pick<TeamApproval, "kind" | "targetId" |
 
 const errorLabels: Record<string, string> = {
   invalid_article: "The article no longer passes the content checks (a rule changed since it was written), so it was not published.",
-  approval_required: "Articles are published only with your approval, and this one was approved automatically, so it was not published.",
+  approval_required: "This action requires your personal approval and was not carried out.",
   slug_taken: "Another article already uses this address, so nothing was published.",
   product_unavailable: "The article's product is retired or closed to support, so it was not published.",
   publish_failed: "The article could not be published.",
@@ -183,7 +183,8 @@ const errorLabels: Record<string, string> = {
   not_configured: "Customer email is not set up on the Hub (the SendGrid key, the postal address for the footer or the public address), so nothing was sent.",
   daily_limit: "20 customer emails already went out today, the most the Hub sends in a day, so this one was not sent.",
   frequency_limited: "Another customer-growth or lifecycle email was recently attempted for this contact, so this one was not sent.",
-  email_unconfirmed: "SendGrid did not confirm this email. It is never sent again on its own, so the customer may or may not have it.",
+  email_unconfirmed: "SendGrid did not confirm this email. The recipient may or may not have it. It will not send again automatically.",
+  direct_email_not_configured: "SendGrid is not configured, so this one-off external email was not sent.",
   wording_changed: "The Hub's wording for this email changed after you approved it, so nothing was sent rather than different words.",
   auto_send_off: "This email was approved on its own, but its template is no longer one you let the agent send, so nothing was sent.",
   invalid_email: "The Hub refused this email as invalid. Nothing was sent.",
