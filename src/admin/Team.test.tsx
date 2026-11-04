@@ -48,6 +48,21 @@ function fakeClient(data: TeamOverview = overview(), overrides: Partial<TeamClie
 const card = (name: string) => screen.getByRole("article", { name });
 
 describe("AI team screen", () => {
+  it("prepares a one-off email for separate approval without sending", async () => {
+    const client = fakeClient(overview({ approvals: [], approvalCount: 0 }, { directEmail: true }));
+    render(<Team client={client} />);
+    const section = await screen.findByRole("region", { name: "One-off external email" });
+    fireEvent.change(within(section).getByLabelText("To (one email address)"), { target: { value: "data.support@cms.hhs.gov" } });
+    fireEvent.change(within(section).getByLabelText("Subject"), { target: { value: "CMS download failures" } });
+    fireEvent.change(within(section).getByLabelText("Message"), { target: { value: "Please investigate the reported HTTP 403 download responses." } });
+    fireEvent.click(within(section).getByRole("button", { name: "Prepare for approval" }));
+    await waitFor(() => expect(client.email).toHaveBeenCalledWith(expect.objectContaining({
+      recipient: "data.support@cms.hhs.gov", subject: "CMS download failures", body: "Please investigate the reported HTTP 403 download responses.",
+      requestKey: expect.any(String),
+    })));
+    expect(client.decide).not.toHaveBeenCalled();
+  });
+
   it("shows what the team can use, what waits for you, and each agent", async () => {
     render(<Team client={fakeClient()} />);
     const services = await screen.findByRole("region", { name: "What the team can use" });
