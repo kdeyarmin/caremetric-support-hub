@@ -1089,3 +1089,36 @@ Engineer resumed, press **Run now** on "Lead form check" and read its run: each 
 
 `supabase/schema.sql` is a reference snapshot that stopped being appended in October; these
 migrations are not mirrored into it.
+
+## One-off external email: owner directed, approval required
+
+The **One-off external email** panel on `/admin/team` lets the portfolio owner prepare a technical
+message to one external email address. This is not an automated campaign, a customer lifecycle
+email, or an agent schedule. Its only agent identity is `chief_of_staff`, but an owner-created
+draft can be approved even when that scheduled agent is paused. No AI model writes or alters the email.
+
+1. Sign in as the owner with a fresh SMS administrator command session.
+2. Enter one address, subject and body, omitting patient information, credentials and secrets.
+   **Prepare for approval** writes a draft, but sends nothing.
+3. In **Waiting for you**, inspect the exact **To**, **Subject** and body. **Approve and send**
+   authorizes the single outbound SendGrid attempt; Reject leaves it unsent.
+4. Check **What the team has done → Proposed actions** and the email provider's delivery events.
+   A completed `sent` state here means SendGrid accepted the email, not that the recipient read it.
+
+The database feature `platform.agents.direct-email.v1` is published only after both
+`20261104231000_agent_direct_email.sql` and `20261104231100_agent_direct_email_contract.sql`
+are applied. The private outbox `private.agent_direct_emails` has RLS and no browser,
+service-role or application-server table grants. Only `hub.prepare_agent_direct_email`,
+which checks `hub.authorize_app_command()`, can create a draft. The sender can use only
+`private.agent_direct_email_begin_send` and `private.agent_direct_email_finish_send`
+under the dedicated Hub server role. The approved action has its own UUID, exact immutable
+text check and a one-use request key; an exact draft submission replay creates no duplicate.
+
+**Unknown is not safe to retry.** The database reserves the attempt *before* calling
+SendGrid. A timeout, crash or lost delivery acknowledgment may mean the message went out;
+neither an executor restart nor another approval automatically resends it. Check provider
+delivery evidence first. To send a materially revised message, make a new draft and
+approve it separately. Audit entries carry only event and action identifiers, not email text.
+
+This feature does not make CMS imports succeed or change CMS access controls; it only
+provides an approved way to report a legitimate source-download failure.
