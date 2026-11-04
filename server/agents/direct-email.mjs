@@ -12,7 +12,7 @@ export function directEmailExecutors({ store, email, features }) {
   if (features?.has?.('platform.agents.direct-email.v1') !== true) return {};
   return {
     'email.direct': async action => {
-      if (!email?.configured) throw failure('not_configured');
+      if (!email?.configured) throw failure('direct_email_not_configured');
       const begun = await store.directEmailBeginSend(action.id, action.execution);
       if (begun?.state === 'recorded') {
         if (begun.status === 'sent') return { delivery: 'sent', replay: true };
