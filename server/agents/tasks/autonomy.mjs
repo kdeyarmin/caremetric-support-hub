@@ -31,24 +31,32 @@ export function autonomyHandlers({ store, notifier, publicOrigin, features = nul
   const page = typeof publicOrigin === 'string' && publicOrigin ? `${publicOrigin.replace(/\/+$/, '')}/admin/team` : 'the AI team page';
 
   async function graduate(task) {
-    const { due = [], soon = [] } = await store.autonomyDue();
+    const first = await store.autonomyDue();
     const graduated = [];
     const waiting = [];
     const delivery = [];
     let reached = false;
-    for (const step of due) {
+    let undelivered = false;
+    for (const step of first.due ?? []) {
       const outcome = await store.autonomyGraduate(step.category);
       if (!outcome?.graduated) { waiting.push(`${step.category}:${outcome?.reason ?? 'unknown'}`); continue; }
       graduated.push(step.category);
-      const switched = outcome.step ?? step;
+    }
+    // The switches the owner has not been told about: the ones just made, and any whose email failed on an earlier run. Each stays pending
+    // in the database until its email is delivered, so neither a failed send nor a server that stopped here loses it.
+    const { announce = [], soon = [] } = graduated.length > 0 ? await store.autonomyDue() : first;
+    for (const step of announce) {
       const results = await notifier.send({
         severity: 'info', subject: `${step.label}: now on their own`,
         body: `Your supervised week for ${step.label.toLowerCase()} has ended. From now on ${words(step)} ${undo} ${page}.`,
-        // One email per switch: the key names the moment it switched, so a retried task finds it already sent.
-        dedupeKey: `autonomy:automatic:${step.category}:${switched.automaticAt ?? step.automaticAt}`, agentKey: task.agentKey, taskId: task.id,
+        // One email per switch: the key names the moment it switched, so a retry finds what an earlier attempt sent.
+        dedupeKey: `autonomy:automatic:${step.category}:${step.automaticAt}`, agentKey: task.agentKey, taskId: task.id,
       });
       reached ||= results.some(delivered);
       delivery.push(...results.map(item => `${step.category}:${item.channel}:${item.delivery}`));
+      // A refused send is tried again on the next run; anything else (sent, switched off, or an answer the provider did not confirm) is done.
+      if (results.some(item => item.delivery === 'failed')) undelivered = true;
+      else await store.autonomyAnnounced(step.category, step.automaticAt);
     }
     for (const step of soon) {
       const results = await notifier.send({
@@ -64,7 +72,9 @@ export function autonomyHandlers({ store, notifier, publicOrigin, features = nul
         summary: `Switched to automatic after the supervised week: ${graduated.join(', ')}.${reached ? '' : ' The email telling the owner was not confirmed.'}`,
       });
     }
-    return { result: { graduated, waiting, reminded: soon.map(step => step.category), delivery } };
+    // The switch itself is done and stays done; the owner must still hear about it, so the task is tried again for the email alone.
+    if (undelivered) throw Object.assign(new Error('The owner could not be told about a switch.'), { code: 'notification_failed', transient: true });
+    return { result: { graduated, waiting, announced: announce.map(step => step.category), reminded: soon.map(step => step.category), delivery } };
   }
 
   return { 'autonomy.graduate': graduate };

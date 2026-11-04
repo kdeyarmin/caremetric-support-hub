@@ -58,11 +58,12 @@ try {
   assert.equal((await row('select actor_id, metadata from private.audit_events where action = $1 and id > $2 order by id desc limit 1', ['agent.autonomy_step', auditFloor])).actor_id, owner);
 
   // The hourly task: nothing is due yet.
-  const notifier = { send: async message => { sent.push(message); return [{ channel: 'email', delivery: 'sent' }]; } };
+  let refuse = false;
+  const notifier = { send: async message => { sent.push(message); return [{ channel: 'email', delivery: refuse ? 'failed' : 'sent' }]; } };
   const sent = [];
   const handler = autonomyHandlers({ store, notifier, publicOrigin: 'https://hub.test', features: new Set([autonomyFeature]), log: () => {} })['autonomy.graduate'];
   const task = { id: randomUUID(), agentKey: 'chief_of_staff', kind: 'autonomy.graduate', sourceKind: 'schedule' };
-  assert.deepEqual((await handler(task)).result, { graduated: [], waiting: [], reminded: [], delivery: [] });
+  assert.deepEqual((await handler(task)).result, { graduated: [], waiting: [], announced: [], reminded: [], delivery: [] });
 
   // Within a day of the end: one reminder. After the end: the switch, once, with one email.
   await admin.query("update private.agent_autonomy_steps set automatic_at = now() + interval '3 hours' where category = 'account_emails'");
@@ -78,6 +79,7 @@ try {
   assert.equal(sent.at(-1).subject, 'Account emails: now on their own');
   assert.deepEqual(await agent('account_manager').then(a => [a.autonomy, a.config.auto_send_templates]), ['act', ['setup_nudge', 'testimonial_ask', 'trial_checkin', 'welcome']]);
   assert.equal((await step('account_emails')).status, 'automatic');
+  assert.equal((await row("select announce_pending from private.agent_autonomy_steps where category = 'account_emails'")).announce_pending, false, 'the owner was told, and that is recorded');
   assert.equal((await step('offers')).status, 'supervised');
   assert.deepEqual(await store.autonomyGraduate('account_emails').then(result => [result.graduated, result.reason]), [false, 'not_due'], 'a switched step is not switched again');
   assert.equal((await row("select count(*)::integer as n from private.audit_events where action = 'agent.autonomy_step' and metadata ->> 'source' = 'schedule' and id > $1", [auditFloor])).n, 1);
@@ -109,6 +111,8 @@ try {
       'grant execute on function hub.set_agent_autonomy_step(text,text,timestamptz) to anon',
       "delete from private.agent_autonomy_steps where category = 'offers'",
       "delete from private.agent_schedules where task_kind = 'autonomy.graduate'",
+      "update private.agent_schedules set every_seconds = 86400 where task_kind = 'autonomy.graduate'",
+      'revoke execute on function private.agent_autonomy_announced(text,timestamptz) from hub_app_server',
       'alter table private.agent_autonomy_steps disable row level security',
     ]) {
       await client.query('begin');
@@ -117,11 +121,21 @@ try {
     }
   } finally { client.release(); }
 
+  // A switch whose email is refused stays done, stays pending announcement, fails the task so it is retried, and is announced next time.
+  await admin.query("update private.agent_autonomy_steps set status = 'supervised', supervised_since = now() - interval '8 days', automatic_at = now() - interval '1 minute' where category = 'account_emails'");
+  refuse = true;
+  await assert.rejects(handler(task), error => error?.code === 'notification_failed' && error.transient === true);
+  assert.deepEqual(await row("select status, announce_pending from private.agent_autonomy_steps where category = 'account_emails'").then(r => [r.status, r.announce_pending]), ['automatic', true]);
+  refuse = false;
+  const retried = (await handler(task)).result;
+  assert.deepEqual([retried.graduated, retried.announced], [[], ['account_emails']]);
+  assert.equal((await row("select announce_pending from private.agent_autonomy_steps where category = 'account_emails'")).announce_pending, false);
+
   // Nothing the owner sees or the emails say carries more than the kind of work and its dates.
   for (const message of sent) assert.doesNotMatch(`${message.subject} ${message.body}`, /@|\+1\d{10}/);
   console.log('Autonomy integration passed: closed table and owner-only changes, stale screen and session refusals, supervised week, one reminder, one switch, code-missing wait, hold that keeps other trust, early hand-over. No email sent.');
 } finally {
-  for (const s of seedSteps) await admin.query('update private.agent_autonomy_steps set status=$2, supervised_since=$3, automatic_at=$4, changed_at=$5, changed_by=$6, requires_feature=$7 where category=$1', [s.category, s.status, s.supervised_since, s.automatic_at, s.changed_at, s.changed_by, s.requires_feature]);
+  for (const s of seedSteps) await admin.query('update private.agent_autonomy_steps set status=$2, supervised_since=$3, automatic_at=$4, changed_at=$5, changed_by=$6, requires_feature=$7, announce_pending=$8 where category=$1', [s.category, s.status, s.supervised_since, s.automatic_at, s.changed_at, s.changed_by, s.requires_feature, s.announce_pending]);
   for (const a of seedAgents) await admin.query('update private.agents set autonomy=$2, config=$3 where key=$1', [a.key, a.autonomy, a.config]);
   await admin.query("delete from private.audit_events where id > $1 and action = 'agent.autonomy_step'", [auditFloor]);
   await admin.query('delete from private.sms_sessions where user_id=$1', [owner]);

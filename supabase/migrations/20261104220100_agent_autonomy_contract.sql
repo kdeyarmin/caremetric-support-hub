@@ -1,6 +1,6 @@
 -- Additive deployment gate for autonomy steps. Declaring the feature changes no behavior: it states that the steps table exists with
 -- row level security and is closed to every browser, service and server role; that the two server operations are security definers
--- with a pinned empty search path executable by the Hub server role alone; that the two owner operations authorize the owner's
+-- with a pinned empty search path executable by the Hub server role alone (three, with the one that records the owner was told); that the two owner operations authorize the owner's
 -- session themselves and are executable by signed-in sessions only; that the internal helpers are executable by no role; and that
 -- the steps and the Chief of Staff's hourly schedule exist. Every test fails closed, as in the hardening gate.
 do $$
@@ -24,7 +24,7 @@ begin
     end if;
   end loop;
 
-  foreach signature in array array['private.agent_autonomy_due()', 'private.agent_autonomy_graduate(text)'] loop
+  foreach signature in array array['private.agent_autonomy_due()', 'private.agent_autonomy_graduate(text)', 'private.agent_autonomy_announced(text,timestamp with time zone)'] loop
     if to_regprocedure(signature) is null
       or not coalesce((select p.prosecdef and coalesce(p.proconfig @> array['search_path=""'], false) from pg_proc p where p.oid = to_regprocedure(signature)), false)
       or has_function_privilege('anon', signature, 'EXECUTE') or has_function_privilege('authenticated', signature, 'EXECUTE')
@@ -68,7 +68,7 @@ begin
   if (select count(*) from private.agent_autonomy_steps where category in ('account_emails', 'support_answers', 'articles', 'offers')) <> 4 then
     raise exception 'The autonomy steps must exist' using errcode = '55000';
   end if;
-  if not exists (select 1 from private.agent_schedules where agent_key = 'chief_of_staff' and task_kind = 'autonomy.graduate' and cadence = 'interval' and not requires_session) then
+  if not exists (select 1 from private.agent_schedules where agent_key = 'chief_of_staff' and task_kind = 'autonomy.graduate' and cadence = 'interval' and every_seconds = 3600 and not requires_session) then
     raise exception 'The hourly autonomy schedule must exist' using errcode = '55000';
   end if;
 

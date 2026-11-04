@@ -59,12 +59,14 @@ auto-approval lists (`auto_send_templates` for the account emails, `auto_approve
 for support answers, `content.publish` for articles, `offer.apply` for offers); only migrations write that list.
 
 - **Start supervised week** (Team screen, under "Work the team does on its own"): the step is supervised for seven days. Any
-  agent it involves that could only observe moves up to Propose, so every item waits for the owner's approval.
+  agent it involves that could only observe moves up to Propose, and the step's values come off the agents' lists (one the owner
+  had added by hand included), so every item of that kind waits for the owner's approval all week.
 - After the week, the Chief of Staff's hourly `autonomy.graduate` task switches the step: each agent involved is set to Act
   and the step's values are added to its list, in one transaction, audited as `agent.autonomy_step` with source `schedule`.
-  The owner gets an email the day before (`autonomy:soon:<step>:<time>`) and one at the switch
-  (`autonomy:automatic:<step>:<time>`). The task runs whatever the Chief of Staff's own level is; pausing the Chief of Staff
-  pauses it.
+  The owner gets an email the day before (`autonomy:soon:<step>:<time>`, only for a step whose code is on the Hub) and one at
+  the switch (`autonomy:automatic:<step>:<time>`). A switch stays pending announcement in the database until that email is
+  delivered (`private.agent_autonomy_announced`), so a refused send fails the task and is retried. The task runs whatever the
+  Chief of Staff's own level is; pausing the Chief of Staff pauses it.
 - **Keep approving** (hold) takes the step's values back off the lists, leaving anything another automatic step or the
   owner added, and keeps the agent proposing that work. **Make automatic now** skips the rest of the week.
 - A step whose code is not on the Hub yet (its feature is not declared: `platform.agents.concierge-autosend.v1`,
@@ -72,9 +74,9 @@ for support answers, `content.publish` for articles, `offer.apply` for offers); 
   supervised step past its date switches as soon as the code arrives. The screen says so next to it.
 
 The steps table is closed to every role. The server reads due steps and switches one through `private.agent_autonomy_due()`
-and `private.agent_autonomy_graduate(text)` (Hub server only); the owner reads and changes them through
-`hub.get_agent_autonomy()` and `hub.set_agent_autonomy_step(text, text, timestamptz)` (`POST /api/admin/team/step`), which
-authorize the owner's session and refuse a stale screen. Both go through one internal function,
+, `private.agent_autonomy_graduate(text)` and `private.agent_autonomy_announced(text, timestamptz)` (Hub server only); the owner
+reads and changes them through `hub.get_agent_autonomy()` and `hub.set_agent_autonomy_step(text, text, timestamptz)`
+(`POST /api/admin/team/step`), which authorize the owner's session and lock the step before refusing a stale screen. Both go through one internal function,
 `private.agent_autonomy_apply`, which no role may call.
 
 ## The Team screen
