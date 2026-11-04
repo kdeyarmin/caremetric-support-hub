@@ -2,7 +2,7 @@
 -- unapproved only when the owner's "articles" autonomy step adds content.publish to the Content Marketer's list): it states that the
 -- publishing operation is still a security definer with a pinned empty search path executable by the Hub server role alone, that it
 -- still authors as the AI assistant, and that an article nobody approved is published only after re-checking, at publication, that
--- the Content Marketer is active, on Act and trusted with content.publish. Every test fails closed.
+-- the Content Marketer is active, on Act and trusted with content.publish, holding its row until publication. Every test fails closed.
 do $$
 declare
   contract jsonb := hub.get_backend_contract();
@@ -24,7 +24,10 @@ begin
     or position('a1a00000-a1a0-4000-8000-000000000001' in definition) = 0
     or position('decided_by is null' in definition) = 0
     or position('auto_approve_kinds' in definition) = 0 or position('content.publish' in definition) = 0
-    or position('approval_required' in definition) = 0 then
+    or position('approval_required' in definition) = 0
+    or position('v_agent.status is distinct from ''active''' in definition) = 0
+    or position('v_agent.autonomy is distinct from ''act''' in definition) = 0
+    or position('where key = v_action.agent_key for share' in definition) = 0 then
     raise exception 'An article nobody approved must be published only while the Content Marketer is trusted with publishing' using errcode = '55000';
   end if;
   if not exists (select 1 from private.agents where key = 'content_marketer') then

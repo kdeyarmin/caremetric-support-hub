@@ -26,10 +26,25 @@ begin
   if v_action.status <> 'executing' or (p_execution is not null and v_action.executions <> p_execution) then
     raise exception 'That article is not being published.' using errcode = '55000';
   end if;
+  v_slug := v_action.input ->> 'slug';
+  -- One publication of an address at a time, so two servers cannot both find it free.
+  perform pg_advisory_xact_lock(hashtextextended('content:' || v_slug, 0));
+  -- Already published (a restart after publication, before the server recorded it): settled as published whatever has changed since,
+  -- so a later change of trust cannot make an article that is public read as "not published".
+  select * into v_item from hub.content_items where content_key = v_slug;
+  if found then
+    if v_item.created_by = v_ai and exists (
+      select 1 from hub.content_revisions r where r.item_id = v_item.id and r.variables ->> 'author' = 'content_marketer') then
+      return jsonb_build_object('outcome', 'already_published', 'slug', v_slug, 'itemId', v_item.id);
+    end if;
+    return jsonb_build_object('outcome', 'slug_taken', 'slug', v_slug);
+  end if;
   if v_action.decided_by is null or v_action.decided_at is null then
     -- Approved automatically: only while the owner has handed article publishing over (the Content Marketer active, on Act and
-    -- trusted with content.publish), checked now, not only when the article was proposed.
-    select * into v_agent from private.agents where key = v_action.agent_key;
+    -- trusted with content.publish), checked now, not only when the article was proposed. The row is held (shared) until this
+    -- transaction commits, so a pause, a level change or Keep approving either commits first (and the article is refused) or waits
+    -- until it is published.
+    select * into v_agent from private.agents where key = v_action.agent_key for share;
     if v_agent.status is distinct from 'active' or v_agent.autonomy is distinct from 'act'
       or jsonb_typeof(v_agent.config -> 'auto_approve_kinds') is distinct from 'array'
       or not ((v_agent.config -> 'auto_approve_kinds') ? 'content.publish') then
@@ -39,17 +54,6 @@ begin
   -- The owner approved it, or (automatically) the AI assistant did under the owner's standing hand-over.
   v_approver := coalesce(v_action.decided_by, v_ai);
   v_approved_at := coalesce(v_action.decided_at, now());
-  v_slug := v_action.input ->> 'slug';
-  -- One publication of an address at a time, so two servers cannot both find it free.
-  perform pg_advisory_xact_lock(hashtextextended('content:' || v_slug, 0));
-  select * into v_item from hub.content_items where content_key = v_slug;
-  if found then
-    if v_item.created_by = v_ai and exists (
-      select 1 from hub.content_revisions r where r.item_id = v_item.id and r.variables ->> 'author' = 'content_marketer') then
-      return jsonb_build_object('outcome', 'already_published', 'slug', v_slug, 'itemId', v_item.id);
-    end if;
-    return jsonb_build_object('outcome', 'slug_taken', 'slug', v_slug);
-  end if;
   select * into v_product from hub.products p
   where p.slug = v_action.input ->> 'product' and p.status <> 'retired' and p.support_enabled;
   if not found then

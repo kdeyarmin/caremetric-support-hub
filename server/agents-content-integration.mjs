@@ -271,6 +271,12 @@ try {
     assert.deepEqual([revision.approved_by, revision.variables.approval], ['a1a00000-a1a0-4000-8000-000000000001', 'automatic']);
     assert.equal((await row("select metadata from private.audit_events where action = 'content.published' and metadata ->> 'slug' = $1", [handedSlug])).metadata.approval, 'automatic');
     await admin.query("update private.agents set config = jsonb_set(config, '{auto_approve_kinds}', '[]') where key = 'content_marketer'");
+    // A restart after publication but before the server recorded it, with the trust withdrawn in between: the retry settles the
+    // article as published (it is public), instead of failing it as not published.
+    await admin.query("update private.agent_actions set status = 'auto_approved', result = null where id = $1", [handed]);
+    const retried = await team.actions.executeOne(handed, { kind: 'content.publish' });
+    assert.equal(retried.executed, true, JSON.stringify(retried));
+    assert.equal((await row('select result from private.agent_actions where id = $1', [handed])).result.outcome, 'already_published');
     const withdrawnSlug = `${slugs.approval}-withdrawn`;
     const withdrawn = await insertAction({ ...article, slug: withdrawnSlug, topic: `pgit-withdrawn-${run}` }, 'auto_approved');
     assert.deepEqual(await team.actions.executeOne(withdrawn, { kind: 'content.publish' }), { executed: false, failed: true, skipped: false, error: 'approval_required' });
@@ -291,6 +297,10 @@ try {
       'revoke execute on function private.agent_content_publish(uuid,integer) from hub_app_server',
       'grant execute on function private.agent_content_publish(uuid,integer) to authenticated',
       'alter function private.agent_content_publish(uuid,integer) reset search_path',
+      // The trust guards themselves: a publisher without one of them must not be declared.
+      ...[["v_agent.autonomy is distinct from 'act'", 'false'], ["v_agent.status is distinct from 'active'", 'false'],
+        ['where key = v_action.agent_key for share', 'where key = v_action.agent_key']]
+        .map(([from, to]) => `do $d$ begin execute replace(pg_get_functiondef('private.agent_content_publish(uuid,integer)'::regprocedure), '${from.replaceAll("'", "''")}', '${to.replaceAll("'", "''")}'); end $d$`),
     ]) {
       await gateClient.query('begin');
       try { await gateClient.query(drift); await assert.rejects(gateClient.query(autopublishGate), refused('55000'), drift); }
