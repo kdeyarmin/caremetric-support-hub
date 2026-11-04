@@ -175,13 +175,13 @@ try {
   assert.deepEqual([revision.revision_no, revision.review_state, revision.created_by, revision.approved_by, revision.title, revision.summary, revision.body_markdown],
     [1, 'approved', ai, owner, proposed.input.title, proposed.input.description, proposed.input.body]);
   assert.equal(new Date(revision.approved_at).getTime(), new Date(executed.decided_at).getTime(), 'approved when the owner decided');
-  assert.deepEqual(revision.variables, { author: 'content_marketer', agent: 'content_marketer', topic: 'pa-fire-drill-requirements', kind: 'regulation', action: proposed.id, approvedBy: owner });
+  assert.deepEqual(revision.variables, { author: 'content_marketer', agent: 'content_marketer', topic: 'pa-fire-drill-requirements', kind: 'regulation', action: proposed.id, approvedBy: owner, approval: 'owner' });
   assert.match(revision.source_hash, /^[0-9a-f]{64}$/);
   assert.equal(revision.source_version, `agent:${promptVersion}`);
   const publication = await row('select p.*, pr.slug as product from hub.content_publications p join hub.products pr on pr.id = p.product_id where p.item_id = $1', [item.id]);
   assert.deepEqual([publication.product, publication.audience, publication.revision_id, publication.published_by, publication.route_pattern], ['carebase', ['all'], revision.id, owner, null]);
   const audit = await row("select * from private.audit_events where action = 'content.published' and entity_id = $1", [item.id]);
-  assert.deepEqual([audit.actor_id, audit.entity_type, audit.metadata], [ai, 'content_item', { agent: 'content_marketer', action: proposed.id, slug: slugs.fire, topic: 'pa-fire-drill-requirements', approvedBy: owner }]);
+  assert.deepEqual([audit.actor_id, audit.entity_type, audit.metadata], [ai, 'content_item', { agent: 'content_marketer', action: proposed.id, slug: slugs.fire, topic: 'pa-fire-drill-requirements', approvedBy: owner, approval: 'owner' }]);
   assert.equal((await row('select status from private.agent_tasks where id = $1', [first.id])).status, 'done', 'the task closes once its proposal is carried out');
 
   // Anyone may now read it, exactly as the help center's app reads it.
@@ -257,6 +257,46 @@ try {
   await store.completeExecution(automatic, false, { error: 'approval_required' }, started.execution);
   await assert.rejects(store.contentPublish(automatic, started.execution), refused('55000', /not being published/), 'only an execution in progress can publish');
   assert.equal(Number((await row('select count(*) from hub.content_items where content_key = $1', [slugs.approval])).count), 0);
+
+  // ---- 7b. Once the owner hands publishing over (the Content Marketer active, on Act and trusted with content.publish), an article
+  //          approved on its own is published, with the AI assistant as its approver; taking the trust back stops the next one. ------
+  const handedSlug = `${slugs.approval}-handed`;
+  const savedMarketer = await row("select status, autonomy, config from private.agents where key = 'content_marketer'");
+  await admin.query("update private.agents set status = 'active', autonomy = 'act', config = jsonb_set(config, '{auto_approve_kinds}', '[\"content.publish\"]') where key = 'content_marketer'");
+  try {
+    const handed = await insertAction({ ...article, slug: handedSlug, topic: `pgit-handed-${run}` }, 'auto_approved');
+    const published = await team.actions.executeOne(handed, { kind: 'content.publish' });
+    assert.equal(published.executed, true, JSON.stringify(published));
+    const revision = await row('select r.approved_by, r.variables from hub.content_revisions r join hub.content_items i on i.id = r.item_id where i.content_key = $1', [handedSlug]);
+    assert.deepEqual([revision.approved_by, revision.variables.approval], ['a1a00000-a1a0-4000-8000-000000000001', 'automatic']);
+    assert.equal((await row("select metadata from private.audit_events where action = 'content.published' and metadata ->> 'slug' = $1", [handedSlug])).metadata.approval, 'automatic');
+    await admin.query("update private.agents set config = jsonb_set(config, '{auto_approve_kinds}', '[]') where key = 'content_marketer'");
+    const withdrawnSlug = `${slugs.approval}-withdrawn`;
+    const withdrawn = await insertAction({ ...article, slug: withdrawnSlug, topic: `pgit-withdrawn-${run}` }, 'auto_approved');
+    assert.deepEqual(await team.actions.executeOne(withdrawn, { kind: 'content.publish' }), { executed: false, failed: true, skipped: false, error: 'approval_required' });
+    assert.equal(Number((await row('select count(*) from hub.content_items where content_key = $1', [withdrawnSlug])).count), 0);
+  } finally {
+    await admin.query("update private.agents set status = $1, autonomy = $2, config = $3 where key = 'content_marketer'", [savedMarketer.status, savedMarketer.autonomy, savedMarketer.config]);
+    await admin.query("delete from hub.content_publications where item_id in (select id from hub.content_items where content_key = $1)", [handedSlug]);
+    await admin.query("delete from hub.content_revisions where item_id in (select id from hub.content_items where content_key = $1)", [handedSlug]);
+    await admin.query("delete from hub.content_items where content_key = $1", [handedSlug]);
+  }
+
+  // ---- 7c. The publishing hand-over gate declares again as it is and refuses drift -----------------------------------------------------
+  const autopublishGate = await readFile(new URL('../supabase/migrations/20261105130100_content_autopublish_contract.sql', import.meta.url), 'utf8');
+  const gateClient = await admin.connect();
+  try {
+    await gateClient.query('begin'); await gateClient.query(autopublishGate); await gateClient.query('rollback');
+    for (const drift of [
+      'revoke execute on function private.agent_content_publish(uuid,integer) from hub_app_server',
+      'grant execute on function private.agent_content_publish(uuid,integer) to authenticated',
+      'alter function private.agent_content_publish(uuid,integer) reset search_path',
+    ]) {
+      await gateClient.query('begin');
+      try { await gateClient.query(drift); await assert.rejects(gateClient.query(autopublishGate), refused('55000'), drift); }
+      finally { await gateClient.query('rollback'); }
+    }
+  } finally { gateClient.release(); }
 
   // ---- 8. A product closed to support is refused, and nothing is written -------------------------------------------------------------
   await admin.query("update hub.products set support_enabled = false where slug = 'advisors'");
