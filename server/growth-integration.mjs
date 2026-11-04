@@ -278,6 +278,37 @@ try {
   assert.equal(+cancellationEvent.occurred_at,+received.created_at,'the reply is not backdated to the previous thread activity');
   assert.ok(planOpportunity(await fixtureSnapshot(cancellation.id)).some(w=>w.kind==='recovery'),'a cancellation after renewal still requires recovery');
 
+  // Growth capture never decides whether a customer's email is kept. A sales email from a domain the growth records cannot
+  // hold (a one-letter host, which the inbox accepts) used to abort the inbox insert; it is now saved and the miss audited.
+  const auditedMiss=async id=>(await row("select metadata from private.audit_events where action='growth.inquiry_failed' and entity_id=$1",[id]))?.metadata;
+  const oddSender=`buyer-${run}@q.example`;
+  const oddThread=await call('private.ingest_inbound_communication',['email',`odd:${run}`,`odd-first:${run}`,null,'carebase','Pricing','What is your pricing? Can we book a demo?','Buyer',oddSender,null]);
+  regressionCommunications.push(oddThread.id);
+  const oddMessage=await row('select id from private.communication_messages where provider_message_id=$1',[`email:odd-first:${run}`]);
+  assert.ok(oddMessage,'the email is saved although growth could not record its sender');
+  assert.equal((await row("select count(*)::integer as n from private.growth_organizations where domain='q.example'")).n,0);
+  const oddMiss=await auditedMiss(oddMessage.id);
+  assert.deepEqual(oddMiss,{communicationId:oddThread.id,sqlstate:'23514'},'the audit row holds the error code and ids only, never the address or text');
+
+  // Any other failure inside growth capture: the reply is saved, nothing is half-written, and it still stops queued outreach.
+  const failing=await regressionFixture();
+  const failingEmail=(await row('select email from private.growth_contacts where id=$1',[failing.contactId])).email;
+  const failingWork=await store.plan(failing.id,{key:'outreach:failsafe',kind:'outreach',action:'Offer a conversation.',success:'Qualified reply.',owner:'marketing_manager',dueAt:new Date().toISOString()});
+  const queued=await store.draft(failing.id,failingWork,{...await draftVersions(failing.id),purpose:'marketing',subject:'Product workflow',body:'Would a conversation be useful?',citations:(await store.detail(token,failing.id)).evidence.map(e=>e.id),unsubscribeHash:digest(failingWork),modelGenerated:true});
+  await store.propose(await task(),queued.id);
+  assert.equal((await message(queued.id)).status,'proposed');
+  const injected=`growth_failsafe_${run}`;
+  await admin.query(`alter table private.customer_activity_events add constraint ${injected} check (event_key not like 'inquiry:%') not valid`);
+  try {
+    regressionCommunications.push((await call('private.ingest_inbound_communication',['email',`failsafe:${run}`,`failsafe-first:${run}`,null,'carebase','Re: Product workflow','Thanks, I am interested.','Buyer',failingEmail,null])).id);
+  } finally { await admin.query(`alter table private.customer_activity_events drop constraint ${injected}`); }
+  const failedReply=await row('select id from private.communication_messages where provider_message_id=$1',[`email:failsafe-first:${run}`]);
+  assert.ok(failedReply,'the reply is saved although growth capture failed');
+  assert.equal((await message(queued.id)).status,'cancelled','the reply still stops queued outreach to its sender');
+  assert.equal((await row('select count(*)::integer as n from private.customer_activity_events where event_key=$1',[`inquiry:${failedReply.id}`])).n,0);
+  assert.equal((await opportunity(failing.id)).stage,'qualified','the failed capture left no partial update');
+  assert.equal((await auditedMiss(failedReply.id))?.sqlstate,'23514');
+
   // Late signup/trial history that leaves current context unchanged must preserve an existing approval.
   const pendingCustomer=await regressionFixture();
   await report(pendingCustomer,'paid-before-history','paid',timeAgo(1));
@@ -397,7 +428,7 @@ try {
       finally { await client.query('rollback'); }
     }
   } finally { client.release(); }
-  console.log('Growth integration passed: session boundaries, unverified-chat exclusion, message chronology, event-based initialization, late milestones and draft preservation, tenant remapping, shared lifecycle/growth recipient claims, reply stop, stale proposal replacement, deferred queue fairness, opt-out, shared budgets, and fail-closed deployment gates. No email sent.');
+  console.log('Growth integration passed: session boundaries, unverified-chat exclusion, message chronology, event-based initialization, late milestones and draft preservation, tenant remapping, shared lifecycle/growth recipient claims, reply stop, inbox saved when growth capture fails, stale proposal replacement, deferred queue fairness, opt-out, shared budgets, and fail-closed deployment gates. No email sent.');
 } finally {
   if (!organization) organization = (await row('select id from private.growth_organizations where domain=$1', [domain]))?.id;
   for(const organizationId of [...(organization?[organization]:[]),...regressionOrganizations]) {
