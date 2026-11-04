@@ -39,7 +39,8 @@ const emptyPage = { items: [], total: 0, offset: 0, limit: 15 };
 function fakeClient(data: TeamOverview = overview(), overrides: Partial<TeamClient> = {}): TeamClient {
   return {
     overview: vi.fn(async () => data), setStatus: vi.fn(async () => engineer), setAutonomy: vi.fn(async () => engineer), setBudget: vi.fn(async () => engineer),
-    decide: vi.fn(async () => ({ id: ids.action, kind: "communication.reply", status: "executed", decided: true })), run: vi.fn(async () => ({ id: ids.task, status: "queued" })),
+    decide: vi.fn(async () => ({ id: ids.action, kind: "communication.reply", status: "executed", decided: true })),
+    email: vi.fn(async () => ({ id: ids.action, actionId: ids.action, status: "proposed" })), run: vi.fn(async () => ({ id: ids.task, status: "queued" })),
     cancel: vi.fn(async () => ({ id: ids.task, status: "cancelled" })), waiting: vi.fn(async () => ({ started: 2, actions: 0 })),
     activity: vi.fn(async () => emptyPage) as TeamClient["activity"], audit: vi.fn(async () => emptyPage), ...overrides,
   };
