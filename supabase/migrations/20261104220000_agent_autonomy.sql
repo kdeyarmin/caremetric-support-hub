@@ -30,7 +30,7 @@ insert into private.agent_autonomy_steps (category, label, requires_feature, cha
   ('account_emails', 'Account emails', 'platform.agents.lifecycle.v1',
     '[{"agent": "account_manager", "config_key": "auto_send_templates", "values": ["welcome", "setup_nudge", "trial_checkin", "testimonial_ask"]}]'),
   ('support_answers', 'Support answers', 'platform.agents.concierge-autosend.v1',
-    '[{"agent": "support_concierge", "config_key": "auto_approve_kinds", "values": ["communication.reply"]}]'),
+    '[{"agent": "support_concierge", "config_key": "auto_approve_kinds", "values": ["communication.answer"]}]'),
   ('articles', 'Article publishing', 'platform.agents.content-autopublish.v1',
     '[{"agent": "content_marketer", "config_key": "auto_approve_kinds", "values": ["content.publish"]}]'),
   ('offers', 'Offers', 'platform.agents.offers.v1',

@@ -55,8 +55,8 @@ metadata, run summaries or task payloads.
 The owner hands kinds of work over to the team one at a time (`supabase/migrations/20261104220000_agent_autonomy.sql`,
 `private.agent_autonomy_steps`). Four ship, all off: **Account emails** (the Account Manager's four templates), **Support
 answers**, **Article publishing** and **Offers**. Each step lists which agents it changes and what it adds to their
-auto-approval lists (`auto_send_templates` for the account emails, `auto_approve_kinds` for the others); only migrations
-write that list.
+auto-approval lists (`auto_send_templates` for the account emails, `auto_approve_kinds` for the others: `communication.answer`
+for support answers, `content.publish` for articles, `offer.apply` for offers); only migrations write that list.
 
 - **Start supervised week** (Team screen, under "Work the team does on its own"): the step is supervised for seven days. Any
   agent it involves that could only observe moves up to Propose, so every item waits for the owner's approval.
