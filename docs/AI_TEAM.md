@@ -845,6 +845,17 @@ can still be rejected (or are left to expire after seven days). Removing `ANTHRO
 published article down, retire it: `update hub.content_items set status = 'retired', retired_at = now() where content_key =
 '<address>';`. It leaves the help center, the sitemap and its address (which then answers 404) within five minutes.
 
+### Publishing on its own
+
+With `platform.agents.content-autopublish.v1` (`supabase/migrations/20261105130000_content_autopublish.sql`), an article approved
+automatically is published too, but only while the owner has handed article publishing over: `private.agent_content_publish`
+checks, at publication, that the Content Marketer is active, on Act and trusted with `content.publish` (the articles autonomy
+step adds it), and otherwise answers `approval_required` as before. The executor still re-checks every article against the
+content rules first. An article published this way records the AI assistant as its approver and says `approval: automatic` in
+its revision variables and its audit row; the owner's own approvals are unchanged. The fact sheet the checks read
+(`server/agents/content/facts.mjs`, `docs/GTM_FACTS.md`) is what keeps automatic articles accurate: confirm it before the
+articles step switches.
+
 ## Boundary
 
 - Every table has row level security and **no** privilege for any browser, service or server role.
@@ -1116,6 +1127,10 @@ Apply the migrations in order with the usual procedure:
    `communication.answer` action kind with its shape check and the server-only operation that records an answer, and declare
    `platform.agents.concierge-autosend.v1` (it needs the Concierge, the hardening, the communications inbox and autonomy steps).
    Restart the Hub after it. Answers are drafted only with `HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true` and a model key.
+13. `20261105130000_content_autopublish.sql`, then its gate `20261105130100_content_autopublish_contract.sql`, which replace the
+   publishing operation so an automatically approved article is published while the Content Marketer is trusted with publishing,
+   and declare `platform.agents.content-autopublish.v1` (it needs the Content Marketer, the hardening and autonomy steps). Restart
+   the Hub after it.
 
 The Hub build does not require any of these features, so a Hub whose database lacks them still starts and
 serves everything else. The AI team is opt-in twice over: nothing runs unless `HUB_AGENTS_ENABLED`

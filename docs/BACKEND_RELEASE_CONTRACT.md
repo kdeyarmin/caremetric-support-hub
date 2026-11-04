@@ -151,6 +151,13 @@ identifiers, `private.agent_answer_begin(...)` is a security definer with a pinn
 assistant, and that profile exists. Each test fails closed. The Hub server proposes answers and registers their executor only
 when the feature is declared.
 
+`20261105130100_content_autopublish_contract.sql` declares `platform.agents.content-autopublish.v1` only after
+`platform.agents.content.v1`, `platform.agents.hardening.v1` and `platform.agents.autonomy.v1` are declared and
+`private.agent_content_publish(...)` is still a security definer with a pinned empty search path executable by `hub_app_server`
+alone that authors as the AI assistant and publishes an article nobody approved only after re-checking that the Content
+Marketer is trusted with `content.publish`. Each test fails closed. The Hub server's publish executor leaves an automatically
+approved article to the database only when the feature is declared.
+
 The table above is not exhaustive:
 later features such as the `billing.*` and `customer.self-service.v1` boundaries are declared
 by their own migrations and listed in `src/lib/backendContract.ts`. See [AI_TEAM.md](AI_TEAM.md).

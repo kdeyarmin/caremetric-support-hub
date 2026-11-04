@@ -123,7 +123,7 @@ describe("AI team display", () => {
     expect(taskLabel("content.outreach")).toBe("Monthly outreach drafts");
     expect(actionLabel("content.publish")).toBe("Publish a help article");
     expect(errorLabel("slug_taken")).toMatch(/already uses this address/);
-    expect(errorLabel("approval_required")).toMatch(/only with your approval/);
+    expect(errorLabel("approval_required")).toMatch(/not handed over to the Content Marketer/);
     expect(errorLabel("invalid_article")).toMatch(/content checks/);
     expect(errorLabel("product_unavailable")).toMatch(/retired or closed/);
     for (const code of ["invalid_article", "approval_required", "slug_taken", "product_unavailable", "publish_failed"]) {
