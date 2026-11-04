@@ -93,7 +93,7 @@ function DirectEmailPanel({ busy, onPrepare }: { busy: string; onPrepare: (draft
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
-  const valid = /^[^\s@<>"\,;]+@[^\s@<>"\,;]+\.[^\s@<>"\,;]+$/.test(recipient.trim())
+  const valid = /^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]+$/.test(recipient.trim())
     && recipient.length <= 200 && subject.trim().length >= 3 && subject.trim().length <= 150
     && !/[\r\n]/.test(subject) && body.trim().length >= 10 && body.trim().length <= 3800;
   return <section className="panel team-direct-email" aria-labelledby="team-direct-email-title">
