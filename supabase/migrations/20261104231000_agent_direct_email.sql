@@ -36,7 +36,7 @@ create table private.agent_direct_emails (
   request_key uuid not null unique,
   action_id uuid not null unique references private.agent_actions(id) on delete restrict,
   recipient text not null check (char_length(recipient) between 3 and 200 and recipient=lower(recipient)
-    and recipient ~ '^[a-z0-9_''+-]+(\\.[a-z0-9_''+-]+)*@[a-z0-9-]+(\\.[a-z0-9-]+)+$'),
+    and recipient ~ '^[a-z0-9_''+-]+(\.[a-z0-9_''+-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)+$'),
   subject text not null check (char_length(subject) between 3 and 150 and subject !~ '[[:cntrl:]]'),
   body text not null check (char_length(body) between 10 and 3800),
   requested_by uuid not null references auth.users(id) on delete restrict,
@@ -67,7 +67,7 @@ declare
 begin
   v_actor:=hub.authorize_app_command();
   if p_request_key is null or v_recipient is null or char_length(v_recipient) not between 3 and 200
-     or v_recipient !~ '^[a-z0-9_''+-]+(\\.[a-z0-9_''+-]+)*@[a-z0-9-]+(\\.[a-z0-9-]+)+$'
+     or v_recipient !~ '^[a-z0-9_''+-]+(\.[a-z0-9_''+-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)+$'
      or v_subject is null or char_length(v_subject) not between 3 and 150 or v_subject ~ '[[:cntrl:]]'
      or v_body is null or char_length(v_body) not between 10 and 3800 then
     raise exception 'Enter one email address, a subject and message without patient information.' using errcode='22023';
