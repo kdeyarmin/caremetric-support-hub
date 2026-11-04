@@ -187,8 +187,6 @@ const errorLabels: Record<string, string> = {
   wording_changed: "The Hub's wording for this email changed after you approved it, so nothing was sent rather than different words.",
   auto_send_off: "This email was approved on its own, but its template is no longer one you let the agent send, so nothing was sent.",
   invalid_email: "The Hub refused this email as invalid. Nothing was sent.",
-  wording_changed: "The message changed after your review, so nothing was sent.",
-  approval_required: "An external email must be approved by you before it can be sent.",
 };
 /** What a stored error code means for the owner; an unknown code is shown as it is. */
 export const errorLabel = (code: string | null | undefined) => (code ? errorLabels[code] ?? code : "");
