@@ -12,7 +12,7 @@ import { replySubject } from './executor.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const failure = code => Object.assign(new Error('The answer could not be sent.'), { code });
-const refusals = new Set(['answers_off', 'conversation_closed', 'conversation_missing', 'thread_changed', 'reply_refused']);
+const refusals = new Set(['answers_off', 'conversation_closed', 'conversation_missing', 'target_mismatch', 'thread_changed', 'reply_refused']);
 
 export function answerExecutor({ communications, notifier, log = line => console.warn(line) }) {
   async function warn(execution, reference) {

@@ -179,6 +179,7 @@ const errorLabels: Record<string, string> = {
   thread_changed: "The customer wrote again after this reply was written, so nothing was sent. Open the conversation and answer their latest message.",
   conversation_closed: "The conversation was closed, so nothing was sent.",
   conversation_missing: "The conversation no longer exists, so nothing was sent.",
+  target_mismatch: "The answer named a different conversation from the one it would have gone to, so nothing was sent.",
   session_required: "Your sign-in lapsed. Sign in again, then press Run what's waiting.",
   not_permitted: "Your account cannot do this, so nothing was sent.",
   reply_refused: "The Hub could not route this reply (no email address or number on file, or that channel is not set up). Nothing was sent.",

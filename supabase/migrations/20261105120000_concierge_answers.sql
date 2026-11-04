@@ -73,6 +73,11 @@ begin
   if not found then
     return jsonb_build_object('state', 'refused', 'code', 'conversation_missing');
   end if;
+  -- The conversation it goes to must be the one the owner's card names and links (the action's target), not only the id in its input.
+  if v_action.target_id is distinct from 'CM-' || v_communication.reference
+    or (v_action.input ->> 'reference') is distinct from v_communication.reference::text then
+    return jsonb_build_object('state', 'refused', 'code', 'target_mismatch');
+  end if;
   -- An answer already recorded under this action's key is settled, whatever the thread has done since: it was written for the thread as it was.
   select * into v_existing from private.communication_messages m where m.communication_id = v_communication.id and m.request_key = v_action.request_key;
   if found then

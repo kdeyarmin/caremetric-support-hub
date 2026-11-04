@@ -22,7 +22,7 @@ describe('sending a support answer', () => {
   });
 
   it('passes on every refusal the database gives, coded, and never retries', async () => {
-    for (const code of ['answers_off', 'conversation_closed', 'conversation_missing', 'thread_changed', 'reply_refused']) {
+    for (const code of ['answers_off', 'conversation_closed', 'conversation_missing', 'target_mismatch', 'thread_changed', 'reply_refused']) {
       const { run } = fixture(async () => ({ refused: code }));
       await expect(run()).rejects.toMatchObject({ code });
     }
