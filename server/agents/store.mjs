@@ -46,6 +46,10 @@ export function sqlAgentStore(pool, { fenced = false, growth = false } = {}) {
       ? call('private.agent_actions_ready', [limit, kinds, excludeKinds])
       : call('private.agent_actions_ready', [limit])),
     beginExecution: actionId => call('private.agent_action_execution', [actionId]),
+    /** One-use reservation for an owner-approved external email (no re-send on an unknown outcome). */
+    directEmailBeginSend: (actionId, execution) => call('private.agent_direct_email_begin_send', [actionId, execution]),
+    directEmailFinishSend: ({ actionId, execution, delivery, providerMessageId = null }) =>
+      call('private.agent_direct_email_finish_send', [actionId, execution, delivery, providerMessageId]),
     /** `execution` is the number beginExecution reported for this start; a report for any other start is refused. */
     completeExecution: (actionId, ok, result = null, execution = null) => (fenced && Number.isInteger(execution)
       ? call('private.agent_action_executed', [actionId, ok, result, execution])
