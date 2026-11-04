@@ -83,9 +83,11 @@ begin
   if found then
     return jsonb_build_object('state', 'replay', 'messageId', v_existing.id, 'delivery', v_existing.delivery, 'deliveryChannel', v_existing.delivery_channel);
   end if;
-  -- Nobody approved it: the Concierge must still be trusted with answers, now, not only when it proposed this one.
+  -- Nobody approved it: the Concierge must still be trusted with answers, now, not only when it proposed this one. The row is held
+  -- (shared) until this transaction commits, so a pause, a level change or Keep approving cannot slip in between the check and the
+  -- recorded answer: either it commits first and the answer is refused, or it waits until the answer is recorded.
   if v_action.decided_by is null then
-    select * into v_agent from private.agents where key = v_action.agent_key;
+    select * into v_agent from private.agents where key = v_action.agent_key for share;
     if v_agent.status is distinct from 'active' or v_agent.autonomy is distinct from 'act'
       or jsonb_typeof(v_agent.config -> 'auto_approve_kinds') is distinct from 'array'
       or not ((v_agent.config -> 'auto_approve_kinds') ? 'communication.answer') then

@@ -54,6 +54,7 @@ const answerInput = (c, over = {}) => ({
 const propose = async (c, over = {}) => store.proposeAction({ taskId: await task(), kind: 'communication.answer', targetKind: 'communication', targetId: `CM-${c.reference}`, preview: 'Hello', input: answerInput(c, over) });
 const trust = async on => admin.query("update private.agents set status = 'active', autonomy = $1, config = jsonb_set(config, '{auto_approve_kinds}', $2::jsonb) where key = 'support_concierge'",
   [on ? 'act' : 'propose', on ? '["communication.answer"]' : '[]']);
+const pgText = value => `'${value.replaceAll("'", "''")}'`;
 const result = async id => (await row('select status, result from private.agent_actions where id = $1', [id]));
 
 try {
@@ -161,6 +162,10 @@ try {
       'revoke execute on function private.agent_answer_begin(uuid,integer,text[]) from hub_app_server',
       'alter function private.agent_answer_begin(uuid,integer,text[]) reset search_path',
       'alter table private.agent_actions drop constraint agent_actions_communication_answer_check',
+      // The trust and target guards themselves: an operation without one of them must not be declared.
+      ...[["v_agent.autonomy is distinct from 'act'", 'false'], ["v_agent.status is distinct from 'active'", 'false'],
+        ['where key = v_action.agent_key for share', 'where key = v_action.agent_key'], ["'code', 'target_mismatch'", "'code', 'reply_refused'"]]
+        .map(([from, to]) => `do $d$ begin execute replace(pg_get_functiondef('private.agent_answer_begin(uuid,integer,text[])'::regprocedure), ${pgText(from)}, ${pgText(to)}); end $d$`),
     ]) {
       await client.query('begin');
       try { await client.query(drift); await assert.rejects(client.query(gate), refused('55000'), drift); }
