@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { config } from "../lib/config";
 import { sessionEvent } from "../lib/appSession";
-import { activitySchemas, agentSchema, auditSchema, decisionSchema, overviewSchema, taskResultSchema, waitingSchema } from "./teamProtocol";
+import { activitySchemas, agentSchema, auditSchema, decisionSchema, overviewSchema, preparedEmailSchema, taskResultSchema, waitingSchema } from "./teamProtocol";
 import type { ActivityKind, ActivityPage, AuditPage, Decision, TeamAgent, TeamOverview } from "./teamProtocol";
 
 /**
@@ -41,6 +41,7 @@ export interface TeamClient {
   setAutonomy(input: { key: string; autonomy: "observe" | "propose" | "act"; expectedUpdatedAt: string }): Promise<TeamAgent>;
   setBudget(input: { key: string; dailyBudgetCents: number; expectedUpdatedAt: string }): Promise<TeamAgent>;
   decide(input: { actionId: string; decision: "approve" | "reject"; note?: string }): Promise<Decision>;
+  email(input: { recipient: string; subject: string; body: string; requestKey: string }): Promise<{ id: string; actionId: string; status: string }>;
   run(input: { agentKey: string; taskKind: string }): Promise<{ id: string; status: string }>;
   cancel(input: { taskId: string }): Promise<{ id: string; status: string }>;
   /** Runs the work that was waiting for the owner's sign-in (imports, and approved replies that never went out). Answers at once; the work finishes in the background. */
@@ -55,6 +56,7 @@ export const teamClient: TeamClient = {
   setAutonomy: input => post("admin/team/autonomy", input, agentSchema),
   setBudget: input => post("admin/team/budget", input, agentSchema),
   decide: ({ note, ...input }) => post("admin/team/decide", note ? { ...input, note } : input, decisionSchema),
+  email: input => post("admin/team/email", input, preparedEmailSchema),
   run: input => post("admin/team/run", input, taskResultSchema),
   cancel: input => post("admin/team/cancel", input, taskResultSchema),
   waiting: () => post("admin/team/waiting", {}, waitingSchema),
