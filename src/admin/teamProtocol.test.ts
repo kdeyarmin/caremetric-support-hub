@@ -92,6 +92,7 @@ describe("AI team display", () => {
   it("explains why an action could not be carried out, and shows an unknown code as it is", () => {
     expect(errorLabel("thread_changed")).toMatch(/customer wrote again/);
     expect(errorLabel("conversation_closed")).toBe("The conversation was closed, so nothing was sent.");
+    expect(errorLabel("target_mismatch")).toMatch(/different conversation/);
     expect(errorLabel("session_required")).toMatch(/Run what's waiting/);
     expect(errorLabel("delivery_unknown")).toMatch(/check the thread before sending again/);
     expect(errorLabel("brand_new_code")).toBe("brand_new_code");

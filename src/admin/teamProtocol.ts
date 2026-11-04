@@ -146,7 +146,7 @@ export function targetLabel(targetKind: string | null, targetId: string): string
 
 const actionLabels: Record<string, string> = {
   "content.publish": "Publish a help article",
-  "communication.reply": "Reply to a customer", "communication.note": "Add an internal note", "communication.update": "Update a conversation",
+  "communication.reply": "Reply to a customer", "communication.answer": "Answer a customer from your guides", "communication.note": "Add an internal note", "communication.update": "Update a conversation",
   "growth.message": "Send a reviewed growth message", "growth.content": "Approve a product content brief",
   "incident.open": "Open an incident", "incident.resolve": "Resolve an incident", "import.run": "Import messages",
   "email.send": "Email a customer",
@@ -179,6 +179,7 @@ const errorLabels: Record<string, string> = {
   thread_changed: "The customer wrote again after this reply was written, so nothing was sent. Open the conversation and answer their latest message.",
   conversation_closed: "The conversation was closed, so nothing was sent.",
   conversation_missing: "The conversation no longer exists, so nothing was sent.",
+  target_mismatch: "The answer named a different conversation from the one it would have gone to, so nothing was sent.",
   session_required: "Your sign-in lapsed. Sign in again, then press Run what's waiting.",
   not_permitted: "Your account cannot do this, so nothing was sent.",
   reply_refused: "The Hub could not route this reply (no email address or number on file, or that channel is not set up). Nothing was sent.",
@@ -187,6 +188,7 @@ const errorLabels: Record<string, string> = {
   delivery_unknown: "The provider did not confirm delivery. Open the conversation and check the thread before sending again.",
   delivery_unconfirmed: "The reply was recorded but its delivery was never confirmed. Open the conversation and check the thread before sending again.",
   auto_approved_refused: "Replies are never sent without your approval, so nothing was sent.",
+  answers_off: "Support answers are no longer handed over to the Concierge (you chose Keep approving, paused it or changed its level after this answer was approved automatically), so nothing was sent.",
   no_executor: "This server cannot carry out that kind of action yet.",
   executor_error: "The action could not be carried out.",
   bridge_unavailable: "The other application did not answer. It is tried again when you press Run what's waiting.",

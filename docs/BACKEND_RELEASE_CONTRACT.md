@@ -143,6 +143,14 @@ helpers are executable by no role, and the four steps and the Chief of Staff's s
 closed. The Hub server registers the hourly task only when the feature is declared, and the Team screen leaves the
 autonomy panel out when the database has no steps.
 
+`20261105120100_concierge_answers_contract.sql` declares `platform.agents.concierge-autosend.v1` only after
+`platform.agents.concierge.v1`, `platform.agents.hardening.v1`, `support.communications.v1` and `platform.agents.autonomy.v1`
+are declared, `communication.answer` is an allowed action kind with a shape check that admits only cited drafted answers with no
+identifiers, `private.agent_answer_begin(...)` is a security definer with a pinned empty search path executable by
+`hub_app_server` alone that re-checks the Concierge's trust for an answer nobody approved and authors the message as the AI
+assistant, and that profile exists. Each test fails closed. The Hub server proposes answers and registers their executor only
+when the feature is declared.
+
 The table above is not exhaustive:
 later features such as the `billing.*` and `customer.self-service.v1` boundaries are declared
 by their own migrations and listed in `src/lib/backendContract.ts`. See [AI_TEAM.md](AI_TEAM.md).
