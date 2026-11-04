@@ -64,7 +64,7 @@ function RecordLink({ reference }: { reference: string }) {
 
 function ApprovalCard({ approval, busy, onDecide }: { approval: TeamApproval; busy: string; onDecide: (approval: TeamApproval, decision: "approve" | "reject", note: string) => void }) {
   const [note, setNote] = useState("");
-  const email = approval.kind === "email.send";
+  const email = approval.kind === "email.send" || approval.kind === "email.direct";
   // A customer email is named by its account and subject, so two waiting emails never share a name.
   const what = email ? approvalTitle(approval) : actionLabel(approval.kind);
   // Approving a reply or a customer email sends it.
@@ -83,6 +83,37 @@ function ApprovalCard({ approval, busy, onDecide }: { approval: TeamApproval; bu
       <span className="muted">Proposed {timeLabel(approval.createdAt)} · expires {timeLabel(approval.expiresAt)}</span>
     </div>
   </li>;
+}
+
+type ExternalEmailDraft = { recipient: string; subject: string; body: string; requestKey: string };
+
+/** Preparing a draft never sends; a separate, explicit Approve and send is always required. */
+function DirectEmailPanel({ busy, onPrepare }: { busy: string; onPrepare: (draft: ExternalEmailDraft) => Promise<boolean> }) {
+  const [recipient, setRecipient] = useState("");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
+  const valid = /^[^\\s@<>"\\,;]+@[^\\s@<>"\\,;]+\\.[^\\s@<>"\\,;]+$/.test(recipient.trim())
+    && recipient.length <= 200 && subject.trim().length >= 3 && subject.trim().length <= 150
+    && !/[\\r\\n]/.test(subject) && body.trim().length >= 10 && body.trim().length <= 3800;
+  return <section className="panel team-direct-email" aria-labelledby="team-direct-email-title">
+    <div className="admin-section-title"><div><h2 id="team-direct-email-title">One-off external email</h2>
+      <p>Prepare a message for your review. The Chief of Staff does not send it until you approve the exact recipient and text below.</p></div></div>
+    <form onSubmit={event => { event.preventDefault(); if (!valid || busy) return; void onPrepare({ recipient, subject, body, requestKey }).then(ok => {
+      if (ok) { setRecipient(""); setSubject(""); setBody(""); setRequestKey(crypto.randomUUID()); }
+    }); }}>
+      <div className="team-budget"><label className="team-field">To (one email address)
+        <input type="email" autoComplete="off" value={recipient} maxLength={200} required disabled={Boolean(busy)} onChange={event => setRecipient(event.target.value)} />
+      </label><label className="team-field">Subject
+        <input value={subject} maxLength={150} required disabled={Boolean(busy)} onChange={event => setSubject(event.target.value)} />
+      </label></div>
+      <label className="team-field">Message
+        <textarea value={body} rows={9} maxLength={3800} required disabled={Boolean(busy)} onChange={event => setBody(event.target.value)} style={{ width: "100%" }} />
+      </label>
+      <p className="muted">No patient information, passwords or credentials. Preparing is not sending. If a request times out, refresh the approval list before trying again.</p>
+      <button className="button button-primary button-small" type="submit" disabled={!valid || Boolean(busy)}>Prepare for approval</button>
+    </form>
+  </section>;
 }
 
 function ApprovalsPanel({ approvals, count, busy, onDecide }: { approvals: TeamApproval[]; count: number; busy: string; onDecide: (approval: TeamApproval, decision: "approve" | "reject", note: string) => void }) {
@@ -276,6 +307,18 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
     void change("waiting", async () => { const result = await client.waiting(); started = result.started; sending = result.actions; },
       () => started === 0 && sending === 0 ? "Nothing was waiting to run." : `${[started > 0 ? `Started ${plural(started, "task")}` : "", sending > 0 ? `${started > 0 ? "sending" : "Sending"} ${plural(sending, "approved reply").replace("replys", "replies")}` : ""].filter(Boolean).join(" and ")}. ${started + sending === 1 ? "It finishes" : "They finish"} in the background; refresh in a minute to see the result.`);
   };
+  const onPrepare = async (draft: ExternalEmailDraft): Promise<boolean> => {
+    if (busy) return false;
+    setBusy("prepare-email"); setNotice(null);
+    try {
+      await client.email(draft);
+      setNotice({ ok: true, text: "Draft ready for review below. Nothing was sent. Check the exact message, then Approve and send." });
+      return true;
+    } catch (error) {
+      setNotice({ ok: false, text: failureText(error) });
+      return false;
+    } finally { setBusy(""); reload(); }
+  };
   const onDecide = (approval: TeamApproval, decision: "approve" | "reject", note: string) => {
     let outcome: "sent" | "waiting" | "unconfirmed" = "unconfirmed";
     void change(`decide:${approval.id}`,
@@ -289,7 +332,7 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
       outcome = result.status === "executed" ? "sent" : result.needsSession ? "waiting" : "unconfirmed";
     }, () => {
       if (decision === "reject") return "Rejected.";
-      if (outcome === "sent") return "Approved.";
+      if (outcome === "sent") return approval.kind === "email.direct" ? "Approved. SendGrid accepted the email." : "Approved.";
       if (outcome === "waiting") return "Approved. It has not been sent yet. Press Run what's waiting while you are signed in.";
       return "Approved, but the Hub could not confirm what happened next. Check the Proposed actions below, and for a reply open the conversation before answering again.";
     });
@@ -306,6 +349,7 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
     {shown && <>
       <p className="admin-read-time">Loaded {timeLabel(shown.receivedAt)}.</p>
       <ServicesPanel services={shown.data.services} awaitingSession={shown.data.team.awaitingSessionCount} waitingActions={shown.data.waitingActions} busy={busy} onRunWaiting={onRunWaiting} />
+      {shown.data.services.directEmail && <DirectEmailPanel busy={busy} onPrepare={onPrepare} />}
       <ApprovalsPanel approvals={shown.data.team.approvals} count={shown.data.team.approvalCount} busy={busy} onDecide={onDecide} />
       <section aria-labelledby="team-agents-title"><h2 id="team-agents-title" className="team-section-heading">Agents</h2>
         <div className="team-agent-grid">
