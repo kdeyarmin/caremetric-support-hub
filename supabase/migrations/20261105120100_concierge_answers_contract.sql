@@ -2,7 +2,8 @@
 -- only when the owner's "support_answers" autonomy step adds the kind to its list): it states that `communication.answer` is a checked
 -- action kind whose shape admits only cited, model-drafted answers with no identifiers going back by email or chat; that the one
 -- operation that records an answer is a security definer with a pinned empty search path executable by the Hub server role alone, that
--- it re-checks the Concierge's trust for an answer nobody approved and authors the message as the AI assistant; and that the AI
+-- it re-checks the Concierge's trust (active, on Act, holding its row) for an answer nobody approved, sends only to the conversation the
+-- action names, and authors the message as the AI assistant; and that the AI
 -- assistant profile exists. Every test fails closed. The gate refuses to declare the feature if any of it has drifted.
 do $$
 declare
@@ -32,6 +33,10 @@ begin
   definition := pg_get_functiondef(to_regprocedure(signature));
   if position('private.require_hub_app_server()' in definition) = 0
     or position('decided_by is null' in definition) = 0 or position('communication.answer' in definition) = 0
+    or position('v_agent.status is distinct from ''active''' in definition) = 0
+    or position('v_agent.autonomy is distinct from ''act''' in definition) = 0
+    or position('where key = v_action.agent_key for share' in definition) = 0
+    or position('target_mismatch' in definition) = 0
     or position('a1a00000-a1a0-4000-8000-000000000001' in definition) = 0 then
     raise exception 'Recording an answer must re-check the Concierge''s trust and author it as the AI assistant' using errcode = '55000';
   end if;

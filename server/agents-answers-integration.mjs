@@ -54,6 +54,7 @@ const answerInput = (c, over = {}) => ({
 const propose = async (c, over = {}) => store.proposeAction({ taskId: await task(), kind: 'communication.answer', targetKind: 'communication', targetId: `CM-${c.reference}`, preview: 'Hello', input: answerInput(c, over) });
 const trust = async on => admin.query("update private.agents set status = 'active', autonomy = $1, config = jsonb_set(config, '{auto_approve_kinds}', $2::jsonb) where key = 'support_concierge'",
   [on ? 'act' : 'propose', on ? '["communication.answer"]' : '[]']);
+const pgText = value => `'${value.replaceAll("'", "''")}'`;
 const result = async id => (await row('select status, result from private.agent_actions where id = $1', [id]));
 
 try {
@@ -139,6 +140,18 @@ try {
   assert.equal((await row("select count(*)::integer as n from private.communication_messages where communication_id = $1 and direction = 'outbound'", [replayed.id])).n, 1);
   await assert.rejects(admin.query('select private.agent_answer_begin($1, $2, $3)', [twice.id, started.execution, ['email']]), refused('42501'), 'only the Hub server records an answer');
 
+  // An answer whose card names one conversation but whose input points at another is refused before anything is recorded.
+  const named = await conversation();
+  const other = await conversation();
+  const crossed = await store.proposeAction({ taskId: await task(), kind: 'communication.answer', targetKind: 'communication', targetId: `CM-${named.reference}`, preview: 'Hello',
+    input: answerInput(other, { reference: named.reference }) });
+  assert.equal(crossed.status, 'auto_approved');
+  await actions.executeReady();
+  assert.deepEqual(await result(crossed.id).then(r => [r.status, r.result.error]), ['failed', 'target_mismatch']);
+  for (const id of [named.id, other.id]) {
+    assert.equal((await row("select count(*)::integer as n from private.communication_messages where communication_id = $1 and direction = 'outbound'", [id])).n, 0);
+  }
+
   // The deployment gate declares the feature again as it is, and refuses it when anything it checks has drifted.
   const gate = await readFile(new URL('../supabase/migrations/20261105120100_concierge_answers_contract.sql', import.meta.url), 'utf8');
   const client = await admin.connect();
@@ -149,6 +162,10 @@ try {
       'revoke execute on function private.agent_answer_begin(uuid,integer,text[]) from hub_app_server',
       'alter function private.agent_answer_begin(uuid,integer,text[]) reset search_path',
       'alter table private.agent_actions drop constraint agent_actions_communication_answer_check',
+      // The trust and target guards themselves: an operation without one of them must not be declared.
+      ...[["v_agent.autonomy is distinct from 'act'", 'false'], ["v_agent.status is distinct from 'active'", 'false'],
+        ['where key = v_action.agent_key for share', 'where key = v_action.agent_key'], ["'code', 'target_mismatch'", "'code', 'reply_refused'"]]
+        .map(([from, to]) => `do $d$ begin execute replace(pg_get_functiondef('private.agent_answer_begin(uuid,integer,text[])'::regprocedure), ${pgText(from)}, ${pgText(to)}); end $d$`),
     ]) {
       await client.query('begin');
       try { await client.query(drift); await assert.rejects(client.query(gate), refused('55000'), drift); }
@@ -156,12 +173,14 @@ try {
     }
   } finally { client.release(); }
 
-  console.log('Support answers integration passed: only cited drafted answers with no identifiers by email or chat, sent without a session as the AI assistant, chat kept in chat, closed/changed/routeless/withdrawn refusals, owner approval during supervision, replay without a second message, server-only recording, gate drift. No email left the machine.');
+  console.log('Support answers integration passed: only cited drafted answers with no identifiers by email or chat, sent without a session as the AI assistant, chat kept in chat, closed/changed/routeless/withdrawn/crossed-target refusals, owner approval during supervision, replay without a second message, server-only recording, gate drift. No email left the machine.');
 } finally {
   await admin.query("update private.agents set status=$1, autonomy=$2, config=$3 where key='support_concierge'", [seedConcierge.status, seedConcierge.autonomy, seedConcierge.config]);
+  // Every audit row this run wrote about its actions (decided, executed, failed) is keyed by the action's id.
+  await admin.query("delete from private.audit_events where entity_type = 'agent_action' and entity_id in (select id from private.agent_actions where task_id = any($1::uuid[]))", [tasks]);
   await admin.query('delete from private.agent_actions where task_id = any($1::uuid[])', [tasks]);
   await admin.query('delete from private.agent_tasks where id = any($1::uuid[])', [tasks]);
-  await admin.query("delete from private.audit_events where action in ('communication.reply', 'agent.action_decided') and (entity_id = any($1::uuid[]) or actor_id = $2)", [made, owner]);
+  await admin.query("delete from private.audit_events where action = 'communication.reply' and (entity_id = any($1::uuid[]) or actor_id = $2)", [made, owner]);
   await admin.query('delete from private.communication_messages where communication_id = any($1::uuid[])', [made]);
   await admin.query('delete from private.communications where id = any($1::uuid[])', [made]);
   await admin.query('delete from private.sms_sessions where user_id=$1', [owner]);
