@@ -170,6 +170,16 @@ describe('agent store', () => {
     ]);
   });
 
+  it('reads due autonomy steps and switches one through the two server-only operations', async () => {
+    const { store, calls } = harness({ due: [], soon: [] });
+    await store.autonomyDue();
+    await store.autonomyGraduate('account_emails');
+    expect(calls).toEqual([
+      ['select private.agent_autonomy_due() as result', []],
+      ['select private.agent_autonomy_graduate($1) as result', ['account_emails']],
+    ]);
+  });
+
   it('returns what the database returns', async () => {
     const { store } = harness([{ id: 't1' }]);
     expect(await store.claim(1, 60)).toEqual([{ id: 't1' }]);

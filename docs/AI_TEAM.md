@@ -50,6 +50,33 @@ Nothing here lets an agent move money, change a plan or price, delete data, merg
 or read resident or patient records. Inbound message text is `possible_phi` and never enters audit
 metadata, run summaries or task payloads.
 
+### Autonomy steps: a supervised week, then on its own
+
+The owner hands kinds of work over to the team one at a time (`supabase/migrations/20261104220000_agent_autonomy.sql`,
+`private.agent_autonomy_steps`). Four ship, all off: **Account emails** (the Account Manager's four templates), **Support
+answers**, **Article publishing** and **Offers**. Each step lists which agents it changes and what it adds to their
+auto-approval lists (`auto_send_templates` for the account emails, `auto_approve_kinds` for the others); only migrations
+write that list.
+
+- **Start supervised week** (Team screen, under "Work the team does on its own"): the step is supervised for seven days. Any
+  agent it involves that could only observe moves up to Propose, so every item waits for the owner's approval.
+- After the week, the Chief of Staff's hourly `autonomy.graduate` task switches the step: each agent involved is set to Act
+  and the step's values are added to its list, in one transaction, audited as `agent.autonomy_step` with source `schedule`.
+  The owner gets an email the day before (`autonomy:soon:<step>:<time>`) and one at the switch
+  (`autonomy:automatic:<step>:<time>`). The task runs whatever the Chief of Staff's own level is; pausing the Chief of Staff
+  pauses it.
+- **Keep approving** (hold) takes the step's values back off the lists, leaving anything another automatic step or the
+  owner added, and keeps the agent proposing that work. **Make automatic now** skips the rest of the week.
+- A step whose code is not on the Hub yet (its feature is not declared: `platform.agents.concierge-autosend.v1`,
+  `platform.agents.content-autopublish.v1`, `platform.agents.offers.v1`) can be supervised but not made automatic; a
+  supervised step past its date switches as soon as the code arrives. The screen says so next to it.
+
+The steps table is closed to every role. The server reads due steps and switches one through `private.agent_autonomy_due()`
+and `private.agent_autonomy_graduate(text)` (Hub server only); the owner reads and changes them through
+`hub.get_agent_autonomy()` and `hub.set_agent_autonomy_step(text, text, timestamptz)` (`POST /api/admin/team/step`), which
+authorize the owner's session and refuse a stale screen. Both go through one internal function,
+`private.agent_autonomy_apply`, which no role may call.
+
 ## The Team screen
 
 Platform administrators open **AI team** in the Admin navigation (`/admin/team`). It needs the owner's
@@ -1061,6 +1088,10 @@ Apply the migrations in order with the usual procedure:
    its shape check and its once-per-address and once-per-topic indexes, the two server-only operations, and the Content
    Marketer (paused, Propose) with its two schedules, and declares `platform.agents.content.v1` (it needs the control
    plane, the hardening, governed publications and the communications inbox). Restart the Hub after it.
+11. `20261104220000_agent_autonomy.sql`, then its gate `20261104220100_agent_autonomy_contract.sql`, which add the
+   autonomy steps (all off) and the Chief of Staff's hourly `autonomy.graduate` schedule, and declare
+   `platform.agents.autonomy.v1` (it needs the control plane, the hardening and the customer emails). Restart the Hub
+   after it so the server registers the hourly task and the Team screen shows the steps.
 
 The Hub build does not require any of these features, so a Hub whose database lacks them still starts and
 serves everything else. The AI team is opt-in twice over: nothing runs unless `HUB_AGENTS_ENABLED`
