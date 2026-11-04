@@ -32,7 +32,7 @@ export const teamSchema = z.object({
   loadedAt: instant, dayStart: instant, agents: z.array(agentSchema), approvals: z.array(approvalSchema),
   approvalCount: z.number().int(), awaitingSessionCount: z.number().int(),
 });
-export const servicesSchema = z.object({ enabled: z.boolean(), handlers: z.array(taskKind), sms: z.boolean(), email: z.boolean(), ownerEmail: z.boolean(), ai: z.boolean(), customerTextToAi: z.boolean() });
+export const servicesSchema = z.object({ enabled: z.boolean(), handlers: z.array(taskKind), sms: z.boolean(), email: z.boolean(), ownerEmail: z.boolean(), ai: z.boolean(), customerTextToAi: z.boolean(), directEmail: z.boolean().optional() });
 /** `waitingActions` is how many approved replies could not be sent yet and wait for the owner's next "Run what's waiting". */
 export const overviewSchema = z.object({ team: teamSchema, services: servicesSchema, waitingActions: z.number().int().min(0) });
 /**
@@ -41,6 +41,7 @@ export const overviewSchema = z.object({ team: teamSchema, services: servicesSch
  */
 export const decisionSchema = z.object({ id: z.uuid(), kind: z.string(), status: z.string(), decided: z.boolean(), error: z.string().optional(), needsSession: z.boolean().optional() });
 export const taskResultSchema = z.object({ id: z.uuid(), status: z.string() });
+export const preparedEmailSchema = z.object({ id: z.uuid(), actionId: z.uuid(), status: z.string() });
 /** How many waiting tasks were started and how many approved replies are being sent; both finish in the background. */
 export const waitingSchema = z.object({ started: z.number().int().min(0), actions: z.number().int().min(0) });
 
@@ -115,6 +116,7 @@ const probeTargetLabels: Record<string, string> = {
  * conversation reference (CM-1042), an unknown target and anything else are shown as they are.
  */
 export function targetLabel(targetKind: string | null, targetId: string): string {
+  if (targetKind === "external_email") return "One-off email";
   if (targetKind !== "probe_target") return targetId;
   const [key, incident] = targetId.split(":");
   const label = probeTargetLabels[key];
@@ -127,7 +129,7 @@ const actionLabels: Record<string, string> = {
   "communication.reply": "Reply to a customer", "communication.note": "Add an internal note", "communication.update": "Update a conversation",
   "growth.message": "Send a reviewed growth message", "growth.content": "Approve a product content brief",
   "incident.open": "Open an incident", "incident.resolve": "Resolve an incident", "import.run": "Import messages",
-  "email.send": "Email a customer",
+  "email.send": "Email a customer", "email.direct": "Send an owner-approved external email",
 };
 export const actionLabel = (kind: string) => actionLabels[kind] ?? kind;
 
@@ -141,6 +143,10 @@ export function emailSubject(preview: string): string | null {
  * then the email's own subject), and the action and its target for everything else ("Reply to a customer for CM-1042").
  */
 export function approvalTitle(approval: Pick<TeamApproval, "kind" | "targetId" | "preview">): string {
+  if (approval.kind === "email.direct") {
+    const match = /^To: ([^\n]{3,200})\nSubject: ([^\n]{3,150})\n/.exec(approval.preview);
+    return match ? `Email to ${match[1]}: ${match[2]}` : "Send an external email";
+  }
   if (approval.kind === "email.send") {
     const subject = emailSubject(approval.preview);
     return `Email to ${approval.targetId || "a customer"}${subject ? `: ${subject}` : ""}`;
@@ -181,6 +187,8 @@ const errorLabels: Record<string, string> = {
   wording_changed: "The Hub's wording for this email changed after you approved it, so nothing was sent rather than different words.",
   auto_send_off: "This email was approved on its own, but its template is no longer one you let the agent send, so nothing was sent.",
   invalid_email: "The Hub refused this email as invalid. Nothing was sent.",
+  wording_changed: "The message changed after your review, so nothing was sent.",
+  approval_required: "An external email must be approved by you before it can be sent.",
 };
 /** What a stored error code means for the owner; an unknown code is shown as it is. */
 export const errorLabel = (code: string | null | undefined) => (code ? errorLabels[code] ?? code : "");
