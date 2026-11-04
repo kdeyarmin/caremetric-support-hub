@@ -5,7 +5,9 @@ const headerControls = /[\u0000-\u001f\u007f]/;
 const bodyControls = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const providerId = value => (typeof value === 'string' && /^[A-Za-z0-9._-]{1,200}$/.test(value) ? value : null);
-const failure = code => Object.assign(new Error('The external email could not be confirmed.'), { code });
+const failure = code => Object.assign(new Error(code === 'external_email_unconfirmed'
+  ? 'The email outcome is uncertain. Do not resend. Check the activity history and email provider.'
+  : 'The external email could not be confirmed.'), { code });
 const declared = features => (features instanceof Set ? features.has(externalEmailFeature) : Array.isArray(features) && features.includes(externalEmailFeature));
 
 /** Validate without rewriting the owner-approved recipient, subject or message. */
@@ -36,14 +38,20 @@ export function externalEmailExecutor({ store, email, log = line => console.warn
       || !Number.isSafeInteger(execution.execution) || execution.execution < 1
       || !uuid.test(execution?.input?.requestKey ?? '') || Object.keys(execution.input).length !== 1) throw failure('invalid_external_email');
     const claim = { actionId: execution.id, execution: execution.execution };
-    const earlier = await store.externalEmailBeginSend({ ...claim, claim: false });
+    // A failed lookup may be a recovery of an earlier send; a lost claim response may have
+    // committed. Neither failure establishes that no message was sent or that retrying is safe.
+    const lookup = async shouldClaim => {
+      try { return await store.externalEmailBeginSend({ ...claim, claim: shouldClaim }); }
+      catch { throw failure('external_email_unconfirmed'); }
+    };
+    const earlier = await lookup(false);
     if (earlier?.state === 'recorded') return recordedOutcome(earlier);
-    if (earlier?.state !== 'unrecorded') throw failure('invalid_external_email');
+    if (earlier?.state !== 'unrecorded') throw failure('external_email_unconfirmed');
     if (email?.configured !== true || typeof email.send !== 'function') throw failure('external_email_not_configured');
 
-    const begun = await store.externalEmailBeginSend({ ...claim, claim: true });
+    const begun = await lookup(true);
     if (begun?.state === 'recorded') return recordedOutcome(begun);
-    if (begun?.state !== 'ready' || !validExternalEmail(begun)) throw failure('invalid_external_email');
+    if (begun?.state !== 'ready' || !validExternalEmail(begun)) throw failure('external_email_unconfirmed');
 
     let response;
     try {
@@ -69,4 +77,9 @@ export function externalEmailExecutor({ store, email, log = line => console.warn
 
 export function externalEmailExecutors({ store, features, email, log }) {
   return declared(features) ? { 'email.external': externalEmailExecutor({ store, email, log }) } : {};
+}
+
+/** Only this email kind is offered for owner-requested recovery; it remains eligible for background completion too. */
+export function externalEmailRecovery({ store, features }) {
+  return declared(features) ? (recover = false) => store.externalEmailReady({ recover }) : null;
 }

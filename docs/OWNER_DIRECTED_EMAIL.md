@@ -12,6 +12,10 @@ request, and approve its exact contents for sending through the Hub's configured
 5. Use **Approve and send**, or reject the proposal. The approval note is audit context; it does
    not change the message.
 
+After a proposal is rejected or expires, **Prepare a fresh proposal** requests a fresh review of
+the same draft. This option is offered only after the server confirms one of those unsent
+states. An unchanged draft keeps its request key through a lost response or an uncertain send.
+
 The subject can contain up to 200 characters and the message up to 5,000. Recipient and subject
 controls reject header injection and multiple recipients. The Hub preserves the approved text
 without a customer campaign footer or a model rewrite. No message content is sent to an AI model.
@@ -23,6 +27,12 @@ the provider **accepted** the message; it is not proof of delivery to the recipi
 Provider refusal and an uncertain outcome are shown separately. A timeout, disconnected response,
 or crash after the send started does not make the message safe to send again. The Hub does not
 automatically resend that action. Check the provider's activity before deciding on any new message.
+
+If a server interruption leaves an approved email waiting, **Run what's waiting** can resume it
+while the owner is signed in, including when the scheduler is off. Recovery checks the same
+private send record. An unfinished earlier attempt is reported as uncertain; an email whose
+send never started can proceed under the existing approval. A running execution must become
+stale before recovery can take it over.
 
 Preparing the same draft again with its request key returns the original proposal. Reusing that
 key with different contents is refused. A repeated approval or competing worker cannot claim a

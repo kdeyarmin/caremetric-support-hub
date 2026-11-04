@@ -42,7 +42,7 @@ function oneOf(value, allowed, label) {
   return value;
 }
 
-export function agentAdmin({ pool, actions, services = () => ({}), kick = null, waiting = null, session = (token, work) => withSession(pool, token, work) }) {
+export function agentAdmin({ pool, actions, services = () => ({}), kick = null, waiting = null, externalEmailReady = null, session = (token, work) => withSession(pool, token, work) }) {
   const query = (token, operation, args = []) => session(token, async db =>
     (await db.query(`select ${operation}(${args.map((_, index) => `$${index + 1}`).join(', ')}) as result`, args)).rows[0].result).catch(error => { throw reviewed(error); });
   // A queued task starts within a second instead of waiting for the next minute's tick.
@@ -55,14 +55,36 @@ export function agentAdmin({ pool, actions, services = () => ({}), kick = null, 
     run.done.catch(() => {});
     return run.started;
   }
+  async function pendingExternalEmail(recover = false) {
+    if (!externalEmailReady) return [];
+    try {
+      const list = await externalEmailReady(recover);
+      // This command may never broaden into draining other autonomous actions.
+      if (!Array.isArray(list) || list.some(item => item?.kind !== 'email.external' || !uuid.test(item?.id ?? ''))) throw new Error('Invalid email recovery list.');
+      return list;
+    } catch {
+      throw new HttpError(503, 'The Hub could not confirm approved email recovery. Do not resend any email. Check the activity history and email provider before trying again.');
+    }
+  }
+  async function executeExternalEmails(list) {
+    for (const { id, kind } of list) {
+      // No session is needed after the owner approved this exact message. A lost execution
+      // response leaves its durable action/ledger available for the same safe recovery path.
+      try { await actions.executeOne(id, { kind }); } catch { /* The recorded state decides the outcome. */ }
+    }
+  }
 
   return {
     /** The roster, what waits for approval, and which services the team can use right now. */
     async overview(token, input = {}) {
       exactly(input, []);
       const team = await query(token, 'hub.get_agent_team');
-      // Approved replies that could not be sent yet (a restart, or a session that lapsed) wait for the owner's next press of the button.
-      const waitingActions = await Promise.resolve(actions.sessionActions?.()).then(list => list?.length ?? 0, () => 0);
+      // Counting external emails is read-only: stale executions change only under the owner's recovery command.
+      const [sessionCount, external] = await Promise.all([
+        Promise.resolve(actions.sessionActions?.()).then(list => list?.length ?? 0, () => 0),
+        pendingExternalEmail(false),
+      ]);
+      const waitingActions = sessionCount + external.length;
       return { team, services: services(), waitingActions };
     },
     async status(token, input) {
@@ -99,17 +121,22 @@ export function agentAdmin({ pool, actions, services = () => ({}), kick = null, 
       soon();
       return requested;
     },
-    /** Runs what was waiting for the owner's sign-in: imports from Advisors and Breathe, and approved replies that never went out. Answers at once; the work continues in the background. */
+    /** Starts existing session work and recovers only approved/stale owner emails, without enabling autonomous tasks. */
     async waiting(token, input = {}) {
       exactly(input, []);
       // The same assurance the database asks for any change: a lapsed session gets 401 before anything is claimed.
       await query(token, 'hub.authorize_app_command');
-      // Approved replies that never went out are sent now, with this session, one at a time in the background.
-      const ready = await Promise.resolve(actions.sessionActions?.()).catch(() => []) ?? [];
+      // Authorize before listing/recovering; finish both lookups before launching any work.
+      const [ready, external] = await Promise.all([
+        Promise.resolve(actions.sessionActions?.()).then(list => list ?? [], () => []),
+        pendingExternalEmail(true),
+      ]);
       if (ready.length > 0) void actions.executeSessionActions(ready, { sessionToken: token }).catch(() => {});
-      // With the scheduler off there are no tasks to start, but the replies above still go out.
-      const started = await startWaiting(token).catch(error => { if (ready.length > 0 && error?.status === 409) return 0; throw error; });
-      return { started, actions: ready.length };
+      if (external.length > 0) void executeExternalEmails(external);
+      // With the scheduler off there are no tasks to start, but explicitly approved messages still finish.
+      const count = ready.length + external.length;
+      const started = await startWaiting(token).catch(error => { if (count > 0 && error?.status === 409) return 0; throw error; });
+      return { started, actions: count };
     },
     async cancel(token, input) {
       exactly(input, ['taskId']);

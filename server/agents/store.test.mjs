@@ -15,11 +15,15 @@ describe('agent store', () => {
     await store.externalEmailBeginSend({ actionId: 'a1', execution: 3 });
     await store.externalEmailFinishSend({ actionId: 'a1', execution: 3, delivery: 'sent', providerMessageId: 'accepted-id' });
     await store.externalEmailFinishSend({ actionId: 'a1', execution: 3, delivery: 'unknown' });
+    await store.externalEmailReady();
+    await store.externalEmailReady({ limit: 5, recover: true });
     expect(calls).toEqual([
       ['select private.agent_external_email_begin_send($1, $2, $3) as result', ['a1', 3, false]],
       ['select private.agent_external_email_begin_send($1, $2, $3) as result', ['a1', 3, true]],
       ['select private.agent_external_email_finish_send($1, $2, $3, $4) as result', ['a1', 3, 'sent', 'accepted-id']],
       ['select private.agent_external_email_finish_send($1, $2, $3, $4) as result', ['a1', 3, 'unknown', null]],
+      ['select private.agent_external_email_ready($1, $2) as result', [10, false]],
+      ['select private.agent_external_email_ready($1, $2) as result', [5, true]],
     ]);
   });
 

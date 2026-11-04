@@ -89,6 +89,7 @@ describe("AI team screen", () => {
     fillEmail(composer);
     fireEvent.click(within(composer).getByRole("button", { name: "Prepare email for approval" }));
     expect((await screen.findByRole("alert")).textContent).toContain("draft is unchanged");
+    expect(screen.queryByRole("button", { name: "Prepare a fresh proposal" })).toBeNull();
     expect((within(composer).getByLabelText("Message") as HTMLTextAreaElement).value).toBe(ownerDraft.body);
     await waitFor(() => expect((screen.getByRole("button", { name: "Refresh" }) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
@@ -97,6 +98,84 @@ describe("AI team screen", () => {
     expect(await screen.findByText(/This email proposal already exists/)).toBeTruthy();
     expect(prepare.mock.calls[1][0]).toEqual(prepare.mock.calls[0][0]);
     expect(client.decide).not.toHaveBeenCalled();
+  });
+
+  it.each(["rejected", "expired"] as const)("offers an explicit fresh proposal only after the server confirms %s, preserving the exact draft", async status => {
+    const prepare = vi.fn<TeamClient["prepareEmail"]>()
+      .mockImplementationOnce(async input => ({ id: ids.action, kind: "email.external", status, created: false, requestKey: input.requestKey }))
+      .mockImplementation(async input => ({ id: ids.schedule2, kind: "email.external", status: "proposed", created: true, requestKey: input.requestKey }));
+    const client = fakeClient(overview({ approvals: [], approvalCount: 0 }), { prepareEmail: prepare });
+    render(<Team client={client} />);
+    const composer = await screen.findByRole("region", { name: "Prepare an email" });
+    fillEmail(composer);
+    fireEvent.submit(composer.querySelector("form")!);
+    const renew = await within(composer).findByRole("button", { name: "Prepare a fresh proposal" });
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect((within(composer).getByLabelText("Message") as HTMLTextAreaElement).value).toBe(ownerDraft.body);
+    fireEvent.click(renew); fireEvent.click(renew);
+    await within(composer).findByRole("button", { name: "Proposal prepared" });
+    expect(prepare).toHaveBeenCalledTimes(2);
+    expect(prepare.mock.calls[1][0].requestKey).not.toBe(prepare.mock.calls[0][0].requestKey);
+    expect(prepare.mock.calls[1][0]).toMatchObject(ownerDraft);
+    expect(within(composer).queryByRole("button", { name: "Prepare a fresh proposal" })).toBeNull();
+    expect(client.decide).not.toHaveBeenCalled();
+  });
+
+  it("recognizes a confirmed rejection of the currently prepared email without making the owner retype it", async () => {
+    const client = fakeClient(overview({ approvals: [externalApproval()] }), {
+      decide: vi.fn(async () => ({ id: ids.action, kind: "email.external", status: "rejected", decided: true })),
+    });
+    render(<Team client={client} />);
+    const composer = await screen.findByRole("region", { name: "Prepare an email" });
+    fillEmail(composer);
+    fireEvent.submit(composer.querySelector("form")!);
+    await within(composer).findByRole("button", { name: "Proposal prepared" });
+    expect(within(composer).queryByRole("button", { name: "Prepare a fresh proposal" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Reject: Email to support@example.org/ }));
+    expect(await within(composer).findByRole("button", { name: "Prepare a fresh proposal" })).toBeTruthy();
+    expect((within(composer).getByLabelText("Message") as HTMLTextAreaElement).value).toBe(ownerDraft.body);
+    expect(client.prepareEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries the one replacement key after a lost renewal response, even if session storage is blocked", async () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("storage blocked"); });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("storage blocked"); });
+    const prepare = vi.fn<TeamClient["prepareEmail"]>()
+      .mockImplementationOnce(async input => ({ id: ids.action, kind: "email.external", status: "rejected", created: false, requestKey: input.requestKey }))
+      .mockRejectedValueOnce(new Error("response lost after saving replacement"))
+      .mockImplementation(async input => ({ id: ids.schedule2, kind: "email.external", status: "proposed", created: false, requestKey: input.requestKey }));
+    render(<Team client={fakeClient(overview(), { prepareEmail: prepare })} />);
+    const composer = await screen.findByRole("region", { name: "Prepare an email" });
+    fillEmail(composer);
+    const form = composer.querySelector("form")!;
+    fireEvent.submit(form);
+    const renew = await within(composer).findByRole("button", { name: "Prepare a fresh proposal" });
+    fireEvent.click(renew); fireEvent.click(renew);
+    expect((await screen.findByRole("alert")).textContent).toContain("draft is unchanged");
+    expect(prepare).toHaveBeenCalledTimes(2);
+    expect(within(composer).queryByRole("button", { name: "Prepare a fresh proposal" })).toBeNull();
+    expect((within(composer).getByLabelText("Message") as HTMLTextAreaElement).value).toBe(ownerDraft.body);
+    fireEvent.submit(form); fireEvent.submit(form);
+    await screen.findByText(/This email proposal already exists/);
+    expect(prepare).toHaveBeenCalledTimes(3);
+    expect(prepare.mock.calls[1][0].requestKey).not.toBe(prepare.mock.calls[0][0].requestKey);
+    expect(prepare.mock.calls[2][0]).toEqual(prepare.mock.calls[1][0]);
+  });
+
+  it.each(["proposed", "approved", "executing", "executed", "failed"] as const)("does not renew a %s request when Write another email repeats the same draft", async status => {
+    const prepare = vi.fn<TeamClient["prepareEmail"]>(async input => ({ id: ids.action, kind: "email.external", status, created: false, requestKey: input.requestKey }));
+    render(<Team client={fakeClient(overview(), { prepareEmail: prepare })} />);
+    const composer = await screen.findByRole("region", { name: "Prepare an email" });
+    fillEmail(composer);
+    fireEvent.submit(composer.querySelector("form")!);
+    const another = await within(composer).findByRole("button", { name: "Write another email" });
+    expect(within(composer).queryByRole("button", { name: "Prepare a fresh proposal" })).toBeNull();
+    fireEvent.click(another);
+    fillEmail(composer);
+    fireEvent.submit(composer.querySelector("form")!);
+    await waitFor(() => expect(prepare).toHaveBeenCalledTimes(2));
+    expect(prepare.mock.calls[1][0]).toEqual(prepare.mock.calls[0][0]);
+    expect(within(composer).queryByRole("button", { name: "Prepare a fresh proposal" })).toBeNull();
   });
 
   it("retains the draft on a server refusal and does not submit twice while preparing", async () => {
@@ -155,11 +234,11 @@ describe("AI team screen", () => {
     expect(client.decide).toHaveBeenCalledTimes(1);
   });
 
-  it.each(["unknown", "approved", "network", "server"])("explicitly says not to resend when the owner email outcome is %s", async mode => {
+  it.each(["unknown", "approved", "network", "server", "lookup", "missing"])("explicitly says not to resend when the owner email outcome is %s", async mode => {
     const decide = vi.fn<TeamClient["decide"]>(async () => {
       if (mode === "network") throw new Error("connection lost");
       if (mode === "server") throw new TeamApiError(500, "The result could not be saved.");
-      return { id: ids.action, kind: "email.external", status: mode === "approved" ? "approved" : "failed", decided: true, ...(mode === "unknown" ? { error: "external_email_unconfirmed" } : {}) };
+      return { id: ids.action, kind: "email.external", status: mode === "approved" ? "approved" : "failed", decided: true, ...(mode === "unknown" ? { error: "external_email_unconfirmed" } : mode === "lookup" ? { error: "executor_error" } : {}) };
     });
     render(<Team client={fakeClient(overview({ approvals: [externalApproval()] }), { decide })} />);
     fireEvent.click(await screen.findByRole("button", { name: /Approve and send: Email to support@example.org/ }));
@@ -172,7 +251,7 @@ describe("AI team screen", () => {
     const base = { ...externalApproval(), decisionNote: null, decidedAt: "2026-11-04T12:01:00+00:00", executedAt: null };
     const activity = vi.fn(async (input: { kind: string }) => input.kind === "actions" ? { ...emptyPage, total: 2, items: [
       { ...base, status: "executed", result: null },
-      { ...base, id: ids.schedule2, preview: "Private preview unavailable", status: "failed", result: { error: "external_email_unconfirmed" } },
+      { ...base, id: ids.schedule2, preview: "Private preview unavailable", status: "failed", result: { error: "executor_error" } },
     ] } : emptyPage) as unknown as TeamClient["activity"];
     render(<Team client={fakeClient(overview({ approvals: [], approvalCount: 0 }), { activity })} />);
     fireEvent.click(await screen.findByRole("tab", { name: "Proposed actions" }));
@@ -244,7 +323,7 @@ describe("AI team screen", () => {
     expect(within(services).getByText(/Run them now while you are signed in/)).toBeTruthy();
     fireEvent.click(within(services).getByRole("button", { name: "Run what's waiting" }));
     expect(client.waiting).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText(/Started 2 tasks\. They finish in the background/)).toBeTruthy();
+    expect(await screen.findByText(/Started 2 tasks\. Refresh in a minute/)).toBeTruthy();
     await waitFor(() => expect(client.overview).toHaveBeenCalledTimes(2));
   });
 
@@ -263,14 +342,14 @@ describe("AI team screen", () => {
     expect((await screen.findByRole("button", { name: "Run what's waiting" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("lets approved replies be sent with the scheduler off, since they need only the owner's session", async () => {
+  it("checks and completes approved messages with the scheduler off, using the owner's session", async () => {
     const off = { enabled: false };
     const withReplies = fakeClient({ ...overview({ awaitingSessionCount: 1 }, off), waitingActions: 2 }, { waiting: vi.fn(async () => ({ started: 0, actions: 2 })) });
     render(<Team client={withReplies} />);
     const button = await screen.findByRole("button", { name: "Run what's waiting" }) as HTMLButtonElement;
     expect(button.disabled).toBe(false);
     fireEvent.click(button);
-    expect(await screen.findByText(/Sending 2 approved replies/)).toBeTruthy();
+    expect(await screen.findByText(/Checking 2 approved messages/)).toBeTruthy();
     cleanup();
     // Waiting tasks alone cannot run with the scheduler off, so the button stays disabled then.
     render(<Team client={fakeClient({ ...overview({ awaitingSessionCount: 1 }, off), waitingActions: 0 })} />);
@@ -284,20 +363,34 @@ describe("AI team screen", () => {
     expect((await screen.findByRole("alert")).textContent).toContain("Current administrator session required.");
   });
 
-  it("offers to send approved replies that never went out, and says what started", async () => {
+  it("describes combined message recovery counts without claiming the messages were unsent or sent again", async () => {
     const client = fakeClient({ ...overview({ awaitingSessionCount: 0 }), waitingActions: 2 }, { waiting: vi.fn(async () => ({ started: 0, actions: 2 })) });
     render(<Team client={client} />);
     const services = await screen.findByRole("region", { name: "What the team can use" });
-    expect(within(services).getByText(/2 replies you approved have not been sent yet/)).toBeTruthy();
+    expect(within(services).getByText(/2 approved messages need checking or completion/)).toBeTruthy();
+    expect(within(services).queryByText(/not been sent yet/)).toBeNull();
     fireEvent.click(within(services).getByRole("button", { name: "Run what's waiting" }));
-    expect(await screen.findByText(/Sending 2 approved replies\. They finish in the background/)).toBeTruthy();
+    expect(await screen.findByText(/Checking 2 approved messages\. Refresh in a minute/)).toBeTruthy();
     cleanup();
     const both = fakeClient({ ...overview({ awaitingSessionCount: 1 }), waitingActions: 1 }, { waiting: vi.fn(async () => ({ started: 1, actions: 1 })) });
     render(<Team client={both} />);
     expect(await screen.findByText(/1 task is waiting for you to be signed in/)).toBeTruthy();
-    expect(screen.getByText(/1 reply you approved has not been sent yet/)).toBeTruthy();
+    expect(screen.getByText(/1 approved message needs checking or completion/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Run what's waiting" }));
-    expect(await screen.findByText(/Started 1 task and sending 1 approved reply\. They finish in the background/)).toBeTruthy();
+    expect(await screen.findByText(/Started 1 task and checking 1 approved message\. Refresh in a minute/)).toBeTruthy();
+  });
+
+  it.each(["network", "lookup", "unavailable"])("says Do not resend when waiting-message recovery has a %s failure", async mode => {
+    const waiting = vi.fn(async () => {
+      if (mode === "network") throw new Error("connection lost");
+      throw new TeamApiError(mode === "lookup" ? 500 : 503, "Recovery status could not be read.");
+    });
+    render(<Team client={fakeClient({ ...overview({}, { enabled: false }), waitingActions: 1 }, { waiting })} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run what's waiting" }));
+    const notice = (await screen.findByRole("alert")).textContent ?? "";
+    expect(notice).toContain("Do not resend");
+    expect(notice).not.toMatch(/Nothing was sent|not been sent|Sending/);
+    expect(waiting).toHaveBeenCalledTimes(1);
   });
 
   it("links a proposed reply to its conversation in the inbox", async () => {

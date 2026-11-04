@@ -249,12 +249,60 @@ begin
 end;
 $$;
 
+-- The owner's existing "Run what's waiting" path can finish already approved emails even
+-- when the scheduler is disabled. Listing for the overview is read-only. After command
+-- authorization, recovery may release only this kind's executions past the same ten-minute
+-- lease used by housekeeping. A current worker keeps its lease; a completed or unrelated
+-- action is never reopened. The normal execution claim and send ledger still decide once.
+create function private.agent_external_email_ready(p_limit integer default 10, p_recover boolean default false) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_action private.agent_actions%rowtype;
+  v_ready jsonb := '[]'::jsonb;
+begin
+  perform private.require_hub_app_server();
+  if p_limit is null or p_limit < 1 or p_limit > 50 or p_recover is null then
+    raise exception 'List between 1 and 50 external email actions.' using errcode = '22023';
+  end if;
+  if not p_recover then
+    return (
+      select coalesce(jsonb_agg(jsonb_build_object('id', x.id, 'kind', x.kind, 'agentKey', x.agent_key) order by x.created_at, x.id), '[]'::jsonb)
+      from (
+        select a.id, a.kind, a.agent_key, a.created_at from private.agent_actions a
+        where a.kind = 'email.external' and a.decided_by is not null and a.decided_at is not null
+          and (a.not_before is null or a.not_before <= now())
+          and (a.status = 'approved' or (a.status = 'executing' and a.executing_at < now() - interval '10 minutes'))
+          and exists (select 1 from private.agent_external_emails e where e.action_id = a.id)
+        order by a.created_at, a.id limit p_limit
+      ) x);
+  end if;
+  for v_action in
+    select a.* from private.agent_actions a
+    where a.kind = 'email.external' and a.decided_by is not null and a.decided_at is not null
+      and (a.not_before is null or a.not_before <= now())
+      and (a.status = 'approved' or (a.status = 'executing' and a.executing_at < now() - interval '10 minutes'))
+      and exists (select 1 from private.agent_external_emails e where e.action_id = a.id)
+    order by a.created_at, a.id limit p_limit
+    for update of a skip locked
+  loop
+    if v_action.status = 'executing' then
+      update private.agent_actions set status = 'approved', executing_at = null, updated_at = now()
+      where id = v_action.id;
+    end if;
+    v_ready := v_ready || jsonb_build_array(jsonb_build_object('id', v_action.id, 'kind', v_action.kind, 'agentKey', v_action.agent_key));
+  end loop;
+  return v_ready;
+end;
+$$;
+
 revoke all on function private.agent_external_email_valid(text, text, text),
+  private.agent_external_email_ready(integer, boolean),
   private.agent_external_email_begin_send(uuid, integer, boolean),
   private.agent_external_email_finish_send(uuid, integer, text, text),
   private.agent_action_propose(uuid, uuid, text, text, text, text, jsonb)
   from public, anon, authenticated, service_role, hub_app_server;
-grant execute on function private.agent_external_email_begin_send(uuid, integer, boolean),
+grant execute on function private.agent_external_email_ready(integer, boolean),
+  private.agent_external_email_begin_send(uuid, integer, boolean),
   private.agent_external_email_finish_send(uuid, integer, text, text),
   private.agent_action_propose(uuid, uuid, text, text, text, text, jsonb) to hub_app_server;
 revoke all on function hub.request_agent_email(text, text, text, uuid) from public, anon, authenticated, service_role, hub_app_server;

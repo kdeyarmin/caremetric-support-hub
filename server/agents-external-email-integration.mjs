@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 import { digest, withSession } from './sms-auth.mjs';
+import { agentTeam } from './agents/index.mjs';
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -27,6 +28,7 @@ const ownerToken = tokens[0];
 const actions = new Set();
 const tasks = [];
 const captured = [];
+const teamLogs = [];
 const base = {
   to: `external.canary.${run}@example.test`,
   subject: `Exact subject ${run} — unchanged  `,
@@ -49,6 +51,7 @@ const request = async (message = base, requestKey = randomUUID(), token = ownerT
 };
 const approve = id => ownerCall('hub.decide_agent_action', [id, 'approve', null]);
 const execute = id => call('private.agent_action_execution', [id]);
+const ready = (recover = false, limit = 50) => call('private.agent_external_email_ready', [limit, recover]);
 const begin = (id, execution, claim = true) => call('private.agent_external_email_begin_send', [id, execution, claim]);
 const finish = (id, execution, delivery, providerId = null) => call('private.agent_external_email_finish_send', [id, execution, delivery, providerId]);
 const settle = (id, execution, ok, result) => call('private.agent_action_executed', [id, ok, result, execution]);
@@ -60,9 +63,18 @@ const makeExecution = async () => {
 };
 const recoverExecution = async id => {
   await admin.query("update private.agent_actions set executing_at = now() - interval '11 minutes' where id = $1", [id]);
-  await call('private.agent_maintenance');
+  assert.ok((await ready(true)).some(action => action.id === id));
   return execute(id);
 };
+async function waitForAction(id, status) {
+  const deadline = Date.now() + 5000;
+  do {
+    const action = await row('select status,result from private.agent_actions where id=$1', [id]);
+    if (action.status === status) return action;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  } while (Date.now() < deadline);
+  assert.fail(`External email action did not settle as ${status}`);
+}
 async function asRole(role, operation) {
   const client = await admin.connect();
   try {
@@ -110,6 +122,8 @@ try {
   // Payloads and the attempt ledger are never directly accessible, even to the server.
   // Server-only operations also refuse a database administrator impersonating a caller.
   const serverOperations = [
+    ['private.agent_external_email_ready', [10, false]],
+    ['private.agent_external_email_ready', [10, true]],
     ['private.agent_external_email_begin_send', [randomUUID(), 1, true]],
     ['private.agent_external_email_finish_send', [randomUUID(), 1, 'sent', null]],
   ];
@@ -234,6 +248,117 @@ try {
   assert.equal((await approve(expired.id)).status, 'expired');
   assert.equal(await execute(expired.id), null);
 
+  // With no scheduler tick or general maintenance, the owner's manual recovery path finds
+  // an approval committed just before a restart. It never starts unrelated approved work,
+  // recovers another kind's stale execution or changes an autonomous task.
+  for (const limit of [0, 51, null]) await assert.rejects(ready(false, limit), refused('22023'));
+  await assert.rejects(ready(null), refused('22023'));
+  const unrelated = [];
+  for (const status of ['approved', 'executing']) {
+    const other = (await row(`insert into private.agent_actions(agent_key,kind,target_kind,target_id,preview,status,decided_by,decided_at,executions,executing_at)
+      values ('platform_engineer','incident.open','probe_target','hub','External-email isolation fixture',$1,$2,now(),1,now()-interval '11 minutes') returning id`,
+    [status, owners[0]])).id;
+    actions.add(other);
+    unrelated.push(other);
+  }
+  const otherBefore = (await admin.query('select id,status,executions,executing_at,updated_at from private.agent_actions where id=any($1::uuid[]) order by id', [unrelated])).rows;
+  const taskBefore = await row('select status,attempts,lease_until from private.agent_tasks where id=$1', [running]);
+  const parked = await request();
+  await approve(parked.id);
+  assert.ok((await ready()).some(item => item.id === parked.id));
+  assert.equal((await emailRow(parked.id)).status, 'requested');
+  assert.ok((await ready(true)).some(item => item.id === parked.id));
+  const parkedStarts = (await Promise.all([execute(parked.id), execute(parked.id)])).filter(Boolean);
+  assert.equal(parkedStarts.length, 1, 'two owner recovery requests still start one execution');
+  const parkedExecution = parkedStarts[0];
+  assert.equal((await begin(parked.id, parkedExecution.execution)).state, 'ready');
+  assert.equal(await finish(parked.id, parkedExecution.execution, 'sent', 'manual-recovery-provider'), true);
+  await settle(parked.id, parkedExecution.execution, true, { outcome: 'accepted' });
+
+  // A read lists a stale external execution without resetting it, and neither a read nor
+  // a recovery may take over a worker inside the ten-minute lease. After the lease expires,
+  // concurrent recovery leaves exactly one new execution and the earlier attempt unknown.
+  const leased = await makeExecution();
+  assert.equal((await begin(leased.id, leased.execution)).state, 'ready');
+  await admin.query("update private.agent_actions set executing_at=now()-interval '9 minutes' where id=$1", [leased.id]);
+  assert.ok(!(await ready()).some(item => item.id === leased.id));
+  assert.ok(!(await ready(true)).some(item => item.id === leased.id));
+  assert.deepEqual(await row('select status,executions from private.agent_actions where id=$1', [leased.id]), { status: 'executing', executions: leased.execution });
+  await admin.query("update private.agent_actions set executing_at=now()-interval '11 minutes' where id=$1", [leased.id]);
+  assert.ok((await ready()).some(item => item.id === leased.id));
+  assert.equal((await row('select status from private.agent_actions where id=$1', [leased.id])).status, 'executing', 'overview does not mutate a stale execution');
+  const recovered = await Promise.all([ready(true), ready(true)]);
+  assert.ok(recovered.flat().some(item => item.id === leased.id));
+  const reclaimed = (await Promise.all([execute(leased.id), execute(leased.id)])).filter(Boolean);
+  assert.equal(reclaimed.length, 1);
+  assert.equal(reclaimed[0].execution, leased.execution + 1);
+  assert.equal(await finish(leased.id, leased.execution, 'sent', 'superseded-provider'), false);
+  assert.deepEqual(await begin(leased.id, reclaimed[0].execution, false), { state: 'recorded', status: 'unknown', providerMessageId: null });
+  assert.equal((await begin(leased.id, reclaimed[0].execution)).state, 'recorded');
+  await settle(leased.id, reclaimed[0].execution, false, { error: 'external_email_unconfirmed' });
+
+  // If the original worker is committing its completion, recovery skips its row lock.
+  // Once that completion commits, the finished action stays finished instead of reopening.
+  const completing = await makeExecution();
+  await begin(completing.id, completing.execution);
+  await admin.query("update private.agent_actions set executing_at=now()-interval '11 minutes' where id=$1", [completing.id]);
+  const completionClient = await pool.connect();
+  try {
+    await completionClient.query('begin');
+    assert.equal((await completionClient.query('select private.agent_external_email_finish_send($1,$2,$3,$4) as r',
+      [completing.id, completing.execution, 'sent', 'completion-race-provider'])).rows[0].r, true);
+    assert.ok(!(await ready(true)).some(item => item.id === completing.id), 'recovery skips a completion holding the action lock');
+    await completionClient.query('select private.agent_action_executed($1,$2,$3,$4)', [completing.id, true, { outcome: 'accepted' }, completing.execution]);
+    await completionClient.query('commit');
+  } finally {
+    await completionClient.query('rollback');
+    completionClient.release();
+  }
+  const remaining = await ready(true);
+  for (const id of [action.id, unicode.id, rejected.id, expired.id, leased.id, completing.id, ...unrelated]) {
+    assert.ok(!remaining.some(item => item.id === id), 'only eligible approved external emails can be recovered');
+  }
+  assert.deepEqual((await admin.query('select id,status,executions,executing_at,updated_at from private.agent_actions where id=any($1::uuid[]) order by id', [unrelated])).rows, otherBefore);
+  assert.deepEqual(await row('select status,attempts,lease_until from private.agent_tasks where id=$1', [running]), taskBefore);
+
+  // Exercise the actual owner route, action executor and SQL store with the scheduler
+  // disabled. The fake sender captures one exact message; neither a model, a remote
+  // integration nor general scheduled work is invoked by the manual recovery command.
+  const manualSends = [];
+  const disabledTeam = agentTeam({
+    pool, enabled: false, features: new Set(['platform.agents.hardening.v1', 'platform.agents.external-email.v1']),
+    publicOrigin: 'https://hub.test', log: line => teamLogs.push(line),
+    fetchImpl: async () => { assert.fail('Manual email recovery must not invoke remote scheduled work'); },
+    email: { configured: true, send: async (to, subject, body) => {
+      manualSends.push({ to, subject, body });
+      return { delivery: 'sent', id: 'owner-manual-provider' };
+    } },
+  });
+  assert.equal(disabledTeam.active(), false);
+  const apiDraft = await disabledTeam.admin.email(ownerToken, { ...base, requestKey: randomUUID() });
+  actions.add(apiDraft.id);
+  await approve(apiDraft.id); // Simulate a restart after approval commits but before the executor is called.
+  const waitingView = await disabledTeam.admin.overview(ownerToken);
+  assert.equal(waitingView.services.enabled, false);
+  assert.ok(waitingView.waitingActions > 0);
+  await assert.rejects(disabledTeam.admin.waiting(tokens[2]), error => error.status === 401);
+  assert.equal(manualSends.length, 0, 'a non-owner cannot trigger approved email recovery');
+  assert.deepEqual(await disabledTeam.admin.waiting(ownerToken), { started: 0, actions: 1 });
+  assert.equal((await waitForAction(apiDraft.id, 'executed')).result.outcome, 'accepted');
+  assert.deepEqual(manualSends, [base]);
+
+  const apiCrash = await makeExecution();
+  await begin(apiCrash.id, apiCrash.execution);
+  await admin.query("update private.agent_actions set executing_at=now()-interval '11 minutes' where id=$1", [apiCrash.id]);
+  assert.ok((await disabledTeam.admin.overview(ownerToken)).waitingActions > 0);
+  assert.equal((await row('select status from private.agent_actions where id=$1', [apiCrash.id])).status, 'executing');
+  assert.deepEqual(await disabledTeam.admin.waiting(ownerToken), { started: 0, actions: 1 });
+  assert.equal((await waitForAction(apiCrash.id, 'failed')).result.error, 'external_email_unconfirmed');
+  assert.equal((await emailRow(apiCrash.id)).status, 'unknown');
+  assert.equal(manualSends.length, 1, 'uncertain earlier sends are settled without a second provider call');
+  assert.deepEqual((await admin.query('select id,status,executions,executing_at,updated_at from private.agent_actions where id=any($1::uuid[]) order by id', [unrelated])).rows, otherBefore);
+  assert.deepEqual(await row('select status,attempts,lease_until from private.agent_tasks where id=$1', [running]), taskBefore);
+
   // Losing the worker before it claims a send is safe to resume. Losing it after claiming
   // is unknown, not permission to send again. The stale worker cannot settle the new lease.
   const unclaimed = await makeExecution();
@@ -281,6 +406,7 @@ try {
   assert.ok(audits.some(value => value.action === 'agent.action.executed'));
   const briefFacts = JSON.stringify(await call('private.agent_brief_facts'));
   for (const value of [base.to, base.subject, `Exact body ${run}`]) assert.ok(!briefFacts.includes(value), 'team facts must not expose external email content');
+  for (const value of [base.to, base.subject, `Exact body ${run}`]) assert.ok(!JSON.stringify(teamLogs).includes(value), 'recovery logs must not expose message content');
 
   // The declaration refuses capability drift, including a null/reset search_path,
   // leaked column privilege, missing dedupe, missing RLS and a weakened action boundary.
@@ -289,6 +415,7 @@ try {
     'alter table private.agent_external_emails disable row level security',
     'grant select(recipient) on private.agent_external_emails to authenticated',
     'grant execute on function private.agent_external_email_begin_send(uuid,integer,boolean) to service_role',
+    'alter function private.agent_external_email_ready(integer,boolean) reset search_path',
     'alter function private.agent_external_email_finish_send(uuid,integer,text,text) reset search_path',
     'alter function hub.request_agent_email(text,text,text,uuid) reset search_path',
     'grant execute on function hub.request_agent_email(text,text,text,uuid) to anon',

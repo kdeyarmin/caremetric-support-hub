@@ -2,6 +2,7 @@
 import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { externalEmailRequestKey } from "./externalEmailDraft";
+import type { ExternalEmailProposal } from "./teamProtocol";
 
 beforeEach(() => { sessionStorage.clear(); vi.stubGlobal("crypto", webcrypto); });
 afterEach(() => vi.unstubAllGlobals());
@@ -34,5 +35,24 @@ describe("owner email request identity", () => {
     await externalEmailRequestKey(draft);
     sessionStorage.setItem(sessionStorage.key(0)!, "not-a-request-id");
     expect(await externalEmailRequestKey(draft)).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it.each(["rejected", "expired"] as const)("replaces a confirmed %s request once and reuses its replacement for stale calls and reloads", async status => {
+    const draft = { to: "support@example.org", subject: "Source access", body: "Please help.\n" };
+    const original = await externalEmailRequestKey(draft);
+    const confirmation = { requestKey: original, status };
+    const replacement = await externalEmailRequestKey(draft, confirmation);
+    expect(replacement).not.toBe(original);
+    expect(await externalEmailRequestKey(draft, confirmation)).toBe(replacement);
+    expect(await externalEmailRequestKey(draft)).toBe(replacement);
+    expect(sessionStorage.length).toBe(1);
+    expect(sessionStorage.getItem(sessionStorage.key(0)!)).toBe(replacement);
+  });
+
+  it.each(["proposed", "approved", "executing", "executed", "failed", "unknown"])("never renews a %s outcome", async status => {
+    const draft = { to: "support@example.org", subject: "Source access", body: "Please help." };
+    const original = await externalEmailRequestKey(draft);
+    await expect(externalEmailRequestKey(draft, { requestKey: original, status: status as ExternalEmailProposal["status"] })).rejects.toThrow("Only a rejected or expired");
+    expect(await externalEmailRequestKey(draft)).toBe(original);
   });
 });

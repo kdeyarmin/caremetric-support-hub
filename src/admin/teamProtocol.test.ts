@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionLabel, approvalTitle, cadenceLabel, centsLabel, decisionSchema, emailSubject, errorLabel, externalEmailProposalSchema, externalEmailRecipient, failedActionLabel, outcomeLabel, servicesSchema, statusLabel, targetLabel, taskLabel, waitingSchema } from "./teamProtocol";
+import { actionLabel, approvalTitle, cadenceLabel, centsLabel, decisionSchema, emailSubject, errorLabel, externalEmailFailure, externalEmailProposalSchema, externalEmailRecipient, failedActionLabel, outcomeLabel, servicesSchema, statusLabel, targetLabel, taskLabel, waitingSchema } from "./teamProtocol";
 
 describe("AI team display", () => {
   it("shows money in whole cents", () => {
@@ -108,6 +108,18 @@ describe("AI team display", () => {
     expect(unknown).toMatch(/Do not resend/);
     expect(unknown).toMatch(/will not retry it automatically/);
     expect(unknown).not.toMatch(/Nothing was sent|Run what's waiting/);
+  });
+
+  it("treats generic external lookup failures and missing result codes as unconfirmed sends", () => {
+    for (const code of ["external_email_unconfirmed", "executor_error", "lookup_failed", null, undefined]) {
+      const failure = externalEmailFailure(code);
+      expect(failure.unconfirmed).toBe(true);
+      expect(failure.message).toMatch(/Do not resend/);
+      expect(failure.message).not.toMatch(/Nothing was sent/);
+    }
+    for (const code of ["invalid_external_email", "external_email_not_configured", "external_email_refused"]) {
+      expect(externalEmailFailure(code)).toEqual({ unconfirmed: false, message: errorLabel(code) });
+    }
   });
 
   it("requires a proposal identity and an explicit creation result, and treats older services as unavailable for composition", () => {

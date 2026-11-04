@@ -39,6 +39,7 @@ begin
   end if;
 
   foreach signature in array array[
+    'private.agent_external_email_ready(integer,boolean)',
     'private.agent_external_email_begin_send(uuid,integer,boolean)',
     'private.agent_external_email_finish_send(uuid,integer,text,text)',
     'private.agent_action_propose(uuid,uuid,text,text,text,text,jsonb)'
@@ -52,6 +53,14 @@ begin
       raise exception 'External email operations must be pinned security definers executable by the application server only' using errcode = '55000';
     end if;
   end loop;
+  definition := pg_get_functiondef(to_regprocedure('private.agent_external_email_ready(integer,boolean)'));
+  if position('if not p_recover then' in definition) = 0
+    or position('a.kind = ''email.external''' in definition) = 0
+    or position('a.decided_by is not null' in definition) = 0
+    or position('a.executing_at < now() - interval ''10 minutes''' in definition) = 0
+    or position('for update of a skip locked' in definition) = 0 then
+    raise exception 'Manual email recovery must preserve current leases and touch only approved external emails' using errcode = '55000';
+  end if;
   definition := pg_get_functiondef(to_regprocedure('private.agent_action_propose(uuid,uuid,text,text,text,text,jsonb)'));
   if position('External emails require an explicit owner request.' in definition) = 0
     or position('auto_send_templates' in definition) = 0 then

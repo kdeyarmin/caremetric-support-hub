@@ -85,6 +85,8 @@ export function sqlAgentStore(pool, { fenced = false, growth = false } = {}) {
     /** The owner-authored email ledger returns a prior outcome, or claims exactly one send of its immutable payload. */
     externalEmailBeginSend: ({ actionId, execution, claim = true }) => call('private.agent_external_email_begin_send', [actionId, execution, claim]),
     externalEmailFinishSend: ({ actionId, execution, delivery, providerMessageId = null }) => call('private.agent_external_email_finish_send', [actionId, execution, delivery, providerMessageId]),
+    /** Lists approved/stale external emails; only the owner's command opts into recovering stale executions. */
+    externalEmailReady: ({ limit = 10, recover = false } = {}) => call('private.agent_external_email_ready', [limit, recover]),
     /**
      * What the Content Marketer needs to choose a topic: its latest article action per topic, which of `slugs` another content
      * item already uses, recent inbox conversations counted by product and inquiry type (never text) and the months whose

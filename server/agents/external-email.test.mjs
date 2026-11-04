@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { externalEmailAvailable, externalEmailExecutor, externalEmailExecutors, externalEmailFeature, validExternalEmail } from './external-email.mjs';
+import { externalEmailAvailable, externalEmailExecutor, externalEmailExecutors, externalEmailFeature, externalEmailRecovery, validExternalEmail } from './external-email.mjs';
 import { actionExecutor } from './actions.mjs';
 import { sendgridMail } from '../communications.mjs';
 
@@ -127,13 +127,32 @@ describe('owner-directed external email', () => {
   it('does not send if the database refuses the claim or returns an invalid payload', async () => {
     for (const begun of [null, { state: 'refused' }, { state: 'ready' }, { state: 'ready', ...message, to: 'two@example.test,three@example.test' }]) {
       const { send, email } = fixture({ begun });
-      await expect(send(execution())).rejects.toMatchObject({ code: 'invalid_external_email' });
+      await expect(send(execution())).rejects.toMatchObject({ code: 'external_email_unconfirmed' });
       expect(email.send).not.toHaveBeenCalled();
     }
     const denied = fixture({ earlier: { state: 'refused' } });
-    await expect(denied.send(execution())).rejects.toMatchObject({ code: 'invalid_external_email' });
+    await expect(denied.send(execution())).rejects.toMatchObject({ code: 'external_email_unconfirmed' });
     expect(denied.email.send).not.toHaveBeenCalled();
     expect(denied.store.externalEmailBeginSend).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([false, true])('records uncertainty when the ledger lookup fails (claim=%s), without exposing provider details or sending', async claimFailure => {
+    const { store, email, log } = fixture();
+    store.beginExecution = vi.fn(async () => execution({ execution: 2 }));
+    store.completeExecution = vi.fn(async () => true);
+    store.externalEmailBeginSend.mockImplementation(async ({ claim }) => {
+      if (claim === claimFailure) throw new Error(`Database response lost for ${message.to}: ${message.body}`);
+      return { state: 'unrecorded' };
+    });
+    const actions = actionExecutor({ store, executors: { 'email.external': externalEmailExecutor({ store, email, log }) }, log });
+    expect(await actions.executeOne(actionId, { kind: 'email.external' })).toEqual({ executed: false, failed: true, skipped: false, error: 'external_email_unconfirmed' });
+    expect(store.completeExecution).toHaveBeenCalledWith(actionId, false, { error: 'external_email_unconfirmed' }, 2);
+    expect(email.send).not.toHaveBeenCalled();
+    expect(store.externalEmailFinishSend).not.toHaveBeenCalled();
+    expect(store.externalEmailBeginSend).toHaveBeenCalledTimes(claimFailure ? 2 : 1);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(message.to);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(message.body);
+    await expect(externalEmailExecutor({ store, email, log })(execution())).rejects.toMatchObject({ code: 'external_email_unconfirmed', message: expect.stringContaining('Do not resend') });
   });
 
   it('does not execute a rejected, expired or already claimed action', async () => {
@@ -180,5 +199,17 @@ describe('owner-directed external email', () => {
       expect(externalEmailAvailable({ features, email: { configured: false } })).toBe(false);
       expect(externalEmailAvailable({ features, email: { configured: true } })).toBe(false);
     }
+  });
+
+  it('offers feature-gated recovery independently of sender readiness, while leaving approved email background eligible', async () => {
+    const ready = [{ id: actionId, kind: 'email.external' }];
+    const store = { externalEmailReady: vi.fn(async () => ready) };
+    for (const features of [undefined, new Set(), externalEmailFeature]) expect(externalEmailRecovery({ store, features })).toBeNull();
+    const features = new Set([externalEmailFeature]);
+    const recover = externalEmailRecovery({ store, features });
+    expect(await recover()).toEqual(ready);
+    expect(await recover(true)).toEqual(ready);
+    expect(store.externalEmailReady.mock.calls).toEqual([[{ recover: false }], [{ recover: true }]]);
+    expect(externalEmailExecutors({ store, features, email: null })['email.external'].requiresSession).not.toBe(true);
   });
 });

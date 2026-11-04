@@ -33,7 +33,7 @@ export const teamSchema = z.object({
   approvalCount: z.number().int(), awaitingSessionCount: z.number().int(),
 });
 export const servicesSchema = z.object({ enabled: z.boolean(), handlers: z.array(taskKind), sms: z.boolean(), email: z.boolean(), ownerEmail: z.boolean(), ai: z.boolean(), customerTextToAi: z.boolean(), externalEmail: z.boolean().optional() });
-/** `waitingActions` is how many approved replies could not be sent yet and wait for the owner's next "Run what's waiting". */
+/** `waitingActions` counts approved messages that need checking or completion, including external email recovery candidates. It is not an unsent count. */
 export const overviewSchema = z.object({ team: teamSchema, services: servicesSchema, waitingActions: z.number().int().min(0) });
 /**
  * `error` is the code of why an approved action could not be carried out (see `errorLabel`). `needsSession` is the server saying it
@@ -48,7 +48,7 @@ export const externalEmailProposalSchema = z.object({
 });
 export type ExternalEmailProposal = z.infer<typeof externalEmailProposalSchema>;
 export interface ExternalEmailDraft { to: string; subject: string; body: string }
-/** How many waiting tasks were started and how many approved replies are being sent; both finish in the background. */
+/** How many waiting tasks were started and how many approved messages were launched or recovered. This does not confirm a new send. */
 export const waitingSchema = z.object({ started: z.number().int().min(0), actions: z.number().int().min(0) });
 
 const page = <T extends z.ZodType>(item: T) => z.object({ items: z.array(item), total: z.number().int(), offset: z.number().int(), limit: z.number().int() });
@@ -200,7 +200,7 @@ const errorLabels: Record<string, string> = {
   invalid_external_email: "The recipient, subject or message is invalid. Nothing was sent.",
   external_email_not_configured: "Owner-written email is not available on this Hub yet. Nothing was sent.",
   external_email_refused: "The email provider refused this message. Nothing was sent.",
-  external_email_unconfirmed: "The email provider did not confirm the outcome. The email may have been sent. Do not resend it; check the provider's activity first. The Hub will not retry it automatically.",
+  external_email_unconfirmed: "The email's outcome could not be confirmed. It may have been sent. Do not resend it; check the provider's activity first. The Hub will not retry it automatically.",
 };
 /** What a stored error code means for the owner; an unknown code is shown as it is. */
 export const errorLabel = (code: string | null | undefined) => (code ? errorLabels[code] ?? code : "");
@@ -210,6 +210,12 @@ export const errorLabel = (code: string | null | undefined) => (code ? errorLabe
  */
 export const failedActionLabel = (code: string | null | undefined) =>
   code === "session_required" ? "Your sign-in lapsed before the reply was sent, so nothing was sent. Sign in again and answer from the conversation." : errorLabel(code);
+
+/** A generic lookup/executor error is not evidence that an external email was never sent. */
+export function externalEmailFailure(code: unknown): { unconfirmed: boolean; message: string } {
+  const definite = typeof code === "string" && ["invalid_external_email", "external_email_not_configured", "external_email_refused"].includes(code);
+  return { unconfirmed: !definite, message: definite ? errorLabel(code) : errorLabel("external_email_unconfirmed") };
+}
 
 const outcomeLabels: Record<string, string> = {
   completed: "Completed", failed: "Failed", budget_exhausted: "Stopped at the daily budget", no_result: "No result", refused: "Declined by the model", cancelled: "Cancelled",

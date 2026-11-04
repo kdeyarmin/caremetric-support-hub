@@ -7,7 +7,7 @@ import { agentAdmin } from './admin.mjs';
 import { builtInHandlers } from './tasks/index.mjs';
 import { conciergeExecutors, draftingFor } from './concierge/index.mjs';
 import { lifecycleExecutors } from './accounts/executor.mjs';
-import { externalEmailAvailable, externalEmailExecutors } from './external-email.mjs';
+import { externalEmailAvailable, externalEmailExecutors, externalEmailRecovery } from './external-email.mjs';
 import { contentExecutors } from './content/executor.mjs';
 import { modelRuntime } from './runtime/index.mjs';
 
@@ -52,6 +52,7 @@ export function agentTeam({
   const scheduler = agentScheduler({ store, handlers: registry, actions, enabled, log, now });
   const admin = agentAdmin({
     pool, actions, kick: () => scheduler.tick(), waiting: scheduler.runWaiting,
+    externalEmailReady: externalEmailRecovery({ store, features }),
     services: () => ({
       enabled: scheduler.active(), handlers: scheduler.kinds(),
       sms: Boolean(sms?.configured), email: Boolean(email?.configured), ownerEmail: emailAddress.test(ownerEmail ?? ''), ai: Boolean(runtime.configured),
