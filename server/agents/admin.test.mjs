@@ -21,6 +21,21 @@ describe('agent administration', () => {
     expect(queries[0][0]).toBe('select hub.get_agent_team() as result');
   });
 
+  it('prepares an external email for a second approval, never by sending directly', async () => {
+    const requestKey = '66666666-6666-4666-8666-666666666666';
+    const { admin, queries } = fixture({ results: { 'hub.prepare_agent_direct_email': { id: actionId, actionId, status: 'proposed' } } });
+    const input = { recipient: 'data.support@cms.hhs.gov', subject: 'CMS data access', body: 'Please review HTTP 403 from our data importer.', requestKey };
+    await expect(admin.email('token', input)).resolves.toMatchObject({ status: 'proposed' });
+    expect(queries).toEqual([['select hub.prepare_agent_direct_email($1, $2, $3, $4) as result',
+      [input.recipient, input.subject, input.body, requestKey]]]);
+  });
+  it('rejects malformed email preparation without touching the database', async () => {
+    const { admin, session } = fixture();
+    await expect(admin.email('token', { recipient: 'two@example.com,other@example.com', subject: 'Hello', body: 'Valid test body', requestKey: 'invalid' })).rejects.toMatchObject({ status: 400 });
+    await expect(admin.email('token', { recipient: 'recipient@example.com', subject: 'x'.repeat(151), body: 'Valid test body', requestKey: actionId })).rejects.toMatchObject({ status: 400 });
+    expect(session).not.toHaveBeenCalled();
+  });
+
   it('requires a signed-in session', async () => {
     const { admin } = fixture();
     await expect(admin.overview(undefined, {})).rejects.toMatchObject({ status: 401 });
