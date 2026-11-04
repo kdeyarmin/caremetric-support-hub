@@ -93,9 +93,9 @@ function DirectEmailPanel({ busy, onPrepare }: { busy: string; onPrepare: (draft
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
-  const valid = /^[^\\s@<>"\\,;]+@[^\\s@<>"\\,;]+\\.[^\\s@<>"\\,;]+$/.test(recipient.trim())
+  const valid = /^[^\s@<>"\,;]+@[^\s@<>"\,;]+\.[^\s@<>"\,;]+$/.test(recipient.trim())
     && recipient.length <= 200 && subject.trim().length >= 3 && subject.trim().length <= 150
-    && !/[\\r\\n]/.test(subject) && body.trim().length >= 10 && body.trim().length <= 3800;
+    && !/[\r\n]/.test(subject) && body.trim().length >= 10 && body.trim().length <= 3800;
   return <section className="panel team-direct-email" aria-labelledby="team-direct-email-title">
     <div className="admin-section-title"><div><h2 id="team-direct-email-title">One-off external email</h2>
       <p>Prepare a message for your review. The Chief of Staff does not send it until you approve the exact recipient and text below.</p></div></div>
