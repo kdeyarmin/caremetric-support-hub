@@ -285,6 +285,12 @@
 .team-preview { margin: 0; padding: 12px 14px; background: #f8fafc; border: 1px solid var(--line); border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: var(--text-md); line-height: 1.55; max-height: 18rem; overflow: auto; }
 .team-note, .team-field { display: grid; gap: 4px; font-size: var(--text-sm); font-weight: 700; color: #475569; }
 .team-note input, .team-field input, .team-field select { font: inherit; font-weight: 400; padding: 7px 9px; border: 1px solid #cbd5e1; border-radius: 6px; min-width: 0; }
+.team-email-form { display: grid; gap: 12px; padding: 0 20px 20px; }
+.team-email-form .team-field { max-width: 52rem; }
+.team-email-form textarea { font: inherit; font-weight: 400; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; min-width: 0; resize: vertical; line-height: 1.55; }
+.team-email-form .muted { margin: 0; }
+.team-email-form input:read-only, .team-email-form textarea:read-only { background: #f8fafc; }
+.team-email-form input:disabled, .team-email-form textarea:disabled { background: #f8fafc; color: var(--muted); }
 .team-approvals > .muted, .team-approvals > .admin-explanation { margin: 0; padding: 0 20px 16px; }
 .team-section-heading { margin: 26px 0 0; font-size: 18px; }
 .team-agent-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }

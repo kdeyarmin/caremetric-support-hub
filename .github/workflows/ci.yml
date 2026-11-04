@@ -158,6 +158,9 @@ jobs:
           node server/agents-growth-integration.mjs
           node server/agents-lifecycle-integration.mjs
           node server/agents-lifecycle-integration.mjs
+          node server/agents-external-email-integration.mjs
+          # Repeat with fresh request keys to verify teardown and duplicate-send protections.
+          node server/agents-external-email-integration.mjs
           node server/agents-content-integration.mjs
           node server/agents-content-integration.mjs
           node server/growth-integration.mjs

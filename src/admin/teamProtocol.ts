@@ -32,7 +32,7 @@ export const teamSchema = z.object({
   loadedAt: instant, dayStart: instant, agents: z.array(agentSchema), approvals: z.array(approvalSchema),
   approvalCount: z.number().int(), awaitingSessionCount: z.number().int(),
 });
-export const servicesSchema = z.object({ enabled: z.boolean(), handlers: z.array(taskKind), sms: z.boolean(), email: z.boolean(), ownerEmail: z.boolean(), ai: z.boolean(), customerTextToAi: z.boolean() });
+export const servicesSchema = z.object({ enabled: z.boolean(), handlers: z.array(taskKind), sms: z.boolean(), email: z.boolean(), ownerEmail: z.boolean(), ai: z.boolean(), customerTextToAi: z.boolean(), externalEmail: z.boolean().optional() });
 /** `waitingActions` is how many approved replies could not be sent yet and wait for the owner's next "Run what's waiting". */
 export const overviewSchema = z.object({ team: teamSchema, services: servicesSchema, waitingActions: z.number().int().min(0) });
 /**
@@ -41,6 +41,13 @@ export const overviewSchema = z.object({ team: teamSchema, services: servicesSch
  */
 export const decisionSchema = z.object({ id: z.uuid(), kind: z.string(), status: z.string(), decided: z.boolean(), error: z.string().optional(), needsSession: z.boolean().optional() });
 export const taskResultSchema = z.object({ id: z.uuid(), status: z.string() });
+/** Preparing an owner-written email creates a proposal; it never approves or sends it. A replay returns the same action. */
+export const externalEmailProposalSchema = z.object({
+  id: z.uuid(), kind: z.literal("email.external"), requestKey: z.uuid(), created: z.boolean(),
+  status: z.enum(["proposed", "approved", "executing", "executed", "failed", "rejected", "expired"]),
+});
+export type ExternalEmailProposal = z.infer<typeof externalEmailProposalSchema>;
+export interface ExternalEmailDraft { to: string; subject: string; body: string }
 /** How many waiting tasks were started and how many approved replies are being sent; both finish in the background. */
 export const waitingSchema = z.object({ started: z.number().int().min(0), actions: z.number().int().min(0) });
 
@@ -128,19 +135,28 @@ const actionLabels: Record<string, string> = {
   "growth.message": "Send a reviewed growth message", "growth.content": "Approve a product content brief",
   "incident.open": "Open an incident", "incident.resolve": "Resolve an incident", "import.run": "Import messages",
   "email.send": "Email a customer",
+  "email.external": "Send an email",
 };
 export const actionLabel = (kind: string) => actionLabels[kind] ?? kind;
 
-/** The subject a proposed customer email opens with (its preview starts "Subject: …"), or null when it has none. */
+/** The subject in an email preview's header, after an optional To line. Text in the body is never treated as a header. */
 export function emailSubject(preview: string): string | null {
-  const match = /^Subject: ([^\n]{1,200})(\n|$)/.exec(preview);
+  const match = /^(?:To: [^\n]{1,320}\n)?Subject: ([^\n]{1,200})(\n|$)/u.exec(preview);
   return match ? match[1].trim() || null : null;
+}
+/** External actions use a request UUID as their target. The private, exact preview carries the recipient. */
+export function externalEmailRecipient(preview: string): string | null {
+  return /^To: ([^\n]{1,320})\nSubject: /.exec(preview)?.[1] ?? null;
 }
 /**
  * What an approval card says is proposed: "Email to maple-grove: Welcome to CareMetric CareBase" for a customer email (the account,
  * then the email's own subject), and the action and its target for everything else ("Reply to a customer for CM-1042").
  */
 export function approvalTitle(approval: Pick<TeamApproval, "kind" | "targetId" | "preview">): string {
+  if (approval.kind === "email.external") {
+    const subject = emailSubject(approval.preview);
+    return `Email to ${externalEmailRecipient(approval.preview) || "a recipient"}${subject ? `: ${subject}` : ""}`;
+  }
   if (approval.kind === "email.send") {
     const subject = emailSubject(approval.preview);
     return `Email to ${approval.targetId || "a customer"}${subject ? `: ${subject}` : ""}`;
@@ -181,6 +197,10 @@ const errorLabels: Record<string, string> = {
   wording_changed: "The Hub's wording for this email changed after you approved it, so nothing was sent rather than different words.",
   auto_send_off: "This email was approved on its own, but its template is no longer one you let the agent send, so nothing was sent.",
   invalid_email: "The Hub refused this email as invalid. Nothing was sent.",
+  invalid_external_email: "The recipient, subject or message is invalid. Nothing was sent.",
+  external_email_not_configured: "Owner-written email is not available on this Hub yet. Nothing was sent.",
+  external_email_refused: "The email provider refused this message. Nothing was sent.",
+  external_email_unconfirmed: "The email provider did not confirm the outcome. The email may have been sent. Do not resend it; check the provider's activity first. The Hub will not retry it automatically.",
 };
 /** What a stored error code means for the owner; an unknown code is shown as it is. */
 export const errorLabel = (code: string | null | undefined) => (code ? errorLabels[code] ?? code : "");

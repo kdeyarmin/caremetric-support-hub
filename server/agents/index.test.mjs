@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { agentTeam } from './index.mjs';
 import { draftingFor } from './concierge/index.mjs';
 import { lifecycleInput } from './accounts/lifecycle.mjs';
+import { externalEmailFeature } from './external-email.mjs';
 
 const store = (tasks = []) => ({
   maintenance: vi.fn(async () => ({})), fireSchedules: vi.fn(async () => []), claim: vi.fn(async () => tasks),
@@ -10,6 +11,24 @@ const store = (tasks = []) => ({
 const origin = 'https://support-hub-web-production.up.railway.app';
 
 describe('the AI team', () => {
+  it('wires owner-directed emails to the existing transactional sender without a scheduled or model task', async () => {
+    const requestKey = '11111111-1111-4111-8111-111111111111';
+    const execution = { id: 'a1', agentKey: 'chief_of_staff', kind: 'email.external', autoApproved: false, execution: 2, input: { requestKey } };
+    const message = { to: 'support@example.test', subject: 'Operational case', body: 'Exact owner message\n' };
+    const email = { configured: true, send: vi.fn(async () => ({ delivery: 'sent', id: 'accepted-id' })) };
+    const fake = () => ({ ...store(), beginExecution: vi.fn(async () => execution), completeExecution: vi.fn(async () => undefined),
+      externalEmailBeginSend: vi.fn(async ({ claim }) => claim ? { state: 'ready', ...message } : { state: 'unrecorded' }), externalEmailFinishSend: vi.fn(async () => true) });
+    const configured = agentTeam({ store: fake(), publicOrigin: origin, email, features: new Set([externalEmailFeature]) });
+    expect(configured.scheduler.kinds()).not.toContain('email.external');
+    expect(await configured.actions.executeOne('a1', { kind: 'email.external' })).toEqual({ executed: true, failed: false, skipped: false });
+    expect(email.send).toHaveBeenCalledExactlyOnceWith(message.to, message.subject, message.body);
+    // An explicit owner approval works even while the automatic scheduler is disabled.
+    expect(configured.active()).toBe(false);
+    const bare = agentTeam({ store: fake(), publicOrigin: origin, email });
+    expect(await bare.actions.executeOne('a1', { kind: 'email.external' })).toMatchObject({ failed: true, error: 'no_executor' });
+    expect(email.send).toHaveBeenCalledTimes(1);
+  });
+
   it('ships the on-call agent\'s handlers without being asked', () => {
     const team = agentTeam({ store: store(), publicOrigin: origin, enabled: true });
     expect(team.scheduler.kinds()).toEqual(['brief.daily', 'probe.incident', 'probe.recovery', 'probe.sweep', 'seo.weekly']);

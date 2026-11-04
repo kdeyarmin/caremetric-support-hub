@@ -4,17 +4,79 @@ import { HttpError } from '../sms-auth.mjs';
 
 const actionId = '11111111-1111-4111-8111-111111111111';
 const version = '2026-11-02T12:00:00.123456+00:00';
-const fixture = ({ results = {}, execution = { executed: true, failed: false }, waiting = vi.fn(async () => ({ skipped: false, started: 2, done: Promise.resolve([]) })), ready = [] } = {}) => {
+const fixture = ({ results = {}, execution = { executed: true, failed: false }, waiting = vi.fn(async () => ({ skipped: false, started: 2, done: Promise.resolve([]) })), ready = [], externalEmail = false } = {}) => {
   const queries = [];
   const db = { query: vi.fn(async (sql, args) => { queries.push([sql, args]); const name = /select (\S+)\(/.exec(sql)[1]; const value = results[name]; if (value instanceof Error) throw value; return { rows: [{ result: value ?? {} }] }; }) };
   const session = vi.fn(async (token, work) => { if (!token) throw new HttpError(401, 'Sign in with an SMS code to continue.'); return work(db); });
   const actions = { executeOne: vi.fn(async () => execution), sessionActions: vi.fn(async () => ready), executeSessionActions: vi.fn(async () => ({ executed: ready.length, failed: 0 })) };
   const kick = vi.fn();
-  return { queries, session, actions, kick, waiting, admin: agentAdmin({ session, actions, kick, waiting, services: () => ({ enabled: true, handlers: ['probe.sweep'] }) }) };
+  return { queries, session, actions, kick, waiting, admin: agentAdmin({ session, actions, kick, waiting, services: () => ({ enabled: true, handlers: ['probe.sweep'], ...(externalEmail ? { externalEmail: true } : {}) }) }) };
 };
 const databaseError = (code, message) => Object.assign(new Error(message), { code });
 
 describe('agent administration', () => {
+  describe('owner-directed email proposals', () => {
+    const email = { to: 'data.support@example.test', subject: 'CareMetric source access', body: 'Hello,\n\nPlease investigate.\n', requestKey: actionId };
+
+    it('authorizes a command and prepares the exact message without approving, executing or queuing any task', async () => {
+      const proposal = { id: actionId, kind: 'email.external', status: 'proposed', created: true, requestKey: actionId };
+      const { admin, queries, actions, kick } = fixture({ externalEmail: true, results: { 'hub.request_agent_email': proposal } });
+      expect(await admin.email('token', email)).toEqual(proposal);
+      expect(queries).toEqual([
+        ['select hub.authorize_app_command() as result', []],
+        ['select hub.request_agent_email($1, $2, $3, $4) as result', [email.to, email.subject, email.body, actionId]],
+      ]);
+      expect(actions.executeOne).not.toHaveBeenCalled();
+      expect(kick).not.toHaveBeenCalled();
+    });
+
+    it('returns an existing request unchanged without sending it again and preserves the request key on a conflict', async () => {
+      const recorded = { id: actionId, kind: 'email.external', status: 'executed', created: false, requestKey: actionId };
+      const { admin, actions } = fixture({ externalEmail: true, results: { 'hub.request_agent_email': recorded } });
+      expect(await admin.email('token', email)).toEqual(recorded);
+      expect(actions.executeOne).not.toHaveBeenCalled();
+      const conflict = fixture({ externalEmail: true, results: { 'hub.request_agent_email': databaseError('40001', 'This request key was used for a different email.') } });
+      await expect(conflict.admin.email('token', { ...email, body: 'Changed text' })).rejects.toMatchObject({ status: 409 });
+    });
+
+    it('rejects extra routing or approval fields, invalid keys and message headers before querying', async () => {
+      const { admin, session } = fixture({ externalEmail: true });
+      for (const bad of [
+        { ...email, bcc: 'another@example.test' }, { ...email, approve: true }, { ...email, from: 'owner@example.test' },
+        { ...email, requestKey: 'not-a-uuid' }, { ...email, to: 'data.support@example.test\nCc: another@example.test' },
+        { ...email, subject: 'Subject\r\nBcc: another@example.test' }, { ...email, body: 'x'.repeat(5001) },
+        { to: email.to, subject: email.subject, requestKey: actionId },
+      ]) await expect(admin.email('token', bad)).rejects.toMatchObject({ status: 400 });
+      expect(session).not.toHaveBeenCalled();
+    });
+
+    it('requires current owner command authorization even when email is unavailable', async () => {
+      for (const [code, status] of [['28000', 401], ['42501', 403]]) {
+        const { admin, queries } = fixture({ results: { 'hub.authorize_app_command': databaseError(code, 'Current owner command required.') } });
+        await expect(admin.email('token', email)).rejects.toMatchObject({ status });
+        expect(queries).toHaveLength(1);
+      }
+      const { admin, queries } = fixture({ externalEmail: true });
+      await expect(admin.email(null, email)).rejects.toMatchObject({ status: 401 });
+      expect(queries).toEqual([]);
+    });
+
+    it('does not create a draft until both the feature and sender are ready', async () => {
+      const { admin, queries } = fixture();
+      await expect(admin.email('token', email)).rejects.toMatchObject({ status: 503 });
+      expect(queries).toEqual([['select hub.authorize_app_command() as result', []]]);
+    });
+
+    it('uses the existing approval path and reports provider acceptance only after a successful execution', async () => {
+      const approved = { id: actionId, kind: 'email.external', status: 'approved', decided: true };
+      const { admin, actions } = fixture({ results: { 'hub.decide_agent_action': approved } });
+      expect(await admin.decide('token', { actionId, decision: 'approve' })).toEqual({ id: actionId, kind: 'email.external', status: 'executed', decided: true });
+      expect(actions.executeOne).toHaveBeenCalledWith(actionId, { kind: 'email.external', sessionToken: 'token' });
+      const unknown = fixture({ results: { 'hub.decide_agent_action': approved }, execution: { executed: false, failed: true, error: 'external_email_unconfirmed' } });
+      expect(await unknown.admin.decide('token', { actionId, decision: 'approve' })).toEqual({ id: actionId, kind: 'email.external', status: 'failed', decided: true, error: 'external_email_unconfirmed' });
+    });
+  });
+
   it('returns the roster with the services the team can use', async () => {
     const { admin, queries } = fixture({ results: { 'hub.get_agent_team': { agents: [], approvalCount: 0 } } });
     expect(await admin.overview('token', {})).toEqual({ team: { agents: [], approvalCount: 0 }, services: { enabled: true, handlers: ['probe.sweep'] }, waitingActions: 0 });

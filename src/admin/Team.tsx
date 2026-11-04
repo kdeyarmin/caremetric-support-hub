@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Bot, RefreshCw } from "lucide-react";
 import { Link, useInRouterContext } from "react-router-dom";
 import { Loading, ReadFailure } from "./AdminReads";
@@ -6,14 +6,15 @@ import { timeLabel } from "./readState";
 import { useAdminRead } from "./useAdminRead";
 import { TeamApiError, teamClient } from "./teamClient";
 import type { TeamClient } from "./teamClient";
+import { externalEmailRequestKey } from "./externalEmailDraft";
 import {
-  actionLabel, approvalTitle, autonomyHelp, autonomyLabels, cadenceLabel, centsLabel, errorLabel, failedActionLabel, outcomeLabel, statusLabel, targetLabel, taskLabel, tierLabels,
+  actionLabel, approvalTitle, autonomyHelp, autonomyLabels, cadenceLabel, centsLabel, errorLabel, externalEmailRecipient, failedActionLabel, outcomeLabel, statusLabel, targetLabel, taskLabel, tierLabels,
 } from "./teamProtocol";
-import type { ActivityKind, ActivityPage, AuditPage, TeamAgent, TeamApproval, TeamOverview, TeamServices } from "./teamProtocol";
+import type { ActivityKind, ActivityPage, AuditPage, ExternalEmailDraft, ExternalEmailProposal, TeamAgent, TeamApproval, TeamOverview, TeamServices } from "./teamProtocol";
 import "./admin.css";
 
 type Notice = { ok: boolean; text: string } | null;
-type Change = (id: string, work: () => Promise<unknown>, success: string | (() => string)) => Promise<void>;
+type Change = (id: string, work: () => Promise<unknown>, success: string | (() => string), failure?: (error: unknown) => string) => Promise<void>;
 
 // A refusal from the server carries its reviewed text. Anything else (a timeout, a dropped connection, an answer the screen could not read)
 // can happen after the server has acted, so it never claims that nothing changed: a second press could queue the same work again.
@@ -56,6 +57,79 @@ function ServicesPanel({ services, awaitingSession, waitingActions, busy, onRunW
   </section>;
 }
 
+const emptyEmail = (): ExternalEmailDraft => ({ to: "", subject: "", body: "" });
+const sameEmail = (left: ExternalEmailDraft, right: ExternalEmailDraft) => left.to === right.to && left.subject === right.subject && left.body === right.body;
+const controlCharacter = (value: string, multiline = false) => Array.from(value).some(character => {
+  const code = character.charCodeAt(0);
+  return code === 127 || (code < 32 && !(multiline && [9, 10, 13].includes(code)));
+});
+const emailDraftError = (draft: ExternalEmailDraft) => {
+  if (draft.to.length > 320 || !/^[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+$/.test(draft.to) || controlCharacter(draft.to)) return "Enter one email address in To.";
+  if (!draft.subject.trim() || Array.from(draft.subject).length > 200 || controlCharacter(draft.subject)) return "Enter a subject of 1–200 characters on one line.";
+  if (!draft.body.trim() || Array.from(draft.body).length > 5000 || controlCharacter(draft.body, true)) return "Enter a message of 1–5,000 characters. Line breaks and tabs are allowed.";
+  return null;
+};
+function proposalNotice(result: ExternalEmailProposal): string {
+  if (result.status === "proposed") return `${result.created ? "Email proposal prepared." : "This email proposal already exists."} Review the exact text in Waiting for you, then choose Approve and send. Preparing a proposal does not send it.`;
+  if (result.status === "executed") return "This email was already accepted by the email provider. Delivery to the recipient is not confirmed. No new proposal was created.";
+  if (result.status === "approved" || result.status === "executing") return "This email was already approved. Do not resend it; check Proposed actions for the outcome. No new proposal was created.";
+  if (result.status === "failed") return "This request already has a finished action. Check Proposed actions for its result. If the outcome is unknown, do not resend the email. No new proposal was created.";
+  return `This email proposal was already ${result.status}. No new proposal was created.`;
+}
+
+/** An owner writes the exact message. The only operation here creates a proposal; sending is a separate decision below. */
+function EmailComposer({ client, ready, busy, change }: { client: TeamClient; ready: boolean; busy: string; change: Change }) {
+  const [draft, setDraft] = useState<ExternalEmailDraft>(emptyEmail);
+  const [prepared, setPrepared] = useState<ExternalEmailProposal | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const attempt = useRef<{ draft: ExternalEmailDraft; requestKey: string } | null>(null);
+  const preparing = useRef(false);
+  const edit = (field: keyof ExternalEmailDraft, value: string) => {
+    setDraft(previous => ({ ...previous, [field]: value }));
+    setValidationError(null);
+  };
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!ready || busy || preparing.current || prepared) return;
+    const exact = { ...draft, to: draft.to.trim() };
+    // Only the address's outer whitespace is normalized, and the field shows what is submitted.
+    setDraft(exact);
+    const invalid = emailDraftError(exact);
+    if (invalid) { setValidationError(invalid); return; }
+    preparing.current = true;
+    let result: ExternalEmailProposal | null = null;
+    try {
+      await change("email:prepare", async () => {
+        if (!attempt.current || !sameEmail(attempt.current.draft, exact)) {
+          attempt.current = { draft: exact, requestKey: await externalEmailRequestKey(exact) };
+        }
+        result = await client.prepareEmail({ ...exact, requestKey: attempt.current.requestKey });
+        setPrepared(result);
+      }, () => result ? proposalNotice(result) : "The proposal result could not be confirmed.", error => error instanceof TeamApiError
+        ? `Draft kept. ${error.message}`
+        : "The proposal result could not be confirmed. Your draft is unchanged. Prepare it again to check the same request; this will not create a second proposal. Preparing never sends an email.");
+    } finally { preparing.current = false; }
+  };
+  const another = () => { setDraft(emptyEmail()); setPrepared(null); setValidationError(null); attempt.current = null; };
+  const disabled = !ready || Boolean(busy);
+  return <section className="panel team-email" aria-labelledby="team-email-title">
+    <div className="admin-section-title"><div><h2 id="team-email-title">Prepare an email</h2><p>Write a message for the team to send. You review and approve its exact text before it goes out.</p></div></div>
+    <form className="team-email-form" onSubmit={event => void submit(event)}>
+      {!ready && <p className="muted">Owner-written email is not available on this Hub yet.</p>}
+      <label className="team-field">To<input type="email" required maxLength={320} autoComplete="off" autoCapitalize="none" spellCheck={false}
+        value={draft.to} disabled={disabled} readOnly={Boolean(prepared)} onChange={event => edit("to", event.target.value)} /></label>
+      <label className="team-field">Subject<input required maxLength={400} value={draft.subject} disabled={disabled} readOnly={Boolean(prepared)} onChange={event => edit("subject", event.target.value)} /></label>
+      <label className="team-field">Message<textarea required rows={10} maxLength={10000} value={draft.body} disabled={disabled} readOnly={Boolean(prepared)} onChange={event => edit("body", event.target.value)} /></label>
+      <p className="muted">One recipient · plain text · up to 5,000 message characters</p>
+      {validationError && <p className="form-message form-error" role="alert">{validationError}</p>}
+      <div className="button-row">
+        <button type="submit" className="button button-primary button-small" disabled={disabled || Boolean(prepared)}>{busy === "email:prepare" ? "Preparing…" : prepared ? "Proposal prepared" : "Prepare email for approval"}</button>
+        {prepared && <button type="button" className="button button-secondary button-small" disabled={Boolean(busy)} onClick={another}>Write another email</button>}
+      </div>
+    </form>
+  </section>;
+}
+
 /** A link to the conversation a proposal is about, in the inbox (a plain link where there is no router, as in tests). */
 function RecordLink({ reference }: { reference: string }) {
   const href = `/communications?search=${encodeURIComponent(reference)}&status=all`;
@@ -64,7 +138,7 @@ function RecordLink({ reference }: { reference: string }) {
 
 function ApprovalCard({ approval, busy, onDecide }: { approval: TeamApproval; busy: string; onDecide: (approval: TeamApproval, decision: "approve" | "reject", note: string) => void }) {
   const [note, setNote] = useState("");
-  const email = approval.kind === "email.send";
+  const email = approval.kind === "email.send" || approval.kind === "email.external";
   // A customer email is named by its account and subject, so two waiting emails never share a name.
   const what = email ? approvalTitle(approval) : actionLabel(approval.kind);
   // Approving a reply or a customer email sends it.
@@ -184,7 +258,11 @@ function ActivityRows({ tab, data, names }: { tab: Tab; data: unknown; names: Re
         // Why a carried-out action failed: the code its executor stored, in plain words, so a refused send is not just "Failed".
         const failure = item.status === "failed" && typeof item.result?.error === "string" ? failedActionLabel(item.result.error) : "";
         const decision = item.decidedAt ? `${timeLabel(item.decidedAt)}${item.decisionNote ? ` — ${item.decisionNote}` : ""}` : "";
-        return <tr key={item.id}><td>{timeLabel(item.createdAt)}</td><td>{who(item.agentKey)}</td><td>{actionLabel(item.kind)}</td><td>{item.targetId ? targetLabel(item.targetKind, item.targetId) : "—"}</td><td>{statusLabel(item.status)}</td>
+        const external = item.kind === "email.external";
+        const target = external ? externalEmailRecipient(item.preview) || "External recipient" : item.targetId ? targetLabel(item.targetKind, item.targetId) : "—";
+        const status = external && item.result?.error === "external_email_unconfirmed" ? "Outcome unknown"
+          : external && item.status === "executed" ? "Accepted by email provider" : statusLabel(item.status);
+        return <tr key={item.id}><td>{timeLabel(item.createdAt)}</td><td>{who(item.agentKey)}</td><td>{actionLabel(item.kind)}</td><td>{target}</td><td>{status}</td>
           <td className="team-wide">{[decision, failure].filter(Boolean).join(" · ") || "—"}</td></tr>;
       })}
     </Table>;
@@ -246,6 +324,7 @@ function ActivityPanel({ client, agents, refresh }: { client: TeamClient; agents
 export function Team({ client = teamClient }: { client?: TeamClient }) {
   const [refresh, setRefresh] = useState(0);
   const [busy, setBusy] = useState("");
+  const changing = useRef(false);
   const [notice, setNotice] = useState<Notice>(null);
   const reload = useCallback(() => setRefresh(value => value + 1), []);
   const reader = useCallback((signal: AbortSignal) => { void refresh; return client.overview({ signal }); }, [client, refresh]);
@@ -255,12 +334,13 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
   if (state.status === "ready" && kept?.data !== state.data) setKept({ data: state.data, receivedAt: state.receivedAt });
   const shown = state.status === "ready" ? state : kept;
 
-  const change: Change = async (id, work, success) => {
-    if (busy) return;
+  const change: Change = async (id, work, success, failure = failureText) => {
+    if (changing.current) return;
+    changing.current = true;
     setBusy(id); setNotice(null);
     try { await work(); setNotice({ ok: true, text: typeof success === "function" ? success() : success }); }
-    catch (error) { setNotice({ ok: false, text: failureText(error) }); }
-    finally { setBusy(""); reload(); }
+    catch (error) { setNotice({ ok: false, text: failure(error) }); }
+    finally { changing.current = false; setBusy(""); reload(); }
   };
   const onStatus = (agent: TeamAgent, status: "active" | "paused") => void change(`status:${agent.key}`,
     () => client.setStatus({ key: agent.key, status, expectedUpdatedAt: agent.updatedAt }), `${agent.displayName} is ${status === "active" ? "active" : "paused"}.`);
@@ -278,21 +358,29 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
   };
   const onDecide = (approval: TeamApproval, decision: "approve" | "reject", note: string) => {
     let outcome: "sent" | "waiting" | "unconfirmed" = "unconfirmed";
+    const external = approval.kind === "email.external";
+    let finalFailure: string | null = null;
     void change(`decide:${approval.id}`,
     async () => {
       const result = await client.decide({ actionId: approval.id, decision, note: note.trim() || undefined });
+      if (external && (result.id !== approval.id || result.kind !== approval.kind)) throw new Error("The action confirmation did not match this email.");
       if (!result.decided) throw new TeamApiError(409, "That was already decided or has expired. The list has been refreshed.");
       // A failed reply is final, so "press Run what's waiting" (the label a waiting task gets) would send the owner the wrong way.
-      if (result.status === "failed") throw new TeamApiError(500, result.error ? failedActionLabel(result.error) : "It was approved but could not be carried out. See the activity below.");
+      if (result.status === "failed") {
+        finalFailure = result.error ? failedActionLabel(result.error) : external ? errorLabel("external_email_unconfirmed") : "It was approved but could not be carried out. See the activity below.";
+        throw new TeamApiError(500, finalFailure);
+      }
       // Only the server can say a reply was not started. A plain "approved" may be an action whose work was done and whose result could not
       // be recorded, so it is never reported as unsent.
       outcome = result.status === "executed" ? "sent" : result.needsSession ? "waiting" : "unconfirmed";
     }, () => {
       if (decision === "reject") return "Rejected.";
-      if (outcome === "sent") return "Approved.";
+      if (outcome === "sent") return external ? "Accepted by the email provider. Delivery to the recipient is not confirmed." : "Approved.";
       if (outcome === "waiting") return "Approved. It has not been sent yet. Press Run what's waiting while you are signed in.";
+      if (external) return "Approved, but the send outcome could not be confirmed. Do not resend this email. Check Proposed actions and the email provider's activity.";
       return "Approved, but the Hub could not confirm what happened next. Check the Proposed actions below, and for a reply open the conversation before answering again.";
-    });
+    }, error => !external || decision === "reject" ? failureText(error) : finalFailure ?? (error instanceof TeamApiError && error.status < 500 ? error.message
+      : "The send outcome could not be confirmed. Do not resend this email. Refresh Proposed actions and check the email provider's activity."));
   };
 
   return <div className="team">
@@ -306,6 +394,7 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
     {shown && <>
       <p className="admin-read-time">Loaded {timeLabel(shown.receivedAt)}.</p>
       <ServicesPanel services={shown.data.services} awaitingSession={shown.data.team.awaitingSessionCount} waitingActions={shown.data.waitingActions} busy={busy} onRunWaiting={onRunWaiting} />
+      <EmailComposer client={client} ready={shown.data.services.externalEmail === true && shown.data.services.email} busy={busy} change={change} />
       <ApprovalsPanel approvals={shown.data.team.approvals} count={shown.data.team.approvalCount} busy={busy} onDecide={onDecide} />
       <section aria-labelledby="team-agents-title"><h2 id="team-agents-title" className="team-section-heading">Agents</h2>
         <div className="team-agent-grid">

@@ -1,4 +1,5 @@
 import { HttpError, withSession } from '../sms-auth.mjs';
+import { validExternalEmail } from './external-email.mjs';
 
 /**
  * What the owner can do to the AI team from the Hub: see the roster and what is waiting for
@@ -17,7 +18,7 @@ const taskKind = /^[a-z][a-z0-9_.]{1,60}$/;
 // The database returns an agent's updated_at to the microsecond; the browser hands it back untouched.
 const instant = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
 const reviewedErrors = { '22023': 400, '40001': 409, '42501': 403, '28000': 401, P0002: 404, '55000': 409 };
-export const agentAdminActions = new Set(['overview', 'status', 'autonomy', 'budget', 'decide', 'run', 'cancel', 'waiting']);
+export const agentAdminActions = new Set(['overview', 'status', 'autonomy', 'budget', 'decide', 'run', 'cancel', 'waiting', 'email']);
 
 function reviewed(error) {
   if (error instanceof HttpError) return error;
@@ -76,6 +77,16 @@ export function agentAdmin({ pool, actions, services = () => ({}), kick = null, 
       exactly(input, ['key', 'dailyBudgetCents', 'expectedUpdatedAt']);
       if (!Number.isInteger(input.dailyBudgetCents) || input.dailyBudgetCents < 0 || input.dailyBudgetCents > 100000) throw new HttpError(400, 'Invalid budget.');
       return query(token, 'hub.set_agent_budget', [matching(input.key, agentKey, 'agent'), input.dailyBudgetCents, matching(input.expectedUpdatedAt, instant, 'version')]);
+    },
+    /** Prepare the owner's exact email for review. This operation never approves, queues a task or sends it. */
+    async email(token, input) {
+      exactly(input, ['to', 'subject', 'body', 'requestKey']);
+      if (!validExternalEmail(input)) throw new HttpError(400, 'Enter one email address, a subject of at most 200 characters, and a message of at most 5000 characters.');
+      const requestKey = matching(input.requestKey, uuid, 'request key');
+      // Authenticate even when the capability is unavailable; the creation operation rechecks command authorization itself.
+      await query(token, 'hub.authorize_app_command');
+      if (services().externalEmail !== true) throw new HttpError(503, 'Owner-directed email is not available. Check the Hub email setup and database feature.');
+      return query(token, 'hub.request_agent_email', [input.to, input.subject, input.body, requestKey]);
     },
     async run(token, input) {
       exactly(input, ['agentKey', 'taskKind']);
