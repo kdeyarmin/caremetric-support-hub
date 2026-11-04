@@ -17,7 +17,7 @@ const taskKind = /^[a-z][a-z0-9_.]{1,60}$/;
 // The database returns an agent's updated_at to the microsecond; the browser hands it back untouched.
 const instant = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
 const reviewedErrors = { '22023': 400, '40001': 409, '42501': 403, '28000': 401, P0002: 404, '55000': 409 };
-export const agentAdminActions = new Set(['overview', 'status', 'autonomy', 'budget', 'decide', 'run', 'cancel', 'waiting']);
+export const agentAdminActions = new Set(['overview', 'status', 'autonomy', 'budget', 'decide', 'run', 'cancel', 'waiting', 'email']);
 
 function reviewed(error) {
   if (error instanceof HttpError) return error;
@@ -99,6 +99,14 @@ export function agentAdmin({ pool, actions, services = () => ({}), kick = null, 
       // With the scheduler off there are no tasks to start, but the replies above still go out.
       const started = await startWaiting(token).catch(error => { if (ready.length > 0 && error?.status === 409) return 0; throw error; });
       return { started, actions: ready.length };
+    },
+    /** Create a draft in the approval queue; this call NEVER sends. The DB requires an owner command session. */
+    async email(token, input) {
+      exactly(input, ['recipient', 'subject', 'body', 'requestKey']);
+      if (typeof input.recipient !== 'string' || input.recipient.length > 200 || typeof input.subject !== 'string'
+        || input.subject.length > 150 || typeof input.body !== 'string' || input.body.length > 3800
+        || !uuid.test(input.requestKey)) throw new HttpError(400, 'Enter one recipient, subject and message.');
+      return query(token, 'hub.prepare_agent_direct_email', [input.recipient, input.subject, input.body, input.requestKey]);
     },
     async cancel(token, input) {
       exactly(input, ['taskId']);
