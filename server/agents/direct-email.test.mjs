@@ -31,7 +31,7 @@ describe('owner-approved direct mail', () => {
   });
   it('never reaches the provider if email is not configured', async () => {
     const { store, email, execute } = fixture({ configured: false });
-    await expect(execute(action)).rejects.toMatchObject({ code: 'not_configured' });
+    await expect(execute(action)).rejects.toMatchObject({ code: 'direct_email_not_configured' });
     expect(store.directEmailBeginSend).not.toHaveBeenCalled();
     expect(email.send).not.toHaveBeenCalled();
   });
