@@ -49,8 +49,8 @@ select ok((select count(*) = 1 from private.agent_schedules where agent_key = 'c
   and cadence = 'interval' and every_seconds = 3600 and not requires_session), 'The Chief of Staff checks the steps every hour');
 select is((select (private.agent_autonomy_step_json(s)) ->> 'ready' from private.agent_autonomy_steps s where category = 'account_emails'), 'true',
   'Account emails are ready: their code is on the Hub');
-select is((select (private.agent_autonomy_step_json(s)) ->> 'ready' from private.agent_autonomy_steps s where category = 'support_answers'), 'false',
-  'Support answers wait for their code');
+select ok((select bool_and(((private.agent_autonomy_step_json(s)) ->> 'ready')::boolean = coalesce((hub.get_backend_contract() -> 'features') ? s.requires_feature, false))
+  from private.agent_autonomy_steps s), 'A step is ready exactly when its feature is declared');
 
 -- ---------------------------------------------------------------------------------------
 -- A supervised week, then automatic, then back to approving.
@@ -82,7 +82,8 @@ select ok((select count(*) = 3 from private.audit_events where action = 'agent.a
   and metadata ->> 'source' = 'test'), 'Each change is audited, and one that changes nothing is not');
 
 -- Refusals.
-select throws_ok($$select private.agent_autonomy_apply('support_answers', 'automatic', null, 'test')$$, '55000', null,
+update private.agent_autonomy_steps set requires_feature = 'platform.agents.never-declared.v1' where category = 'offers';
+select throws_ok($$select private.agent_autonomy_apply('offers', 'automatic', null, 'test')$$, '55000', null,
   'A step whose code is not on the Hub cannot become automatic');
 select throws_ok($$select private.agent_autonomy_apply('nothing', 'hold', null, 'test')$$, 'P0002', null, 'An unknown step is refused');
 select throws_ok($$select private.agent_autonomy_apply('account_emails', 'sometimes', null, 'test')$$, '22023', null, 'An unknown action is refused');
