@@ -77,7 +77,7 @@ function skipReason(snapshot, payload, settings) {
  * and the guide library), and null otherwise, which keeps the handler exactly as it is without a model.
  * `bookingUrl` is the owner's booking page (HUB_BOOKING_URL): the sales acknowledgment offers it, and nothing else does.
  */
-export function triageHandler({ store, notifier, drafting = null, bookingUrl = null, log = line => console.warn(line) }) {
+export function triageHandler({ store, notifier, drafting = null, bookingUrl = null, answers = false, log = line => console.warn(line) }) {
   // Whether this alert has been tried before in a channel: its key already has a row there. A refused try counts toward the caps like any
   // other, so a retry has to resume the alert under its own key and channels instead of being judged by the caps again, which would turn it
   // into an email-only alert or a rollup because of itself.
@@ -182,14 +182,17 @@ export function triageHandler({ store, notifier, drafting = null, bookingUrl = n
     if (!route) return { reply: 'no_route', template };
     const body = draft ? draft.body : replyBody(template, route, { bookingUrl });
     try {
+      // A drafted answer that cites the guides, for a message with no identifier, going back by email or chat, is an answer: it can go
+      // out without the owner's session (approved by them, or automatically once they hand answers over). Everything else is a reply.
+      const answer = answers && Boolean(draft) && !phi && Array.isArray(draft.sources) && draft.sources.length >= 1 && draft.sources.length <= 5 && (route === 'email' || route === 'chat');
       const proposal = await store.proposeAction({
-        taskId: task.id, kind: 'communication.reply', targetKind: 'communication', targetId: `CM-${snapshot.reference}`, preview: body,
+        taskId: task.id, kind: answer ? 'communication.answer' : 'communication.reply', targetKind: 'communication', targetId: `CM-${snapshot.reference}`, preview: body,
         input: {
           communicationId: snapshot.id, reference: snapshot.reference, channel: snapshot.channel, route, basedOnMessageId: snapshot.headMessageId,
           body, classification: { category, phi, ...(draft ? { drafted: true } : {}) }, template, ...(draft ? { sources: draft.sources } : {}),
         },
       });
-      return { reply: proposal.created === false ? 'already_proposed' : 'proposed', template };
+      return { reply: proposal.created === false ? 'already_proposed' : answer ? (proposal.status === 'auto_approved' ? 'answer_approved' : 'answer_proposed') : 'proposed', template };
     } catch (error) {
       if (error?.code === '42501') return { reply: 'observe_only', template };
       throw error;
@@ -259,12 +262,15 @@ export function triageHandler({ store, notifier, drafting = null, bookingUrl = n
 
     // A model that declined saw something its provider objected to: a person should read it, so nothing is offered automatically.
     const proposal = asked?.state === 'refused' ? { reply: 'model_refused' } : await proposeReply({ task, snapshot, category, phi, unread, draft: asked?.draft ?? null });
-    const proposed = proposal.reply === 'proposed' || proposal.reply === 'already_proposed';
-    const proposedWords = { drafted: 'drafted reply', phi: 'identifier notice', sales: 'sales acknowledgment' }[proposal.template] ?? 'acknowledgment';
+    // An answer waits like a reply: for the owner during the supervised week, or for the drain that sends it once approved on its own.
+    const proposed = ['proposed', 'already_proposed', 'answer_proposed', 'answer_approved'].includes(proposal.reply);
+    const proposedWords = proposal.reply === 'answer_approved' ? 'drafted answer approved to send'
+      : proposal.reply === 'answer_proposed' ? 'drafted answer'
+      : { drafted: 'drafted reply', phi: 'identifier notice', sales: 'sales acknowledgment' }[proposal.template] ?? 'acknowledgment';
     const modelWords = asked && asked.state !== 'drafted' ? `; ${asked.state === 'rejected' ? `draft not used (${asked.reason.replaceAll('_', ' ')})` : asked.state === 'unavailable' ? `the model was unavailable (${asked.reason.replaceAll('_', ' ')})` : draftWords[asked.state]}` : '';
     await recordRun({ store, log }, task, {
       promptVersion: 'rules.1',
-      summary: `Triaged CM-${snapshot.reference} (${channelWord(snapshot.channel)}): ${categoryWord(category)}${phi ? ', identifiers found' : ''}; ${severity} alert (${delivery.join(', ')})${proposed ? `; ${proposedWords} proposed` : ''}${modelWords}.`,
+      summary: `Triaged CM-${snapshot.reference} (${channelWord(snapshot.channel)}): ${categoryWord(category)}${phi ? ', identifiers found' : ''}; ${severity} alert (${delivery.join(', ')})${proposed ? `; ${proposedWords}${proposal.reply === 'answer_approved' ? '' : ' proposed'}` : ''}${modelWords}.`,
     });
     return {
       // A proposed reply keeps the task open until the owner approves or rejects it.

@@ -403,11 +403,11 @@ const reading = (over = {}) => ({
 });
 const done = (output = reading()) => ({ outcome: 'completed', output, costCents: 1.2, model: 'm', runId: 'run-9', requestId: 'req_1' });
 
-const withModel = ({ snapshot = snapshotOf(`How do I export the staff roster by month? ${canary}`), result = done(), guides = guideList, counts = {}, drafting = true, followups = false } = {}) => {
+const withModel = ({ snapshot = snapshotOf(`How do I export the staff roster by month? ${canary}`), result = done(), guides = guideList, counts = {}, drafting = true, followups = false, answers = false } = {}) => {
   const base = fixture({ snapshot, counts });
   const model = { configured: true, run: vi.fn(async () => (typeof result === 'function' ? result() : result)) };
   const library = { top: vi.fn(async () => guides) };
-  const handler = triageHandler({ store: base.store, notifier: base.notifier, drafting: drafting ? { model, guides: library, followups } : null, log: line => base.logs.push(line) });
+  const handler = triageHandler({ store: base.store, notifier: base.notifier, drafting: drafting ? { model, guides: library, followups } : null, answers, log: line => base.logs.push(line) });
   return { ...base, model, library, run: (task = taskOf(), context = {}) => handler(task, { now, ...context }) };
 };
 const proposals = harness => harness.store.proposeAction.mock.calls.map(([call]) => call);
@@ -445,6 +445,29 @@ describe('triaging with the model', () => {
     } });
     expect(harness.store.finishRun).toHaveBeenCalledWith('run-1', 'completed', {}, 'Triaged CM-1042 (email): general question; info alert (email:sent); drafted reply proposed.', null);
     expect(leaked(harness, outcome)).not.toMatch(/CANARY|pat@example|555-010/);
+  });
+
+  it('files a checked, cited draft for an email or chat as an answer once the database has answers, and says when it was approved on its own', async () => {
+    const harness = withModel({ answers: true });
+    const outcome = await harness.run();
+    expect(proposals(harness)[0]).toMatchObject({ kind: 'communication.answer', targetKind: 'communication', targetId: 'CM-1042',
+      input: { template: 'drafted', route: 'email', classification: { phi: false, drafted: true }, sources: ['Export the staff roster'] } });
+    expect(outcome.result.reply).toBe('answer_proposed');
+    // The task stays open while the answer waits, as it does for a reply.
+    expect(outcome.status).toBe('awaiting_approval');
+    expect(harness.store.finishRun).toHaveBeenCalledWith('run-1', 'completed', {}, 'Triaged CM-1042 (email): general question; info alert (email:sent); drafted answer proposed.', null);
+    const trusted = withModel({ answers: true });
+    trusted.store.proposeAction.mockImplementation(async () => ({ id: 'action-2', status: 'auto_approved', requestKey: 'k2', created: true }));
+    const sending = await trusted.run();
+    expect([sending.status, sending.result.reply]).toEqual(['awaiting_approval', 'answer_approved']);
+    expect(trusted.store.finishRun).toHaveBeenCalledWith('run-1', 'completed', {}, 'Triaged CM-1042 (email): general question; info alert (email:sent); drafted answer approved to send.', null);
+    // A text message is never an answer, and without the feature a draft stays a reply the owner sends.
+    const text = withModel({ answers: true, snapshot: snapshotOf('How do I export the staff roster by month?', { channel: 'sms', canText: true, canEmail: false, subject: null }), result: done(reading({ reply: 'Open Reports, pick a month and select Export.' })) });
+    await text.run(taskOf({ agent: { autonomy: 'propose', config: { channels: ['sms'] } } }));
+    expect(proposals(text)[0]?.kind).toBe('communication.reply');
+    const without = withModel({ answers: false });
+    await without.run();
+    expect(proposals(without)[0].kind).toBe('communication.reply');
   });
 
   it('takes the effort from the agent\'s settings when it is one the runtime allows, and a text message gets a shorter draft route', async () => {

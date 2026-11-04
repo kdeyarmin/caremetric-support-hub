@@ -196,6 +196,18 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
   }
 
   return {
+    /**
+     * An answer the Support Concierge sends without the owner's session: approved by the owner, or approved automatically once the owner
+     * handed support answers over. The database records it in the conversation as written by the CareMetric AI Assistant before it is
+     * sent, under the action's request key (private.agent_answer_begin), and checks again that it may go; then it is delivered exactly
+     * as a staff reply is. Returns `{ refused: code }` when the database says no, else `{ delivery, deliveryChannel, replay }`.
+     */
+    async answer({ actionId, execution = null, subject = null }) {
+      const started = await server('select private.agent_answer_begin($1,$2,$3) as result', [actionId, execution, available()]);
+      if (started?.state === 'refused') return { refused: started.code };
+      if (started?.state === 'replay') return { delivery: started.delivery, deliveryChannel: started.deliveryChannel, replay: true };
+      return deliver({ ...started, replay: false }, started.body, subject);
+    },
     /** Inbound SMS from Twilio. Returns an empty TwiML response; staff reply from the Hub. */
     async smsWebhook(req) {
       if (!twilioAuthToken) throw new HttpError(503, 'Text messaging is not configured.');
