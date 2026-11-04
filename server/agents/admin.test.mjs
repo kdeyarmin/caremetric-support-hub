@@ -78,9 +78,17 @@ describe('agent administration', () => {
   });
 
   it('returns the roster with the services the team can use', async () => {
-    const { admin, queries } = fixture({ results: { 'hub.get_agent_team': { agents: [], approvalCount: 0 } } });
-    expect(await admin.overview('token', {})).toEqual({ team: { agents: [], approvalCount: 0 }, services: { enabled: true, handlers: ['probe.sweep'] }, waitingActions: 0 });
-    expect(queries[0][0]).toBe('select hub.get_agent_team() as result');
+    const steps = [{ category: 'account_emails', status: 'supervised' }];
+    const { admin, queries } = fixture({ results: { 'hub.get_agent_team': { agents: [], approvalCount: 0 }, 'hub.get_agent_autonomy': steps } });
+    expect(await admin.overview('token', {})).toEqual({ team: { agents: [], approvalCount: 0 }, services: { enabled: true, handlers: ['probe.sweep'] }, waitingActions: 0, autonomy: steps });
+    expect(queries.map(([sql]) => sql)).toEqual(['select hub.get_agent_team() as result', 'select hub.get_agent_autonomy() as result']);
+  });
+
+  it('shows no autonomy steps against a database that does not have them yet, and passes any other failure on', async () => {
+    const missing = fixture({ results: { 'hub.get_agent_team': { agents: [] }, 'hub.get_agent_autonomy': databaseError('42883', 'function hub.get_agent_autonomy() does not exist') } });
+    expect((await missing.admin.overview('token', {})).autonomy).toBeNull();
+    const refused = fixture({ results: { 'hub.get_agent_team': { agents: [] }, 'hub.get_agent_autonomy': databaseError('28000', 'Current administrator session required.') } });
+    await expect(refused.admin.overview('token', {})).rejects.toMatchObject({ status: 401 });
   });
 
   it('requires a signed-in session', async () => {
@@ -95,7 +103,9 @@ describe('agent administration', () => {
     await admin.autonomy('token', { key: 'support_concierge', autonomy: 'propose', expectedUpdatedAt: version });
     await admin.budget('token', { key: 'support_concierge', dailyBudgetCents: 250, expectedUpdatedAt: version });
     await admin.cancel('token', { taskId: actionId });
-    expect(queries.map(([sql]) => /select (\S+)\(/.exec(sql)[1])).toEqual(['hub.set_agent_status', 'hub.set_agent_autonomy', 'hub.set_agent_budget', 'hub.cancel_agent_task']);
+    await admin.step('token', { category: 'account_emails', action: 'hold', expectedChangedAt: version });
+    expect(queries.map(([sql]) => /select (\S+)\(/.exec(sql)[1])).toEqual(['hub.set_agent_status', 'hub.set_agent_autonomy', 'hub.set_agent_budget', 'hub.cancel_agent_task', 'hub.set_agent_autonomy_step']);
+    expect(queries[4][1]).toEqual(['account_emails', 'hold', version]);
   });
 
   it('rejects input it did not expect before touching the database', async () => {
@@ -118,6 +128,10 @@ describe('agent administration', () => {
       () => admin.decide('token', { actionId, decision: 'approve', note: 'x'.repeat(1001) }),
       () => admin.decide('token', { actionId, decision: 'approve', note: 5 }),
       () => admin.overview('token', { all: true }),
+      () => admin.step('token', { category: 'account_emails', action: 'always', expectedChangedAt: version }),
+      () => admin.step('token', { category: 'Account Emails', action: 'hold', expectedChangedAt: version }),
+      () => admin.step('token', { category: 'account_emails', action: 'hold' }),
+      () => admin.step('token', { category: 'account_emails', action: 'hold', expectedChangedAt: version, now: true }),
     ];
     for (const attempt of bad) await expect(attempt()).rejects.toMatchObject({ status: 400 });
     expect(session).not.toHaveBeenCalled();
@@ -195,11 +209,12 @@ describe('agent administration', () => {
   });
 
   describe('work that waits for the owner\'s session', () => {
-    it('counts approved or stale external emails without recovering or executing them during overview', async () => {
+    it('returns autonomy steps and counts approved or stale external emails without changing either during overview', async () => {
       const externalReady = vi.fn(async () => [{ id: actionId, kind: 'email.external' }]);
-      const { admin, queries, actions } = fixture({ externalReady, ready: [{ id: 'reply1', kind: 'communication.reply' }] });
-      expect((await admin.overview('token', {})).waitingActions).toBe(2);
-      expect(queries).toEqual([['select hub.get_agent_team() as result', []]]);
+      const steps = [{ category: 'account_emails', status: 'supervised' }];
+      const { admin, queries, actions } = fixture({ externalReady, ready: [{ id: 'reply1', kind: 'communication.reply' }], results: { 'hub.get_agent_autonomy': steps } });
+      expect(await admin.overview('token', {})).toMatchObject({ waitingActions: 2, autonomy: steps });
+      expect(queries).toEqual([['select hub.get_agent_team() as result', []], ['select hub.get_agent_autonomy() as result', []]]);
       expect(externalReady).toHaveBeenCalledExactlyOnceWith(false);
       expect(actions.executeOne).not.toHaveBeenCalled();
       expect(actions.executeSessionActions).not.toHaveBeenCalled();

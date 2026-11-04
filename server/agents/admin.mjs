@@ -18,7 +18,8 @@ const taskKind = /^[a-z][a-z0-9_.]{1,60}$/;
 // The database returns an agent's updated_at to the microsecond; the browser hands it back untouched.
 const instant = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
 const reviewedErrors = { '22023': 400, '40001': 409, '42501': 403, '28000': 401, P0002: 404, '55000': 409 };
-export const agentAdminActions = new Set(['overview', 'status', 'autonomy', 'budget', 'decide', 'run', 'cancel', 'waiting', 'email']);
+const stepCategory = /^[a-z][a-z_]{2,39}$/;
+export const agentAdminActions = new Set(['overview', 'status', 'autonomy', 'budget', 'decide', 'run', 'cancel', 'waiting', 'step', 'email']);
 
 function reviewed(error) {
   if (error instanceof HttpError) return error;
@@ -85,7 +86,9 @@ export function agentAdmin({ pool, actions, services = () => ({}), kick = null, 
         pendingExternalEmail(false),
       ]);
       const waitingActions = sessionCount + external.length;
-      return { team, services: services(), waitingActions };
+      // The owner's autonomy steps, or null against a database that does not have them yet (its migration is not applied).
+      const autonomy = await query(token, 'hub.get_agent_autonomy').catch(error => { if (error?.code === '42883') return null; throw error; });
+      return { team, services: services(), waitingActions, autonomy };
     },
     async status(token, input) {
       exactly(input, ['key', 'status', 'expectedUpdatedAt']);
@@ -137,6 +140,11 @@ export function agentAdmin({ pool, actions, services = () => ({}), kick = null, 
       const count = ready.length + external.length;
       const started = await startWaiting(token).catch(error => { if (count > 0 && error?.status === 409) return 0; throw error; });
       return { started, actions: count };
+    },
+    /** Start a supervised week for one kind of work, keep approving it, or hand it over now. */
+    async step(token, input) {
+      exactly(input, ['category', 'action', 'expectedChangedAt']);
+      return query(token, 'hub.set_agent_autonomy_step', [matching(input.category, stepCategory, 'step'), oneOf(input.action, ['supervise', 'hold', 'automatic'], 'action'), matching(input.expectedChangedAt, instant, 'version')]);
     },
     async cancel(token, input) {
       exactly(input, ['taskId']);

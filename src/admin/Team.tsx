@@ -8,9 +8,9 @@ import { TeamApiError, teamClient } from "./teamClient";
 import type { TeamClient } from "./teamClient";
 import { externalEmailRequestKey } from "./externalEmailDraft";
 import {
-  actionLabel, approvalTitle, autonomyHelp, autonomyLabels, cadenceLabel, centsLabel, errorLabel, externalEmailFailure, externalEmailRecipient, failedActionLabel, outcomeLabel, statusLabel, targetLabel, taskLabel, tierLabels,
+  actionLabel, approvalTitle, autonomyHelp, autonomyLabels, cadenceLabel, centsLabel, errorLabel, externalEmailFailure, externalEmailRecipient, failedActionLabel, outcomeLabel, statusLabel, stepHelpText, targetLabel, taskLabel, tierLabels,
 } from "./teamProtocol";
-import type { ActivityKind, ActivityPage, AuditPage, ExternalEmailDraft, ExternalEmailProposal, TeamAgent, TeamApproval, TeamOverview, TeamServices } from "./teamProtocol";
+import type { ActivityKind, ActivityPage, AuditPage, AutonomyStep, ExternalEmailDraft, ExternalEmailProposal, TeamAgent, TeamApproval, TeamOverview, TeamServices } from "./teamProtocol";
 import "./admin.css";
 
 type Notice = { ok: boolean; text: string } | null;
@@ -136,6 +136,39 @@ function EmailComposer({ client, ready, busy, change, terminalDecisions }: { cli
         {prepared && <button type="button" className="button button-secondary button-small" disabled={Boolean(busy)} onClick={another}>Write another email</button>}
       </div>
     </form>
+  </section>;
+}
+
+type StepAction = "supervise" | "hold" | "automatic";
+/**
+ * The kinds of work the owner hands over. Each starts with a supervised week (the owner approves every item), then switches to
+ * automatic by itself; "Keep approving" stops that at any time, and "Make automatic now" skips the rest of the week.
+ */
+function AutonomyPanel({ steps, busy, onStep }: { steps: AutonomyStep[]; busy: string; onStep: (step: AutonomyStep, action: StepAction) => void }) {
+  const working = Boolean(busy);
+  return <section className="panel team-autonomy" aria-labelledby="team-autonomy-title">
+    <div className="admin-section-title"><div><h2 id="team-autonomy-title">Work the team does on its own</h2>
+      <p>Each kind of work starts with a supervised week: you approve every item. Then it switches to automatic by itself, and you get an email the day before and when it switches. Keep approving stops that at any time.</p></div></div>
+    <ul className="team-service-list">
+      {steps.map(step => {
+        const state = step.status === "supervised" ? `Supervised until ${timeLabel(step.automaticAt ?? step.changedAt)}`
+          : step.status === "automatic" ? `On its own since ${timeLabel(step.automaticAt ?? step.changedAt)}`
+          : step.status === "held" ? "You approve each one" : "Not started";
+        return <li key={step.category}>
+          <span className="team-service-name">{step.label}</span>
+          <Pill good={step.status === "automatic"}>{state}</Pill>
+          <span className="muted">{stepHelpText(step.category)}{!step.ready ? " Its code is not on the Hub yet, so it cannot run on its own; a supervised week switches as soon as the code arrives." : ""}</span>
+          <span className="button-row">
+            {(step.status === "off" || step.status === "held") && <button type="button" className="button button-secondary button-small" disabled={working}
+              aria-label={`Start a supervised week for ${step.label}`} onClick={() => onStep(step, "supervise")}>Start supervised week</button>}
+            {(step.status === "supervised" || step.status === "automatic") && <button type="button" className="button button-secondary button-small" disabled={working}
+              aria-label={`Keep approving ${step.label}`} onClick={() => onStep(step, "hold")}>Keep approving</button>}
+            {step.status !== "automatic" && step.status !== "off" && <button type="button" className="button button-primary button-small" disabled={working || !step.ready}
+              aria-label={`Make ${step.label} automatic now`} title={step.ready ? undefined : "Its code is not on the Hub yet"} onClick={() => onStep(step, "automatic")}>Make automatic now</button>}
+          </span>
+        </li>;
+      })}
+    </ul>
   </section>;
 }
 
@@ -361,6 +394,10 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
     () => client.setBudget({ key: agent.key, dailyBudgetCents: cents, expectedUpdatedAt: agent.updatedAt }), `${agent.displayName}'s daily budget is ${centsLabel(cents)}.`);
   const onRun = (agent: TeamAgent, taskKind: string) => void change(`run:${agent.key}:${taskKind}`,
     () => client.run({ agentKey: agent.key, taskKind }), `${taskLabel(taskKind)} is queued for ${agent.displayName}.`);
+  const onStep = (step: AutonomyStep, action: StepAction) => void change(`step:${step.category}`,
+    () => client.setStep({ category: step.category, action, expectedChangedAt: step.changedAt }),
+    action === "supervise" ? `${step.label}: supervised week started. You approve each one until it ends.`
+      : action === "hold" ? `${step.label}: you approve each one from now on.` : `${step.label}: the team does this on its own from now on.`);
   const onRunWaiting = () => {
     let started = 0;
     let sending = 0;
@@ -409,6 +446,7 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
     {shown && <>
       <p className="admin-read-time">Loaded {timeLabel(shown.receivedAt)}.</p>
       <ServicesPanel services={shown.data.services} awaitingSession={shown.data.team.awaitingSessionCount} waitingActions={shown.data.waitingActions} busy={busy} onRunWaiting={onRunWaiting} />
+      {shown.data.autonomy && shown.data.autonomy.length > 0 && <AutonomyPanel steps={shown.data.autonomy} busy={busy} onStep={onStep} />}
       <EmailComposer client={client} ready={shown.data.services.externalEmail === true && shown.data.services.email} busy={busy} change={change} terminalDecisions={terminalEmailDecisions} />
       <ApprovalsPanel approvals={shown.data.team.approvals} count={shown.data.team.approvalCount} busy={busy} onDecide={onDecide} />
       <section aria-labelledby="team-agents-title"><h2 id="team-agents-title" className="team-section-heading">Agents</h2>

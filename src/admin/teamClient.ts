@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { config } from "../lib/config";
 import { sessionEvent } from "../lib/appSession";
-import { activitySchemas, agentSchema, auditSchema, decisionSchema, externalEmailProposalSchema, overviewSchema, taskResultSchema, waitingSchema } from "./teamProtocol";
-import type { ActivityKind, ActivityPage, AuditPage, Decision, ExternalEmailDraft, ExternalEmailProposal, TeamAgent, TeamOverview } from "./teamProtocol";
+import { activitySchemas, agentSchema, auditSchema, autonomyStepSchema, decisionSchema, externalEmailProposalSchema, overviewSchema, taskResultSchema, waitingSchema } from "./teamProtocol";
+import type { ActivityKind, ActivityPage, AuditPage, AutonomyStep, Decision, ExternalEmailDraft, ExternalEmailProposal, TeamAgent, TeamOverview } from "./teamProtocol";
 
 /**
  * A failed AI team request. The message is the server's reviewed text (for example "This agent
@@ -47,6 +47,8 @@ export interface TeamClient {
   cancel(input: { taskId: string }): Promise<{ id: string; status: string }>;
   /** Starts waiting tasks and checks/completes approved messages. Actions may be recovered without sending again; counts do not confirm delivery. */
   waiting(): Promise<{ started: number; actions: number }>;
+  /** Starts a supervised week for one kind of work, keeps the owner approving it ("hold"), or hands it over now ("automatic"). */
+  setStep(input: { category: string; action: "supervise" | "hold" | "automatic"; expectedChangedAt: string }): Promise<AutonomyStep>;
   activity<K extends ActivityKind>(input: { kind: K; agentKey: string | null; offset: number; limit: number }, options: { signal: AbortSignal }): Promise<ActivityPage<K>>;
   audit(input: { prefix: string | null; offset: number; limit: number }, options: { signal: AbortSignal }): Promise<AuditPage>;
 }
@@ -65,6 +67,7 @@ export const teamClient: TeamClient = {
   run: input => post("admin/team/run", input, taskResultSchema),
   cancel: input => post("admin/team/cancel", input, taskResultSchema),
   waiting: () => post("admin/team/waiting", {}, waitingSchema),
+  setStep: input => post("admin/team/step", input, autonomyStepSchema),
   activity: (input, { signal }) => post("rpc/list_agent_activity", { p_kind: input.kind, p_agent_key: input.agentKey, p_offset: input.offset, p_limit: input.limit }, activitySchemas[input.kind], signal) as never,
   audit: (input, { signal }) => post("rpc/list_audit_events", { p_action_prefix: input.prefix, p_offset: input.offset, p_limit: input.limit }, auditSchema, signal),
 };

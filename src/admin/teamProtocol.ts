@@ -33,8 +33,20 @@ export const teamSchema = z.object({
   approvalCount: z.number().int(), awaitingSessionCount: z.number().int(),
 });
 export const servicesSchema = z.object({ enabled: z.boolean(), handlers: z.array(taskKind), sms: z.boolean(), email: z.boolean(), ownerEmail: z.boolean(), ai: z.boolean(), customerTextToAi: z.boolean(), externalEmail: z.boolean().optional() });
-/** `waitingActions` counts approved messages that need checking or completion, including external email recovery candidates. It is not an unsent count. */
-export const overviewSchema = z.object({ team: teamSchema, services: servicesSchema, waitingActions: z.number().int().min(0) });
+/**
+ * One kind of work the owner hands over: off, a supervised week (they approve each item until `automaticAt`), automatic (the agent
+ * does it on its own) or held (they keep approving). `ready` says whether its code is on the Hub; a supervised step whose code is
+ * missing switches only when the code arrives. `changedAt` is handed back with a change so a stale screen is refused.
+ */
+export const autonomyStepSchema = z.object({
+  category: z.string().regex(/^[a-z][a-z_]{2,39}$/), label: z.string().max(80), status: z.enum(["off", "supervised", "automatic", "held"]),
+  supervisedSince: instant.nullable(), automaticAt: instant.nullable(), changedAt: instant, ready: z.boolean(), agents: z.array(agentKey),
+});
+/**
+ * `waitingActions` counts approved messages needing checking or completion, including external email recovery candidates; it is not
+ * an unsent count. `autonomy` is null (or absent) when the Hub's database does not have autonomy steps yet.
+ */
+export const overviewSchema = z.object({ team: teamSchema, services: servicesSchema, waitingActions: z.number().int().min(0), autonomy: z.array(autonomyStepSchema).nullable().optional() });
 /**
  * `error` is the code of why an approved action could not be carried out (see `errorLabel`). `needsSession` is the server saying it
  * confirmed that nothing was started for want of the owner's session; an approval without it, still `approved`, is not confirmed either way.
@@ -79,6 +91,7 @@ export const activitySchemas = { runs: page(runItem), tasks: page(taskItem), act
 export const auditSchema = page(auditItem);
 
 export type TeamOverview = z.infer<typeof overviewSchema>;
+export type AutonomyStep = z.infer<typeof autonomyStepSchema>;
 export type TeamAgent = z.infer<typeof agentSchema>;
 export type TeamSchedule = z.infer<typeof scheduleSchema>;
 export type TeamApproval = z.infer<typeof approvalSchema>;
@@ -101,13 +114,22 @@ export const autonomyHelp = {
 } as const;
 export const tierLabels = { fast: "Fast (Haiku)", draft: "Draft (Sonnet)", quality: "Quality (Opus)" } as const;
 
+/** What handing each kind of work over means, in the owner's words. */
+const stepHelp: Record<string, string> = {
+  account_emails: "Welcome, setup help, trial check-in and testimonial request emails to customers, up to 20 a day, each with an unsubscribe link.",
+  support_answers: "Answers to questions your published guides cover. Billing, cancellations, outages, legal questions and anything with personal details always come to you.",
+  articles: "Articles that pass the content checks, published to your public help pages.",
+  offers: "Offers from the menu you set (a trial extension or one of your coupons), to accounts that qualify, within the menu's caps.",
+};
+export const stepHelpText = (category: string) => stepHelp[category] ?? "";
+
 const taskLabels: Record<string, string> = {
   "content.weekly": "Weekly help article", "content.outreach": "Monthly outreach drafts",
   "probe.sweep": "Health check", "probe.incident": "Handle an incident", "probe.recovery": "Write a recovery note", "probe.forms": "Lead form check",
   "brief.daily": "Morning brief", "seo.weekly": "Weekly SEO check", "concierge.sweep": "Look for new messages", "concierge.communication": "Triage a message",
   "import.advisors": "Import Advisors requests", "import.breathe": "Import phone messages", "accounts.weekly": "Weekly account report",
   "growth.leads": "Look for new leads", "growth.followup": "Chase unanswered leads", "growth.weekly": "Weekly growth report",
-  "accounts.lifecycle": "Customer emails",
+  "accounts.lifecycle": "Customer emails", "autonomy.graduate": "Hand over work after its supervised week",
   "growth.pipeline": "Review sales pipeline", "growth.success": "Review customer success", "growth.discovery": "Discover prospective organizations", "growth.content": "Propose product content",
 };
 export const taskLabel = (kind: string) => taskLabels[kind] ?? kind;
