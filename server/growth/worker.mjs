@@ -12,6 +12,10 @@ export const growthAutonomyFeature='platform.agents.growth-autonomy.v1';
 export const contactSearchLimit=10;
 export const qualifyLimit=100;
 const declared=features=>features instanceof Set?features.has(growthAutonomyFeature):Array.isArray(features)&&features.includes(growthAutonomyFeature);
+/** Whether a work item's last message was cancelled (not withdrawn) under exactly the opportunity, contact and policy it would be drafted against now. */
+export const unchangedSinceCancelled=(existing,o)=>existing?.message_status==='cancelled' && existing.message_withdrawn===false
+  && Number.isInteger(existing.message_opportunity_version) && existing.message_opportunity_version===o.version
+  && existing.message_contact_version===o.contact_version && existing.message_policy_version===o.policy?.version;
 // Claim outcomes that mean "never send this one": the hand-over was withdrawn, or the business was already contacted once.
 const finalRefusals=new Set(['outreach_off','business_contacted']);
 export function growthHandlers({growth,model,notifier,features=null}) {
@@ -39,6 +43,11 @@ export function growthHandlers({growth,model,notifier,features=null}) {
           const id=await growth.store.plan(o.id,work);planned++;
           if(!['outreach','onboarding','activation','trial','adoption','renewal','expansion','support','recovery'].includes(work.kind)||o.eligibility!=='permitted'||!growth.signingReady)continue;
           if(existing?.message_id && existing.message_status!=='cancelled') {if(existing.message_status==='draft')await growth.store.propose(task.id,existing.message_id);continue;}
+          // Cancelled for a lasting reason (the contact unsubscribed, the business replied, the business was already contacted) with
+          // nothing changed since: a new draft would pay for a model call and get that same cancelled message back, every sweep. Only a
+          // withdrawn message (the owner took the hand-over back), or a change of the opportunity, contact or policy, opens the work
+          // again. A database that does not report these fields yet keeps the old behaviour.
+          if(unchangedSinceCancelled(existing,o))continue;
           const draft=await draftMessage({opportunity:o,work,task,model,signal});if(!draft)continue;
           signal?.throwIfAborted();
           let saved;

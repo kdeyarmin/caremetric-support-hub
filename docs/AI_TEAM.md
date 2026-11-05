@@ -1190,6 +1190,10 @@ Apply the migrations in order with the usual procedure:
    server-only operations, the owner's menu operations and the Account Manager's daily `accounts.offers` schedule, and declare
    `platform.agents.offers.v1` (it needs the control plane, the hardening, the customer emails, autonomy steps and platform
    billing). Restart the Hub after it. Nothing is offered until the owner switches an offer on.
+16. `20261105160000_growth_snapshot_redraft.sql`, which adds to the pipeline's snapshot whether each work item's last message was
+   withdrawn and the versions it was drafted against, so the Marketing Manager no longer pays for a new draft of work whose last
+   message was cancelled while nothing changed. No gate and no new feature: a Hub on a database without it drafts as before. No restart
+   is needed.
 
 The Hub build does not require any of these features, so a Hub whose database lacks them still starts and
 serves everything else. The AI team is opt-in twice over: nothing runs unless `HUB_AGENTS_ENABLED`
