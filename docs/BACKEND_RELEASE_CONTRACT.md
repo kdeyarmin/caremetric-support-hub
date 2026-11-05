@@ -151,6 +151,15 @@ identifiers, `private.agent_answer_begin(...)` is a security definer with a pinn
 assistant, and that profile exists. Each test fails closed. The Hub server proposes answers and registers their executor only
 when the feature is declared.
 
+`20261105150100_growth_autonomy_contract.sql` declares `platform.agents.growth-autonomy.v1` only after
+`platform.agents.customer-growth.v1`, `platform.agents.hardening.v1` and `platform.agents.autonomy.v1` are declared, a contact
+found online is checked to be a role address, the qualification rules are closed to every role with one active set, the contact
+finder, qualification, proposing and claiming operations are security definers with a pinned empty search path executable by
+`hub_app_server` alone, proposing approves on its own only for a class the owner handed over, claiming re-checks that hand-over
+with the agent row held and keeps the ten-a-day and once-per-business cold email caps, a product policy no longer overwrites an
+agent's list, and the two steps and the daily evaluation schedule exist. Each test fails closed. The Hub server registers the
+contact finder, qualification and evaluation only when the feature is declared.
+
 The table above is not exhaustive:
 later features such as the `billing.*` and `customer.self-service.v1` boundaries are declared
 by their own migrations and listed in `src/lib/backendContract.ts`. See [AI_TEAM.md](AI_TEAM.md).

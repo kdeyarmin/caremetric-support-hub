@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionLabel, approvalTitle, cadenceLabel, centsLabel, decisionSchema, emailSubject, errorLabel, failedActionLabel, outcomeLabel, statusLabel, targetLabel, taskLabel, waitingSchema } from "./teamProtocol";
+import { actionLabel, approvalTitle, cadenceLabel, centsLabel, decisionSchema, emailSubject, errorLabel, failedActionLabel, outcomeLabel, statusLabel, stepHelpText, targetLabel, taskLabel, waitingSchema } from "./teamProtocol";
 
 describe("AI team display", () => {
   it("shows money in whole cents", () => {
@@ -27,6 +27,10 @@ describe("AI team display", () => {
 
   it("names the Growth Manager's work and the lead form check", () => {
     expect(["growth.leads", "growth.followup", "growth.weekly", "probe.forms"].map(taskLabel)).toEqual(["Look for new leads", "Chase unanswered leads", "Weekly growth report", "Lead form check"]);
+    expect(taskLabel("growth.evaluate")).toBe("Check the outreach guardrails");
+    expect(stepHelpText("cold_email")).toMatch(/role address on the business's own website.*at most 10 a day, each business once, never a text/);
+    expect(stepHelpText("sales_followups")).toMatch(/unsubscribe link/);
+    expect(stepHelpText("something_new")).toBe("");
   });
 
   it("names what a probe incident is about, and shows any other target as it is", () => {
@@ -93,6 +97,9 @@ describe("AI team display", () => {
     expect(errorLabel("thread_changed")).toMatch(/customer wrote again/);
     expect(errorLabel("conversation_closed")).toBe("The conversation was closed, so nothing was sent.");
     expect(errorLabel("target_mismatch")).toMatch(/different conversation/);
+    expect(errorLabel("outreach_off")).toMatch(/no longer handed over to the Marketing Manager/);
+    expect(errorLabel("business_contacted")).toMatch(/already emailed once/);
+    for (const code of ["outreach_off", "business_contacted"]) expect(failedActionLabel(code), code).toMatch(/nothing (more )?was sent/);
     expect(errorLabel("session_required")).toMatch(/Run what's waiting/);
     expect(errorLabel("delivery_unknown")).toMatch(/check the thread before sending again/);
     expect(errorLabel("brand_new_code")).toBe("brand_new_code");
