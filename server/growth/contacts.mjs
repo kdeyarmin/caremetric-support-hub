@@ -6,14 +6,18 @@
  * - Only https pages on the business's own domain or its www. name are read, never a directory, search result or third-party page.
  * - robots.txt is honoured (for this finder's name and for every robot); a site that forbids it is left alone.
  * - At most four pages (the home page, contact, contact-us and about), 300 KB each, 10 seconds each; redirects only within the domain.
- * - A name that resolves to a private, loopback or link-local address, or an address literal, is never fetched.
+ * - A name that resolves to a private, loopback or link-local address, or an address literal, is never fetched. The connection itself
+ *   resolves the name through the same check (pinnedFetch), so a name whose answer changes after the check cannot steer it elsewhere.
+ * - A redirect is checked against the robots.txt of the host it leads to before it is followed.
  * - Only role local parts on the business's exact domain are kept; a personal address (jane.doe@, a name) is never kept, nor one on
- *   another domain, nor a phone number of any kind.
+ *   another domain, nor a phone number of any kind. An address is read whole: `jane!info@` is not taken for `info@`.
  *
  * Nothing it reads is stored except the one address and the page it was found on. Page text is never logged.
  */
 import { lookup as dnsLookup } from 'node:dns/promises';
+import { request as httpsRequest } from 'node:https';
 import { isIP } from 'node:net';
+import { Readable } from 'node:stream';
 
 /** The role local parts the database admits for a found contact (growth_contacts_role_address_check), in order of preference. */
 export const roleLocalParts = Object.freeze(['info', 'contact', 'contactus', 'office', 'hello', 'inquiries', 'inquiry', 'enquiries', 'enquiry',
@@ -30,7 +34,9 @@ export function roleAddresses(text, domain) {
   const decoded = String(text ?? '')
     .replace(/&#(?:64|x40);/gi, '@').replace(/&commat;/gi, '@').replace(/&#(?:46|x2e);/gi, '.').replace(/%40/g, '@');
   const found = new Set();
-  for (const match of decoded.matchAll(/[a-z0-9._%+-]{1,64}@[a-z0-9.-]{1,253}\.[a-z]{2,24}/gi)) {
+  // An address starts where no character of an address's local part could come before it (RFC 5322 atext and the dot), so a longer
+  // address such as jane!info@ or john/sales@ is never read as the role address at its end; and it ends where its domain ends.
+  for (const match of decoded.matchAll(/(?<![a-z0-9!#$%&'*+\/=?^_`{|}~.-])[a-z0-9._%+-]{1,64}@[a-z0-9.-]{1,253}\.[a-z]{2,24}(?![a-z0-9-])/gi)) {
     const [local, host] = match[0].toLowerCase().split('@');
     if (host === domain && roleLocalParts.includes(local)) found.add(`${local}@${host}`);
   }
@@ -87,6 +93,42 @@ export function privateAddress(address) {
   return true;
 }
 
+/**
+ * A GET that connects only to addresses it has just checked: the name is resolved inside the connection, through `lookup`, and any
+ * answer that includes a private, loopback or link-local address refuses the connection. TLS still verifies the certificate for the
+ * name. Redirects are not followed (the finder checks each one itself).
+ */
+export function pinnedFetch(lookup = dnsLookup) {
+  const checkedLookup = (hostname, options, callback) => {
+    Promise.resolve(lookup(hostname, { all: true })).then(addresses => {
+      if (!Array.isArray(addresses) || addresses.length === 0 || addresses.some(entry => privateAddress(entry?.address))) {
+        callback(Object.assign(new Error('The name resolves to an address the finder never connects to.'), { code: 'EPRIVATEADDRESS' }));
+      } else if (options?.all) {
+        callback(null, addresses.map(entry => ({ address: entry.address, family: entry.family })));
+      } else {
+        callback(null, addresses[0].address, addresses[0].family);
+      }
+    }, callback);
+  };
+  return (url, { headers = {}, signal } = {}) => new Promise((resolve, reject) => {
+    const target = new URL(url);
+    const outgoing = httpsRequest({
+      protocol: 'https:', hostname: target.hostname, servername: target.hostname, port: 443, path: `${target.pathname}${target.search}`,
+      method: 'GET', headers, signal, lookup: checkedLookup, agent: false,
+    }, incoming => {
+      const responseHeaders = new Headers();
+      for (const [name, value] of Object.entries(incoming.headers)) {
+        if (value !== undefined) for (const one of [].concat(value)) responseHeaders.append(name, String(one));
+      }
+      const empty = [204, 205, 304].includes(incoming.statusCode);
+      if (empty) incoming.resume();
+      resolve(new Response(empty ? null : Readable.toWeb(incoming), { status: incoming.statusCode, headers: responseHeaders }));
+    });
+    outgoing.on('error', reject);
+    outgoing.end();
+  });
+}
+
 async function readLimited(response, limit) {
   const reader = response.body?.getReader?.();
   if (!reader) return '';
@@ -104,7 +146,8 @@ async function readLimited(response, limit) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-export function growthContactFinder({ fetchImpl = fetch, lookup = dnsLookup } = {}) {
+export function growthContactFinder({ fetchImpl = null, lookup = dnsLookup } = {}) {
+  const fetchPage = fetchImpl ?? pinnedFetch(lookup);
   async function safeHost(host) {
     if (isIP(host)) return false;
     try {
@@ -113,13 +156,15 @@ export function growthContactFinder({ fetchImpl = fetch, lookup = dnsLookup } = 
     } catch { return false; }
   }
 
-  // One GET on the business's own hosts, following at most two redirects that stay on them. Returns { url, text } or null.
-  async function get(url, hosts, limit, signal, accept) {
+  // One GET on the business's own hosts, following at most two redirects that stay on them and that `allowed` (robots.txt) permits.
+  // Returns { url, text } or null.
+  async function get(url, hosts, limit, signal, accept, allowed = null) {
     let target = new URL(url);
     for (let hop = 0; hop < 3; hop += 1) {
       if (target.protocol !== 'https:' || target.username || target.password || target.port || !hosts.includes(target.hostname)) return null;
       if (!(await safeHost(target.hostname))) return null;
-      const response = await fetchImpl(target.href, {
+      if (hop > 0 && allowed && !(await allowed(target))) return null;
+      const response = await fetchPage(target.href, {
         redirect: 'manual', headers: { 'User-Agent': `${finderAgent}/1.0 (+https://help.caremetric.ai)`, Accept: accept },
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
       });
@@ -143,19 +188,29 @@ export function growthContactFinder({ fetchImpl = fetch, lookup = dnsLookup } = 
     const host = String(domain ?? '').toLowerCase();
     if (!domainPattern.test(host) || host.length > 253) return { email: null, reason: 'invalid_domain' };
     const hosts = [host, `www.${host}`];
-    let robots = '';
-    try {
-      const page = await get(`https://${host}/robots.txt`, hosts, robotsBytes, signal, 'text/plain');
-      robots = page?.text ?? '';
-    } catch (error) {
-      if (signal?.aborted) throw error;
-    }
+    // Each host's robots.txt, read once: the business's domain first, its www. name only if a redirect leads there.
+    const robotsByHost = new Map();
+    const robotsFor = async name => {
+      if (!robotsByHost.has(name)) {
+        let text = '';
+        try {
+          const page = await get(`https://${name}/robots.txt`, hosts, robotsBytes, signal, 'text/plain');
+          text = page?.text ?? '';
+        } catch (error) {
+          if (signal?.aborted) throw error;
+        }
+        robotsByHost.set(name, text);
+      }
+      return robotsByHost.get(name);
+    };
+    const allowed = async target => robotsAllows(await robotsFor(target.hostname), `${target.pathname}${target.search}`);
+    const robots = await robotsFor(host);
     let read = 0;
     for (const path of contactPaths) {
       signal?.throwIfAborted();
       if (!robotsAllows(robots, path)) continue;
       let page = null;
-      try { page = await get(`https://${host}${path}`, hosts, pageBytes, signal, 'text/html'); } catch (error) { if (signal?.aborted) throw error; }
+      try { page = await get(`https://${host}${path}`, hosts, pageBytes, signal, 'text/html', allowed); } catch (error) { if (signal?.aborted) throw error; }
       read += 1;
       const best = page ? roleAddresses(page.text, host)[0] : null;
       if (best) return { email: best, sourceUrl: page.url };

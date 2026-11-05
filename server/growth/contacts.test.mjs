@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { contactPaths, growthContactFinder, privateAddress, roleAddresses, roleLocalParts, robotsAllows } from './contacts.mjs';
+import { contactPaths, growthContactFinder, pinnedFetch, privateAddress, roleAddresses, roleLocalParts, robotsAllows } from './contacts.mjs';
 
 const publicLookup = vi.fn(async () => [{ address: '93.184.216.34', family: 4 }]);
 const page = (body, { status = 200, type = 'text/html; charset=utf-8', location = null } = {}) =>
@@ -21,6 +21,13 @@ describe('role addresses', () => {
     const html = `<a href="mailto:Jane.Doe@Example.org">Jane</a> sales@example.org <a href="mailto:info@example.org?subject=Hi">Write</a>
       office@other.org admin@mail.example.org contact&#64;example.org 555-0100 hello@example.org.evil.test`;
     expect(roleAddresses(html, 'example.org')).toEqual(['info@example.org', 'contact@example.org', 'sales@example.org']);
+  });
+  it('reads an address whole: a longer address is never taken for the role address at its end', () => {
+    const html = '<a href="mailto:jane!info@example.org">Jane</a> john/sales@example.org pat+office@example.org x.info@example.org a=contact@example.org';
+    expect(roleAddresses(html, 'example.org')).toEqual([]);
+    expect(roleAddresses('Write to info@example.org.', 'example.org')).toEqual(['info@example.org']);
+    expect(roleAddresses('(info@example.org)', 'example.org')).toEqual(['info@example.org']);
+    expect(roleAddresses('info@example.org-mail.test', 'example.org')).toEqual([]);
   });
   it('never keeps a personal address, whatever the page says', () => {
     expect(roleAddresses('pat@example.org patricia.example@example.org director@example.org', 'example.org')).toEqual([]);
@@ -93,6 +100,32 @@ describe('the contact finder', () => {
     expect((await growthContactFinder({ fetchImpl: offsite, lookup: publicLookup }).find('example.org')).email).toBeNull();
     expect(offsiteCalls.some(call => call.url.startsWith('https://directory.test'))).toBe(false);
     expect(calls.some(call => call.url.startsWith('https://directory.test'))).toBe(false);
+  });
+
+  it('checks a redirect against the robots.txt of the host it leads to before following it', async () => {
+    const { fetchImpl, calls } = site({
+      'https://example.org/robots.txt': page('User-agent: *\nDisallow: /private', { type: 'text/plain' }),
+      'https://example.org/': page('', { status: 302, location: '/private/contact' }),
+      'https://example.org/private/contact': page('info@example.org'),
+      'https://example.org/contact': page('', { status: 301, location: 'https://www.example.org/team' }),
+      'https://www.example.org/robots.txt': page('User-agent: *\nDisallow: /team', { type: 'text/plain' }),
+      'https://www.example.org/team': page('office@example.org'),
+    });
+    expect(await growthContactFinder({ fetchImpl, lookup: publicLookup }).find('example.org')).toEqual({ email: null, reason: 'none' });
+    expect(calls.map(call => call.url)).not.toContain('https://example.org/private/contact');
+    expect(calls.map(call => call.url)).not.toContain('https://www.example.org/team');
+    expect(calls.map(call => call.url)).toContain('https://www.example.org/robots.txt');
+  });
+
+  it('connects only to addresses it checked at connection time, so a name whose answer changes after the check is refused', async () => {
+    // The first answer (the pre-check) is public; the second (the connection's own lookup) is private: the connection is refused
+    // before any socket is opened, so nothing is read.
+    let answers = 0;
+    const rebinding = vi.fn(async () => (answers++ % 2 === 0 ? [{ address: '93.184.216.34', family: 4 }] : [{ address: '127.0.0.1', family: 4 }]));
+    expect(await growthContactFinder({ lookup: rebinding }).find('example.org')).toEqual({ email: null, reason: 'none' });
+    expect(rebinding.mock.calls.length).toBeGreaterThanOrEqual(2);
+    await expect(pinnedFetch(async () => [{ address: '10.0.0.5', family: 4 }])('https://example.org/')).rejects.toMatchObject({ code: 'EPRIVATEADDRESS' });
+    await expect(pinnedFetch(async () => [])('https://example.org/')).rejects.toMatchObject({ code: 'EPRIVATEADDRESS' });
   });
 
   it('never connects to a name that resolves to a private address, an address literal or a malformed domain', async () => {
