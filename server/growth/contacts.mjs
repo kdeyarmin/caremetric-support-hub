@@ -43,7 +43,22 @@ export function roleAddresses(text, domain) {
   return [...found].sort((a, b) => roleLocalParts.indexOf(a.split('@')[0]) - roleLocalParts.indexOf(b.split('@')[0]));
 }
 
-/** Whether robots.txt lets this finder read `path`: the longest matching rule of the group for this finder, else of `*`, wins. */
+/**
+ * Whether one robots.txt pattern matches `path`, as RFC 9309 reads it: `*` matches any run of characters, a final `$` anchors the end,
+ * and anything else is a prefix.
+ */
+export function robotsPatternMatches(pattern, path) {
+  const anchored = pattern.endsWith('$');
+  const body = anchored ? pattern.slice(0, -1) : pattern;
+  const source = body.split('*').map(part => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*');
+  return new RegExp(`^${source}${anchored ? '$' : ''}`).test(path);
+}
+
+/**
+ * Whether robots.txt lets this finder read `path`: of the group for this finder (else the `*` group), the matching rule with the longest
+ * pattern wins, and Allow wins a tie (RFC 9309, section 2.2.2). Wildcards and the end anchor are honoured, so `Allow: /*.pdf$` never
+ * opens `/contact` under `Disallow: /`.
+ */
 export function robotsAllows(robots, path) {
   if (typeof robots !== 'string' || robots.trim() === '') return true;
   const groups = [];
@@ -61,7 +76,7 @@ export function robotsAllows(robots, path) {
       lastWasAgent = true;
     } else if ((field === 'allow' || field === 'disallow') && current) {
       lastWasAgent = false;
-      if (value !== '') current.rules.push({ allow: field === 'allow', prefix: value.replace(/\*.*$/, '').replace(/\$$/, '') });
+      if (value !== '') current.rules.push({ allow: field === 'allow', pattern: value });
     } else {
       lastWasAgent = false;
     }
@@ -70,8 +85,8 @@ export function robotsAllows(robots, path) {
   const applicable = mine.length > 0 ? mine : groups.filter(group => group.agents.includes('*'));
   let best = null;
   for (const rule of applicable.flatMap(group => group.rules)) {
-    if (!path.startsWith(rule.prefix)) continue;
-    if (!best || rule.prefix.length > best.prefix.length || (rule.prefix.length === best.prefix.length && rule.allow)) best = rule;
+    if (!robotsPatternMatches(rule.pattern, path)) continue;
+    if (!best || rule.pattern.length > best.pattern.length || (rule.pattern.length === best.pattern.length && rule.allow)) best = rule;
   }
   return best ? best.allow : true;
 }

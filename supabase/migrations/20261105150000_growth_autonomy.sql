@@ -159,6 +159,39 @@ language sql immutable set search_path='' as $$
              when p_agent='marketing_manager' then 'growth.sales_followup' end;
 $$;
 
+-- A message withdrawn because the owner took the hand-over back, or paused the agent or moved it to Observe, is kept (cancelled, with
+-- withdrawn_at) but no longer holds its work's draft key, so the next sweep drafts that work again: for the owner to approve, or on its
+-- own once the hand-over is given again. Any other cancellation keeps the key, so unchanged work is not drafted (and paid for) again.
+alter table private.growth_messages add column if not exists withdrawn_at timestamptz;
+do $$
+declare v_name text;
+begin
+  select conname into v_name from pg_constraint where conrelid = 'private.growth_messages'::regclass and contype = 'u'
+    and pg_get_constraintdef(oid) = 'UNIQUE (work_id, opportunity_version, contact_version, policy_version)';
+  if v_name is not null then execute format('alter table private.growth_messages drop constraint %I', v_name); end if;
+end $$;
+create unique index if not exists growth_messages_draft_key on private.growth_messages(work_id, opportunity_version, contact_version, policy_version)
+  where withdrawn_at is null;
+
+create or replace function private.growth_draft(p_opportunity uuid,p_work uuid,p_data jsonb) returns jsonb
+language plpgsql security definer set search_path='' as $$ declare v_o private.growth_opportunities%rowtype; v_id uuid; v_contact_version integer; v_policy_version integer; begin
+ perform private.require_hub_app_server(); perform pg_advisory_xact_lock(hashtextextended('growth.workflow',0));
+ select * into v_o from private.growth_opportunities where id=p_opportunity for update;
+ if not found or v_o.contact_id is null or v_o.version is distinct from (p_data->>'version')::integer then raise exception 'Opportunity changed or lacks contact' using errcode='40001'; end if;
+ select version into v_contact_version from private.growth_contacts where id=v_o.contact_id;
+ select version into v_policy_version from private.growth_policies where product=v_o.product;
+ if v_contact_version is distinct from (p_data->>'contactVersion')::integer or v_policy_version is distinct from (p_data->>'policyVersion')::integer then
+  raise exception 'Draft context changed; regenerate from the current contact and policy' using errcode='40001';
+ end if;
+ if not exists(select 1 from private.customer_success_plans where id=p_work and opportunity_id=p_opportunity and status='open') then raise exception 'Work no longer open' using errcode='40001'; end if;
+ insert into private.growth_messages(opportunity_id,work_id,contact_id,purpose,subject,body,citations,opportunity_version,contact_version,policy_version,unsubscribe_hash,variant,model_generated)
+ select v_o.id,p_work,c.id,p_data->>'purpose',p_data->>'subject',p_data->>'body',p_data->'citations',v_o.version,c.version,p.version,p_data->>'unsubscribeHash',coalesce(p_data->>'variant','control'),coalesce((p_data->>'modelGenerated')::boolean,false)
+ from private.growth_contacts c join private.growth_policies p on p.product=v_o.product where c.id=v_o.contact_id
+ on conflict(work_id,opportunity_version,contact_version,policy_version) where withdrawn_at is null do nothing returning id into v_id;
+ if v_id is null then select id into v_id from private.growth_messages where work_id=p_work and opportunity_version=v_o.version and contact_version=(select version from private.growth_contacts where id=v_o.contact_id) and policy_version=(select version from private.growth_policies where product=v_o.product) and withdrawn_at is null; end if;
+ return (select jsonb_build_object('id',id,'subject',subject,'body',body,'status',status,'actionId',action_id) from private.growth_messages where id=v_id);
+end; $$;
+
 -- ---------------------------------------------------------------------------------------
 -- 4. Proposing and claiming a message.
 -- ---------------------------------------------------------------------------------------
@@ -200,8 +233,15 @@ begin
  select * into o from private.growth_opportunities where id=m.opportunity_id for update;
  select * into c from private.growth_contacts where id=m.contact_id for update;
  select * into p from private.growth_policies where product=o.product for update;
- if a.id is null or a.id<>m.action_id or a.status<>'executing' or a.kind<>'growth.message' or a.target_id<>m.id::text
- or g.status<>'active' or g.autonomy='observe' then raise exception 'Message not authorized' using errcode='42501'; end if;
+ if a.id is null or a.id<>m.action_id or a.status<>'executing' or a.kind<>'growth.message' or a.target_id<>m.id::text then raise exception 'Message not authorized' using errcode='42501'; end if;
+ -- Paused, or moved to Observe, after the message was approved: one nobody approved is withdrawn like any hand-over taken back (never
+ -- sent, and its work is drafted again); one the owner approved is refused as before.
+ if g.status<>'active' or g.autonomy='observe' then
+  if a.decided_by is null then
+   update private.growth_messages set status='cancelled',withdrawn_at=now() where id=m.id; return jsonb_build_object('send',false,'status','outreach_off');
+  end if;
+  raise exception 'Message not authorized' using errcode='42501';
+ end if;
  v_class:=private.growth_message_class(a.agent_key,m.purpose,c.source_kind);
  v_cold:=v_class='growth.cold_email';
  -- Nobody approved it: the agent must still be on Act and trusted with its class now (cold email only through its own step), or,
@@ -209,7 +249,7 @@ begin
  if a.decided_by is null and not (g.autonomy='act' and (
    (v_class is not null and jsonb_typeof(g.config->'auto_approve_kinds')='array' and (g.config->'auto_approve_kinds') ? v_class)
    or (p.auto_send and not m.model_generated and not v_cold))) then
-  update private.growth_messages set status='cancelled' where id=m.id; return jsonb_build_object('send',false,'status','outreach_off');
+  update private.growth_messages set status='cancelled',withdrawn_at=now() where id=m.id; return jsonb_build_object('send',false,'status','outreach_off');
  end if;
  if not p.enabled or p.version<>m.policy_version or o.version<>m.opportunity_version or c.version<>m.contact_version
  or c.eligibility<>'permitted' or c.verified_at is null or c.verified_at<now()-interval '90 days'

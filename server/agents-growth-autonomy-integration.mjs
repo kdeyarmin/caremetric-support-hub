@@ -163,6 +163,18 @@ try {
   assert.deepEqual(await kinds('marketing_manager'), []);
   assert.deepEqual(await claim(trusted), { send: false, status: 'outreach_off' });
   assert.equal(await messageStatus(trusted.id), 'cancelled');
+  // The withdrawn message no longer holds its work: the same work, unchanged, is drafted again and goes to the owner.
+  const redrafted = await propose(found);
+  assert.notEqual(redrafted.id, trusted.id);
+  assert.equal(redrafted.status, 'proposed', 'held: the work comes back to the owner');
+  assert.equal(await messageStatus(trusted.id), 'cancelled', 'the withdrawn message is kept, never sent');
+  // Any other cancellation keeps the key: unchanged work is not drafted again.
+  await admin.query("update private.growth_messages set status='cancelled' where id=$1", [redrafted.id]);
+  const versionsOf = await row('select work_id,opportunity_version,contact_version,policy_version from private.growth_messages where id=$1', [redrafted.id]);
+  const sameDraft = await store.draft((await opportunityOf(found)).id, versionsOf.work_id, { version: versionsOf.opportunity_version, contactVersion: versionsOf.contact_version,
+    policyVersion: versionsOf.policy_version, purpose: 'marketing', subject: 'Again', body: 'Again?', citations: [], unsubscribeHash: digest(randomUUID()), modelGenerated: true });
+  assert.equal(sameDraft.id, redrafted.id);
+  assert.equal(sameDraft.status, 'cancelled');
 
   // ---- 6. Supervised: proposed, the owner's approval sends it; cold email never rides the product policy ---------------------------
   await step('cold_email', 'supervise');
@@ -210,6 +222,31 @@ try {
   assert.deepEqual(await claim(withdrawn), { send: false, status: 'outreach_off' });
   const heldProposal = await propose(ownerOrg, 'caremetric-intel', 'outreach:2');
   assert.equal(heldProposal.status, 'proposed', 'held: back to the owner');
+  // Paused (or moved to Observe) while an automatic message waits: it is withdrawn, not left proposed behind an error; a message
+  // the owner approved is still refused as before.
+  await step('sales_followups', 'automatic');
+  const pausedAway = await propose(ownerOrg, 'caremetric-intel', 'outreach:3');
+  assert.equal(pausedAway.status, 'auto_approved');
+  const ownerApproved = await propose(ownerOrg, 'caremetric-intel', 'outreach:4');
+  await admin.query("update private.agent_actions set status='proposed' where id=$1", [ownerApproved.action]);
+  await approve(ownerApproved.action);
+  await admin.query("update private.agents set status='paused' where key='marketing_manager'");
+  try {
+    assert.deepEqual(await claim(pausedAway), { send: false, status: 'outreach_off' });
+    assert.equal(await messageStatus(pausedAway.id), 'cancelled');
+    await assert.rejects(claim(ownerApproved), refused('42501'), 'an owner-approved message from a paused agent is refused as before');
+  } finally {
+    await admin.query("update private.agents set status='active' where key='marketing_manager'");
+  }
+  const observed = await propose(ownerOrg, 'caremetric-intel', 'outreach:5');
+  assert.equal(observed.status, 'auto_approved');
+  await admin.query("update private.agents set autonomy='observe' where key='marketing_manager'");
+  try {
+    assert.deepEqual(await claim(observed), { send: false, status: 'outreach_off' });
+  } finally {
+    await admin.query("update private.agents set autonomy='act' where key='marketing_manager'");
+  }
+  await step('sales_followups', 'hold');
 
   // ---- 9. At most ten cold emails a day, across both products, however each was approved -------------------------------------------
   const already = (await row("select count(*)::integer as n from private.growth_messages m join private.growth_contacts c on c.id=m.contact_id where c.source_kind='role_address' and m.purpose='marketing' and m.attempted_at>=private.agent_day_start()")).n;
@@ -245,6 +282,9 @@ try {
       rewrite('private.growth_propose(uuid,uuid)', "m.model_generated or v_class='growth.cold_email'", 'm.model_generated'),
       rewrite('hub.growth_manage(text,jsonb)', "v<>'growth.message'", "v<>'growth.other'"),
       rewrite('private.growth_record_contact(uuid,text,text)', 'email_suppressions', 'growth_contacts'),
+      rewrite('private.growth_claim_message(uuid,uuid)', "set status='cancelled',withdrawn_at=now()", "set status='cancelled'"),
+      rewrite('private.growth_draft(uuid,uuid,jsonb)', 'where withdrawn_at is null do nothing', 'do nothing'),
+      'drop index private.growth_messages_draft_key',
     ]) {
       await client.query('begin');
       try { await client.query(drift); await assert.rejects(client.query(gate), refused('55000'), drift); }

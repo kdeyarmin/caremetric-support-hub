@@ -78,8 +78,17 @@ begin
     or position('v_cold_sent >= 10 then' in definition) = 0
     or position('business_contacted' in definition) = 0
     or position('evaluation_required' in definition) = 0
-    or position('email_suppressions' in definition) = 0 then
+    or position('email_suppressions' in definition) = 0
+    or position('set status=''cancelled'',withdrawn_at=now()' in definition) = 0 then
     raise exception 'Claiming a message must re-check the hand-over and keep the cold email caps' using errcode = '55000';
+  end if;
+
+  -- A withdrawn message frees its work's draft key, and only a withdrawn one, so withdrawn work is drafted again and nothing else is.
+  definition := pg_get_functiondef('private.growth_draft(uuid,uuid,jsonb)'::regprocedure);
+  if position('where withdrawn_at is null do nothing' in definition) = 0
+    or not exists (select 1 from pg_indexes where schemaname = 'private' and tablename = 'growth_messages' and indexname = 'growth_messages_draft_key'
+                   and indexdef like 'CREATE UNIQUE INDEX%' and indexdef like '%(work_id, opportunity_version, contact_version, policy_version) WHERE (withdrawn_at IS NULL)') then
+    raise exception 'A withdrawn message must free its work''s draft key, and only a withdrawn one' using errcode = '55000';
   end if;
 
   -- A product policy adds or removes only its own value.

@@ -45,6 +45,19 @@ describe('robots.txt', () => {
     expect(robotsAllows(robots, '/private/team')).toBe(false);
     expect(robotsAllows(robots, '/private/contact')).toBe(true);
   });
+  it('honours wildcards and the end anchor, so a narrow Allow never opens the rest of a site', () => {
+    const robots = 'User-agent: *\nDisallow: /\nAllow: /*.pdf$';
+    expect(robotsAllows(robots, '/contact')).toBe(false);
+    expect(robotsAllows(robots, '/')).toBe(false);
+    expect(robotsAllows(robots, '/files/brochure.pdf')).toBe(true);
+    expect(robotsAllows(robots, '/files/brochure.pdf?x=1')).toBe(false);
+    expect(robotsAllows('User-agent: *\nDisallow: /*/contact', '/team/contact')).toBe(false);
+    expect(robotsAllows('User-agent: *\nDisallow: /*/contact', '/contact')).toBe(true);
+    expect(robotsAllows('User-agent: *\nDisallow: /about$', '/about')).toBe(false);
+    expect(robotsAllows('User-agent: *\nDisallow: /about$', '/about-us')).toBe(true);
+    expect(robotsAllows('User-agent: *\nDisallow: /a.b(c)', '/a.b(c)/x')).toBe(false);
+    expect(robotsAllows('User-agent: *\nDisallow: /a.b(c)', '/aXb(c)')).toBe(true);
+  });
   it('prefers a group naming this finder, and treats an empty Disallow as allowing all', () => {
     expect(robotsAllows('User-agent: *\nDisallow: /\n\nUser-agent: CareMetricContactFinder\nDisallow:', '/contact')).toBe(true);
     expect(robotsAllows('User-agent: CareMetricContactFinder\nDisallow: /', '/')).toBe(false);
