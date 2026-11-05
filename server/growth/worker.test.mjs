@@ -28,6 +28,22 @@ it('discards a stale draft and continues the sweep when an owner edits its conte
  expect(await growthHandlers({growth})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'})).toMatchObject({result:{inspected:2,drafted:1}});
  expect(store.propose).toHaveBeenCalledTimes(1);
 });
+it('does not pay for a new draft of work whose last message was cancelled under the same context, unless it was withdrawn or something changed',async()=>{
+ const o={...base,version:4,contact_id:'contact',contact_version:7,eligibility:'permitted',policy:{version:9,approved_claim:'Discuss staff training.'},evidence:[{id:'source',source_url:'https://example.org',claim:'Care operator.',observed_at:new Date().toISOString()}]};
+ const cancelled={trigger_key:'outreach:0',status:'open',message_id:'old',message_status:'cancelled',message_withdrawn:false,message_opportunity_version:4,message_contact_version:7,message_policy_version:9};
+ const run=async work=>{
+  const store={snapshot:vi.fn(async()=>({total:1,items:[{...o,work:[work]}]})),plan:vi.fn(async()=> 'work'),draft:vi.fn(async()=>({id:'message',status:'draft'})),propose:vi.fn()};
+  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'A question',body:'Would a short conversation help?',citations:['source'],needsHuman:false}}))};
+  await growthHandlers({growth:{store,signingReady:true,hash:x=>x,unsubscribeToken:()=> 'token'},model})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'});
+  return {drafted:store.draft.mock.calls.length,modelCalls:model.run.mock.calls.length};
+ };
+ expect(await run(cancelled)).toEqual({drafted:0,modelCalls:0});
+ expect(await run({...cancelled,message_withdrawn:true})).toEqual({drafted:1,modelCalls:1});
+ for(const change of [{message_opportunity_version:3},{message_contact_version:6},{message_policy_version:8}]) expect(await run({...cancelled,...change}),JSON.stringify(change)).toEqual({drafted:1,modelCalls:1});
+ // A database that does not report the fields yet: drafted as before.
+ const {message_withdrawn,message_opportunity_version,message_contact_version,message_policy_version,...older}=cancelled;
+ expect(await run(older)).toEqual({drafted:1,modelCalls:1});
+});
 it('sending disabled defers before claiming a message',async()=>{
  const store={claim:vi.fn()},growth={store,configured:()=>false};const exec=growthExecutors({growth,mail:{configured:true}})['growth.message'];await expect(exec({input:{messageId:'m'}})).rejects.toMatchObject({code:'action_deferred'});expect(store.claim).not.toHaveBeenCalled();
 });

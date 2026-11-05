@@ -9,7 +9,7 @@ import pg from 'pg';
 import { digest, withSession } from './sms-auth.mjs';
 import { growthStore } from './growth/store.mjs';
 import { sqlAgentStore } from './agents/store.mjs';
-import { growthHandlers, growthAutonomyFeature } from './growth/worker.mjs';
+import { growthHandlers, growthAutonomyFeature, unchangedSinceCancelled } from './growth/worker.mjs';
 import { growthContactFinder } from './growth/contacts.mjs';
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
@@ -60,6 +60,14 @@ async function propose(domain, product = 'carebase', key = 'outreach:0', modelGe
 }
 const approve = id => ownerCall('hub.decide_agent_action', [id, 'approve', 'Reviewed synthetic message.']);
 const claim = async message => { await agents.beginExecution(message.action); return store.claim(message.id, message.action); };
+// One opportunity's entry in the pipeline's snapshot, as the sweep reads it.
+const snapshotOf = async opportunityId => {
+  for (let offset = 0; ; offset += 100) {
+    const page = await store.snapshot(offset);
+    const hit = page.items.find(item => item.id === opportunityId);
+    if (hit || page.items.length === 0) return hit;
+  }
+};
 const messageStatus = async id => (await row('select status from private.growth_messages where id=$1', [id])).status;
 // A fake web: only the URLs listed answer. Every request is recorded.
 const fetched = [];
@@ -163,6 +171,11 @@ try {
   assert.deepEqual(await kinds('marketing_manager'), []);
   assert.deepEqual(await claim(trusted), { send: false, status: 'outreach_off' });
   assert.equal(await messageStatus(trusted.id), 'cancelled');
+  // The sweep sees the withdrawal: it drafts this work again.
+  const withdrawnEntry = await snapshotOf((await opportunityOf(found)).id);
+  const withdrawnWork = withdrawnEntry.work.find(w => w.message_id === trusted.id);
+  assert.equal(withdrawnWork.message_withdrawn, true);
+  assert.equal(unchangedSinceCancelled(withdrawnWork, withdrawnEntry), false);
   // The withdrawn message no longer holds its work: the same work, unchanged, is drafted again and goes to the owner.
   const redrafted = await propose(found);
   assert.notEqual(redrafted.id, trusted.id);
@@ -175,6 +188,11 @@ try {
     policyVersion: versionsOf.policy_version, purpose: 'marketing', subject: 'Again', body: 'Again?', citations: [], unsubscribeHash: digest(randomUUID()), modelGenerated: true });
   assert.equal(sameDraft.id, redrafted.id);
   assert.equal(sameDraft.status, 'cancelled');
+  // ... and the sweep knows it before paying for a draft: the snapshot reports the cancelled message, not withdrawn, at today's versions.
+  const cancelledEntry = await snapshotOf((await opportunityOf(found)).id);
+  const cancelledWork = cancelledEntry.work.find(w => w.id === versionsOf.work_id);
+  assert.deepEqual([cancelledWork.message_id, cancelledWork.message_status, cancelledWork.message_withdrawn], [redrafted.id, 'cancelled', false]);
+  assert.equal(unchangedSinceCancelled(cancelledWork, cancelledEntry), true);
 
   // ---- 6. Supervised: proposed, the owner's approval sends it; cold email never rides the product policy ---------------------------
   await step('cold_email', 'supervise');
