@@ -4,12 +4,24 @@ import { assessProspect } from './assessment.mjs';
 import { planOpportunity, products } from './policy.mjs';
 import { draftMessage } from './draft.mjs';
 import { renderEmail } from '../email-layout.mjs';
+import { evaluateGrowth } from './evaluation.mjs';
 const deferred=()=>Object.assign(new Error('Action is deferred'),{code:'action_deferred'});
-export function growthHandlers({growth,model,notifier}) {
+/** Sales follow-ups and capped cold email (20261105150000_growth_autonomy.sql): the contact finder, qualification and the daily evaluation. */
+export const growthAutonomyFeature='platform.agents.growth-autonomy.v1';
+// Businesses the contact finder reads per discovery run, and opportunities qualified per pass.
+export const contactSearchLimit=10;
+export const qualifyLimit=100;
+const declared=features=>features instanceof Set?features.has(growthAutonomyFeature):Array.isArray(features)&&features.includes(growthAutonomyFeature);
+// Claim outcomes that mean "never send this one": the hand-over was withdrawn, or the business was already contacted once.
+const finalRefusals=new Set(['outreach_off','business_contacted']);
+export function growthHandlers({growth,model,notifier,features=null}) {
   if(!growth)return {};
+  const autonomy=declared(features);
   async function sweep(task,{signal,now=()=>new Date()}={}) {
     await growth.store.maintenance?.();
     const owner=task.kind==='growth.success'?'account_manager':'marketing_manager'; let inspected=0,planned=0,drafted=0,offset=0,total=1;
+    // Researched prospects that meet the qualification rules move to qualified before the pipeline is read (nothing is sent here).
+    if(autonomy&&owner==='marketing_manager'&&task.agent?.autonomy!=='observe')await growth.store.autoQualify(qualifyLimit);
     while(offset<total) {
       signal?.throwIfAborted(); const page=await growth.store.snapshot(offset);total=page.total;offset+=page.items.length;if(!page.items.length)break;
       for(const o of page.items) {
@@ -49,7 +61,32 @@ export function growthHandlers({growth,model,notifier}) {
     if(task.agent?.autonomy==='observe')return {result:{skipped:'observe_only'}};
     let candidates=0;
     for(const product of products){signal?.throwIfAborted(); const rows=await growth.research.search(product,{signal});signal?.throwIfAborted();candidates+=await growth.store.discover(product,rows);}
-    return {result:{candidates}};
+    if(!autonomy||!growth.contacts?.configured)return {result:{candidates}};
+    // The contact finder reads each new business's own website for one public role address; a business with none stays without a
+    // contact (and is not read again for 90 days). Only the counts are kept here: never an address.
+    const contacts={searched:0,found:0,none:0};
+    for(const target of await growth.store.contactCandidates(contactSearchLimit)) {
+      signal?.throwIfAborted(); contacts.searched++;
+      let found={email:null};
+      try {found=await growth.contacts.find(target.domain,{signal});} catch(error) {if(signal?.aborted)throw error;}
+      signal?.throwIfAborted();
+      let recorded=null;
+      try {recorded=await growth.store.recordContact(target.id,found.email??null,found.email?found.sourceUrl:null);}
+      catch(error) {if(error?.code!=='22023')throw error; recorded=await growth.store.recordContact(target.id,null,null);}
+      if(recorded?.found)contacts.found++; else contacts.none++;
+    }
+    const qualified=(await growth.store.autoQualify(qualifyLimit))?.qualified??0;
+    return {result:{candidates,contacts,qualified}};
+  }
+  // The guardrail check that messages nobody approved need (growth.1, within 30 days). Synthetic cases only: no model, no customer data.
+  async function evaluate(task,{now=()=>new Date()}={}) {
+    const reports=await evaluateGrowth(now());
+    for(const report of reports)await growth.store.evaluate(report.product,report.version,report.passed,report.results);
+    const failed=reports.filter(report=>!report.passed).map(report=>report.product);
+    if(failed.length&&notifier)await notifier.send({severity:'warning',subject:'Outreach guardrail check failed',
+      body:`The daily outreach guardrail check failed for ${failed.join(' and ')}. Until it passes, no outreach email goes out on its own; emails you approve still go.`,
+      dedupeKey:`growth:evaluate:${now().toISOString().slice(0,10)}`,agentKey:task.agentKey,taskId:task.id});
+    return {result:{evaluated:reports.length,passed:reports.filter(report=>report.passed).map(report=>report.product),failed}};
   }
   async function content(task,{signal,now=()=>new Date()}={}) {
     if(task.agent?.autonomy==='observe'||!growth.research?.configured)return {result:{skipped:'content_research_not_enabled'}};
@@ -65,14 +102,18 @@ export function growthHandlers({growth,model,notifier}) {
     }
     return {status:proposals?'awaiting_approval':'done',result:{contentWeek:week,proposals}};
   }
-  return {'growth.pipeline':sweep,'growth.success':sweep,'growth.discovery':discover,'growth.content':content};
+  return {'growth.pipeline':sweep,'growth.success':sweep,'growth.discovery':discover,'growth.content':content,...(autonomy?{'growth.evaluate':evaluate}:{})};
 }
 export function growthExecutors({growth,mail,publicOrigin,postalAddress}) {
   if(!growth)return {};
   return {'growth.content':async()=>({recorded:true,published:false}),'growth.message':async execution=>{
     if(!growth.configured()||!mail?.configured)throw deferred();
     const claimed=await growth.store.claim(execution.input.messageId,execution.id);
-    if(!claimed.send){if(['frequency_limited','daily_limit','evaluation_required','delivery_unresolved'].includes(claimed.status))throw deferred();return {delivery:claimed.status};}
+    if(!claimed.send){
+      if(['frequency_limited','daily_limit','evaluation_required','delivery_unresolved'].includes(claimed.status))throw deferred();
+      if(finalRefusals.has(claimed.status))throw Object.assign(new Error('The message was not sent.'),{code:claimed.status});
+      return {delivery:claimed.status};
+    }
     // The work ID is read from the claim, so the exact link is stable across retries.
     const token=growth.unsubscribeToken(claimed.workId);
     if(claimed.unsubscribeHash && growth.hash(token)!==claimed.unsubscribeHash){await growth.store.finish(claimed.id,'failed',null);throw Object.assign(new Error('Regenerate the message after signing configuration changed'),{code:'unsubscribe_key_changed'});}

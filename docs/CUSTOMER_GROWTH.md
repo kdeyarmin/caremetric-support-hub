@@ -32,9 +32,46 @@ The existing Billing and weekly account report remain the source of MRR/ARR. The
 5. Configure the signed SendGrid Event Webhook at `/api/growth/delivery` and set `HUB_SENDGRID_EVENT_PUBLIC_KEY`. Subscribe to delivery, bounce, dropped, spam report and unsubscribe events. Keep the existing signed Inbound Parse route for replies; the growth sender's Reply-To points to the configured support inbox.
 6. In Growth, map existing tenants to their organizations and classify internal accounts. Add the correct buyer/champion, verify its business source and outreach eligibility, record the goal, and qualify the opportunity. Review each product benefit and booking URL in its policy. Policies start disabled.
 7. Resume Marketing Manager and Account Manager in **Propose** mode for the pilot. The scheduler also needs `HUB_AGENTS_ENABLED=true`. Set `HUB_GROWTH_SEND_ENABLED=true` only when the configured channel and reviewed cohort are ready. Approve exact messages in Team; changing policy, contact, or opportunity invalidates stale drafts.
-8. Review pilot replies, objections, activation and retention separately for each product. Optional template autonomy needs an active agent in Act mode, an enabled product policy with template sending allowed, and a passing `growth.1` behavioral evaluation recorded in the last 30 days. **Model-written messages always require individual approval.** The latest failed evaluation blocks automatic templates too.
+8. Review pilot replies, objections, activation and retention separately for each product. Optional template autonomy needs an active agent in Act mode, an enabled product policy with template sending allowed, and a passing `growth.1` behavioral evaluation recorded in the last 30 days. **Model-written messages require individual approval** unless the owner hands sales follow-ups or cold email over (next section). The latest failed evaluation blocks every message nobody approved.
 
 `npm run evaluate:growth` runs synthetic cases. Supplying `HUB_GROWTH_EVAL_DATABASE_URL` explicitly records those results through the restricted `hub_app_server` role. Leave it unset for local/CI evaluation. A behavioral pass proves guardrail behavior; it does not validate a model's persuasion or factual accuracy on unseen prospects. Review real draft quality before increasing volume.
+
+## Sales follow-ups and capped cold email
+
+The owner chose (2026-11-04) to let the Marketing Manager send two kinds of email on its own, each after one supervised week:
+**Sales follow-ups** (outreach and follow-ups to people who contacted CareMetric or that the owner added) and **Cold email**
+(first emails to businesses found online). Both are autonomy steps on the Team screen and start off
+(`20261105150000_growth_autonomy.sql`, gate `20261105150100_growth_autonomy_contract.sql`, feature
+`platform.agents.growth-autonomy.v1`). Each step adds one trust value to the Marketing Manager's list
+(`growth.sales_followup`, `growth.cold_email`); a supervised week or Keep approving takes it off, and every message then waits for
+the owner, model-written or not.
+
+- **Contact finder.** After the daily discovery search, the finder reads each new business's own website: https only, its
+  domain or `www.` name only (redirects included), robots.txt honoured, never an address literal or a name that resolves to a
+  private address, at most four pages (`/`, `/contact`, `/contact-us`, `/about`) of 300 KB each (`server/growth/contacts.mjs`).
+  It keeps one **role address** on that exact domain (`info@`, `contact@`, `office@`, `hello@`, `inquiries@`, `admissions@`,
+  `sales@` and a few more); the database admits nothing else as a found contact (`growth_contacts.source_kind = 'role_address'`)
+  and refuses one on another domain, one found off the business's site, or one that unsubscribed. A personal address is never
+  kept, and no phone number is ever read or texted. A business with none is not read again for 90 days. Only the address and
+  the page it was on are stored.
+- **Qualification.** Researched prospects whose fresh, cited assessment meets the active rules (`private.growth_qualification_rules`,
+  `qualify.1`: fit 75 or more, assessed and evidenced within 30 days, a permitted verified contact that has not unsubscribed,
+  not a customer or internal, no "not now" or "not interested") move to qualified before each pipeline sweep. The rule version
+  is recorded on the opportunity.
+- **Sending on its own.** A message is approved on its own only when the Marketing Manager is active, on Act and trusted with the
+  message's class, and the send claim checks that again with the agent's row held, so Keep approving or a pause can never slip
+  in between. A message nobody approved also needs a passing `growth.1` evaluation from the last 30 days; the
+  `growth.evaluate` task records one for each product every morning at 06:40 Eastern and warns the owner if it fails.
+- **Cold email caps.** At most ten cold emails a day (Eastern) across both products, however each was approved; one business is
+  contacted once (one contact, one opportunity, up to the policy's touch cap); a customer's organization is never cold-emailed;
+  cold email never rides the product policy's template autonomy. Every email carries the unsubscribe link and the postal
+  address, and the existing per-contact gap, suppression list, touch cap and per-product daily limit still apply.
+- **Product policies** no longer overwrite the agents' lists: turning template sending on adds `growth.message`, turning it off
+  everywhere removes only that value.
+
+Nothing is sent until `HUB_GROWTH_SEND_ENABLED=true`, a signing key and an enabled product policy are in place, and the finder
+runs only with `HUB_GROWTH_SEARCH_API_KEY`. A counsel check of cold email to businesses' public addresses was recommended to the
+owner before enabling it. `npm run test:growth-autonomy:db` runs the integration checks against a disposable local database.
 
 ## Native product event integration
 

@@ -43,8 +43,10 @@ reset role;
 -- What ships: four steps, all off, and the hourly check.
 -- ---------------------------------------------------------------------------------------
 select ok(hub.get_backend_contract() -> 'features' @> '["platform.agents.autonomy.v1"]'::jsonb, 'Autonomy steps are declared in release metadata');
-select is((select array_agg(category || ':' || status order by category) from private.agent_autonomy_steps),
-  array['account_emails:off', 'articles:off', 'offers:off', 'support_answers:off'], 'Four steps ship, all off');
+-- Later features add their own steps; each starts off, so any step not off shows up here.
+select is((select array_agg(category || ':' || status order by category) from private.agent_autonomy_steps
+           where category in ('account_emails', 'articles', 'offers', 'support_answers') or status <> 'off'),
+  array['account_emails:off', 'articles:off', 'offers:off', 'support_answers:off'], 'The first four steps ship, and every step starts off');
 select ok((select count(*) = 1 from private.agent_schedules where agent_key = 'chief_of_staff' and task_kind = 'autonomy.graduate'
   and cadence = 'interval' and every_seconds = 3600 and not requires_session), 'The Chief of Staff checks the steps every hour');
 select is((select (private.agent_autonomy_step_json(s)) ->> 'ready' from private.agent_autonomy_steps s where category = 'account_emails'), 'true',

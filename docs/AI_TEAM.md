@@ -60,9 +60,12 @@ metadata, run summaries or task payloads.
 
 The owner hands kinds of work over to the team one at a time (`supabase/migrations/20261104220000_agent_autonomy.sql`,
 `private.agent_autonomy_steps`). Four ship, all off: **Account emails** (the Account Manager's four templates), **Support
-answers**, **Article publishing** and **Offers**. Each step lists which agents it changes and what it adds to their
+answers**, **Article publishing** and **Offers**; **Sales follow-ups** and **Cold email** (the Marketing Manager's, see
+[Customer growth](CUSTOMER_GROWTH.md#sales-follow-ups-and-capped-cold-email)) are added, also off, by
+`20261105150000_growth_autonomy.sql`. Each step lists which agents it changes and what it adds to their
 auto-approval lists (`auto_send_templates` for the account emails, `auto_approve_kinds` for the others: `communication.answer`
-for support answers, `content.publish` for articles, `offer.apply` for offers); only migrations write that list.
+for support answers, `content.publish` for articles, `offer.apply` for offers, and the trust values `growth.sales_followup` and
+`growth.cold_email`, which the growth operations read, for the Marketing Manager's two steps); only migrations write that list.
 
 - **Start supervised week** (Team screen, under "Work the team does on its own"): the step is supervised for seven days. Any
   agent it involves that could only observe moves up to Propose, and the step's values come off the agents' lists (one the owner
@@ -76,7 +79,7 @@ for support answers, `content.publish` for articles, `offer.apply` for offers); 
 - **Keep approving** (hold) takes the step's values back off the lists, leaving anything another automatic step or the
   owner added, and keeps the agent proposing that work. **Make automatic now** skips the rest of the week.
 - A step whose code is not on the Hub yet (its feature is not declared: `platform.agents.concierge-autosend.v1`,
-  `platform.agents.content-autopublish.v1`, `platform.agents.offers.v1`) can be supervised but not made automatic; a
+  `platform.agents.content-autopublish.v1`, `platform.agents.offers.v1`, `platform.agents.growth-autonomy.v1`) can be supervised but not made automatic; a
   supervised step past its date switches as soon as the code arrives. The screen says so next to it.
 
 The steps table is closed to every role. The server reads due steps and switches one through `private.agent_autonomy_due()`
@@ -1137,6 +1140,12 @@ Apply the migrations in order with the usual procedure:
    publishing operation so an automatically approved article is published while the Content Marketer is trusted with publishing,
    and declare `platform.agents.content-autopublish.v1` (it needs the Content Marketer, the hardening and autonomy steps). Restart
    the Hub after it.
+14. `20261105150000_growth_autonomy.sql`, then its gate `20261105150100_growth_autonomy_contract.sql`, which add role
+   addresses found on a business's own website, the qualification rules, the Marketing Manager's two steps (off) and its daily
+   `growth.evaluate` schedule, re-check the hand-over when proposing and claiming a growth message, cap cold email at ten a day and
+   one business once, stop a product policy from overwriting an agent's list, and declare `platform.agents.growth-autonomy.v1`
+   (it needs customer growth, the hardening and autonomy steps). Restart the Hub after it. Nothing is sent until
+   `HUB_GROWTH_SEND_ENABLED=true` and the signing key are set, and the contact finder runs only with `HUB_GROWTH_SEARCH_API_KEY`.
 
 The Hub build does not require any of these features, so a Hub whose database lacks them still starts and
 serves everything else. The AI team is opt-in twice over: nothing runs unless `HUB_AGENTS_ENABLED`

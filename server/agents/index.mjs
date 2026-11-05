@@ -48,7 +48,7 @@ export function agentTeam({
     ...contentExecutors({ store, features, log }), ...externalEmailExecutors({ store, features, email, log }), ...(typeof executors === 'function' ? executors(shared) : executors),
   }, log });
   // The handlers every server ships with, then any the caller adds (a caller's handler for the same kind wins).
-  const registry = { ...growthHandlers({growth,model:runtime,notifier}), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, bookingUrl, leadSecrets, lifecycle: customerEmail, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
+  const registry = { ...growthHandlers({growth,model:runtime,notifier,features}), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, bookingUrl, leadSecrets, lifecycle: customerEmail, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   const scheduler = agentScheduler({ store, handlers: registry, actions, enabled, log, now });
   const admin = agentAdmin({
     pool, actions, kick: () => scheduler.tick(), waiting: scheduler.runWaiting,

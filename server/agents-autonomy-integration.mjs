@@ -43,7 +43,10 @@ try {
   await admin.query("update private.agent_autonomy_steps set requires_feature = 'platform.agents.never-declared.v1' where category = 'offers'");
   const declared = new Set((await row('select hub.get_backend_contract() as c')).c.features);
   const steps = await ownerCall('hub.get_agent_autonomy', []);
-  assert.deepEqual(steps.map(item => [item.category, item.status]), [['account_emails', 'off'], ['articles', 'off'], ['offers', 'off'], ['support_answers', 'off']]);
+  // Later features add their own steps; each starts off.
+  const firstFour = ['account_emails', 'articles', 'offers', 'support_answers'];
+  assert.deepEqual(steps.filter(item => firstFour.includes(item.category)).map(item => [item.category, item.status]), firstFour.map(category => [category, 'off']));
+  assert.ok(steps.every(item => item.status === 'off'), 'every step starts off');
   for (const item of steps) assert.equal(item.ready, item.category !== 'offers' && declared.has(seedSteps.find(seed => seed.category === item.category).requires_feature), item.category);
   assert.equal(steps.find(item => item.category === 'account_emails').ready, true);
 

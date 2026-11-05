@@ -120,6 +120,8 @@ const stepHelp: Record<string, string> = {
   support_answers: "Answers to questions your published guides cover. Billing, cancellations, outages, legal questions and anything with personal details always come to you.",
   articles: "Articles that pass the content checks, published to your public help pages.",
   offers: "Offers from the menu you set (a trial extension or one of your coupons), to accounts that qualify, within the menu's caps.",
+  sales_followups: "The Marketing Manager's follow-ups and replies to people who contacted CareMetric or that you added, within each product's daily limit and touch cap, each with an unsubscribe link.",
+  cold_email: "First emails to businesses found online, sent only to the public role address on the business's own website (such as info@), at most 10 a day, each business once, never a text, each with an unsubscribe link and your postal address.",
 };
 export const stepHelpText = (category: string) => stepHelp[category] ?? "";
 
@@ -131,6 +133,7 @@ const taskLabels: Record<string, string> = {
   "growth.leads": "Look for new leads", "growth.followup": "Chase unanswered leads", "growth.weekly": "Weekly growth report",
   "accounts.lifecycle": "Customer emails", "autonomy.graduate": "Hand over work after its supervised week",
   "growth.pipeline": "Review sales pipeline", "growth.success": "Review customer success", "growth.discovery": "Discover prospective organizations", "growth.content": "Propose product content",
+  "growth.evaluate": "Check the outreach guardrails",
 };
 export const taskLabel = (kind: string) => taskLabels[kind] ?? kind;
 
@@ -225,6 +228,8 @@ const errorLabels: Record<string, string> = {
   external_email_not_configured: "Owner-written email is not available on this Hub yet. Nothing was sent.",
   external_email_refused: "The email provider refused this message. Nothing was sent.",
   external_email_unconfirmed: "The email's outcome could not be confirmed. It may have been sent. Do not resend it; check the provider's activity first. The Hub will not retry it automatically.",
+  outreach_off: "This email was approved on its own, but that kind of outreach is no longer handed over to the Marketing Manager (you chose Keep approving, paused it or changed its level), so nothing was sent.",
+  business_contacted: "This business was already emailed once from a public address found on its website, so nothing more was sent to it.",
 };
 /** What a stored error code means for the owner; an unknown code is shown as it is. */
 export const errorLabel = (code: string | null | undefined) => (code ? errorLabels[code] ?? code : "");

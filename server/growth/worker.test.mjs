@@ -43,3 +43,56 @@ it('transport exceptions record uncertainty and surface the failed action',async
  const exec=growthExecutors({growth:{store,configured:()=>true,unsubscribeToken:()=> 't'},mail:{configured:true,send:vi.fn(async()=>{throw new Error('timeout');})},publicOrigin:'https://hub.example.org',postalAddress:'Test address'})['growth.message'];
  await expect(exec({id:'a',input:{messageId:'m'}})).rejects.toMatchObject({code:'delivery_unknown'});expect(store.finish).toHaveBeenCalledWith('m','unknown',null);
 });
+const autonomy=new Set(['platform.agents.growth-autonomy.v1']);
+it('qualifies researched prospects before each sales sweep, only with the feature and never in Observe',async()=>{
+ const store={snapshot:vi.fn(async()=>({total:0,items:[]})),autoQualify:vi.fn(async()=>({qualified:2}))};
+ await growthHandlers({growth:{store},features:autonomy})['growth.pipeline']({id:'t',agent:{autonomy:'propose'},kind:'growth.pipeline'});
+ expect(store.autoQualify).toHaveBeenCalledWith(100);
+ store.autoQualify.mockClear();
+ await growthHandlers({growth:{store},features:autonomy})['growth.pipeline']({id:'t',agent:{autonomy:'observe'},kind:'growth.pipeline'});
+ await growthHandlers({growth:{store},features:autonomy})['growth.success']({id:'t',agent:{autonomy:'act'},kind:'growth.success'});
+ await growthHandlers({growth:{store}})['growth.pipeline']({id:'t',agent:{autonomy:'propose'},kind:'growth.pipeline'});
+ expect(store.autoQualify).not.toHaveBeenCalled();
+});
+it('discovery reads each new business\'s own site for one role address and records what it found, keeping only counts',async()=>{
+ const store={discover:vi.fn(async()=>1),contactCandidates:vi.fn(async()=>[{id:'org-a',domain:'a.example'},{id:'org-b',domain:'b.example'},{id:'org-c',domain:'c.example'}]),
+  recordContact:vi.fn(async(id,email)=>({found:Boolean(email)})),autoQualify:vi.fn(async()=>({qualified:1}))};
+ const contacts={configured:true,find:vi.fn(async domain=>domain==='a.example'?{email:'info@a.example',sourceUrl:'https://a.example/contact'}:domain==='b.example'?{email:null,reason:'none'}:(()=>{throw new Error('unreachable');})())};
+ const growth={store,research:{configured:true,search:vi.fn(async()=>[])},contacts};
+ const outcome=await growthHandlers({growth,features:autonomy})['growth.discovery']({id:'t',agent:{autonomy:'propose'}});
+ expect(outcome.result).toEqual({candidates:2,contacts:{searched:3,found:1,none:2},qualified:1});
+ expect(store.recordContact.mock.calls).toEqual([['org-a','info@a.example','https://a.example/contact'],['org-b',null,null],['org-c',null,null]]);
+ expect(JSON.stringify(outcome)).not.toContain('@');
+ // A refused address (the database's own domain check) is recorded as nothing found.
+ store.recordContact.mockReset().mockRejectedValueOnce(Object.assign(new Error('off domain'),{code:'22023'})).mockResolvedValue({found:false});
+ store.contactCandidates.mockResolvedValue([{id:'org-a',domain:'a.example'}]);
+ expect((await growthHandlers({growth,features:autonomy})['growth.discovery']({id:'t',agent:{autonomy:'propose'}})).result.contacts).toEqual({searched:1,found:0,none:1});
+ expect(store.recordContact.mock.calls[1]).toEqual(['org-a',null,null]);
+ // Without the feature, or in Observe, no website is read.
+ contacts.find.mockClear();
+ await growthHandlers({growth})['growth.discovery']({id:'t',agent:{autonomy:'propose'}});
+ await growthHandlers({growth,features:autonomy})['growth.discovery']({id:'t',agent:{autonomy:'observe'}});
+ expect(contacts.find).not.toHaveBeenCalled();
+});
+it('the daily evaluation records each product\'s guardrail check and warns the owner only when one fails',async()=>{
+ const store={evaluate:vi.fn()},notifier={send:vi.fn(async()=>[])};
+ const handlers=growthHandlers({growth:{store},notifier,features:autonomy});
+ const outcome=await handlers['growth.evaluate']({id:'t',agentKey:'marketing_manager'});
+ expect(outcome.result).toEqual({evaluated:2,passed:['carebase','caremetric-intel'],failed:[]});
+ expect(store.evaluate.mock.calls.map(call=>[call[0],call[1],call[2]])).toEqual([['carebase','growth.1',true],['caremetric-intel','growth.1',true]]);
+ expect(notifier.send).not.toHaveBeenCalled();
+ expect(growthHandlers({growth:{store}})['growth.evaluate']).toBeUndefined();
+ // A failed check is recorded as failed and the owner is told once that day; nothing about customers is in the email.
+ const failing=growthHandlers({growth:{store},notifier,features:autonomy});
+ // Evidence dated a day ahead of the clock fails the synthetic cases, which is enough to see the failure path.
+ expect((await failing['growth.evaluate']({id:'t',agentKey:'marketing_manager'},{now:()=>new Date(Date.now()+86_400_000)})).result.failed).toEqual(['carebase','caremetric-intel']);
+ expect(store.evaluate.mock.calls.slice(-2).map(call=>call[2])).toEqual([false,false]);
+ expect(notifier.send).toHaveBeenCalledTimes(1);
+ expect(notifier.send.mock.calls[0][0]).toMatchObject({severity:'warning',subject:'Outreach guardrail check failed',dedupeKey:expect.stringMatching(/^growth:evaluate:\d{4}-\d{2}-\d{2}$/)});
+});
+it('a withdrawn hand-over or an already contacted business fails the action instead of settling it',async()=>{
+ const store={claim:vi.fn()},growth={store,configured:()=>true,unsubscribeToken:()=> 't'};
+ const exec=growthExecutors({growth,mail:{configured:true,send:vi.fn()},publicOrigin:'https://hub.example.org',postalAddress:'Test address'})['growth.message'];
+ for(const status of ['outreach_off','business_contacted']) {store.claim.mockResolvedValueOnce({send:false,status});await expect(exec({id:'a',input:{messageId:'m'}})).rejects.toMatchObject({code:status});}
+ store.claim.mockResolvedValueOnce({send:false,status:'cancelled'});expect(await exec({id:'a',input:{messageId:'m'}})).toEqual({delivery:'cancelled'});
+});
