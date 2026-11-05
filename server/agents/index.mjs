@@ -7,6 +7,7 @@ import { agentAdmin } from './admin.mjs';
 import { builtInHandlers } from './tasks/index.mjs';
 import { conciergeExecutors, draftingFor } from './concierge/index.mjs';
 import { lifecycleExecutors } from './accounts/executor.mjs';
+import { externalEmailAvailable, externalEmailExecutors, externalEmailRecovery } from './external-email.mjs';
 import { contentExecutors } from './content/executor.mjs';
 import { modelRuntime } from './runtime/index.mjs';
 
@@ -44,17 +45,19 @@ export function agentTeam({
   const customerEmail = { ...(lifecycle ?? {}), publicOrigin };
   const actions = actionExecutor({ store, executors: {
     ...recordOnlyExecutors, ...growthExecutors({growth,mail:growthMail,publicOrigin,postalAddress}), ...conciergeExecutors({ communications, store, notifier, features, log }), ...lifecycleExecutors({ store, features, lifecycle: customerEmail, log }),
-    ...contentExecutors({ store, features, log }), ...(typeof executors === 'function' ? executors(shared) : executors),
+    ...contentExecutors({ store, features, log }), ...externalEmailExecutors({ store, features, email, log }), ...(typeof executors === 'function' ? executors(shared) : executors),
   }, log });
   // The handlers every server ships with, then any the caller adds (a caller's handler for the same kind wins).
   const registry = { ...growthHandlers({growth,model:runtime,notifier,features}), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, bookingUrl, leadSecrets, lifecycle: customerEmail, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   const scheduler = agentScheduler({ store, handlers: registry, actions, enabled, log, now });
   const admin = agentAdmin({
     pool, actions, kick: () => scheduler.tick(), waiting: scheduler.runWaiting,
+    externalEmailReady: externalEmailRecovery({ store, features }),
     services: () => ({
       enabled: scheduler.active(), handlers: scheduler.kinds(),
       sms: Boolean(sms?.configured), email: Boolean(email?.configured), ownerEmail: emailAddress.test(ownerEmail ?? ''), ai: Boolean(runtime.configured),
       customerTextToAi: draftingFor({ model: runtime, guides, customerTextToAi }) !== null,
+      externalEmail: externalEmailAvailable({ features, email }),
     }),
   });
   return { store, notifier, model: runtime, actions, scheduler, admin, tick: scheduler.tick, active: scheduler.active, runWaiting: scheduler.runWaiting };

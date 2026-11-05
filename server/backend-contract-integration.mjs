@@ -35,7 +35,9 @@ const lifecycleContract=await readFile(new URL('../supabase/migrations/202611031
 const contentContract=await readFile(new URL('../supabase/migrations/20261103150100_agent_content_contract.sql',import.meta.url),'utf8');
 const customerGrowthContract=await readFile(new URL('../supabase/migrations/20261103150102_customer_growth_contract.sql',import.meta.url),'utf8');
 const autonomyContract=await readFile(new URL('../supabase/migrations/20261104220100_agent_autonomy_contract.sql',import.meta.url),'utf8');
+const externalEmailContract=await readFile(new URL('../supabase/migrations/20261104230057_agent_external_email_contract.sql',import.meta.url),'utf8');
 const answersContract=await readFile(new URL('../supabase/migrations/20261105120100_concierge_answers_contract.sql',import.meta.url),'utf8');
+const autopublishContract=await readFile(new URL('../supabase/migrations/20261105130100_content_autopublish_contract.sql',import.meta.url),'utf8');
 const growthAutonomyContract=await readFile(new URL('../supabase/migrations/20261105150100_growth_autonomy_contract.sql',import.meta.url),'utf8');
 const diagnosticSupportContract=diagnosticSupportMigration.slice(diagnosticSupportMigration.indexOf('do $$ declare contract'));
 assert.ok(selfServiceContract.startsWith('-- Contract publication is last:'),'Recognize the self-service contract declaration');
@@ -109,9 +111,14 @@ try {
   await client.query('begin');
   try {
     const latest=await readContract();
-    // The AI team, lead desk, Growth Manager, customer email and Content Marketer declarations are the newest features (declared ahead of the build that will require them): replay history without them, then replay their gates last, in order.
-    const current={...latest,features:latest.features.filter(feature=>!['platform.agents.v1','platform.agents.probes.v1','platform.agents.brief.v1','platform.agents.seo.v1','platform.agents.concierge.v1','platform.agents.accounts.v1','platform.agents.hardening.v1','support.leads.v1','platform.agents.growth.v1','platform.agents.lifecycle.v1','platform.agents.content.v1','platform.agents.customer-growth.v1','platform.agents.autonomy.v1','platform.agents.concierge-autosend.v1','platform.agents.growth-autonomy.v1'].includes(feature))};
-    const latestBase={...latest,features:latest.features.filter(feature=>!['platform.agents.customer-growth.v1','platform.agents.autonomy.v1','platform.agents.concierge-autosend.v1','platform.agents.growth-autonomy.v1'].includes(feature))};
+    // Replay history without the newer workforce features, then replay their reviewed gates last, in order.
+    const current={...latest,features:latest.features.filter(feature=>!['platform.agents.v1','platform.agents.probes.v1','platform.agents.brief.v1','platform.agents.seo.v1','platform.agents.concierge.v1','platform.agents.accounts.v1','platform.agents.hardening.v1','support.leads.v1','platform.agents.growth.v1','platform.agents.lifecycle.v1','platform.agents.content.v1','platform.agents.customer-growth.v1','platform.agents.autonomy.v1','platform.agents.external-email.v1','platform.agents.concierge-autosend.v1','platform.agents.content-autopublish.v1','platform.agents.growth-autonomy.v1'].includes(feature))};
+    const latestBase={...latest,features:latest.features.filter(feature=>!['platform.agents.customer-growth.v1','platform.agents.autonomy.v1','platform.agents.external-email.v1','platform.agents.concierge-autosend.v1','platform.agents.content-autopublish.v1','platform.agents.growth-autonomy.v1'].includes(feature))};
+    const beforeAutonomy={...latest,features:latest.features.filter(feature=>!['platform.agents.autonomy.v1','platform.agents.external-email.v1','platform.agents.concierge-autosend.v1','platform.agents.content-autopublish.v1','platform.agents.growth-autonomy.v1'].includes(feature))};
+    const beforeExternalEmail={...latest,features:latest.features.filter(feature=>!['platform.agents.external-email.v1','platform.agents.concierge-autosend.v1','platform.agents.content-autopublish.v1','platform.agents.growth-autonomy.v1'].includes(feature))};
+    const beforeAnswers={...latest,features:latest.features.filter(feature=>!['platform.agents.concierge-autosend.v1','platform.agents.content-autopublish.v1','platform.agents.growth-autonomy.v1'].includes(feature))};
+    const beforeAutopublish={...latest,features:latest.features.filter(feature=>!['platform.agents.content-autopublish.v1','platform.agents.growth-autonomy.v1'].includes(feature))};
+    const beforeGrowthAutonomy={...latest,features:latest.features.filter(feature=>feature!=='platform.agents.growth-autonomy.v1')};
     // Platform billing replaced three app-specific billing features. Replay history with them in their original places.
     const before={...current,features:current.features.filter(feature=>!['billing.platform.v1','customer.self-service.v1','support.manual-escalation.v1','support.customer-diagnostics.v1','billing.customer-checkout.v1','billing.facility-entitlements.v1'].includes(feature)).flatMap(feature=>
       feature==='learning.draft-editing.v1'?[feature,'billing.portal.v1']
@@ -240,13 +247,19 @@ try {
     await client.query(contentContract);
     assert.deepEqual(await readContract(),latestBase,'The Content Marketer declaration restores the exact current feature set');
     await client.query(customerGrowthContract);
-    assert.deepEqual(await readContract(),{...latest,features:latest.features.filter(feature=>!['platform.agents.autonomy.v1','platform.agents.concierge-autosend.v1','platform.agents.growth-autonomy.v1'].includes(feature))},'The customer growth declaration adds only its own feature');
+    assert.deepEqual(await readContract(),beforeAutonomy,'The customer growth declaration adds only its own feature');
     await client.query(autonomyContract);
-    assert.deepEqual(await readContract(),{...latest,features:latest.features.filter(feature=>!['platform.agents.concierge-autosend.v1','platform.agents.growth-autonomy.v1'].includes(feature))},'The autonomy steps declaration adds only its own feature');
+    assert.deepEqual(await readContract(),beforeExternalEmail,'The autonomy steps declaration adds only its reviewed feature');
     await client.query(autonomyContract);
-    assert.deepEqual(await readContract(),{...latest,features:latest.features.filter(feature=>!['platform.agents.concierge-autosend.v1','platform.agents.growth-autonomy.v1'].includes(feature))},'The autonomy steps declaration is idempotent');
+    assert.deepEqual(await readContract(),beforeExternalEmail,'The autonomy steps declaration is idempotent');
+    await client.query(externalEmailContract);
+    assert.deepEqual(await readContract(),beforeAnswers,'The owner-directed email declaration adds only its reviewed feature');
+    await client.query(externalEmailContract);
+    assert.deepEqual(await readContract(),beforeAnswers,'The owner-directed email declaration is idempotent');
     await client.query(answersContract);
-    assert.deepEqual(await readContract(),{...latest,features:latest.features.filter(feature=>feature!=='platform.agents.growth-autonomy.v1')},'The support answers declaration adds only its own feature');
+    assert.deepEqual(await readContract(),beforeAutopublish,'The support answers declaration adds only its own feature');
+    await client.query(autopublishContract);
+    assert.deepEqual(await readContract(),beforeGrowthAutonomy,'The article publishing declaration adds only its own feature');
     await client.query(growthAutonomyContract);
     assert.deepEqual(await readContract(),latest,'The sales follow-up and cold email declaration restores the exact current feature set');
     await client.query(growthAutonomyContract);

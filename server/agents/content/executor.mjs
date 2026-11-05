@@ -8,7 +8,8 @@
  * - `published`: a new public article; `already_published`: the slug already holds this agent's article (a retry, or a second
  *   approval for the same slug), so nothing new is written. Either way the result carries the article's address.
  * - Thrown codes the owner sees: `invalid_article` (the stored article fails the rules now), `approval_required` (it was approved
- *   automatically; an article is only ever published with the owner's approval), `slug_taken` (another article already uses the
+ *   automatically while article publishing is not handed over: before platform.agents.content-autopublish.v1 always, after it whenever
+ *   the database finds the Content Marketer is not trusted with publishing right now), `slug_taken` (another article already uses the
  *   address), `product_unavailable` (the product is retired or closed to support) and `publish_failed`.
  *
  * Registered only when the database declares platform.agents.content.v1. It needs no owner session and no model.
@@ -17,13 +18,18 @@ import { articleUrl } from './facts.mjs';
 import { checkArticle } from './validate.mjs';
 
 export const contentFeature = 'platform.agents.content.v1';
-export const contentDeclared = features => (features instanceof Set ? features.has(contentFeature) : Array.isArray(features) && features.includes(contentFeature));
+const has = (features, feature) => (features instanceof Set ? features.has(feature) : Array.isArray(features) && features.includes(feature));
+export const contentDeclared = features => has(features, contentFeature);
+/** Articles the owner handed over publish without their approval (supabase/migrations/20261105130000_content_autopublish.sql). */
+export const autopublishFeature = 'platform.agents.content-autopublish.v1';
 
 const refused = new Set(['approval_required', 'slug_taken', 'product_unavailable']);
 const failure = code => Object.assign(new Error('The article was not published.'), { code });
 
 export function contentExecutors({ store, features = null, log = line => console.warn(line) }) {
   if (!contentDeclared(features)) return {};
+  // Without the hand-over in the database, an article approved on its own is refused here; with it, the database decides, at publication.
+  const autopublish = has(features, autopublishFeature);
   async function publish(execution) {
     const problems = checkArticle(execution.input);
     if (problems.length > 0) {
@@ -31,7 +37,7 @@ export function contentExecutors({ store, features = null, log = line => console
       log(JSON.stringify({ event: 'hub_content_publish_refused', action_id: execution.id, reasons: problems }));
       throw failure('invalid_article');
     }
-    if (execution.autoApproved === true) throw failure('approval_required');
+    if (execution.autoApproved === true && !autopublish) throw failure('approval_required');
     const answer = await store.contentPublish(execution.id, Number.isInteger(execution.execution) ? execution.execution : null);
     if (answer?.outcome === 'published' || answer?.outcome === 'already_published') {
       return { outcome: answer.outcome, slug: answer.slug, url: articleUrl(answer.slug) };

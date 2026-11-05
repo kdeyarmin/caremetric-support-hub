@@ -36,6 +36,32 @@ describe("AI team client", () => {
     expect(JSON.parse(String((fetcher.mock.calls[1] as unknown as [string, RequestInit])[1].body))).toEqual({ actionId: "11111111-1111-4111-8111-111111111111", decision: "reject", note: "Not now" });
   });
 
+  it("prepares an exact email in the owner's session without deciding or sending it", async () => {
+    const input = { to: "support@example.org", subject: "CMS source access", body: "Hello,\n\nPlease help with these failures.\n", requestKey: "22222222-2222-4222-8222-222222222222" };
+    const response = { id: "11111111-1111-4111-8111-111111111111", kind: "email.external", status: "proposed", created: true, requestKey: input.requestKey };
+    const fetcher = respond(response);
+    vi.stubGlobal("fetch", fetcher);
+    expect(await teamClient.prepareEmail(input)).toEqual(response);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/admin/team/email");
+    expect(init).toMatchObject({ method: "POST", credentials: "same-origin", cache: "no-store", redirect: "error" });
+    expect(JSON.parse(String(init.body))).toEqual(input);
+  });
+
+  it("accepts a replayed proposal but rejects a confirmation for another request or another action kind", async () => {
+    const input = { to: "support@example.org", subject: "Source access", body: "Please help.", requestKey: "22222222-2222-4222-8222-222222222222" };
+    const replay = { id: "11111111-1111-4111-8111-111111111111", kind: "email.external", status: "executed", created: false, requestKey: input.requestKey };
+    vi.stubGlobal("fetch", respond(replay));
+    expect(await teamClient.prepareEmail(input)).toEqual(replay);
+    vi.stubGlobal("fetch", respond({ ...replay, requestKey: "33333333-3333-4333-8333-333333333333" }));
+    await expect(teamClient.prepareEmail(input)).rejects.toThrow("did not match this request");
+    vi.stubGlobal("fetch", respond({ ...replay, kind: "email.send" }));
+    await expect(teamClient.prepareEmail(input)).rejects.toThrow();
+    vi.stubGlobal("fetch", respond({ id: replay.id, kind: "email.external", status: "proposed" }));
+    await expect(teamClient.prepareEmail(input)).rejects.toThrow();
+  });
+
   it("starts the waiting work with an empty body and checks how many tasks started", async () => {
     const fetcher = respond({ started: 2, actions: 1 });
     vi.stubGlobal("fetch", fetcher);

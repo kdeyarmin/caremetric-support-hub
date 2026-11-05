@@ -321,7 +321,7 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
           if(!agents) throw new HttpError(503,'The AI team is not configured.');
           const action=path.slice('/api/admin/team/'.length);
           if(!agentAdminActions.has(action) || req.method!=='POST') throw new HttpError(404,'AI team resource unavailable.');
-          return json(await agents[action](session,await jsonBody(req,8192)));
+          return json(await agents[action](session,await jsonBody(req,action==='email'?32768:8192)));
         }
         // The owner's lead status change; the Leads screen reads through the RPC allowlist (list_leads).
         if(path.startsWith('/api/admin/leads/')) {
