@@ -8,6 +8,7 @@ import { builtInHandlers } from './tasks/index.mjs';
 import { conciergeExecutors, draftingFor } from './concierge/index.mjs';
 import { lifecycleExecutors } from './accounts/executor.mjs';
 import { externalEmailAvailable, externalEmailExecutors, externalEmailRecovery } from './external-email.mjs';
+import { offerExecutors } from './accounts/offers.mjs';
 import { contentExecutors } from './content/executor.mjs';
 import { modelRuntime } from './runtime/index.mjs';
 
@@ -30,11 +31,13 @@ const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
  * one-click unsubscribe headers, the footer's postal address and the owner's optional booking link); the unsubscribe link uses
  * `publicOrigin`. Without them nothing is proposed or sent, and the daily run says what is missing.
  * Growth assessment and drafting use structured business evidence, with exact-message review for model drafts.
+ * `offerBilling` makes the Account Manager's offers from the owner's menu (`{ agentOffer }`, platform billing's session-less method); without
+ * it an approved offer is refused before Stripe is asked and its place under the cap is given back.
  */
 export function agentTeam({
   pool, growth: givenGrowth = null, growthMail = null, postalAddress = '', store: givenStore = null, handlers = {}, executors = {}, sms, email, ownerEmail, publicOrigin,
   fetchImpl = fetch, enabled = false, log = line => console.warn(line), now = () => new Date(), communications = null, features = null,
-  anthropicApiKey = null, record = null, model = null, guides = null, customerTextToAi = false, bookingUrl = null, leadSecrets = {}, lifecycle = null,
+  anthropicApiKey = null, record = null, model = null, guides = null, customerTextToAi = false, bookingUrl = null, leadSecrets = {}, lifecycle = null, offerBilling = null,
 }) {
   // Fenced operations (the attempt a task was claimed under, the execution an action started) exist once the database declares the hardening feature.
   const store = givenStore ?? sqlAgentStore(pool, { fenced: features?.has?.('platform.agents.hardening.v1') === true, growth: features?.has?.('platform.agents.customer-growth.v1') === true });
@@ -45,6 +48,7 @@ export function agentTeam({
   const customerEmail = { ...(lifecycle ?? {}), publicOrigin };
   const actions = actionExecutor({ store, executors: {
     ...recordOnlyExecutors, ...growthExecutors({growth,mail:growthMail,publicOrigin,postalAddress}), ...conciergeExecutors({ communications, store, notifier, features, log }), ...lifecycleExecutors({ store, features, lifecycle: customerEmail, log }),
+    ...offerExecutors({ store, features, billing: offerBilling, notifier, log }),
     ...contentExecutors({ store, features, log }), ...externalEmailExecutors({ store, features, email, log }), ...(typeof executors === 'function' ? executors(shared) : executors),
   }, log });
   // The handlers every server ships with, then any the caller adds (a caller's handler for the same kind wins).

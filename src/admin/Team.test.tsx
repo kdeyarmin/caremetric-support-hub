@@ -45,6 +45,11 @@ const steps: NonNullable<TeamOverview["autonomy"]> = [
   { category: "articles", label: "Article publishing", status: "automatic", supervisedSince: "2026-11-01T00:00:00+00:00", automaticAt: "2026-11-08T00:00:00+00:00",
     changedAt: "2026-11-08T00:00:00+00:00", ready: true, agents: ["content_marketer"] },
 ];
+const menu: NonNullable<TeamOverview["offers"]> = {
+  offers: [{ key: "trial_extension_14", label: "14 more trial days", kind: "trial_extension", trialDays: 14, couponId: null, apps: ["carebase", "caremetric-intel"],
+    eligibility: "trial_ending", windowDays: 7, monthlyCap: 10, enabled: false, changedAt: "2026-11-05T08:00:00.123456+00:00", usedThisMonth: 2, appliedTotal: 5 }],
+  coupons: [{ id: "SPRING20", name: "Spring", percentOff: 20, amountOff: null, currency: null, duration: "repeating", durationInMonths: 3 }],
+};
 const emptyPage = { items: [], total: 0, offset: 0, limit: 15 };
 function fakeClient(data: TeamOverview = overview(), overrides: Partial<TeamClient> = {}): TeamClient {
   return {
@@ -52,7 +57,7 @@ function fakeClient(data: TeamOverview = overview(), overrides: Partial<TeamClie
     decide: vi.fn(async () => ({ id: ids.action, kind: "communication.reply", status: "executed", decided: true })), run: vi.fn(async () => ({ id: ids.task, status: "queued" })),
     prepareEmail: vi.fn(async (input: ExternalEmailDraft & { requestKey: string }) => ({ id: ids.action, kind: "email.external" as const, status: "proposed" as const, created: true, requestKey: input.requestKey })),
     cancel: vi.fn(async () => ({ id: ids.task, status: "cancelled" })), waiting: vi.fn(async () => ({ started: 2, actions: 0 })),
-    setStep: vi.fn(async () => steps[0]),
+    setStep: vi.fn(async () => steps[0]), setOffer: vi.fn(async () => menu.offers[0]), addOffer: vi.fn(async () => menu.offers[0]),
     activity: vi.fn(async () => emptyPage) as TeamClient["activity"], audit: vi.fn(async () => emptyPage), ...overrides,
   };
 }
@@ -290,6 +295,31 @@ describe("AI team screen", () => {
     fireEvent.click(within(panel).getByRole("button", { name: "Start a supervised week for Offers" }));
     await waitFor(() => expect(client.setStep).toHaveBeenCalledWith({ category: "offers", action: "supervise", expectedChangedAt: "2026-11-04T22:00:00+00:00" }));
     expect(within(panel).getByRole("button", { name: "Keep approving Article publishing" })).toBeTruthy();
+  });
+
+  it("shows the offer menu, switches an offer on with the version it was shown, changes its cap and adds a coupon offer switched off", async () => {
+    const client = fakeClient({ ...overview(), offers: menu });
+    render(<Team client={client} />);
+    const panel = await screen.findByRole("region", { name: "Offers the Account Manager may make" });
+    expect(within(panel).getByText(/2 of 10 used this month, 5 applied in all/)).toBeTruthy();
+    fireEvent.click(within(panel).getByRole("button", { name: "Switch on 14 more trial days" }));
+    await waitFor(() => expect(client.setOffer).toHaveBeenCalledWith({ key: "trial_extension_14", enabled: true, monthlyCap: 10, expectedChangedAt: "2026-11-05T08:00:00.123456+00:00" }));
+    expect(await screen.findByText("14 more trial days is switched on.")).toBeTruthy();
+    fireEvent.change(within(panel).getByLabelText("Monthly cap for 14 more trial days"), { target: { value: "4" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Save cap" }));
+    await waitFor(() => expect(client.setOffer).toHaveBeenLastCalledWith({ key: "trial_extension_14", enabled: false, monthlyCap: 4, expectedChangedAt: "2026-11-05T08:00:00.123456+00:00" }));
+    fireEvent.click(within(panel).getByText("Add an offer"));
+    fireEvent.change(within(panel).getByLabelText("Name"), { target: { value: "20% off for 3 months" } });
+    fireEvent.change(within(panel).getByLabelText("What it gives"), { target: { value: "coupon" } });
+    fireEvent.change(within(panel).getByLabelText("Coupon"), { target: { value: "SPRING20" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Add offer (switched off)" }));
+    await waitFor(() => expect(client.addOffer).toHaveBeenCalledWith({ label: "20% off for 3 months", kind: "coupon", couponId: "SPRING20", apps: ["carebase", "caremetric-intel"], windowDays: 7, monthlyCap: 5 }));
+  });
+
+  it("leaves the offer menu out against a database that does not have it yet", async () => {
+    render(<Team client={fakeClient({ ...overview(), offers: null })} />);
+    await screen.findByRole("region", { name: "What the team can use" });
+    expect(screen.queryByRole("region", { name: "Offers the Account Manager may make" })).toBeNull();
   });
 
   it("leaves the autonomy panel out against a database that has no steps yet", async () => {

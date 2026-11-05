@@ -171,6 +171,8 @@ jobs:
           node server/agents-answers-integration.mjs
           node server/agents-growth-autonomy-integration.mjs
           node server/agents-growth-autonomy-integration.mjs
+          node server/agents-offers-integration.mjs
+          node server/agents-offers-integration.mjs
       - name: Export, lose and restore disposable Hub data
         env:
           HUB_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
