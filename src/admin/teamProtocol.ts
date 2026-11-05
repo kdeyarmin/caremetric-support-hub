@@ -188,7 +188,7 @@ export function approvalTitle(approval: Pick<TeamApproval, "kind" | "targetId" |
 
 const errorLabels: Record<string, string> = {
   invalid_article: "The article no longer passes the content checks (a rule changed since it was written), so it was not published.",
-  approval_required: "Articles are published only with your approval, and this one was approved automatically, so it was not published.",
+  approval_required: "This article was approved automatically, but article publishing is not handed over to the Content Marketer right now (you chose Keep approving, paused it or changed its level), so it was not published.",
   slug_taken: "Another article already uses this address, so nothing was published.",
   product_unavailable: "The article's product is retired or closed to support, so it was not published.",
   publish_failed: "The article could not be published.",

@@ -51,6 +51,15 @@ describe('publishing an approved article', () => {
     expect(store.contentPublish).not.toHaveBeenCalled();
   });
 
+  it('lets the database decide an article approved on its own once publishing can be handed over', async () => {
+    const store = { contentPublish: vi.fn(async () => ({ outcome: 'published', slug: article.slug })) };
+    const { 'content.publish': handed } = contentExecutors({ store, features: new Set(['platform.agents.content.v1', 'platform.agents.content-autopublish.v1']), log: () => {} });
+    expect(await handed(execution({ autoApproved: true }))).toMatchObject({ outcome: 'published', slug: article.slug });
+    expect(store.contentPublish).toHaveBeenCalledWith('a1', 1);
+    store.contentPublish.mockResolvedValueOnce({ outcome: 'approval_required' });
+    await expect(handed(execution({ autoApproved: true }))).rejects.toMatchObject({ code: 'approval_required' });
+  });
+
   it('checks the stored article again and refuses one that fails, logging the checks and never the text', async () => {
     const { publish, store, logs } = fixture();
     const tampered = { ...article, body: `${article.body}\n\nCareBase ensures compliance. <script>alert(1)</script>` };
