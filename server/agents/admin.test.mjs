@@ -235,7 +235,8 @@ describe('agent administration', () => {
       const steps = [{ category: 'account_emails', status: 'supervised' }];
       const { admin, queries, actions } = fixture({ externalReady, ready: [{ id: 'reply1', kind: 'communication.reply' }], results: { 'hub.get_agent_autonomy': steps } });
       expect(await admin.overview('token', {})).toMatchObject({ waitingActions: 2, autonomy: steps });
-      expect(queries).toEqual([['select hub.get_agent_team() as result', []], ['select hub.get_agent_autonomy() as result', []]]);
+      // Read-only: the team, the autonomy steps and the offer menu, nothing else.
+      expect(queries).toEqual([['select hub.get_agent_team() as result', []], ['select hub.get_agent_autonomy() as result', []], ['select hub.get_agent_offers() as result', []]]);
       expect(externalReady).toHaveBeenCalledExactlyOnceWith(false);
       expect(actions.executeOne).not.toHaveBeenCalled();
       expect(actions.executeSessionActions).not.toHaveBeenCalled();
