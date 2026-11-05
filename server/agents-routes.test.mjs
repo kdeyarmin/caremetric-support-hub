@@ -3,7 +3,7 @@ import { once } from 'node:events';
 import { appServer } from './http.mjs';
 
 const origin = 'https://support-hub-web-production.up.railway.app';
-const agents = Object.fromEntries(['overview', 'status', 'autonomy', 'budget', 'decide', 'run', 'cancel', 'waiting', 'step', 'offer', 'addOffer'].map(name => [name, vi.fn(async () => ({ ok: name }))]));
+const agents = Object.fromEntries(['overview', 'status', 'autonomy', 'budget', 'decide', 'run', 'cancel', 'waiting', 'step', 'email', 'offer', 'addOffer'].map(name => [name, vi.fn(async () => ({ ok: name }))]));
 const health = vi.fn(async () => undefined);
 const sessionToken = 'a'.repeat(43);
 let server, base;
@@ -16,6 +16,26 @@ afterAll(() => new Promise(resolve => server.close(resolve)));
 const post = (path, body = {}, headers = {}) => fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin, ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
 
 describe('AI team routes', () => {
+  it('accepts an owner email draft through the same-origin command path and never calls approval', async () => {
+    const draft = { to: 'data.support@example.test', subject: 'CMS support case', body: 'Exact message\n', requestKey: '11111111-1111-4111-8111-111111111111' };
+    const decisions = agents.decide.mock.calls.length;
+    const response = await post('/api/admin/team/email', draft, { Cookie: `__Host-caremetric_session=${sessionToken}` });
+    expect(response.status).toBe(200);
+    expect(agents.email).toHaveBeenCalledWith(sessionToken, draft);
+    expect(agents.decide).toHaveBeenCalledTimes(decisions);
+    expect((await post('/api/admin/team/email', draft, { Origin: 'https://attacker.test' })).status).toBe(403);
+    expect((await post('/api/admin/team/email?send=true', draft)).status).toBe(400);
+    expect((await fetch(base + '/api/admin/team/email')).status).toBe(404);
+  });
+
+  it('bounds external email requests while allowing a full Unicode message', async () => {
+    const draft = { to: 'data.support@example.test', subject: 'Case', body: '界'.repeat(5000), requestKey: '11111111-1111-4111-8111-111111111111' };
+    expect((await post('/api/admin/team/email', draft)).status).toBe(200);
+    expect((await post('/api/admin/team/email', { ...draft, body: 'x'.repeat(33000) })).status).toBe(413);
+    // The larger email envelope does not increase the existing approval or administration limits.
+    expect((await post('/api/admin/team/decide', { note: 'x'.repeat(9000) })).status).toBe(413);
+  });
+
   it('serves a public liveness check that reveals nothing and follows the database', async () => {
     const live = await fetch(base + '/api/health');
     expect(live.status).toBe(200);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionLabel, approvalTitle, cadenceLabel, centsLabel, decisionSchema, emailSubject, errorLabel, failedActionLabel, outcomeLabel, statusLabel, targetLabel, taskLabel, waitingSchema } from "./teamProtocol";
+import { actionLabel, approvalTitle, cadenceLabel, centsLabel, decisionSchema, emailSubject, errorLabel, externalEmailFailure, externalEmailProposalSchema, externalEmailRecipient, failedActionLabel, outcomeLabel, servicesSchema, statusLabel, targetLabel, taskLabel, waitingSchema } from "./teamProtocol";
 
 describe("AI team display", () => {
   it("shows money in whole cents", () => {
@@ -89,6 +89,50 @@ describe("AI team display", () => {
     }
   });
 
+  it("names an owner email from the exact private headers rather than its request UUID", () => {
+    const preview = "To: support@example.org\nSubject: CMS source access\n\nHello,\n\nSubject: this is body text.";
+    expect(actionLabel("email.external")).toBe("Send an email");
+    expect(externalEmailRecipient(preview)).toBe("support@example.org");
+    expect(emailSubject(preview)).toBe("CMS source access");
+    expect(approvalTitle({ kind: "email.external", targetId: "22222222-2222-4222-8222-222222222222", preview })).toBe("Email to support@example.org: CMS source access");
+    expect(externalEmailRecipient("Hello,\nTo: not-a-header\nSubject: Also body")).toBeNull();
+    expect(approvalTitle({ kind: "email.external", targetId: "22222222-2222-4222-8222-222222222222", preview: "Preview unavailable" })).toBe("Email to a recipient");
+  });
+
+  it("distinguishes a refused owner email from an unknown outcome that must not be resent", () => {
+    expect(failedActionLabel("external_email_refused")).toMatch(/provider refused.*Nothing was sent/);
+    expect(failedActionLabel("external_email_not_configured")).toMatch(/not available.*Nothing was sent/);
+    expect(failedActionLabel("invalid_external_email")).toMatch(/invalid.*Nothing was sent/);
+    const unknown = failedActionLabel("external_email_unconfirmed");
+    expect(unknown).toMatch(/may have been sent/);
+    expect(unknown).toMatch(/Do not resend/);
+    expect(unknown).toMatch(/will not retry it automatically/);
+    expect(unknown).not.toMatch(/Nothing was sent|Run what's waiting/);
+  });
+
+  it("treats generic external lookup failures and missing result codes as unconfirmed sends", () => {
+    for (const code of ["external_email_unconfirmed", "executor_error", "lookup_failed", null, undefined]) {
+      const failure = externalEmailFailure(code);
+      expect(failure.unconfirmed).toBe(true);
+      expect(failure.message).toMatch(/Do not resend/);
+      expect(failure.message).not.toMatch(/Nothing was sent/);
+    }
+    for (const code of ["invalid_external_email", "external_email_not_configured", "external_email_refused"]) {
+      expect(externalEmailFailure(code)).toEqual({ unconfirmed: false, message: errorLabel(code) });
+    }
+  });
+
+  it("requires a proposal identity and an explicit creation result, and treats older services as unavailable for composition", () => {
+    const proposal = { id: "11111111-1111-4111-8111-111111111111", kind: "email.external", status: "proposed", created: true, requestKey: "22222222-2222-4222-8222-222222222222" };
+    expect(externalEmailProposalSchema.parse(proposal)).toEqual(proposal);
+    expect(externalEmailProposalSchema.parse({ ...proposal, status: "executed", created: false }).created).toBe(false);
+    expect(() => externalEmailProposalSchema.parse({ ...proposal, status: "sent" })).toThrow();
+    expect(() => externalEmailProposalSchema.parse({ ...proposal, requestKey: undefined })).toThrow();
+    const older = { enabled: true, handlers: [], sms: false, email: true, ownerEmail: true, ai: false, customerTextToAi: false };
+    expect(servicesSchema.parse(older).externalEmail).toBeUndefined();
+    expect(servicesSchema.parse({ ...older, externalEmail: true }).externalEmail).toBe(true);
+  });
+
   it("explains why an action could not be carried out, and shows an unknown code as it is", () => {
     expect(errorLabel("thread_changed")).toMatch(/customer wrote again/);
     expect(errorLabel("conversation_closed")).toBe("The conversation was closed, so nothing was sent.");
@@ -123,7 +167,7 @@ describe("AI team display", () => {
     expect(taskLabel("content.outreach")).toBe("Monthly outreach drafts");
     expect(actionLabel("content.publish")).toBe("Publish a help article");
     expect(errorLabel("slug_taken")).toMatch(/already uses this address/);
-    expect(errorLabel("approval_required")).toMatch(/only with your approval/);
+    expect(errorLabel("approval_required")).toMatch(/not handed over to the Content Marketer/);
     expect(errorLabel("invalid_article")).toMatch(/content checks/);
     expect(errorLabel("product_unavailable")).toMatch(/retired or closed/);
     for (const code of ["invalid_article", "approval_required", "slug_taken", "product_unavailable", "publish_failed"]) {

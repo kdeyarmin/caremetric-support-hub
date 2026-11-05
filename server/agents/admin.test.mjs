@@ -4,17 +4,79 @@ import { HttpError } from '../sms-auth.mjs';
 
 const actionId = '11111111-1111-4111-8111-111111111111';
 const version = '2026-11-02T12:00:00.123456+00:00';
-const fixture = ({ results = {}, execution = { executed: true, failed: false }, waiting = vi.fn(async () => ({ skipped: false, started: 2, done: Promise.resolve([]) })), ready = [] } = {}) => {
+const fixture = ({ results = {}, execution = { executed: true, failed: false }, waiting = vi.fn(async () => ({ skipped: false, started: 2, done: Promise.resolve([]) })), ready = [], externalEmail = false, externalReady = null } = {}) => {
   const queries = [];
   const db = { query: vi.fn(async (sql, args) => { queries.push([sql, args]); const name = /select (\S+)\(/.exec(sql)[1]; const value = results[name]; if (value instanceof Error) throw value; return { rows: [{ result: value ?? {} }] }; }) };
   const session = vi.fn(async (token, work) => { if (!token) throw new HttpError(401, 'Sign in with an SMS code to continue.'); return work(db); });
   const actions = { executeOne: vi.fn(async () => execution), sessionActions: vi.fn(async () => ready), executeSessionActions: vi.fn(async () => ({ executed: ready.length, failed: 0 })) };
   const kick = vi.fn();
-  return { queries, session, actions, kick, waiting, admin: agentAdmin({ session, actions, kick, waiting, services: () => ({ enabled: true, handlers: ['probe.sweep'] }) }) };
+  return { queries, session, actions, kick, waiting, admin: agentAdmin({ session, actions, kick, waiting, externalEmailReady: externalReady, services: () => ({ enabled: true, handlers: ['probe.sweep'], ...(externalEmail ? { externalEmail: true } : {}) }) }) };
 };
 const databaseError = (code, message) => Object.assign(new Error(message), { code });
 
 describe('agent administration', () => {
+  describe('owner-directed email proposals', () => {
+    const email = { to: 'data.support@example.test', subject: 'CareMetric source access', body: 'Hello,\n\nPlease investigate.\n', requestKey: actionId };
+
+    it('authorizes a command and prepares the exact message without approving, executing or queuing any task', async () => {
+      const proposal = { id: actionId, kind: 'email.external', status: 'proposed', created: true, requestKey: actionId };
+      const { admin, queries, actions, kick } = fixture({ externalEmail: true, results: { 'hub.request_agent_email': proposal } });
+      expect(await admin.email('token', email)).toEqual(proposal);
+      expect(queries).toEqual([
+        ['select hub.authorize_app_command() as result', []],
+        ['select hub.request_agent_email($1, $2, $3, $4) as result', [email.to, email.subject, email.body, actionId]],
+      ]);
+      expect(actions.executeOne).not.toHaveBeenCalled();
+      expect(kick).not.toHaveBeenCalled();
+    });
+
+    it('returns an existing request unchanged without sending it again and preserves the request key on a conflict', async () => {
+      const recorded = { id: actionId, kind: 'email.external', status: 'executed', created: false, requestKey: actionId };
+      const { admin, actions } = fixture({ externalEmail: true, results: { 'hub.request_agent_email': recorded } });
+      expect(await admin.email('token', email)).toEqual(recorded);
+      expect(actions.executeOne).not.toHaveBeenCalled();
+      const conflict = fixture({ externalEmail: true, results: { 'hub.request_agent_email': databaseError('40001', 'This request key was used for a different email.') } });
+      await expect(conflict.admin.email('token', { ...email, body: 'Changed text' })).rejects.toMatchObject({ status: 409 });
+    });
+
+    it('rejects extra routing or approval fields, invalid keys and message headers before querying', async () => {
+      const { admin, session } = fixture({ externalEmail: true });
+      for (const bad of [
+        { ...email, bcc: 'another@example.test' }, { ...email, approve: true }, { ...email, from: 'owner@example.test' },
+        { ...email, requestKey: 'not-a-uuid' }, { ...email, to: 'data.support@example.test\nCc: another@example.test' },
+        { ...email, subject: 'Subject\r\nBcc: another@example.test' }, { ...email, body: 'x'.repeat(5001) },
+        { to: email.to, subject: email.subject, requestKey: actionId },
+      ]) await expect(admin.email('token', bad)).rejects.toMatchObject({ status: 400 });
+      expect(session).not.toHaveBeenCalled();
+    });
+
+    it('requires current owner command authorization even when email is unavailable', async () => {
+      for (const [code, status] of [['28000', 401], ['42501', 403]]) {
+        const { admin, queries } = fixture({ results: { 'hub.authorize_app_command': databaseError(code, 'Current owner command required.') } });
+        await expect(admin.email('token', email)).rejects.toMatchObject({ status });
+        expect(queries).toHaveLength(1);
+      }
+      const { admin, queries } = fixture({ externalEmail: true });
+      await expect(admin.email(null, email)).rejects.toMatchObject({ status: 401 });
+      expect(queries).toEqual([]);
+    });
+
+    it('does not create a draft until both the feature and sender are ready', async () => {
+      const { admin, queries } = fixture();
+      await expect(admin.email('token', email)).rejects.toMatchObject({ status: 503 });
+      expect(queries).toEqual([['select hub.authorize_app_command() as result', []]]);
+    });
+
+    it('uses the existing approval path and reports provider acceptance only after a successful execution', async () => {
+      const approved = { id: actionId, kind: 'email.external', status: 'approved', decided: true };
+      const { admin, actions } = fixture({ results: { 'hub.decide_agent_action': approved } });
+      expect(await admin.decide('token', { actionId, decision: 'approve' })).toEqual({ id: actionId, kind: 'email.external', status: 'executed', decided: true });
+      expect(actions.executeOne).toHaveBeenCalledWith(actionId, { kind: 'email.external', sessionToken: 'token' });
+      const unknown = fixture({ results: { 'hub.decide_agent_action': approved }, execution: { executed: false, failed: true, error: 'external_email_unconfirmed' } });
+      expect(await unknown.admin.decide('token', { actionId, decision: 'approve' })).toEqual({ id: actionId, kind: 'email.external', status: 'failed', decided: true, error: 'external_email_unconfirmed' });
+    });
+  });
+
   it('returns the roster with the services the team can use', async () => {
     const steps = [{ category: 'account_emails', status: 'supervised' }];
     const menu = { offers: [{ key: 'trial_extension_14', enabled: false }], coupons: [] };
@@ -168,6 +230,85 @@ describe('agent administration', () => {
   });
 
   describe('work that waits for the owner\'s session', () => {
+    it('returns autonomy steps and counts approved or stale external emails without changing either during overview', async () => {
+      const externalReady = vi.fn(async () => [{ id: actionId, kind: 'email.external' }]);
+      const steps = [{ category: 'account_emails', status: 'supervised' }];
+      const { admin, queries, actions } = fixture({ externalReady, ready: [{ id: 'reply1', kind: 'communication.reply' }], results: { 'hub.get_agent_autonomy': steps } });
+      expect(await admin.overview('token', {})).toMatchObject({ waitingActions: 2, autonomy: steps });
+      expect(queries).toEqual([['select hub.get_agent_team() as result', []], ['select hub.get_agent_autonomy() as result', []]]);
+      expect(externalReady).toHaveBeenCalledExactlyOnceWith(false);
+      expect(actions.executeOne).not.toHaveBeenCalled();
+      expect(actions.executeSessionActions).not.toHaveBeenCalled();
+    });
+
+    it('recovers only explicitly approved external messages with the scheduler off, after command authorization', async () => {
+      const externalReady = vi.fn(async () => [{ id: actionId, kind: 'email.external' }]);
+      const waiting = vi.fn(async () => ({ skipped: true, started: 0, done: Promise.resolve([]) }));
+      const { admin, queries, session, actions, kick } = fixture({ externalReady, waiting });
+      expect(await admin.waiting('token', {})).toEqual({ started: 0, actions: 1 });
+      expect(queries).toEqual([['select hub.authorize_app_command() as result', []]]);
+      expect(externalReady).toHaveBeenCalledExactlyOnceWith(true);
+      expect(session.mock.invocationCallOrder[0]).toBeLessThan(externalReady.mock.invocationCallOrder[0]);
+      expect(actions.executeOne).toHaveBeenCalledExactlyOnceWith(actionId, { kind: 'email.external' });
+      expect(actions.executeSessionActions).not.toHaveBeenCalled();
+      expect(kick).not.toHaveBeenCalled();
+    });
+
+    it('keeps recovery asynchronous and counts it alongside the existing approved replies', async () => {
+      let finish;
+      const pending = new Promise(resolve => { finish = resolve; });
+      const externalReady = vi.fn(async () => [{ id: actionId, kind: 'email.external' }]);
+      const ready = [{ id: 'reply1', kind: 'communication.reply' }];
+      const { admin, actions } = fixture({ externalReady, ready });
+      actions.executeOne.mockReturnValue(pending);
+      expect(await admin.waiting('token', {})).toEqual({ started: 2, actions: 2 });
+      expect(actions.executeSessionActions).toHaveBeenCalledWith(ready, { sessionToken: 'token' });
+      expect(actions.executeOne).toHaveBeenCalledWith(actionId, { kind: 'email.external' });
+      finish({ executed: true, failed: false });
+    });
+
+    it('does not recover or execute any message when command authorization fails', async () => {
+      for (const [token, error, status] of [[null, null, 401], ['token', databaseError('28000', 'Current command required.'), 401], ['token', databaseError('42501', 'Not an administrator.'), 403]]) {
+        const externalReady = vi.fn(async () => [{ id: actionId, kind: 'email.external' }]);
+        const { admin, actions, waiting } = fixture({ externalReady, results: error ? { 'hub.authorize_app_command': error } : {} });
+        await expect(admin.waiting(token, {})).rejects.toMatchObject({ status });
+        expect(externalReady).not.toHaveBeenCalled();
+        expect(actions.executeOne).not.toHaveBeenCalled();
+        expect(actions.executeSessionActions).not.toHaveBeenCalled();
+        expect(waiting).not.toHaveBeenCalled();
+      }
+    });
+
+    it('fails conservatively on a recovery lookup failure before launching any replies or tasks', async () => {
+      const externalReady = vi.fn(async () => { throw new Error('database unavailable'); });
+      const { admin, actions, waiting } = fixture({ externalReady, ready: [{ id: 'reply1', kind: 'communication.reply' }] });
+      await expect(admin.waiting('token', {})).rejects.toMatchObject({ status: 503, message: expect.stringContaining('Do not resend') });
+      expect(actions.executeOne).not.toHaveBeenCalled();
+      expect(actions.executeSessionActions).not.toHaveBeenCalled();
+      expect(waiting).not.toHaveBeenCalled();
+      await expect(admin.overview('token', {})).rejects.toMatchObject({ status: 503 });
+    });
+
+    it('never broadens the manual drain to another action kind or malformed candidate', async () => {
+      for (const list of [null, {}, [{ id: actionId, kind: 'incident.open' }], [{ id: 'invalid', kind: 'email.external' }]]) {
+        const { admin, actions, waiting } = fixture({ externalReady: vi.fn(async () => list) });
+        await expect(admin.waiting('token', {})).rejects.toMatchObject({ status: 503 });
+        expect(actions.executeOne).not.toHaveBeenCalled();
+        expect(actions.executeSessionActions).not.toHaveBeenCalled();
+        expect(waiting).not.toHaveBeenCalled();
+      }
+    });
+
+    it('leaves a lost action-start response to durable recovery and continues other approved emails', async () => {
+      const next = '22222222-2222-4222-8222-222222222222';
+      const externalReady = vi.fn(async () => [{ id: actionId, kind: 'email.external' }, { id: next, kind: 'email.external' }]);
+      const { admin, actions } = fixture({ externalReady });
+      actions.executeOne.mockRejectedValueOnce(new Error('response lost before execution outcome known'));
+      expect(await admin.waiting('token', {})).toEqual({ started: 2, actions: 2 });
+      await new Promise(resolve => setImmediate(resolve));
+      expect(actions.executeOne.mock.calls).toEqual([[actionId, { kind: 'email.external' }], [next, { kind: 'email.external' }]]);
+    });
+
     it('runs a task that reads another application the moment the owner asks for it', async () => {
       const { admin, kick, waiting } = fixture({ results: { 'hub.request_agent_task': { id: actionId, status: 'awaiting_session' } } });
       expect(await admin.run('token', { agentKey: 'support_concierge', taskKind: 'import.advisors' })).toEqual({ id: actionId, status: 'running' });

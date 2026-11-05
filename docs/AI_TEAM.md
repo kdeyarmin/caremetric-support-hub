@@ -46,6 +46,12 @@ An approved action is carried out by the server through the existing reviewed pa
 the same staff reply operation the inbox uses, under the action's request key), so a retry can
 never send twice. A proposal nobody decides within seven days expires.
 
+The owner can also prepare a one-off operational email from the Team screen. It records the exact
+recipient, subject and message for review, then uses the existing **Approve and send** control. The
+`email.external` action always requires an explicit owner decision, regardless of the Chief of
+Staff's autonomy or automatic approval settings. Its private send ledger permits one attempt and
+retains an uncertain provider outcome without resending. See [Owner-directed email](OWNER_DIRECTED_EMAIL.md).
+
 Nothing here lets an agent move money, change a plan or price, delete data, merge code, deploy,
 or read resident or patient records. Inbound message text is `possible_phi` and never enters audit
 metadata, run summaries or task payloads.
@@ -879,6 +885,17 @@ can still be rejected (or are left to expire after seven days). Removing `ANTHRO
 published article down, retire it: `update hub.content_items set status = 'retired', retired_at = now() where content_key =
 '<address>';`. It leaves the help center, the sitemap and its address (which then answers 404) within five minutes.
 
+### Publishing on its own
+
+With `platform.agents.content-autopublish.v1` (`supabase/migrations/20261105130000_content_autopublish.sql`), an article approved
+automatically is published too, but only while the owner has handed article publishing over: `private.agent_content_publish`
+checks, at publication, that the Content Marketer is active, on Act and trusted with `content.publish` (the articles autonomy
+step adds it), and otherwise answers `approval_required` as before. The executor still re-checks every article against the
+content rules first. An article published this way records the AI assistant as its approver and says `approval: automatic` in
+its revision variables and its audit row; the owner's own approvals are unchanged. The fact sheet the checks read
+(`server/agents/content/facts.mjs`, `docs/GTM_FACTS.md`) is what keeps automatic articles accurate: confirm it before the
+articles step switches.
+
 ## Boundary
 
 - Every table has row level security and **no** privilege for any browser, service or server role.
@@ -1150,7 +1167,11 @@ Apply the migrations in order with the usual procedure:
    `communication.answer` action kind with its shape check and the server-only operation that records an answer, and declare
    `platform.agents.concierge-autosend.v1` (it needs the Concierge, the hardening, the communications inbox and autonomy steps).
    Restart the Hub after it. Answers are drafted only with `HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true` and a model key.
-13. `20261105140000_agent_offers.sql`, then its gate `20261105140100_agent_offers_contract.sql`, which add the offer menu (one
+13. `20261105130000_content_autopublish.sql`, then its gate `20261105130100_content_autopublish_contract.sql`, which replace the
+   publishing operation so an automatically approved article is published while the Content Marketer is trusted with publishing,
+   and declare `platform.agents.content-autopublish.v1` (it needs the Content Marketer, the hardening and autonomy steps). Restart
+   the Hub after it.
+14. `20261105140000_agent_offers.sql`, then its gate `20261105140100_agent_offers_contract.sql`, which add the offer menu (one
    14-day trial extension, switched off), the record of offers made, the `offer.apply` action kind with its shape check, the
    server-only operations, the owner's menu operations and the Account Manager's daily `accounts.offers` schedule, and declare
    `platform.agents.offers.v1` (it needs the control plane, the hardening, the customer emails, autonomy steps and platform

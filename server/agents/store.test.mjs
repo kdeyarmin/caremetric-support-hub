@@ -9,6 +9,24 @@ const harness = (result = null) => {
 const when = new Date('2026-11-02T13:00:00Z');
 
 describe('agent store', () => {
+  it('carries the external email claim and settlement execution fences to their private operations', async () => {
+    const { store, calls } = harness();
+    await store.externalEmailBeginSend({ actionId: 'a1', execution: 3, claim: false });
+    await store.externalEmailBeginSend({ actionId: 'a1', execution: 3 });
+    await store.externalEmailFinishSend({ actionId: 'a1', execution: 3, delivery: 'sent', providerMessageId: 'accepted-id' });
+    await store.externalEmailFinishSend({ actionId: 'a1', execution: 3, delivery: 'unknown' });
+    await store.externalEmailReady();
+    await store.externalEmailReady({ limit: 5, recover: true });
+    expect(calls).toEqual([
+      ['select private.agent_external_email_begin_send($1, $2, $3) as result', ['a1', 3, false]],
+      ['select private.agent_external_email_begin_send($1, $2, $3) as result', ['a1', 3, true]],
+      ['select private.agent_external_email_finish_send($1, $2, $3, $4) as result', ['a1', 3, 'sent', 'accepted-id']],
+      ['select private.agent_external_email_finish_send($1, $2, $3, $4) as result', ['a1', 3, 'unknown', null]],
+      ['select private.agent_external_email_ready($1, $2) as result', [10, false]],
+      ['select private.agent_external_email_ready($1, $2) as result', [5, true]],
+    ]);
+  });
+
   it('calls exactly one database operation per method, with its arguments in order', async () => {
     const { store, calls } = harness();
     await store.fireSchedules(['probe.sweep', 'brief.daily']);
