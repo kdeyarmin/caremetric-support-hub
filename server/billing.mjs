@@ -784,41 +784,79 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
   const offerSubscription = /^sub_[A-Za-z0-9]{1,250}$/;
   const offerCoupon = /^[A-Za-z0-9_-]{1,255}$/;
   const offerKey = /^hub-agent-offer-[0-9a-f-]{36}$/;
-  async function agentOffer({ subscription, trialEnd = null, coupon = null, idempotencyKey } = {}) {
+  // A coupon offer's request: the subscription's discounts by id, plus the offer's coupon once.
+  const offerDiscounts = (value, coupon) => Array.isArray(value) && value.length >= 1 && value.length <= 20
+    && value.every(entry => entry && typeof entry === 'object' && Object.keys(entry).length === 1
+      && ((typeof entry.discount === 'string' && /^di_[A-Za-z0-9_]{1,250}$/.test(entry.discount)) || entry.coupon === coupon))
+    && value.filter(entry => 'coupon' in entry).length === 1;
+  /**
+   * An offer from the AI team's menu, made without an owner session: a later trial end, or one of the owner's coupons added to the
+   * subscription's discounts. A coupon offer's request is `discounts` when an earlier attempt recorded it (sent verbatim, so a retry under
+   * the same idempotency key asks exactly the same), else built from the subscription's live discounts and handed to `recordDiscounts`
+   * before it is sent; what that returns is what is sent.
+   */
+  async function agentOffer({ subscription, trialEnd = null, coupon = null, idempotencyKey, discounts = null, recordDiscounts = null } = {}) {
     const extend = trialEnd !== null;
     if (typeof subscription !== 'string' || !offerSubscription.test(subscription) || typeof idempotencyKey !== 'string' || !offerKey.test(idempotencyKey)
       || extend === (coupon !== null)
       || (extend && (!Number.isSafeInteger(trialEnd) || trialEnd <= Math.floor(now() / 1000)))
-      || (!extend && (typeof coupon !== 'string' || !offerCoupon.test(coupon)))) {
+      || (!extend && (typeof coupon !== 'string' || !offerCoupon.test(coupon)))
+      || (discounts !== null && (extend || !offerDiscounts(discounts, coupon)))
+      || (recordDiscounts !== null && typeof recordDiscounts !== 'function')) {
       throw new HttpError(400, 'Invalid offer.');
     }
     const live = await stripe();
-    const current = await transaction(pool, db => lookup(db, 'subscription', subscription));
-    if (!current) throw new HttpError(404, 'That subscription was not found.');
-    let already = false;
-    if (extend) {
-      await live.post(`/v1/subscriptions/${subscription}`, { trial_end: trialEnd, proration_behavior: 'none' }, { idempotencyKey });
-    } else if ((current.discounts ?? []).some(discount => discount.coupon === coupon)) {
-      // An earlier attempt of this offer applied it (and the mirror already shows it): nothing is asked again.
-      already = true;
-    } else {
-      await live.post(`/v1/subscriptions/${subscription}`, {
-        discounts: [...(current.discounts ?? []).map(discount => ({ discount: discount.id })), { coupon }],
-      }, { idempotencyKey });
+    // One transaction holding the subscription's row lock (private.billing_lock, the lock every owner subscription command takes) from
+    // reading the subscription until Stripe has answered and the mirror is refreshed, so an owner's discount change and this offer never
+    // read and overwrite each other's discounts. A row that changed between the read and the lock is read again; nothing was asked of
+    // Stripe by then. Anything that stops the offer before Stripe is asked is an HttpError, so the caller knows nothing changed.
+    for (let attempt = 1; ; attempt += 1) {
+      let asked = false;
+      try {
+        return await transaction(pool, async db => {
+          let current = await lookup(db, 'subscription', subscription);
+          if (!current) throw new HttpError(404, 'That subscription was not found.');
+          await lock(db, 'subscription', subscription, Number(current.version ?? 0));
+          let already = false;
+          if (extend) {
+            asked = true;
+            await live.post(`/v1/subscriptions/${subscription}`, { trial_end: trialEnd, proration_behavior: 'none' }, { idempotencyKey });
+          } else {
+            // The discounts Stripe holds now, not a mirror that may be behind (a refresh that failed, a webhook not yet arrived).
+            await refresh(db, live, 'subscription', subscription);
+            current = await lookup(db, 'subscription', subscription);
+            if ((current?.discounts ?? []).some(discount => discount.coupon === coupon)) {
+              // An earlier attempt of this offer applied it: nothing is asked again.
+              already = true;
+            } else {
+              let request = discounts ?? [...(current?.discounts ?? []).map(discount => ({ discount: discount.id })), { coupon }];
+              if (discounts === null && recordDiscounts) request = await recordDiscounts(request);
+              if (!offerDiscounts(request, coupon)) throw new HttpError(400, 'Invalid offer.');
+              asked = true;
+              await live.post(`/v1/subscriptions/${subscription}`, { discounts: request }, { idempotencyKey });
+            }
+          }
+          let mirrored = true;
+          await db.query('savepoint agent_offer_mirror');
+          try {
+            await refresh(db, live, 'subscription', subscription);
+            if (!extend) await refresh(db, live, 'coupon', coupon);
+            await audit(db, aiAssistant, 'billing.agent_offer', current.tenant_id ?? null, null,
+              { subscription, kind: extend ? 'trial_extension' : 'coupon', trial_end: extend ? trialEnd : null, coupon: extend ? null : coupon, replay: already });
+            await db.query('release savepoint agent_offer_mirror');
+          } catch {
+            // Applied in Stripe; its webhook brings the mirror up to date.
+            await db.query('rollback to savepoint agent_offer_mirror');
+            mirrored = false;
+          }
+          return { applied: true, already, mirrored };
+        });
+      } catch (error) {
+        if (asked || error instanceof HttpError) throw error;
+        if (error?.code === '40001' && attempt < 3) continue;
+        throw new HttpError(503, 'The subscription could not be read for the offer. Nothing was changed.');
+      }
     }
-    let mirrored = true;
-    try {
-      await transaction(pool, async db => {
-        await refresh(db, live, 'subscription', subscription);
-        if (!extend) await refresh(db, live, 'coupon', coupon);
-        await audit(db, aiAssistant, 'billing.agent_offer', current.tenant_id ?? null, null,
-          { subscription, kind: extend ? 'trial_extension' : 'coupon', trial_end: extend ? trialEnd : null, coupon: extend ? null : coupon, replay: already });
-      });
-    } catch {
-      // Applied in Stripe; its webhook brings the mirror up to date.
-      mirrored = false;
-    }
-    return { applied: true, already, mirrored };
   }
 
   // After a verified start: bring the mirror up to date with Stripe, so a catalog

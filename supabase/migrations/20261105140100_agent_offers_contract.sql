@@ -1,9 +1,10 @@
 -- Additive deployment gate for offers from the owner's menu. Declaring the feature changes no behavior by itself (an offer is made
 -- without the owner's approval only when the "offers" autonomy step adds offer.apply to the Account Manager's list): it states that the
 -- menu and the record of offers made exist with row level security and are closed to every browser, service and server role; that
--- offer.apply is a checked action kind; that the three server operations are security definers with a pinned empty search path
+-- offer.apply is a checked action kind; that the four server operations are security definers with a pinned empty search path
 -- executable by the Hub server role alone, and that the one that makes an offer re-checks the Account Manager's trust (active, on Act,
--- holding its row) for an offer nobody approved, holds the menu row while it counts the cap and keeps the once-per-account rule; that the
+-- holding its row) for an offer nobody approved, holds the menu row while it counts the cap, keeps the once-per-account rule and re-checks
+-- the offer's window; that an offer whose action ends unsettled is settled by a trigger on the action, so a refusal gives its place back; that the
 -- owner operations authorize the owner's session themselves and are executable by signed-in sessions only; that the helpers are executable
 -- by no role; and that the Account Manager's daily schedule exists. Every test fails closed.
 do $$
@@ -39,7 +40,8 @@ begin
     raise exception 'Offers must be a checked action kind aimed at a billing account' using errcode = '55000';
   end if;
 
-  foreach signature in array array['private.agent_offer_candidates(integer)', 'private.agent_offer_begin(uuid,integer)', 'private.agent_offer_settle(uuid,text)'] loop
+  foreach signature in array array['private.agent_offer_candidates(integer)', 'private.agent_offer_begin(uuid,integer)', 'private.agent_offer_settle(uuid,text)',
+    'private.agent_offer_request(uuid,integer,jsonb)'] loop
     if to_regprocedure(signature) is null
       or not coalesce((select p.prosecdef and coalesce(p.proconfig @> array['search_path=""'], false) from pg_proc p where p.oid = to_regprocedure(signature)), false)
       or has_function_privilege('anon', signature, 'EXECUTE') or has_function_privilege('authenticated', signature, 'EXECUTE')
@@ -55,7 +57,8 @@ begin
     or position('v_agent.autonomy is distinct from ''act''' in definition) = 0
     or position('where key = v_action.agent_key for share' in definition) = 0
     or position('where key = v_action.input ->> ''offer'' for update' in definition) = 0
-    or position('monthly_cap' in definition) = 0 or position('already_offered' in definition) = 0 then
+    or position('monthly_cap' in definition) = 0 or position('already_offered' in definition) = 0
+    or position('make_interval(days => v_offer.window_days)' in definition) = 0 then
     raise exception 'Making an offer must re-check the Account Manager''s trust and hold the menu row while it counts the cap' using errcode = '55000';
   end if;
 
@@ -78,7 +81,8 @@ begin
 
   foreach signature in array array[
     'private.agent_offer_month_start()', 'private.agent_offer_use_json(private.agent_offer_uses,text)',
-    'private.agent_offer_menu_json(private.agent_offer_menu)', 'private.agent_offer_coupon_usable(text)'
+    'private.agent_offer_menu_json(private.agent_offer_menu)', 'private.agent_offer_coupon_usable(text)',
+    'private.agent_offer_record(uuid,text)', 'private.agent_offer_settle_on_completion()'
   ] loop
     if to_regprocedure(signature) is null
       or not coalesce((select coalesce(p.proconfig @> array['search_path=""'], false) from pg_proc p where p.oid = to_regprocedure(signature)), false) then
@@ -90,6 +94,13 @@ begin
       end if;
     end loop;
   end loop;
+
+  if not exists (select 1 from pg_trigger where tgrelid = 'private.agent_actions'::regclass and tgname = 'agent_offer_settle_on_completion'
+                   and tgenabled <> 'D' and tgfoid = to_regprocedure('private.agent_offer_settle_on_completion()'))
+    or position('''offer_refused''' in pg_get_functiondef(to_regprocedure('private.agent_offer_settle_on_completion()'))) = 0
+    or position('private.agent_offer_record(' in pg_get_functiondef(to_regprocedure('private.agent_offer_settle(uuid,text)'))) = 0 then
+    raise exception 'An offer whose action ends unsettled must be settled from how its action ended' using errcode = '55000';
+  end if;
 
   if not exists (select 1 from private.agent_schedules where agent_key = 'account_manager' and task_kind = 'accounts.offers' and cadence = 'daily' and not requires_session) then
     raise exception 'The Account Manager''s daily offer schedule must exist' using errcode = '55000';

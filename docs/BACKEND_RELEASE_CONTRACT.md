@@ -162,10 +162,12 @@ approved article to the database only when the feature is declared.
 `platform.agents.hardening.v1`, `platform.agents.lifecycle.v1`, `platform.agents.autonomy.v1` and `billing.platform.v1` are
 declared, the offer menu and the record of offers exist with row level security and are closed to every browser, service and
 server role, the once-per-account index exists, `offer.apply` is an allowed action kind with a shape check aimed at a billing
-account, the three server operations are security definers with a pinned empty search path executable by `hub_app_server` alone
-(the one that makes an offer re-checks the Account Manager's trust, holding its row, and holds the menu row while it counts the
-cap), the three owner operations authorize the owner's session (changes need a current administrator session) and are executable
-by signed-in sessions only, the four helpers are executable by no role, and the Account Manager's daily schedule exists. Each
+account, the four server operations are security definers with a pinned empty search path executable by `hub_app_server` alone
+(the one that makes an offer re-checks the Account Manager's trust, holding its row, holds the menu row while it counts the cap and
+re-checks the offer's window; the one that records a coupon offer's request keeps the first request recorded), an offer whose action
+ends unsettled is settled by the `agent_offer_settle_on_completion` trigger from how the action ended, the three owner operations
+authorize the owner's session (changes need a current administrator session) and are executable by signed-in sessions only, the six
+helpers are executable by no role, and the Account Manager's daily schedule exists. Each
 test fails closed. The Hub server registers the daily run and the offer executor only when the feature is declared, and the Team
 screen leaves the offer menu out when the database does not have it.
 

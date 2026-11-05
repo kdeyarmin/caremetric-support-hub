@@ -53,6 +53,10 @@ create table private.agent_offer_uses (
   trial_end_before timestamptz,
   trial_end_after timestamptz,
   coupon_id text check (coupon_id ~ '^[A-Za-z0-9_-]{1,255}$'),
+  -- A coupon offer's complete request to Stripe (the subscription's discounts plus the coupon), recorded before it is sent, so a retry
+  -- under the same idempotency key sends exactly the same request whatever the subscription's discounts have become since.
+  stripe_discounts jsonb check (stripe_discounts is null or (kind = 'coupon' and jsonb_typeof(stripe_discounts) = 'array'
+    and jsonb_array_length(stripe_discounts) between 1 and 20)),
   status text not null default 'applying' check (status in ('applying', 'applied', 'refused', 'unconfirmed')),
   created_at timestamptz not null default now(),
   settled_at timestamptz,
@@ -177,7 +181,8 @@ create function private.agent_offer_use_json(p_use private.agent_offer_uses, p_s
 language sql stable set search_path = '' as $$
   select jsonb_build_object('state', p_state, 'status', p_use.status, 'offer', p_use.offer_key, 'kind', p_use.kind,
     'subscription', p_use.stripe_subscription_id, 'coupon', p_use.coupon_id,
-    'trialEndBefore', floor(extract(epoch from p_use.trial_end_before))::bigint, 'trialEndAfter', floor(extract(epoch from p_use.trial_end_after))::bigint);
+    'trialEndBefore', floor(extract(epoch from p_use.trial_end_before))::bigint, 'trialEndAfter', floor(extract(epoch from p_use.trial_end_after))::bigint,
+    'discounts', p_use.stripe_discounts);
 $$;
 
 create function private.agent_offer_begin(p_action_id uuid, p_execution integer) returns jsonb
@@ -231,12 +236,14 @@ begin
       where u.offer_key = v_offer.key and u.status <> 'refused' and u.created_at >= private.agent_offer_month_start()) >= v_offer.monthly_cap then
     return jsonb_build_object('state', 'refused', 'code', 'cap_reached');
   end if;
-  -- The account still qualifies: a live trial of this product on this account, not over yet.
+  -- The account still qualifies, on the same terms the daily run chose it by: a live trial of this product on this account, not over yet
+  -- and ending within the offer's window (a trial extended since the proposal no longer qualifies).
   select livemode into v_live from private.billing_settings;
   select s.* into v_sub from private.billing_subscriptions s join hub.products p on p.id = s.product_id
   where s.stripe_subscription_id = v_action.input ->> 'subscription' and s.tenant_id = v_tenant.id
     and p.slug = v_action.input ->> 'product' and p.status <> 'retired' and s.livemode and coalesce(v_live, true);
-  if not found or v_sub.status <> 'trialing' or v_sub.trial_end is null or v_sub.trial_end <= now() then
+  if not found or v_sub.status <> 'trialing' or v_sub.trial_end is null or v_sub.trial_end <= now()
+    or v_sub.trial_end > now() + make_interval(days => v_offer.window_days) then
     return jsonb_build_object('state', 'refused', 'code', 'not_eligible');
   end if;
   if v_offer.kind = 'trial_extension' then
@@ -255,15 +262,48 @@ begin
 end;
 $$;
 
+-- A coupon offer's request, recorded before it is sent (server only). The first request recorded for the offer is kept and returned, and
+-- the server sends what is returned, so every attempt of one action sends the same request under its idempotency key. The request names
+-- the subscription's discounts by id and adds this offer's coupon once; nothing else is accepted.
+create function private.agent_offer_request(p_action_id uuid, p_execution integer, p_discounts jsonb) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_action private.agent_actions%rowtype;
+  v_use private.agent_offer_uses%rowtype;
+begin
+  perform private.require_hub_app_server();
+  select * into v_action from private.agent_actions where id = p_action_id for update;
+  if not found or v_action.kind <> 'offer.apply' or v_action.status <> 'executing'
+    or (p_execution is not null and v_action.executions <> p_execution) then
+    raise exception 'That offer is not being made.' using errcode = '55000';
+  end if;
+  select * into v_use from private.agent_offer_uses where action_id = p_action_id and kind = 'coupon' and status = 'applying' for update;
+  if not found then
+    raise exception 'That offer has no coupon request to record.' using errcode = '55000';
+  end if;
+  if v_use.stripe_discounts is not null then
+    return v_use.stripe_discounts;
+  end if;
+  if jsonb_typeof(p_discounts) is distinct from 'array' or jsonb_array_length(p_discounts) not between 1 and 20
+    or exists (select 1 from jsonb_array_elements(p_discounts) e
+               where jsonb_typeof(e) <> 'object' or (select count(*) from jsonb_object_keys(e)) <> 1
+                 or not (coalesce(e ->> 'discount', '') ~ '^di_[A-Za-z0-9_]{1,250}$' or e ->> 'coupon' = v_use.coupon_id))
+    or (select count(*) from jsonb_array_elements(p_discounts) e where e ? 'coupon') <> 1 then
+    raise exception 'Invalid coupon request.' using errcode = '22023';
+  end if;
+  update private.agent_offer_uses set stripe_discounts = p_discounts where id = v_use.id;
+  return p_discounts;
+end;
+$$;
+
 -- What Stripe answered for one recorded offer. 'refused' gives its place under the cap and the once-per-account rule back. Audited once,
--- with whether the owner approved it or it went automatically.
-create function private.agent_offer_settle(p_action_id uuid, p_status text) returns boolean
+-- with whether the owner approved it or it went automatically. Internal: the server's settle operation and the completion trigger use it.
+create function private.agent_offer_record(p_action_id uuid, p_status text) returns boolean
 language plpgsql security definer set search_path = '' as $$
 declare
   v_use private.agent_offer_uses%rowtype;
   v_decided uuid;
 begin
-  perform private.require_hub_app_server();
   if p_status is null or p_status not in ('applied', 'refused', 'unconfirmed') then
     raise exception 'Invalid offer outcome.' using errcode = '22023';
   end if;
@@ -281,6 +321,33 @@ begin
   return true;
 end;
 $$;
+
+-- Server: record what Stripe answered.
+create function private.agent_offer_settle(p_action_id uuid, p_status text) returns boolean
+language plpgsql security definer set search_path = '' as $$
+begin
+  perform private.require_hub_app_server();
+  return private.agent_offer_record(p_action_id, p_status);
+end;
+$$;
+
+-- An offer whose action ends while its use is still 'applying' (the server's settle call failed, or it stopped before making it) is
+-- settled in the same transaction that ends the action, from how the action ended: carried out means Stripe applied it; a refusal the
+-- server recorded (Stripe said no, or billing was unavailable before Stripe was asked) gives the place under the cap and the account's
+-- one offer back; anything else may have been applied and keeps both. So a definite refusal never stays counted against the cap.
+create function private.agent_offer_settle_on_completion() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  perform private.agent_offer_record(new.id, case
+    when new.status = 'executed' then 'applied'
+    when coalesce(new.result ->> 'error', '') in ('offer_refused', 'billing_unavailable') then 'refused'
+    else 'unconfirmed' end);
+  return null;
+end;
+$$;
+create trigger agent_offer_settle_on_completion after update of status on private.agent_actions
+  for each row when (new.kind = 'offer.apply' and new.status in ('executed', 'failed') and old.status is distinct from new.status)
+  execute function private.agent_offer_settle_on_completion();
 
 -- ---------------------------------------------------------------------------------------
 -- 5. The owner's menu on the AI team page: read it, switch an offer on or off or change its cap, and add an offer.
@@ -385,9 +452,13 @@ revoke all on function
   private.agent_offer_coupon_usable(text),
   private.agent_offer_candidates(integer),
   private.agent_offer_begin(uuid, integer),
-  private.agent_offer_settle(uuid, text)
+  private.agent_offer_settle(uuid, text),
+  private.agent_offer_record(uuid, text),
+  private.agent_offer_settle_on_completion(),
+  private.agent_offer_request(uuid, integer, jsonb)
 from public, anon, authenticated, service_role, hub_app_server;
-grant execute on function private.agent_offer_candidates(integer), private.agent_offer_begin(uuid, integer), private.agent_offer_settle(uuid, text) to hub_app_server;
+grant execute on function private.agent_offer_candidates(integer), private.agent_offer_begin(uuid, integer), private.agent_offer_settle(uuid, text),
+  private.agent_offer_request(uuid, integer, jsonb) to hub_app_server;
 
 revoke all on function hub.get_agent_offers(), hub.set_agent_offer(text, boolean, integer, timestamptz),
   hub.add_agent_offer(text, text, integer, text, text[], integer, integer) from public, anon, service_role;

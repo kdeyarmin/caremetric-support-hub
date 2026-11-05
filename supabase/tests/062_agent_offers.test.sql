@@ -10,7 +10,8 @@ select ok(not bool_or(has_table_privilege(role_name, t, 'SELECT,INSERT,UPDATE,DE
 from unnest(array['anon', 'authenticated', 'service_role', 'hub_app_server']) role_name cross join unnest(array['private.agent_offer_menu', 'private.agent_offer_uses']) t;
 select ok(bool_and(has_function_privilege('hub_app_server', signature, 'execute'))
   and not bool_or(has_function_privilege(role_name, signature, 'execute')), 'Only the Hub server reads candidates, makes and settles offers')
-from unnest(array['private.agent_offer_candidates(integer)', 'private.agent_offer_begin(uuid,integer)', 'private.agent_offer_settle(uuid,text)']) signature
+from unnest(array['private.agent_offer_candidates(integer)', 'private.agent_offer_begin(uuid,integer)', 'private.agent_offer_settle(uuid,text)',
+  'private.agent_offer_request(uuid,integer,jsonb)']) signature
 cross join unnest(array['public', 'anon', 'authenticated', 'service_role']) role_name;
 select ok(not bool_or(has_function_privilege(role_name, signature, 'execute')), 'The offer helpers are executable by no role')
 from unnest(array['private.agent_offer_month_start()', 'private.agent_offer_use_json(private.agent_offer_uses,text)',

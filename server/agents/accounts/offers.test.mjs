@@ -34,7 +34,23 @@ describe('making an approved offer', () => {
   it('applies a coupon offer by its coupon, and repeats the same request for a use an earlier attempt never settled', async () => {
     const coupon = fixture({ begun: ready({ state: 'replay', kind: 'coupon', coupon: 'SPRING20', trialEndBefore: null, trialEndAfter: null }) });
     expect(await coupon.make(execution())).toMatchObject({ outcome: 'applied', kind: 'coupon' });
-    expect(coupon.billing.agentOffer).toHaveBeenCalledWith({ subscription: 'sub_123', coupon: 'SPRING20', idempotencyKey: 'hub-agent-offer-44444444-4444-4444-8444-444444444444' });
+    expect(coupon.billing.agentOffer).toHaveBeenCalledWith({ subscription: 'sub_123', coupon: 'SPRING20', idempotencyKey: 'hub-agent-offer-44444444-4444-4444-8444-444444444444',
+      discounts: null, recordDiscounts: null });
+  });
+
+  it('sends a coupon request an earlier attempt recorded verbatim, and records a first attempt\'s request before it is sent', async () => {
+    const recorded = [{ discount: 'di_1' }, { coupon: 'SPRING20' }];
+    const replay = fixture({ begun: ready({ state: 'replay', kind: 'coupon', coupon: 'SPRING20', trialEndBefore: null, trialEndAfter: null, discounts: recorded }) });
+    await replay.make(execution());
+    expect(replay.billing.agentOffer.mock.calls[0][0].discounts).toEqual(recorded);
+
+    const first = fixture({ begun: ready({ kind: 'coupon', coupon: 'SPRING20', trialEndBefore: null, trialEndAfter: null, discounts: null }) });
+    first.store.offerRequest = vi.fn(async (_id, _execution, request) => request);
+    await first.make(execution());
+    const { discounts, recordDiscounts } = first.billing.agentOffer.mock.calls[0][0];
+    expect(discounts).toBeNull();
+    expect(await recordDiscounts([{ coupon: 'SPRING20' }])).toEqual([{ coupon: 'SPRING20' }]);
+    expect(first.store.offerRequest).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111', 1, [{ coupon: 'SPRING20' }]);
   });
 
   it('settles a use an earlier attempt recorded without asking Stripe again', async () => {
@@ -45,6 +61,12 @@ describe('making an approved offer', () => {
       await expect(earlier.make(execution())).rejects.toSatisfy(refusal(code));
       expect(earlier.billing.agentOffer).not.toHaveBeenCalled();
       expect(earlier.store.offerSettle).not.toHaveBeenCalled();
+      // An unconfirmed outcome recorded by an attempt that stopped before telling the owner is told now, under the same key.
+      if (status === 'unconfirmed') {
+        expect(earlier.notifier.send).toHaveBeenCalledWith(expect.objectContaining({ severity: 'warning', dedupeKey: 'offers:unconfirmed:11111111-1111-4111-8111-111111111111' }));
+      } else {
+        expect(earlier.notifier.send).not.toHaveBeenCalled();
+      }
     }
   });
 
@@ -68,7 +90,9 @@ describe('making an approved offer', () => {
     await expect(off.make(execution())).rejects.toSatisfy(refusal('billing_unavailable'));
     expect(off.store.offerSettle).toHaveBeenCalledWith(expect.any(String), 'refused');
 
-    for (const error of [new StripeError(500, 'api_error', null, 'boom'), new StripeError(429, 'rate_limit', null, 'slow'), new TypeError('fetch failed')]) {
+    // An idempotency error says a request under this key was already made with other parameters: it may have been applied.
+    for (const error of [new StripeError(500, 'api_error', null, 'boom'), new StripeError(429, 'rate_limit', null, 'slow'), new TypeError('fetch failed'),
+      new StripeError(400, 'idempotency_error', null, 'Keys for idempotent requests can only be used with the same parameters')]) {
       const unknown = fixture({ apply: async () => { throw error; } });
       await expect(unknown.make(execution())).rejects.toSatisfy(refusal('offer_unconfirmed'));
       expect(unknown.store.offerSettle).toHaveBeenCalledWith(expect.any(String), 'unconfirmed');

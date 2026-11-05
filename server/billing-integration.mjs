@@ -277,6 +277,50 @@ try {
   }
   await command({ action: 'subscription.discount', subscription: subscriptionId, op: 'remove', coupon: offerCoupon, promotion_code: null, expected_version: sub.version, request_key: key() });
   sub = (await customer(tenant)).subscriptions[0];
+  // An owner's discount change and an offer at the same moment: the offer waits for the owner's change (it takes the same subscription
+  // lock before reading the discounts), then keeps it. A second Hub instance whose Stripe updates of this subscription are held at a gate.
+  const ownerCoupon = (await command({ action: 'coupon.create', name: 'Owner 5', percent_off: 5, amount_off: null, duration: 'once', duration_in_months: null, max_redemptions: null, redeem_by: null, app: null, products: [], request_key: key() })).id;
+  let opened, held = 0;
+  const gate = new Promise(resolve => { opened = resolve; });
+  const gated = platformBilling({ pool, secretKey: 'sk_test_hub', apiBase: stripeBase, publicOrigin: 'https://hub.test', log: { warn() {} },
+    fetchImpl: async (url, init) => {
+      if (init?.method === 'POST' && new URL(url).pathname === `/v1/subscriptions/${subscriptionId}`) { held += 1; await gate; }
+      return fetch(url, init);
+    } });
+  const ownerChange = gated.command(ownerToken, { action: 'subscription.discount', subscription: subscriptionId, op: 'apply', coupon: ownerCoupon, promotion_code: null, expected_version: sub.version, request_key: key() });
+  let concurrentOffer = null;
+  const recorded = [];
+  try {
+    for (let wait = 0; held < 1 && wait < 100; wait += 1) await new Promise(resolve => setTimeout(resolve, 20));
+    assert.equal(held, 1, 'the owner\'s change is with Stripe, holding the subscription');
+    concurrentOffer = gated.agentOffer({ subscription: subscriptionId, coupon: offerCoupon, idempotencyKey: `hub-agent-offer-${randomUUID()}`,
+      recordDiscounts: async request => { recorded.push(request); return request; } });
+    await new Promise(resolve => setTimeout(resolve, 400));
+    assert.equal(held, 1, 'the offer has not asked Stripe while the owner\'s change holds the subscription');
+  } finally { opened(); }
+  await ownerChange;
+  assert.equal((await concurrentOffer).applied, true);
+  assert.equal(recorded.length, 1, 'the offer\'s request was recorded once, before it was sent');
+  assert.deepEqual(stripe.requests.filter(entry => entry.method === 'POST' && entry.path === `/v1/subscriptions/${subscriptionId}`).at(-1).params.discounts.at(-1), { coupon: offerCoupon },
+    'what was recorded is what was sent');
+  assert.deepEqual(stripe.store.subscriptions.get(subscriptionId).discounts.map(entry => (typeof entry === 'string' ? entry : entry.source?.coupon?.id ?? entry.coupon?.id)).filter(Boolean).sort(),
+    [coupon, ownerCoupon, offerCoupon].sort(), 'both the owner\'s discount and the offer\'s are on the subscription');
+  sub = (await customer(tenant)).subscriptions[0];
+  await command({ action: 'subscription.discount', subscription: subscriptionId, op: 'remove', coupon: offerCoupon, promotion_code: null, expected_version: sub.version, request_key: key() });
+  sub = (await customer(tenant)).subscriptions[0];
+  await command({ action: 'subscription.discount', subscription: subscriptionId, op: 'remove', coupon: ownerCoupon, promotion_code: null, expected_version: sub.version, request_key: key() });
+  sub = (await customer(tenant)).subscriptions[0];
+  // A replay sends the request an earlier attempt recorded, verbatim, whatever the subscription's discounts are now.
+  // (Built here in another order than a fresh request would be, so only the recorded one can match what Stripe receives.)
+  const replayed = [{ coupon: offerCoupon }, ...sub.discounts.map(entry => ({ discount: entry.id }))];
+  await billing.agentOffer({ subscription: subscriptionId, coupon: offerCoupon, idempotencyKey: `hub-agent-offer-${randomUUID()}`, discounts: replayed,
+    recordDiscounts: async () => { throw new Error('a replay records nothing'); } });
+  assert.deepEqual(stripe.requests.filter(entry => entry.method === 'POST' && entry.path === `/v1/subscriptions/${subscriptionId}`).at(-1).params.discounts, replayed);
+  await assert.rejects(billing.agentOffer({ subscription: subscriptionId, coupon: offerCoupon, idempotencyKey: `hub-agent-offer-${randomUUID()}`, discounts: [{ coupon: 'other' }] }),
+    error => error.status === 400, 'a recorded request for another coupon is refused');
+  sub = (await customer(tenant)).subscriptions[0];
+  await command({ action: 'subscription.discount', subscription: subscriptionId, op: 'remove', coupon: offerCoupon, promotion_code: null, expected_version: sub.version, request_key: key() });
+  sub = (await customer(tenant)).subscriptions[0];
   await command({ action: 'subscription.pause', subscription: subscriptionId, behavior: 'void', resumes_at: null, expected_version: sub.version, request_key: key() });
   sub = (await customer(tenant)).subscriptions[0];
   assert.equal(sub.pause_behavior, 'void');

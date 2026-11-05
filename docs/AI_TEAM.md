@@ -781,14 +781,19 @@ accounts that qualify, at most once per account for each offer and at most each 
   transaction: for an offer nobody approved, the Account Manager must still be active, on Act and trusted with `offer.apply`
   (its row held for share: `offers_off`); the offer must be switched on (`offer_disabled`); the menu row is held while the cap
   is counted (`cap_reached`, calendar month, Eastern); once per account (`already_offered`); and the subscription must still be a
-  live trial of that product on that account (`not_eligible`). It records the use before Stripe is asked. The server then asks
-  Stripe once (`platformBilling.agentOffer`: a later `trial_end` with no proration, or the coupon added to the subscription's
-  discounts) with the idempotency key `hub-agent-offer-<action request key>`, mirrors the subscription and writes a
-  `billing.agent_offer` audit row as the AI assistant. The answer is recorded with `private.agent_offer_settle`: applied;
-  refused (Stripe said no, or billing is not set up: the place under the cap and the account's one offer are given back); or
-  unconfirmed (no answer: it may have been applied, so it keeps its place, is never retried on its own, and the owner gets a
-  warning to check the subscription in Stripe). A retry after a restart repeats the same Stripe request; a settled use is
-  settled from its record. The `agent.offer` audit row says whether the owner approved it or it went automatically.
+  live trial of that product on that account ending within the offer's window (`not_eligible`). It records the use before Stripe
+  is asked. The server then asks Stripe once (`platformBilling.agentOffer`: a later `trial_end` with no proration, or the coupon
+  added to the subscription's discounts as Stripe holds them now) with the idempotency key `hub-agent-offer-<action request key>`,
+  holding the subscription's row lock (the one the owner's subscription commands take) from reading it until Stripe has answered
+  and the mirror is refreshed, and writes a `billing.agent_offer` audit row as the AI assistant. A coupon offer's request is
+  recorded on its use before it is sent (`private.agent_offer_request`, first one kept), so a retry sends exactly the same request.
+  The answer is recorded with `private.agent_offer_settle`: applied; refused (Stripe said no, or billing is not set up: the place
+  under the cap and the account's one offer are given back); or unconfirmed (no answer, or Stripe's idempotency error: it may have
+  been applied, so it keeps its place, is never retried on its own, and the owner gets a warning to check the subscription in
+  Stripe, also when a restart came before the warning). If recording the answer fails, the `agent_offer_settle_on_completion`
+  trigger settles the use from how the action ended, in the same transaction, so a refusal is never left counted. A retry after a
+  restart repeats the same Stripe request; a settled use is settled from its record. The `agent.offer` audit row says whether the
+  owner approved it or it went automatically.
 - **Handing it over** is the "Offers" autonomy step: a supervised week (the owner approves each offer), then the Chief of
   Staff's hourly task adds `offer.apply` to the Account Manager's list. Keep approving takes it back.
 

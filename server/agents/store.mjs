@@ -109,6 +109,8 @@ export function sqlAgentStore(pool, { fenced = false, growth = false } = {}) {
     offerCandidates: (limit = 50) => call('private.agent_offer_candidates', [limit]),
     /** Checks one approved offer again and records it before Stripe is asked (`ready`), or says what an earlier attempt recorded or why not. */
     offerBegin: (actionId, execution = null) => call('private.agent_offer_begin', [actionId, execution]),
+    /** Records a coupon offer's request before it is sent; the first one recorded is kept and returned, to be sent verbatim. */
+    offerRequest: (actionId, execution, discounts) => call('private.agent_offer_request', [actionId, execution, JSON.stringify(discounts)]),
     /** Records Stripe's answer for a recorded offer: applied, refused (its place is given back) or unconfirmed. */
     offerSettle: (actionId, status) => call('private.agent_offer_settle', [actionId, status]),
     /** One health check for one product. The database decides when that opens or closes an incident. */

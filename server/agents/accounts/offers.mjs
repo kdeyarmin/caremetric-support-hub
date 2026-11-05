@@ -12,7 +12,8 @@
  *   - refused      Stripe said no (a 4xx), or billing is not set up on this server: nothing changed, the place under the cap is given back;
  *   - unconfirmed  no answer (a timeout, a 429 or a 5xx): it may have been applied, so it keeps its place, is never tried again on its own,
  *                  and the owner is told to check the subscription in Stripe.
- * A use an earlier attempt recorded is settled from that record first. Nothing here is retried.
+ * A use an earlier attempt recorded is settled from that record first. Nothing here is retried. If recording the answer itself fails, the
+ * database settles the use from how the action ended, in the same transaction that ends it, so a refusal never stays counted.
  */
 import { HttpError } from '../../sms-auth.mjs';
 
@@ -69,7 +70,9 @@ export function offerExecutor({ store, billing, notifier = null, log = line => c
   }
   const settle = async (actionId, status) => {
     try { await store.offerSettle(actionId, status); } catch {
-      // The use stays 'applying', which a later attempt reads as a replay of the same Stripe request (the same idempotency key).
+      // The use stays 'applying' for now. The database settles it when this action ends (the agent_offer_settle_on_completion trigger:
+      // a refusal recorded on the action gives the place back, anything uncertain keeps it), and a restart before that replays the same
+      // Stripe request under the same idempotency key.
       log(JSON.stringify({ event: 'hub_agent_offer_unsettled', action_id: actionId, status }));
     }
   };
@@ -80,14 +83,24 @@ export function offerExecutor({ store, billing, notifier = null, log = line => c
     const executionNumber = Number.isInteger(execution.execution) ? execution.execution : null;
     const begun = await store.offerBegin(execution.id, executionNumber);
     if (begun?.state === 'refused') throw failure(offerCodes.includes(begun.code) ? begun.code : 'not_eligible');
-    if (begun?.state === 'recorded') return settled(begun);
+    if (begun?.state === 'recorded') {
+      // An earlier attempt recorded "no answer" and may have stopped before the owner was told: tell them now (the warning's key is the
+      // action's, so one already sent is not sent again).
+      if (begun.status === 'unconfirmed') await warn(execution, input);
+      return settled(begun);
+    }
     if (begun?.state !== 'ready' && begun?.state !== 'replay') throw failure('executor_error');
 
     // Billing that is not set up on this server never reached Stripe: the place is given back and the offer can be proposed again.
     if (typeof billing?.agentOffer !== 'function') { await settle(execution.id, 'refused'); throw failure('billing_unavailable'); }
     const request = begun.kind === 'trial_extension'
       ? { subscription: begun.subscription, trialEnd: Number(begun.trialEndAfter), idempotencyKey: `hub-agent-offer-${execution.requestKey}` }
-      : { subscription: begun.subscription, coupon: begun.coupon, idempotencyKey: `hub-agent-offer-${execution.requestKey}` };
+      : {
+        subscription: begun.subscription, coupon: begun.coupon, idempotencyKey: `hub-agent-offer-${execution.requestKey}`,
+        // The request an earlier attempt recorded is sent again verbatim; a first attempt records its request before sending it.
+        discounts: Array.isArray(begun.discounts) ? begun.discounts : null,
+        recordDiscounts: typeof store.offerRequest === 'function' ? request => store.offerRequest(execution.id, executionNumber, request) : null,
+      };
     try {
       await billing.agentOffer(request);
     } catch (error) {
@@ -97,8 +110,9 @@ export function offerExecutor({ store, billing, notifier = null, log = line => c
         await settle(execution.id, 'refused');
         throw failure(status === 503 ? 'billing_unavailable' : 'offer_refused');
       }
-      // Stripe said no: nothing changed.
-      if (status >= 400 && status < 500 && status !== 429) { await settle(execution.id, 'refused'); throw failure('offer_refused'); }
+      // Stripe said no: nothing changed. Not an idempotency error, though: that says a request under this key was already made with
+      // other parameters, which may have been applied.
+      if (status >= 400 && status < 500 && status !== 429 && error?.type !== 'idempotency_error') { await settle(execution.id, 'refused'); throw failure('offer_refused'); }
       // No answer, too many requests or a Stripe outage: it may have been applied.
       await settle(execution.id, 'unconfirmed');
       await warn(execution, input);

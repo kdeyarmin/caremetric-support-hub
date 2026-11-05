@@ -1,8 +1,9 @@
 // Offers from the owner's menu through the real roles: which accounts qualify, the daily run's proposals, an owner approval and an
 // automatic one carried out without a session, every refusal (the cap, once per account, trust withdrawn, the offer switched off, an
-// account that no longer qualifies), Stripe refusing (the place is given back) or not answering (it is kept, the owner warned), a replay
-// after a restart, the owner's menu operations and the deployment gate. Disposable loopback database only; Stripe is a fake here (the
-// session-less billing call itself is exercised against the fake Stripe API in billing-integration.mjs).
+// account that no longer qualifies, a trial extended past the offer's window), Stripe refusing (the place is given back) or not answering
+// (it is kept, the owner warned), an answer that could not be recorded (settled from how the action ended), a replay after a restart, the
+// owner's menu operations and the deployment gate. Disposable loopback database only; Stripe is a fake here (the session-less billing call
+// itself is exercised against the fake Stripe API in billing-integration.mjs).
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -150,7 +151,12 @@ try {
   await menu(true, 50);
   const notTrial = await offerAction(paying);
   await actions.executeOne(notTrial, { kind: 'offer.apply' });
-  for (const [id, code] of [[again, 'already_offered'], [untrusted, 'offers_off'], [off, 'offer_disabled'], [notTrial, 'not_eligible']]) {
+  // A trial extended after the proposal (now ending beyond the offer's window) no longer qualifies, on the daily run's own terms.
+  const extended = await account('extended');
+  const outsideWindow = await offerAction(extended);
+  await admin.query("update private.billing_subscriptions set trial_end = now() + interval '20 days' where stripe_subscription_id = $1", [extended.subscription]);
+  await actions.executeOne(outsideWindow, { kind: 'offer.apply' });
+  for (const [id, code] of [[again, 'already_offered'], [untrusted, 'offers_off'], [off, 'offer_disabled'], [notTrial, 'not_eligible'], [outsideWindow, 'not_eligible']]) {
     assert.deepEqual(await outcome(id).then(entry => [entry.status, entry.result.error]), ['failed', code], code);
   }
   assert.equal(stripeCalls.length, asked);
@@ -184,6 +190,55 @@ try {
   await actions.executeOne(blocked, { kind: 'offer.apply' });
   assert.equal((await outcome(blocked)).result.error, 'already_offered', 'an unconfirmed offer still counts for the account');
   stripeAnswer = async () => ({ applied: true, already: false, mirrored: true });
+
+  // Recording Stripe's answer fails (the database blipped): the use is settled anyway, in the transaction that ends the action, from how
+  // it ended. A refusal gives the place and the account's one offer back; no answer keeps both; an offer carried out counts as applied.
+  const blipped = actionExecutor({ store, executors: offerExecutors({ store: { ...store, offerSettle: async () => { throw new Error('connection reset'); } },
+    features, billing, notifier, log: () => {} }), log: () => {} });
+  const k = await account('k');
+  stripeAnswer = async () => { throw new StripeError(400, 'invalid_request_error', 'resource_missing', 'No such subscription'); };
+  const refusedUnsettled = await offerAction(k);
+  await blipped.executeOne(refusedUnsettled, { kind: 'offer.apply' });
+  assert.deepEqual(await outcome(refusedUnsettled).then(entry => [entry.status, entry.result.error]), ['failed', 'offer_refused']);
+  assert.equal((await row('select status from private.agent_offer_uses where action_id = $1', [refusedUnsettled])).status, 'refused', 'a refusal is never left counted');
+  stripeAnswer = async () => { throw new TypeError('fetch failed'); };
+  const silentUnsettled = await offerAction(k);
+  await blipped.executeOne(silentUnsettled, { kind: 'offer.apply' });
+  assert.equal((await row('select status from private.agent_offer_uses where action_id = $1', [silentUnsettled])).status, 'unconfirmed', 'no answer keeps its place');
+  const l = await account('l');
+  stripeAnswer = async () => ({ applied: true, already: false, mirrored: true });
+  const appliedUnsettled = await offerAction(l);
+  await blipped.executeOne(appliedUnsettled, { kind: 'offer.apply' });
+  assert.equal((await outcome(appliedUnsettled)).status, 'executed');
+  assert.equal((await row('select status from private.agent_offer_uses where action_id = $1', [appliedUnsettled])).status, 'applied');
+  assert.equal(Number((await row("select count(*) from private.audit_events where action = 'agent.offer' and metadata ->> 'action_id' = $1", [refusedUnsettled])).count), 1, 'the settlement is audited once');
+
+  // A coupon offer records its request to Stripe before sending it: the first request recorded is kept and returned (so a retry under
+  // the same idempotency key sends exactly the same), a replay hands it back, and nothing but the subscription's discounts and the
+  // offer's coupon is accepted.
+  const couponId = `OFFERTEST${run}`;
+  await admin.query("insert into private.billing_coupons(stripe_coupon_id, name, percent_off, duration, valid, livemode, stripe_created, seen_at) values ($1, 'Offer test', 10, 'once', true, true, now(), now())", [couponId]);
+  await admin.query("insert into private.agent_offer_menu(key, label, kind, coupon_id, apps, window_days, monthly_cap, enabled) values ($1, 'Coupon test', 'coupon', $2, array['carebase'], 7, 10, true)", [`coupon_${run}`, couponId]);
+  added.push(`coupon_${run}`);
+  const m = await account('m');
+  const couponAction = (await row(`insert into private.agent_actions (agent_key, task_id, kind, target_kind, target_id, preview, input, status)
+    values ('account_manager', $1, 'offer.apply', 'billing_account', $2, 'Offer', $3, 'auto_approved') returning id`,
+  [await task(), m.slug, { offer: `coupon_${run}`, tenant: m.slug, product: 'carebase', subscription: m.subscription }])).id;
+  const couponRun = await store.beginExecution(couponAction);
+  const couponBegin = () => pool.query('select private.agent_offer_begin($1, $2) as r', [couponAction, couponRun.execution]).then(result => result.rows[0].r);
+  const couponReady = await couponBegin();
+  assert.deepEqual([couponReady.state, couponReady.kind, couponReady.coupon, couponReady.discounts], ['ready', 'coupon', couponId, null]);
+  const sent = [{ discount: 'di_existing1' }, { coupon: couponId }];
+  for (const bad of [[], [{ coupon: 'SOMETHINGELSE' }], [{ discount: 'di_1', coupon: couponId }], [{ discount: 'di_1' }], [{ coupon: couponId }, { coupon: couponId }], { coupon: couponId }]) {
+    await assert.rejects(store.offerRequest(couponAction, couponRun.execution, bad), refused('22023'), JSON.stringify(bad));
+  }
+  assert.deepEqual(await store.offerRequest(couponAction, couponRun.execution, sent), sent);
+  assert.deepEqual(await store.offerRequest(couponAction, couponRun.execution, [{ coupon: couponId }]), sent, 'the first request recorded is kept');
+  assert.deepEqual((await couponBegin()).discounts, sent, 'a replay hands the recorded request back');
+  await assert.rejects(store.offerRequest(couponAction, couponRun.execution + 1, sent), refused('55000'), 'a stale execution records nothing');
+  await assert.rejects(admin.query('select private.agent_offer_request($1, $2, $3::jsonb)', [couponAction, couponRun.execution, JSON.stringify(sent)]), refused('42501'), 'only the Hub server records a request');
+  await store.offerSettle(couponAction, 'applied');
+  await assert.rejects(store.offerRequest(couponAction, couponRun.execution, sent), refused('55000'), 'a settled offer takes no request');
 
   // A restart between recording and settling: the next attempt gets the same request back, a stale one is refused, a settled one is settled.
   const i = await account('i');
@@ -235,6 +290,11 @@ try {
       rewrite("v_agent.status is distinct from 'active'", 'false'),
       rewrite('where key = v_action.agent_key for share', 'where key = v_action.agent_key'),
       rewrite("where key = v_action.input ->> 'offer' for update", "where key = v_action.input ->> 'offer'"),
+      rewrite('or v_sub.trial_end > now() + make_interval(days => v_offer.window_days)', 'or false'),
+      'drop trigger agent_offer_settle_on_completion on private.agent_actions',
+      'alter table private.agent_actions disable trigger agent_offer_settle_on_completion',
+      'grant execute on function private.agent_offer_record(uuid,text) to hub_app_server',
+      'revoke execute on function private.agent_offer_request(uuid,integer,jsonb) from hub_app_server',
     ]) {
       await client.query('begin');
       try { await client.query(drift); await assert.rejects(client.query(gate), refused('55000'), drift); }
@@ -242,7 +302,7 @@ try {
     }
   } finally { client.release(); }
 
-  console.log('Offers integration passed: qualifying live trials only, the daily proposals, an owner approval and an automatic offer made without a session under the action\'s idempotency key, the cap, once per account, trust withdrawn, offer switched off, an account that no longer qualifies, Stripe refusing (place given back) or not answering (kept, owner warned), replay after a restart, server-only making, the owner\'s menu operations and gate drift. Nothing reached Stripe.');
+  console.log('Offers integration passed: qualifying live trials only, the daily proposals, an owner approval and an automatic offer made without a session under the action\'s idempotency key, the cap, once per account, trust withdrawn, offer switched off, an account that no longer qualifies or whose trial was extended past the window, Stripe refusing (place given back) or not answering (kept, owner warned), an unrecorded answer settled from how its action ended, replay after a restart, server-only making, the owner\'s menu operations and gate drift. Nothing reached Stripe.');
 } finally {
   const ids = Object.values(tenants).map(entry => entry.id);
   const slugs = Object.values(tenants).map(entry => entry.slug);
@@ -251,6 +311,7 @@ try {
   await admin.query('update private.billing_settings set livemode = $1', [seedLive]);
   await admin.query('delete from private.agent_offer_uses where tenant_id = any($1::uuid[])', [ids]);
   await admin.query('delete from private.agent_offer_menu where key = any($1::text[])', [added]);
+  await admin.query('delete from private.billing_coupons where stripe_coupon_id = $1', [`OFFERTEST${run}`]);
   await admin.query("delete from private.audit_events where entity_type = 'agent_action' and entity_id in (select id from private.agent_actions where kind = 'offer.apply' and target_id = any($1::text[]))", [slugs]);
   await admin.query('delete from private.agent_actions where kind = \'offer.apply\' and target_id = any($1::text[])', [slugs]);
   await admin.query('delete from private.agent_actions where task_id = any($1::uuid[])', [tasks]);
