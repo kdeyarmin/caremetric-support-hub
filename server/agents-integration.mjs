@@ -540,7 +540,7 @@ try {
     const proposed = (await rows('select * from private.agent_actions where task_id = $1', [draft]))[0];
     assert.deepEqual([proposed.status, (await task(draft)).status], ['proposed', 'awaiting_approval']);
     const overview = overviewSchema.parse(await team2.admin.overview(ownerToken, {}));
-    assert.deepEqual(overview.services, { enabled: true, handlers: ['brief.daily', 'concierge.communication', 'probe.incident', 'probe.recovery', 'probe.sweep', 'seo.weekly'], sms: true, email: true, ownerEmail: true, ai: false, customerTextToAi: false });
+    assert.deepEqual(overview.services, { enabled: true, handlers: ['brief.daily', 'concierge.communication', 'probe.incident', 'probe.recovery', 'probe.sweep', 'seo.weekly'], sms: true, email: true, ownerEmail: true, ai: false, customerTextToAi: false, externalEmail: false });
     assert.equal(overview.team.approvals[0].id, proposed.id);
     const decision = decisionSchema.parse(await team2.admin.decide(ownerToken, { actionId: proposed.id, decision: 'approve', note: 'Send it' }));
     assert.deepEqual(decision, { id: proposed.id, kind: 'communication.reply', status: 'executed', decided: true });

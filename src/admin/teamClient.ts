@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { config } from "../lib/config";
 import { sessionEvent } from "../lib/appSession";
-import { activitySchemas, agentSchema, auditSchema, autonomyStepSchema, decisionSchema, overviewSchema, taskResultSchema, waitingSchema } from "./teamProtocol";
-import type { ActivityKind, ActivityPage, AuditPage, AutonomyStep, Decision, TeamAgent, TeamOverview } from "./teamProtocol";
+import { activitySchemas, agentSchema, auditSchema, autonomyStepSchema, decisionSchema, externalEmailProposalSchema, overviewSchema, taskResultSchema, waitingSchema } from "./teamProtocol";
+import type { ActivityKind, ActivityPage, AuditPage, AutonomyStep, Decision, ExternalEmailDraft, ExternalEmailProposal, TeamAgent, TeamOverview } from "./teamProtocol";
 
 /**
  * A failed AI team request. The message is the server's reviewed text (for example "This agent
@@ -41,9 +41,11 @@ export interface TeamClient {
   setAutonomy(input: { key: string; autonomy: "observe" | "propose" | "act"; expectedUpdatedAt: string }): Promise<TeamAgent>;
   setBudget(input: { key: string; dailyBudgetCents: number; expectedUpdatedAt: string }): Promise<TeamAgent>;
   decide(input: { actionId: string; decision: "approve" | "reject"; note?: string }): Promise<Decision>;
+  /** Saves the owner's exact email as a proposal, using the same request key for an unchanged draft's retries. Never sends. */
+  prepareEmail(input: ExternalEmailDraft & { requestKey: string }): Promise<ExternalEmailProposal>;
   run(input: { agentKey: string; taskKind: string }): Promise<{ id: string; status: string }>;
   cancel(input: { taskId: string }): Promise<{ id: string; status: string }>;
-  /** Runs the work that was waiting for the owner's sign-in (imports, and approved replies that never went out). Answers at once; the work finishes in the background. */
+  /** Starts waiting tasks and checks/completes approved messages. Actions may be recovered without sending again; counts do not confirm delivery. */
   waiting(): Promise<{ started: number; actions: number }>;
   /** Starts a supervised week for one kind of work, keeps the owner approving it ("hold"), or hands it over now ("automatic"). */
   setStep(input: { category: string; action: "supervise" | "hold" | "automatic"; expectedChangedAt: string }): Promise<AutonomyStep>;
@@ -57,6 +59,11 @@ export const teamClient: TeamClient = {
   setAutonomy: input => post("admin/team/autonomy", input, agentSchema),
   setBudget: input => post("admin/team/budget", input, agentSchema),
   decide: ({ note, ...input }) => post("admin/team/decide", note ? { ...input, note } : input, decisionSchema),
+  prepareEmail: async input => {
+    const result = await post("admin/team/email", input, externalEmailProposalSchema);
+    if (result.requestKey !== input.requestKey) throw new Error("The proposal confirmation did not match this request.");
+    return result;
+  },
   run: input => post("admin/team/run", input, taskResultSchema),
   cancel: input => post("admin/team/cancel", input, taskResultSchema),
   waiting: () => post("admin/team/waiting", {}, waitingSchema),

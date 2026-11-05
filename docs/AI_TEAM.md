@@ -46,6 +46,12 @@ An approved action is carried out by the server through the existing reviewed pa
 the same staff reply operation the inbox uses, under the action's request key), so a retry can
 never send twice. A proposal nobody decides within seven days expires.
 
+The owner can also prepare a one-off operational email from the Team screen. It records the exact
+recipient, subject and message for review, then uses the existing **Approve and send** control. The
+`email.external` action always requires an explicit owner decision, regardless of the Chief of
+Staff's autonomy or automatic approval settings. Its private send ledger permits one attempt and
+retains an uncertain provider outcome without resending. See [Owner-directed email](OWNER_DIRECTED_EMAIL.md).
+
 Nothing here lets an agent move money, change a plan or price, delete data, merge code, deploy,
 or read resident or patient records. Inbound message text is `possible_phi` and never enters audit
 metadata, run summaries or task payloads.
