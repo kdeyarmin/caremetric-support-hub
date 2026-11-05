@@ -99,6 +99,13 @@ export function sqlAgentStore(pool, { fenced = false, growth = false } = {}) {
     autonomyGraduate: category => call('private.agent_autonomy_graduate', [category]),
     /** Records that the owner was told about the switch a step made at `automaticAt`, so it is not announced again. */
     autonomyAnnounced: (category, automaticAt) => call('private.agent_autonomy_announced', [category, automaticAt]),
+    // The Account Manager's offers from the owner's menu (platform.agents.offers.v1).
+    /** Switched-on offers with room left this month and the accounts that qualify: offer keys, slugs, names, dates and Stripe ids; never an address. */
+    offerCandidates: (limit = 50) => call('private.agent_offer_candidates', [limit]),
+    /** Checks one approved offer again and records it before Stripe is asked (`ready`), or says what an earlier attempt recorded or why not. */
+    offerBegin: (actionId, execution = null) => call('private.agent_offer_begin', [actionId, execution]),
+    /** Records Stripe's answer for a recorded offer: applied, refused (its place is given back) or unconfirmed. */
+    offerSettle: (actionId, status) => call('private.agent_offer_settle', [actionId, status]),
     /** One health check for one product. The database decides when that opens or closes an incident. */
     probeRecord: ({ targetKey, ok, statusCode, latencyMs, failure = null, threshold = 2, agentKey = 'platform_engineer' }) =>
       call('private.agent_probe_record', [targetKey, ok, statusCode, latencyMs, failure, threshold, agentKey]),

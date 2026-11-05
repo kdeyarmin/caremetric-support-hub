@@ -249,6 +249,34 @@ try {
   sub = (await customer(tenant)).subscriptions[0];
   assert.equal(sub.status, 'trialing');
   assert.equal((await billing.entitlements(bearer, { account })).status, 'trialing');
+  // An offer the AI team makes from the owner's menu: no owner session, a later trial end and then a coupon, each under its action's
+  // idempotency key (a retry repeats the same request), mirrored and audited as the AI assistant; a refusal from Stripe is thrown as it is.
+  const offerTrialEnd = Math.floor(Date.parse(`${trialEnd}T23:59:59Z`) / 1000) + 14 * 86400;
+  const trialOfferKey = `hub-agent-offer-${randomUUID()}`;
+  assert.deepEqual(await billing.agentOffer({ subscription: subscriptionId, trialEnd: offerTrialEnd, idempotencyKey: trialOfferKey }), { applied: true, already: false, mirrored: true });
+  sub = (await customer(tenant)).subscriptions[0];
+  assert.equal(Date.parse(sub.trial_end) / 1000, offerTrialEnd, 'the mirror shows the later trial end');
+  const sentBefore = stripe.requests.length;
+  await billing.agentOffer({ subscription: subscriptionId, trialEnd: offerTrialEnd, idempotencyKey: trialOfferKey });
+  assert.equal(stripe.store.subscriptions.get(subscriptionId).trial_end, offerTrialEnd, 'a retry under the same key changes nothing more');
+  assert.ok(stripe.requests.length > sentBefore);
+  const offerAudit = (await admin.query("select actor_id, metadata from private.audit_events where action = 'billing.agent_offer' and tenant_id = $1 order by id", [tenant])).rows;
+  assert.equal(offerAudit[0].actor_id, 'a1a00000-a1a0-4000-8000-000000000001');
+  assert.deepEqual([offerAudit[0].metadata.kind, offerAudit[0].metadata.subscription], ['trial_extension', subscriptionId]);
+  // The subscription already carries the partner coupon (through its promotion code): an offer of it asks Stripe for nothing.
+  assert.equal((await billing.agentOffer({ subscription: subscriptionId, coupon, idempotencyKey: `hub-agent-offer-${randomUUID()}` })).already, true, 'a coupon already applied is not asked for again');
+  const offerCoupon = (await command({ action: 'coupon.create', name: 'Offer 10', percent_off: 10, amount_off: null, duration: 'once', duration_in_months: null, max_redemptions: null, redeem_by: null, app: null, products: [], request_key: key() })).id;
+  const couponOfferKey = `hub-agent-offer-${randomUUID()}`;
+  assert.deepEqual(await billing.agentOffer({ subscription: subscriptionId, coupon: offerCoupon, idempotencyKey: couponOfferKey }), { applied: true, already: false, mirrored: true });
+  sub = (await customer(tenant)).subscriptions[0];
+  assert.deepEqual(sub.discounts.map(discount => discount.coupon).sort(), [coupon, offerCoupon].sort(), 'the offer adds its coupon and keeps the discount already there');
+  await assert.rejects(billing.agentOffer({ subscription: subscriptionId, coupon: 'no_such_coupon', idempotencyKey: `hub-agent-offer-${randomUUID()}` }), error => error.status >= 400 && error.status < 500);
+  for (const bad of [{ subscription: subscriptionId, trialEnd: 1, idempotencyKey: trialOfferKey }, { subscription: subscriptionId, trialEnd: offerTrialEnd, coupon, idempotencyKey: trialOfferKey },
+    { subscription: 'cus_1', trialEnd: offerTrialEnd, idempotencyKey: trialOfferKey }, { subscription: subscriptionId, trialEnd: offerTrialEnd, idempotencyKey: 'hub-x' }]) {
+    await assert.rejects(billing.agentOffer(bad), error => error.status === 400, JSON.stringify(bad));
+  }
+  await command({ action: 'subscription.discount', subscription: subscriptionId, op: 'remove', coupon: offerCoupon, promotion_code: null, expected_version: sub.version, request_key: key() });
+  sub = (await customer(tenant)).subscriptions[0];
   await command({ action: 'subscription.pause', subscription: subscriptionId, behavior: 'void', resumes_at: null, expected_version: sub.version, request_key: key() });
   sub = (await customer(tenant)).subscriptions[0];
   assert.equal(sub.pause_behavior, 'void');
@@ -373,7 +401,7 @@ try {
   await admin.query('update private.staff_permissions set revoked_at=now() where user_id=$1', [owner]);
   await assert.rejects(workspace()); await assert.rejects(command({ action: 'catalog.sync' }));
   await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1', [owner]);
-  console.log('Platform billing: Stripe account pinning, administrator and command sessions, catalog, subscriptions, price changes (grandfather and migrate), coupons, promotion codes, custom prices, quantities, trials, pause, cancel, invoices, portal, webhook idempotency and ordering, entitlements, usage, self-service trials and bounded audit passed.');
+  console.log('Platform billing: Stripe account pinning, administrator and command sessions, catalog, subscriptions, price changes (grandfather and migrate), coupons, promotion codes, custom prices, quantities, trials, pause, cancel, invoices, portal, webhook idempotency and ordering, entitlements, usage, self-service trials, AI team offers (session-less, idempotent, audited) and bounded audit passed.');
 } finally {
   await stripe.close();
   const tenantsArray = tenantIds;

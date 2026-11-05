@@ -151,6 +151,17 @@ identifiers, `private.agent_answer_begin(...)` is a security definer with a pinn
 assistant, and that profile exists. Each test fails closed. The Hub server proposes answers and registers their executor only
 when the feature is declared.
 
+`20261105140100_agent_offers_contract.sql` declares `platform.agents.offers.v1` only after `platform.agents.v1`,
+`platform.agents.hardening.v1`, `platform.agents.lifecycle.v1`, `platform.agents.autonomy.v1` and `billing.platform.v1` are
+declared, the offer menu and the record of offers exist with row level security and are closed to every browser, service and
+server role, the once-per-account index exists, `offer.apply` is an allowed action kind with a shape check aimed at a billing
+account, the three server operations are security definers with a pinned empty search path executable by `hub_app_server` alone
+(the one that makes an offer re-checks the Account Manager's trust, holding its row, and holds the menu row while it counts the
+cap), the three owner operations authorize the owner's session (changes need a current administrator session) and are executable
+by signed-in sessions only, the four helpers are executable by no role, and the Account Manager's daily schedule exists. Each
+test fails closed. The Hub server registers the daily run and the offer executor only when the feature is declared, and the Team
+screen leaves the offer menu out when the database does not have it.
+
 The table above is not exhaustive:
 later features such as the `billing.*` and `customer.self-service.v1` boundaries are declared
 by their own migrations and listed in `src/lib/backendContract.ts`. See [AI_TEAM.md](AI_TEAM.md).

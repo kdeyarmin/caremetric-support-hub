@@ -61,7 +61,9 @@ const customerMail=sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,fro
 // The AI team: inert unless HUB_AGENTS_ENABLED is exactly "true", and every agent starts paused until the owner resumes it.
 const team=agentTeam({pool,growth,growthMail,postalAddress:process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS,sms:textSender,email:mailSender,ownerEmail:process.env.HUB_OWNER_EMAIL,publicOrigin,enabled:process.env.HUB_AGENTS_ENABLED==='true',communications:messaging,features,anthropicApiKey:process.env.ANTHROPIC_API_KEY,record:sqlAiUsageRecorder(pool).record,guides:guideLibrary({load:()=>api.rpc('list_published_content',{}),loadProducts:()=>api.rows('products')}),customerTextToAi:process.env.HUB_AGENTS_CUSTOMER_TEXT_TO_AI==='true',
   bookingUrl:process.env.HUB_BOOKING_URL||null,leadSecrets:leadSecrets(process.env),
-  lifecycle:{mail:customerMail,postalAddress:(process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS||'').trim(),bookingUrl:process.env.HUB_BOOKING_URL||null}});
+  lifecycle:{mail:customerMail,postalAddress:(process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS||'').trim(),bookingUrl:process.env.HUB_BOOKING_URL||null},
+  // Offers from the owner's menu: platform billing (created below) makes them, so the call is deferred until an offer is approved.
+  offerBilling:{agentOffer:input=>billing.agentOffer(input)}});
 const announcements=bulkEmail({pool,delegations:capabilities,publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin,postalAddress:(process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS||'').trim(),
   mail:sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_BULK_EMAIL_FROM||process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai',replyTo:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai'})});
 // Platform billing: the Hub is the only Stripe client for every application's subscriptions.

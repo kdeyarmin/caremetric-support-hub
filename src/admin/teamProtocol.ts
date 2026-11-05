@@ -43,10 +43,30 @@ export const autonomyStepSchema = z.object({
   supervisedSince: instant.nullable(), automaticAt: instant.nullable(), changedAt: instant, ready: z.boolean(), agents: z.array(agentKey),
 });
 /**
- * `waitingActions` is how many approved replies could not be sent yet and wait for the owner's next "Run what's waiting". `autonomy` is
- * null (or absent) when the Hub's database does not have autonomy steps yet.
+ * One offer on the owner's menu: a trial extension of `trialDays`, or one of the owner's Stripe coupons (`couponId`), for trials of `apps`
+ * that end within `windowDays`, at most `monthlyCap` a month and once per account. `usedThisMonth` counts offers made (or still being made)
+ * this calendar month, Eastern; `appliedTotal` every offer Stripe confirmed. `changedAt` is handed back with a change.
  */
-export const overviewSchema = z.object({ team: teamSchema, services: servicesSchema, waitingActions: z.number().int().min(0), autonomy: z.array(autonomyStepSchema).nullable().optional() });
+export const offerSchema = z.object({
+  key: z.string().regex(/^[a-z][a-z0-9_]{2,39}$/), label: z.string().max(80), kind: z.enum(["trial_extension", "coupon"]),
+  trialDays: z.number().int().min(1).max(30).nullable(), couponId: z.string().max(255).nullable(), apps: z.array(z.string().max(80)),
+  eligibility: z.string().max(40), windowDays: z.number().int().min(1).max(30), monthlyCap: z.number().int().min(1).max(50), enabled: z.boolean(),
+  changedAt: instant, usedThisMonth: z.number().int().min(0), appliedTotal: z.number().int().min(0),
+});
+/** One of the owner's Stripe coupons a menu offer may use (valid, live mode). */
+export const offerCouponSchema = z.object({
+  id: z.string().max(255), name: z.string().nullable(), percentOff: z.number().nullable(), amountOff: z.number().nullable(), currency: z.string().nullable(),
+  duration: z.string().nullable(), durationInMonths: z.number().int().nullable(),
+});
+export const offersSchema = z.object({ offers: z.array(offerSchema), coupons: z.array(offerCouponSchema) });
+/**
+ * `waitingActions` is how many approved replies could not be sent yet and wait for the owner's next "Run what's waiting". `autonomy` and
+ * `offers` are null (or absent) when the Hub's database does not have autonomy steps or the offer menu yet.
+ */
+export const overviewSchema = z.object({
+  team: teamSchema, services: servicesSchema, waitingActions: z.number().int().min(0), autonomy: z.array(autonomyStepSchema).nullable().optional(),
+  offers: offersSchema.nullable().optional(),
+});
 /**
  * `error` is the code of why an approved action could not be carried out (see `errorLabel`). `needsSession` is the server saying it
  * confirmed that nothing was started for want of the owner's session; an approval without it, still `approved`, is not confirmed either way.
@@ -85,6 +105,8 @@ export const auditSchema = page(auditItem);
 
 export type TeamOverview = z.infer<typeof overviewSchema>;
 export type AutonomyStep = z.infer<typeof autonomyStepSchema>;
+export type MenuOffer = z.infer<typeof offerSchema>;
+export type OfferCoupon = z.infer<typeof offerCouponSchema>;
 export type TeamAgent = z.infer<typeof agentSchema>;
 export type TeamSchedule = z.infer<typeof scheduleSchema>;
 export type TeamApproval = z.infer<typeof approvalSchema>;
@@ -122,7 +144,7 @@ const taskLabels: Record<string, string> = {
   "brief.daily": "Morning brief", "seo.weekly": "Weekly SEO check", "concierge.sweep": "Look for new messages", "concierge.communication": "Triage a message",
   "import.advisors": "Import Advisors requests", "import.breathe": "Import phone messages", "accounts.weekly": "Weekly account report",
   "growth.leads": "Look for new leads", "growth.followup": "Chase unanswered leads", "growth.weekly": "Weekly growth report",
-  "accounts.lifecycle": "Customer emails", "autonomy.graduate": "Hand over work after its supervised week",
+  "accounts.lifecycle": "Customer emails", "autonomy.graduate": "Hand over work after its supervised week", "accounts.offers": "Offers from your menu",
   "growth.pipeline": "Review sales pipeline", "growth.success": "Review customer success", "growth.discovery": "Discover prospective organizations", "growth.content": "Propose product content",
 };
 export const taskLabel = (kind: string) => taskLabels[kind] ?? kind;
@@ -149,7 +171,7 @@ const actionLabels: Record<string, string> = {
   "communication.reply": "Reply to a customer", "communication.answer": "Answer a customer from your guides", "communication.note": "Add an internal note", "communication.update": "Update a conversation",
   "growth.message": "Send a reviewed growth message", "growth.content": "Approve a product content brief",
   "incident.open": "Open an incident", "incident.resolve": "Resolve an incident", "import.run": "Import messages",
-  "email.send": "Email a customer",
+  "email.send": "Email a customer", "offer.apply": "Make an offer from your menu",
 };
 export const actionLabel = (kind: string) => actionLabels[kind] ?? kind;
 
@@ -205,6 +227,15 @@ const errorLabels: Record<string, string> = {
   wording_changed: "The Hub's wording for this email changed after you approved it, so nothing was sent rather than different words.",
   auto_send_off: "This email was approved on its own, but its template is no longer one you let the agent send, so nothing was sent.",
   invalid_email: "The Hub refused this email as invalid. Nothing was sent.",
+  offers_off: "Offers are no longer handed over to the Account Manager (you chose Keep approving, paused it or changed its level after this offer was approved automatically), so nothing was offered.",
+  offer_disabled: "That offer is switched off on your menu, so nothing was offered.",
+  not_eligible: "The account no longer qualifies (the trial ended, converted or is not live, or the coupon is no longer valid), so nothing was offered.",
+  already_offered: "This account already had this offer, so nothing was offered again.",
+  cap_reached: "This offer reached its monthly cap, so nothing was offered.",
+  offer_refused: "Stripe refused the change, so nothing was offered. The place under the cap was given back.",
+  offer_unconfirmed: "Stripe did not answer, so the offer may or may not have been applied. It is never tried again on its own: check the subscription in Stripe.",
+  billing_unavailable: "Stripe is not set up or could not be verified on the Hub, so nothing was offered.",
+  invalid_offer: "The Hub refused this offer as invalid. Nothing was offered.",
 };
 /** What a stored error code means for the owner; an unknown code is shown as it is. */
 export const errorLabel = (code: string | null | undefined) => (code ? errorLabels[code] ?? code : "");

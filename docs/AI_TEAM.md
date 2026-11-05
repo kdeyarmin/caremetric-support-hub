@@ -755,6 +755,40 @@ Hub, set `HUB_BULK_EMAIL_POSTAL_ADDRESS` (and `HUB_BOOKING_URL` if you want the 
 leave it in **Observe** for a morning and read its run ("Observe only: 3 customer emails would be proposed …"), then
 switch it to **Propose** and press **Run now** on "Customer emails".
 
+### Offers from your menu
+
+The owner chose (2026-11-04) a fixed menu with caps: the Account Manager may offer only what the owner put on the menu, only to
+accounts that qualify, at most once per account for each offer and at most each offer's monthly cap
+(`supabase/migrations/20261105140000_agent_offers.sql`, feature `platform.agents.offers.v1`).
+
+- **The menu** (`private.agent_offer_menu`, the "Offers the Account Manager may make" panel on the Team screen): a trial extension
+  of 1 to 30 days, or one of the owner's own Stripe coupons (valid and in live mode in the billing mirror), for trials of chosen
+  products that end within a window of days, with a monthly cap of 1 to 50. One offer is seeded: 14 more trial days for a trial
+  that ends within 7 days, at most 10 a month, **switched off**. The owner switches offers on or off, changes a cap or adds an
+  offer (it starts switched off) from the Team screen; each change needs a current administrator session and is audited.
+- **The daily run** (`accounts.offers`, 08:40 Eastern, shown as "Offers from your menu") reads the switched-on offers with room
+  left this month and the live trials that qualify (`private.agent_offer_candidates`: never an address) and proposes
+  `offer.apply` actions, one per account a run, within each offer's room, with exactly what changes as the approval card's text.
+  In Observe it proposes nothing. An account that had the offer, has a proposal of it open, or whose proposal the owner rejected
+  or Stripe refused is not proposed again.
+- **Making an offer** needs no owner session. `private.agent_offer_begin` (Hub server only) checks everything again in one
+  transaction: for an offer nobody approved, the Account Manager must still be active, on Act and trusted with `offer.apply`
+  (its row held for share: `offers_off`); the offer must be switched on (`offer_disabled`); the menu row is held while the cap
+  is counted (`cap_reached`, calendar month, Eastern); once per account (`already_offered`); and the subscription must still be a
+  live trial of that product on that account (`not_eligible`). It records the use before Stripe is asked. The server then asks
+  Stripe once (`platformBilling.agentOffer`: a later `trial_end` with no proration, or the coupon added to the subscription's
+  discounts) with the idempotency key `hub-agent-offer-<action request key>`, mirrors the subscription and writes a
+  `billing.agent_offer` audit row as the AI assistant. The answer is recorded with `private.agent_offer_settle`: applied;
+  refused (Stripe said no, or billing is not set up: the place under the cap and the account's one offer are given back); or
+  unconfirmed (no answer: it may have been applied, so it keeps its place, is never retried on its own, and the owner gets a
+  warning to check the subscription in Stripe). A retry after a restart repeats the same Stripe request; a settled use is
+  settled from its record. The `agent.offer` audit row says whether the owner approved it or it went automatically.
+- **Handing it over** is the "Offers" autonomy step: a supervised week (the owner approves each offer), then the Chief of
+  Staff's hourly task adds `offer.apply` to the Account Manager's list. Keep approving takes it back.
+
+The customer sees an extension as a later trial end in their product and billing portal, and a coupon on their next invoice;
+the Account Manager sends no separate email about it.
+
 ## The Content Marketer
 
 Writes the help center's public articles, one a week, for the owner to approve, and once a month drafts outreach for the
@@ -1116,6 +1150,11 @@ Apply the migrations in order with the usual procedure:
    `communication.answer` action kind with its shape check and the server-only operation that records an answer, and declare
    `platform.agents.concierge-autosend.v1` (it needs the Concierge, the hardening, the communications inbox and autonomy steps).
    Restart the Hub after it. Answers are drafted only with `HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true` and a model key.
+13. `20261105140000_agent_offers.sql`, then its gate `20261105140100_agent_offers_contract.sql`, which add the offer menu (one
+   14-day trial extension, switched off), the record of offers made, the `offer.apply` action kind with its shape check, the
+   server-only operations, the owner's menu operations and the Account Manager's daily `accounts.offers` schedule, and declare
+   `platform.agents.offers.v1` (it needs the control plane, the hardening, the customer emails, autonomy steps and platform
+   billing). Restart the Hub after it. Nothing is offered until the owner switches an offer on.
 
 The Hub build does not require any of these features, so a Hub whose database lacks them still starts and
 serves everything else. The AI team is opt-in twice over: nothing runs unless `HUB_AGENTS_ENABLED`

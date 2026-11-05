@@ -9,7 +9,7 @@ import type { TeamClient } from "./teamClient";
 import {
   actionLabel, approvalTitle, autonomyHelp, autonomyLabels, cadenceLabel, centsLabel, errorLabel, failedActionLabel, outcomeLabel, statusLabel, stepHelpText, targetLabel, taskLabel, tierLabels,
 } from "./teamProtocol";
-import type { ActivityKind, ActivityPage, AuditPage, AutonomyStep, TeamAgent, TeamApproval, TeamOverview, TeamServices } from "./teamProtocol";
+import type { ActivityKind, ActivityPage, AuditPage, AutonomyStep, MenuOffer, OfferCoupon, TeamAgent, TeamApproval, TeamOverview, TeamServices } from "./teamProtocol";
 import "./admin.css";
 
 type Notice = { ok: boolean; text: string } | null;
@@ -86,6 +86,78 @@ function AutonomyPanel({ steps, busy, onStep }: { steps: AutonomyStep[]; busy: s
         </li>;
       })}
     </ul>
+  </section>;
+}
+
+type NewOffer = Parameters<TeamClient["addOffer"]>[0];
+const offerWhat = (offer: MenuOffer) => offer.kind === "trial_extension" ? `${offer.trialDays} more trial days` : `Your Stripe coupon ${offer.couponId}`;
+const couponWords = (coupon: OfferCoupon) => `${coupon.name || coupon.id}: ${coupon.percentOff !== null ? `${coupon.percentOff}% off` : coupon.amountOff !== null ? `${centsLabel(coupon.amountOff)} off` : "discount"}${coupon.duration === "repeating" && coupon.durationInMonths ? ` for ${coupon.durationInMonths} months` : coupon.duration ? `, ${coupon.duration}` : ""}`;
+
+/** One offer on the menu: what it gives, who qualifies, this month's use against its cap, switched on or off. */
+function OfferRow({ offer, busy, onOffer }: { offer: MenuOffer; busy: string; onOffer: (offer: MenuOffer, enabled: boolean, monthlyCap: number) => void }) {
+  const [cap, setCap] = useState(String(offer.monthlyCap));
+  const capValue = Number(cap);
+  const capValid = Number.isInteger(capValue) && capValue >= 1 && capValue <= 50;
+  const working = Boolean(busy);
+  return <li>
+    <span className="team-service-name">{offer.label}</span>
+    <Pill good={offer.enabled}>{offer.enabled ? "On" : "Off"}</Pill>
+    <span className="muted">{offerWhat(offer)} for a trial of {offer.apps.join(", ")} that ends within {plural(offer.windowDays, "day")}. Once per account; {offer.usedThisMonth} of {offer.monthlyCap} used this month, {offer.appliedTotal} applied in all.</span>
+    <span className="button-row">
+      <label className="team-field">Monthly cap<input type="number" min={1} max={50} value={cap} disabled={working} aria-label={`Monthly cap for ${offer.label}`} onChange={event => setCap(event.target.value)} /></label>
+      <button type="button" className="button button-secondary button-small" disabled={working || !capValid || capValue === offer.monthlyCap}
+        onClick={() => onOffer(offer, offer.enabled, capValue)}>Save cap</button>
+      <button type="button" className={`button button-small ${offer.enabled ? "button-secondary" : "button-primary"}`} disabled={working || !capValid}
+        aria-label={`${offer.enabled ? "Switch off" : "Switch on"} ${offer.label}`} onClick={() => onOffer(offer, !offer.enabled, capValid ? capValue : offer.monthlyCap)}>{offer.enabled ? "Switch off" : "Switch on"}</button>
+    </span>
+  </li>;
+}
+
+/** Add an offer to the menu: more trial days, or one of the owner's own Stripe coupons. It starts switched off. */
+function AddOfferForm({ coupons, apps, busy, onAdd }: { coupons: OfferCoupon[]; apps: string[]; busy: string; onAdd: (offer: NewOffer) => void }) {
+  const [label, setLabel] = useState("");
+  const [kind, setKind] = useState<"trial_extension" | "coupon">("trial_extension");
+  const [days, setDays] = useState("7");
+  const [coupon, setCoupon] = useState("");
+  const [chosen, setChosen] = useState<string[]>(apps);
+  const [windowDays, setWindowDays] = useState("7");
+  const [cap, setCap] = useState("5");
+  const whole = (value: string, low: number, high: number) => Number.isInteger(Number(value)) && Number(value) >= low && Number(value) <= high;
+  const valid = label.trim().length >= 3 && label.trim().length <= 80 && chosen.length > 0 && whole(windowDays, 1, 30) && whole(cap, 1, 50)
+    && (kind === "trial_extension" ? whole(days, 1, 30) : coupons.some(item => item.id === coupon));
+  const submit = () => onAdd({ label: label.trim(), kind, ...(kind === "trial_extension" ? { trialDays: Number(days) } : { couponId: coupon }), apps: chosen, windowDays: Number(windowDays), monthlyCap: Number(cap) });
+  return <details className="team-add-offer"><summary>Add an offer</summary>
+    <div className="team-add-offer-fields">
+      <label className="team-field">Name<input value={label} maxLength={80} disabled={Boolean(busy)} onChange={event => setLabel(event.target.value)} /></label>
+      <label className="team-field">What it gives<select value={kind} disabled={Boolean(busy)} onChange={event => setKind(event.target.value === "coupon" ? "coupon" : "trial_extension")}>
+        <option value="trial_extension">More trial days</option><option value="coupon" disabled={coupons.length === 0}>One of your Stripe coupons</option></select></label>
+      {kind === "trial_extension"
+        ? <label className="team-field">Extra days<input type="number" min={1} max={30} value={days} disabled={Boolean(busy)} onChange={event => setDays(event.target.value)} /></label>
+        : <label className="team-field">Coupon<select value={coupon} disabled={Boolean(busy)} onChange={event => setCoupon(event.target.value)}>
+            <option value="">Choose a coupon</option>{coupons.map(item => <option key={item.id} value={item.id}>{couponWords(item)}</option>)}</select></label>}
+      <fieldset className="team-field"><legend>Products</legend>
+        {apps.map(app => <label key={app}><input type="checkbox" checked={chosen.includes(app)} disabled={Boolean(busy)}
+          onChange={event => setChosen(list => event.target.checked ? [...list, app] : list.filter(item => item !== app))} /> {app}</label>)}</fieldset>
+      <label className="team-field">Trial ends within (days)<input type="number" min={1} max={30} value={windowDays} disabled={Boolean(busy)} onChange={event => setWindowDays(event.target.value)} /></label>
+      <label className="team-field">Monthly cap<input type="number" min={1} max={50} value={cap} disabled={Boolean(busy)} onChange={event => setCap(event.target.value)} /></label>
+      <button type="button" className="button button-secondary button-small" disabled={Boolean(busy) || !valid} onClick={submit}>Add offer (switched off)</button>
+    </div>
+    {coupons.length === 0 && <p className="muted">To offer a discount, create the coupon in Stripe first; it appears here once the Hub has seen it.</p>}
+  </details>;
+}
+
+/**
+ * The owner's offer menu. The Account Manager offers only what is switched on here, to trials that qualify, once per account and within
+ * each offer's monthly cap. Until the "Offers" step above is automatic, the owner approves each one.
+ */
+function OffersPanel({ menu, busy, onOffer, onAdd }: { menu: NonNullable<TeamOverview["offers"]>; busy: string; onOffer: (offer: MenuOffer, enabled: boolean, monthlyCap: number) => void; onAdd: (offer: NewOffer) => void }) {
+  const apps = [...new Set(menu.offers.flatMap(offer => offer.apps))].sort();
+  return <section className="panel team-offers" aria-labelledby="team-offers-title">
+    <div className="admin-section-title"><div><h2 id="team-offers-title">Offers the Account Manager may make</h2>
+      <p>Only what is switched on here, to trials that qualify, once per account and within each offer's monthly cap. Until Offers runs on its own, you approve each one.</p></div></div>
+    {menu.offers.length === 0 ? <p className="muted">No offer on the menu yet.</p>
+      : <ul className="team-service-list">{menu.offers.map(offer => <OfferRow key={`${offer.key}:${offer.changedAt}`} offer={offer} busy={busy} onOffer={onOffer} />)}</ul>}
+    <AddOfferForm coupons={menu.coupons} apps={apps.length > 0 ? apps : ["carebase"]} busy={busy} onAdd={onAdd} />
   </section>;
 }
 
@@ -307,6 +379,10 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
     () => client.setStep({ category: step.category, action, expectedChangedAt: step.changedAt }),
     action === "supervise" ? `${step.label}: supervised week started. You approve each one until it ends.`
       : action === "hold" ? `${step.label}: you approve each one from now on.` : `${step.label}: the team does this on its own from now on.`);
+  const onOffer = (offer: MenuOffer, enabled: boolean, monthlyCap: number) => void change(`offer:${offer.key}`,
+    () => client.setOffer({ key: offer.key, enabled, monthlyCap, expectedChangedAt: offer.changedAt }),
+    enabled === offer.enabled ? `${offer.label}: at most ${plural(monthlyCap, "offer")} a month.` : `${offer.label} is switched ${enabled ? "on" : "off"}.`);
+  const onAddOffer = (offer: NewOffer) => void change("offer:new", () => client.addOffer(offer), `${offer.label} is on the menu, switched off. Switch it on when you are ready.`);
   const onRunWaiting = () => {
     let started = 0;
     let sending = 0;
@@ -344,6 +420,7 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
       <p className="admin-read-time">Loaded {timeLabel(shown.receivedAt)}.</p>
       <ServicesPanel services={shown.data.services} awaitingSession={shown.data.team.awaitingSessionCount} waitingActions={shown.data.waitingActions} busy={busy} onRunWaiting={onRunWaiting} />
       {shown.data.autonomy && shown.data.autonomy.length > 0 && <AutonomyPanel steps={shown.data.autonomy} busy={busy} onStep={onStep} />}
+      {shown.data.offers && <OffersPanel menu={shown.data.offers} busy={busy} onOffer={onOffer} onAdd={onAddOffer} />}
       <ApprovalsPanel approvals={shown.data.team.approvals} count={shown.data.team.approvalCount} busy={busy} onDecide={onDecide} />
       <section aria-labelledby="team-agents-title"><h2 id="team-agents-title" className="team-section-heading">Agents</h2>
         <div className="team-agent-grid">

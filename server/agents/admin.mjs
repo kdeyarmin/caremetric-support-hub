@@ -18,7 +18,10 @@ const taskKind = /^[a-z][a-z0-9_.]{1,60}$/;
 const instant = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
 const reviewedErrors = { '22023': 400, '40001': 409, '42501': 403, '28000': 401, P0002: 404, '55000': 409 };
 const stepCategory = /^[a-z][a-z_]{2,39}$/;
-export const agentAdminActions = new Set(['overview', 'status', 'autonomy', 'budget', 'decide', 'run', 'cancel', 'waiting', 'step']);
+const offerKeyPattern = /^[a-z][a-z0-9_]{2,39}$/;
+const productSlug = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const couponId = /^[A-Za-z0-9_-]{1,255}$/;
+export const agentAdminActions = new Set(['overview', 'status', 'autonomy', 'budget', 'decide', 'run', 'cancel', 'waiting', 'step', 'offer', 'addOffer']);
 
 function reviewed(error) {
   if (error instanceof HttpError) return error;
@@ -65,7 +68,9 @@ export function agentAdmin({ pool, actions, services = () => ({}), kick = null, 
       const waitingActions = await Promise.resolve(actions.sessionActions?.()).then(list => list?.length ?? 0, () => 0);
       // The owner's autonomy steps, or null against a database that does not have them yet (its migration is not applied).
       const autonomy = await query(token, 'hub.get_agent_autonomy').catch(error => { if (error?.code === '42883') return null; throw error; });
-      return { team, services: services(), waitingActions, autonomy };
+      // The owner's offer menu, likewise null until its migration is applied.
+      const offers = await query(token, 'hub.get_agent_offers').catch(error => { if (error?.code === '42883') return null; throw error; });
+      return { team, services: services(), waitingActions, autonomy, offers };
     },
     async status(token, input) {
       exactly(input, ['key', 'status', 'expectedUpdatedAt']);
@@ -107,6 +112,27 @@ export function agentAdmin({ pool, actions, services = () => ({}), kick = null, 
     async step(token, input) {
       exactly(input, ['category', 'action', 'expectedChangedAt']);
       return query(token, 'hub.set_agent_autonomy_step', [matching(input.category, stepCategory, 'step'), oneOf(input.action, ['supervise', 'hold', 'automatic'], 'action'), matching(input.expectedChangedAt, instant, 'version')]);
+    },
+    /** Switch one offer on the menu on or off, or change its monthly cap. */
+    async offer(token, input) {
+      exactly(input, ['key', 'enabled', 'monthlyCap', 'expectedChangedAt']);
+      if (typeof input.enabled !== 'boolean' || !Number.isInteger(input.monthlyCap) || input.monthlyCap < 1 || input.monthlyCap > 50) throw new HttpError(400, 'Invalid offer.');
+      return query(token, 'hub.set_agent_offer', [matching(input.key, offerKeyPattern, 'offer'), input.enabled, input.monthlyCap, matching(input.expectedChangedAt, instant, 'version')]);
+    },
+    /** Add an offer to the menu: a trial extension of 1 to 30 days, or one of the owner's own Stripe coupons. It starts switched off. */
+    async addOffer(token, input) {
+      exactly(input, ['label', 'kind', 'apps', 'windowDays', 'monthlyCap'], ['trialDays', 'couponId']);
+      const kind = oneOf(input.kind, ['trial_extension', 'coupon'], 'offer');
+      const label = typeof input.label === 'string' ? input.label.trim() : '';
+      const whole = (value, low, high) => Number.isInteger(value) && value >= low && value <= high;
+      if (label.length < 3 || label.length > 80 || !Array.isArray(input.apps) || input.apps.length < 1 || input.apps.length > 10
+        || input.apps.some(app => typeof app !== 'string' || !productSlug.test(app)) || !whole(input.windowDays, 1, 30) || !whole(input.monthlyCap, 1, 50)
+        || (kind === 'trial_extension' && (!whole(input.trialDays, 1, 30) || input.couponId !== undefined))
+        || (kind === 'coupon' && (typeof input.couponId !== 'string' || !couponId.test(input.couponId) || input.trialDays !== undefined))) {
+        throw new HttpError(400, 'Invalid offer.');
+      }
+      return query(token, 'hub.add_agent_offer', [label, kind, kind === 'trial_extension' ? input.trialDays : null, kind === 'coupon' ? input.couponId : null,
+        input.apps, input.windowDays, input.monthlyCap]);
     },
     async cancel(token, input) {
       exactly(input, ['taskId']);

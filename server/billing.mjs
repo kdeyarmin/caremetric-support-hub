@@ -19,6 +19,8 @@ export const appKeyPattern = /^cmb_[A-Za-z0-9_-]{43}$/;
 const trialDays = { carebase: 30, breathe: 14, 'caremetric-emr': 14, 'caremetric-go': 14, 'caremetric-intel': 14 };
 export const entitlementCacheSeconds = 300;
 const sha256 = value => createHash('sha256').update(value).digest('hex');
+// The CareMetric AI Assistant: the actor of every billing change the AI team makes (hub.profiles row seeded with the AI team).
+const aiAssistant = 'a1a00000-a1a0-4000-8000-000000000001';
 const unixEndOfDay = day => Math.floor(Date.parse(`${day}T23:59:59Z`) / 1000);
 
 function firstIssue(error) {
@@ -773,6 +775,52 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     } catch (error) { throw asHttpError(error); }
   }
 
+  // ---------------------------------------------------------------------------
+  // An offer the AI team makes from the owner's menu: a later trial end, or one of the owner's own coupons, on one subscription. There is
+  // no owner session here: the database decided and recorded the offer first (private.agent_offer_begin, which checks the menu, the cap,
+  // the once-per-account rule, the account and the agent's trust), and the Stripe request carries the action's idempotency key, so a
+  // retry repeats the same request instead of making a second change. Stripe errors are thrown as they are, for the caller to tell a
+  // refusal (4xx) from an unknown outcome; a mirror refresh that fails afterwards does not undo or hide an applied change.
+  const offerSubscription = /^sub_[A-Za-z0-9]{1,250}$/;
+  const offerCoupon = /^[A-Za-z0-9_-]{1,255}$/;
+  const offerKey = /^hub-agent-offer-[0-9a-f-]{36}$/;
+  async function agentOffer({ subscription, trialEnd = null, coupon = null, idempotencyKey } = {}) {
+    const extend = trialEnd !== null;
+    if (typeof subscription !== 'string' || !offerSubscription.test(subscription) || typeof idempotencyKey !== 'string' || !offerKey.test(idempotencyKey)
+      || extend === (coupon !== null)
+      || (extend && (!Number.isSafeInteger(trialEnd) || trialEnd <= Math.floor(now() / 1000)))
+      || (!extend && (typeof coupon !== 'string' || !offerCoupon.test(coupon)))) {
+      throw new HttpError(400, 'Invalid offer.');
+    }
+    const live = await stripe();
+    const current = await transaction(pool, db => lookup(db, 'subscription', subscription));
+    if (!current) throw new HttpError(404, 'That subscription was not found.');
+    let already = false;
+    if (extend) {
+      await live.post(`/v1/subscriptions/${subscription}`, { trial_end: trialEnd, proration_behavior: 'none' }, { idempotencyKey });
+    } else if ((current.discounts ?? []).some(discount => discount.coupon === coupon)) {
+      // An earlier attempt of this offer applied it (and the mirror already shows it): nothing is asked again.
+      already = true;
+    } else {
+      await live.post(`/v1/subscriptions/${subscription}`, {
+        discounts: [...(current.discounts ?? []).map(discount => ({ discount: discount.id })), { coupon }],
+      }, { idempotencyKey });
+    }
+    let mirrored = true;
+    try {
+      await transaction(pool, async db => {
+        await refresh(db, live, 'subscription', subscription);
+        if (!extend) await refresh(db, live, 'coupon', coupon);
+        await audit(db, aiAssistant, 'billing.agent_offer', current.tenant_id ?? null, null,
+          { subscription, kind: extend ? 'trial_extension' : 'coupon', trial_end: extend ? trialEnd : null, coupon: extend ? null : coupon, replay: already });
+      });
+    } catch {
+      // Applied in Stripe; its webhook brings the mirror up to date.
+      mirrored = false;
+    }
+    return { applied: true, already, mirrored };
+  }
+
   // After a verified start: bring the mirror up to date with Stripe, so a catalog
   // edited in the Dashboard or a subscription changed while the Hub was down, or
   // before its webhook existed, is never missing. Each object commits on its own.
@@ -815,7 +863,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     },
     status: () => ({ configured: !!client, state, mode: client?.mode ?? null, account: state === 'ready' ? accountId : null,
       webhook: webhookSecrets.length > 0, portal_configuration: !!portalConfiguration }),
-    webhook, command, customerPortal, appPortal, appPlanChanges, entitlements, facilityEntitlements, usage, trial,
+    webhook, command, customerPortal, appPortal, appPlanChanges, entitlements, facilityEntitlements, usage, trial, agentOffer,
     customer: async (session, input) => { try { return await customerSelfService.handle(session, input); } catch (error) { throw asHttpError(error); } },
   };
 }
