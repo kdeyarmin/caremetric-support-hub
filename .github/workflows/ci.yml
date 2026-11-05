@@ -169,6 +169,8 @@ jobs:
           node server/agents-autonomy-integration.mjs
           node server/agents-answers-integration.mjs
           node server/agents-answers-integration.mjs
+          node server/agents-growth-autonomy-integration.mjs
+          node server/agents-growth-autonomy-integration.mjs
           node server/agents-offers-integration.mjs
           node server/agents-offers-integration.mjs
       - name: Export, lose and restore disposable Hub data

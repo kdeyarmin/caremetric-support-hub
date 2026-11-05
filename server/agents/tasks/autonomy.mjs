@@ -21,6 +21,8 @@ export const autonomyWords = Object.freeze({
   support_answers: 'the Support Concierge answers questions it can answer from your published guides without asking you. Billing, cancellations, outages, legal questions and anything with personal details still come to you.',
   articles: 'the Content Marketer publishes articles that pass the content checks without asking you.',
   offers: 'the Account Manager makes offers from your menu without asking you, within the menu\'s caps.',
+  sales_followups: 'the Marketing Manager sends its follow-ups and replies to people who contacted CareMetric or that you added without asking you, within each product\'s daily limit and touch cap.',
+  cold_email: 'the Marketing Manager sends first emails to businesses found online without asking you: only to the public role address on the business\'s own website, at most 10 a day, each business once, never a text, each with an unsubscribe link and your postal address.',
 });
 const words = step => autonomyWords[step.category] ?? `${step.label.toLowerCase()} run without asking you.`;
 const undo = 'To keep approving each one yourself, choose Keep approving next to it on';

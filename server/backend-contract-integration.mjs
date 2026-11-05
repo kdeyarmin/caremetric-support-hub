@@ -39,6 +39,7 @@ const externalEmailContract=await readFile(new URL('../supabase/migrations/20261
 const answersContract=await readFile(new URL('../supabase/migrations/20261105120100_concierge_answers_contract.sql',import.meta.url),'utf8');
 const autopublishContract=await readFile(new URL('../supabase/migrations/20261105130100_content_autopublish_contract.sql',import.meta.url),'utf8');
 const offersContract=await readFile(new URL('../supabase/migrations/20261105140100_agent_offers_contract.sql',import.meta.url),'utf8');
+const growthAutonomyContract=await readFile(new URL('../supabase/migrations/20261105150100_growth_autonomy_contract.sql',import.meta.url),'utf8');
 const diagnosticSupportContract=diagnosticSupportMigration.slice(diagnosticSupportMigration.indexOf('do $$ declare contract'));
 assert.ok(selfServiceContract.startsWith('-- Contract publication is last:'),'Recognize the self-service contract declaration');
 const structureMigration=await readFile(new URL('../supabase/migrations/20260911202823_learning_structure_backend_contract.sql',import.meta.url),'utf8');
@@ -112,13 +113,14 @@ try {
   try {
     const latest=await readContract();
     // Replay history without the newer workforce features, then replay their reviewed gates last, in order.
-    const current={...latest,features:latest.features.filter(feature=>!['platform.agents.v1','platform.agents.probes.v1','platform.agents.brief.v1','platform.agents.seo.v1','platform.agents.concierge.v1','platform.agents.accounts.v1','platform.agents.hardening.v1','support.leads.v1','platform.agents.growth.v1','platform.agents.lifecycle.v1','platform.agents.content.v1','platform.agents.customer-growth.v1','platform.agents.autonomy.v1','platform.agents.external-email.v1','platform.agents.concierge-autosend.v1','platform.agents.content-autopublish.v1','platform.agents.offers.v1'].includes(feature))};
-    const latestBase={...latest,features:latest.features.filter(feature=>!['platform.agents.customer-growth.v1','platform.agents.autonomy.v1','platform.agents.external-email.v1','platform.agents.concierge-autosend.v1','platform.agents.content-autopublish.v1','platform.agents.offers.v1'].includes(feature))};
-    const beforeAutonomy={...latest,features:latest.features.filter(feature=>!['platform.agents.autonomy.v1','platform.agents.external-email.v1','platform.agents.concierge-autosend.v1','platform.agents.content-autopublish.v1','platform.agents.offers.v1'].includes(feature))};
-    const beforeExternalEmail={...latest,features:latest.features.filter(feature=>!['platform.agents.external-email.v1','platform.agents.concierge-autosend.v1','platform.agents.content-autopublish.v1','platform.agents.offers.v1'].includes(feature))};
-    const beforeAnswers={...latest,features:latest.features.filter(feature=>!['platform.agents.concierge-autosend.v1','platform.agents.content-autopublish.v1','platform.agents.offers.v1'].includes(feature))};
-    const beforeAutopublish={...latest,features:latest.features.filter(feature=>!['platform.agents.content-autopublish.v1','platform.agents.offers.v1'].includes(feature))};
-    const beforeOffers={...latest,features:latest.features.filter(feature=>feature!=='platform.agents.offers.v1')};
+    const current={...latest,features:latest.features.filter(feature=>!['platform.agents.v1','platform.agents.probes.v1','platform.agents.brief.v1','platform.agents.seo.v1','platform.agents.concierge.v1','platform.agents.accounts.v1','platform.agents.hardening.v1','support.leads.v1','platform.agents.growth.v1','platform.agents.lifecycle.v1','platform.agents.content.v1','platform.agents.customer-growth.v1','platform.agents.autonomy.v1','platform.agents.external-email.v1','platform.agents.concierge-autosend.v1','platform.agents.content-autopublish.v1','platform.agents.offers.v1','platform.agents.growth-autonomy.v1'].includes(feature))};
+    const latestBase={...latest,features:latest.features.filter(feature=>!['platform.agents.customer-growth.v1','platform.agents.autonomy.v1','platform.agents.external-email.v1','platform.agents.concierge-autosend.v1','platform.agents.content-autopublish.v1','platform.agents.offers.v1','platform.agents.growth-autonomy.v1'].includes(feature))};
+    const beforeAutonomy={...latest,features:latest.features.filter(feature=>!['platform.agents.autonomy.v1','platform.agents.external-email.v1','platform.agents.concierge-autosend.v1','platform.agents.content-autopublish.v1','platform.agents.offers.v1','platform.agents.growth-autonomy.v1'].includes(feature))};
+    const beforeExternalEmail={...latest,features:latest.features.filter(feature=>!['platform.agents.external-email.v1','platform.agents.concierge-autosend.v1','platform.agents.content-autopublish.v1','platform.agents.offers.v1','platform.agents.growth-autonomy.v1'].includes(feature))};
+    const beforeAnswers={...latest,features:latest.features.filter(feature=>!['platform.agents.concierge-autosend.v1','platform.agents.content-autopublish.v1','platform.agents.offers.v1','platform.agents.growth-autonomy.v1'].includes(feature))};
+    const beforeAutopublish={...latest,features:latest.features.filter(feature=>!['platform.agents.content-autopublish.v1','platform.agents.offers.v1','platform.agents.growth-autonomy.v1'].includes(feature))};
+    const beforeOffers={...latest,features:latest.features.filter(feature=>!['platform.agents.offers.v1','platform.agents.growth-autonomy.v1'].includes(feature))};
+    const beforeGrowthAutonomy={...latest,features:latest.features.filter(feature=>feature!=='platform.agents.growth-autonomy.v1')};
     // Platform billing replaced three app-specific billing features. Replay history with them in their original places.
     const before={...current,features:current.features.filter(feature=>!['billing.platform.v1','customer.self-service.v1','support.manual-escalation.v1','support.customer-diagnostics.v1','billing.customer-checkout.v1','billing.facility-entitlements.v1'].includes(feature)).flatMap(feature=>
       feature==='learning.draft-editing.v1'?[feature,'billing.portal.v1']
@@ -261,9 +263,13 @@ try {
     await client.query(autopublishContract);
     assert.deepEqual(await readContract(),beforeOffers,'The article publishing declaration adds only its own feature');
     await client.query(offersContract);
-    assert.deepEqual(await readContract(),latest,'The offers declaration restores the exact current feature set');
+    assert.deepEqual(await readContract(),beforeGrowthAutonomy,'The offers declaration adds only its own feature');
     await client.query(offersContract);
-    assert.deepEqual(await readContract(),latest,'The offers declaration is idempotent');
+    assert.deepEqual(await readContract(),beforeGrowthAutonomy,'The offers declaration is idempotent');
+    await client.query(growthAutonomyContract);
+    assert.deepEqual(await readContract(),latest,'The sales follow-up and cold email declaration restores the exact current feature set');
+    await client.query(growthAutonomyContract);
+    assert.deepEqual(await readContract(),latest,'The sales follow-up and cold email declaration is idempotent');
     assertBackendContract(await readContract());
     assert.throws(()=>assertBackendContract({...latest,features:latest.features.filter(feature=>feature!=='billing.platform.v1')}),/incompatible/);
   } finally { await client.query('rollback'); }
