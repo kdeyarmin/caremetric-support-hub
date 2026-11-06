@@ -24,7 +24,9 @@ feature integration is additive and rebased after other Hub releases.
 
 Each converted course binds the source snapshot hash, course ID and record
 revision. Lesson and question IDs derive deterministically from their original
-entity IDs. Option IDs derive from the original option value, after the same
+entity IDs. The [bulk media import](MEDIA_IMPORT.md) relies on this: a manifest row
+that names a TrainingModule id attaches its approved video to the draft lesson with
+that derived id, so a Hub draft of a converted course must keep it. Option IDs derive from the original option value, after the same
 case/whitespace normalization used by PennSync. Ambiguous normalized options
 block conversion; they are never merged. The original fields remain in the
 private source snapshot, including unmapped learners and plan relationships.

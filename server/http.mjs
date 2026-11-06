@@ -45,7 +45,7 @@ export const privateHubMessage='This Hub is private. Only its owner can sign in.
  * treated as signed out, a sign-in that fails it is revoked at once, and the routes that create
  * sign-ins for anyone else (invitation claims and application self-service) are closed.
  */
-export function appServer({auth,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,selfService,agents,growth,leads,leadAdmin,health,owner,origins,helpCenter=null,dist=resolve('dist')}) {
+export function appServer({auth,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,selfService,agents,growth,leads,leadAdmin,mediaImport=null,health,owner,origins,helpCenter=null,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -391,6 +391,15 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
           req.once('aborted',abort);res.once('close',abort);
           try {return json(await delegations[path.endsWith('/training')?'training':path.endsWith('/configuration')?'configuration':path.endsWith('/pennsync-migration')?'pennsyncMigration':path.endsWith('/provider')?'provider':path.endsWith('/learning-catalog')?'catalog':path.endsWith('/learning-generation')?'generation':path.endsWith('/course-distribution')?'distribution':path.endsWith('/course-creation')?'creation':path.endsWith('/onboarding')?'onboarding':path.endsWith('/authoring')?'authoring':'learning'](session,body,controller.signal));}
           finally {req.removeListener('aborted',abort);res.removeListener('close',abort);}
+        }
+        // Bulk lesson-media import (docs/MEDIA_IMPORT.md): the server fetches each MP4, so a row can take minutes.
+        if(path==='/api/admin/learning-media-import') {
+          if(req.method!=='POST'||url.search) throw new HttpError(400,'Use the media import panel.');
+          if(!mediaImport) throw new HttpError(503,'Media import is not configured.');
+          const input=await jsonBody(req,6200000);const controller=new AbortController();
+          const abort=()=>{if(!res.writableEnded)controller.abort();};req.once('aborted',abort);res.once('close',abort);
+          try{return json(await mediaImport(session,input,controller.signal));}
+          finally{req.removeListener('aborted',abort);res.removeListener('close',abort);}
         }
         if(path==='/api/media/sign' && req.method==='POST') {
           const {path:objectPath}=await jsonBody(req,2048);

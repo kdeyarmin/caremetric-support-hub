@@ -57,6 +57,10 @@ alongside playback. Uploads require MP4, WebVTT, and plain-text files. The uploa
 compares SHA-256 of the source video with the stored download before registration.
 Human review is required for accuracy, captions, transcript, and absence of private
 data. This is a staff-owned publishing flow, not a customer attachment inbox.
+To bring many approved videos in at once, the library's manifest import fetches each
+MP4 server-side from an allowlisted host, verifies size, type and SHA-256 against the
+stored copy, and stages it with its captions and transcript for the same review and
+`register_learning_media` approval; see [MEDIA_IMPORT.md](MEDIA_IMPORT.md).
 
 Failed uploads can leave private, unregistered objects. An operator can remove
 those after confirming they are not registered; never delete a registered asset
@@ -77,6 +81,8 @@ frontend, source exports, or SDK.
    and unlimited-attempt settings are retained.
 4. Copy each source MP4 through the reviewed upload flow, supply its matching
    captions/transcript, choose the approved video in the imported draft, then save.
+   For many videos, use the [manifest import](MEDIA_IMPORT.md): it stages each
+   video for review and, on approval, attaches it to the named draft's lesson.
    Source storage and temporary HeyGen URLs are never used as Hub playback URLs.
 5. Imported CareBase courses publish through the publication bridge
    (`20261017140000_carebase_course_publication_bridge.sql`). The import records

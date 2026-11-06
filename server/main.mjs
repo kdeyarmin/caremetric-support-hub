@@ -29,6 +29,7 @@ import { growthStore } from './growth/store.mjs';
 import { growthService } from './growth/service.mjs';
 import { growthResearch } from './growth/research.mjs';
 import { growthContactFinder } from './growth/contacts.mjs';
+import { learningMediaImport, mediaImportFeature, mediaImportHosts } from './learning-media-import.mjs';
 
 const storageUrl='https://xgauehtwksmnoqhgqegm.supabase.co';
 const pool=new pg.Pool(databaseConfig());
@@ -89,10 +90,17 @@ const leadDesk=leadAdmin({pool,enabled:features.has(leadFeature)});
 // Leads and website conversations are deleted twelve months on (docs/LEAD_INTAKE.md, "Retention"), from the cleanup below.
 const leadRetentionJob=leadRetention({pool,enabled:features.has(leadFeature)});
 console.info(`Website leads: ${leads.enabled()?'database ready':'waiting for the support.leads.v1 migration'}; secrets set for ${leads.configured().join(', ')||'no product'}.`);
+// Bulk lesson-media import: answered only when the database declares learning.media-import.v1. MP4s are fetched only
+// from the exact hosts in HUB_MEDIA_IMPORT_HOSTS (default: HeyGen's asset hosts); an unusable value disables fetching.
+const importHosts=mediaImportHosts(process.env.HUB_MEDIA_IMPORT_HOSTS);
+if(!importHosts) console.warn('HUB_MEDIA_IMPORT_HOSTS must list exact host names separated by commas; bulk media import will refuse every source.');
+const mediaImport=learningMediaImport({pool,hosts:importHosts,enabled:features.has(mediaImportFeature),
+  storage:{upload:(sessionToken,path,body,contentType)=>capabilities.media(sessionToken,path,'upload',body,contentType),
+    download:(sessionToken,path)=>capabilities.media(sessionToken,path,'download')}});
 const setup=integrationSetup({rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
 // Public articles as HTML for crawlers, read exactly as an anonymous visitor's app reads them, at their canonical address.
 const help=helpCenter({load:()=>api.rpc('list_published_content',{}),origin:helpCenterOrigin});
-const server=appServer({auth:smsAuth({pool,provider}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,growth,leads,leadAdmin:leadDesk,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help});
+const server=appServer({auth:smsAuth({pool,provider}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,growth,leads,leadAdmin:leadDesk,mediaImport,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help});
 let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;

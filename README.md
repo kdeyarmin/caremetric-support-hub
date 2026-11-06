@@ -135,6 +135,8 @@ playback, quizzes, learner progress, and completion records for newly authored
 shared courses, with no HeyGen runtime dependency.
 SDK 0.4.0 includes catalog, course-editor, and My Learning links. See
 [the central learning contract and migration steps](docs/CENTRAL_LEARNING.md).
+Editors can bring approved lesson videos in from a manifest in one reviewed pass;
+see [bulk lesson-video import](docs/MEDIA_IMPORT.md).
 Existing CareBase courses keep their native launch paths. Their imported Hub
 drafts cannot publish until quiz behavior, credits, and completion reporting are
 connected. Media, identities, and legacy learning history still require verified
