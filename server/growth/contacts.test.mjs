@@ -94,6 +94,19 @@ describe('the contact finder', () => {
     expect(calls.length).toBe(1 + contactPaths.length);
   });
 
+  it('treats a robots.txt it cannot read as forbidding the site, and a missing one as allowing it (RFC 9309)', async () => {
+    for (const robots of [page('Service unavailable', { status: 503 }), () => { throw new TypeError('fetch failed'); }]) {
+      const { fetchImpl, calls } = site({ 'https://example.org/robots.txt': robots, 'https://example.org/contact': page('info@example.org') });
+      expect(await growthContactFinder({ fetchImpl, lookup: publicLookup }).find('example.org')).toEqual({ email: null, reason: 'robots' });
+      expect(calls.map(call => call.url)).toEqual(['https://example.org/robots.txt']);
+    }
+    // Rules are rules whatever the content type they are served with.
+    const { fetchImpl: binary } = site({ 'https://example.org/robots.txt': page('User-agent: *\nDisallow: /', { type: 'application/octet-stream' }), 'https://example.org/contact': page('info@example.org') });
+    expect(await growthContactFinder({ fetchImpl: binary, lookup: publicLookup }).find('example.org')).toEqual({ email: null, reason: 'robots' });
+    const { fetchImpl: missing } = site({ 'https://example.org/robots.txt': page('Gone', { status: 410 }), 'https://example.org/contact': page('info@example.org') });
+    expect(await growthContactFinder({ fetchImpl: missing, lookup: publicLookup }).find('example.org')).toEqual({ email: 'info@example.org', sourceUrl: 'https://example.org/contact' });
+  });
+
   it('honours robots.txt: a site that forbids every page is not read', async () => {
     const { fetchImpl, calls } = site({ 'https://example.org/robots.txt': page('User-agent: *\nDisallow: /', { type: 'text/plain' }) });
     expect(await growthContactFinder({ fetchImpl, lookup: publicLookup }).find('example.org')).toEqual({ email: null, reason: 'robots' });
@@ -132,10 +145,10 @@ describe('the contact finder', () => {
 
   it('connects only to addresses it checked at connection time, so a name whose answer changes after the check is refused', async () => {
     // The first answer (the pre-check) is public; the second (the connection's own lookup) is private: the connection is refused
-    // before any socket is opened, so nothing is read.
+    // before any socket is opened, so nothing is read. Its robots.txt cannot be read either, so no page is tried.
     let answers = 0;
     const rebinding = vi.fn(async () => (answers++ % 2 === 0 ? [{ address: '93.184.216.34', family: 4 }] : [{ address: '127.0.0.1', family: 4 }]));
-    expect(await growthContactFinder({ lookup: rebinding }).find('example.org')).toEqual({ email: null, reason: 'none' });
+    expect(await growthContactFinder({ lookup: rebinding }).find('example.org')).toEqual({ email: null, reason: 'robots' });
     expect(rebinding.mock.calls.length).toBeGreaterThanOrEqual(2);
     await expect(pinnedFetch(async () => [{ address: '10.0.0.5', family: 4 }])('https://example.org/')).rejects.toMatchObject({ code: 'EPRIVATEADDRESS' });
     await expect(pinnedFetch(async () => [])('https://example.org/')).rejects.toMatchObject({ code: 'EPRIVATEADDRESS' });
