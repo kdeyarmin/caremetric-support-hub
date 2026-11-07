@@ -43,7 +43,7 @@ export const learningApi = {
   publish: (itemId: string, version: number, reviewed: boolean) => rpc("publish_learning_course", z.object({ itemId: learningId, versionId: learningId }), { p_item_id: itemId, p_expected_version: version, p_reviewed: reviewed }),
   course: (itemId: string, enrollmentId: string | null = null) => rpc("get_learning_course", courseSchema, { p_item_id: itemId, p_enrollment_id: enrollmentId }),
   enroll: (itemId: string) => rpc("enroll_learning_course", learningId, { p_item_id: itemId }),
-  submit: (enrollmentId: string, unitId: string, answers: Record<string, string>, attested: boolean, requestKey: string) => rpc("submit_learning_unit", submissionSchema, { p_enrollment_id: enrollmentId, p_unit_id: unitId, p_answers: answers, p_attested: attested, p_request_key: requestKey }),
+  submit: (enrollmentId: string, unitId: string, answers: Record<string, string | string[]>, attested: boolean, requestKey: string) => rpc("submit_learning_unit", submissionSchema, { p_enrollment_id: enrollmentId, p_unit_id: unitId, p_answers: answers, p_attested: attested, p_request_key: requestKey }),
   mine: () => rpc("list_my_learning", myLearningSchema),
   certificate: (enrollmentId: string) => rpc("get_learning_certificate", certificateSchema, { p_enrollment_id: enrollmentId }),
   async media(assetId: string, enrollmentId: string) {

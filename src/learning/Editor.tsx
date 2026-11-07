@@ -84,8 +84,37 @@ export function CourseEditor({ products }: { products: Product[] }) {
   </>}</div>;
 }
 
-function QuizEditor({ unit, onChange }: { unit: Extract<DraftUnit, { type: "quiz" }>; onChange: (unit: Extract<DraftUnit, { type: "quiz" }>) => void }) {
-  return <><label>Quiz instructions<textarea rows={4} maxLength={60000} value={unit.body} onChange={e => onChange({ ...unit, body: e.target.value })} /></label><div className="learning-fields"><label>Passing score (%)<input type="number" min={1} max={100} value={unit.passingScore} onChange={e => onChange({ ...unit, passingScore: Number(e.target.value) })} /></label><label>Attempt limit (blank for unlimited)<input type="number" min={1} max={10} value={unit.maxAttempts ?? ""} onChange={e => onChange({ ...unit, maxAttempts: e.target.value ? Number(e.target.value) : null })} /></label></div>{unit.questions.map((question, index) => <fieldset key={question.id}><legend>Question {index + 1}</legend><label>Question<input required value={question.prompt} onChange={e => onChange({ ...unit, questions: unit.questions.map(q => q.id === question.id ? { ...q, prompt: e.target.value } : q) })} /></label>{question.options.map(option => <div className="learning-option" key={option.id}><input aria-label={`Correct answer: option ${question.options.indexOf(option) + 1}`} type="radio" name={`correct-${question.id}`} checked={question.correctOptionId === option.id} onChange={() => onChange({ ...unit, questions: unit.questions.map(q => q.id === question.id ? { ...q, correctOptionId: option.id } : q) })} /><input aria-label={`Option ${question.options.indexOf(option) + 1}`} required value={option.text} onChange={e => onChange({ ...unit, questions: unit.questions.map(q => q.id === question.id ? { ...q, options: q.options.map(o => o.id === option.id ? { ...o, text: e.target.value } : o) } : q) })} /></div>)}<div className="learning-links"><button type="button" disabled={question.options.length >= 8} onClick={() => onChange({ ...unit, questions: unit.questions.map(q => q.id === question.id ? { ...q, options: [...q.options, { id: crypto.randomUUID(), text: "" }] } : q) })}>Add answer option</button><button type="button" disabled={unit.questions.length === 1} onClick={() => onChange({ ...unit, questions: unit.questions.filter(q => q.id !== question.id) })}>Remove question</button></div></fieldset>)}<button type="button" disabled={unit.questions.length >= 100} onClick={() => { const extra = newUnit("quiz"); if (extra.type === "quiz") onChange({ ...unit, questions: [...unit.questions, ...extra.questions] }); }}>Add question</button></>;
+type QuizUnit = Extract<DraftUnit, { type: "quiz" }>;
+type QuizQuestion = QuizUnit["questions"][number];
+const correctKeys = (question: QuizQuestion) => "correctOptionIds" in question ? question.correctOptionIds : [question.correctOptionId];
+// A select-all question keeps a set of correct options; a single-answer question keeps one.
+function withKeys(question: QuizQuestion, keys: string[], multiple: boolean): QuizQuestion {
+  const { id, prompt, points, options } = question;
+  return multiple ? { id, prompt, points, options, correctOptionIds: keys } : { id, prompt, points, options, correctOptionId: keys[0] };
+}
+
+function QuizEditor({ unit, onChange }: { unit: QuizUnit; onChange: (unit: QuizUnit) => void }) {
+  const update = (questionId: string, change: (question: QuizQuestion) => QuizQuestion) => onChange({ ...unit, questions: unit.questions.map(q => q.id === questionId ? change(q) : q) });
+  const choose = (question: QuizQuestion, optionId: string): QuizQuestion => {
+    if (!("correctOptionIds" in question)) return withKeys(question, [optionId], false);
+    const keys = question.correctOptionIds.includes(optionId) ? question.correctOptionIds.filter(key => key !== optionId) : [...question.correctOptionIds, optionId];
+    return keys.length ? withKeys(question, keys, true) : question;
+  };
+  return <><label>Quiz instructions<textarea rows={4} maxLength={60000} value={unit.body} onChange={e => onChange({ ...unit, body: e.target.value })} /></label>
+    <div className="learning-fields"><label>Passing score (%)<input type="number" min={1} max={100} value={unit.passingScore} onChange={e => onChange({ ...unit, passingScore: Number(e.target.value) })} /></label><label>Attempt limit (blank for unlimited)<input type="number" min={1} max={10} value={unit.maxAttempts ?? ""} onChange={e => onChange({ ...unit, maxAttempts: e.target.value ? Number(e.target.value) : null })} /></label></div>
+    {unit.questions.map((question, index) => {
+      const multiple = "correctOptionIds" in question, keys = correctKeys(question);
+      return <fieldset key={question.id}><legend>Question {index + 1}</legend>
+        <label>Question<input required value={question.prompt} onChange={e => update(question.id, q => ({ ...q, prompt: e.target.value }))} /></label>
+        <label className="learning-check"><input type="checkbox" checked={multiple} onChange={e => update(question.id, q => withKeys(q, correctKeys(q), e.target.checked))} />Select all that apply (learners must choose every correct answer)</label>
+        {question.options.map((option, optionIndex) => <div className="learning-option" key={option.id}>
+          <input aria-label={`Correct answer: option ${optionIndex + 1}`} type={multiple ? "checkbox" : "radio"} name={`correct-${question.id}`} checked={keys.includes(option.id)} onChange={() => update(question.id, q => choose(q, option.id))} />
+          <input aria-label={`Option ${optionIndex + 1}`} required value={option.text} onChange={e => update(question.id, q => ({ ...q, options: q.options.map(o => o.id === option.id ? { ...o, text: e.target.value } : o) }))} />
+        </div>)}
+        <div className="learning-links"><button type="button" disabled={question.options.length >= 8} onClick={() => update(question.id, q => ({ ...q, options: [...q.options, { id: crypto.randomUUID(), text: "" }] }))}>Add answer option</button><button type="button" disabled={unit.questions.length === 1} onClick={() => onChange({ ...unit, questions: unit.questions.filter(q => q.id !== question.id) })}>Remove question</button></div>
+      </fieldset>;
+    })}
+    <button type="button" disabled={unit.questions.length >= 100} onClick={() => { const extra = newUnit("quiz"); if (extra.type === "quiz") onChange({ ...unit, questions: [...unit.questions, ...extra.questions] }); }}>Add question</button></>;
 }
 
 function MediaUpload({ onUploaded }: { onUploaded: () => Promise<void> }) {

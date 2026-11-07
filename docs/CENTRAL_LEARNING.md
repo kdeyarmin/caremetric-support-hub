@@ -31,6 +31,18 @@ for the deployed release and remaining authenticated verification gates.
   post-test; a closing attestation may follow it
   (`20261009203000_learning_course_sequence.sql`). Connected frontends require
   backend feature `learning.sequence.v1` before they deploy.
+- Quiz questions take one correct answer, or are marked **Select all that apply** in
+  the editor and name every correct answer. A learner answers a select-all question
+  with every option they choose, and earns its points only for exactly the correct
+  set, as CareMetric PennSync's own grader does. The learner document says which
+  questions take several answers, never which answers are correct
+  (`20261107030000_learning_select_all_and_pennsync_placement.sql`, backend feature
+  `learning.select-all.v1`).
+- Course placements are CareBase, Breathe, Intel and CareMetric PennSync.
+  CareMetric PennSync was retired with the other apps outside the central Hub in
+  `20261028220500_limit_central_hub_to_three_apps.sql` and stays retired for support,
+  billing and native connections; courses can be placed on it again. Its staff keep
+  training in its own catalog until its central-learning cutover.
 - `/learn/my`: the current learner's enrollments and progress.
 - `/learn/certificates/:enrollmentId`: an authenticated, printable record of
   completion that shows the best post-test score and its passing score. These

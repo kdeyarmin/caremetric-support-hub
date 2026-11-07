@@ -43,7 +43,8 @@ export function CoursePlayer() {
 
 function Lesson({ course, unit, onRefresh, onNext }: { course: Course; unit: LearnerUnit; onRefresh: () => Promise<void>; onNext: () => void }) {
   const progress = course.progress.find(p => p.unitId === unit.id);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  // A select-all question is answered with the set of chosen options; the others with one option.
+  const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [attested, setAttested] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -70,14 +71,19 @@ function Lesson({ course, unit, onRefresh, onNext }: { course: Course; unit: Lea
     {unit.type !== "quiz" ? <div className="lesson-body">{unit.body}</div> : <>
       {unit.body && <div className="lesson-body">{unit.body}</div>}
       <p>Passing score: {unit.passingScore}%. Attempts used: {progress?.attemptCount ?? 0}{unit.maxAttempts === null ? " (unlimited)" : ` of ${unit.maxAttempts}`}.</p>
-      {unit.questions.map((question, index) => <fieldset key={question.id} disabled={busy || Boolean(progress?.completedAt) || exhausted}><legend>{index + 1}. {question.prompt}</legend>{question.options.map(option => <label className="learning-check" key={option.id}><input type="radio" name={question.id} checked={answers[question.id] === option.id} onChange={() => setAnswers({ ...answers, [question.id]: option.id })} />{option.text}</label>)}</fieldset>)}
+      {unit.questions.map((question, index) => <fieldset key={question.id} disabled={busy || Boolean(progress?.completedAt) || exhausted}><legend>{index + 1}. {question.prompt}</legend>{question.multiple && <p><em>Select all that apply.</em></p>}{question.options.map(option => {
+        const chosen = answers[question.id], picked = Array.isArray(chosen) ? chosen : [];
+        return question.multiple
+          ? <label className="learning-check" key={option.id}><input type="checkbox" name={question.id} checked={picked.includes(option.id)} onChange={() => setAnswers({ ...answers, [question.id]: picked.includes(option.id) ? picked.filter(id => id !== option.id) : [...picked, option.id] })} />{option.text}</label>
+          : <label className="learning-check" key={option.id}><input type="radio" name={question.id} checked={chosen === option.id} onChange={() => setAnswers({ ...answers, [question.id]: option.id })} />{option.text}</label>;
+      })}</fieldset>)}
     </>}
     {error && <p className="learning-error" role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}
     {progress?.completedAt ? <button className="button button-primary" onClick={onNext}>Continue</button> : exhausted ? <p role="status">Attempt limit reached. Contact your educator for help.</p> : <>
       {mustWatch && <p role="status">Watch the full video to continue.</p>}
       {unit.type !== "quiz" && <label className="learning-check"><input type="checkbox" checked={attested} disabled={busy || mustWatch} onChange={event => setAttested(event.target.checked)} />{unit.type === "attestation" ? "I agree to the attestation above." : "I have completed this lesson."}</label>}
-      <button className="button button-primary" disabled={busy || (unit.type === "quiz" ? unit.questions.some(q => !answers[q.id]) : !attested)} onClick={() => void submit()}>{busy ? "Saving…" : unit.type === "quiz" ? "Submit answers" : "Complete lesson"}</button>
+      <button className="button button-primary" disabled={busy || (unit.type === "quiz" ? unit.questions.some(q => { const answer = answers[q.id]; return Array.isArray(answer) ? answer.length === 0 : !answer; }) : !attested)} onClick={() => void submit()}>{busy ? "Saving…" : unit.type === "quiz" ? "Submit answers" : "Complete lesson"}</button>
     </>}
   </section>;
 }
