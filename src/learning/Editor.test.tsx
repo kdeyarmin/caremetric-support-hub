@@ -7,7 +7,7 @@ import type { Draft, DraftDocument } from "./model";
 
 const api = vi.hoisted(() => ({ editorAccess: vi.fn(), drafts: vi.fn(), draft: vi.fn(), mediaList: vi.fn(), save: vi.fn(), publish: vi.fn(), uploadMedia: vi.fn() }));
 vi.mock("./api", () => ({ learningApi: api }));
-const { CourseEditor } = await import("./Editor");
+const { CourseEditor, CourseLibrary } = await import("./Editor");
 
 // Placement eligibility mirrors private.validate_learning_document: the six
 // app products below may hold courses; a registered product outside that set
@@ -180,4 +180,15 @@ it("offers CareMetric PennSync, retired except for courses, as a placement autho
   const [, document] = await saveDraft();
   expect(document.productIds).not.toContain(ids.pennsync);
   expect([...document.productIds].sort()).toEqual(eligibleIds.filter(id => id !== ids.pennsync).sort());
+});
+
+it("links course editors to material imports from Course authoring, and nobody else", async () => {
+  api.drafts.mockResolvedValue([]);
+  const { unmount } = render(<MemoryRouter><CourseLibrary products={products} /></MemoryRouter>);
+  expect((await screen.findByRole("link", { name: "Review material imports" })).getAttribute("href")).toBe("/imports/docstudio");
+  unmount();
+  api.editorAccess.mockResolvedValue(false);
+  render(<MemoryRouter><CourseLibrary products={products} /></MemoryRouter>);
+  await waitFor(() => expect(api.editorAccess).toHaveBeenCalledTimes(2));
+  expect(screen.queryByRole("link", { name: "Review material imports" })).toBeNull();
 });

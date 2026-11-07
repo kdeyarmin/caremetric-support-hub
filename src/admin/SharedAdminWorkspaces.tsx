@@ -10,7 +10,6 @@ const workspaces = [
   {to:'/cases',label:'Support cases'},
   {to:'/knowledge',label:'Knowledge articles'},
   {to:'/library',label:'Courses, creation and distribution'},
-  {to:'/imports/docstudio',label:'Review material imports'},
   {to:'/products',label:'Products and support contacts'},
   {to:'/integration',label:'Connections and customer onboarding'},
   {to:'/security',label:'Account security'},

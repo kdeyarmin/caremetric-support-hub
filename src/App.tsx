@@ -92,6 +92,7 @@ import { config } from "./lib/config";
 import { appSession } from "./lib/appSession";
 import { SmsSignIn } from "./auth/SmsSignIn";
 import { PrivateHubNotice } from "./auth/PrivateHubNotice";
+import { PublicationImport } from "./imports/PublicationImport";
 import { PublicationVideo } from "./imports/PublicationVideo";
 import { courseLaunchUrl } from "./security/courseLaunch";
 import { reconcileCaseSelection } from "./security/caseListState";
@@ -401,6 +402,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/learn/my" element={<MyLearning />} />
             <Route path="/learn/certificates/:enrollmentId" element={<LearningCertificate />} />
             <Route path="/library" element={<CourseLibrary products={data.products} />} />
+            <Route path="/imports/docstudio" element={platformAdmin ? <PublicationImport /> : <Navigate to="/overview" replace />} />
             <Route path="/products" element={<ProductsPage data={data} />} />
             <Route path="/integration" element={<IntegrationPage data={data} />} />
             <Route path="/security" element={<SecurityPage actor={data.actor} />} />

@@ -14,7 +14,7 @@ describe('shared owner workspaces',()=>{
       ['Phone numbers and routing','/phone-numbers'],['AI phone inbox','/phone'],
       ['Communications: phone, text, email, chat','/communications'],['Support cases','/cases'],['Knowledge articles','/knowledge'],
       ['Courses, creation and distribution','/library'],
-      ['Review material imports','/imports/docstudio'],['Products and support contacts','/products'],
+      ['Products and support contacts','/products'],
       ['Connections and customer onboarding','/integration'],['Account security','/security'],
       ['Support overview','/overview'],['Portfolio rollup','/admin/portfolio'],
       ['AI go-live readiness','/admin/go-live-readiness'],
