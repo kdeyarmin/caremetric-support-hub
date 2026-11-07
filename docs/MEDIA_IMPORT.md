@@ -19,10 +19,10 @@ A CSV with exactly these columns, in any order, and one row per video:
 
 | Column | Meaning |
 | --- | --- |
-| `product` | `pennsync` or `carebase` |
+| `product` | `pennsync` or `carebase`, or a label that names one, such as `PennSync (home health and hospice)` |
 | `course_title` | Shown in review; the draft's own title is shown next to it |
 | `lesson_title` | The approved media title, and for a Hub draft item the video lesson it fills |
-| `source_record` | A PennSync TrainingModule id (24 hex characters, PennSync rows only) or a Hub draft item id (UUID) |
+| `source_record` | A PennSync TrainingModule id (24 hex characters, PennSync rows only) or a Hub draft item id (UUID), bare or labelled as `PennSync TrainingModule <id>` or `Hub draft item <uuid>`; a label must name its own kind of id |
 | `duration_seconds` | The render length; captions must end within it, plus one second |
 | `mp4_url` | Permanent `https` URL of the rendered MP4 |
 | `poster_url` | Optional `https` URL, recorded for provenance only; it is not fetched |

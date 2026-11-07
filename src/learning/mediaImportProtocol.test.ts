@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { learningSourceId } from "../imports/pennsyncCourseImport";
-import { MEDIA_IMPORT_COLUMNS, matchSidecar, mediaImportRequestSchema, mediaImportTargetKey, parseCsv, parseMediaManifest, validateSidecars } from "./mediaImportProtocol";
+import { MEDIA_IMPORT_COLUMNS, manifestProduct, manifestSourceRecord, matchSidecar, mediaImportRequestSchema, mediaImportTargetKey, parseCsv, parseMediaManifest, validateSidecars } from "./mediaImportProtocol";
 
 const header = MEDIA_IMPORT_COLUMNS.join(",");
 const module = "65f1a2b3c4d5e6f708192a3b";
@@ -37,6 +37,28 @@ describe("manifest validation", () => {
         mp4Url: "https://resource2.heygen.ai/video/abc.mp4", posterUrl: null, captionsFile: "captions/abc.vtt", transcriptFile: "transcripts/abc.txt", heygenVideoId: "abc123def" },
       expect.objectContaining({ line: 3, product: "carebase", sourceRecord: draft, lessonTitle: "Fire   safety", posterUrl: "https://files2.heygen.ai/x/cb.jpg" }),
     ]);
+  });
+
+  it("reads the labelled product and source record the PennSync package writes", () => {
+    // The shapes of docs/hub-media-2026/manifest.csv in kdeyarmin/CareMetric-Pennsync (synthetic ids and URLs).
+    const parsed = parseMediaManifest([header,
+      line({ product: "PennSync (home health and hospice)", source_record: `PennSync TrainingModule ${module}` }),
+      line({ product: "CareBase (PCH and ALF)", course_title: '"ALF Dementia Annual Training Part 2: Applied Support, Safety, and Rights"', lesson_title: "Course video",
+        source_record: `Hub draft item ${draft}`, heygen_video_id: "cb1234567", mp4_url: "https://resource2.heygen.ai/video/cb/original.mp4",
+        captions_file: "carebase-pch-alf/alf.vtt", transcript_file: "carebase-pch-alf/alf.txt" }),
+    ].join("\n"));
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.rows.map(row => [row.product, row.sourceRecord, row.courseTitle])).toEqual([
+      ["pennsync", module, "Infection control"],
+      ["carebase", draft, "ALF Dementia Annual Training Part 2: Applied Support, Safety, and Rights"],
+    ]);
+    expect(manifestProduct("CareBase")).toBe("carebase");
+    expect(manifestSourceRecord(`  hub draft ITEM   ${draft.toUpperCase()} `)).toBe(draft);
+    // A label must name its own kind of id, and an unknown product stays invalid.
+    expect(manifestSourceRecord(`Hub draft item ${module}`)).toBe(`hub draft item ${module}`);
+    expect(manifestSourceRecord(`PennSync TrainingModule ${draft}`)).toBe(`pennsync trainingmodule ${draft}`);
+    expect(manifestProduct("Breathe (respiratory)")).toBe("breathe (respiratory)");
+    expect(parseMediaManifest([header, line({ source_record: `Hub draft item ${module}` })].join("\n")).errors[0].message).toMatch(/sourceRecord/);
   });
 
   it("requires exactly the documented columns", () => {
