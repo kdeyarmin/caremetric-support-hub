@@ -140,6 +140,12 @@ accepting messages that may contain PHI.
 3. For replies, authenticate the sending domain in SendGrid and set
    `HUB_SENDGRID_API_KEY` (Mail Send only). `HUB_SUPPORT_FROM_EMAIL` defaults
    to `support@caremetric.ai`.
+4. If Inbound Parse receives on a different address (for example
+   `support@inbound.caremetric.ai`), set `HUB_SUPPORT_REPLY_TO` to it. Staff
+   replies, the AI team's customer emails and bulk email then carry it as
+   Reply-To, so customers' answers join the conversation (and a reply still
+   stops a growth sequence). A value that is not an email address is ignored
+   with a warning; without it, answers go to the reply sender.
 
 ### Chat
 

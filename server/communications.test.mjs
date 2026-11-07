@@ -92,6 +92,14 @@ describe('reply providers', () => {
     expect(body.content).toEqual([{ type: 'text/plain', value: 'Body' }]);
     expect(body.tracking_settings).toEqual({ click_tracking: { enable: false, enable_text: false } });
     expect(sendgridMail({ apiKey: 'not-a-key' }).configured).toBe(false);
+    expect(body).not.toHaveProperty('reply_to');
+  });
+  it('asks customers to answer at the inbound address when one is set, and ignores one that is not an address', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response('', { status: 202 }));
+    await sendgridMail({ apiKey: 'SG.fixture', replyTo: ' support@inbound.caremetric.ai ', fetchImpl }).send('pat@agency.test', 'Re: Help', 'Body');
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body).reply_to).toEqual({ email: 'support@inbound.caremetric.ai' });
+    await sendgridMail({ apiKey: 'SG.fixture', replyTo: 'not an address', fetchImpl }).send('pat@agency.test', 'Re: Help', 'Body');
+    expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).not.toHaveProperty('reply_to');
   });
   it('sends the text part first and the HTML part second when both are given', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response('', { status: 202 }));

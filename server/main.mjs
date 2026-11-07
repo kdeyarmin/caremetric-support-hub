@@ -49,17 +49,23 @@ const automation=aiAutomation({ai,store:sqlAutomationStore(pool),enabled:process
 const publicOrigin=process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin;
 // One text sender and one mail sender, shared by the Communications inbox and the AI team's owner alerts.
 const textSender=twilioMessaging({accountSid:process.env.HUB_TWILIO_ACCOUNT_SID,authToken:process.env.HUB_TWILIO_AUTH_TOKEN,messagingServiceSid:process.env.HUB_TWILIO_MESSAGING_SERVICE_SID,from:process.env.HUB_TWILIO_FROM_NUMBER});
-const mailSender=sendgridMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai'});
+// Where customers' answers go: the address SendGrid Inbound Parse receives (HUB_SUPPORT_REPLY_TO), else the support sender.
+// An address that is not one is ignored (with a warning) rather than making SendGrid refuse every email.
+const configuredReplyTo=process.env.HUB_SUPPORT_REPLY_TO?.trim()||'';
+const validReplyTo=/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(configuredReplyTo)&&configuredReplyTo.length<=320?configuredReplyTo:null;
+if(configuredReplyTo&&!validReplyTo)console.warn('HUB_SUPPORT_REPLY_TO is not an email address; replies go to the support sender.');
+const supportReplyTo=validReplyTo||process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai';
+const mailSender=sendgridMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai',replyTo:validReplyTo});
 const messaging=communications({pool,delegations:capabilities,publicOrigin,
   twilioAuthToken:process.env.HUB_TWILIO_AUTH_TOKEN,sendgridInboundPublicKey:process.env.HUB_SENDGRID_INBOUND_PUBLIC_KEY,
   sms:textSender,email:mailSender,
   chatEnabled:process.env.HUB_CHAT_ENABLED==='true'});
 const growth=growthService({store:growthStore(pool),research:growthResearch({apiKey:process.env.HUB_GROWTH_SEARCH_API_KEY}),contacts:growthContactFinder(),features:new Set(contract.features),enabled:process.env.HUB_GROWTH_SEND_ENABLED==='true',signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,publicOrigin,postalAddress:process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS});
-const growthMail=sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_BULK_EMAIL_FROM||'support@caremetric.ai',replyTo:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai'});
+const growthMail=sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_BULK_EMAIL_FROM||'support@caremetric.ai',replyTo:supportReplyTo});
 // The owner's booking page, which the Concierge's sales acknowledgment may offer. A value it cannot use offers no link, and says so once.
 if(process.env.HUB_BOOKING_URL&&!bookingLink(process.env.HUB_BOOKING_URL)) console.warn('HUB_BOOKING_URL is not an https link of at most 200 characters, so the sales acknowledgment offers no booking link.');
 // The Account Manager's customer emails: from the support address, replies to it, one-click unsubscribe headers, and the postal address in every footer.
-const customerMail=sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai',replyTo:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai',category:'hub-lifecycle-email'});
+const customerMail=sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai',replyTo:supportReplyTo,category:'hub-lifecycle-email'});
 // The AI team: inert unless HUB_AGENTS_ENABLED is exactly "true", and every agent starts paused until the owner resumes it.
 const team=agentTeam({pool,growth,growthMail,postalAddress:process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS,sms:textSender,email:mailSender,ownerEmail:process.env.HUB_OWNER_EMAIL,publicOrigin,enabled:process.env.HUB_AGENTS_ENABLED==='true',communications:messaging,features,anthropicApiKey:process.env.ANTHROPIC_API_KEY,record:sqlAiUsageRecorder(pool).record,guides:guideLibrary({load:()=>api.rpc('list_published_content',{}),loadProducts:()=>api.rows('products')}),customerTextToAi:process.env.HUB_AGENTS_CUSTOMER_TEXT_TO_AI==='true',
   bookingUrl:process.env.HUB_BOOKING_URL||null,leadSecrets:leadSecrets(process.env),
@@ -67,7 +73,7 @@ const team=agentTeam({pool,growth,growthMail,postalAddress:process.env.HUB_BULK_
   // Offers from the owner's menu: platform billing (created below) makes them, so the call is deferred until an offer is approved.
   offerBilling:{agentOffer:input=>billing.agentOffer(input)}});
 const announcements=bulkEmail({pool,delegations:capabilities,publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin,postalAddress:(process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS||'').trim(),
-  mail:sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_BULK_EMAIL_FROM||process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai',replyTo:process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai'})});
+  mail:sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:process.env.HUB_BULK_EMAIL_FROM||process.env.HUB_SUPPORT_FROM_EMAIL||'support@caremetric.ai',replyTo:supportReplyTo})});
 // Platform billing: the Hub is the only Stripe client for every application's subscriptions.
 const customerSelfService=selfService({pool,provider});
 const billing=platformBilling({pool,secretKey:process.env.STRIPE_SECRET_KEY,authorizeCustomerBilling:customerSelfService.authorizeBilling,customerPurchasingEnabled:process.env.HUB_CUSTOMER_PURCHASING_ENABLED==='true',
