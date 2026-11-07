@@ -129,7 +129,8 @@ try{
   await assert.rejects(service.send(staleToken,{id:created.id,version:saved.version,recipients:expected.size-1}));
   await assert.rejects(service.send(customerToken,{id:created.id,version:saved.version,recipients:expected.size-1}));
   failNext=1;unknownNext=1;
-  const queued=await service.send(ownerToken,{id:created.id,version:saved.version,recipients:expected.size-1});
+  // Delivery starts in the next tick below, not in the background, so the unsubscribe after queuing is ordered deterministically.
+  const queued=await (async()=>{const realTick=service.tick;service.tick=()=>Promise.resolve();try{return await service.send(ownerToken,{id:created.id,version:saved.version,recipients:expected.size-1});}finally{service.tick=realTick;}})();
   assert.equal(queued.status,'sending');assert.equal(queued.recipientCount,expected.size-1);
   assert.equal((await admin.query('select count(*)::int as n from private.email_audience_members where campaign_id=$1',[created.id])).rows[0].n,0);
   await assert.rejects(service.save(ownerToken,{...draft,version:queued.version}),error=>error.status===409,'a sending email cannot be edited');
