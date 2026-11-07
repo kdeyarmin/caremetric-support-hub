@@ -170,6 +170,8 @@ describe('reply providers', () => {
     expect(send).toHaveBeenCalledTimes(1);
     expect([failure.status, failure.code]).toEqual([502, 'delivery_unsettled']);
     expect(failure.message).not.toMatch(/connection to the database/);
+    // Staff see the warning in the inbox: the code alone would reach the browser as a generic failure.
+    expect(failure.publicMessage).toBe('The provider answered, but the delivery could not be recorded. Check the conversation before sending again.');
   });
   it('names an emailed reply to a phone-line message for the caller, not with the staff import title', async () => {
     const started = { messageId: 'm2', replay: false, delivery: 'pending', deliveryChannel: 'email', to: 'jordan@example.com', reference: 1043,

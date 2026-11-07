@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { Mail, MessageCircle, MessageSquareText, Phone, RefreshCw, Search, Send, StickyNote, Globe2 } from "lucide-react";
 import type { Product } from "../domain";
 import {
-  channelLabels, channels, communicationsClient, conversationSourceLabel, conversationStatuses, deliveryLabels, describeChannels, inquiryLabels, inquiryTypes, replyRoute, statusLabels,
+  channelLabels, channels, communicationsClient, conversationSourceLabel, conversationStatuses, deliveryLabels, describeChannels, inquiryLabels, inquiryTypes, replyLimit, replyRoute, statusLabels,
   type Channel, type ChannelStatus, type CommunicationsClient, type ConversationPage, type ConversationStatus, type ConversationThread, type InquiryType, type SyncSource,
 } from "./communicationsClient";
 import "./communications.css";
@@ -83,7 +83,8 @@ export function Communications({ products, actor, client = communicationsClient,
   async function act(work: () => Promise<string>) {
     setBusy(true); setNotice(""); setError("");
     try { setNotice(await work()); refresh(); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "The action could not be completed."); }
+    // A failed action may still have changed the conversation (a reply the provider took but the Hub could not record), so read it again.
+    catch (cause) { setError(cause instanceof Error ? cause.message : "The action could not be completed."); refresh(); }
     finally { setBusy(false); }
   }
   const sync = (source: SyncSource, from = 0) => act(async () => {
@@ -144,6 +145,7 @@ function ThreadView({ thread, products, actorId, status, busy, client, act }: { 
   const [note, setNote] = useState("");
   const replyKey = useRequestKey(), noteKey = useRequestKey();
   const route = replyRoute(thread, status);
+  const limit = replyLimit(thread, status);
   const update = (change: Partial<Parameters<CommunicationsClient["update"]>[0]>) => act(async () => { await client.update({ id: thread.id, expectedUpdatedAt: thread.updatedAt, ...change }); return "Conversation updated."; });
   const ChannelIcon = channelIcons[thread.channel];
   const replyAsNew = replyKey.changed(reply), noteAsNew = noteKey.changed(note);
@@ -172,7 +174,7 @@ function ThreadView({ thread, products, actorId, status, busy, client, act }: { 
       <p>{message.body}</p>{message.direction === "outbound" && <small>{message.deliveryChannel ? `${channelLabels[message.deliveryChannel]} · ` : ""}{deliveryLabels[message.delivery] ?? message.delivery}</small>}</li>)}</ol>
     <form className="communications-compose" onSubmit={event => { event.preventDefault(); if (reply.trim()) void sendReply(); }}>
       <label htmlFor="communication-reply">{route.label}</label>
-      <textarea id="communication-reply" maxLength={5000} value={reply} disabled={!route.available || busy} onChange={event => setReply(event.target.value)} placeholder="Write a reply without patient information." />
+      <textarea id="communication-reply" maxLength={limit} value={reply} disabled={!route.available || busy} onChange={event => setReply(event.target.value)} placeholder="Write a reply without patient information." />
       {replyAsNew && <UnconfirmedAttempt kind="reply" disabled={busy} onRestore={() => setReply(replyKey.pending?.body ?? "")} />}
       <button className="button button-primary" type="submit" disabled={!route.available || busy || !reply.trim()}><Send size={15} aria-hidden="true" />{replyAsNew ? "Send as a new message" : "Send reply"}</button>
     </form>

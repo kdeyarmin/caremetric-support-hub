@@ -62,12 +62,23 @@ export interface ConversationUpdate {
   changeProduct?: boolean; productId?: string | null; changeAssignment?: boolean; assignedTo?: string | null;
 }
 
+function replyChannel(conversation: Conversation, status: ChannelStatus | null): "chat" | "sms" | "email" | null {
+  if (conversation.channel === "chat") return "chat";
+  const mobile = !!conversation.contactPhone && /^\+[1-9][0-9]{7,14}$/.test(conversation.contactPhone);
+  return conversation.channel === "sms" ? "sms" : conversation.channel === "email" ? "email"
+    : conversation.contactEmail && status?.email.replies ? "email" : mobile && status?.sms.replies ? "sms" : conversation.contactEmail ? "email" : mobile ? "sms" : null;
+}
+
+/** Twilio refuses a text message body over 1,600 characters; email and chat replies may run to 5,000. */
+export const smsReplyLimit = 1600;
+export function replyLimit(conversation: Conversation, status: ChannelStatus | null): number {
+  return replyChannel(conversation, status) === "sms" ? smsReplyLimit : 5000;
+}
+
 /** Where a staff reply will go for this conversation, given the configured providers. */
 export function replyRoute(conversation: Conversation, status: ChannelStatus | null): { label: string; available: boolean } {
-  if (conversation.channel === "chat") return { label: "Reply in chat", available: true };
-  const mobile = !!conversation.contactPhone && /^\+[1-9][0-9]{7,14}$/.test(conversation.contactPhone);
-  const route = conversation.channel === "sms" ? "sms" : conversation.channel === "email" ? "email"
-    : conversation.contactEmail && status?.email.replies ? "email" : mobile && status?.sms.replies ? "sms" : conversation.contactEmail ? "email" : mobile ? "sms" : null;
+  const route = replyChannel(conversation, status);
+  if (route === "chat") return { label: "Reply in chat", available: true };
   if (!route) return { label: "No email address or mobile number — call back and record a note", available: false };
   const configured = route === "sms" ? !!status?.sms.replies : !!status?.email.replies;
   return { label: `${route === "sms" ? "Reply by text message" : "Reply by email"}${configured ? "" : " — not configured in the Hub yet"}`, available: configured };

@@ -9,10 +9,13 @@ export async function appRequest<T>(path: string, body?: unknown, signal?: Abort
     headers: body === undefined ? {} : { 'Content-Type':'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body), signal,
   });
-  const data = await response.json() as { error?:string } & T;
+  const data = await response.json() as { error?:string | { code?:string; message?:string } } & T;
   if (!response.ok) {
     if (response.status === 401 && !path.startsWith('auth/')) window.dispatchEvent(new Event(authEvent));
-    throw new Error(typeof data.error === 'string' ? data.error : 'The request could not be completed.');
+    // A coded error carries a message only when the server marked it as safe to show.
+    const error = data.error;
+    const message = typeof error === 'string' ? error : typeof error === 'object' && error !== null && typeof error.message === 'string' ? error.message : null;
+    throw new Error(message ?? 'The request could not be completed.');
   }
   return data;
 }

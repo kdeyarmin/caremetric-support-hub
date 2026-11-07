@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { Communications } from "./Communications";
 import { ChatPanel } from "./ChatPanel";
 import { demoCommunicationsClient } from "./demoCommunications";
-import { conversationSourceLabel, replyRoute, type ChannelStatus, type ChatClient, type Conversation } from "./communicationsClient";
+import { conversationSourceLabel, replyLimit, replyRoute, type ChannelStatus, type ChatClient, type Conversation } from "./communicationsClient";
 import type { Product } from "../domain";
 
 afterEach(cleanup);
@@ -32,6 +32,12 @@ describe("unified communications inbox", () => {
     expect(replyRoute(conversation({ channel: "email", contactEmail: "pat@agency.test" }), configured)).toEqual({ label: "Reply by email — not configured in the Hub yet", available: false });
     expect(replyRoute(conversation({ contactEmail: "pat@agency.test", contactPhone: "+12025550144" }), configured).label).toBe("Reply by text message");
     expect(replyRoute(conversation({ contactPhone: "(202) 555" }), configured).available).toBe(false);
+  });
+  it("limits a text-message reply to what Twilio accepts", () => {
+    expect(replyLimit(conversation({ channel: "sms", contactPhone: "+12025550144" }), configured)).toBe(1600);
+    expect(replyLimit(conversation({ contactEmail: "pat@agency.test", contactPhone: "+12025550144" }), configured)).toBe(1600);
+    expect(replyLimit(conversation({ channel: "email", contactEmail: "pat@agency.test" }), configured)).toBe(5000);
+    expect(replyLimit(conversation({ channel: "chat" }), null)).toBe(5000);
   });
   it("lists every channel, opens a thread, triages it and replies once", async () => {
     const fake = client();

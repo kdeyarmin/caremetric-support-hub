@@ -165,6 +165,8 @@ export function sendgridMail({ apiKey, from = 'support@caremetric.ai', fetchImpl
   };
 }
 
+const unsettledDelivery = 'The provider answered, but the delivery could not be recorded. Check the conversation before sending again.';
+
 export function communications({ pool, delegations, publicOrigin = defaultPublicOrigin, twilioAuthToken, sendgridInboundPublicKey, sms, email, chatEnabled = false, now = () => new Date() }) {
   let inboundKey = null;
   // A malformed key disables inbound email rather than stopping the whole Hub.
@@ -190,7 +192,7 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
     } catch {
       // The provider has answered (it may well have delivered), but the record still says pending. Say so with a code, so a caller can tell
       // this from a failure before anything was sent and warn instead of reporting that nothing happened.
-      throw new HttpError(502, 'The provider answered, but the delivery could not be recorded. Check the conversation before sending again.', 'delivery_unsettled');
+      throw Object.assign(new HttpError(502, unsettledDelivery, 'delivery_unsettled'), { publicMessage: unsettledDelivery });
     }
     return { delivery: outcome.delivery, deliveryChannel: started.deliveryChannel, replay: false };
   }
