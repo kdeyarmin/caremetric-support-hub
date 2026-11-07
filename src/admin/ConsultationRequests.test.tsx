@@ -53,3 +53,26 @@ it("deletes a request only after a second, explicit confirmation", async () => {
   expect(await screen.findByText("Deleted from Advisors.")).toBeTruthy();
   expect(change).toHaveBeenCalledWith({ operation: "inquiries.delete", id: "CM-00000000000A", expected: { status: "new", notes: "" } });
 });
+
+it("starts the next page where the source now is after deleting on this one, so no request is skipped", async () => {
+  const { readPortfolio } = await import("./portfolioClient");
+  const reads = vi.mocked(readPortfolio);
+  reads.mockResolvedValueOnce({ ...page, total: 45 });
+  render(<ConsultationRequests change={vi.fn(async () => ({}))} />);
+  const request = await row();
+  fireEvent.click(within(request).getByRole("button", { name: "Delete" }));
+  fireEvent.click(within(request).getByRole("button", { name: "Yes, delete" }));
+  await screen.findByText("Deleted from Advisors.");
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await vi.waitFor(() => expect(reads.mock.calls.at(-1)?.[1]).toMatchObject({ operation: "inquiries.list", offset: 19 }));
+});
+
+it("links a self-reported email address without letting it add recipients or a message", async () => {
+  const { readPortfolio } = await import("./portfolioClient");
+  vi.mocked(readPortfolio).mockResolvedValueOnce({ ...page, items: [{ ...page.items[0], email: "alex@agency.test?bcc=someone@elsewhere.test&body=hi" }] });
+  render(<ConsultationRequests change={vi.fn(async () => ({}))} />);
+  const link = within(await row()).getByRole("link", { name: /alex@agency\.test/ });
+  // Encoded, the address cannot start a query: no header such as bcc or body reaches the mail client.
+  expect(link.getAttribute("href")).toMatch(/^mailto:/);
+  expect(link.getAttribute("href")).not.toMatch(/[?&]/);
+});
