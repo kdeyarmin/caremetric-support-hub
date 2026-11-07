@@ -825,8 +825,21 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
           await lock(db, 'subscription', subscription, Number(current.version ?? 0));
           let already = false;
           if (extend) {
-            asked = true;
-            await live.post(`/v1/subscriptions/${subscription}`, { trial_end: trialEnd, proration_behavior: 'none' }, { idempotencyKey });
+            // The trial Stripe holds now, not a mirror that may be behind: the owner may have moved the trial end in the Dashboard and its
+            // webhook not arrived yet. An offer never shortens a trial, and is made only to a subscription that is still on one.
+            await refresh(db, live, 'subscription', subscription);
+            current = await lookup(db, 'subscription', subscription);
+            const currentEnd = current?.trial_end ? Math.floor(Date.parse(current.trial_end) / 1000) : null;
+            if (currentEnd === trialEnd) {
+              // An earlier attempt of this offer applied it: nothing is asked again.
+              already = true;
+            } else {
+              if (current?.status !== 'trialing' || currentEnd === null || currentEnd > trialEnd) {
+                throw new HttpError(409, 'The trial changed since this offer was made. Nothing was changed.');
+              }
+              asked = true;
+              await live.post(`/v1/subscriptions/${subscription}`, { trial_end: trialEnd, proration_behavior: 'none' }, { idempotencyKey });
+            }
           } else {
             // The discounts Stripe holds now, not a mirror that may be behind (a refresh that failed, a webhook not yet arrived).
             await refresh(db, live, 'subscription', subscription);

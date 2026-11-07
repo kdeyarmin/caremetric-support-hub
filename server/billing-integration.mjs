@@ -260,6 +260,15 @@ try {
   await billing.agentOffer({ subscription: subscriptionId, trialEnd: offerTrialEnd, idempotencyKey: trialOfferKey });
   assert.equal(stripe.store.subscriptions.get(subscriptionId).trial_end, offerTrialEnd, 'a retry under the same key changes nothing more');
   assert.ok(stripe.requests.length > sentBefore);
+  assert.ok(!stripe.requests.slice(sentBefore).some(request => request.method === 'POST' && request.path === `/v1/subscriptions/${subscriptionId}`), 'a retry finds the offer applied and asks Stripe for nothing');
+  // The owner moves the trial end later in the Dashboard and its webhook has not arrived: an offer computed from the mirror would cut
+  // the trial short, so it is refused before Stripe is asked, and the trial keeps the owner's date.
+  const ownerTrialEnd = offerTrialEnd + 30 * 86400;
+  stripe.store.subscriptions.get(subscriptionId).trial_end = ownerTrialEnd;
+  const beforeShorter = stripe.requests.length;
+  await assert.rejects(billing.agentOffer({ subscription: subscriptionId, trialEnd: offerTrialEnd + 7 * 86400, idempotencyKey: `hub-agent-offer-${randomUUID()}` }), error => error.status === 409);
+  assert.equal(stripe.store.subscriptions.get(subscriptionId).trial_end, ownerTrialEnd, 'an offer never shortens a trial');
+  assert.ok(!stripe.requests.slice(beforeShorter).some(request => request.method === 'POST'), 'nothing was asked of Stripe');
   const offerAudit = (await admin.query("select actor_id, metadata from private.audit_events where action = 'billing.agent_offer' and tenant_id = $1 order by id", [tenant])).rows;
   assert.equal(offerAudit[0].actor_id, 'a1a00000-a1a0-4000-8000-000000000001');
   assert.deepEqual([offerAudit[0].metadata.kind, offerAudit[0].metadata.subscription], ['trial_extension', subscriptionId]);
