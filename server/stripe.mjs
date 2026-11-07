@@ -77,15 +77,25 @@ export function stripeClient({ secretKey, fetchImpl = fetch, apiBase = 'https://
     get: (path, params, options) => request('GET', path, params, options),
     post: (path, params, options) => request('POST', path, params, options),
     del: (path, params) => request('DELETE', path, params),
-    /** Every page of a list endpoint, up to a hard limit. */
+    /**
+     * Every page of a list endpoint, up to `max` rows. `truncated` is set when Stripe
+     * still has more, so a caller never treats a cut-off page as the full list.
+     */
     async list(path, params = {}, max = 1000) {
-      const rows = []; let starting_after;
+      const rows = []; let starting_after; let truncated = false;
       while (rows.length < max) {
-        const page = await request('GET', path, { ...params, limit: 100, ...(starting_after ? { starting_after } : {}) });
-        rows.push(...page.data);
-        if (!page.has_more || !page.data.length) break;
-        starting_after = page.data.at(-1).id;
+        const limit = Math.min(100, max - rows.length);
+        const page = await request('GET', path, { ...params, limit, ...(starting_after ? { starting_after } : {}) });
+        const data = Array.isArray(page?.data) ? page.data : [];
+        rows.push(...data.slice(0, limit));
+        const more = page?.has_more === true || data.length > limit;
+        if (!more || !data.length) break;
+        if (rows.length >= max) { truncated = true; break; }
+        const next = data[Math.min(data.length, limit) - 1]?.id;
+        if (!next || next === starting_after) break;
+        starting_after = next;
       }
+      if (truncated) rows.truncated = true;
       return rows;
     },
   };
@@ -171,6 +181,21 @@ export function discountRef(discount) {
   if (!discount || typeof discount !== 'object' || typeof discount.id !== 'string' || !/^di_[A-Za-z0-9]+$/.test(discount.id)) return null;
   const coupon = idOf(discount.coupon) ?? idOf(discount.source?.coupon);
   return coupon ? { id: discount.id, coupon, promotion_code: idOf(discount.promotion_code) } : null;
+}
+
+/**
+ * A subscription retrieve includes only the first page of items (10) and sets `items.has_more`
+ * when a plan plus add-ons runs past that. The Hub allows 20 prices, so the rest are loaded
+ * before any comparison, mirror, or quantity change. A list that is still cut off throws.
+ */
+export async function withAllSubscriptionItems(live, subscription) {
+  if (!subscription?.items?.has_more) return subscription;
+  const data = await live.list('/v1/subscription_items', { subscription: subscription.id, expand: ['data.price'] }, 100);
+  if (!Array.isArray(data) || data.truncated) {
+    throw new StripeError(409, 'invalid_request_error', 'subscription_items_incomplete',
+      'This subscription has more prices than the Hub can read in one pass.');
+  }
+  return { ...subscription, items: { object: 'list', data, has_more: false } };
 }
 
 export function normalizeSubscription(subscription, livemode = subscription.livemode) {

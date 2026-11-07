@@ -32,6 +32,8 @@ describe("unified communications inbox", () => {
     expect(replyRoute(conversation({ channel: "email", contactEmail: "pat@agency.test" }), configured)).toEqual({ label: "Reply by email — not configured in the Hub yet", available: false });
     expect(replyRoute(conversation({ contactEmail: "pat@agency.test", contactPhone: "+12025550144" }), configured).label).toBe("Reply by text message");
     expect(replyRoute(conversation({ contactPhone: "(202) 555" }), configured).available).toBe(false);
+    expect(replyRoute(conversation({ channel: "sms", contactPhone: "(202) 555-0144" }), configured)).toEqual({ label: "No email address or mobile number — call back and record a note", available: false });
+    expect(replyRoute(conversation({ channel: "email" }), { ...configured, email: { inbound: true, replies: true } })).toEqual({ label: "No email address or mobile number — call back and record a note", available: false });
   });
   it("limits a text-message reply to what Twilio accepts", () => {
     expect(replyLimit(conversation({ channel: "sms", contactPhone: "+12025550144" }), configured)).toBe(1600);

@@ -3,7 +3,7 @@ import { HttpError } from './sms-auth.mjs';
 import { initialSubscriptionLines } from '../src/billing/facilityAllocations.ts';
 import { assertPlanFits } from '../src/billing/planSize.ts';
 import { selfServiceApps } from '../src/self-service/protocol.ts';
-import { CHECKOUT_API_VERSION, normalizers, StripeError } from './stripe.mjs';
+import { CHECKOUT_API_VERSION, normalizers, StripeError, withAllSubscriptionItems } from './stripe.mjs';
 
 const reference = value => typeof value === 'string' ? value : value?.id;
 const linesOf = subscription => (subscription.items?.data ?? []).map(item => ({ price: reference(item.price), quantity: item.quantity ?? 1 }));
@@ -28,7 +28,7 @@ export function customerCheckoutService({ stripe, service, mirrorCustomer, mirro
     if (!workspace.customer) return;
     const subscriptions = await live.list('/v1/subscriptions', { customer: workspace.customer, status: 'all' }, 1000);
     // Never interpret a truncated provider result as proof that an account is new.
-    if (subscriptions.length >= 1000) throw new HttpError(409, 'This account needs billing reconciliation before starting a subscription.');
+    if (subscriptions.truncated) throw new HttpError(409, 'This account needs billing reconciliation before starting a subscription.');
     const products = new Set(workspace.catalog.map(price => price.product));
     if (subscriptions.some(sub => !['canceled', 'incomplete_expired'].includes(sub.status)
       && !(ownQuote && sub.metadata?.hub_checkout_quote === ownQuote)
@@ -91,7 +91,14 @@ export function customerCheckoutService({ stripe, service, mirrorCustomer, mirro
     if (!['paid', 'no_payment_required'].includes(checkout.payment_status)) return { state: 'pending_payment' };
     const subscriptionId = reference(checkout.subscription), invoiceId = reference(checkout.invoice);
     if (!/^sub_[A-Za-z0-9]+$/.test(subscriptionId ?? '') || !/^in_[A-Za-z0-9]+$/.test(invoiceId ?? '')) throw new HttpError(409, 'The initial subscription receipt is unavailable.');
-    const subscription = await live.get(`/v1/subscriptions/${subscriptionId}`);
+    let subscription = await live.get(`/v1/subscriptions/${subscriptionId}`);
+    try { subscription = await withAllSubscriptionItems(live, subscription); }
+    catch (error) {
+      if (error instanceof StripeError && error.code === 'subscription_items_incomplete') {
+        throw new HttpError(409, 'Payment and subscription details need reconciliation before access can be granted. Open a billing support request.');
+      }
+      throw error;
+    }
     const invoice = await live.get(`/v1/invoices/${invoiceId}`);
     const normalized = normalizers.invoice(invoice);
     const lines = await live.list(`/v1/checkout/sessions/${checkout.id}/line_items`, {}, 100);

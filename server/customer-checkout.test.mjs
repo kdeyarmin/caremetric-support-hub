@@ -177,6 +177,18 @@ describe('initial subscription Checkout', () => {
     await expect(test.service.reconcileCheckouts()).resolves.toEqual({ pending: 1, failed: 0, unbound: 0 });
     expect(test.events).toContain('applied'); expect(test.events.filter(event => event === 'checkout_created')).toHaveLength(1);
   });
+  it('grants access when the paid subscription’s prices continue past Stripe’s first item page', async () => {
+    const test = fixture(), quote = await test.preview();
+    await test.confirm(quote);
+    test.complete();
+    test.mutateSubscription({ items: { data: [{ id: 'si_page', price: { id: 'price_other' }, quantity: 1 }], has_more: true } });
+    const listed = [{ id: 'si_new', price: { id: 'price_core' }, quantity: 2 }];
+    const original = test.live.list.getMockImplementation();
+    test.live.list.mockImplementation(async path => path === '/v1/subscription_items' ? listed : original(path));
+    await test.service.reconcileCheckout('cs_test_new');
+    expect(test.events).toContain('applied');
+    expect(test.live.list).toHaveBeenCalledWith('/v1/subscription_items', { subscription: 'sub_new', expand: ['data.price'] }, 100);
+  });
   it('waits through delayed payment and grants only after the exact initial paid invoice', async () => {
     const test = fixture(), quote = await test.preview(); await test.confirm(quote); test.complete('unpaid');
     await test.service.reconcileCheckout('cs_test_new'); expect(test.events).not.toContain('applied');

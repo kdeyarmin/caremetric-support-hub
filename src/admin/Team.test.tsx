@@ -328,6 +328,23 @@ describe("AI team screen", () => {
     expect(screen.queryByRole("region", { name: "Work the team does on its own" })).toBeNull();
   });
 
+  it("pages later proposals so each one can be approved", async () => {
+    const approvals = Array.from({ length: 11 }, (_, index) => ({
+      id: `33333333-3333-4333-8333-${String(index).padStart(12, "0")}`,
+      agentKey: "support_concierge", agentName: "Support Concierge", taskId: ids.task, kind: "communication.reply",
+      targetKind: "communication", targetId: `CM-${1000 + index}`, preview: `Proposal ${index}`,
+      createdAt: "2026-11-02T11:30:00+00:00", expiresAt: "2026-11-09T11:30:00+00:00",
+    }));
+    render(<Team client={fakeClient(overview({ approvals, approvalCount: 12 }))} />);
+    const waiting = await screen.findByRole("region", { name: /Waiting for you \(12\)/ });
+    expect(within(waiting).getByText("Proposal 0")).toBeTruthy();
+    expect(within(waiting).queryByText("Proposal 10")).toBeNull();
+    expect(within(waiting).getByText("1 newer proposal is not loaded yet. Decide these, then refresh to see the rest.")).toBeTruthy();
+    fireEvent.click(within(waiting).getByRole("button", { name: "Next proposals" }));
+    expect(within(waiting).getByText("Proposal 10")).toBeTruthy();
+    expect(within(waiting).queryByText("Proposal 0")).toBeNull();
+  });
+
   it("shows what the team can use, what waits for you, and each agent", async () => {
     render(<Team client={fakeClient()} />);
     const services = await screen.findByRole("region", { name: "What the team can use" });

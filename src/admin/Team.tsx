@@ -274,12 +274,24 @@ function ApprovalCard({ approval, busy, onDecide }: { approval: TeamApproval; bu
 }
 
 function ApprovalsPanel({ approvals, count, busy, onDecide }: { approvals: TeamApproval[]; count: number; busy: string; onDecide: (approval: TeamApproval, decision: "approve" | "reject", note: string) => void }) {
+  const pageSize = 10;
+  const [page, setPage] = useState(0);
+  const pages = Math.max(1, Math.ceil(approvals.length / pageSize));
+  const current = Math.min(page, pages - 1);
+  const start = current * pageSize;
+  const visible = approvals.slice(start, start + pageSize);
+  const notLoaded = Math.max(0, count - approvals.length);
   return <section className="panel team-approvals" aria-labelledby="team-approvals-title">
     <div className="admin-section-title"><div><h2 id="team-approvals-title">Waiting for you{count ? ` (${count})` : ""}</h2><p>Nothing here has happened yet. Approve what you want done; reject the rest.</p></div></div>
     {approvals.length === 0
       ? <p className="admin-explanation">Nothing is waiting for your approval.</p>
-      : <ul className="team-approval-list">{approvals.map(approval => <ApprovalCard key={approval.id} approval={approval} busy={busy} onDecide={onDecide} />)}</ul>}
-    {count > approvals.length && <p className="muted">Showing the oldest {approvals.length} of {count}.</p>}
+      : <ul className="team-approval-list">{visible.map(approval => <ApprovalCard key={approval.id} approval={approval} busy={busy} onDecide={onDecide} />)}</ul>}
+    {approvals.length > pageSize && <div className="button-row">
+      <button type="button" className="button button-secondary button-small" disabled={current === 0} onClick={() => setPage(current - 1)}>Previous proposals</button>
+      <span className="muted">Proposals {start + 1}–{start + visible.length} of {approvals.length}</span>
+      <button type="button" className="button button-secondary button-small" disabled={current >= pages - 1} onClick={() => setPage(current + 1)}>Next proposals</button>
+    </div>}
+    {notLoaded > 0 && <p className="muted">{notLoaded} newer {notLoaded === 1 ? "proposal is" : "proposals are"} not loaded yet. Decide these, then refresh to see the rest.</p>}
   </section>;
 }
 
