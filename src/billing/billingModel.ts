@@ -54,6 +54,8 @@ export const couponSchema = z.object({
   id: z.string(), name: z.string(), percent_off: z.number().nullable(), amount_off: z.number().int().nullable(), currency: z.string().nullable(),
   duration: z.enum(['once', 'repeating', 'forever']), duration_in_months: z.number().int().nullable(), max_redemptions: z.number().int().nullable(),
   times_redeemed: z.number().int(), redeem_by: ts, valid: z.boolean(), applies_to: z.array(z.string()), app: appSlug, created: z.string(), version: z.number().int(),
+  // A coupon deleted in Stripe still discounts the subscriptions that already have it, so the money maths keeps it; it is not listed or offered.
+  deleted: z.boolean().default(false),
 });
 export type Coupon = z.infer<typeof couponSchema>;
 export const promotionCodeSchema = z.object({

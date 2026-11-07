@@ -29,7 +29,9 @@ const myInvoice = z.object({
   due_date: z.string().nullable(), created: z.string(), hosted_invoice_url: z.string().nullable(), invoice_pdf: z.string().nullable(),
 });
 const myItem = z.object({ name: z.string(), kind: z.string(), quantity: z.number().int(), unit_label: z.string(), unit_amount: z.number().int().nullable(),
-  currency: z.string(), interval: z.string().nullable(), interval_count: z.number().int().nullable() });
+  currency: z.string(), interval: z.string().nullable(), interval_count: z.number().int().nullable(),
+  // The price's own model; absent from a database that does not return it yet, which falls back to the unit label.
+  pricing_model: z.enum(['flat', 'per_unit', 'tiered', 'custom']).nullable().optional() });
 const mySubscription = z.object({ app: z.string().nullable(), status: z.string(), cancel_at_period_end: z.boolean(), current_period_end: z.string().nullable(),
   trial_end: z.string().nullable(), paused: z.boolean(), items: z.array(myItem) });
 export const myBillingSchema = z.object({

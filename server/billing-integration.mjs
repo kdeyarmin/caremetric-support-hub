@@ -384,6 +384,9 @@ try {
   assert.deepEqual(mine.tenants.map(item => item.id), [tenant]);
   assert.equal(mine.tenants[0].invoices.length > 0, true);
   assert.equal(JSON.stringify(mine).includes('cus_'), false, 'customers never see Stripe identifiers');
+  // Each item carries its price's own model, so a flat price on a product with a unit label is not shown as per unit.
+  const myItems = mine.tenants[0].subscriptions.flatMap(subscription => subscription.items);
+  assert.ok(myItems.length > 0 && myItems.every(item => ['flat', 'per_unit', 'tiered', 'custom'].includes(item.pricing_model)), 'every item names its pricing model');
   assert.match((await billing.customerPortal(memberToken, { tenant_id: tenant })).url, /^https:\/\/billing\.stripe\.com\//);
   await assert.rejects(billing.customerPortal(memberToken, { tenant_id: otherTenant }), error => error.status === 403);
   await assert.rejects(billing.customerPortal(null, { tenant_id: tenant }), error => error.status === 401);
@@ -448,7 +451,10 @@ try {
   await command({ action: 'coupon.update', coupon, name: 'Partner twenty', expected_version: space.coupons.find(item => item.id === coupon).version, request_key: key() });
   space = await workspace();
   await command({ action: 'coupon.delete', coupon, expected_version: space.coupons.find(item => item.id === coupon).version, request_key: key() });
-  assert.equal((await workspace()).coupons.some(item => item.id === coupon), false);
+  // Stripe keeps applying a deleted coupon to the subscriptions that have it, so the workspace keeps it for the money maths,
+  // marked deleted and no longer valid (the Billing screen neither lists nor offers it).
+  assert.deepEqual((({ deleted, valid }) => ({ deleted, valid }))((await workspace()).coupons.find(item => item.id === coupon)), { deleted: true, valid: false });
+  assert.equal((await workspace()).coupons.filter(item => !item.deleted).some(item => item.id === coupon), false);
   const keyId = (await workspace()).app_keys.find(item => item.app === 'carebase' && !item.revoked_at).id;
   await command({ action: 'app_key.revoke', key_id: keyId });
   await assert.rejects(billing.entitlements(bearer, { account }), error => error.status === 401);

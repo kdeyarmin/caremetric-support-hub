@@ -6,11 +6,19 @@ import { dateLabel, formatCents, priceLabel, statusLabels, type SubscriptionStat
 import { Notice, StatusChip } from './BillingUi';
 import './billing.css';
 
+type MyBillingItem = MyBillingData['tenants'][number]['subscriptions'][number]['items'][number];
 /**
  * Billing for a customer's own organization: plans, quantities and invoices,
  * with open invoices payable through Stripe and the payment method managed in
  * the Stripe customer portal. Tenant administrators only; there is no checkout.
  */
+/** One subscription item's price in plain words, with the quantity only where it multiplies the price. */
+function itemPrice(item: MyBillingItem): string {
+  const pricingModel = item.pricing_model ?? (item.unit_label ? 'per_unit' : 'flat');
+  const quantity = item.quantity > 1 || pricingModel === 'per_unit' ? `${item.quantity} × ` : '';
+  return quantity + priceLabel({ unit_amount: item.unit_amount, currency: item.currency, type: item.interval ? 'recurring' : 'one_time', interval: item.interval as 'month' | 'year' | null, interval_count: item.interval_count, pricing_model: pricingModel }, item.unit_label);
+}
+
 export function MyBilling({ client = customerBillingClient, demo = config.demoMode }: { client?: CustomerBillingClient; demo?: boolean }) {
   const [data, setData] = useState<MyBillingData | null>(null);
   const [error, setError] = useState('');
@@ -43,7 +51,7 @@ export function MyBilling({ client = customerBillingClient, demo = config.demoMo
           <p>{subscription.status === 'trialing' && subscription.trial_end ? `Free trial through ${dateLabel(subscription.trial_end)}` : subscription.cancel_at_period_end ? `Ends ${dateLabel(subscription.current_period_end)}` : subscription.current_period_end ? `Renews ${dateLabel(subscription.current_period_end)}` : ''}</p></div>
           <StatusChip status={subscription.status} label={statusLabels[subscription.status as SubscriptionStatus] ?? subscription.status} /></div>
         <ul className="billing-items">{subscription.items.map((item, itemIndex) => <li key={itemIndex}><div><strong>{item.name}</strong>{item.kind === 'addon' && <small className="billing-muted"> · add-on</small>}</div>
-          <div>{item.quantity > 1 || item.unit_label ? `${item.quantity} × ` : ''}{priceLabel({ unit_amount: item.unit_amount, currency: item.currency, type: item.interval ? 'recurring' : 'one_time', interval: item.interval as 'month' | 'year' | null, interval_count: item.interval_count, pricing_model: item.unit_label ? 'per_unit' : 'flat' }, item.unit_label)}</div></li>)}</ul>
+          <div>{itemPrice(item)}</div></li>)}</ul>
         {subscription.status === 'past_due' && <p className="billing-error">A payment is past due. Pay the open invoice below or update your payment method.</p>}
       </article>)}</div> : tenant.has_customer && <p className="billing-muted">No current subscriptions.</p>}
       {tenant.invoices.length > 0 && <div className="billing-table-wrap"><table className="billing-table"><thead><tr><th>Invoice</th><th>Status</th><th>Total</th><th></th></tr></thead><tbody>
