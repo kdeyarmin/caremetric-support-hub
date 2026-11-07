@@ -182,6 +182,8 @@ export function ControlCenter({ data, portfolio = portfolioClient, billing = bil
   const summary = headline(input);
   const cards = apps.status === "ready" ? applicationCards(input) : [];
   const intakeReady = intake.status === "ready" && intake.data !== null ? intake.data : null;
+  const intakeEnabled = intakeReady?.filter(item => item.supportEnabled) ?? [];
+  const intakeDetail = intakeReady === null ? "" : `${formatNumber.format(intakeEnabled.reduce((sum, item) => sum + item.readyTenantCount, 0))} ready customers across ${formatNumber.format(intakeEnabled.length)} ${intakeEnabled.length === 1 ? "application" : "applications"} with support enabled`;
 
   return <div className="control-center">
     <div className="page-heading"><div><span className="eyebrow">CareMetric Admin</span><h1>Control center</h1>
@@ -224,7 +226,7 @@ export function ControlCenter({ data, portfolio = portfolioClient, billing = bil
           {intake.status === "error" && <li><ReadFailure error={intake.error} retry={retry} /></li>}
           {intake.status === "ready" && (intakeReady === null
             ? <li><Users size={16} aria-hidden="true" /><div><strong>Customer intake</strong><span className="control-detail">{previewNote}</span></div></li>
-            : <li><Users size={16} aria-hidden="true" /><div><strong>Customer intake</strong><span className="control-detail">{formatNumber.format(intakeReady.reduce((sum, item) => sum + item.readyTenantCount, 0))} ready customers across {formatNumber.format(intakeReady.filter(item => item.supportEnabled).length)} applications with support enabled</span></div><Link className="control-count" to="/integration">Review access</Link></li>)}
+            : <li><Users size={16} aria-hidden="true" /><div><strong>Customer intake</strong><span className="control-detail">{intakeDetail}</span></div><Link className="control-count" to="/integration">Review access</Link></li>)}
         </ul>
         <div className="control-panel-footer"><Link className="text-link" to="/admin/billing">Billing: subscriptions, catalog and discounts</Link><Link className="text-link" to="/admin/go-live-readiness">AI go-live readiness</Link><Link className="text-link" to="/integration">Connections and customer onboarding</Link><Link className="text-link" to="/admin/portfolio">Portfolio rollup and coverage matrix</Link><Link className="text-link" to="/security">Account security</Link></div>
       </section>

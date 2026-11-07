@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { HttpError, transaction, withSession } from './sms-auth.mjs';
+import { normalizePhone } from './sms-provider.mjs';
 
 /**
  * Website leads (docs/LEAD_INTAKE.md, "CareMetric lead intake, version 1"). CareBase, Intel and Healthcare Advisors
@@ -70,6 +71,15 @@ function storable(value, depth = 0) {
   return true;
 }
 
+/** Store a phone the Hub can text. A number that is not a mobile address is kept as written so the lead is not rejected. */
+function withDeliverablePhone(lead) {
+  const contact = lead.contact;
+  if (!contact || typeof contact !== 'object' || Array.isArray(contact) || typeof contact.phone !== 'string') return lead;
+  const phone = normalizePhone(contact.phone);
+  if (!phone || phone === contact.phone) return lead;
+  return { ...lead, contact: { ...contact, phone } };
+}
+
 /** A JSON object from a UTF-8 application/json body, or null. The database checks everything the contract says about it. */
 function parseLead(contentType, body) {
   if (String(contentType ?? '').split(';')[0].trim().toLowerCase() !== 'application/json') return null;
@@ -133,7 +143,7 @@ export function leadIntake({ pool, store = sqlLeadStore(pool), secrets = {}, ena
     const lead = parseLead(req.headers['content-type'], body);
     if (!lead) return answer(source, 'invalid', 400, { error: 'invalid_lead' });
     let result;
-    try { result = await store.record(source, lead); }
+    try { result = await store.record(source, withDeliverablePhone(lead)); }
     catch (error) {
       // The database's own message is never passed on or logged: it is either "Invalid lead." or about the database.
       return error?.code === '22023' ? answer(source, 'invalid', 400, { error: 'invalid_lead' }) : answer(source, 'unavailable', 503, { error: 'unavailable' });

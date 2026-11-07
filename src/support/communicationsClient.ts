@@ -65,8 +65,9 @@ export interface ConversationUpdate {
 function replyChannel(conversation: Conversation, status: ChannelStatus | null): "chat" | "sms" | "email" | null {
   if (conversation.channel === "chat") return "chat";
   const mobile = !!conversation.contactPhone && /^\+[1-9][0-9]{7,14}$/.test(conversation.contactPhone);
-  return conversation.channel === "sms" ? "sms" : conversation.channel === "email" ? "email"
-    : conversation.contactEmail && status?.email.replies ? "email" : mobile && status?.sms.replies ? "sms" : conversation.contactEmail ? "email" : mobile ? "sms" : null;
+  if (conversation.channel === "sms") return mobile ? "sms" : null;
+  if (conversation.channel === "email") return conversation.contactEmail ? "email" : null;
+  return conversation.contactEmail && status?.email.replies ? "email" : mobile && status?.sms.replies ? "sms" : conversation.contactEmail ? "email" : mobile ? "sms" : null;
 }
 
 /** Twilio refuses a text message body over 1,600 characters; email and chat replies may run to 5,000. */

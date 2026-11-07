@@ -63,6 +63,17 @@ it("requires a first viewing to reach the end before a video lesson can be compl
   fireEvent.ended(video);
   expect(checkbox.disabled).toBe(false);
   expect(screen.queryByText("Watch the full video to continue.")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "✓ Why falls happen" }));
+  await screen.findByRole("heading", { name: "Why falls happen" });
+  fireEvent.click(screen.getByRole("button", { name: "Room safety" }));
+  await screen.findByRole("heading", { name: "Room safety" });
+  expect(screen.queryByText("Watch the full video to continue.")).toBeNull();
+  expect((screen.getByRole("checkbox", { name: "I have completed this lesson." }) as HTMLInputElement).disabled).toBe(false);
+  const returned = await waitFor(() => { const element = document.querySelector("video"); if (!element) throw new Error("video pending"); return element; });
+  Object.defineProperty(returned, "currentTime", { value: 0, writable: true });
+  returned.currentTime = 90;
+  fireEvent.seeking(returned);
+  expect(returned.currentTime).toBe(4);
 });
 
 it("answers a select-all question with every chosen option", async () => {

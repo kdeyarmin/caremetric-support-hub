@@ -4,7 +4,7 @@ import { customerBillingRequest, customerBillingWorkspace } from '../src/billing
 import { aggregateFacilityLines, planFacilityChange } from '../src/billing/facilityAllocations.ts';
 import { assertPlanFits } from '../src/billing/planSize.ts';
 import { selfServiceApps } from '../src/self-service/protocol.ts';
-import { normalizers, StripeError } from './stripe.mjs';
+import { normalizers, StripeError, withAllSubscriptionItems } from './stripe.mjs';
 import { customerCheckoutService } from './customer-checkout.mjs';
 
 const rows = subscription => (subscription.items?.data ?? []).map(item => ({ price: item.price.id ?? item.price, quantity: item.quantity ?? 1 })).sort((a, b) => a.price.localeCompare(b.price));
@@ -122,9 +122,19 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
     return { ...workspace, allocations: workspace.allocations.filter(row => permitted.has(row.facility_id)), customer: null, pending_checkout: null,
       subscription: workspace.subscription ? { ...workspace.subscription, items: [] } : null };
   }
+  async function readSubscription(live, id, params) {
+    try {
+      return await withAllSubscriptionItems(live, await live.get(`/v1/subscriptions/${id}`, params));
+    } catch (error) {
+      if (error instanceof StripeError && error.code === 'subscription_items_incomplete') {
+        throw new HttpError(409, 'This subscription has more prices than one change can read. Refresh billing before continuing.');
+      }
+      throw error;
+    }
+  }
   async function providerSubscription(live, workspace) {
     if (!workspace.subscription) throw new HttpError(409, 'A current organization subscription is required before changing its plan.');
-    const sub = await live.get(`/v1/subscriptions/${workspace.subscription.id}`, { expand: ['latest_invoice', 'discounts'] });
+    const sub = await readSubscription(live, workspace.subscription.id, { expand: ['latest_invoice', 'discounts'] });
     if (reference(sub.customer) !== workspace.customer || sub.metadata?.app !== workspace.app) throw new HttpError(409, 'The subscription account changed. Refresh billing.');
     if (!['active'].includes(sub.status) || sub.pause_collection || sub.cancel_at_period_end || sub.pending_update) throw new HttpError(409, 'Resolve the pending payment, cancellation, pause, or trial before changing this subscription.');
     return sub;
@@ -265,7 +275,7 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
     quote = await requester.claimQuote(input.quote_id, true);
     if (quote.execution.kind === 'checkout') return checkout.start(quote, await context(requester, quote.connection_id));
     const live = await stripe();
-    let sub = await live.get(`/v1/subscriptions/${quote.subscription}`, { expand: ['latest_invoice', 'discounts'] });
+    let sub = await readSubscription(live, quote.subscription, { expand: ['latest_invoice', 'discounts'] });
     try { verifyAccount(sub, quote.execution); } catch (error) { await settle(quote.id, 'failed', sub.id); throw error; }
     if (quote.payment_invoice) return finish(live, quote, sub);
     if (quote.execution.hasImmediate) {
@@ -297,7 +307,7 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
       await service('record_customer_payment_invoice', [quote.id, quote.payment_invoice]);
       // An idempotent replay can return an old response. Settlement uses the
       // current provider subscription and this purchase's exact invoice.
-      sub = await live.get(`/v1/subscriptions/${quote.subscription}`, { expand: ['latest_invoice', 'discounts'] });
+      sub = await readSubscription(live, quote.subscription, { expand: ['latest_invoice', 'discounts'] });
     }
     await mirrorSubscription(sub);
     return finish(live, quote, sub);
@@ -307,7 +317,7 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
     const quotes = await service('customer_quotes_for_subscription', [subscription.id]);
     if (!quotes?.length) return;
     const live = await stripe();
-    const latest = await live.get(`/v1/subscriptions/${subscription.id}`, { expand: ['latest_invoice', 'discounts'] });
+    const latest = await readSubscription(live, subscription.id, { expand: ['latest_invoice', 'discounts'] });
     for (const quote of quotes) if (quote.execution.kind !== 'checkout') await finish(live, quote, latest);
   }
   // One flow for both requesters: reading and previewing work while purchasing is off; confirming does not, and a

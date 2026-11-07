@@ -6,6 +6,9 @@ import { draftMessage } from './draft.mjs';
 import { renderEmail } from '../email-layout.mjs';
 import { evaluateGrowth } from './evaluation.mjs';
 const deferred=()=>Object.assign(new Error('Action is deferred'),{code:'action_deferred'});
+const easternDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'});
+/** The calendar day in America/New_York, matching every other send cap and notice. */
+export const growthDay=instant=>easternDay.format(instant);
 /** Sales follow-ups and capped cold email (20261105150000_growth_autonomy.sql): the contact finder, qualification and the daily evaluation. */
 export const growthAutonomyFeature='platform.agents.growth-autonomy.v1';
 // Businesses the contact finder reads per discovery run, and opportunities qualified per pass.
@@ -71,7 +74,7 @@ export function growthHandlers({growth,model,notifier,features=null}) {
         }
       }
     }
-    if(planned && notifier)await notifier.send({severity:'info',subject:'Customer growth work is ready',body:`${planned} follow-up tasks reviewed; ${drafted} message drafts prepared. Open Growth to review next actions.`,dedupeKey:`growth:${owner}:${now().toISOString().slice(0,10)}`,agentKey:owner,taskId:task.id});
+    if(planned && notifier)await notifier.send({severity:'info',subject:'Customer growth work is ready',body:`${planned} follow-up tasks reviewed; ${drafted} message drafts prepared. Open Growth to review next actions.`,dedupeKey:`growth:${owner}:${growthDay(now())}`,agentKey:owner,taskId:task.id});
     return {result:{inspected,planned,drafted}};
   }
   async function discover(task,{signal}={}) {
@@ -103,7 +106,7 @@ export function growthHandlers({growth,model,notifier,features=null}) {
     const failed=reports.filter(report=>!report.passed).map(report=>report.product);
     if(failed.length&&notifier)await notifier.send({severity:'warning',subject:'Outreach guardrail check failed',
       body:`The daily outreach guardrail check failed for ${failed.join(' and ')}. Until it passes, no outreach email goes out on its own; emails you approve still go.`,
-      dedupeKey:`growth:evaluate:${now().toISOString().slice(0,10)}`,agentKey:task.agentKey,taskId:task.id});
+      dedupeKey:`growth:evaluate:${growthDay(now())}`,agentKey:task.agentKey,taskId:task.id});
     return {result:{evaluated:reports.length,passed:reports.filter(report=>report.passed).map(report=>report.product),failed}};
   }
   async function content(task,{signal,now=()=>new Date()}={}) {

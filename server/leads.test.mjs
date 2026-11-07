@@ -47,6 +47,17 @@ describe('lead intake secrets and signatures', () => {
 });
 
 describe('POST /api/leads handler', () => {
+  it('stores a website phone as a number the Hub can text', async () => {
+    const { intake, store } = harness();
+    const phoned = { ...lead, externalId: 'cb-phone', contact: { ...lead.contact, phone: '(202) 555-0144' } };
+    expect((await intake.handle(request({ body: JSON.stringify(phoned) }))).status).toBe(202);
+    expect(store.record).toHaveBeenCalledWith('carebase', { ...phoned, contact: { ...phoned.contact, phone: '+12025550144' } });
+    store.record.mockClear();
+    const odd = { ...lead, externalId: 'cb-odd', contact: { ...lead.contact, phone: 'extension 4' } };
+    expect((await intake.handle(request({ body: JSON.stringify(odd) }))).status).toBe(202);
+    expect(store.record).toHaveBeenCalledWith('carebase', odd);
+  });
+
   it('records a signed lead and answers 202 with exactly the contract body', async () => {
     const { intake, store, logs } = harness();
     expect(await intake.handle(request())).toEqual({ status: 202, body: { id, duplicate: false, conversation: 'CM-1042' }, headers: {} });

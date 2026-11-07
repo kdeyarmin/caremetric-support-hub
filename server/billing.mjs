@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { HttpError, transaction, withSession } from './sms-auth.mjs';
 import { billingCommandSchema, localBillingActions, entitlementRequestSchema, usageReportSchema, trialRequestSchema, appPortalRequestSchema, appBillingRequestSchema } from '../src/billing/billingProtocol.ts';
-import { stripeClient, StripeError, STRIPE_ACCOUNT_ID, verifyStripeSignature, eventTarget, retrievePaths, normalizers } from './stripe.mjs';
+import { stripeClient, StripeError, STRIPE_ACCOUNT_ID, verifyStripeSignature, eventTarget, retrievePaths, normalizers, withAllSubscriptionItems } from './stripe.mjs';
 import { customerBillingService } from './customer-billing.mjs';
 import { facilityEntitlementRequest, facilityEntitlementSnapshot } from '../src/billing/facilityEntitlements.ts';
 import { selfServiceApps } from '../src/self-service/protocol.ts';
@@ -21,7 +21,25 @@ export const entitlementCacheSeconds = 300;
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 // The CareMetric AI Assistant: the actor of every billing change the AI team makes (hub.profiles row seeded with the AI team).
 const aiAssistant = 'a1a00000-a1a0-4000-8000-000000000001';
-const unixEndOfDay = day => Math.floor(Date.parse(`${day}T23:59:59Z`) / 1000);
+const easternClock = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York', hourCycle: 'h23',
+  year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+});
+function easternStamp(ms) {
+  const parts = Object.fromEntries(easternClock.formatToParts(new Date(ms)).filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`;
+}
+/** A date from an administrator's calendar runs through 23:59:59 America/New_York, the Hub's operational day. */
+export function unixEndOfDay(day) {
+  const target = Date.parse(`${day}T23:59:59Z`);
+  let ms = target;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const delta = target - Date.parse(`${easternStamp(ms)}Z`);
+    if (delta === 0) break;
+    ms += delta;
+  }
+  return Math.floor(ms / 1000);
+}
 
 function firstIssue(error) {
   const issue = error?.issues?.[0];
@@ -30,6 +48,7 @@ function firstIssue(error) {
 function asHttpError(error) {
   if (error instanceof HttpError) return error;
   if (error instanceof StripeError) {
+    if (error.code === 'subscription_items_incomplete') return new HttpError(409, error.message);
     return error.status >= 500 || error.type === 'api_connection_error'
       ? new HttpError(503, 'Stripe is temporarily unavailable. Try again.')
       : new HttpError(400, `Stripe: ${error.message}`);
@@ -90,6 +109,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
 
   /** Mirrors one Stripe object, first loading the customer or product it depends on. */
   async function mirror(db, kind, object, seen, { livemode = object?.livemode, live } = {}) {
+    if (kind === 'subscription' && object?.items?.has_more && live) object = await withAllSubscriptionItems(live, object);
     const record = normalizers[kind](object, livemode);
     const apply = async () => (await one(db, 'select private.billing_sync($1,$2::jsonb,$3) as outcome', [kind, JSON.stringify(record), seen])).outcome;
     let outcome = await apply();
@@ -510,10 +530,15 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         if (!context.stripe_customer_id) throw new HttpError(400, 'This tenant has no Stripe customer yet.');
         let synced = 0;
         await refresh(db, live, 'customer', context.stripe_customer_id); synced++;
-        for (const subscription of await live.list('/v1/subscriptions', { customer: context.stripe_customer_id, status: 'all', expand: ['data.discounts'] }, 200)) {
+        const subscriptions = await live.list('/v1/subscriptions', { customer: context.stripe_customer_id, status: 'all', expand: ['data.discounts'] }, 1000);
+        const invoices = await live.list('/v1/invoices', { customer: context.stripe_customer_id }, 1000);
+        if (subscriptions.truncated || invoices.truncated) {
+          throw new HttpError(409, 'This customer has more billing records than one refresh can copy. Nothing was saved.');
+        }
+        for (const subscription of subscriptions) {
           await mirror(db, 'subscription', subscription, new Date(now()), { live }); synced++;
         }
-        for (const invoice of await live.list('/v1/invoices', { customer: context.stripe_customer_id }, 200)) {
+        for (const invoice of invoices) {
           await mirror(db, 'invoice', invoice, new Date(now()), { live }); synced++;
         }
         await audit(db, actor, 'billing.customer.sync', request.tenant_id, null, { synced });
@@ -690,7 +715,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         const closed = new Set();
         for (const id of subscriptions) {
           const expected = await lookup(db, 'subscription', id);
-          const current = await live.get(`/v1/subscriptions/${id}`, { expand: ['discounts'] });
+          const current = await withAllSubscriptionItems(live, await live.get(`/v1/subscriptions/${id}`, { expand: ['discounts'] }));
           const customer = typeof current.customer === 'string' ? current.customer : current.customer?.id;
           const terminal = ['canceled', 'incomplete_expired'].includes(current.status);
           if (terminal) closed.add(id);

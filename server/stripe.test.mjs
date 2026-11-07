@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   STRIPE_API_VERSION, CHECKOUT_API_VERSION, discountRef, eventTarget, formEncode, keyMode, normalizeInvoice, normalizePrice, normalizeProduct,
-  normalizeSubscription, signStripePayload, stripeClient, verifyStripeSignature,
+  normalizeSubscription, signStripePayload, stripeClient, verifyStripeSignature, withAllSubscriptionItems,
 } from './stripe.mjs';
 
 describe('Stripe form encoding', () => {
@@ -72,6 +72,20 @@ describe('Stripe client', () => {
     expect([cancel.method, cancel.body, cancel.headers['Content-Type']]).toEqual(['DELETE', undefined, undefined]);
     expect([couponUrl, coupon.body]).toEqual(['https://api.stripe.com/v1/coupons/co_1', undefined]);
   });
+  it('stops at the requested maximum and marks a list Stripe has not finished', async () => {
+    const pages = [
+      { data: [{ id: 'cus_1' }, { id: 'cus_2' }], has_more: true },
+      { data: [{ id: 'cus_3' }], has_more: true },
+    ];
+    const fetchImpl = vi.fn(async () => Response.json(pages.shift()));
+    const client = stripeClient({ secretKey: 'sk_test_x', fetchImpl });
+    const rows = await client.list('/v1/customers', {}, 2);
+    expect(rows.map(row => row.id)).toEqual(['cus_1', 'cus_2']);
+    expect(rows.truncated).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const complete = await stripeClient({ secretKey: 'sk_test_x', fetchImpl: vi.fn(async () => Response.json({ data: [{ id: 'cus_9' }], has_more: false })) }).list('/v1/customers', {}, 2);
+    expect(complete.truncated).toBeUndefined();
+  });
   it('never retries a create without an idempotency key and reports Stripe’s message', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { type: 'invalid_request_error', message: 'No such price' } }), { status: 400 }));
     const client = stripeClient({ secretKey: 'sk_test_x', fetchImpl });
@@ -122,6 +136,20 @@ describe('Stripe normalizers', () => {
     expect(eventTarget({ type: 'invoice.paid', data: { object: { object: 'invoice', id: 'in_1' } } })).toEqual({ kind: 'invoice', id: 'in_1' });
     expect(eventTarget({ type: 'charge.succeeded', data: { object: { id: 'ch_1' } } })).toBeNull();
     expect(eventTarget({ type: 'checkout.session.async_payment_succeeded', data: { object: { object: 'checkout.session', id: 'cs_test_1' } } })).toEqual({ kind: 'checkout', id: 'cs_test_1' });
+  });
+  it('loads subscription items past Stripe’s first page and refuses a list that is still cut off', async () => {
+    const first = { id: 'si_0', price: { id: 'price_0' }, quantity: 1 };
+    const rest = Array.from({ length: 11 }, (_, index) => ({ id: `si_${index}`, price: { id: `price_${index}` }, quantity: 1 }));
+    const live = { list: vi.fn(async () => rest) };
+    const loaded = await withAllSubscriptionItems(live, { id: 'sub_1', items: { data: [first], has_more: true } });
+    expect(loaded.items.has_more).toBe(false);
+    expect(loaded.items.data).toHaveLength(11);
+    expect(live.list).toHaveBeenCalledWith('/v1/subscription_items', { subscription: 'sub_1', expand: ['data.price'] }, 100);
+    const untouched = { id: 'sub_1', items: { data: [first], has_more: false } };
+    expect(await withAllSubscriptionItems({ list: vi.fn() }, untouched)).toBe(untouched);
+    const truncated = Object.assign([...rest], { truncated: true });
+    await expect(withAllSubscriptionItems({ list: async () => truncated }, { id: 'sub_1', items: { data: [first], has_more: true } }))
+      .rejects.toMatchObject({ status: 409, code: 'subscription_items_incomplete' });
   });
   it('keeps malformed checkout markers held instead of treating them as legacy subscriptions', () => {
     expect(normalizeSubscription({ id: 'sub_1', metadata: { hub_checkout_quote: 'invalid' } })).toMatchObject({ checkout_required: true, checkout_quote: null });

@@ -90,11 +90,12 @@ describe("mutation request keys", () => {
   });
 
   it("catches case-thread read failures and exposes a read-only retry", () => {
-    expect(appSource).toContain("readCaseThread(repository, selectedId)");
+    expect(appSource).toContain("readCaseThread(repository, visibleSelectedId)");
     expect(appSource).toContain("failCaseThreadLoad(beginCaseThreadLoad(current, result.caseId)");
     expect(appSource).toContain('role="alert"');
     expect(appSource).toMatch(/onRetryThread=\{\(\) => \{[\s\S]*?beginCaseThreadLoad[\s\S]*?setRefresh/);
-    expect(appSource).toMatch(/onChanged=\{\(\) => \{[\s\S]*?beginCaseThreadLoad[\s\S]*?reloadCases/);
+    expect(appSource).toContain("onChanged={() => noteCaseChange(selected.id)}");
+    expect(appSource).toMatch(/const noteCaseChange = \(caseId: string\) => \{[\s\S]*?reloadCases\(\)[\s\S]*?caseId !== visibleCaseId\.current[\s\S]*?beginCaseThreadLoad/);
     expect(appSource).toContain("requestId !== caseListRequest.current");
     expect(appSource).toContain("setSelectedId((currentId) => reconcileCaseSelection");
   });

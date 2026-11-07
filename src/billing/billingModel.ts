@@ -146,5 +146,5 @@ export function couponLabel(coupon: Pick<Coupon, 'percent_off' | 'amount_off' | 
 export const appLabel = (app: string | null) => app && app in appLabels ? appLabels[app as BillingApp] : 'Unassigned';
 export function dateLabel(value: string | null) {
   if (!value) return '—';
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value));
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' }).format(new Date(value));
 }

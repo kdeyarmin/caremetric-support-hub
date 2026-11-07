@@ -14,6 +14,8 @@ export function CoursePlayer() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
+  // Watching state lives with the course, not the lesson panel: switching lessons unmounts the panel.
+  const playback = useRef(new Map<string, { watched: boolean; furthest: number }>());
   const steps = course ? courseSteps(course) : null;
   const current = steps ? Math.min(selected ?? steps.lastOpen, steps.lastOpen) : 0;
   useEffect(() => {
@@ -36,21 +38,22 @@ export function CoursePlayer() {
       {course.completedAt && <div className="panel learning-notice"><strong>Course completed</strong><Link to={`/learn/certificates/${course.enrollmentId}`}>View completion certificate</Link></div>}
       {!course.enrollmentId ? <button className="button button-primary" disabled={busy} onClick={() => void start()}>Start course</button> :
         <div className="learning-player"><aside className="panel"><ol>{course.document.units.map((unit, index) => <li key={unit.id}><button aria-current={index === current ? "step" : undefined} disabled={index > steps!.lastOpen} title={index > steps!.lastOpen ? "Complete the earlier lessons first" : undefined} onClick={() => setSelected(index)}>{course.progress.some(p => p.unitId === unit.id && p.completedAt) ? "✓ " : ""}{unit.title}{index === steps!.postTest ? " · Post-test" : ""}</button></li>)}</ol></aside>
-          <Lesson key={`${course.enrollmentId}:${course.document.units[current].id}`} course={course} unit={course.document.units[current]} onRefresh={async () => { setSelected(current); setCourse(await learningApi.course(itemId, course.enrollmentId)); }} onNext={() => setSelected(Math.min(current + 1, course.document.units.length - 1))} />
+          <Lesson key={`${course.enrollmentId}:${course.document.units[current].id}`} course={course} unit={course.document.units[current]} playback={playback} onRefresh={async () => { setSelected(current); setCourse(await learningApi.course(itemId, course.enrollmentId)); }} onNext={() => setSelected(Math.min(current + 1, course.document.units.length - 1))} />
         </div>}
     </>}
   </div>;
 }
 
-function Lesson({ course, unit, onRefresh, onNext }: { course: Course; unit: LearnerUnit; onRefresh: () => Promise<void>; onNext: () => void }) {
+function Lesson({ course, unit, playback, onRefresh, onNext }: { course: Course; unit: LearnerUnit; playback: { current: Map<string, { watched: boolean; furthest: number }> }; onRefresh: () => Promise<void>; onNext: () => void }) {
   const progress = course.progress.find(p => p.unitId === unit.id);
+  const saved = playback.current.get(unit.id);
   // A select-all question is answered with the set of chosen options; the others with one option.
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [attested, setAttested] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [watched, setWatched] = useState(false);
+  const [watched, setWatched] = useState(saved?.watched ?? false);
   const pending = useRef<{ serialized: string; key: string } | null>(null);
   // Learners retake a quiz as many times as they need; each attempt shows its questions in a new order.
   const attemptsSoFar = progress?.attemptCount ?? 0;
@@ -72,7 +75,7 @@ function Lesson({ course, unit, onRefresh, onNext }: { course: Course; unit: Lea
     finally { setBusy(false); }
   }
   return <section className="panel lesson-panel"><h2>{unit.title}</h2>
-    {unit.type === "video" && unit.mediaAssetId && <PrivateVideo assetId={unit.mediaAssetId} enrollmentId={course.enrollmentId!} lockSeeking={!progress?.completedAt} onWatched={() => setWatched(true)} />}
+    {unit.type === "video" && unit.mediaAssetId && <PrivateVideo assetId={unit.mediaAssetId} enrollmentId={course.enrollmentId!} lockSeeking={!progress?.completedAt} initialFurthest={saved?.furthest ?? 0} onFurthest={seconds => { const entry = playback.current.get(unit.id) ?? { watched: false, furthest: 0 }; playback.current.set(unit.id, { ...entry, furthest: seconds }); }} onWatched={() => { const entry = playback.current.get(unit.id) ?? { watched: false, furthest: 0 }; playback.current.set(unit.id, { ...entry, watched: true }); setWatched(true); }} />}
     {unit.type !== "quiz" ? <div className="lesson-body">{unit.body}</div> : <>
       {unit.body && <div className="lesson-body">{unit.body}</div>}
       <p>Passing score: {unit.passingScore}%. {attemptsSoFar ? `Attempts so far: ${attemptsSoFar}. ` : ""}You can retake this quiz as many times as you need.</p>
@@ -93,19 +96,19 @@ function Lesson({ course, unit, onRefresh, onNext }: { course: Course; unit: Lea
   </section>;
 }
 
-function PrivateVideo({ assetId, enrollmentId, lockSeeking, onWatched }: { assetId: string; enrollmentId: string; lockSeeking: boolean; onWatched: () => void }) {
+function PrivateVideo({ assetId, enrollmentId, lockSeeking, initialFurthest, onFurthest, onWatched }: { assetId: string; enrollmentId: string; lockSeeking: boolean; initialFurthest: number; onFurthest: (seconds: number) => void; onWatched: () => void }) {
   const [media, setMedia] = useState<{ video: string; captions: string } | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   // Furthest point reached by playback; a seek past it returns there until the video has been watched.
-  const furthest = useRef(0);
+  const furthest = useRef(initialFurthest);
   useEffect(() => {
     let active = true;
     void learningApi.media(assetId, enrollmentId).then(value => { if (active) { setMedia(value); setError(""); } }, caught => { if (active) setError(errorMessage(caught)); });
     return () => { active = false; };
   }, [assetId, enrollmentId, attempt]);
   return <div>{media && <video controls preload="metadata" crossOrigin="anonymous" src={media.video} onError={() => setError("Playback could not continue. Refresh access and resume the video.")}
-    onTimeUpdate={event => { const time = event.currentTarget.currentTime; if (time > furthest.current && time - furthest.current < 2) furthest.current = time; }}
+    onTimeUpdate={event => { const time = event.currentTarget.currentTime; if (time > furthest.current && time - furthest.current < 2) { furthest.current = time; onFurthest(time); } }}
     onSeeking={event => { const video = event.currentTarget; if (lockSeeking && video.currentTime > furthest.current) video.currentTime = furthest.current; }}
     onEnded={onWatched}><track kind="captions" src={media.captions} srcLang="en" label="English" default /></video>}{error && <p role="alert">{error} <button onClick={() => setAttempt(attempt + 1)}>Refresh video access</button></p>}</div>;
 }

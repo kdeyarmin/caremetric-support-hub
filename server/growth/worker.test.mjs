@@ -1,5 +1,5 @@
 import {it,expect,vi} from 'vitest';
-import {growthExecutors,growthHandlers} from './worker.mjs';
+import {growthDay,growthExecutors,growthHandlers} from './worker.mjs';
 const base={id:'opp',product:'carebase',stage:'qualified',owner_agent:'marketing_manager',internal:false,next_at:'2026-01-01T00:00:00Z',touches:0,work:[],events:[],eligibility:'review'};
 it('Observe inspects but creates no work or proposals',async()=>{
  const store={snapshot:vi.fn(async()=>({total:1,items:[base]})),plan:vi.fn(),propose:vi.fn()};
@@ -108,6 +108,14 @@ it('discovery reads each new business\'s own site for one role address and recor
  await growthHandlers({growth})['growth.discovery']({id:'t',agent:{autonomy:'propose'}});
  await growthHandlers({growth,features:autonomy})['growth.discovery']({id:'t',agent:{autonomy:'observe'}});
  expect(contacts.find).not.toHaveBeenCalled();
+});
+it('dedupes growth notices on the Eastern day, including after UTC midnight',async()=>{
+ expect(growthDay(new Date('2026-11-08T03:30:00Z'))).toBe('2026-11-07');
+ expect(growthDay(new Date('2026-07-15T03:30:00Z'))).toBe('2026-07-14');
+ const store={snapshot:vi.fn(async()=>({total:1,items:[base]})),plan:vi.fn(async()=>'work')};
+ const notifier={send:vi.fn(async()=>[])};
+ await growthHandlers({growth:{store},notifier})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'},{now:()=>new Date('2026-11-08T03:30:00Z')});
+ expect(notifier.send.mock.calls[0][0].dedupeKey).toBe('growth:marketing_manager:2026-11-07');
 });
 it('the daily evaluation records each product\'s guardrail check and warns the owner only when one fails',async()=>{
  const store={evaluate:vi.fn()},notifier={send:vi.fn(async()=>[])};

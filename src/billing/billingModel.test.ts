@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { billingTotals, canManageOrganizationBilling, couponLabel, customerDetailSchema, itemMonthlyCents, parseDollars, priceLabel, subscriptionMonthlyCents, summarizeByApp, workspaceSchema } from './billingModel';
+import { billingTotals, canManageOrganizationBilling, couponLabel, customerDetailSchema, dateLabel, itemMonthlyCents, parseDollars, priceLabel, subscriptionMonthlyCents, summarizeByApp, workspaceSchema } from './billingModel';
 import { billingCommandSchema } from './billingProtocol';
 import { fixtureCoupon, fixtureCustomer, fixtureItem, fixtureSubscription, fixtureWorkspace } from './billingFixtures';
 
@@ -19,6 +19,11 @@ describe('billing money', () => {
     expect(billingCommandSchema.safeParse({ action: 'subscription.create', tenant_id: request_key, app: 'pennsync',
       items: [{ price: 'price_example', quantity: 1 }], trial_days: 0, collection_method: 'charge_automatically',
       days_until_due: 30, coupon: null, promotion_code: null, request_key }).success).toBe(false);
+  });
+  it('labels a billing instant on the Eastern calendar day', () => {
+    expect(dateLabel('2026-11-01T03:30:00Z')).toBe('Oct 31, 2026');
+    expect(dateLabel('2026-11-01T05:00:00Z')).toBe('Nov 1, 2026');
+    expect(dateLabel(null)).toBe('—');
   });
   it('parses dollar entries to whole cents and refuses anything else', () => {
     expect(['$1,299.50', '1299.5', '499', '0', '0.07'].map(parseDollars)).toEqual([129950, 129950, 49900, 0, 7]);
