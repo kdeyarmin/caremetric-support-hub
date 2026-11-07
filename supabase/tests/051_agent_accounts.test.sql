@@ -130,7 +130,7 @@ select is((select array_agg(k order by k) from snap, jsonb_object_keys((j -> 'ac
 select is((select array_agg(k order by k) from snap, jsonb_object_keys(j -> 'accounts' -> 1 -> 'customer') k), array['balanceCents', 'delinquent', 'hasEmail'],
   'The customer is three flags, never a name or an address');
 select is((select array_agg(k order by k) from snap, jsonb_object_keys(j -> 'accounts' -> 1 -> 'subscriptions' -> 0) k),
-  array['app', 'cancel_at', 'cancel_at_period_end', 'canceled_at', 'collection_method', 'created', 'current_period_end', 'discounts', 'ended_at', 'items', 'status', 'trial_end'],
+  array['app', 'cancel_at', 'cancel_at_period_end', 'canceled_at', 'collection_method', 'created', 'current_period_end', 'discounts', 'ended_at', 'items', 'pause_behavior', 'status', 'trial_end'],
   'A subscription has exactly the whitelisted keys, with no identifier');
 select is((select array_agg(k order by k) from snap, jsonb_object_keys(j -> 'accounts' -> 1 -> 'subscriptions' -> 0 -> 'items' -> 0) k),
   array['currency', 'interval', 'interval_count', 'kind', 'product', 'quantity', 'unit_amount'], 'An item has exactly the whitelisted keys');

@@ -6,7 +6,7 @@
 
 export interface MoneyItem { unit_amount: number | null; quantity: number; interval: string | null; interval_count: number | null; product: string }
 export interface MoneyCoupon { id: string; percent_off: number | null; amount_off: number | null; applies_to: readonly string[] }
-export interface MoneySubscription { status: string; items: readonly MoneyItem[]; discounts: readonly { coupon: string }[] }
+export interface MoneySubscription { status: string; items: readonly MoneyItem[]; discounts: readonly { coupon: string }[]; pause_behavior?: string | null }
 export interface MoneyTotals { subscriptions: number; mrrCents: number; arrCents: number; trialMrrCents: number; byStatus: Partial<Record<string, number>> }
 
 const perMonth: Record<string, number> = { day: 365 / 12, week: 52 / 12, month: 1, year: 1 / 12 };
@@ -19,8 +19,9 @@ export function itemMonthlyCents(item: Pick<MoneyItem, 'unit_amount' | 'quantity
 
 /**
  * Monthly recurring revenue of one subscription after its discounts. A percent
- * coupon reduces the items it applies to; an amount coupon is spread over the
- * subscription's interval. Never below zero.
+ * coupon reduces the items it applies to; an amount coupon comes off each invoice,
+ * so it is spread over the billing period (interval and interval count) and never
+ * takes more than the items it applies to. Never below zero.
  */
 export function subscriptionMonthlyCents(subscription: Pick<MoneySubscription, 'items' | 'discounts'>, coupons: readonly MoneyCoupon[]): number {
   let total = subscription.items.reduce((sum, item) => sum + itemMonthlyCents(item), 0);
@@ -32,14 +33,20 @@ export function subscriptionMonthlyCents(subscription: Pick<MoneySubscription, '
       const base = subscription.items.filter(applies).reduce((sum, item) => sum + itemMonthlyCents(item), 0);
       total -= base * coupon.percent_off / 100;
     } else if (coupon.amount_off !== null) {
-      const interval = subscription.items.find(item => item.interval)?.interval ?? 'month';
-      total -= coupon.amount_off * perMonth[interval];
+      const eligible = subscription.items.filter(applies);
+      const base = eligible.reduce((sum, item) => sum + itemMonthlyCents(item), 0);
+      const billed = subscription.items.find(item => item.interval);
+      const perInvoice = coupon.amount_off * perMonth[billed?.interval ?? 'month'] / (billed?.interval_count || 1);
+      total -= Math.min(base, perInvoice);
     }
   }
   return Math.max(0, Math.round(total));
 }
 
-/** Paying statuses count toward MRR; a trial is reported separately and paused or unpaid collection is not revenue. */
+/**
+ * Paying statuses count toward MRR; a trial is reported separately and paused or unpaid collection is not revenue.
+ * Stripe keeps a subscription whose payment collection is paused `active` and sets `pause_behavior`, so that is checked too.
+ */
 export const revenueStatuses: readonly string[] = ['active', 'past_due'];
 
 export function monthlyTotals(subscriptions: readonly MoneySubscription[], coupons: readonly MoneyCoupon[]): MoneyTotals {
@@ -48,7 +55,7 @@ export function monthlyTotals(subscriptions: readonly MoneySubscription[], coupo
   for (const subscription of subscriptions) {
     byStatus[subscription.status] = (byStatus[subscription.status] ?? 0) + 1;
     const monthly = subscriptionMonthlyCents(subscription, coupons);
-    if (revenueStatuses.includes(subscription.status)) mrr += monthly;
+    if (revenueStatuses.includes(subscription.status) && !subscription.pause_behavior) mrr += monthly;
     else if (subscription.status === 'trialing') trial += monthly;
   }
   return { subscriptions: subscriptions.length, mrrCents: mrr, arrCents: mrr * 12, trialMrrCents: trial, byStatus };
