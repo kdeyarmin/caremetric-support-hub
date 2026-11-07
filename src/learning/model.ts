@@ -48,7 +48,7 @@ export function newUnit(type: DraftUnit["type"]): DraftUnit {
   const base = { id: crypto.randomUUID(), title: "New lesson" };
   if (type === "quiz") {
     const correct = crypto.randomUUID();
-    return { ...base, title: "Knowledge check", type, body: "", passingScore: 80, maxAttempts: 3, questions: [{ id: crypto.randomUUID(), prompt: "", points: 1, correctOptionId: correct, options: [{ id: correct, text: "" }, { id: crypto.randomUUID(), text: "" }] }] };
+    return { ...base, title: "Knowledge check", type, body: "", passingScore: 80, maxAttempts: null, questions: [{ id: crypto.randomUUID(), prompt: "", points: 1, correctOptionId: correct, options: [{ id: correct, text: "" }, { id: crypto.randomUUID(), text: "" }] }] };
   }
   return type === "video" ? { ...base, type, body: "", mediaAssetId: null } : { ...base, type, body: "" };
 }

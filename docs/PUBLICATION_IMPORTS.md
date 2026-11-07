@@ -10,7 +10,7 @@ function; `hub-publications` is separate from the retired `hub-docstudio` bucket
 
 ## Editor workflow
 
-1. Obtain an approved manifest package and its original assets in the existing DocStudio publication format. Open **Review material imports** (`/imports/docstudio`) in the Hub using the current SMS session.
+1. Obtain an approved manifest package and its original assets in the existing DocStudio publication format. Open **Review material imports** (`/imports/docstudio`, linked from **Course authoring**) in the Hub using the current SMS session; it is available to the platform administrator.
 2. Select the manifest (at most 64 KiB) and its exact files. Articles require one Markdown file (2 MiB maximum). Videos require MP4, WebVTT captions, and a plain-text transcript; all three hashes must differ. Both sidecars are required and have a 10 MiB limit. Video duration is at most 24 hours.
 3. Approve the source version and human PHI-free review. The Hub verifies every byte count/hash and the existing text, MP4 header, and timed caption rules, then shows the current catalog changes.
 4. Explicitly confirm each placement replacement, retirement, and reactivation, then commit the exact reviewed plan. A lost response can be retried with the same request key. Changed request keys or stale previews require a new review.

@@ -755,6 +755,15 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         if (current.status !== 'none') return appResponse(current);
         const context = (await one(db, 'select private.billing_context($1) as c', [prepared.tenant])).c;
         let customer = context.stripe_customer_id;
+        // One free trial per application. Entitlements leave ended subscriptions out, so an account whose trial lapsed reads as
+        // "none"; Stripe still lists that subscription. Asking again starts nothing (and never replays the original trial's stored
+        // response into the mirror). It does bring the mirror up to date first from Stripe's current copy of any subscription that
+        // has not ended, so a trial whose first mirror write was lost (a lost response or a failed commit) is answered as running.
+        const earlier = customer ? (await live.list('/v1/subscriptions', { customer, status: 'all' }, 100)).filter(item => item.metadata?.app === prepared.app.slug) : [];
+        if (earlier.length) {
+          for (const item of earlier) if (!['canceled', 'incomplete_expired'].includes(item.status)) await refresh(db, live, 'subscription', item.id);
+          return appResponse((await one(db, 'select private.billing_app_entitlements($1,$2) as e', [prepared.app.product_id, request.account])).e);
+        }
         if (!customer) {
           const created = await live.post('/v1/customers', { name: request.name, ...(request.email ? { email: request.email } : {}),
             metadata: { hub_tenant_id: prepared.tenant, app: prepared.app.slug } }, { idempotencyKey: `hub-trial-customer-${accountKey}` });
@@ -819,8 +828,21 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
           await lock(db, 'subscription', subscription, Number(current.version ?? 0));
           let already = false;
           if (extend) {
-            asked = true;
-            await live.post(`/v1/subscriptions/${subscription}`, { trial_end: trialEnd, proration_behavior: 'none' }, { idempotencyKey });
+            // The trial Stripe holds now, not a mirror that may be behind: the owner may have moved the trial end in the Dashboard and its
+            // webhook not arrived yet. An offer never shortens a trial, and is made only to a subscription that is still on one.
+            await refresh(db, live, 'subscription', subscription);
+            current = await lookup(db, 'subscription', subscription);
+            const currentEnd = current?.trial_end ? Math.floor(Date.parse(current.trial_end) / 1000) : null;
+            if (currentEnd === trialEnd) {
+              // An earlier attempt of this offer applied it: nothing is asked again.
+              already = true;
+            } else {
+              if (current?.status !== 'trialing' || currentEnd === null || currentEnd > trialEnd) {
+                throw new HttpError(409, 'The trial changed since this offer was made. Nothing was changed.');
+              }
+              asked = true;
+              await live.post(`/v1/subscriptions/${subscription}`, { trial_end: trialEnd, proration_behavior: 'none' }, { idempotencyKey });
+            }
           } else {
             // The discounts Stripe holds now, not a mirror that may be behind (a refresh that failed, a webhook not yet arrived).
             await refresh(db, live, 'subscription', subscription);

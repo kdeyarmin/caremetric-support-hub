@@ -140,9 +140,11 @@ export function twilioMessaging({ accountSid, authToken, messagingServiceSid, fr
   };
 }
 /** SendGrid Mail Send for staff replies by email. `content` is the text body, or
-    { text, html } to send both parts (text/plain first, as SendGrid requires). */
-export function sendgridMail({ apiKey, from = 'support@caremetric.ai', fetchImpl = fetch }) {
+    { text, html } to send both parts (text/plain first, as SendGrid requires). `replyTo`, when set to a valid address, is where
+    the customer's answer goes: the address SendGrid Inbound Parse receives, so the answer joins the conversation. */
+export function sendgridMail({ apiKey, from = 'support@caremetric.ai', replyTo = null, fetchImpl = fetch }) {
   const configured = typeof apiKey === 'string' && apiKey.startsWith('SG.') && emailAddress.test(from);
+  const reply = typeof replyTo === 'string' && emailAddress.test(replyTo.trim()) ? { reply_to: { email: replyTo.trim() } } : {};
   return {
     configured,
     async send(to, subject, content) {
@@ -151,7 +153,7 @@ export function sendgridMail({ apiKey, from = 'support@caremetric.ai', fetchImpl
       try {
         response = await fetchImpl('https://api.sendgrid.com/v3/mail/send', {
           method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(15000),
-          body: JSON.stringify({ personalizations: [{ to: [{ email: to }] }], from: { email: from, name: 'CareMetric Support' }, subject,
+          body: JSON.stringify({ personalizations: [{ to: [{ email: to }] }], from: { email: from, name: 'CareMetric Support' }, ...reply, subject,
             // Transactional support links must go straight to the Hub, independent of account-level tracking DNS.
             tracking_settings: { click_tracking: { enable: false, enable_text: false } },
             content: [{ type: 'text/plain', value: text }, ...(html ? [{ type: 'text/html', value: html }] : [])] }),
@@ -164,6 +166,8 @@ export function sendgridMail({ apiKey, from = 'support@caremetric.ai', fetchImpl
     },
   };
 }
+
+const unsettledDelivery = 'The provider answered, but the delivery could not be recorded. Check the conversation before sending again.';
 
 export function communications({ pool, delegations, publicOrigin = defaultPublicOrigin, twilioAuthToken, sendgridInboundPublicKey, sms, email, chatEnabled = false, now = () => new Date() }) {
   let inboundKey = null;
@@ -190,7 +194,7 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
     } catch {
       // The provider has answered (it may well have delivered), but the record still says pending. Say so with a code, so a caller can tell
       // this from a failure before anything was sent and warn instead of reporting that nothing happened.
-      throw new HttpError(502, 'The provider answered, but the delivery could not be recorded. Check the conversation before sending again.', 'delivery_unsettled');
+      throw Object.assign(new HttpError(502, unsettledDelivery, 'delivery_unsettled'), { publicMessage: unsettledDelivery });
     }
     return { delivery: outcome.delivery, deliveryChannel: started.deliveryChannel, replay: false };
   }

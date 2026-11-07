@@ -29,7 +29,23 @@ export async function transaction(pool, operation) {
   } finally { connection.release(); }
 }
 
-export function smsAuth({ pool, provider }) {
+export function smsAuth({ pool, provider, log = console }) {
+  // Codes in flight, by challenge: a verify for one waits for its send to be recorded (in this process).
+  const deliveries = new Map();
+  // The text is sent after the challenge is committed and outside the global lock, so a registered and an unregistered number
+  // get the same answer at the same speed, and a slow provider never holds up other sign-ins. A failed send is not reported to
+  // the requester (that would say the number is registered); they ask again after the 60-second wait.
+  const deliver = (id, phone) => {
+    const delivery = (async () => {
+      try {
+        const providerId = await provider.send(phone);
+        await pool.query('update private.sms_challenges set provider_id=$2 where id=$1 and consumed_at is null', [id, providerId]);
+      } catch {
+        log.warn?.('An SMS sign-in code could not be sent; the requester can ask again.');
+      }
+    })().finally(() => deliveries.delete(id));
+    deliveries.set(id, delivery);
+  };
   return {
     async start(rawPhone, clientAddress) {
       const phone = normalizePhone(rawPhone);
@@ -38,11 +54,13 @@ export function smsAuth({ pool, provider }) {
       const id = randomUUID();
       const phoneHash = digest(phone);
       const clientHash = digest(clientAddress || 'unknown');
-      return transaction(pool, async db => {
-        // Global + per-number persisted limits also cover restarts and multiple replicas.
+      const registered = await transaction(pool, async db => {
+        // Global + per-number persisted limits also cover restarts and multiple replicas. The global cap guards real
+        // sends, so requests for unregistered numbers (which send nothing) cannot use it up and lock the owner out;
+        // those stay bounded per visitor and per number.
         await db.query("select pg_advisory_xact_lock(hashtextextended('hub_sms_start',0))");
         const { rows: [limits] } = await db.query(`select
-          count(*) as total,
+          count(*) filter(where user_id is not null) as total,
           count(*) filter(where phone_hash=$1) as phone_count,
           count(*) filter(where client_hash=$2) as client_count,
           count(*) filter(where phone_hash=$1 and created_at>now()-interval '60 seconds') as recent
@@ -54,23 +72,17 @@ export function smsAuth({ pool, provider }) {
         await db.query('update private.sms_challenges set consumed_at=now() where phone_hash=$1 and consumed_at is null', [phoneHash]);
         await db.query(`insert into private.sms_challenges(id,user_id,identity_version,phone_hash,client_hash,browser_hash)
           values($1,$2,$3,$4,$5,$6)`, [id, identity?.user_id ?? null, identity?.identity_version ?? null, phoneHash, clientHash, digest(browserToken)]);
-        // Unknown numbers receive the same response without creating a user or sending SMS.
-        if (identity) {
-          try {
-            const providerId = await provider.send(phone);
-            await db.query('update private.sms_challenges set provider_id=$2 where id=$1', [id, providerId]);
-          } catch {
-            // Retain the rate-limit event even when the upstream provider fails.
-            return { id, browserToken, unavailable: true };
-          }
-        }
-        return { id, browserToken, unavailable: false };
+        return Boolean(identity);
       });
+      // Unknown numbers receive the same response without creating a user or sending SMS.
+      if (registered) deliver(id, phone);
+      return { id, browserToken };
     },
     async verify(id, browserToken, code, previousSession) {
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id || '') || !browserToken || !/^[0-9]{6}$/.test(code || '')) {
         throw new HttpError(400, 'The code could not be verified. Request a new code.');
       }
+      await deliveries.get(id);
       const result = await transaction(pool, async db => {
         const { rows: [challenge] } = await db.query(`select c.*,i.phone_e164 from private.sms_challenges c
           left join private.sms_identities i on i.user_id=c.user_id and i.identity_version=c.identity_version and i.revoked_at is null

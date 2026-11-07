@@ -273,13 +273,14 @@ function DiscountsTab({ data, client, refresh }: { data: Workspace; client: Bill
     if (result) refresh('Coupon deleted.');
   };
   const customerName = (id: string | null) => id ? data.tenants.find(tenant => tenant.customer?.id === id)?.name ?? id : null;
+  const current = data.coupons.filter(coupon => !coupon.deleted);
   return <section className="billing-section" aria-label="Discounts">
     <div className="billing-section-head"><div><h2>Discounts</h2><p>Coupons set the discount (percent or amount; once, repeating or forever) and can be limited to an application or products. Promotion codes are the codes customers or staff enter for a coupon.</p></div>
       <div className="billing-actions"><button type="button" className="button button-secondary" onClick={() => setEditor('code')} disabled={!data.coupons.some(coupon => coupon.valid)}>New promotion code</button><button type="button" className="button button-primary" onClick={() => setEditor('coupon')}>New coupon</button></div></div>
     <Notice error={action.error} />
     <h3>Coupons</h3>
-    {!data.coupons.length && <p>No coupons yet.</p>}
-    <div className="billing-list">{data.coupons.map(coupon => <article className="billing-card" key={coupon.id}>
+    {!current.length && <p>No coupons yet.</p>}
+    <div className="billing-list">{current.map(coupon => <article className="billing-card" key={coupon.id}>
       <div className="billing-card-head"><div><h3>{coupon.name || coupon.id}</h3><p>{couponLabel(coupon)} · {coupon.app ? appLabel(coupon.app) : coupon.applies_to.length ? `${coupon.applies_to.length} product(s)` : 'Any product'} · <span className="billing-mono">{coupon.id}</span></p></div>
         <div className="billing-actions">{!coupon.valid && <StatusChip status="archived" label="No longer valid" />}<button type="button" className="button button-secondary button-small" disabled={action.busy} onClick={() => void remove(coupon)}>Delete</button></div></div>
       <p className="billing-muted">Redeemed {coupon.times_redeemed}{coupon.max_redemptions ? ` of ${coupon.max_redemptions}` : ''} times{coupon.redeem_by ? ` · redeem by ${dateLabel(coupon.redeem_by)}` : ''}</p>

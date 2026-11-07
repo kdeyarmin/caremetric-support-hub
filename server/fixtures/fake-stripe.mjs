@@ -301,7 +301,8 @@ export function fakeStripe({ accountId = 'acct_1SinLKB06O2UFlNz' } = {}) {
     const chunks = []; for await (const chunk of req) chunks.push(chunk);
     const url = new URL(req.url, 'http://fake');
     const body = Buffer.concat(chunks).toString('utf8');
-    const params = req.method === 'GET' ? parseForm(url.searchParams.toString()) : parseForm(body);
+    // Like Stripe: GET and DELETE parameters come in the query string, POST parameters in the form body.
+    const params = req.method === 'GET' || req.method === 'DELETE' ? parseForm(url.searchParams.toString()) : parseForm(body);
     requests.push({ method: req.method, path: url.pathname, params, idempotencyKey: req.headers['idempotency-key'] ?? null, version: req.headers['stripe-version'] });
     if (!/^Bearer sk_test_/.test(req.headers.authorization ?? '')) { res.statusCode = 401; return res.end(JSON.stringify({ error: { type: 'authentication_error', message: 'Invalid API key.' } })); }
     const key = req.headers['idempotency-key'];

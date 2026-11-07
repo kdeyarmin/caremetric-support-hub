@@ -386,6 +386,24 @@ try {
     { agent: 'account_manager', kind: 'email.send', auto: true }, 'recorded honestly as sent on its own');
   assert.equal((await actionFor('autosetup')).status, 'proposed', 'a template that is not listed waits for the owner, even with email.send in auto_approve_kinds');
 
+  // One approved on its own while the Account Manager is then paused is refused at send time.
+  await makeAccount('autopause', { subscriptions: [{ started: 0.3 }] });
+  {
+    const pausedRun = await ownerCall('hub.request_agent_task', ['account_manager', 'accounts.lifecycle']);
+    const [pausedClaim] = await call('private.agent_task_claim', [1, 600]);
+    assert.equal(pausedClaim.id, pausedRun.id);
+    const pausedHandler = lifecycleHandlers({ store: team.store, features: new Set(features), lifecycle: { ...customerEmail, publicOrigin: origin } })['accounts.lifecycle'];
+    const pausedHandled = await pausedHandler(pausedClaim, { now: () => new Date() });
+    await team.store.finish(pausedClaim.id, 'done', { result: pausedHandled.result, attempt: pausedClaim.attempts });
+    const pausedAction = await actionFor('autopause');
+    assert.equal(pausedAction.status, 'auto_approved');
+    await admin.query("update private.agents set status = 'paused' where key = 'account_manager'");
+    try {
+      assert.deepEqual(await team.actions.executeOne(pausedAction.id, { kind: 'email.send' }), { executed: false, failed: true, skipped: false, error: 'auto_send_off' }, 'a paused agent sends nothing on its own');
+      assert.equal(sent.length, 5);
+    } finally { await admin.query("update private.agents set status = 'active' where key = 'account_manager'"); }
+  }
+
   // One approved on its own whose template the owner then takes off the list is refused at send time.
   await makeAccount('autooff', { subscriptions: [{ started: 0.3 }] });
   const manual = await ownerCall('hub.request_agent_task', ['account_manager', 'accounts.lifecycle']);

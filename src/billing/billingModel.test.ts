@@ -39,8 +39,13 @@ describe('billing money', () => {
     const workspace = fixtureWorkspace();
     expect(billingTotals(workspace.subscriptions, workspace.coupons)).toMatchObject({ subscriptions: 3, mrrCents: 59700, arrCents: 59700 * 12, trialMrrCents: 79900 });
     const byApp = summarizeByApp(workspace);
-    expect(byApp.carebase).toMatchObject({ subscriptionCount: 2, mrrCents: 59700 });
+    // The canceled CareBase subscription stays in the Stripe mirror but is not current: the control center counts what the
+    // Billing screen shows by default, so churn does not inflate the figure.
+    expect(byApp.carebase).toMatchObject({ subscriptionCount: 1, mrrCents: 59700 });
+    expect(byApp.carebase.statusCounts).toEqual([{ status: 'active', count: 1 }]);
     expect(byApp.breathe.statusCounts).toEqual([{ status: 'trialing', count: 1 }]);
+    const lapsed = summarizeByApp({ ...workspace, subscriptions: [...workspace.subscriptions, fixtureSubscription({ id: 'sub_lapsed', status: 'incomplete_expired' })] });
+    expect(lapsed.carebase.subscriptionCount).toBe(1);
   });
   it('labels prices and coupons in plain words', () => {
     expect(priceLabel({ unit_amount: 19900, currency: 'usd', type: 'recurring', interval: 'month', interval_count: 1, pricing_model: 'per_unit' }, 'facility')).toBe('$199.00 per facility per month');

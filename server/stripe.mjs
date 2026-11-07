@@ -42,15 +42,19 @@ export function stripeClient({ secretKey, fetchImpl = fetch, apiBase = 'https://
   if (!keyMode(secretKey)) return null;
   async function request(method, path, params, { idempotencyKey, apiVersion = STRIPE_API_VERSION } = {}) {
     if (!/^\/v1\/[A-Za-z0-9_/.-]+$/.test(path)) throw new Error('Invalid Stripe path.');
-    const query = method === 'GET' && params ? `?${formEncode(params)}` : '';
+    // As Stripe's own SDKs do, GET and DELETE carry their parameters in the query string (a DELETE body may be ignored, which would
+    // silently drop an immediate cancel's proration and final invoice); only POST has a form body.
+    const inQuery = method === 'GET' || method === 'DELETE';
+    const encoded = params ? formEncode(params).toString() : '';
+    const query = inQuery && encoded ? `?${encoded}` : '';
     const headers = { Authorization: `Bearer ${secretKey}`, 'Stripe-Version': apiVersion };
-    if (method !== 'GET') headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    if (!inQuery) headers['Content-Type'] = 'application/x-www-form-urlencoded';
     if (idempotencyKey && method === 'POST') headers['Idempotency-Key'] = idempotencyKey;
     for (let attempt = 0; ; attempt++) {
       let response;
       try {
         response = await fetchImpl(`${apiBase}${path}${query}`, {
-          method, headers, body: method === 'GET' ? undefined : formEncode(params).toString(),
+          method, headers, body: inQuery ? undefined : formEncode(params).toString(),
           redirect: 'error', signal: AbortSignal.timeout(timeoutMs),
         });
       } catch {

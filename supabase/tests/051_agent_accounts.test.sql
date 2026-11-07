@@ -130,7 +130,7 @@ select is((select array_agg(k order by k) from snap, jsonb_object_keys((j -> 'ac
 select is((select array_agg(k order by k) from snap, jsonb_object_keys(j -> 'accounts' -> 1 -> 'customer') k), array['balanceCents', 'delinquent', 'hasEmail'],
   'The customer is three flags, never a name or an address');
 select is((select array_agg(k order by k) from snap, jsonb_object_keys(j -> 'accounts' -> 1 -> 'subscriptions' -> 0) k),
-  array['app', 'cancel_at', 'cancel_at_period_end', 'canceled_at', 'collection_method', 'created', 'current_period_end', 'discounts', 'ended_at', 'items', 'status', 'trial_end'],
+  array['app', 'cancel_at', 'cancel_at_period_end', 'canceled_at', 'collection_method', 'created', 'current_period_end', 'discounts', 'ended_at', 'items', 'pause_behavior', 'status', 'trial_end'],
   'A subscription has exactly the whitelisted keys, with no identifier');
 select is((select array_agg(k order by k) from snap, jsonb_object_keys(j -> 'accounts' -> 1 -> 'subscriptions' -> 0 -> 'items' -> 0) k),
   array['currency', 'interval', 'interval_count', 'kind', 'product', 'quantity', 'unit_amount'], 'An item has exactly the whitelisted keys');
@@ -154,7 +154,8 @@ select is((select s -> 'items' from snap, jsonb_array_elements(j -> 'accounts' -
   'Items carry what the revenue maths reads, with the product id that coupons are scoped by');
 select is((select s -> 'discounts' from snap, jsonb_array_elements(j -> 'accounts' -> 1 -> 'subscriptions') s where s ->> 'status' = 'active'), '[{"coupon": "cpn_pct20"}]'::jsonb,
   'A discount is its coupon id alone');
-select is((select j -> 'coupons' from snap), '[{"id": "cpn_pct20", "applies_to": [], "amount_off": null, "percent_off": 20.00}]'::jsonb, 'Coupons are the live, undeleted ones the maths needs');
+-- A coupon deleted in Stripe still discounts the subscriptions that already have it, so the maths keeps it.
+select is((select j -> 'coupons' from snap), '[{"id": "cpn_deleted", "applies_to": [], "amount_off": null, "percent_off": 10.00}, {"id": "cpn_pct20", "applies_to": [], "amount_off": null, "percent_off": 20.00}]'::jsonb, 'Coupons are the live ones the maths needs, deleted ones included');
 
 select is((select (j -> 'accounts' -> 1 -> 'invoices') - 'oldestOverdueDue' - 'latestPaidAt' from snap), '{"open": 3, "overdue": 2, "remainingCents": 8400}'::jsonb,
   'Open invoices count as overdue three days after their due date, or after they were created when they have none; other modes and drafts are ignored');

@@ -54,6 +54,21 @@ describe('integration setup report', () => {
     expect(JSON.stringify(report)).not.toContain(secret);
   });
 
+  it('does not call a secret ready when it is shorter than the service accepts', async () => {
+    const short = 'short-secret';
+    const report = await harness('platform_admin', { ...env, HUB_LEAD_SECRET_CAREBASE: short, HUB_LEAD_SECRET_INTEL: 'i'.repeat(32), HUB_GROWTH_SIGNING_KEY: 'tooshort' }).handle('token');
+    const leads = report.integrations.find((integration) => integration.id === 'website-leads');
+    expect(leads.variables.map((variable) => [variable.name, variable.set, variable.satisfied])).toEqual([
+      ['HUB_LEAD_SECRET_CAREBASE', true, false], ['HUB_LEAD_SECRET_INTEL', true, true], ['HUB_LEAD_SECRET_ADVISORS', false, false],
+    ]);
+    const growth = report.integrations.find((integration) => integration.id === 'customer-growth');
+    expect(growth.variables.find((variable) => variable.name === 'HUB_GROWTH_SIGNING_KEY')).toMatchObject({ set: true, satisfied: false });
+    expect(growth.ready).toBe(false);
+    // Still booleans only: neither the value nor its length is reported.
+    expect(JSON.stringify(report)).not.toContain(short);
+    expect(JSON.stringify(report)).not.toMatch(/"(length|minLength)"/);
+  });
+
   it('shows the booking page as a setting the owner can confirm, optional for the AI team', async () => {
     const report = await harness('platform_admin', { ...env, HUB_BOOKING_URL: 'https://cal.example.test/caremetric/intro' }).handle('token');
     const team = report.integrations.find((integration) => integration.id === 'ai-team');

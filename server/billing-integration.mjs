@@ -27,7 +27,7 @@ const webhookSecret = 'whsec_' + randomUUID().replaceAll('-', '');
 const rpc = (name, args = {}, token = ownerToken) => api.rpc(name, args, token);
 const key = () => randomUUID();
 const product = async slug => (await admin.query('select id from hub.products where slug=$1', [slug])).rows[0].id;
-let billing, dropQuantityResponses = false;
+let billing, dropQuantityResponses = false, dropTrialResponses = false;
 const command = (input, token = ownerToken) => billing.command(token, input);
 const workspace = () => rpc('billing_workspace');
 const customer = id => rpc('billing_customer', { p_tenant_id: id });
@@ -79,7 +79,9 @@ try {
   billing = platformBilling({ pool, secretKey: 'sk_test_hub', webhookSecrets: [webhookSecret], apiBase: stripeBase, publicOrigin: 'https://hub.test', log: { warn() {} },
     fetchImpl: async (url, init) => {
       const response = await fetch(url, init);
-      if (dropQuantityResponses && new URL(url).pathname.startsWith('/v1/subscription_items/')) {
+      const path = new URL(url).pathname;
+      if ((dropQuantityResponses && path.startsWith('/v1/subscription_items/'))
+        || (dropTrialResponses && path === '/v1/subscriptions' && init?.method === 'POST' && String(init.body).includes('app_trial'))) {
         await response.arrayBuffer();
         throw new TypeError('Synthetic lost provider response');
       }
@@ -260,6 +262,15 @@ try {
   await billing.agentOffer({ subscription: subscriptionId, trialEnd: offerTrialEnd, idempotencyKey: trialOfferKey });
   assert.equal(stripe.store.subscriptions.get(subscriptionId).trial_end, offerTrialEnd, 'a retry under the same key changes nothing more');
   assert.ok(stripe.requests.length > sentBefore);
+  assert.ok(!stripe.requests.slice(sentBefore).some(request => request.method === 'POST' && request.path === `/v1/subscriptions/${subscriptionId}`), 'a retry finds the offer applied and asks Stripe for nothing');
+  // The owner moves the trial end later in the Dashboard and its webhook has not arrived: an offer computed from the mirror would cut
+  // the trial short, so it is refused before Stripe is asked, and the trial keeps the owner's date.
+  const ownerTrialEnd = offerTrialEnd + 30 * 86400;
+  stripe.store.subscriptions.get(subscriptionId).trial_end = ownerTrialEnd;
+  const beforeShorter = stripe.requests.length;
+  await assert.rejects(billing.agentOffer({ subscription: subscriptionId, trialEnd: offerTrialEnd + 7 * 86400, idempotencyKey: `hub-agent-offer-${randomUUID()}` }), error => error.status === 409);
+  assert.equal(stripe.store.subscriptions.get(subscriptionId).trial_end, ownerTrialEnd, 'an offer never shortens a trial');
+  assert.ok(!stripe.requests.slice(beforeShorter).some(request => request.method === 'POST'), 'nothing was asked of Stripe');
   const offerAudit = (await admin.query("select actor_id, metadata from private.audit_events where action = 'billing.agent_offer' and tenant_id = $1 order by id", [tenant])).rows;
   assert.equal(offerAudit[0].actor_id, 'a1a00000-a1a0-4000-8000-000000000001');
   assert.deepEqual([offerAudit[0].metadata.kind, offerAudit[0].metadata.subscription], ['trial_extension', subscriptionId]);
@@ -375,6 +386,9 @@ try {
   assert.deepEqual(mine.tenants.map(item => item.id), [tenant]);
   assert.equal(mine.tenants[0].invoices.length > 0, true);
   assert.equal(JSON.stringify(mine).includes('cus_'), false, 'customers never see Stripe identifiers');
+  // Each item carries its price's own model, so a flat price on a product with a unit label is not shown as per unit.
+  const myItems = mine.tenants[0].subscriptions.flatMap(subscription => subscription.items);
+  assert.ok(myItems.length > 0 && myItems.every(item => ['flat', 'per_unit', 'tiered', 'custom'].includes(item.pricing_model)), 'every item names its pricing model');
   assert.match((await billing.customerPortal(memberToken, { tenant_id: tenant })).url, /^https:\/\/billing\.stripe\.com\//);
   await assert.rejects(billing.customerPortal(memberToken, { tenant_id: otherTenant }), error => error.status === 403);
   await assert.rejects(billing.customerPortal(null, { tenant_id: tenant }), error => error.status === 401);
@@ -393,6 +407,29 @@ try {
   assert.equal(stripe.requests.find(request => request.path === '/v1/subscriptions' && request.params.metadata?.hub_source === 'app_trial').params.trial_settings.end_behavior.missing_payment_method, 'cancel');
   assert.equal([...stripe.store.subscriptions.values()].filter(item => item.metadata.hub_source === 'app_trial').length, 1);
   assert.equal(trialSubscription.trial_end - trialSubscription.trial_start, 14 * 86400);
+  // The trial ends without a payment method and Stripe cancels it, so the account has no current subscription. It has had its
+  // trial: asking again returns that answer and starts nothing, not a second trial and not a replay of the first.
+  const ended = Math.floor(Date.now() / 1000);
+  Object.assign(trialSubscription, { status: 'canceled', canceled_at: ended, ended_at: ended });
+  await sendEvent({ id: 'evt_' + randomUUID().replaceAll('-', ''), object: 'event', type: 'customer.subscription.deleted', created: ended, livemode: false, data: { object: structuredClone(trialSubscription) } });
+  assert.equal((await billing.entitlements('Bearer ' + breatheKey, { account: breatheAccount })).status, 'none');
+  const secondTrial = await billing.trial('Bearer ' + breatheKey, { account: breatheAccount, name: 'Trial DME ' + suffix, email: 'owner@test.invalid', plan: 'launch' });
+  assert.deepEqual([secondTrial.entitled, secondTrial.status], [false, 'none'], 'a lapsed trial is not started again');
+  assert.equal([...stripe.store.subscriptions.values()].filter(item => item.metadata.hub_source === 'app_trial').length, 1, 'one trial per application account');
+  // An account whose tenant already has a Stripe customer: Stripe starts the trial but its answer is lost, so nothing reaches the
+  // mirror. Asking again finds the trial in Stripe, records it and answers that it is running, without starting another.
+  const savedAccount = randomUUID();
+  const savedTenant = (await pool.query('select private.billing_app_tenant($1,$2,$3) as t', [await product('breathe'), savedAccount, 'Saved DME ' + suffix])).rows[0].t;
+  tenantIds.push(savedTenant);
+  await command({ action: 'customer.save', tenant_id: savedTenant, email: 'saved@test.invalid', name: 'Saved DME', expected_version: 0, request_key: key() });
+  const savedCustomer = (await admin.query('select stripe_customer_id from private.billing_customers where tenant_id=$1', [savedTenant])).rows[0].stripe_customer_id;
+  dropTrialResponses = true;
+  await assert.rejects(billing.trial('Bearer ' + breatheKey, { account: savedAccount, name: 'Saved DME ' + suffix, email: 'saved@test.invalid', plan: 'launch' }));
+  dropTrialResponses = false;
+  assert.equal((await billing.entitlements('Bearer ' + breatheKey, { account: savedAccount })).status, 'none', 'the lost answer left the mirror without the trial');
+  const recovered = await billing.trial('Bearer ' + breatheKey, { account: savedAccount, name: 'Saved DME ' + suffix, email: 'saved@test.invalid', plan: 'launch' });
+  assert.deepEqual([recovered.entitled, recovered.status], [true, 'trialing'], 'asking again records the trial Stripe started');
+  assert.equal([...stripe.store.subscriptions.values()].filter(item => item.customer === savedCustomer && item.metadata.app === 'breathe').length, 1, 'and starts no second trial');
   await assert.rejects(billing.trial('Bearer ' + breatheKey, { account: randomUUID(), name: 'No Plan', email: null, plan: 'missing-plan' }), error => error.status === 409);
 
   // On boot the Hub catches up with what changed in Stripe without it: a product
@@ -420,15 +457,32 @@ try {
   await rpc('save_tenant', { p_tenant_id: tenant, p_record: { name: 'Synthetic Billing Agency ' + suffix, industry: '', status: 'active' }, p_expected_updated_at: (await customer(tenant)).updated_at });
   sub = (await customer(tenant)).subscriptions[0];
   await command({ action: 'subscription.cancel', subscription: subscriptionId, when: 'immediately', prorate: false, expected_version: sub.version, request_key: key() });
+  // The proration choice reaches Stripe in the query string, where Stripe's own SDKs put DELETE parameters.
+  assert.deepEqual(stripe.requests.filter(request => request.method === 'DELETE' && request.path === `/v1/subscriptions/${subscriptionId}`).at(-1).params, { prorate: 'false', invoice_now: 'false' });
   entitlement = await billing.entitlements(bearer, { account });
   assert.deepEqual([entitlement.entitled, entitlement.status, entitlement.products], [false, 'none', []]);
+
+  // The customer is deleted in the Stripe Dashboard (Stripe cancels its subscriptions; the webhook marks the mirror deleted). The
+  // screen offers "Set up billing" again, and saving it creates a new customer while the old subscriptions keep their history.
+  const oldCustomerId = (await customer(tenant)).customer.id;
+  await admin.query('update private.billing_customers set deleted=true,version=version+1,updated_at=now() where tenant_id=$1', [tenant]);
+  assert.equal((await customer(tenant)).customer, null, 'a deleted customer reads as none');
+  const renewed = await command({ action: 'customer.save', tenant_id: tenant, email: 'renewed@test.invalid', name: 'Synthetic Billing Agency', expected_version: 0, request_key: key() });
+  assert.notEqual(renewed.id, oldCustomerId);
+  const afterRenewal = await customer(tenant);
+  assert.deepEqual([afterRenewal.customer.id, afterRenewal.customer.email], [renewed.id, 'renewed@test.invalid'], 'the tenant is billed through its new customer');
+  assert.ok(afterRenewal.subscriptions.some(item => item.id === subscriptionId), 'the old subscriptions keep their history');
+  assert.equal((await admin.query('select stripe_customer_id from private.billing_subscriptions where stripe_subscription_id=$1', [subscriptionId])).rows[0].stripe_customer_id, oldCustomerId);
 
   // Coupon lifecycle and key revocation.
   space = await workspace();
   await command({ action: 'coupon.update', coupon, name: 'Partner twenty', expected_version: space.coupons.find(item => item.id === coupon).version, request_key: key() });
   space = await workspace();
   await command({ action: 'coupon.delete', coupon, expected_version: space.coupons.find(item => item.id === coupon).version, request_key: key() });
-  assert.equal((await workspace()).coupons.some(item => item.id === coupon), false);
+  // Stripe keeps applying a deleted coupon to the subscriptions that have it, so the workspace keeps it for the money maths,
+  // marked deleted and no longer valid (the Billing screen neither lists nor offers it).
+  assert.deepEqual((({ deleted, valid }) => ({ deleted, valid }))((await workspace()).coupons.find(item => item.id === coupon)), { deleted: true, valid: false });
+  assert.equal((await workspace()).coupons.filter(item => !item.deleted).some(item => item.id === coupon), false);
   const keyId = (await workspace()).app_keys.find(item => item.app === 'carebase' && !item.revoked_at).id;
   await command({ action: 'app_key.revoke', key_id: keyId });
   await assert.rejects(billing.entitlements(bearer, { account }), error => error.status === 401);

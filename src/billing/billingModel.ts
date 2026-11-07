@@ -54,6 +54,8 @@ export const couponSchema = z.object({
   id: z.string(), name: z.string(), percent_off: z.number().nullable(), amount_off: z.number().int().nullable(), currency: z.string().nullable(),
   duration: z.enum(['once', 'repeating', 'forever']), duration_in_months: z.number().int().nullable(), max_redemptions: z.number().int().nullable(),
   times_redeemed: z.number().int(), redeem_by: ts, valid: z.boolean(), applies_to: z.array(z.string()), app: appSlug, created: z.string(), version: z.number().int(),
+  // A coupon deleted in Stripe still discounts the subscriptions that already have it, so the money maths keeps it; it is not listed or offered.
+  deleted: z.boolean().default(false),
 });
 export type Coupon = z.infer<typeof couponSchema>;
 export const promotionCodeSchema = z.object({
@@ -114,11 +116,14 @@ export function billingTotals(subscriptions: readonly Subscription[], coupons: r
   return monthlyTotals(subscriptions, coupons) as BillingTotals;
 }
 
-/** Subscription counts per application, for the control center and the portfolio rollup. */
+/**
+ * Current subscription counts per application, for the control center and the portfolio rollup. They count what the Billing
+ * screen shows by default ("Current (not canceled)"), so a figure and the page it links to agree and churn does not inflate it.
+ */
 export interface AppBillingSummary { app: BillingApp; subscriptionCount: number; statusCounts: Array<{ status: string; count: number }>; mrrCents: number }
 export function summarizeByApp(workspace: Pick<BillingWorkspace, 'subscriptions' | 'coupons'>): Record<BillingApp, AppBillingSummary> {
   return Object.fromEntries(historicalBillingApps.map(app => {
-    const rows = workspace.subscriptions.filter(subscription => subscription.app === app && subscription.status !== 'incomplete_expired');
+    const rows = workspace.subscriptions.filter(subscription => subscription.app === app && liveStatuses.includes(subscription.status));
     const totals = billingTotals(rows, workspace.coupons);
     return [app, { app, subscriptionCount: rows.length, mrrCents: totals.mrrCents,
       statusCounts: subscriptionStatuses.filter(status => totals.byStatus[status]).map(status => ({ status, count: totals.byStatus[status] ?? 0 })) }];

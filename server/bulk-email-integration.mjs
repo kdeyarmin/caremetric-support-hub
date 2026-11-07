@@ -129,16 +129,21 @@ try{
   await assert.rejects(service.send(staleToken,{id:created.id,version:saved.version,recipients:expected.size-1}));
   await assert.rejects(service.send(customerToken,{id:created.id,version:saved.version,recipients:expected.size-1}));
   failNext=1;unknownNext=1;
-  const queued=await service.send(ownerToken,{id:created.id,version:saved.version,recipients:expected.size-1});
+  // Delivery starts in the next tick below, not in the background, so the unsubscribe after queuing is ordered deterministically.
+  const queued=await (async()=>{const realTick=service.tick;service.tick=()=>Promise.resolve();try{return await service.send(ownerToken,{id:created.id,version:saved.version,recipients:expected.size-1});}finally{service.tick=realTick;}})();
   assert.equal(queued.status,'sending');assert.equal(queued.recipientCount,expected.size-1);
   assert.equal((await admin.query('select count(*)::int as n from private.email_audience_members where campaign_id=$1',[created.id])).rows[0].n,0);
   await assert.rejects(service.save(ownerToken,{...draft,version:queued.version}),error=>error.status===409,'a sending email cannot be edited');
+  // Someone unsubscribes through an earlier email's link while this one is still queued: they are not sent it.
+  const lateUnsubscriber=[...expected].find(address=>address!==unsubscribedEarlier&&address!==`user4@${domain}`);
+  await admin.query('insert into private.email_suppressions(email_hash) values($1)',[hash(lateUnsubscriber)]);
   await service.tick();
   const delivered=await service.get(ownerToken,{id:created.id});
   assert.equal(delivered.status,'sent');assert.ok(delivered.completedAt);
-  assert.deepEqual(delivered.delivery,{queued:0,sending:0,sent:expected.size-3,failed:1,unknown:1,cancelled:0});
+  assert.deepEqual(delivered.delivery,{queued:0,sending:0,sent:expected.size-4,failed:1,unknown:1,cancelled:1});
   const bulk=sent.slice(1);
-  assert.equal(bulk.length,expected.size-1);
+  assert.equal(bulk.length,expected.size-2);
+  assert.ok(!bulk.some(message=>message.to.toLowerCase()===lateUnsubscriber),'an address unsubscribed after queuing is not sent');
   assert.equal(new Set(bulk.map(message=>message.to.toLowerCase())).size,bulk.length,'one message per address');
   assert.ok(!bulk.some(message=>message.to===unsubscribedEarlier));
   const shared=bulk.find(message=>message.to.toLowerCase()===`user4@${domain}`);

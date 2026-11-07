@@ -62,6 +62,16 @@ describe('Stripe client', () => {
       expect(init.headers['Idempotency-Key']).toBe('hub-1');
     }
   });
+  it('sends DELETE parameters in the query string, as Stripe’s SDKs do, with no body', async () => {
+    const fetchImpl = vi.fn(async () => Response.json({ id: 'sub_1', status: 'canceled' }));
+    const client = stripeClient({ secretKey: 'sk_test_x', fetchImpl });
+    await client.del('/v1/subscriptions/sub_1', { prorate: true, invoice_now: true });
+    await client.del('/v1/coupons/co_1');
+    const [[cancelUrl, cancel], [couponUrl, coupon]] = fetchImpl.mock.calls;
+    expect(new URL(cancelUrl).searchParams.toString()).toBe('prorate=true&invoice_now=true');
+    expect([cancel.method, cancel.body, cancel.headers['Content-Type']]).toEqual(['DELETE', undefined, undefined]);
+    expect([couponUrl, coupon.body]).toEqual(['https://api.stripe.com/v1/coupons/co_1', undefined]);
+  });
   it('never retries a create without an idempotency key and reports Stripe’s message', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { type: 'invalid_request_error', message: 'No such price' } }), { status: 400 }));
     const client = stripeClient({ secretKey: 'sk_test_x', fetchImpl });

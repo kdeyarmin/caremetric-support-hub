@@ -220,7 +220,8 @@ export function headline(input: ControlCenterInput): Headline {
 }
 
 export interface PhoneSummary { total: number; active: number; needsReview: number; textingAttention: number }
-/** The phone registry's own inventory counters, so the control center and the registry page always agree. */
+/** The phone registry's own inventory counters (its "Need review" tile and filter use phoneNeedsReview too), so the control center
+ * and the registry page always agree. */
 export function phoneSummary(rows: readonly PhoneRow[]): PhoneSummary {
   return {
     total: rows.length,

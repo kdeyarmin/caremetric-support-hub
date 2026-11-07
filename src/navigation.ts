@@ -69,7 +69,7 @@ export const navSections: readonly NavSection[] = [
   ] },
 ];
 
-const unlistedPageTitles: Record<string, string> = { "/help": "Help", "/subscriptions": "Subscriptions" };
+const unlistedPageTitles: Record<string, string> = { "/help": "Help", "/subscriptions": "Subscriptions", "/imports/docstudio": "Review material imports" };
 
 /** The sections and links one person may open; a section with nothing left in it is dropped. */
 export function visibleNavSections(viewer: NavViewer): NavSection[] {

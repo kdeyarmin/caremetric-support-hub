@@ -3,7 +3,9 @@ import { HttpError } from './sms-auth.mjs';
 /**
  * Which integrations the Hub service has configured, read from the service
  * environment at request time for the platform administrator only. A secret
- * contributes a boolean: no part of its value is returned, logged or measured.
+ * contributes booleans only: whether it is set and, where the service requires a
+ * minimum length (minLength), whether it meets it, the same test the service
+ * applies before using it. No part of its value or its length is returned or logged.
  * Non-secret settings (an address, a flag, a tier, an identifier) are returned so
  * the owner can confirm them. A flag satisfies its integration only when it is
  * exactly "true", the same test server/main.mjs applies; a present but false
@@ -34,6 +36,7 @@ export const integrationCatalog = Object.freeze([
       { name: 'HUB_SENDGRID_INBOUND_PUBLIC_KEY', secret: true, required: true, purpose: 'Verifies signed Inbound Parse posts.' },
       { name: 'HUB_SENDGRID_API_KEY', secret: true, required: false, purpose: 'Mail Send key for replies and bulk email.' },
       { name: 'HUB_SUPPORT_FROM_EMAIL', secret: false, required: false, purpose: 'Reply sender (default support@caremetric.ai).' },
+      { name: 'HUB_SUPPORT_REPLY_TO', secret: false, required: false, purpose: 'Reply-To on support replies and customer emails: the address Inbound Parse receives (e.g. support@inbound.caremetric.ai), so answers join the conversation. Default: the reply sender.' },
       { name: 'HUB_BULK_EMAIL_FROM', secret: false, required: false, purpose: 'Bulk email sender (default the reply sender); replies go to the reply sender.' },
       { name: 'HUB_BULK_EMAIL_POSTAL_ADDRESS', secret: false, required: false, purpose: 'Mailing address in every bulk email footer; include it for marketing email (CAN-SPAM).' },
     ] },
@@ -62,17 +65,17 @@ export const integrationCatalog = Object.freeze([
   { id: 'customer-growth', name: 'Customer growth', purpose: 'CareBase and Intel prospecting, customer success, activity and delivery events.', docs: 'docs/CUSTOMER_GROWTH.md',
     variables: [
       { name: 'HUB_GROWTH_SEND_ENABLED', secret: false, required: false, flag: true, purpose: 'Master switch for sending reviewed growth messages.' },
-      { name: 'HUB_GROWTH_SIGNING_KEY', secret: true, required: true, purpose: 'At least 32 characters; signs stable unsubscribe links. Keep it across releases.' },
+      { name: 'HUB_GROWTH_SIGNING_KEY', secret: true, minLength: 32, required: true, purpose: 'At least 32 characters; signs stable unsubscribe links. Keep it across releases.' },
       { name: 'HUB_GROWTH_SEARCH_API_KEY', secret: true, required: false, purpose: 'Brave Search API key for attributable organization discovery; manual evidence also works.' },
-      { name: 'HUB_GROWTH_CAREBASE_EVENT_KEY', secret: true, required: false, purpose: 'CareBase server-only activity signing key, at least 32 characters.' },
-      { name: 'HUB_GROWTH_INTEL_EVENT_KEY', secret: true, required: false, purpose: 'Intel server-only activity signing key, at least 32 characters.' },
+      { name: 'HUB_GROWTH_CAREBASE_EVENT_KEY', secret: true, minLength: 32, required: false, purpose: 'CareBase server-only activity signing key, at least 32 characters.' },
+      { name: 'HUB_GROWTH_INTEL_EVENT_KEY', secret: true, minLength: 32, required: false, purpose: 'Intel server-only activity signing key, at least 32 characters.' },
       { name: 'HUB_SENDGRID_EVENT_PUBLIC_KEY', secret: true, required: false, purpose: 'Verifies delivery, bounce, complaint and unsubscribe webhooks.' },
     ] },
   { id: 'website-leads', name: 'Website leads', purpose: 'CareBase, Intel and Healthcare Advisors forward every lead from their public forms to the Hub (POST /api/leads), where it appears on Leads and, when the person asked to be contacted, in Communications. Each product signs its leads with its own secret; a product without one keeps its leads to itself.', docs: 'docs/LEAD_INTAKE.md',
     variables: [
-      { name: 'HUB_LEAD_SECRET_CAREBASE', secret: true, required: false, purpose: 'The secret CareBase signs its website leads with: the same value as CareBase\'s HUB_LEAD_SECRET. Use at least 32 random characters; a shorter value counts as not set.' },
-      { name: 'HUB_LEAD_SECRET_INTEL', secret: true, required: false, purpose: 'The secret Intel signs its website leads with: the same value as Intel\'s HUB_LEAD_SECRET. Use at least 32 random characters; a shorter value counts as not set.' },
-      { name: 'HUB_LEAD_SECRET_ADVISORS', secret: true, required: false, purpose: 'The secret Healthcare Advisors signs its consultation requests with: the same value as Advisors\' HUB_LEAD_SECRET. Use at least 32 random characters; a shorter value counts as not set.' },
+      { name: 'HUB_LEAD_SECRET_CAREBASE', secret: true, minLength: 32, required: false, purpose: 'The secret CareBase signs its website leads with: the same value as CareBase\'s HUB_LEAD_SECRET. Use at least 32 random characters; a shorter value counts as not set.' },
+      { name: 'HUB_LEAD_SECRET_INTEL', secret: true, minLength: 32, required: false, purpose: 'The secret Intel signs its website leads with: the same value as Intel\'s HUB_LEAD_SECRET. Use at least 32 random characters; a shorter value counts as not set.' },
+      { name: 'HUB_LEAD_SECRET_ADVISORS', secret: true, minLength: 32, required: false, purpose: 'The secret Healthcare Advisors signs its consultation requests with: the same value as Advisors\' HUB_LEAD_SECRET. Use at least 32 random characters; a shorter value counts as not set.' },
     ] },
   { id: 'carebase-distribution', name: 'CareBase course distribution observer', purpose: 'Lets the Hub observe shared course availability in CareBase.', docs: 'docs/SHARED_COURSE_DISTRIBUTION.md',
     variables: [{ name: 'CAREBASE_DISTRIBUTION_OBSERVER_TOKEN', secret: true, required: true, purpose: 'Token CareBase issued to the Hub observer.' }] },
@@ -97,7 +100,8 @@ export function integrationSetup({ rpc, env = process.env, now = () => new Date(
           const set = present(value);
           return {
             name: variable.name, secret: variable.secret, required: variable.required, purpose: variable.purpose, set,
-            satisfied: variable.flag ? value === 'true' : set,
+            // A secret shorter than the service's minimum is treated as missing by the service, so it does not satisfy here either.
+            satisfied: variable.flag ? value === 'true' : variable.minLength ? typeof value === 'string' && value.length >= variable.minLength : set,
             // Only a non-secret setting is ever shown; a secret is represented by `set` alone.
             ...(variable.secret ? {} : { value: set ? String(value).trim().slice(0, 200) : null }),
           };

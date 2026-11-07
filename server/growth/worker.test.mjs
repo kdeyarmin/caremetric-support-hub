@@ -28,6 +28,25 @@ it('discards a stale draft and continues the sweep when an owner edits its conte
  expect(await growthHandlers({growth})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'})).toMatchObject({result:{inspected:2,drafted:1}});
  expect(store.propose).toHaveBeenCalledTimes(1);
 });
+it('skips one opportunity whose model answer is cut off and drafts the rest; a rate limit still stops the sweep for a retry',async()=>{
+ const o={...base,version:4,contact_id:'contact',contact_version:7,eligibility:'permitted',policy:{version:9,approved_claim:'Discuss staff training.'},evidence:[{id:'source',source_url:'https://example.org',claim:'Care operator.',observed_at:new Date().toISOString()}]};
+ const answer={outcome:'completed',output:{subject:'Staff training',body:'Discuss staff training.',citations:['source'],needsHuman:false}};
+ const sweep=async model=>{
+  const store={snapshot:vi.fn(async()=>({total:2,items:[o,{...o,id:'next'}]})),plan:vi.fn(async()=> 'work'),draft:vi.fn(async()=>({id:'message',status:'draft'})),propose:vi.fn()};
+  const growth={store,signingReady:true,hash:x=>x,unsubscribeToken:()=> 'token'};
+  return {store,run:growthHandlers({growth,model})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'})};
+ };
+ const cut={configured:true,run:vi.fn().mockRejectedValueOnce(Object.assign(new Error('The model call could not be completed.'),{code:'output_truncated',transient:false})).mockResolvedValue(answer)};
+ const first=await sweep(cut);
+ expect(await first.run).toMatchObject({result:{inspected:2,drafted:1}});
+ expect(first.store.draft).toHaveBeenCalledTimes(1);
+ expect(first.store.draft).toHaveBeenCalledWith('next','work',expect.objectContaining({subject:'Staff training'}));
+ const limited={configured:true,run:vi.fn().mockRejectedValue(Object.assign(new Error('The model call could not be completed.'),{code:'rate_limited',transient:true}))};
+ await expect((await sweep(limited)).run).rejects.toMatchObject({code:'rate_limited'});
+ const account={configured:true,run:vi.fn().mockRejectedValue(Object.assign(new Error('The model call could not be completed.'),{code:'ai_auth_failed',transient:false}))};
+ await expect((await sweep(account)).run).rejects.toMatchObject({code:'ai_auth_failed'});
+ expect(account.run).toHaveBeenCalledTimes(1);
+});
 it('does not pay for a new draft of work whose last message was cancelled under the same context, unless it was withdrawn or something changed',async()=>{
  const o={...base,version:4,contact_id:'contact',contact_version:7,eligibility:'permitted',policy:{version:9,approved_claim:'Discuss staff training.'},evidence:[{id:'source',source_url:'https://example.org',claim:'Care operator.',observed_at:new Date().toISOString()}]};
  const cancelled={trigger_key:'outreach:0',status:'open',message_id:'old',message_status:'cancelled',message_withdrawn:false,message_opportunity_version:4,message_contact_version:7,message_policy_version:9};

@@ -7,7 +7,7 @@ import type { Draft, DraftDocument } from "./model";
 
 const api = vi.hoisted(() => ({ editorAccess: vi.fn(), drafts: vi.fn(), draft: vi.fn(), mediaList: vi.fn(), save: vi.fn(), publish: vi.fn(), uploadMedia: vi.fn() }));
 vi.mock("./api", () => ({ learningApi: api }));
-const { CourseEditor } = await import("./Editor");
+const { CourseEditor, CourseLibrary } = await import("./Editor");
 
 // Placement eligibility mirrors private.validate_learning_document: the six
 // app products below may hold courses; a registered product outside that set
@@ -96,7 +96,7 @@ it("updates the placement selection when an eligible product is toggled", async 
   expect([...document.productIds].sort()).toEqual(eligibleIds.filter(id => id !== ids.breathe).sort());
 });
 
-it("keeps an ineligible product already on a draft visible, disabled, and saved", async () => {
+it("keeps an ineligible product already on a draft visible and saved unless the author clears it", async () => {
   const itemId = "20000000-0000-4000-8000-000000000001";
   const existing: Draft = {
     itemId, draftVersion: 3, published: false,
@@ -110,7 +110,8 @@ it("keeps an ineligible product already on a draft visible, disabled, and saved"
   renderEditor(`/library/courses/${itemId}`);
   const advisors = await screen.findByRole("checkbox", { name: /Healthcare Advisors/ }) as HTMLInputElement;
   expect(advisors.checked).toBe(true);
-  expect(advisors.disabled).toBe(true);
+  // The server refuses this placement, so the author must be able to clear it (but not add it back).
+  expect(advisors.disabled).toBe(false);
   expect(box(/CareBase/).checked).toBe(true);
   expect(box(/CareBase/).disabled).toBe(false);
   fireEvent.change(screen.getByLabelText("Summary"), { target: { value: "Updated summary" } });
@@ -120,6 +121,25 @@ it("keeps an ineligible product already on a draft visible, disabled, and saved"
   expect(document.productIds).toContain(ids.advisors);
   expect(document.productIds).toContain(ids.carebase);
   expect(document.productIds).toHaveLength(2);
+});
+
+it("lets an author clear a placement on an app retired since the draft was made, so the draft can be saved again", async () => {
+  // Drafts made before CareMetric EMR and Go were retired carry them; the server refuses those placements now.
+  const live = products.map(p => p.slug === "caremetric-emr" || p.slug === "caremetric-go" ? { ...p, status: "retired" as const } : p);
+  const itemId = "20000000-0000-4000-8000-000000000002";
+  api.draft.mockResolvedValue({ itemId, draftVersion: 2, published: false, document: {
+    title: "Existing course", summary: "", overview: "", category: "Safety", durationMinutes: 15, accessLevel: "customer",
+    productIds: [ids.carebase, ids.emr, ids.go], units: [{ id: "30000000-0000-4000-8000-000000000001", type: "text", title: "First lesson", body: "Lesson content." }],
+  } } satisfies Draft);
+  render(<MemoryRouter initialEntries={[`/library/courses/${itemId}`]}><Routes><Route path="/library/courses/:itemId" element={<CourseEditor products={live} />} /></Routes></MemoryRouter>);
+  const emr = await screen.findByRole("checkbox", { name: /CareMetric EMR/ }) as HTMLInputElement;
+  expect([emr.checked, emr.disabled]).toEqual([true, false]);
+  fireEvent.click(emr);
+  fireEvent.click(box(/CareMetric Go/));
+  // Once cleared, a retired app is no longer offered.
+  expect(screen.queryByRole("checkbox", { name: /CareMetric EMR|CareMetric Go/ })).toBeNull();
+  const [, document] = await saveDraft();
+  expect(document.productIds).toEqual([ids.carebase]);
 });
 
 it("turns a question into select all that apply and saves its set of correct answers", async () => {
@@ -160,4 +180,15 @@ it("offers CareMetric PennSync, retired except for courses, as a placement autho
   const [, document] = await saveDraft();
   expect(document.productIds).not.toContain(ids.pennsync);
   expect([...document.productIds].sort()).toEqual(eligibleIds.filter(id => id !== ids.pennsync).sort());
+});
+
+it("links course editors to material imports from Course authoring, and nobody else", async () => {
+  api.drafts.mockResolvedValue([]);
+  const { unmount } = render(<MemoryRouter><CourseLibrary products={products} /></MemoryRouter>);
+  expect((await screen.findByRole("link", { name: "Review material imports" })).getAttribute("href")).toBe("/imports/docstudio");
+  unmount();
+  api.editorAccess.mockResolvedValue(false);
+  render(<MemoryRouter><CourseLibrary products={products} /></MemoryRouter>);
+  await waitFor(() => expect(api.editorAccess).toHaveBeenCalledTimes(2));
+  expect(screen.queryByRole("link", { name: "Review material imports" })).toBeNull();
 });

@@ -41,8 +41,11 @@ for the deployed release and remaining authenticated verification gates.
 - Course placements are CareBase, Breathe, Intel and CareMetric PennSync.
   CareMetric PennSync was retired with the other apps outside the central Hub in
   `20261028220500_limit_central_hub_to_three_apps.sql` and stays retired for support,
-  billing and native connections; courses can be placed on it again. Its staff keep
-  training in its own catalog until its central-learning cutover.
+  billing and native connections; courses can be placed on it again. A course placed
+  on it reaches learners like any other: a public course everyone, and a course for
+  product members the members of a PennSync agency
+  (`20261107160000_owner_decisions.sql`, `20261107180000_review_comment_fixes.sql`).
+  Its staff keep training in its own catalog until its central-learning cutover.
 - `/learn/my`: the current learner's enrollments and progress.
 - `/learn/certificates/:enrollmentId`: an authenticated, printable record of
   completion that shows the best post-test score and its passing score. These
@@ -59,6 +62,12 @@ table grants. Authenticated RPCs check a current, usable Auth principal and
 relational permissions. Learner documents use an explicit field projection.
 Submissions use an enrollment lock plus a request key and payload hash to prevent
 double attempts from retries. Certificates retain immutable revision identity.
+
+Learners may retake a quiz as many times as they need. The player shows the
+questions in a new order on each attempt, derived from the enrollment, quiz and
+attempt number (grading is by question ID, so order never affects a score). A
+course document's `maxAttempts` is kept, so imported courses still match their
+source, but it no longer limits retakes.
 
 The `hub-learning` bucket is private. Shared content editors can insert new objects
 and read uploads for review. They cannot overwrite or delete objects through these

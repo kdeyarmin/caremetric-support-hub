@@ -197,7 +197,9 @@ function TrainingEditor({ client, editor, onReview, close }: {
   const courses = useAdminRead(courseReader);
   const student = editor.student;
   const organizationInvitation = editor.action === "invitations.create" && !student;
-  const reviewedFacilityName = editor.action === "enrollments.cancel" ? editor.enrollment?.facility : !organizationInvitation && facilityId ? facilityName : null;
+  // A new facility is created in a new organization, so the facility selected in the address is not part of its review.
+  const provisioning = editor.action === "facilities.provision";
+  const reviewedFacilityName = editor.action === "enrollments.cancel" ? editor.enrollment?.facility : !organizationInvitation && !provisioning && facilityId ? facilityName : null;
   const studentFields = ["students.create", "students.update", "invitations.create"].includes(editor.action);
   const title = editor.action === "invitations.create" ? student ? "Invite student" : "Invite organization administrator" : actionNames[editor.action];
   function review(event: FormEvent<HTMLFormElement>) {
@@ -225,7 +227,7 @@ function TrainingEditor({ client, editor, onReview, close }: {
       if (parsed.operation === "apply") onReview({ command: parsed, title, details }, { search: courseSearch, filter: courseFilter, offset: courseOffset, selected: selectedCourse });
     } catch { setError("Check the required names, dates, email and administrative reason before reviewing this change."); }
   }
-  return <section className="panel training-editor" aria-label={title}><h3>{title}</h3>{organizationId && <p>{organizationName}{reviewedFacilityName ? ` · ${reviewedFacilityName}` : ""}{student ? ` · ${student.firstName} ${student.lastName}` : ""}</p>}
+  return <section className="panel training-editor" aria-label={title}><h3>{title}</h3>{organizationId && !provisioning && <p>{organizationName}{reviewedFacilityName ? ` · ${reviewedFacilityName}` : ""}{student ? ` · ${student.firstName} ${student.lastName}` : ""}</p>}
     {editor.action === "enrollments.assign" && <form className="training-facility-picker" onSubmit={event => { event.preventDefault(); setCourseFilter(courseSearch.trim()); setCourseOffset(0); setSelectedCourse(null); }}><label>Find a course<input type="search" maxLength={100} value={courseSearch} onChange={event => setCourseSearch(event.target.value)} /></label><button className="button button-secondary">Search courses</button></form>}
     <form onSubmit={review} className="training-form">
       {editor.action === "facilities.provision" && <><label>Organization name<input name="organizationName" required maxLength={200} defaultValue={initialValue("organizationName")} /></label><label>Facility name<input name="facilityName" required maxLength={200} defaultValue={initialValue("facilityName")} /></label><label>Facility type<select name="facilityType" defaultValue={initialValue("facilityType", "PCH")}><option value="PCH">Pennsylvania Personal Care Home (PCH)</option><option value="ALR">Pennsylvania Assisted Living Facility (ALF)</option></select></label><p>Creates a new organization and its first facility with training module access. Add other modules only after separate agreement.</p></>}

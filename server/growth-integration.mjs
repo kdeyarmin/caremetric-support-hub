@@ -215,6 +215,15 @@ try {
   await runSweep();assert.equal((await latestDraft()).id,contactDraft.id,'an unchanged rejection must not be repeatedly proposed');
   await changePolicy('Revised reviewed training capability.');
   await runSweep();assert.notEqual((await latestDraft()).id,contactDraft.id,'a revised policy can replace a rejected draft');
+  // A proposal nobody decides expires after seven days: the next sweep withdraws it and drafts the same work afresh.
+  const unanswered=await latestDraft();
+  assert.equal(unanswered.status,'proposed');
+  await admin.query("update private.agent_actions set status='expired',updated_at=now() where id=$1",[unanswered.action_id]);
+  await runSweep();
+  const redrafted=await latestDraft();
+  assert.notEqual(redrafted.id,unanswered.id,'an expired proposal is drafted again');
+  assert.equal(redrafted.status,'proposed');
+  assert.deepEqual([(await message(unanswered.id)).status,(await row('select withdrawn_at is not null as withdrawn from private.growth_messages where id=$1',[unanswered.id])).withdrawn],['cancelled',true]);
   // Never cancel an accepted or uncertain delivery merely because its context changes.
   const attempted=await latestDraft();
   for(const status of ['accepted','unknown']) {

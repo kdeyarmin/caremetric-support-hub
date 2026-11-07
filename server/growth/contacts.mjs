@@ -161,6 +161,8 @@ async function readLimited(response, limit) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+const disallowAll = 'User-agent: *\nDisallow: /';
+
 export function growthContactFinder({ fetchImpl = null, lookup = dnsLookup } = {}) {
   const fetchPage = fetchImpl ?? pinnedFetch(lookup);
   async function safeHost(host) {
@@ -172,13 +174,14 @@ export function growthContactFinder({ fetchImpl = null, lookup = dnsLookup } = {
   }
 
   // One GET on the business's own hosts, following at most two redirects that stay on them and that `allowed` (robots.txt) permits.
-  // Returns { url, text } or null.
-  async function get(url, hosts, limit, signal, accept, allowed = null) {
+  // Says how it ended: 'ok' with { url, text }; 'missing' for a 4xx answer; 'unreachable' for a 5xx answer; 'refused' when the
+  // address, a redirect or the content type is not one this finder reads. A network error or timeout throws.
+  async function fetchOnHosts(url, hosts, limit, signal, accept, allowed, anyType) {
     let target = new URL(url);
     for (let hop = 0; hop < 3; hop += 1) {
-      if (target.protocol !== 'https:' || target.username || target.password || target.port || !hosts.includes(target.hostname)) return null;
-      if (!(await safeHost(target.hostname))) return null;
-      if (hop > 0 && allowed && !(await allowed(target))) return null;
+      if (target.protocol !== 'https:' || target.username || target.password || target.port || !hosts.includes(target.hostname)) return { outcome: 'refused' };
+      if (!(await safeHost(target.hostname))) return { outcome: 'refused' };
+      if (hop > 0 && allowed && !(await allowed(target))) return { outcome: 'refused' };
       const response = await fetchPage(target.href, {
         redirect: 'manual', headers: { 'User-Agent': `${finderAgent}/1.0 (+https://help.caremetric.ai)`, Accept: accept },
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
@@ -186,16 +189,24 @@ export function growthContactFinder({ fetchImpl = null, lookup = dnsLookup } = {
       if (response.status >= 300 && response.status < 400) {
         await response.body?.cancel?.().catch(() => {});
         const location = response.headers.get('location');
-        if (!location) return null;
+        if (!location) return { outcome: 'refused' };
         target = new URL(location, target);
         continue;
       }
-      if (!response.ok) { await response.body?.cancel?.().catch(() => {}); return null; }
+      if (!response.ok) {
+        await response.body?.cancel?.().catch(() => {});
+        return { outcome: response.status >= 400 && response.status < 500 ? 'missing' : 'unreachable' };
+      }
       const type = String(response.headers.get('content-type') ?? '').toLowerCase();
-      if (!type.startsWith('text/html') && !type.startsWith('text/plain')) { await response.body?.cancel?.().catch(() => {}); return null; }
-      return { url: target.href, text: await readLimited(response, limit) };
+      if (!anyType && !type.startsWith('text/html') && !type.startsWith('text/plain')) { await response.body?.cancel?.().catch(() => {}); return { outcome: 'refused' }; }
+      return { outcome: 'ok', url: target.href, text: await readLimited(response, limit) };
     }
-    return null;
+    return { outcome: 'refused' };
+  }
+  // A page: { url, text } or null.
+  async function get(url, hosts, limit, signal, accept, allowed = null) {
+    const result = await fetchOnHosts(url, hosts, limit, signal, accept, allowed, false);
+    return result.outcome === 'ok' ? { url: result.url, text: result.text } : null;
   }
 
   /** The one role address to record for `domain`, with the page it was on, or why there is none. */
@@ -203,14 +214,17 @@ export function growthContactFinder({ fetchImpl = null, lookup = dnsLookup } = {
     const host = String(domain ?? '').toLowerCase();
     if (!domainPattern.test(host) || host.length > 253) return { email: null, reason: 'invalid_domain' };
     const hosts = [host, `www.${host}`];
-    // Each host's robots.txt, read once: the business's domain first, its www. name only if a redirect leads there.
+    // Each host's robots.txt, read once: the business's domain first, its www. name only if a redirect leads there. As RFC 9309
+    // sets out, a robots.txt that answers 4xx means no rules, and one that cannot be read (a 5xx answer, a network error or
+    // timeout, or a redirect this finder does not follow) means the whole site is off limits. Its content type does not matter.
     const robotsByHost = new Map();
     const robotsFor = async name => {
       if (!robotsByHost.has(name)) {
-        let text = '';
+        let text = disallowAll;
         try {
-          const page = await get(`https://${name}/robots.txt`, hosts, robotsBytes, signal, 'text/plain');
-          text = page?.text ?? '';
+          const result = await fetchOnHosts(`https://${name}/robots.txt`, hosts, robotsBytes, signal, 'text/plain', null, true);
+          if (result.outcome === 'ok') text = result.text;
+          else if (result.outcome === 'missing') text = '';
         } catch (error) {
           if (signal?.aborted) throw error;
         }

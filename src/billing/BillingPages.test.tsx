@@ -33,6 +33,17 @@ describe('Billing workspace', () => {
     expect(screen.getByText('Synthetic Home Medical')).toBeTruthy();
   });
 
+  it('lists and offers only current coupons, but counts a deleted coupon still on a subscription', async () => {
+    const workspace = fixtureWorkspace();
+    workspace.coupons.push({ ...workspace.coupons[0], id: 'co_retired', name: 'Retired partner', valid: false, deleted: true });
+    workspace.subscriptions[0] = { ...workspace.subscriptions[0], discounts: [{ id: 'di_retired', coupon: 'co_retired', promotion_code: null }] };
+    render(<MemoryRouter initialEntries={['/admin/billing']}><BillingWorkspace client={adminClient({ workspace: vi.fn(async () => workspace) })} demo={false} /></MemoryRouter>);
+    // 25% off the $597.00 subscription: Stripe still applies a coupon deleted after it was given.
+    expect(within(await screen.findByLabelText('Subscription totals')).getByText('$447.75')).toBeTruthy();
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Billing sections' })).getByRole('button', { name: 'Discounts' }));
+    expect(await screen.findByText('Founding agency')).toBeTruthy();
+    expect(screen.queryByText('Retired partner')).toBeNull();
+  });
   it('opens on the application named in the link', async () => {
     render(<MemoryRouter initialEntries={['/admin/billing?app=carebase']}><BillingWorkspace client={adminClient()} demo={false} /></MemoryRouter>);
     await screen.findByLabelText('Subscription totals');
@@ -123,6 +134,21 @@ describe('My billing', () => {
     await waitFor(() => expect(assign).toHaveBeenCalledWith('https://billing.stripe.com/p/session/synthetic'));
     expect(client.portal).toHaveBeenCalledWith(fixtureTenantId);
     vi.unstubAllGlobals();
+  });
+
+  it('prices each item by its own model, not by whether its product has a unit label', async () => {
+    const item = (over: Partial<MyBillingData['tenants'][number]['subscriptions'][number]['items'][number]>) =>
+      ({ name: 'Core', kind: 'plan', quantity: 1, unit_label: 'facility', unit_amount: 19900, currency: 'usd', interval: 'month', interval_count: 1, ...over });
+    const priced: MyBillingData = { ...data, tenants: [{ ...data.tenants[0], invoices: [], subscriptions: [{ ...data.tenants[0].subscriptions[0], items: [
+      item({ name: 'Flat plan', pricing_model: 'flat' }), item({ name: 'Seats', quantity: 3, pricing_model: 'per_unit' }), item({ name: 'Older database', quantity: 2 }),
+    ] }] }] };
+    render(<MyBilling client={{ read: vi.fn(async () => priced), portal: vi.fn() }} demo={false} />);
+    const price = async (name: string) => (await screen.findByText(name)).closest('li')!.textContent;
+    expect(await price('Flat plan')).toMatch(/\$199\.00 per month$/);
+    expect(await price('Flat plan')).not.toMatch(/×|per facility/);
+    expect(await price('Seats')).toMatch(/3 × \$199\.00 per facility per month$/);
+    // A database that does not return the model yet keeps the unit-label guess.
+    expect(await price('Older database')).toMatch(/2 × \$199\.00 per facility per month$/);
   });
 
   it('tells a member without billing access whom to ask', async () => {

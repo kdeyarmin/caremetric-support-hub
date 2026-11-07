@@ -39,6 +39,15 @@ const aiCaseActions=new Set(['summary','draft-reply','triage-suggestion']);
 const staffCommunicationActions=new Set(['list','get','update','note','reply','sync']);
 // Railway's edge appends the visitor address last; rate limits use it only as a hashed bucket.
 const visitorAddress=req=>String(req.headers['x-forwarded-for']||'').split(',').at(-1).trim()||req.socket.remoteAddress||'unknown';
+// The database functions raise these codes with a message written for the person using the Hub (a stale save, a closed case, a
+// course that cannot publish yet and why): it is shown with a matching status instead of "temporarily unavailable". Sign-in and
+// permission errors keep their fixed wording, and anything else (a constraint naming a table, an outage) stays generic.
+const databaseStatus={'22023':400,P0001:422,P0002:404,'40001':409,'55000':409,P4040:404,P4090:409,P4130:413,P4290:429};
+export function reviewedDatabaseError(error) {
+  if(typeof error?.code!=='string'||!Object.hasOwn(databaseStatus,error.code)||typeof error.severity!=='string'||typeof error.message!=='string') return null;
+  const message=error.message.split('\n')[0].trim().slice(0,500);
+  return message?{status:databaseStatus[error.code],message}:null;
+}
 export const privateHubMessage='This Hub is private. Only its owner can sign in.';
 /**
  * `owner.allows(sessionToken)` makes the Hub private to its owner: a session that fails it is
@@ -273,7 +282,7 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
         if(path==='/api/auth/session' && req.method==='GET') return json(await gateway.session(session));
         if(path==='/api/auth/invitation/start' && req.method==='POST') {
           if(url.search)throw new HttpError(400,'Invitation query parameters are not supported.');
-          const result=await delegations.registration.start(await jsonBody(req,2048),req.socket.remoteAddress);
+          const result=await delegations.registration.start(await jsonBody(req,2048),visitorAddress(req));
           if(result.unavailable)throw new HttpError(503,'SMS is temporarily unavailable. Please try again later.');
           return json({challengeId:result.id,retryAfter:60},200,[cookie(challengeCookie,result.browserToken,300)]);
         }
@@ -284,8 +293,8 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
         }
         if(path==='/api/auth/sms/start' && req.method==='POST') {
           const {phone}=await jsonBody(req,2048);
-          const result=await auth.start(phone,req.socket.remoteAddress);
-          if(result.unavailable) throw new HttpError(503,'SMS is temporarily unavailable. Please try again later.');
+          // The same answer for every number: whether one is registered, or its text could be sent, is never revealed.
+          const result=await auth.start(phone,visitorAddress(req));
           return json({challengeId:result.id,retryAfter:60},200,[cookie(challengeCookie,result.browserToken,300)]);
         }
         if(path==='/api/auth/sms/verify' && req.method==='POST') {
@@ -442,8 +451,9 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
       await pipeline(createReadStream(file),res);
     } catch(error) {
       if(res.headersSent) { res.destroy(); return; }
-      const status=error instanceof HttpError?error.status:error?.code==='28000'?401:error?.code==='42501'?403:500;
-      const message=error instanceof HttpError?error.message:error?.code==='P0001'?'The action could not be completed. Check the form and try again.':status===401?'Sign in with an SMS code to continue.':status===403?'You do not have access to this action.':'The service is temporarily unavailable.';
+      const reviewed=reviewedDatabaseError(error);
+      const status=error instanceof HttpError?error.status:reviewed?reviewed.status:error?.code==='28000'?401:error?.code==='42501'?403:500;
+      const message=error instanceof HttpError?error.message:reviewed?reviewed.message:error?.code==='P0001'?'The action could not be completed. Check the form and try again.':status===401?'Sign in with an SMS code to continue.':status===403?'You do not have access to this action.':'The service is temporarily unavailable.';
       json({error:error instanceof HttpError && error.code ? {code:error.code,...(typeof error.publicMessage==='string'?{message:error.publicMessage}:{})} : message},status);
     }
   });

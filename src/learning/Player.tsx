@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { learningApi } from "./api";
 import { courseSteps, type Course, type LearnerUnit } from "./model";
+import { questionOrder } from "./quizOrder";
 
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : "The request did not complete. Please retry."; }
 
@@ -51,7 +52,9 @@ function Lesson({ course, unit, onRefresh, onNext }: { course: Course; unit: Lea
   const [busy, setBusy] = useState(false);
   const [watched, setWatched] = useState(false);
   const pending = useRef<{ serialized: string; key: string } | null>(null);
-  const exhausted = unit.type === "quiz" && unit.maxAttempts !== null && (progress?.attemptCount ?? 0) >= unit.maxAttempts;
+  // Learners retake a quiz as many times as they need; each attempt shows its questions in a new order.
+  const attemptsSoFar = progress?.attemptCount ?? 0;
+  const questions = unit.type === "quiz" ? questionOrder(unit.questions, { enrollmentId: course.enrollmentId ?? "", unitId: unit.id, attemptNumber: attemptsSoFar }) : [];
   // A first viewing must reach the end before the lesson can be marked complete.
   const mustWatch = unit.type === "video" && Boolean(unit.mediaAssetId) && !progress?.completedAt && !watched;
   async function submit() {
@@ -60,7 +63,9 @@ function Lesson({ course, unit, onRefresh, onNext }: { course: Course; unit: Lea
     if (pending.current?.serialized !== serialized) pending.current = { serialized, key: crypto.randomUUID() };
     try {
       const result = await learningApi.submit(course.enrollmentId!, unit.id, answers, attested, pending.current.key);
-      setMessage(result.score === null ? "Lesson completed." : `${result.score}% — ${result.passed ? "passed" : "not passed"}.`);
+      setMessage(result.score === null ? "Lesson completed." : result.passed ? `${result.score}% — passed.` : `${result.score}% — not passed. Try again: the questions are in a new order.`);
+      // A new attempt starts clean.
+      if (result.score !== null && !result.passed) setAnswers({});
       await onRefresh();
       pending.current = null;
     } catch (caught) { setError(errorMessage(caught)); }
@@ -70,8 +75,8 @@ function Lesson({ course, unit, onRefresh, onNext }: { course: Course; unit: Lea
     {unit.type === "video" && unit.mediaAssetId && <PrivateVideo assetId={unit.mediaAssetId} enrollmentId={course.enrollmentId!} lockSeeking={!progress?.completedAt} onWatched={() => setWatched(true)} />}
     {unit.type !== "quiz" ? <div className="lesson-body">{unit.body}</div> : <>
       {unit.body && <div className="lesson-body">{unit.body}</div>}
-      <p>Passing score: {unit.passingScore}%. Attempts used: {progress?.attemptCount ?? 0}{unit.maxAttempts === null ? " (unlimited)" : ` of ${unit.maxAttempts}`}.</p>
-      {unit.questions.map((question, index) => <fieldset key={question.id} disabled={busy || Boolean(progress?.completedAt) || exhausted}><legend>{index + 1}. {question.prompt}</legend>{question.multiple && <p><em>Select all that apply.</em></p>}{question.options.map(option => {
+      <p>Passing score: {unit.passingScore}%. {attemptsSoFar ? `Attempts so far: ${attemptsSoFar}. ` : ""}You can retake this quiz as many times as you need.</p>
+      {questions.map((question, index) => <fieldset key={question.id} disabled={busy || Boolean(progress?.completedAt)}><legend>{index + 1}. {question.prompt}</legend>{question.multiple && <p><em>Select all that apply.</em></p>}{question.options.map(option => {
         const chosen = answers[question.id], picked = Array.isArray(chosen) ? chosen : [];
         return question.multiple
           ? <label className="learning-check" key={option.id}><input type="checkbox" name={question.id} checked={picked.includes(option.id)} onChange={() => setAnswers({ ...answers, [question.id]: picked.includes(option.id) ? picked.filter(id => id !== option.id) : [...picked, option.id] })} />{option.text}</label>
@@ -80,7 +85,7 @@ function Lesson({ course, unit, onRefresh, onNext }: { course: Course; unit: Lea
     </>}
     {error && <p className="learning-error" role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}
-    {progress?.completedAt ? <button className="button button-primary" onClick={onNext}>Continue</button> : exhausted ? <p role="status">Attempt limit reached. Contact your educator for help.</p> : <>
+    {progress?.completedAt ? <button className="button button-primary" onClick={onNext}>Continue</button> : <>
       {mustWatch && <p role="status">Watch the full video to continue.</p>}
       {unit.type !== "quiz" && <label className="learning-check"><input type="checkbox" checked={attested} disabled={busy || mustWatch} onChange={event => setAttested(event.target.checked)} />{unit.type === "attestation" ? "I agree to the attestation above." : "I have completed this lesson."}</label>}
       <button className="button button-primary" disabled={busy || (unit.type === "quiz" ? unit.questions.some(q => { const answer = answers[q.id]; return Array.isArray(answer) ? answer.length === 0 : !answer; }) : !attested)} onClick={() => void submit()}>{busy ? "Saving…" : unit.type === "quiz" ? "Submit answers" : "Complete lesson"}</button>
