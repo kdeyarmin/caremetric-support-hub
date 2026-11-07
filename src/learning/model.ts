@@ -18,8 +18,19 @@ const meta = {
   title: z.string().min(2).max(180), summary: z.string().max(500), overview: z.string().max(60000).default(""), category: z.string().max(100),
   durationMinutes: z.number().int().min(1).max(1440), accessLevel: z.enum(["public", "customer", "staff"]), productIds: z.array(id).min(1),
 };
-export const draftDocumentSchema = z.object({ ...meta, units: z.array(z.discriminatedUnion("type", [lesson, video, z.object({ ...quizBase, questions: z.array(question.extend({ correctOptionId: id })).min(1).max(100) })])).min(1).max(150) });
-export const learnerDocumentSchema = z.object({ ...meta, units: z.array(z.discriminatedUnion("type", [lesson, video, z.object({ ...quizBase, questions: z.array(question).min(1) })])) });
+// A question names one correct option, or, for select all that apply, the set of correct options.
+// The server grades a select-all answer as correct only when the learner chose exactly that set.
+const draftQuestion = z.union([
+  question.extend({ correctOptionId: id }),
+  question.extend({ correctOptionIds: z.array(id).min(1).max(8) }),
+]).superRefine((value, context) => {
+  const options = new Set(value.options.map(option => option.id));
+  const keys = "correctOptionIds" in value ? value.correctOptionIds : [value.correctOptionId];
+  if (new Set(keys).size !== keys.length || keys.some(key => !options.has(key))) context.addIssue({ code: "custom", message: "Choose valid correct answers from the question's options." });
+});
+export type DraftQuestion = z.infer<typeof draftQuestion>;
+export const draftDocumentSchema = z.object({ ...meta, units: z.array(z.discriminatedUnion("type", [lesson, video, z.object({ ...quizBase, questions: z.array(draftQuestion).min(1).max(100) })])).min(1).max(150) });
+export const learnerDocumentSchema = z.object({ ...meta, units: z.array(z.discriminatedUnion("type", [lesson, video, z.object({ ...quizBase, questions: z.array(question.extend({ multiple: z.boolean().optional() })).min(1) })])) });
 export type DraftDocument = z.infer<typeof draftDocumentSchema>;
 export type DraftUnit = DraftDocument["units"][number];
 export type LearnerDocument = z.infer<typeof learnerDocumentSchema>;

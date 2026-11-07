@@ -33,6 +33,23 @@ describe("learning input contracts", () => {
     const data = { ...newDocument([crypto.randomUUID()]), title: "Quiz course", units: [unit] };
     expect(JSON.stringify(learnerDocumentSchema.parse(data))).not.toContain("correctOptionId");
   });
+  it("holds select-all questions with a set of correct options and keeps the set out of learner state", () => {
+    const unit = newUnit("quiz");
+    if (unit.type !== "quiz") throw new Error("Fixture type");
+    const [a, b] = unit.questions[0].options.map((o, i) => ({ ...o, text: `Option ${i}` }));
+    const c = { id: crypto.randomUUID(), text: "Option 2" };
+    const selectAll = { id: unit.questions[0].id, prompt: "Choose every correct option", points: 1, options: [a, b, c], correctOptionIds: [a.id, c.id] };
+    const data = { ...newDocument([crypto.randomUUID()]), title: "Select-all course", units: [{ ...unit, questions: [selectAll] }] };
+    const parsed = draftDocumentSchema.parse(data);
+    expect(parsed.units[0].type === "quiz" && parsed.units[0].questions[0]).toEqual(selectAll);
+    const withKeys = (keys: string[]) => draftDocumentSchema.safeParse({ ...data, units: [{ ...unit, questions: [{ ...selectAll, correctOptionIds: keys }] }] }).success;
+    expect(withKeys([])).toBe(false);
+    expect(withKeys([a.id, a.id])).toBe(false);
+    expect(withKeys([a.id, crypto.randomUUID()])).toBe(false);
+    const learner = learnerDocumentSchema.parse({ ...data, units: [{ ...unit, questions: [{ ...selectAll, correctOptionIds: undefined, multiple: true }] }] });
+    expect(learner.units[0].type === "quiz" && learner.units[0].questions[0].multiple).toBe(true);
+    expect(JSON.stringify(learnerDocumentSchema.parse(data))).not.toContain("correctOptionIds");
+  });
   it.each(["//evil.example/learn", "/learn/../../library", "/learn?token=secret", "/learn/courses/patient-name", "/library/courses/new?email=someone@example.com"])("rejects unsafe login return path %s", value => {
     expect(safeLearningPath(value)).toBeNull();
   });

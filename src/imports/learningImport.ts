@@ -22,9 +22,13 @@ export const COURSE_PLACEMENT_PRODUCT_SLUGS: readonly string[] = [
   "caremetric-intel",
 ];
 
+// CareMetric PennSync is retired for every Hub service except course placement
+// (supabase/migrations/20261107030000_learning_select_all_and_pennsync_placement.sql).
+export const RETIRED_COURSE_PLACEMENT_SLUGS: readonly string[] = ["pennsync"];
+
 export function coursePlacementProductIds(products: ReadonlyArray<{ id: string; slug: string; status: string }>): string[] {
   return products
-    .filter(product => product.status !== "retired" && COURSE_PLACEMENT_PRODUCT_SLUGS.includes(product.slug))
+    .filter(product => (product.status !== "retired" || RETIRED_COURSE_PLACEMENT_SLUGS.includes(product.slug)) && COURSE_PLACEMENT_PRODUCT_SLUGS.includes(product.slug))
     .map(product => product.id);
 }
 

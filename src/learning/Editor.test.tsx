@@ -121,3 +121,43 @@ it("keeps an ineligible product already on a draft visible, disabled, and saved"
   expect(document.productIds).toContain(ids.carebase);
   expect(document.productIds).toHaveLength(2);
 });
+
+it("turns a question into select all that apply and saves its set of correct answers", async () => {
+  const itemId = "20000000-0000-4000-8000-000000000001", [first, second, third] = ["30000000-0000-4000-8000-000000000001", "30000000-0000-4000-8000-000000000002", "30000000-0000-4000-8000-000000000003"];
+  const question = "40000000-0000-4000-8000-000000000001";
+  const draft: Draft = { itemId, draftVersion: 3, published: false, document: { title: "Home safety basics", summary: "", overview: "", category: "Safety", durationMinutes: 20, accessLevel: "customer", productIds: [ids.carebase], units: [
+    { id: "50000000-0000-4000-8000-000000000001", type: "text", title: "Lesson", body: "Read the lesson before continuing." },
+    { id: "50000000-0000-4000-8000-000000000002", type: "quiz", title: "Post-test", body: "", passingScore: 80, maxAttempts: 3, questions: [{ id: question, prompt: "Which apply?", points: 1, correctOptionId: first,
+      options: [{ id: first, text: "Lock wheels" }, { id: second, text: "Clear the path" }, { id: third, text: "Rush the transfer" }] }] },
+  ] } };
+  api.draft.mockResolvedValue(draft);
+  renderEditor(`/library/courses/${itemId}`);
+  fireEvent.click(await screen.findByRole("checkbox", { name: /Select all that apply/ }));
+  const correct = (n: number) => screen.getByRole("checkbox", { name: `Correct answer: option ${n}` }) as HTMLInputElement;
+  expect(correct(1).checked).toBe(true);
+  fireEvent.click(correct(2));
+  expect([correct(1).checked, correct(2).checked, correct(3).checked]).toEqual([true, true, false]);
+  // The last correct answer cannot be cleared.
+  fireEvent.click(correct(1)); fireEvent.click(correct(2));
+  expect(correct(2).checked).toBe(true);
+  fireEvent.click(correct(1));
+  const [, document, version] = await saveDraft();
+  expect(version).toBe(3);
+  const saved = document.units[1];
+  expect(saved.type === "quiz" && saved.questions[0]).toEqual({ id: question, prompt: "Which apply?", points: 1, correctOptionIds: [second, first],
+    options: [{ id: first, text: "Lock wheels" }, { id: second, text: "Clear the path" }, { id: third, text: "Rush the transfer" }] });
+});
+
+it("offers CareMetric PennSync, retired except for courses, as a placement authors can clear", async () => {
+  const live = products.map(p => p.slug === "pennsync" ? { ...p, name: "CareMetric PennSync", status: "retired" as const } : p);
+  render(<MemoryRouter initialEntries={["/library/courses/new"]}><Routes><Route path="/library/courses/:itemId" element={<CourseEditor products={live} />} /></Routes></MemoryRouter>);
+  const pennsync = await screen.findByRole("checkbox", { name: /CareMetric PennSync/ }) as HTMLInputElement;
+  expect(pennsync.checked).toBe(true);
+  expect(pennsync.disabled).toBe(false);
+  expect(screen.queryByRole("checkbox", { name: /Legacy/ })).toBeNull();
+  fireEvent.click(pennsync);
+  fillRequired();
+  const [, document] = await saveDraft();
+  expect(document.productIds).not.toContain(ids.pennsync);
+  expect([...document.productIds].sort()).toEqual(eligibleIds.filter(id => id !== ids.pennsync).sort());
+});

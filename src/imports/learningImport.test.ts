@@ -26,7 +26,7 @@ describe("central course import", () => {
 
 const placementProducts = [
   { id: "10000000-0000-4000-8000-000000000001", slug: "carebase", status: "active" },
-  { id: "10000000-0000-4000-8000-000000000002", slug: "pennsync", status: "active" },
+  { id: "10000000-0000-4000-8000-000000000002", slug: "pennsync", status: "retired" },
   { id: "10000000-0000-4000-8000-000000000003", slug: "breathe", status: "pilot" },
   { id: "10000000-0000-4000-8000-000000000004", slug: "caremetric-emr", status: "retired" },
   { id: "10000000-0000-4000-8000-000000000005", slug: "caremetric-go", status: "active" },
@@ -41,8 +41,9 @@ const eligibleProductIds = [
   "10000000-0000-4000-8000-000000000006",
 ];
 describe("course placement products", () => {
-  it("keeps only the non-retired placement-eligible products", () => {
+  it("keeps the placement-eligible products that are not retired, and CareMetric PennSync, which is retired except for courses", () => {
     expect(coursePlacementProductIds(placementProducts)).toEqual(eligibleProductIds);
+    expect(coursePlacementProductIds(placementProducts.filter(product => product.slug !== "pennsync"))).not.toContain("10000000-0000-4000-8000-000000000002");
   });
   it("places imported documents on exactly that set", () => {
     const [result] = prepareLearningImport(source, coursePlacementProductIds(placementProducts));

@@ -151,7 +151,7 @@ function StagedVideo({ item, onChanged }: { item: MediaImportItem; onChanged: ()
   }
   return <article className="learning-notice" aria-label={`${item.courseTitle} · ${item.lessonTitle}`}>
     <div><h4>{item.courseTitle} · {item.lessonTitle}</h4>
-      <p>{item.product === "pennsync" ? "PennSync" : "CareBase"} · {minutes(item.durationSeconds)} · {megabytes(item.byteSize)} · SHA-256 {item.sourceSha256?.slice(0, 12)}…</p>
+      <p>{item.product === "pennsync" ? "CareMetric PennSync" : "CareBase"} · {minutes(item.durationSeconds)} · {megabytes(item.byteSize)} · SHA-256 {item.sourceSha256?.slice(0, 12)}…</p>
       <Target item={item} />
       {!media && <button className="button button-secondary" disabled={busy} onClick={() => void open()}>Review video, captions and transcript</button>}
       {media && <>

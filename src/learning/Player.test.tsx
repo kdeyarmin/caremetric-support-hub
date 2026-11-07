@@ -65,6 +65,27 @@ it("requires a first viewing to reach the end before a video lesson can be compl
   expect(screen.queryByText("Watch the full video to continue.")).toBeNull();
 });
 
+it("answers a select-all question with every chosen option", async () => {
+  const base = course([ids.text, ids.video]);
+  const quiz = base.document.units[2];
+  if (quiz.type !== "quiz") throw new Error("Fixture type");
+  const third = "77777777-7777-4777-8777-777777777778";
+  const selectAll = { ...quiz.questions[0], prompt: "Which apply?", multiple: true, options: [...quiz.questions[0].options, { id: third, text: "This too" }] };
+  api.course.mockResolvedValue({ ...base, document: { ...base.document, units: [base.document.units[0], base.document.units[1], { ...quiz, questions: [selectAll] }] } });
+  api.submit.mockResolvedValue({ passed: true, score: 100, attemptCount: 1, completedAt: null, certificateId: null });
+  renderPlayer();
+  await screen.findByText("Select all that apply.");
+  const submit = screen.getByRole("button", { name: "Submit answers" }) as HTMLButtonElement;
+  expect(submit.disabled).toBe(true);
+  fireEvent.click(screen.getByRole("checkbox", { name: "This one" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Not this" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "This too" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Not this" }));
+  expect(submit.disabled).toBe(false);
+  fireEvent.click(submit);
+  await waitFor(() => expect(api.submit).toHaveBeenCalledWith(ids.enrollment, ids.quiz, { [ids.question]: [ids.option, third] }, false, expect.any(String)));
+});
+
 it("shows the post-test score on the certificate", async () => {
   api.certificate.mockResolvedValue({ certificateId: ids.option, learnerName: "Learner One", courseTitle: "Falls prevention", completedAt: "2026-10-09T12:00:00Z", durationMinutes: 30, versionId: ids.version, finalScore: 90, passingScore: 80 });
   render(<MemoryRouter initialEntries={[`/learn/certificates/${ids.enrollment}`]}><Routes><Route path="/learn/certificates/:enrollmentId" element={<LearningCertificate />} /></Routes></MemoryRouter>);
