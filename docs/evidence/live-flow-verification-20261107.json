@@ -1,0 +1,107 @@
+{
+  "inspected_at": "2026-11-07T23:59:46.580Z",
+  "kind": "read_only_reconciliation_of_existing_provider_activity",
+  "production": {
+    "origin": "https://help.caremetric.ai",
+    "sms": {
+      "matched_provider_challenges_and_sessions": 15,
+      "latest_successful_signin": "2026-11-07T13:02:59.566058Z",
+      "fresh_signin_performed": false
+    },
+    "native_reads": {
+      "products": [
+        "carebase",
+        "breathe",
+        "intel",
+        "advisors"
+      ],
+      "http_window": "2026-11-07T13:05:00Z/2026-11-07T13:06:00Z",
+      "hub_http_status": 200,
+      "one_use_capabilities_consumed": true
+    },
+    "stripe": {
+      "account": "acct_1SinLKB06O2UFlNz",
+      "livemode": true,
+      "connector_reauthorized": true,
+      "payment_intent_count": 0,
+      "payment_intents_has_more": false,
+      "invoices": [
+        {
+          "status": "paid",
+          "amount_paid": 0,
+          "total": 0,
+          "currency": "usd"
+        },
+        {
+          "status": "paid",
+          "amount_paid": 0,
+          "total": 0,
+          "currency": "usd"
+        },
+        {
+          "status": "paid",
+          "amount_paid": 0,
+          "total": 0,
+          "currency": "usd"
+        }
+      ],
+      "invoices_has_more": false,
+      "webhook": {
+        "configured": true,
+        "versionMatches": true,
+        "expectedEvents": 40,
+        "actualEvents": 40,
+        "missing": [],
+        "unexpected": []
+      },
+      "recorded_webhook_events": 36,
+      "recorded_events_all_applied": true
+    }
+  },
+  "sandbox": {
+    "account": "acct_1UVIE766OwFQY1wC",
+    "livemode": false,
+    "payment_intents": {
+      "total": 23,
+      "succeeded": 22,
+      "canceled": 1,
+      "has_more": false
+    },
+    "checkout_chain": {
+      "checkoutCompleted": true,
+      "checkoutPaid": true,
+      "checkoutAmount": 2000,
+      "currency": "usd",
+      "liveMode": false,
+      "checkoutMatchesInvoice": true,
+      "subscriptionFound": true,
+      "subscriptionStatus": "canceled",
+      "subscriptionsListed": 2,
+      "hasMore": false
+    },
+    "prior_evidence": "customer-checkout-sandbox-20261028.json",
+    "new_purchase_performed": false,
+    "hosted_hub_fulfillment_verified": false
+  },
+  "fresh_public_checks": {
+    "at": "2026-11-07T23:51:17.582Z",
+    "database_health": 200,
+    "anonymous_private_read": 401,
+    "unsigned_stripe_webhook": 400
+  },
+  "remaining": [
+    "fresh_owner_authenticated_run_of_current_release",
+    "positive_value_production_payment",
+    "hosted_checkout_to_hub_fulfillment",
+    "outbound_support_sms",
+    "provider_mutations",
+    "private_media_playback",
+    "course_publication",
+    "ai_generation"
+  ],
+  "effects": {
+    "new_sms_sent": false,
+    "new_payments": false,
+    "provider_writes": false
+  }
+}
