@@ -84,7 +84,10 @@ const connectedClients = () => ({
     },
     advisors: { capabilities: { apiVersion: 1, operations: ["overview", "inquiries.list"], sourceRevision: null }, overview: { organizationCount: null, activeUserCount: null, inquiryCount: 7, openInquiryCount: 2 } },
   }),
-  supportReadiness: { summary: vi.fn(async () => ({ products: [{ id: products[0].id, slug: "carebase", name: "CareBase", status: "active", supportEnabled: true, activeTenantCount: 4, usableMemberCount: 6, readyTenantCount: 2, publishedItemCount: 9 }], loadedAt: "2026-10-21T00:00:00Z" })) } as unknown as SupportReadinessClient,
+  supportReadiness: { summary: vi.fn(async () => ({ products: [
+    { id: products[0].id, slug: "carebase", name: "CareBase", status: "active", supportEnabled: true, activeTenantCount: 4, usableMemberCount: 6, readyTenantCount: 2, publishedItemCount: 9 },
+    { id: products[4].id, slug: "caremetric-go", name: "CareMetric Go", status: "active", supportEnabled: false, activeTenantCount: 3, usableMemberCount: 0, readyTenantCount: 9, publishedItemCount: 0 },
+  ], loadedAt: "2026-10-21T00:00:00Z" })) } as unknown as SupportReadinessClient,
   goLive: { report: vi.fn(async () => ({ checkedAt: "2026-10-21T00:00:00Z", migrations: { complete: false, items: [{ version: "1", name: "a", applied: true }, { version: "2", name: "b", applied: false }] }, anthropicKey: { present: true }, aiAutomation: { enabled: false }, helpDomain: { hostname: "help.caremetric.ai", resolves: false, targets: [] } })) } as GoLiveClient,
   phones: { list: vi.fn(async () => ({ loaded_at: "2026-10-21T00:00:00Z", rows: [
     { id: crypto.randomUUID(), version: 1, updated_at: "2026-10-20T00:00:00Z", number: "+18775212890", label: "Support line", provider: "Twilio", account: "", tenant: "", account_type: "unknown", account_sid: "", parent_account_sid: "", business_profile_status: "approved", messaging_registration: "", migration_status: "active", purpose: "Support", apps: "", owner: "", lifecycle: "active", usage_status: "observed", voice_status: "configured", voice_routing: "", sms_status: "pending", sms_routing: "", last_used_on: "", reviewed_on: "2026-10-01", evidence: "Call log", notes: "" },
@@ -136,7 +139,7 @@ describe("control center", () => {
     expect(within(services).getByText("DNS record not found yet")).toBeTruthy();
     expect(await within(services).findByText("1 active · 1 need review · 1 with texting attention")).toBeTruthy();
     expect(href(within(services).getByRole("link", { name: "2 numbers" }))).toBe("/phone-numbers");
-    expect(await within(services).findByText("2 ready customers across 1 applications with support enabled")).toBeTruthy();
+    expect(await within(services).findByText("2 ready customers across 1 application with support enabled")).toBeTruthy();
     expect(href(within(services).getByRole("link", { name: "AI go-live readiness" }))).toBe("/admin/go-live-readiness");
   });
 

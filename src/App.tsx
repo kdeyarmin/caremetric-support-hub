@@ -531,8 +531,13 @@ function CasesPage({ data }: CasesPageProps) {
   const params = new URLSearchParams(location.search);
   const requestedProduct = data.products.find((product) => product.slug === params.get("product"));
   // A link can open the queue for one application: /cases?product=<slug>. The detail pane then starts on that application's first case.
+  const requestedCase = params.get("case");
   const [productFilter, setProductFilter] = useState(requestedProduct?.id ?? "all");
-  const [selectedId, setSelectedId] = useState<string | null>((requestedProduct ? data.cases.find((item) => item.productId === requestedProduct.id) : data.cases[0])?.id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    (requestedCase && data.cases.some((item) => item.id === requestedCase) ? requestedCase : null)
+    ?? (requestedProduct ? data.cases.find((item) => item.productId === requestedProduct.id) : data.cases[0])?.id
+    ?? null,
+  );
   const [thread, setThread] = useState(emptyCaseThread);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<CaseStatus | "all">("all");
@@ -541,7 +546,20 @@ function CasesPage({ data }: CasesPageProps) {
   const [refresh, setRefresh] = useState(0);
   const [caseRows, setCaseRows] = useState(data.cases);
   const [caseListError, setCaseListError] = useState("");
+  const [trackedCaseLink, setTrackedCaseLink] = useState(requestedCase);
   const caseListRequest = useRef(0);
+  const visibleCaseId = useRef<string | null>(selectedId);
+  // A later visit to /cases?case=<id> opens that request and clears filters that would hide it.
+  if (requestedCase !== trackedCaseLink) {
+    setTrackedCaseLink(requestedCase);
+    if (requestedCase && (caseRows.some((item) => item.id === requestedCase) || data.cases.some((item) => item.id === requestedCase))) {
+      setProductFilter("all");
+      setStatusFilter("all");
+      setFacilityFilter("all");
+      setSearch("");
+      setSelectedId(requestedCase);
+    }
+  }
 
   const reloadCases = async (preferId?: string) => {
     const requestId = ++caseListRequest.current;
@@ -558,24 +576,6 @@ function CasesPage({ data }: CasesPageProps) {
     }
   };
 
-  useEffect(() => {
-    if (!selectedId) return;
-    let active = true;
-    void readCaseThread(repository, selectedId).then((result) => {
-      if (!active) return;
-      setThread((current) => result.messages
-        ? completeCaseThreadLoad(beginCaseThreadLoad(current, result.caseId), result.caseId, result.messages)
-        : failCaseThreadLoad(beginCaseThreadLoad(current, result.caseId), result.caseId, result.error));
-    });
-    return () => { active = false; };
-  }, [selectedId, refresh]);
-
-  const selectCase = (caseId: string) => {
-    if (caseId === selectedId) return;
-    setThread((current) => beginCaseThreadLoad(current, caseId));
-    setSelectedId(caseId);
-  };
-
   const visibleCases = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return caseRows.filter((item) =>
@@ -585,7 +585,33 @@ function CasesPage({ data }: CasesPageProps) {
       (!needle || item.subject.toLowerCase().includes(needle) || caseCode(item.caseNumber).toLowerCase().includes(needle) || item.tenantName.toLowerCase().includes(needle)),
     );
   }, [caseRows, productFilter, search, statusFilter, facilityFilter]);
-  const selected = caseRows.find((item) => item.id === selectedId) ?? null;
+  // The open case follows the filtered list. A hidden case stays selected underneath, so clearing the filter returns to it.
+  const visibleSelectedId = visibleCases.some((item) => item.id === selectedId) ? selectedId : (visibleCases[0]?.id ?? null);
+  const selected = caseRows.find((item) => item.id === visibleSelectedId) ?? null;
+  useEffect(() => { visibleCaseId.current = visibleSelectedId; }, [visibleSelectedId]);
+  useEffect(() => {
+    if (!visibleSelectedId) return;
+    let active = true;
+    void readCaseThread(repository, visibleSelectedId).then((result) => {
+      if (!active) return;
+      setThread((current) => result.messages
+        ? completeCaseThreadLoad(beginCaseThreadLoad(current, result.caseId), result.caseId, result.messages)
+        : failCaseThreadLoad(beginCaseThreadLoad(current, result.caseId), result.caseId, result.error));
+    });
+    return () => { active = false; };
+  }, [visibleSelectedId, refresh]);
+
+  const selectCase = (caseId: string) => {
+    if (caseId === visibleSelectedId) return;
+    setThread((current) => beginCaseThreadLoad(current, caseId));
+    setSelectedId(caseId);
+  };
+  const noteCaseChange = (caseId: string) => {
+    void reloadCases();
+    if (caseId !== visibleCaseId.current) return;
+    setThread((current) => beginCaseThreadLoad(current, caseId));
+    setRefresh((value) => value + 1);
+  };
 
   return (
     <>
@@ -596,7 +622,7 @@ function CasesPage({ data }: CasesPageProps) {
         action={!staff ? <button className="button button-primary" onClick={() => setShowCreate(true)}><Plus size={17} /> New case</button> : undefined}
       />
       {showCreate && !staff && (
-        <NewCasePanel data={data} preferredProductId={requestedProduct?.id} onCancel={() => setShowCreate(false)} onCreated={(id) => { setShowCreate(false); void reloadCases(id); }} />
+        <NewCasePanel data={data} preferredProductId={requestedProduct?.id} onCancel={() => setShowCreate(false)} onCreated={(id) => { setShowCreate(false); setStatusFilter("all"); setProductFilter("all"); setFacilityFilter("all"); setSearch(""); void reloadCases(id); }} />
       )}
       <section className="case-workspace">
         <div className="case-list-panel">
@@ -606,13 +632,13 @@ function CasesPage({ data }: CasesPageProps) {
               <option value="all">All statuses</option>
               {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
-            <select className="case-application-filter" aria-label="Filter by application" value={productFilter} onChange={(event) => { const next = event.target.value; setProductFilter(next); setSelectedId((current) => reconcileCaseSelection(caseRows.filter((item) => next === "all" || item.productId === next), current)); }}>
+            <select className="case-application-filter" aria-label="Filter by application" value={productFilter} onChange={(event) => setProductFilter(event.target.value)}>
               <option value="all">All applications</option>
               {data.products.filter(product => isCentralHubApp(product.slug)).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
             </select>
           </div>
           <div className="case-count">{visibleCases.length} case{visibleCases.length === 1 ? "" : "s"}</div>
-          {caseRows.some(row => row.facilityId) && <label>Facility<select aria-label="Filter by facility" value={facilityFilter} onChange={event => { const id = event.target.value; setFacilityFilter(id); setSelectedId(current => reconcileCaseSelection(caseRows.filter(row => id === "all" || row.facilityId === id), current)); }}><option value="all">All authorized facilities</option>{caseRows.filter((row, index, all) => row.facilityId && all.findIndex(item => item.facilityId === row.facilityId) === index).map(row => <option key={row.facilityId} value={row.facilityId ?? ''}>{row.facilityName ?? row.facilityId}</option>)}</select></label>}
+          {caseRows.some(row => row.facilityId) && <label>Facility<select aria-label="Filter by facility" value={facilityFilter} onChange={event => setFacilityFilter(event.target.value)}><option value="all">All authorized facilities</option>{caseRows.filter((row, index, all) => row.facilityId && all.findIndex(item => item.facilityId === row.facilityId) === index).map(row => <option key={row.facilityId} value={row.facilityId ?? ''}>{row.facilityName ?? row.facilityId}</option>)}</select></label>}
           {caseListError && (
             <div className="case-list-error" role="alert">
               <span>{caseListError}</span>
@@ -623,7 +649,7 @@ function CasesPage({ data }: CasesPageProps) {
             {visibleCases.map((supportCase) => {
               const product = productFor(data.products, supportCase.productId);
               return (
-                <button key={supportCase.id} className={`case-list-row ${selectedId === supportCase.id ? "selected" : ""}`} onClick={() => selectCase(supportCase.id)}>
+                <button key={supportCase.id} className={`case-list-row ${visibleSelectedId === supportCase.id ? "selected" : ""}`} onClick={() => selectCase(supportCase.id)}>
                   <div className="case-list-top"><span>{caseCode(supportCase.caseNumber)}</span><time>{formatDate(supportCase.lastMessageAt)}</time></div>
                   <strong>{supportCase.subject}</strong>
                   <p>{supportCase.tenantName} · {product?.name}</p>
@@ -647,11 +673,7 @@ function CasesPage({ data }: CasesPageProps) {
               products={data.products}
               actor={data.actor}
               staff={staff}
-              onChanged={() => {
-                setThread((current) => beginCaseThreadLoad(current, selected.id));
-                setRefresh((value) => value + 1);
-                void reloadCases();
-              }}
+              onChanged={() => noteCaseChange(selected.id)}
               onRetryThread={() => {
                 setThread((current) => beginCaseThreadLoad(current, selected.id));
                 setRefresh((value) => value + 1);

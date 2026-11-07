@@ -8,6 +8,7 @@ const repo = vi.hoisted(() => ({
   listProducts: vi.fn(),
   listContacts: vi.fn(),
   listCases: vi.fn(),
+  listMessages: vi.fn(async () => []),
   listContent: vi.fn(),
 }));
 const session = vi.hoisted(() => ({ current: vi.fn(), subscribe: vi.fn(() => () => {}), signOut: vi.fn() }));
@@ -60,6 +61,44 @@ describe("moving between pages", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(document.querySelector(".app-shell")).toBeTruthy();
     expect(screen.queryByText("temporarily unavailable")).toBeNull();
+  });
+});
+
+const product = (id: string, slug: string, name: string) => ({ id, slug, name, description: "", status: "active" as const, color: "#264491" });
+const supportCase = (id: string, caseNumber: number, subject: string, status: "open" | "resolved", productId: string) => ({
+  id, caseNumber, tenantId: "tenant", tenantName: "North Home", productId, requesterId: "requester", requesterName: "Pat",
+  subject, category: "general" as const, priority: "normal" as const, status, source: "portal" as const,
+  assignedTo: null, assignedToName: null, appVersion: null, route: null,
+  createdAt: "2026-10-20T00:00:00Z", updatedAt: "2026-10-20T00:00:00Z", lastMessageAt: "2026-10-20T00:00:00Z", aiStage: null, aiAttempts: null,
+});
+
+describe("the support case queue", () => {
+  const carebase = product("prod-carebase", "carebase", "CareBase");
+  const breathe = product("prod-breathe", "breathe", "Breathe");
+  const open = supportCase("case-open", 1042, "Open sign-in problem", "open", carebase.id);
+  const resolved = supportCase("case-done", 1043, "Resolved billing question", "resolved", breathe.id);
+
+  beforeEach(() => {
+    repo.listProducts.mockResolvedValue([carebase, breathe]);
+    repo.listCases.mockResolvedValue([open, resolved]);
+  });
+
+  it("follows the cases the filters still show", async () => {
+    render(<MemoryRouter initialEntries={["/cases"]}><App /></MemoryRouter>);
+    expect(await screen.findByRole("heading", { name: "Open sign-in problem" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Filter by status"), { target: { value: "resolved" } });
+    expect(await screen.findByRole("heading", { name: "Resolved billing question" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Open sign-in problem" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Filter by application"), { target: { value: carebase.id } });
+    expect(await screen.findByText("No cases match")).toBeTruthy();
+    expect(screen.getByText("Select a case")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Open sign-in problem" })).toBeNull();
+  });
+
+  it("opens the support request named by the customer center link", async () => {
+    render(<MemoryRouter initialEntries={["/cases?case=case-done"]}><App /></MemoryRouter>);
+    expect(await screen.findByRole("heading", { name: "Resolved billing question" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Open sign-in problem" })).toBeNull();
   });
 });
 
