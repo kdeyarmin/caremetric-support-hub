@@ -9,6 +9,7 @@ const repo = vi.hoisted(() => ({
   listContacts: vi.fn(),
   listCases: vi.fn(),
   listMessages: vi.fn(async () => []),
+  updateCase: vi.fn(async () => undefined),
   listContent: vi.fn(),
 }));
 const session = vi.hoisted(() => ({ current: vi.fn(), subscribe: vi.fn(() => () => {}), signOut: vi.fn() }));
@@ -120,6 +121,20 @@ describe("the support case queue", () => {
     repo.listCases.mockResolvedValue([{ ...open, subject: "Updated by another staff member" }, resolved]);
     fireEvent.click(screen.getByRole("link", { name: "Open queue" }));
     expect(await screen.findByRole("heading", { name: "Updated by another staff member" })).toBeTruthy();
+  });
+
+  it("does not let an earlier navigation refresh undo a locally saved change", async () => {
+    render(<MemoryRouter initialEntries={["/overview"]}><App /></MemoryRouter>);
+    await screen.findByRole("heading", { name: /Everything your customers need/ });
+    let resolveRefresh!: (value: typeof open[]) => void;
+    repo.listCases.mockReturnValueOnce(new Promise(resolve => { resolveRefresh = resolve; }))
+      .mockResolvedValue([{ ...open, subject: "Freshly saved case", status: "resolved" }, resolved]);
+    fireEvent.click(screen.getByRole("link", { name: "Open queue" }));
+    await waitFor(() => expect(repo.listCases).toHaveBeenCalledTimes(2));
+    fireEvent.change(document.querySelector('.case-controls select')!, { target: { value: 'resolved' } });
+    await screen.findByRole("heading", { name: "Freshly saved case" });
+    await act(async () => { resolveRefresh([open, resolved]); });
+    expect(screen.getByRole("heading", { name: "Freshly saved case" })).toBeTruthy();
   });
 });
 

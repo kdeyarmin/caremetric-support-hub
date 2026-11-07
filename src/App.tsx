@@ -547,16 +547,19 @@ function CasesPage({ data }: CasesPageProps) {
   const [refresh, setRefresh] = useState(0);
   const [caseRows, setCaseRows] = useState(data.cases);
   const [sourceCases, setSourceCases] = useState(data.cases);
+  const [hasLocalReload, setHasLocalReload] = useState(false);
   const [caseListError, setCaseListError] = useState("");
   const [trackedCaseLink, setTrackedCaseLink] = useState(requestedCase);
   const caseListRequest = useRef(0);
   const visibleCaseId = useRef<string | null>(selectedId);
-  // Navigation refreshes the shell after this page mounts. Adopt that new snapshot,
-  // while keeping locally reloaded rows until the shell actually supplies new data.
+  // Navigation refreshes the shell after this page mounts. Adopt that snapshot unless
+  // this page has already reloaded after a mutation: the navigation read may predate it.
   if (data.cases !== sourceCases) {
     setSourceCases(data.cases);
-    setCaseRows(data.cases);
-    setSelectedId(current => reconcileCaseSelection(data.cases, current, requestedCase ?? undefined));
+    if (!hasLocalReload) {
+      setCaseRows(data.cases);
+      setSelectedId(current => reconcileCaseSelection(data.cases, current, requestedCase ?? undefined));
+    }
   }
   // A later visit to /cases?case=<id> opens that request and clears filters that would hide it.
   if (requestedCase !== trackedCaseLink) {
@@ -572,6 +575,7 @@ function CasesPage({ data }: CasesPageProps) {
 
   const reloadCases = async (preferId?: string) => {
     const requestId = ++caseListRequest.current;
+    setHasLocalReload(true);
     setCaseListError("");
     try {
       const rows = await repository.listCases();
