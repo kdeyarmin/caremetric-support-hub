@@ -273,7 +273,7 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
         if(path==='/api/auth/session' && req.method==='GET') return json(await gateway.session(session));
         if(path==='/api/auth/invitation/start' && req.method==='POST') {
           if(url.search)throw new HttpError(400,'Invitation query parameters are not supported.');
-          const result=await delegations.registration.start(await jsonBody(req,2048),req.socket.remoteAddress);
+          const result=await delegations.registration.start(await jsonBody(req,2048),visitorAddress(req));
           if(result.unavailable)throw new HttpError(503,'SMS is temporarily unavailable. Please try again later.');
           return json({challengeId:result.id,retryAfter:60},200,[cookie(challengeCookie,result.browserToken,300)]);
         }
@@ -284,7 +284,7 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
         }
         if(path==='/api/auth/sms/start' && req.method==='POST') {
           const {phone}=await jsonBody(req,2048);
-          const result=await auth.start(phone,req.socket.remoteAddress);
+          const result=await auth.start(phone,visitorAddress(req));
           if(result.unavailable) throw new HttpError(503,'SMS is temporarily unavailable. Please try again later.');
           return json({challengeId:result.id,retryAfter:60},200,[cookie(challengeCookie,result.browserToken,300)]);
         }

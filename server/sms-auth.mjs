@@ -39,10 +39,12 @@ export function smsAuth({ pool, provider }) {
       const phoneHash = digest(phone);
       const clientHash = digest(clientAddress || 'unknown');
       return transaction(pool, async db => {
-        // Global + per-number persisted limits also cover restarts and multiple replicas.
+        // Global + per-number persisted limits also cover restarts and multiple replicas. The global cap guards real
+        // sends, so requests for unregistered numbers (which send nothing) cannot use it up and lock the owner out;
+        // those stay bounded per visitor and per number.
         await db.query("select pg_advisory_xact_lock(hashtextextended('hub_sms_start',0))");
         const { rows: [limits] } = await db.query(`select
-          count(*) as total,
+          count(*) filter(where user_id is not null) as total,
           count(*) filter(where phone_hash=$1) as phone_count,
           count(*) filter(where client_hash=$2) as client_count,
           count(*) filter(where phone_hash=$1 and created_at>now()-interval '60 seconds') as recent
