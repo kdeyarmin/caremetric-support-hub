@@ -3,6 +3,7 @@ import {afterEach,beforeAll,describe,expect,it,vi} from 'vitest';
 import {cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {PhoneRegistry} from './PhoneRegistry';
+import {phoneSummary} from '../admin/controlCenter';
 import {blankPhoneRecord,phoneRecordSchema,phoneRegistryClient,type PhoneRow} from './phoneRegistryModel';
 const row:PhoneRow={...blankPhoneRecord,id:'11111111-1111-4111-8111-111111111111',number:'+12025550881',label:'Test support',provider:'Test',purpose:'Software support',version:1,updated_at:'2026-09-24T00:00:00Z'};
 beforeAll(()=>{HTMLDialogElement.prototype.showModal=function(){this.open=true;};});
@@ -19,6 +20,16 @@ describe('phone inventory',()=>{
     expect(screen.getByRole('heading',{name:'(202) 555-0881'})).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Search numbers'),{target:{value:'other provider'}});
     expect(screen.getByText('No numbers match your search.')).toBeTruthy();
+  });
+  it('counts numbers needing review the same way as its filter and the control center',async()=>{
+    // Usage observed but texting pending: it needs review, though its usage is known.
+    const rows=[{...row,usage_status:'observed' as const,lifecycle:'active' as const,voice_status:'configured' as const,sms_status:'pending' as const},
+      {...row,id:'22222222-2222-4222-8222-222222222222',number:'+12025550882'},
+      {...row,id:'33333333-3333-4333-8333-333333333333',number:'+12025550883',usage_status:'observed' as const,lifecycle:'active' as const,voice_status:'configured' as const,sms_status:'configured' as const,business_profile_status:'approved' as const,migration_status:'active' as const}];
+    setup(rows);await screen.findByText('(202) 555-0881');
+    const tile=within(screen.getByLabelText('Inventory summary')).getByText('Need review').previousElementSibling!.textContent;
+    fireEvent.change(screen.getByLabelText('Show'),{target:{value:'review'}});
+    expect([Number(tile),screen.queryAllByRole('heading',{level:2}).length]).toEqual([phoneSummary(rows).needsReview,phoneSummary(rows).needsReview]);
   });
   it('saves edits with the original version and retains provider number',async()=>{
     const client=setup();await screen.findByText('(202) 555-0881');
