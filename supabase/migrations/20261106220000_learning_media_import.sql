@@ -263,9 +263,12 @@ declare target jsonb; course private.learning_courses%rowtype; v_index integer;
 begin
   target := private.learning_media_import_target(p_item);
   if target->>'state' <> 'ready' then return target; end if;
-  select * into course from private.learning_courses where item_id = (target->>'itemId')::uuid;
+  -- Hold the draft, then decide from the locked row: a save that landed after the lookup above is never
+  -- overwritten, and the version passed to the save is the one this decision read.
+  select * into course from private.learning_courses where item_id = (target->>'itemId')::uuid for update;
   select u.idx - 1 into v_index from jsonb_array_elements(course.draft->'units') with ordinality as u(value,idx)
-    where u.value->>'id' = target->>'unitId';
+    where u.value->>'id' = target->>'unitId' and u.value->>'type' = 'video' and u.value->>'mediaAssetId' is null;
+  if v_index is null then return private.learning_media_import_target(p_item); end if;
   perform hub.save_learning_draft(course.item_id,
     jsonb_set(course.draft,array['units',v_index::text,'mediaAssetId'],to_jsonb(p_item.media_id::text)),course.draft_version);
   insert into private.audit_events(actor_id,action,entity_type,entity_id,metadata)

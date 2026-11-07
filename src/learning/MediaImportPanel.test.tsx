@@ -97,3 +97,23 @@ it("offers attachment for an approved video once its lesson exists, and explains
   expect(screen.getByText(/No Hub draft has this course yet/)).toBeTruthy();
   expect(screen.getAllByRole("button", { name: "Attach to lesson" })).toHaveLength(1);
 });
+
+it("starts a fresh review when a staged row is re-staged with new content", async () => {
+  const replaced = "00000000-0000-4000-8000-000000000009";
+  client.list.mockResolvedValueOnce([item(1)]).mockResolvedValue([item(1, { mediaId: replaced, sourceSha256: "b".repeat(64) })]);
+  client.review.mockResolvedValue({ video: "https://media.test/video.mp4", captions: "https://media.test/captions.vtt", transcript: "Welcome to the lesson." });
+  client.stage.mockResolvedValue({ item: item(1, { mediaId: replaced }), replayed: false });
+  render(<MediaImportPanel />);
+  const staged = await screen.findByRole("article", { name: "Infection control · Lesson 1" });
+  fireEvent.click(within(staged).getByRole("button", { name: "Review video, captions and transcript" }));
+  fireEvent.click(await within(staged).findByRole("checkbox"));
+  choose([manifest([csvLine(1)]), ...sidecars(1)]);
+  fireEvent.click(await screen.findByRole("button", { name: "Transfer 1 videos" }));
+  await screen.findByText(/1 of 1 videos staged\./);
+  const restaged = await screen.findByRole("article", { name: "Infection control · Lesson 1" });
+  await within(restaged).findByText(/SHA-256 bbbbbbbbbbbb/);
+  expect(within(restaged).queryByRole("checkbox")).toBeNull();
+  expect(within(restaged).queryByRole("button", { name: /Approve/ })).toBeNull();
+  expect(within(restaged).getByRole("button", { name: "Review video, captions and transcript" })).toBeTruthy();
+  expect(client.register).not.toHaveBeenCalled();
+});

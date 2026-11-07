@@ -119,9 +119,10 @@ export function learningMediaImport({pool,storage,hosts,fetchImpl=fetch,enabled=
         let stored;
         try{stored=await storage.upload(sessionToken,`learning/${mediaId}/${name}`,body(),type);}
         catch(error){if(error instanceof HttpError)throw error;throw failure(signal.aborted?'timeout':'storage_unavailable');}
+        // A refused upload is not a verdict: the prefix follows the bytes, so an earlier attempt may already have
+        // stored them, and app-media reports Storage's 400 "Duplicate" answer as 503. The stored-copy digest below
+        // decides: a missing object fails as storage_unavailable, other bytes as hash_mismatch.
         await stored.body?.cancel().catch(()=>{});
-        // 409: an identical earlier attempt already stored this prefix. The digest below decides.
-        if(!stored.ok&&stored.status!==409)throw failure('storage_unavailable');
       }
       for(const [name,,,expected,bytes] of parts){
         let stored;

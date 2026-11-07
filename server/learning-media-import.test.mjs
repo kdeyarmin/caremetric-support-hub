@@ -50,12 +50,13 @@ function fakeDatabase() {
   });
   return {items,calls,query,pool:{connect:async()=>({query,release:vi.fn()})}};
 }
-function fakeStorage({tamper=null}={}) {
+function fakeStorage({tamper=null,refuse=false}={}) {
   const objects=new Map(),uploads=[];
   return {objects,uploads,
     upload:vi.fn(async(_session,path,body,contentType)=>{
       uploads.push(path);
-      if(objects.has(path))return Response.json({error:'exists'},{status:409});
+      // Production app-media reports Storage's 400 "Duplicate" answer for an existing object as 503.
+      if(objects.has(path)||refuse)return Response.json({error:'Upload failed'},{status:503});
       const bytes=Buffer.from(await new Response(body).arrayBuffer());
       objects.set(path,{bytes,contentType});return Response.json({uploaded:true});
     }),
@@ -73,8 +74,8 @@ function source(routes) {
 }
 const video=(bytes,headers={})=>()=>new Response(bytes,{status:200,headers:{'Content-Type':'video/mp4','Content-Length':String(bytes.length),...headers}});
 const redirect=location=>()=>new Response(null,{status:302,headers:{Location:location}});
-function setup({routes={},hosts=DEFAULT_MEDIA_IMPORT_HOSTS,tamper=null,enabled=true}={}) {
-  const db=fakeDatabase(),storage=fakeStorage({tamper}),fetchImpl=source(routes);
+function setup({routes={},hosts=DEFAULT_MEDIA_IMPORT_HOSTS,tamper=null,refuse=false,enabled=true}={}) {
+  const db=fakeDatabase(),storage=fakeStorage({tamper,refuse}),fetchImpl=source(routes);
   return {db,storage,fetchImpl,run:input=>learningMediaImport({pool:db.pool,storage,hosts,fetchImpl,enabled})('session-token',input)};
 }
 
@@ -176,7 +177,8 @@ it('retries without duplicating: identical content is not fetched again and the 
   const replay=await f.run(stage(row(1)));
   expect(replay).toMatchObject({replayed:true,item:{state:'staged',mediaId:staged.item.mediaId}});
   expect(f.fetchImpl.mock.calls.length).toBe(fetches);expect(f.storage.uploads.length).toBe(uploads);
-  // A lost response after storage: the next attempt meets 409s for its own prefix and verifies the stored bytes.
+  // A lost response after storage: the next attempt's uploads are refused (503, as app-media answers a duplicate)
+  // and the stored bytes are verified instead.
   f.db.items.get(`pennsync:${row(1).sourceRecord}:${row(1).heygenVideoId}`).state='failed';
   const recovered=await f.run(stage(row(1)));
   expect(recovered.item).toMatchObject({state:'staged',mediaId:staged.item.mediaId});
@@ -185,6 +187,12 @@ it('retries without duplicating: identical content is not fetched again and the 
   const corrected=await f.run(stage(row(1),{captions:captions.replace('Welcome','Hello')}));
   expect(corrected.item.state).toBe('staged');expect(corrected.item.mediaId).not.toBe(staged.item.mediaId);
   expect(f.storage.objects.size).toBe(6);
+});
+
+it('fails a row as storage_unavailable when Storage refuses an upload and nothing was stored', async () => {
+  const f=setup({routes:{'https://resource2.heygen.ai/video/1.mp4':video(mp4('one'))},refuse:true});
+  expect((await f.run(stage(row(1)))).item).toMatchObject({state:'failed',failureCode:'storage_unavailable'});
+  expect(f.storage.upload).toHaveBeenCalledTimes(3);expect(f.db.calls).toEqual(['begin','prepare','fail']);
 });
 
 it('refuses unusable captions or transcripts before any transfer', async () => {

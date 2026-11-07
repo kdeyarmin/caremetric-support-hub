@@ -78,16 +78,19 @@ describe("manifest validation", () => {
 });
 
 describe("sidecars", () => {
-  it("matches a manifest path to exactly one chosen file", () => {
-    const files = [{ name: "abc.vtt", webkitRelativePath: "hub-media-2026/captions/abc.vtt" }, { name: "abc.txt", webkitRelativePath: "hub-media-2026/transcripts/abc.txt" },
-      { name: "dup.vtt", webkitRelativePath: "a/dup.vtt" }, { name: "dup.vtt", webkitRelativePath: "b/dup.vtt" }, { name: "loose.vtt" }];
-    expect(matchSidecar("captions/abc.vtt", files)?.name).toBe("abc.vtt");
-    expect(matchSidecar("abc.txt", files)?.webkitRelativePath).toBe("hub-media-2026/transcripts/abc.txt");
-    expect(matchSidecar("loose.vtt", files)?.name).toBe("loose.vtt");
-    expect(matchSidecar("captions/loose.vtt", files)?.name).toBe("loose.vtt");
-    expect(matchSidecar("other/abc.vtt", files)).toBeNull();
-    expect(matchSidecar("dup.vtt", files)).toBeNull();
-    expect(matchSidecar("missing.vtt", files)).toBeNull();
+  it("resolves folder paths exactly beside the manifest and loose files by name", () => {
+    const folder = [{ name: "abc.vtt", webkitRelativePath: "hub-media-2026/captions/abc.vtt" }, { name: "abc.txt", webkitRelativePath: "hub-media-2026/abc.txt" },
+      { name: "lesson.vtt", webkitRelativePath: "selected/archive/captions/lesson.vtt" }];
+    expect(matchSidecar("captions/abc.vtt", folder, "hub-media-2026")?.webkitRelativePath).toBe("hub-media-2026/captions/abc.vtt");
+    expect(matchSidecar("abc.txt", folder, "hub-media-2026")?.name).toBe("abc.txt");
+    // A same-named file in another directory of the chosen folder is never used.
+    expect(matchSidecar("captions/lesson.vtt", folder, "selected/current")).toBeNull();
+    expect(matchSidecar("abc.vtt", folder, "hub-media-2026")).toBeNull();
+    const loose = [{ name: "loose.vtt", webkitRelativePath: "" }, { name: "dup.vtt" }, { name: "dup.vtt" }];
+    expect(matchSidecar("loose.vtt", loose)?.name).toBe("loose.vtt");
+    expect(matchSidecar("captions/loose.vtt", loose)?.name).toBe("loose.vtt");
+    expect(matchSidecar("dup.vtt", loose)).toBeNull();
+    expect(matchSidecar("missing.vtt", loose)).toBeNull();
   });
   it("applies the server's WebVTT and transcript checks first", () => {
     const captions = "WEBVTT\n\n00:00.000 --> 00:02.000\nWash your hands.\n";

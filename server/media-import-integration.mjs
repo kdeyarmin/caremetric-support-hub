@@ -37,7 +37,7 @@ const sources=new Map();let sourceFetches=0;
 const heygen=async url=>{sourceFetches++;const bytes=sources.get(url);
   return bytes?new Response(bytes,{status:200,headers:{'Content-Type':'video/mp4','Content-Length':String(bytes.length)}}):new Response('missing',{status:404});};
 // app-media, exactly: consume the capability for the 'media' audience, then the private bucket with no upsert.
-const stored=new Set();let tamper=null;
+const stored=new Set();let tamper=null,duplicates=0;
 const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(url,options)=>{
   assert.equal(url,'https://storage.test/functions/v1/app-media');assert.equal(options.redirect,'manual');
   const {path,operation}=await caps.consume(options.headers.Authorization.slice(7),'media');
@@ -46,9 +46,10 @@ const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(u
   if(operation==='upload'){
     const response=await fetch(`${storageApi}/object/hub-learning/${path}`,{method:'POST',headers:{...headers,'Content-Type':options.headers['Content-Type'],'x-upsert':'false'},
       body:options.body,duplex:'half',redirect:'manual'});
-    const body=await response.json().catch(()=>({}));
+    await response.body?.cancel();
     if(response.ok){stored.add(path);return Response.json({uploaded:true});}
-    return Response.json({error:'Upload failed'},{status:response.status===409||String(body.statusCode)==='409'?409:503});
+    // Exactly app-media's mapping: Storage's 400 "Duplicate" answer reaches the Hub as 503.
+    duplicates++;return Response.json({error:'Upload failed'},{status:response.status===409?409:503});
   }
   assert.equal(operation,'download');
   const response=await fetch(`${storageApi}/object/authenticated/hub-learning/${path}`,{headers,redirect:'manual'});
@@ -125,8 +126,9 @@ try{
   assert.equal(mismatch.status,200);assert.equal(mismatch.body.item.state,'failed');assert.equal(mismatch.body.item.failureCode,'hash_mismatch');
   assert.equal((await media({operation:'register',mediaId:mismatch.body.item.mediaId,reviewed:true})).status,409,'a failed row cannot be approved');
   // Retry with an honest store: the same bytes reuse the same prefix; the bucket's no-upsert answer is verified, not trusted.
-  const retried=await stage(tamperedRow);
+  const refusedBefore=duplicates;const retried=await stage(tamperedRow);
   assert.equal(retried.body.item.state,'staged');assert.equal(retried.body.item.mediaId,mismatch.body.item.mediaId);assert.equal(retried.body.item.attempts,2);
+  assert.equal(duplicates-refusedBefore,3,'every upload of the retry met an existing object and was refused as app-media refuses it');
 
   // Retry identity: identical content is not fetched or stored again.
   const fetches=sourceFetches,objects=stored.size;
@@ -167,6 +169,26 @@ try{
   const occupied=await media({operation:'register',mediaId:pennsyncItem.mediaId,reviewed:true});
   assert.equal(occupied.body.item.state,'registered');assert.equal(occupied.body.item.target.state,'occupied');
   assert.equal((await draftOf(converted.body.itemId)).draft.units[0].mediaAssetId,staged.mediaId);
+  // A save that lands while approval is attaching is never overwritten: attachment decides from the locked draft.
+  const racedDraft=await call('rpc/save_learning_draft',{p_item_id:randomUUID(),p_expected_version:0,p_document:draftDoc('Emergency preparedness',[
+    {id:randomUUID(),type:'video',title:'Lesson 6',body:transcript,mediaAssetId:null}])});
+  assert.equal(racedDraft.status,200,JSON.stringify(racedDraft));
+  const racedRow=row(6,{sourceRecord:racedDraft.body.itemId});sources.set(racedRow.mp4Url,mp4('video 6'));
+  const racedItem=(await stage(racedRow)).body.item;assert.equal(racedItem.target.state,'ready');
+  const holder=await admin.connect();
+  try{
+    await holder.query('begin');
+    await holder.query('select 1 from private.learning_courses where item_id=$1 for update',[racedDraft.body.itemId]);
+    const approving=media({operation:'register',mediaId:racedItem.mediaId,reviewed:true});
+    await new Promise(resolve=>setTimeout(resolve,750));
+    await holder.query("update private.learning_courses set draft=jsonb_set(draft,'{units,0,mediaAssetId}',to_jsonb($2::text)),draft_version=draft_version+1 where item_id=$1",
+      [racedDraft.body.itemId,staged.mediaId]);
+    await holder.query('commit');
+    const raced=await approving;
+    assert.equal(raced.status,200,JSON.stringify(raced));assert.equal(raced.body.item.state,'registered');assert.equal(raced.body.item.target.state,'occupied');
+    const kept=await draftOf(racedDraft.body.itemId);
+    assert.equal(kept.draft.units[0].mediaAssetId,staged.mediaId,'the concurrent save keeps its video');assert.equal(kept.draft_version,2);
+  }finally{await holder.query('rollback').catch(()=>{});holder.release();}
   // An approved row with no draft yet stays unattached until the draft exists.
   const unmapped=await media({operation:'register',mediaId:results[3].body.item.mediaId,reviewed:true});
   assert.equal(unmapped.body.item.target.state,'missing_draft');
@@ -174,8 +196,8 @@ try{
 
   const listed=await media({operation:'list'});
   const mine=listed.body.items.filter(item=>item.heygenVideoId.startsWith(`r${run}`));
-  assert.deepEqual(mine.map(item=>item.state).sort(),['registered','registered','registered','staged','staged']);
-  assert.equal((await admin.query("select count(*)::int as n from hub.content_items where id = any($1::uuid[]) and status='published'",[[named.body.itemId,converted.body.itemId]])).rows[0].n,0,'nothing publishes');
+  assert.deepEqual(mine.map(item=>item.state).sort(),['registered','registered','registered','registered','staged','staged']);
+  assert.equal((await admin.query("select count(*)::int as n from hub.content_items where id = any($1::uuid[]) and status='published'",[[named.body.itemId,converted.body.itemId,racedDraft.body.itemId]])).rows[0].n,0,'nothing publishes');
 
   // The editor's permission is rechecked on every call.
   await admin.query('update private.staff_permissions set revoked_at=now() where user_id=$1',[editor]);

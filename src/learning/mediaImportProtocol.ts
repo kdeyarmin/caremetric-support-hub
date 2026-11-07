@@ -148,14 +148,14 @@ export function mediaImportTargetKey(row: Pick<MediaImportRow, "sourceRecord" | 
 }
 
 /**
- * Match a manifest-relative sidecar to exactly one chosen file: by folder-relative path when a folder was
- * chosen, otherwise by file name. Two candidates are never guessed between.
+ * Match a manifest-relative sidecar to exactly one chosen file. When a folder was chosen, the path must be exactly
+ * `<manifest directory>/<path>`, so a same-named file elsewhere in the folder never matches. Individually chosen
+ * files carry no path and match by file name. Two candidates are never guessed between.
  */
-export function matchSidecar<T extends { name: string; webkitRelativePath?: string }>(path: string, files: readonly T[]): T | null {
+export function matchSidecar<T extends { name: string; webkitRelativePath?: string }>(path: string, files: readonly T[], manifestDirectory = ""): T | null {
   const name = path.split("/").pop();
-  const matches = files.filter(file => file.webkitRelativePath
-    ? file.webkitRelativePath === path || file.webkitRelativePath.endsWith(`/${path}`)
-    : file.name === name);
+  const expected = manifestDirectory ? `${manifestDirectory}/${path}` : path;
+  const matches = files.filter(file => file.webkitRelativePath ? file.webkitRelativePath === expected : file.name === name);
   return matches.length === 1 ? matches[0] : null;
 }
 

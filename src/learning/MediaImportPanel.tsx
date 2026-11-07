@@ -19,11 +19,13 @@ const minutes = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.
 async function prepare(files: File[]): Promise<Plan> {
   const manifests = files.filter(file => file.name.toLowerCase().endsWith(".csv"));
   if (manifests.length !== 1) throw new Error("Choose exactly one manifest CSV with its caption and transcript files.");
+  // Folder-relative sidecar paths resolve against the manifest's own directory, never another folder.
+  const directory = (manifests[0].webkitRelativePath || "").split("/").slice(0, -1).join("/");
   const text = await manifests[0].text();
   const parsed = parseMediaManifest(text);
   const rows: Prepared[] = [];
   for (const row of parsed.rows) {
-    const captionsFile = matchSidecar(row.captionsFile, files), transcriptFile = matchSidecar(row.transcriptFile, files);
+    const captionsFile = matchSidecar(row.captionsFile, files, directory), transcriptFile = matchSidecar(row.transcriptFile, files, directory);
     if (!captionsFile || !transcriptFile) {
       rows.push({ row, captions: "", transcript: "", problem: `Choose exactly one ${!captionsFile ? row.captionsFile : row.transcriptFile} with the manifest.` });
       continue;
@@ -112,7 +114,8 @@ export function MediaImportPanel() {
 
     <h3>Staged for review ({staged.length})</h3>
     {!staged.length && <p>No videos are waiting for review.</p>}
-    {staged.map(item => <StagedVideo key={item.itemKey} item={item} onChanged={refresh} />)}
+    {/* Keyed by media id: re-staged content is new media and starts a fresh review. */}
+    {staged.map(item => <StagedVideo key={`${item.itemKey}:${item.mediaId}`} item={item} onChanged={refresh} />)}
     {attention.length > 0 && <><h3>Needs attention ({attention.length})</h3><ul>{attention.map(item => <li key={item.itemKey}>
       {item.courseTitle} · {item.lessonTitle}: {item.state === "fetching" ? "Transfer in progress or interrupted. Retry the row after a few minutes." : item.failureCode ? MEDIA_IMPORT_FAILURES[item.failureCode] : "Transfer failed."} Attempts: {item.attempts}.
     </li>)}</ul></>}

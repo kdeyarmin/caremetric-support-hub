@@ -32,7 +32,10 @@ A CSV with exactly these columns, in any order, and one row per video:
 
 The PennSync repository keeps the current manifest at
 `docs/hub-media-2026/manifest.csv` with its sidecar files. Choose the manifest
-folder, or the manifest together with its `.vtt` and `.txt` files. A manifest with
+folder, or the manifest together with its `.vtt` and `.txt` files. When a folder is
+chosen, each sidecar path is resolved exactly against the manifest's own directory, so a
+same-named file elsewhere in the folder is never used; individually chosen files match by
+file name, and two candidates are never guessed between. A manifest with
 any invalid row, missing column, unexpected column, or a render, URL, lesson or
 sidecar listed twice transfers nothing; every problem is listed with its line.
 Before any transfer the browser also runs the server's caption and transcript
@@ -80,9 +83,11 @@ captions and transcript:
 
 - Re-running identical content for a staged or approved row fetches and stores
   nothing. The response says it was replayed.
-- Re-running the same bytes after a failure reuses the same prefix. When the bucket
-  answers that an object already exists, the stored copy is hashed and accepted only
-  if it matches.
+- Re-running the same bytes after a failure reuses the same prefix. The bucket refuses
+  to overwrite the objects already there, and `app-media` reports Storage's 400
+  "Duplicate" answer as 503, so an upload's status never decides the row: each stored
+  copy is downloaded and hashed, and accepted only if it matches. A missing object
+  fails the row as `storage_unavailable`.
 - Changed captions, transcript or video for a row that is not yet approved get a new
   prefix, never an overwrite. The superseded objects remain private and
   unregistered.
@@ -116,6 +121,9 @@ revision-conflict check:
 - **Hub draft item id:** the one video lesson in that draft whose title matches
   `lesson_title`, ignoring case and repeated spaces.
 
+Attachment locks the draft and decides from that locked copy, then saves with that
+copy's revision, so a save another editor makes in the meantime is never overwritten.
+A staged row that is re-staged with new content starts a fresh review in the panel.
 Attachment only fills an empty `mediaAssetId`. It never replaces a lesson's
 existing video, never changes the lesson's transcript text, and never picks between
 two matching lessons. A text lesson, a missing lesson, an ambiguous title or an
@@ -155,8 +163,9 @@ identity, against an in-memory store. CI's database job runs
 actual PostgreSQL, local Supabase Storage, SMS sessions and HTTP. It covers host
 refusal, partial failure, a stored-copy hash mismatch and its retry, replay without
 refetching, reviewed approval with the server checksum, attachment through the
-draft save, an occupied lesson, a not-yet-converted PennSync course, editor-only
-access, and that nothing publishes.
+draft save, an occupied lesson, a concurrent save during attachment, a
+not-yet-converted PennSync course, editor-only access, and that nothing publishes. Its
+Storage emulator reports duplicates exactly as `app-media` does.
 
 Failed or superseded transfers can leave private, unregistered objects, as with the
 single-file uploader. Remove them only after confirming they are not registered.
