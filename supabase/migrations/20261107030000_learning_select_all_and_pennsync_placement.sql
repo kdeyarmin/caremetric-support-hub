@@ -5,7 +5,8 @@
 --    answers a select-all question with the set of options they chose, and earns its points
 --    only for exactly the correct set, as CareMetric PennSync's native grader does
 --    (base44/functions/gradeTrainingAttempt). The learner document marks the question as
---    multiple and never includes either key.
+--    multiple and never includes either key. An imported course still publishes only with its
+--    answers unchanged, now including select-all answer sets.
 -- 2. CareMetric PennSync as a course placement. 20261028220500 retired PennSync with every
 --    other app outside CareBase, Breathe and Intel. Courses may be placed on it again. The
 --    product stays retired for everything else: support intake, billing keys, native
@@ -43,6 +44,9 @@ declare
 
   -- private.learning_public_document(jsonb)
   public_points constant text := $old$'points', coalesce((q.value->>'points')::integer,1),$old$;
+
+  -- private.learning_import_preservation_error(uuid, jsonb)
+  preserve_key constant text := $old$          or draft_question->>'correctOptionId' is distinct from source_question->>'correctOptionId'$old$;
 begin
   -- Validation: the select-all key and the PennSync placement.
   definition := pg_get_functiondef('private.validate_learning_document(jsonb,boolean)'::regprocedure);
@@ -115,6 +119,14 @@ begin
     raise exception 'Review private.learning_public_document before patching' using errcode = '55000';
   end if;
   execute replace(definition, public_points, public_points || ' ''multiple'', q.value ? ''correctOptionIds'',');
+
+  -- Imported courses publish only with their answers unchanged, including select-all answer sets.
+  definition := pg_get_functiondef('private.learning_import_preservation_error(uuid,jsonb)'::regprocedure);
+  if (length(definition) - length(replace(definition, preserve_key, ''))) / length(preserve_key) <> 1 then
+    raise exception 'Review private.learning_import_preservation_error before patching' using errcode = '55000';
+  end if;
+  execute replace(definition, preserve_key, preserve_key || $new$
+          or draft_question->'correctOptionIds' is distinct from source_question->'correctOptionIds'$new$);
 end;
 $patch$;
 

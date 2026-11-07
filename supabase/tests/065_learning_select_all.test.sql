@@ -1,5 +1,5 @@
 begin;
-select plan(31);
+select plan(34);
 insert into auth.users(id,email,raw_user_meta_data,is_anonymous)
 values ('98700000-0000-4000-8000-000000000001','select-all-editor@test.invalid','{"display_name":"Editor"}',false),
 ('98700000-0000-4000-8000-000000000002','select-all-learner@test.invalid','{"display_name":"Learner"}',false);
@@ -50,6 +50,16 @@ update select_all_fixture set item_id=(hub.save_learning_draft(null,jsonb_set(do
 select lives_ok($$select hub.publish_learning_course(item_id,1,true) from select_all_fixture$$,'a reviewed select-all course placed on CareMetric PennSync publishes');
 select is((select count(*) from hub.content_publications p join hub.products pr on pr.id=p.product_id
   where p.item_id=(select item_id from select_all_fixture) and pr.slug in ('carebase','pennsync') and p.expires_at is null),2::bigint,'both placements are published');
+
+-- An imported course publishes only with its answers unchanged, including a select-all answer set.
+insert into private.learning_imports(source_course_id,source_version_id,document_sha256,item_id,source_document)
+  select '98750000-0000-4000-8000-000000000001','98750000-0000-4000-8000-000000000002',repeat('0',64),item_id,doc from select_all_fixture;
+select is(private.learning_import_preservation_error(item_id,doc),null,'an unchanged imported select-all quiz is preserved') from select_all_fixture;
+select is(private.learning_import_preservation_error(item_id,jsonb_set(doc,'{units,1,questions,0,correctOptionIds}','["98730000-0000-4000-8000-00000000000a"]')),'quiz',
+  'changing an imported select-all answer set is a quiz change') from select_all_fixture;
+select is(private.learning_import_preservation_error(item_id,jsonb_set(doc,'{units,1,questions,0}',(doc#>'{units,1,questions,0}') - 'correctOptionIds'
+  || '{"correctOptionId":"98730000-0000-4000-8000-00000000000a"}')),'quiz','turning an imported select-all question into one answer is a quiz change') from select_all_fixture;
+delete from private.learning_imports where source_course_id='98750000-0000-4000-8000-000000000001';
 
 -- Learners see which question takes several answers, never which answers are correct.
 set local request.jwt.claims='{"sub":"98700000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}';

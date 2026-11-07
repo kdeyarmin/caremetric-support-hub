@@ -147,3 +147,17 @@ it("turns a question into select all that apply and saves its set of correct ans
   expect(saved.type === "quiz" && saved.questions[0]).toEqual({ id: question, prompt: "Which apply?", points: 1, correctOptionIds: [second, first],
     options: [{ id: first, text: "Lock wheels" }, { id: second, text: "Clear the path" }, { id: third, text: "Rush the transfer" }] });
 });
+
+it("offers CareMetric PennSync, retired except for courses, as a placement authors can clear", async () => {
+  const live = products.map(p => p.slug === "pennsync" ? { ...p, name: "CareMetric PennSync", status: "retired" as const } : p);
+  render(<MemoryRouter initialEntries={["/library/courses/new"]}><Routes><Route path="/library/courses/:itemId" element={<CourseEditor products={live} />} /></Routes></MemoryRouter>);
+  const pennsync = await screen.findByRole("checkbox", { name: /CareMetric PennSync/ }) as HTMLInputElement;
+  expect(pennsync.checked).toBe(true);
+  expect(pennsync.disabled).toBe(false);
+  expect(screen.queryByRole("checkbox", { name: /Legacy/ })).toBeNull();
+  fireEvent.click(pennsync);
+  fillRequired();
+  const [, document] = await saveDraft();
+  expect(document.productIds).not.toContain(ids.pennsync);
+  expect([...document.productIds].sort()).toEqual(eligibleIds.filter(id => id !== ids.pennsync).sort());
+});

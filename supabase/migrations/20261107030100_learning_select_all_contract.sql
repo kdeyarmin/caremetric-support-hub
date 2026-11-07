@@ -13,7 +13,8 @@ begin
   if position('correctOptionIds' in pg_get_functiondef('private.validate_learning_document(jsonb,boolean)'::regprocedure)) = 0
     or position('p.slug = ''pennsync''' in pg_get_functiondef('private.validate_learning_document(jsonb,boolean)'::regprocedure)) = 0
     or position('correctOptionIds' in pg_get_functiondef('hub.submit_learning_unit(uuid,uuid,jsonb,boolean,uuid)'::regprocedure)) = 0
-    or position('''multiple''' in pg_get_functiondef('private.learning_public_document(jsonb)'::regprocedure)) = 0 then
+    or position('''multiple''' in pg_get_functiondef('private.learning_public_document(jsonb)'::regprocedure)) = 0
+    or position('correctOptionIds' in pg_get_functiondef('private.learning_import_preservation_error(uuid,jsonb)'::regprocedure)) = 0 then
     raise exception 'Apply the select-all and PennSync placement migration first' using errcode = '55000';
   end if;
   -- Placement reopens courses only. Support, billing and native connections stay closed.
