@@ -27,7 +27,7 @@ const webhookSecret = 'whsec_' + randomUUID().replaceAll('-', '');
 const rpc = (name, args = {}, token = ownerToken) => api.rpc(name, args, token);
 const key = () => randomUUID();
 const product = async slug => (await admin.query('select id from hub.products where slug=$1', [slug])).rows[0].id;
-let billing, dropQuantityResponses = false;
+let billing, dropQuantityResponses = false, dropTrialResponses = false;
 const command = (input, token = ownerToken) => billing.command(token, input);
 const workspace = () => rpc('billing_workspace');
 const customer = id => rpc('billing_customer', { p_tenant_id: id });
@@ -79,7 +79,9 @@ try {
   billing = platformBilling({ pool, secretKey: 'sk_test_hub', webhookSecrets: [webhookSecret], apiBase: stripeBase, publicOrigin: 'https://hub.test', log: { warn() {} },
     fetchImpl: async (url, init) => {
       const response = await fetch(url, init);
-      if (dropQuantityResponses && new URL(url).pathname.startsWith('/v1/subscription_items/')) {
+      const path = new URL(url).pathname;
+      if ((dropQuantityResponses && path.startsWith('/v1/subscription_items/'))
+        || (dropTrialResponses && path === '/v1/subscriptions' && init?.method === 'POST' && String(init.body).includes('app_trial'))) {
         await response.arrayBuffer();
         throw new TypeError('Synthetic lost provider response');
       }
@@ -414,6 +416,20 @@ try {
   const secondTrial = await billing.trial('Bearer ' + breatheKey, { account: breatheAccount, name: 'Trial DME ' + suffix, email: 'owner@test.invalid', plan: 'launch' });
   assert.deepEqual([secondTrial.entitled, secondTrial.status], [false, 'none'], 'a lapsed trial is not started again');
   assert.equal([...stripe.store.subscriptions.values()].filter(item => item.metadata.hub_source === 'app_trial').length, 1, 'one trial per application account');
+  // An account whose tenant already has a Stripe customer: Stripe starts the trial but its answer is lost, so nothing reaches the
+  // mirror. Asking again finds the trial in Stripe, records it and answers that it is running, without starting another.
+  const savedAccount = randomUUID();
+  const savedTenant = (await pool.query('select private.billing_app_tenant($1,$2,$3) as t', [await product('breathe'), savedAccount, 'Saved DME ' + suffix])).rows[0].t;
+  tenantIds.push(savedTenant);
+  await command({ action: 'customer.save', tenant_id: savedTenant, email: 'saved@test.invalid', name: 'Saved DME', expected_version: 0, request_key: key() });
+  const savedCustomer = (await admin.query('select stripe_customer_id from private.billing_customers where tenant_id=$1', [savedTenant])).rows[0].stripe_customer_id;
+  dropTrialResponses = true;
+  await assert.rejects(billing.trial('Bearer ' + breatheKey, { account: savedAccount, name: 'Saved DME ' + suffix, email: 'saved@test.invalid', plan: 'launch' }));
+  dropTrialResponses = false;
+  assert.equal((await billing.entitlements('Bearer ' + breatheKey, { account: savedAccount })).status, 'none', 'the lost answer left the mirror without the trial');
+  const recovered = await billing.trial('Bearer ' + breatheKey, { account: savedAccount, name: 'Saved DME ' + suffix, email: 'saved@test.invalid', plan: 'launch' });
+  assert.deepEqual([recovered.entitled, recovered.status], [true, 'trialing'], 'asking again records the trial Stripe started');
+  assert.equal([...stripe.store.subscriptions.values()].filter(item => item.customer === savedCustomer && item.metadata.app === 'breathe').length, 1, 'and starts no second trial');
   await assert.rejects(billing.trial('Bearer ' + breatheKey, { account: randomUUID(), name: 'No Plan', email: null, plan: 'missing-plan' }), error => error.status === 409);
 
   // On boot the Hub catches up with what changed in Stripe without it: a product

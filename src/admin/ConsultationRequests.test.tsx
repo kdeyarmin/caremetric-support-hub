@@ -67,6 +67,25 @@ it("starts the next page where the source now is after deleting on this one, so 
   await vi.waitFor(() => expect(reads.mock.calls.at(-1)?.[1]).toMatchObject({ operation: "inquiries.list", offset: 19 }));
 });
 
+it("reads the page again when deleting all of a full page leaves the next page at the same place", async () => {
+  const { readPortfolio } = await import("./portfolioClient");
+  const reads = vi.mocked(readPortfolio);
+  const items = Array.from({ length: 20 }, (_, index) => ({ ...page.items[0], id: `CM-0000000000${String(index).padStart(2, "0")}`, name: `Requester ${index + 1}` }));
+  reads.mockResolvedValueOnce({ ...page, total: 45, items } as unknown as Awaited<ReturnType<typeof readPortfolio>>);
+  render(<ConsultationRequests change={vi.fn(async () => ({}))} />);
+  await screen.findByText("Requester 20");
+  for (let deleted = 1; deleted <= 20; deleted += 1) {
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Yes, delete" }));
+    await vi.waitFor(() => expect(screen.getAllByText("Deleted from Advisors.")).toHaveLength(deleted));
+  }
+  const before = reads.mock.calls.length;
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  // The source closed the gap, so the next records now start at the same offset: the page is read again there.
+  await vi.waitFor(() => expect(reads.mock.calls.length).toBe(before + 1));
+  expect(reads.mock.calls.at(-1)?.[1]).toMatchObject({ operation: "inquiries.list", offset: 0 });
+});
+
 it("links a self-reported email address without letting it add recipients or a message", async () => {
   const { readPortfolio } = await import("./portfolioClient");
   vi.mocked(readPortfolio).mockResolvedValueOnce({ ...page, items: [{ ...page.items[0], email: "alex@agency.test?bcc=someone@elsewhere.test&body=hi" }] } as unknown as Awaited<ReturnType<typeof readPortfolio>>);

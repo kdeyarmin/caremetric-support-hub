@@ -756,10 +756,13 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         const context = (await one(db, 'select private.billing_context($1) as c', [prepared.tenant])).c;
         let customer = context.stripe_customer_id;
         // One free trial per application. Entitlements leave ended subscriptions out, so an account whose trial lapsed reads as
-        // "none"; Stripe still lists that subscription. Asking again returns the current answer and starts nothing (and never
-        // replays the original trial's stored response into the mirror).
-        if (customer && (await live.list('/v1/subscriptions', { customer, status: 'all' }, 100)).some(item => item.metadata?.app === prepared.app.slug)) {
-          return appResponse(current);
+        // "none"; Stripe still lists that subscription. Asking again starts nothing (and never replays the original trial's stored
+        // response into the mirror). It does bring the mirror up to date first from Stripe's current copy of any subscription that
+        // has not ended, so a trial whose first mirror write was lost (a lost response or a failed commit) is answered as running.
+        const earlier = customer ? (await live.list('/v1/subscriptions', { customer, status: 'all' }, 100)).filter(item => item.metadata?.app === prepared.app.slug) : [];
+        if (earlier.length) {
+          for (const item of earlier) if (!['canceled', 'incomplete_expired'].includes(item.status)) await refresh(db, live, 'subscription', item.id);
+          return appResponse((await one(db, 'select private.billing_app_entitlements($1,$2) as e', [prepared.app.product_id, request.account])).e);
         }
         if (!customer) {
           const created = await live.post('/v1/customers', { name: request.name, ...(request.email ? { email: request.email } : {}),

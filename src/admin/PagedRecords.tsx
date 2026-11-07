@@ -12,14 +12,15 @@ export function PagedRecords<T extends { id: string }>({ app, title, searchLabel
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
   // Rows deleted on this page stay in view with their confirmation, but the source has already closed the gap: the next page
-  // starts that many records earlier, so none is skipped.
+  // starts that many records earlier, so none is skipped. Every move reads again, even one that lands on the same offset (all
+  // of a full page deleted), so the page never keeps showing rows that are gone.
   const [removedHere, setRemovedHere] = useState(0);
-  const moveTo = (next: number) => { setRemovedHere(0); setOffset(next); };
   const [refresh, setRefresh] = useState(0);
   const retry = () => setRefresh(value => value + 1);
+  const moveTo = (next: number) => { setRemovedHere(0); setOffset(next); retry(); };
   const reader = useCallback((signal: AbortSignal) => { void refresh; return read(search, offset, signal); }, [read, search, offset, refresh]);
   const state = useAdminRead(reader);
-  function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setSearch(input.trim()); moveTo(0); retry(); }
+  function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setSearch(input.trim()); moveTo(0); }
   return <section className="panel portfolio-records"><div className="panel-heading"><h2>{title}</h2></div><div className="admin-section-body"><form className="admin-course-search" onSubmit={submit}><label className="admin-search"><span className="admin-field-label">{searchLabel}</span><span className="admin-search-input"><Search size={16} aria-hidden="true" /><input type="search" maxLength={100} value={input} onChange={event => setInput(event.target.value)} /></span></label><button className="button button-primary" type="submit">Search</button></form>
     {state.status === "loading" && <Loading label={`Loading ${title.toLowerCase()}`} app={app} />}
     {state.status === "error" && <ReadFailure error={state.error} retry={retry} />}
