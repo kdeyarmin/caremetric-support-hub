@@ -132,6 +132,9 @@ jobs:
           node server/generation-integration.mjs
           node server/course-media-integration.mjs
           node server/media-contract-integration.mjs
+          node server/media-import-integration.mjs
+          # Repeat with fresh fixtures to prove complete teardown.
+          node server/media-import-integration.mjs
           node server/creation-integration.mjs
           node server/creation-contract-integration.mjs
           node server/publication-integration.mjs

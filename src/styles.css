@@ -59,6 +59,7 @@
 .learning-option input[type="radio"] { width: auto; }
 .learning-notice { padding: 24px; margin: 20px 0; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .learning-error { background: #ffefed; border: 1px solid #d99287; border-radius: 8px; padding: 16px; overflow-wrap: anywhere; }
+.learning-transcript { white-space: pre-wrap; max-height: 16rem; overflow: auto; padding: 12px; background: #f6f8fc; border-radius: 8px; }
 .learning-certificate { padding: 60px; text-align: center; border: 4px double #213a76; }
 .learning-certificate small { overflow-wrap: anywhere; }
 @media (max-width: 760px) { .learning-player { grid-template-columns: 1fr; } .learning-notice { flex-direction: column; align-items: start; } .lesson-panel, .learning-certificate { padding: 20px; } }

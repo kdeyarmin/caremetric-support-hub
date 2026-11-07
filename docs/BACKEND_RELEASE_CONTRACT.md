@@ -167,6 +167,15 @@ with the agent row held and keeps the ten-a-day and once-per-business cold email
 agent's list, and the two steps and the daily evaluation schedule exist. Each test fails closed. The Hub server registers the
 contact finder, qualification and evaluation only when the feature is declared.
 
+`20261106220100_learning_media_import_contract.sql` declares `learning.media-import.v1` only after `learning.runtime.v1`,
+`learning.media.v1` and `app.sms.v1` are declared, the staged-import table exists with row level security and is closed to every
+browser, service and server role, the seven import operations are security definers with a pinned empty search path executable by
+`hub_app_server` alone, each enters through a helper that requires the Hub server connection, a verified Hub SMS session and
+shared-course editor authority, approval goes through `hub.register_learning_media` and attachment through
+`hub.save_learning_draft`, the helpers stay internal, and the SQL PennSync lesson identity matches the conversion's on a fixed
+vector. Each test fails closed. The Hub server answers the bulk media import route only when the feature is declared
+([MEDIA_IMPORT.md](MEDIA_IMPORT.md)).
+
 `20261105140100_agent_offers_contract.sql` declares `platform.agents.offers.v1` only after `platform.agents.v1`,
 `platform.agents.hardening.v1`, `platform.agents.lifecycle.v1`, `platform.agents.autonomy.v1` and `billing.platform.v1` are
 declared, the offer menu and the record of offers exist with row level security and are closed to every browser, service and
