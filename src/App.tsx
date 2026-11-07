@@ -91,6 +91,7 @@ import { currentPage, visibleNavSections } from "./navigation";
 import { config } from "./lib/config";
 import { appSession } from "./lib/appSession";
 import { SmsSignIn } from "./auth/SmsSignIn";
+import { SignOutButton } from "./auth/SignOutButton";
 import { PrivateHubNotice } from "./auth/PrivateHubNotice";
 import { PublicationImport } from "./imports/PublicationImport";
 import { PublicationVideo } from "./imports/PublicationVideo";
@@ -249,7 +250,7 @@ function SecurityPage({ actor }: { actor: ActorContext }) {
   return <><PageHeading eyebrow="Account protection" title="SMS sign-in" description={`Secure CareMetric access for ${actor.name}.`} />
     <section className="panel security-factor-panel"><h2>Your CareMetric session</h2><p>Sign in using a six-digit code sent to your registered mobile number. Codes expire after five minutes and can be used once. This session expires after eight hours.</p>
     <p>To change your registered number or recover access, contact CareMetric support.</p>
-    {!config.demoMode && <button className="button button-secondary" onClick={() => void appSession.signOut()}>Sign out</button>}</section></>;
+    {!config.demoMode && <SignOutButton />}</section></>;
 }
 
 /** The control center is the administrator's home. Links from before it existed carried the per-application workspace's query and still open that workspace. */
@@ -363,7 +364,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
                 <button className={!staff ? "active" : ""} aria-pressed={!staff} aria-label="Customer" onClick={() => onPersonaChange("customer")}><UserRound size={15} aria-hidden="true" /><span>Customer</span></button>
               </div>
             )}
-            {!config.demoMode && <button className="button button-secondary" onClick={() => void appSession.signOut()}>Sign out</button>}
+            {!config.demoMode && <SignOutButton />}
             <NavLink className="button button-secondary topbar-help" to="/help" aria-label="Help"><CircleHelp size={17} aria-hidden="true" /><span>Help</span></NavLink>
           </div>
         </header>
@@ -475,7 +476,7 @@ function OverviewPage({ data }: { data: HubData }) {
         description={staff
           ? "Manage support across every CareMetric product while sharing one governed library of answers, videos, and courses."
           : "Search shared guidance, open a support case, or continue a conversation with CareMetric."}
-        action={<NavLink className="button button-primary" to="/cases"><Plus size={17} /> {staff ? "Open queue" : "New support case"}</NavLink>}
+        action={<NavLink className="button button-primary" to={staff ? "/cases" : "/cases?new=1"}><Plus size={17} /> {staff ? "Open queue" : "New support case"}</NavLink>}
       />
       <section className="metric-grid" aria-label="Support summary">
         <article className="metric-card metric-teal"><span className="metric-icon"><Inbox /></span><div><p>Active cases</p><strong>{summary.open}</strong><small>{staff ? "Across all products" : "For your organization"}</small></div></article>
@@ -490,7 +491,7 @@ function OverviewPage({ data }: { data: HubData }) {
             {recent.map((supportCase) => {
               const product = productFor(data.products, supportCase.productId);
               return (
-                <NavLink to="/cases" className="activity-row" key={supportCase.id}>
+                <NavLink to={`/cases?case=${encodeURIComponent(supportCase.id)}`} className="activity-row" key={supportCase.id}>
                   <span className="product-dot" style={{ background: product?.color }} />
                   <div className="activity-copy"><strong>{supportCase.subject}</strong><span>{caseCode(supportCase.caseNumber)} · {product?.name}</span></div>
                   <StatusBadge status={supportCase.status} />
@@ -545,10 +546,18 @@ function CasesPage({ data }: CasesPageProps) {
   const [showCreate, setShowCreate] = useState(!staff && (data.cases.length === 0 || params.get("new") === "1"));
   const [refresh, setRefresh] = useState(0);
   const [caseRows, setCaseRows] = useState(data.cases);
+  const [sourceCases, setSourceCases] = useState(data.cases);
   const [caseListError, setCaseListError] = useState("");
   const [trackedCaseLink, setTrackedCaseLink] = useState(requestedCase);
   const caseListRequest = useRef(0);
   const visibleCaseId = useRef<string | null>(selectedId);
+  // Navigation refreshes the shell after this page mounts. Adopt that new snapshot,
+  // while keeping locally reloaded rows until the shell actually supplies new data.
+  if (data.cases !== sourceCases) {
+    setSourceCases(data.cases);
+    setCaseRows(data.cases);
+    setSelectedId(current => reconcileCaseSelection(data.cases, current, requestedCase ?? undefined));
+  }
   // A later visit to /cases?case=<id> opens that request and clears filters that would hide it.
   if (requestedCase !== trackedCaseLink) {
     setTrackedCaseLink(requestedCase);
@@ -891,7 +900,7 @@ function CaseDetail({ supportCase, thread, threadStatus, threadError, threadStal
       )}
       <div className="reply-box">
         {staff && <div className="reply-tabs"><button className={visibility === "customer" ? "active" : ""} onClick={() => setVisibility("customer")}><MessageSquareText size={14} /> Reply to customer</button><button className={visibility === "internal" ? "active" : ""} onClick={() => setVisibility("internal")}><LockKeyhole size={14} /> Internal note</button></div>}
-        <textarea rows={4} value={body} onChange={(event) => setBody(event.target.value)} maxLength={5000} disabled={threadStatus !== "ready"} placeholder={visibility === "internal" ? "Add a note visible only to support staff…" : "Write a reply…"} />
+        <textarea aria-label={visibility === "internal" ? "Internal note" : staff ? "Reply to customer" : "Your reply"} rows={4} value={body} onChange={(event) => setBody(event.target.value)} maxLength={5000} disabled={threadStatus !== "ready"} placeholder={visibility === "internal" ? "Add a note visible only to support staff…" : "Write a reply…"} />
         <div className="reply-footer"><span><ShieldCheck size={14} /> Do not request or repeat patient information.</span><button className="button button-primary" onClick={() => void reply()} disabled={saving || threadStatus !== "ready" || !body.trim()}>{saving ? <LoaderCircle className="spin" size={16} /> : <Send size={16} />} {visibility === "internal" ? "Add note" : "Send reply"}</button></div>
         {error && <p className="form-message form-error"><AlertCircle size={15} /> {error}</p>}
       </div>
@@ -917,8 +926,8 @@ function KnowledgePage({ data }: { data: HubData }) {
       <PageHeading eyebrow="Canonical knowledge" title="One answer, wherever customers need it." description="Publish shared core guidance once, then add small product or industry overlays only when the workflow truly differs." />
       {isSupportStaff(data.actor.role) && <KnowledgeCoverage products={data.products} content={data.content} selectedProductId={productId} onSelect={setProductId} />}
       <section className="library-toolbar panel">
-        <label className="search-box large"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search articles, workflows, and questions" /></label>
-        <select value={productId} onChange={(event) => setProductId(event.target.value)}><option value="all">All products</option>{data.products.filter(product => isHubAdminApp(product.slug)).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select>
+        <label className="search-box large"><Search size={18} /><input aria-label="Search knowledge articles" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search articles, workflows, and questions" /></label>
+        <select aria-label="Filter knowledge by product" value={productId} onChange={(event) => setProductId(event.target.value)}><option value="all">All products</option>{data.products.filter(product => isHubAdminApp(product.slug)).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select>
       </section>
       <div className="knowledge-layout">
         <section className="article-grid">
@@ -932,7 +941,7 @@ function KnowledgePage({ data }: { data: HubData }) {
           ))}
         </section>
         <aside className={`article-preview ${selected ? "open" : ""}`}>
-          {selected ? <><button className="icon-button preview-close" onClick={() => setSelectedId(null)}><X size={18} /></button><span className="eyebrow">{selected.contentKey}</span><h2>{selected.title}</h2><p className="preview-summary">{selected.summary}</p><div className="preview-body">{selected.body}</div><div className="preview-meta"><div><span>Source</span><strong>{selected.sourceSystem}</strong></div><div><span>Access</span><strong>{selected.accessLevel}</strong></div><div><span>Revision</span><strong>{selected.revision}</strong></div><div><span>Route</span><strong>{selected.routePattern ?? "Search only"}</strong></div></div></> : <div className="empty-state"><FileText /><strong>Choose an article</strong><p>Preview its canonical copy, placements, and governance details.</p></div>}
+          {selected ? <><button className="icon-button preview-close" aria-label="Close article preview" onClick={() => setSelectedId(null)}><X size={18} /></button><span className="eyebrow">{selected.contentKey}</span><h2>{selected.title}</h2><p className="preview-summary">{selected.summary}</p><div className="preview-body">{selected.body}</div><div className="preview-meta"><div><span>Source</span><strong>{selected.sourceSystem}</strong></div><div><span>Access</span><strong>{selected.accessLevel}</strong></div><div><span>Revision</span><strong>{selected.revision}</strong></div><div><span>Route</span><strong>{selected.routePattern ?? "Search only"}</strong></div></div></> : <div className="empty-state"><FileText /><strong>Choose an article</strong><p>Preview its canonical copy, placements, and governance details.</p></div>}
         </aside>
       </div>
     </>
@@ -1050,6 +1059,7 @@ function ContextualHelpPage({ data }: { data: HubData }) {
 
 function IntegrationPage({ data }: { data: HubData }) {
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState("");
   const code = `import { openHelp } from "@caremetric/help-sdk";
 
 const supportRoutes = {
@@ -1065,12 +1075,16 @@ openHelp({
     environment: "production"
   }
 });`;
-  const copy = async () => { await navigator.clipboard.writeText(code); setCopied(true); window.setTimeout(() => setCopied(false), 1800); };
+  const copy = async () => {
+    setCopyError("");
+    try { await navigator.clipboard.writeText(code); setCopied(true); window.setTimeout(() => setCopied(false), 1800); }
+    catch { setCopied(false); setCopyError("Copy is unavailable in this browser. Select and copy the example below."); }
+  };
   return (
     <>
       <PageHeading eyebrow="Universal Help SDK" title="Connect every app without coupling its backend." description="The first package is framework-neutral and sends only approved application context. Identity and tenant claims will be exchanged server-to-server using short-lived signed tokens." />
       <div className="integration-grid">
-        <section className="panel integration-code"><div className="panel-heading"><div><h2>React, Vite, Next.js, or Base44</h2><p>Open contextual help from any screen.</p></div><button className="button button-secondary button-small" onClick={() => void copy()}>{copied ? <Check size={14} /> : <FileText size={14} />} {copied ? "Copied" : "Copy"}</button></div><pre><code>{code}</code></pre></section>
+        <section className="panel integration-code"><div className="panel-heading"><div><h2>React, Vite, Next.js, or Base44</h2><p>Open contextual help from any screen.</p></div><button className="button button-secondary button-small" onClick={() => void copy()}>{copied ? <Check size={14} /> : <FileText size={14} />} {copied ? "Copied" : "Copy"}</button></div>{copyError && <p role="alert">{copyError}</p>}<pre><code>{code}</code></pre></section>
         <section className="panel context-contract"><div className="panel-heading"><div><h2>Approved context contract</h2><p>Deliberately excludes personal and clinical fields.</p></div></div><ul><li><CheckCircle2 /> Product slug</li><li><CheckCircle2 /> App route or feature key</li><li><CheckCircle2 /> App version and environment</li><li><CheckCircle2 /> Locale</li><li className="blocked"><X /> No patient, user, tenant, or free-text data in URLs</li><li className="blocked"><X /> No service-role key in the app</li></ul></section>
       </div>
       <section className="panel rollout-table">
@@ -1092,6 +1106,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [authenticated, setAuthenticated] = useState(config.demoMode);
+  const [publicHelpLoaded, setPublicHelpLoaded] = useState(false);
+  const sessionRequest = useRef(0);
   // Every load of the shell's data takes the next number; a response is used only while its number is still the latest,
   // so a slow read can never overwrite newer data or bring data back after sign-out.
   const dataRequest = useRef(0);
@@ -1136,22 +1152,27 @@ export default function App() {
       const [products, contacts, content] = await Promise.all([
         repository.listProducts(), repository.listContacts(), repository.listContent(),
       ]);
-      if (request === dataRequest.current) setData({ ...emptyData, products, contacts, content });
+      if (request === dataRequest.current) {
+        setData({ ...emptyData, products, contacts, content });
+        setPublicHelpLoaded(true);
+      }
     } catch (caught) {
       if (request === dataRequest.current) setError(caught instanceof Error ? caught.message : "Unknown Support Hub error.");
     } finally { if (request === dataRequest.current) setLoading(false); }
   }, []);
 
-  const loadAuthenticated = useCallback(async () => {
+  const loadAuthenticated = useCallback(async (sessionVersion = sessionRequest.current) => {
     setLoading(true); setError("");
     try {
       const actor = await repository.getActorContext();
+      if (sessionVersion !== sessionRequest.current) return;
       // A saved destination is used once: from the home address it opens; anywhere else it is discarded, so it cannot
       // redirect a later sign-in.
       const pendingPath = takePendingHelpPath();
       if (pendingPath && window.location.pathname === "/") setHomeRedirect(pendingPath);
       await load(actor);
     } catch (caught) {
+      if (sessionVersion !== sessionRequest.current) return;
       setError(caught instanceof Error ? caught.message : "Your session could not be checked.");
       setLoading(false);
     }
@@ -1161,24 +1182,28 @@ export default function App() {
     if (config.demoMode) { void Promise.resolve().then(() => load()); return; }
     let active = true;
     const refresh = async () => {
+      const request = ++sessionRequest.current;
+      dataRequest.current += 1;
       try {
         const session = await appSession.current();
-        if (!active) return;
+        if (!active || request !== sessionRequest.current) return;
         setAuthenticated(session.authenticated);
-        if (session.authenticated) await loadAuthenticated();
+        if (session.authenticated) await loadAuthenticated(request);
         else {
           dataRequest.current += 1;
           setData(emptyData);
+          setPublicHelpLoaded(false);
+          setError("");
           if (isPublicHelpPath(window.location.pathname)) await loadPublicHelp();
           else setLoading(false);
         }
       } catch {
-        if (active) { dataRequest.current += 1; setAuthenticated(false); setData(emptyData); setLoading(false); }
+        if (active && request === sessionRequest.current) { dataRequest.current += 1; setAuthenticated(false); setData(emptyData); setPublicHelpLoaded(false); setError(""); setLoading(false); }
       }
     };
     void refresh();
     const unsubscribe = appSession.subscribe(() => { void refresh(); });
-    return () => { active = false; unsubscribe(); };
+    return () => { active = false; sessionRequest.current += 1; dataRequest.current += 1; unsubscribe(); };
   },[load,loadAuthenticated,loadPublicHelp]);
 
   // The session is checked when the Hub opens and whenever it may have changed, not on every page: navigation keeps the
@@ -1194,7 +1219,7 @@ export default function App() {
   }, [ready, authenticated, location.pathname, refreshInBackground]);
 
   // A signed-out visitor who moves from the sign-in page to public help needs its articles and contacts.
-  const needsPublicHelp = !config.demoMode && !authenticated && !loading && !error && isPublicHelpPath(location.pathname) && data.products.length === 0;
+  const needsPublicHelp = !config.demoMode && !authenticated && !loading && !error && isPublicHelpPath(location.pathname) && !publicHelpLoaded;
   useEffect(() => {
     if (needsPublicHelp) void Promise.resolve().then(() => loadPublicHelp());
   }, [needsPublicHelp, loadPublicHelp]);

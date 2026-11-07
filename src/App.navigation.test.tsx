@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 
 const repo = vi.hoisted(() => ({
@@ -99,6 +99,64 @@ describe("the support case queue", () => {
     render(<MemoryRouter initialEntries={["/cases?case=case-done"]}><App /></MemoryRouter>);
     expect(await screen.findByRole("heading", { name: "Resolved billing question" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Open sign-in problem" })).toBeNull();
+  });
+
+  it("opens the specific recent case from the overview", async () => {
+    render(<MemoryRouter initialEntries={["/overview"]}><App /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("link", { name: /Resolved billing question/ }));
+    expect(await screen.findByRole("heading", { name: "Resolved billing question" })).toBeTruthy();
+  });
+
+  it("opens the new case form from the customer overview even with existing cases", async () => {
+    repo.getActorContext.mockResolvedValue({ ...owner, role: "customer" });
+    render(<MemoryRouter initialEntries={["/overview"]}><App /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("link", { name: "New support case" }));
+    expect(await screen.findByRole("heading", { name: "Open a new support case" })).toBeTruthy();
+  });
+
+  it("uses refreshed cases when entering the queue", async () => {
+    render(<MemoryRouter initialEntries={["/overview"]}><App /></MemoryRouter>);
+    await screen.findByRole("heading", { name: /Everything your customers need/ });
+    repo.listCases.mockResolvedValue([{ ...open, subject: "Updated by another staff member" }, resolved]);
+    fireEvent.click(screen.getByRole("link", { name: "Open queue" }));
+    expect(await screen.findByRole("heading", { name: "Updated by another staff member" })).toBeTruthy();
+  });
+});
+
+describe("session refresh ordering", () => {
+  it("ignores an older authenticated session response after sign-out", async () => {
+    let resolveSession!: (value: { authenticated: boolean }) => void;
+    session.current.mockReturnValueOnce(new Promise(resolve => { resolveSession = resolve; }));
+    render(<MemoryRouter initialEntries={["/overview"]}><App /></MemoryRouter>);
+    await waitFor(() => expect(session.subscribe).toHaveBeenCalled());
+    session.current.mockResolvedValue({ authenticated: false });
+    await act(async () => { (session.subscribe.mock.calls[0] as unknown as [() => void])[0](); });
+    await act(async () => { resolveSession({ authenticated: true }); });
+    expect(screen.queryByRole("heading", { name: "Sign in with a text message." })).toBeTruthy();
+    expect(document.querySelector(".app-shell")).toBeNull();
+  });
+
+  it("does not load private data from an actor lookup that completes after sign-out", async () => {
+    let resolveActor!: (value: typeof owner) => void;
+    repo.getActorContext.mockReturnValueOnce(new Promise(resolve => { resolveActor = resolve; }));
+    render(<MemoryRouter initialEntries={["/overview"]}><App /></MemoryRouter>);
+    await waitFor(() => expect(repo.getActorContext).toHaveBeenCalled());
+    session.current.mockResolvedValue({ authenticated: false });
+    await act(async () => { (session.subscribe.mock.calls[0] as unknown as [() => void])[0](); });
+    await act(async () => { resolveActor(owner); });
+    expect(repo.listCases).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: "Sign in with a text message." })).toBeTruthy();
+  });
+
+  it("does not reload an empty public catalog indefinitely", async () => {
+    session.current.mockResolvedValue({ authenticated: false });
+    window.history.replaceState({}, "", "/help");
+    repo.listProducts.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockRejectedValue(new Error("Too many reads"));
+    render(<MemoryRouter initialEntries={["/help"]}><App /></MemoryRouter>);
+    await waitFor(() => expect(repo.listProducts).toHaveBeenCalled());
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 40)); });
+    expect(repo.listProducts).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("heading", { name: "CareMetric help" })).toBeTruthy();
   });
 });
 

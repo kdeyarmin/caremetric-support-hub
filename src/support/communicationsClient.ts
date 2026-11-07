@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { appRequest } from "../lib/appSession";
+import { appRequest, AppRequestError } from "../lib/appSession";
 
 export const channels = ["phone", "sms", "email", "chat", "web_form"] as const;
 export const conversationStatuses = ["new", "open", "waiting", "closed"] as const;
@@ -120,7 +120,10 @@ export const chatClient = {
   async start(input: { name: string; email: string; product?: string; message: string; noPhi: true }) {
     return z.object({ reference: z.number().int().positive() }).parse(await appRequest("chat/start", input));
   },
-  async thread(signal?: AbortSignal) { return chatSchema.parse(await appRequest("chat/thread", undefined, signal)); },
+  async thread(signal?: AbortSignal) {
+    try { return chatSchema.parse(await appRequest("chat/thread", undefined, signal)); }
+    catch (error) { if (error instanceof AppRequestError && error.status === 404) return null; throw error; }
+  },
   async send(message: string) { return chatSchema.parse(await appRequest("chat/message", { message })); },
   async end() { await appRequest("chat/end", {}); },
 };

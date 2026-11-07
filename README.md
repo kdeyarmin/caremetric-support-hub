@@ -220,7 +220,7 @@ The first deployment is a modular monolith. Services can be extracted only when 
 
 ## Run locally
 
-Requirements: Node.js 22 or newer.
+Requirements: Node.js 24 or newer (see `.nvmrc`).
 
 ```bash
 npm install
