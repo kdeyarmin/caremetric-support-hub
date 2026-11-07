@@ -66,6 +66,31 @@ describe("DemoSupportRepository", () => {
     );
   });
 
+  it("changes case status only for customer-visible replies, as the database does", async () => {
+    const statusOf = async (id: string) => (await repository.listCases()).find((item) => item.id === id)?.status;
+    const created = await repository.createCase({
+      tenantId: "tenant-penn",
+      productId: "prod-carebase",
+      subject: "Status follows the reply",
+      category: "general",
+      priority: "normal",
+      message: "The export button does nothing.",
+      containsPhi: false,
+      requestKey: "50000000-0000-4000-8000-000000000005",
+    });
+
+    repository.setActorRole("staff");
+    await repository.replyToCase(created.id, "Checking the export logs.", "internal", "50000000-0000-4000-8000-000000000006");
+    expect(await statusOf(created.id)).toBe("open");
+
+    await repository.replyToCase(created.id, "Which browser are you using?", "customer", "50000000-0000-4000-8000-000000000007");
+    expect(await statusOf(created.id)).toBe("waiting_on_customer");
+
+    repository.setActorRole("customer");
+    await repository.replyToCase(created.id, "Chrome, latest version.", "customer", "50000000-0000-4000-8000-000000000008");
+    expect(await statusOf(created.id)).toBe("open");
+  });
+
   it("keeps the central phone in canonical E.164 form", async () => {
     const contacts = await repository.listContacts();
     expect(contacts.find((contact) => contact.channel === "phone")?.value).toBe("+18775212890");

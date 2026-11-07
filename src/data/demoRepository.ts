@@ -12,6 +12,7 @@ import type {
   SupportContact,
   UpdateCaseInput,
 } from "../domain";
+import { isSupportStaff } from "../domain";
 import { AiNotConfiguredError } from "./supabaseRepository";
 
 const products: Product[] = [
@@ -500,16 +501,20 @@ export class DemoSupportRepository implements HubRepository {
       createdAt: now,
     };
     messages = [...messages, message];
-    cases = cases.map((item) =>
-      item.id === caseId
-        ? {
-            ...item,
-            status: this.actor.role === "tenant_admin" ? "open" : "waiting_on_customer",
-            lastMessageAt: now,
-            updatedAt: now,
-          }
-        : item,
-    );
+    // Mirror hub.reply_to_support_case: an internal note leaves the case untouched; a customer-visible
+    // reply from staff waits on the customer, and one from the customer side reopens the case.
+    if (visibility === "customer") {
+      cases = cases.map((item) =>
+        item.id === caseId
+          ? {
+              ...item,
+              status: isSupportStaff(this.actor.role) ? "waiting_on_customer" : "open",
+              lastMessageAt: now,
+              updatedAt: now,
+            }
+          : item,
+      );
+    }
     return { ...message };
   }
 
