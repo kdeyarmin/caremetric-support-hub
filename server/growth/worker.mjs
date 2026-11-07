@@ -18,6 +18,15 @@ export const unchangedSinceCancelled=(existing,o)=>existing?.message_status==='c
   && existing.message_contact_version===o.contact_version && existing.message_policy_version===o.policy?.version;
 // Claim outcomes that mean "never send this one": the hand-over was withdrawn, or the business was already contacted once.
 const finalRefusals=new Set(['outreach_off','business_contacted']);
+// A model answer that is cut off, invalid or refused for one opportunity's input says nothing about the others: skip that one and
+// carry on, as the concierge does. A transient failure (rate limit, outage, the task's own deadline) and a failure of the model
+// account itself still stop the sweep, so the scheduler retries it or reports it.
+const perOpportunityModelCodes=new Set(['output_truncated','output_invalid','request_rejected']);
+async function oneAnswer(call,signal) {
+  try { return await call(); }
+  catch(error) { if(signal?.aborted||error?.transient===true||!perOpportunityModelCodes.has(error?.code))throw error; return null; }
+}
+
 export function growthHandlers({growth,model,notifier,features=null}) {
   if(!growth)return {};
   const autonomy=declared(features);
@@ -33,7 +42,7 @@ export function growthHandlers({growth,model,notifier,features=null}) {
         const plans=planOpportunity(o,now());
         if(task.agent?.autonomy==='observe')continue;
         if(owner==='marketing_manager' && ['identified','researched'].includes(o.stage) && (!o.assessed_at || (o.evidence??[]).some(e=>Date.parse(e.observed_at)>Date.parse(o.assessed_at)))) {
-          const assessment=await assessProspect(o,task,model,signal);
+          const assessment=await oneAnswer(()=>assessProspect(o,task,model,signal),signal);
           signal?.throwIfAborted();
           if(assessment) {await growth.store.assess(o.id,assessment);continue;}
         }
@@ -48,7 +57,7 @@ export function growthHandlers({growth,model,notifier,features=null}) {
           // withdrawn message (the owner took the hand-over back), or a change of the opportunity, contact or policy, opens the work
           // again. A database that does not report these fields yet keeps the old behaviour.
           if(unchangedSinceCancelled(existing,o))continue;
-          const draft=await draftMessage({opportunity:o,work,task,model,signal});if(!draft)continue;
+          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal}),signal);if(!draft)continue;
           signal?.throwIfAborted();
           let saved;
           try {
