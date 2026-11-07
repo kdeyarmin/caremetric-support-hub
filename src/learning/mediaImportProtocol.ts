@@ -124,8 +124,8 @@ export function parseMediaManifest(text: string): MediaImportManifest {
     const value = (name: (typeof MEDIA_IMPORT_COLUMNS)[number]) => (cells[header.indexOf(name)] ?? "").trim();
     const duration = value("duration_seconds");
     const parsed = mediaImportRowSchema.safeParse({
-      product: value("product").toLowerCase(), courseTitle: value("course_title"), lessonTitle: value("lesson_title"),
-      sourceRecord: value("source_record").toLowerCase(),
+      product: manifestProduct(value("product")), courseTitle: value("course_title"), lessonTitle: value("lesson_title"),
+      sourceRecord: manifestSourceRecord(value("source_record")),
       durationSeconds: /^\d{1,5}(\.\d{1,3})?$/.test(duration) ? Number(duration) : Number.NaN,
       mp4Url: value("mp4_url"), posterUrl: value("poster_url") || null,
       captionsFile: value("captions_file"), transcriptFile: value("transcript_file"), heygenVideoId: value("heygen_video_id"),
@@ -140,6 +140,22 @@ export function parseMediaManifest(text: string): MediaImportManifest {
     rows.push({ ...row, line });
   });
   return { rows: errors.length ? [] : rows, errors };
+}
+
+/** `pennsync`, `carebase`, or a label that names one, such as `PennSync (home health and hospice)`. */
+export function manifestProduct(value: string): string {
+  const named = /^(pennsync|carebase)(?:\s*\([^()]*\))?$/i.exec(value.trim());
+  return named ? named[1].toLowerCase() : value.trim().toLowerCase();
+}
+
+/**
+ * A bare id, or the same id after the label that names its kind: `PennSync TrainingModule <24 hex>` or
+ * `Hub draft item <uuid>`. A label on the wrong kind of id is left as written, so the row fails validation.
+ */
+export function manifestSourceRecord(value: string): string {
+  const text = value.trim().toLowerCase().replace(/\s+/g, " ");
+  const labelled = /^(?:pennsync trainingmodule ([a-f0-9]{24})|hub draft item ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))$/.exec(text);
+  return labelled ? labelled[1] ?? labelled[2] : text;
 }
 
 /** One video per lesson: a PennSync module, or a lesson title within a named Hub draft. */
