@@ -72,6 +72,25 @@ try {
   await text('+12025550144','It says my code expired.','SM'+'2'.repeat(32));
   const sms=await find(item=>item.contactPhone==='+12025550144');created.push(sms.id);
   assert.equal(sms.channel,'sms');assert.equal(sms.status,'new');assert.equal(sms.messageCount,2,'a Twilio retry is stored once');assert.equal(sms.productId,null);
+  // Two first texts from a new number, ingested at the same moment, share one conversation: the second waits for the first
+  // instead of failing on the thread's unique key (Twilio does not retry a failed message webhook).
+  {
+    const ingest='select private.ingest_inbound_communication($1,$2,$3,null,null,null,$4,null,null,$5) as result';
+    const first=await pool.connect(),second=await pool.connect();
+    try {
+      await first.query('begin');
+      await first.query(ingest,['sms','+12025550145','SM'+'4'.repeat(32),'Hi.','+12025550145']);
+      await second.query('begin');
+      const pending=second.query(ingest,['sms','+12025550145','SM'+'5'.repeat(32),'My code expired.','+12025550145']).then(result=>result,error=>error);
+      await new Promise(resolve=>setTimeout(resolve,300));
+      await first.query('commit');
+      const outcome=await pending;
+      assert.ok(!(outcome instanceof Error),`the second first text is stored (${outcome?.code ?? ''})`);
+      await second.query('commit');
+    } finally { await first.query('rollback').catch(()=>{}); await second.query('rollback').catch(()=>{}); first.release(); second.release(); }
+    const burst=await find(item=>item.contactPhone==='+12025550145');created.push(burst.id);
+    assert.equal(burst.messageCount,2,'simultaneous first texts share one conversation');
+  }
   await assert.rejects(pool.query('select * from private.communications'),/permission denied/,'the server role has no direct table access');
   await assert.rejects(list(customerToken),error=>error.status===403,'customers cannot read the inbox');
   await assert.rejects(list(null),error=>error.status===401);
@@ -167,7 +186,7 @@ try {
   for(const row of audit) for(const secret of ['sign in','certificate','Reports','Checked','billing']) assert.ok(!row.metadata.toLowerCase().includes(secret.toLowerCase()),row.action);
   console.log('Unified communications: signed SMS and email, threading, scoped visibility, triage, notes, single-send replies, chat limits, imports and audit hygiene passed.');
 } finally {
-  const ids=(await admin.query("select id from private.communications where id=any($1::uuid[]) or contact_email in ('pat@agency.test','someone@else.test','visitor@agency.test','v2@agency.test','v3@agency.test','caller@agency.test','requester@agency.test') or contact_phone='+12025550144'",[created])).rows.map(row=>row.id);
+  const ids=(await admin.query("select id from private.communications where id=any($1::uuid[]) or contact_email in ('pat@agency.test','someone@else.test','visitor@agency.test','v2@agency.test','v3@agency.test','caller@agency.test','requester@agency.test') or contact_phone in ('+12025550144','+12025550145')",[created])).rows.map(row=>row.id);
   await admin.query('delete from private.communications where id=any($1::uuid[])',[ids]);
   await admin.query("delete from private.communication_rate_events");
   await admin.query('delete from private.audit_events where actor_id in ($1,$2,$3)',[owner,agent,customer]);
