@@ -64,6 +64,19 @@ describe("Hub facility training workspace", () => {
     expect(applied).toMatchObject({ action: "students.create", organizationId: ids.organization, parameters: { facilityId: ids.facility, firstName: "Grace", lastName: "Student", hireDate: "2026-09-01" } });
     await screen.findByText(/Student added/);
   });
+  it("reviews a new training facility by its own names, not the facility selected in the address", async () => {
+    const { request } = setup();
+    fireEvent.click(await screen.findByRole("button", { name: "New training facility" }));
+    const editor = screen.getByRole("region", { name: "Create training facility" });
+    expect(within(editor).queryByText(/Cedar Care|Cedar Home/)).toBeNull();
+    fill("Organization name", "Brand New Org"); fill("Facility name", "Brand New Home"); fill("Administrative reason", "New training customer.");
+    fireEvent.click(screen.getByRole("button", { name: "Review training change" }));
+    const review = screen.getByRole("region", { name: "Review training change" });
+    expect(within(review).queryByText(/Cedar Care|Cedar Home/)).toBeNull();
+    expect([...review.querySelectorAll("dt")].map(term => term.textContent)).toEqual(["Organization", "Facility", "Facility type", "Included access", "Reason"]);
+    expect(within(review).getByText("Brand New Home")).toBeTruthy();
+    expect(request.mock.calls.filter(([operation]) => operation.operation === "apply")).toHaveLength(0);
+  });
   it("invites administrators as org_admin with no implicit student or platform role", async () => {
     const { request } = setup(); fireEvent.click(await screen.findByRole("button", { name: "Invite organization administrator" }));
     const editor = screen.getByRole("region", { name: "Invite organization administrator" });
