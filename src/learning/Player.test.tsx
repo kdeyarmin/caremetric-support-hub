@@ -86,6 +86,32 @@ it("answers a select-all question with every chosen option", async () => {
   await waitFor(() => expect(api.submit).toHaveBeenCalledWith(ids.enrollment, ids.quiz, { [ids.question]: [ids.option, third] }, false, expect.any(String)));
 });
 
+it("lets a learner retake a quiz as often as needed, in a new question order each time", async () => {
+  const base = course([ids.text, ids.video]);
+  const quiz = base.document.units[2];
+  if (quiz.type !== "quiz") throw new Error("Fixture type");
+  const questionIds = Array.from({ length: 6 }, (_, index) => `66666666-6666-4666-8666-66666666666${index}`);
+  const many = { ...quiz, maxAttempts: 3, questions: questionIds.map((id, index) => ({ ...quiz.questions[0], id, prompt: `Question ${String.fromCharCode(65 + index)}` })) };
+  // Three attempts already used: the course's old limit no longer locks the quiz.
+  const withAttempts = (attemptCount: number): Course => ({ ...base, document: { ...base.document, units: [base.document.units[0], base.document.units[1], many] },
+    progress: [...base.progress, { unitId: ids.quiz, completedAt: null, attemptCount, bestScore: 50 }] });
+  api.course.mockResolvedValueOnce(withAttempts(3)).mockResolvedValue(withAttempts(4));
+  api.submit.mockResolvedValue({ passed: false, score: 50, attemptCount: 4, completedAt: null, certificateId: null });
+  renderPlayer();
+  await screen.findByText(/You can retake this quiz as many times as you need/);
+  expect(screen.queryByText(/Attempt limit reached/)).toBeNull();
+  const order = () => screen.getAllByRole("group").map(group => group.querySelector("legend")?.textContent?.replace(/^\d+\. /, ""));
+  const first = order();
+  expect([...first].sort()).toEqual(questionIds.map((_, index) => `Question ${String.fromCharCode(65 + index)}`));
+  for (const group of screen.getAllByRole("group")) fireEvent.click(group.querySelector("input")!);
+  fireEvent.click(screen.getByRole("button", { name: "Submit answers" }));
+  await screen.findByText(/not passed\. Try again: the questions are in a new order/);
+  await screen.findByText(/Attempts so far: 4/);
+  expect(order()).not.toEqual(first);
+  expect(screen.getAllByRole("group").every(group => !(group.querySelector("input") as HTMLInputElement).checked)).toBe(true);
+  expect((screen.getByRole("button", { name: "Submit answers" }) as HTMLButtonElement).disabled).toBe(true);
+});
+
 it("shows the post-test score on the certificate", async () => {
   api.certificate.mockResolvedValue({ certificateId: ids.option, learnerName: "Learner One", courseTitle: "Falls prevention", completedAt: "2026-10-09T12:00:00Z", durationMinutes: 30, versionId: ids.version, finalScore: 90, passingScore: 80 });
   render(<MemoryRouter initialEntries={[`/learn/certificates/${ids.enrollment}`]}><Routes><Route path="/learn/certificates/:enrollmentId" element={<LearningCertificate />} /></Routes></MemoryRouter>);

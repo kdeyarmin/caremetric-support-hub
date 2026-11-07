@@ -101,7 +101,7 @@ function QuizEditor({ unit, onChange }: { unit: QuizUnit; onChange: (unit: QuizU
     return keys.length ? withKeys(question, keys, true) : question;
   };
   return <><label>Quiz instructions<textarea rows={4} maxLength={60000} value={unit.body} onChange={e => onChange({ ...unit, body: e.target.value })} /></label>
-    <div className="learning-fields"><label>Passing score (%)<input type="number" min={1} max={100} value={unit.passingScore} onChange={e => onChange({ ...unit, passingScore: Number(e.target.value) })} /></label><label>Attempt limit (blank for unlimited)<input type="number" min={1} max={10} value={unit.maxAttempts ?? ""} onChange={e => onChange({ ...unit, maxAttempts: e.target.value ? Number(e.target.value) : null })} /></label></div>
+    <div className="learning-fields"><label>Passing score (%)<input type="number" min={1} max={100} value={unit.passingScore} onChange={e => onChange({ ...unit, passingScore: Number(e.target.value) })} /></label></div><p className="muted">Learners can retake this quiz as many times as they need; the questions are shown in a new order on each attempt.</p>
     {unit.questions.map((question, index) => {
       const multiple = "correctOptionIds" in question, keys = correctKeys(question);
       return <fieldset key={question.id}><legend>Question {index + 1}</legend>

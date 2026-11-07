@@ -60,6 +60,12 @@ relational permissions. Learner documents use an explicit field projection.
 Submissions use an enrollment lock plus a request key and payload hash to prevent
 double attempts from retries. Certificates retain immutable revision identity.
 
+Learners may retake a quiz as many times as they need. The player shows the
+questions in a new order on each attempt, derived from the enrollment, quiz and
+attempt number (grading is by question ID, so order never affects a score). A
+course document's `maxAttempts` is kept, so imported courses still match their
+source, but it no longer limits retakes.
+
 The `hub-learning` bucket is private. Shared content editors can insert new objects
 and read uploads for review. They cannot overwrite or delete objects through these
 policies. Learners can sign URLs only for media in their own enrolled courses
