@@ -393,6 +393,15 @@ try {
   assert.equal(stripe.requests.find(request => request.path === '/v1/subscriptions' && request.params.metadata?.hub_source === 'app_trial').params.trial_settings.end_behavior.missing_payment_method, 'cancel');
   assert.equal([...stripe.store.subscriptions.values()].filter(item => item.metadata.hub_source === 'app_trial').length, 1);
   assert.equal(trialSubscription.trial_end - trialSubscription.trial_start, 14 * 86400);
+  // The trial ends without a payment method and Stripe cancels it, so the account has no current subscription. It has had its
+  // trial: asking again returns that answer and starts nothing, not a second trial and not a replay of the first.
+  const ended = Math.floor(Date.now() / 1000);
+  Object.assign(trialSubscription, { status: 'canceled', canceled_at: ended, ended_at: ended });
+  await sendEvent({ id: 'evt_' + randomUUID().replaceAll('-', ''), object: 'event', type: 'customer.subscription.deleted', created: ended, livemode: false, data: { object: structuredClone(trialSubscription) } });
+  assert.equal((await billing.entitlements('Bearer ' + breatheKey, { account: breatheAccount })).status, 'none');
+  const secondTrial = await billing.trial('Bearer ' + breatheKey, { account: breatheAccount, name: 'Trial DME ' + suffix, email: 'owner@test.invalid', plan: 'launch' });
+  assert.deepEqual([secondTrial.entitled, secondTrial.status], [false, 'none'], 'a lapsed trial is not started again');
+  assert.equal([...stripe.store.subscriptions.values()].filter(item => item.metadata.hub_source === 'app_trial').length, 1, 'one trial per application account');
   await assert.rejects(billing.trial('Bearer ' + breatheKey, { account: randomUUID(), name: 'No Plan', email: null, plan: 'missing-plan' }), error => error.status === 409);
 
   // On boot the Hub catches up with what changed in Stripe without it: a product

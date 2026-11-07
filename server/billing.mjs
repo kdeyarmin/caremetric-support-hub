@@ -755,6 +755,12 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         if (current.status !== 'none') return appResponse(current);
         const context = (await one(db, 'select private.billing_context($1) as c', [prepared.tenant])).c;
         let customer = context.stripe_customer_id;
+        // One free trial per application. Entitlements leave ended subscriptions out, so an account whose trial lapsed reads as
+        // "none"; Stripe still lists that subscription. Asking again returns the current answer and starts nothing (and never
+        // replays the original trial's stored response into the mirror).
+        if (customer && (await live.list('/v1/subscriptions', { customer, status: 'all' }, 100)).some(item => item.metadata?.app === prepared.app.slug)) {
+          return appResponse(current);
+        }
         if (!customer) {
           const created = await live.post('/v1/customers', { name: request.name, ...(request.email ? { email: request.email } : {}),
             metadata: { hub_tenant_id: prepared.tenant, app: prepared.app.slug } }, { idempotencyKey: `hub-trial-customer-${accountKey}` });
