@@ -1069,45 +1069,71 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [authenticated, setAuthenticated] = useState(config.demoMode);
+  // Every load of the shell's data takes the next number; a response is used only while its number is still the latest,
+  // so a slow read can never overwrite newer data or bring data back after sign-out.
+  const dataRequest = useRef(0);
+  // React Router gives navigate a new identity on every location change; holding it in a ref keeps the session check
+  // below from re-running (and reloading the whole Hub) each time the visitor moves to another page.
+  const navigateRef = useRef(navigate);
+  useEffect(() => { navigateRef.current = navigate; }, [navigate]);
 
-  const load = useCallback(async (actorOverride?: ActorContext) => {
-    setLoading(true); setError("");
-    try {
-      const [actor, products, contacts, cases, content] = await Promise.all([
-        actorOverride ?? repository.getActorContext(), repository.listProducts(), repository.listContacts(), repository.listCases(), repository.listContent(),
-      ]);
-      setData({ actor, products, contacts, cases, content });
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unknown Support Hub error.");
-    } finally { setLoading(false); }
+  const readHubData = useCallback(async (actorOverride?: ActorContext): Promise<HubData> => {
+    const [actor, products, contacts, cases, content] = await Promise.all([
+      actorOverride ?? repository.getActorContext(), repository.listProducts(), repository.listContacts(), repository.listCases(), repository.listContent(),
+    ]);
+    return { actor, products, contacts, cases, content };
   }, []);
 
+  const load = useCallback(async (actorOverride?: ActorContext) => {
+    const request = ++dataRequest.current;
+    setLoading(true); setError("");
+    try {
+      const next = await readHubData(actorOverride);
+      if (request === dataRequest.current) setData(next);
+    } catch (caught) {
+      if (request === dataRequest.current) setError(caught instanceof Error ? caught.message : "Unknown Support Hub error.");
+    } finally { if (request === dataRequest.current) setLoading(false); }
+  }, [readHubData]);
+
+  // Moving between pages keeps the shell mounted and refreshes its data quietly. A failed refresh keeps what is shown;
+  // a lapsed session is reported by the request itself (401), which re-checks the sign-in.
+  const refreshInBackground = useCallback(async () => {
+    const request = ++dataRequest.current;
+    try {
+      const next = await readHubData();
+      if (request === dataRequest.current) setData(next);
+    } catch {
+      // Keep the data already on screen.
+    }
+  }, [readHubData]);
+
   const loadPublicHelp = useCallback(async () => {
+    const request = ++dataRequest.current;
     setLoading(true); setError("");
     try {
       const [products, contacts, content] = await Promise.all([
         repository.listProducts(), repository.listContacts(), repository.listContent(),
       ]);
-      setData({ ...emptyData, products, contacts, content });
+      if (request === dataRequest.current) setData({ ...emptyData, products, contacts, content });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unknown Support Hub error.");
-    } finally { setLoading(false); }
+      if (request === dataRequest.current) setError(caught instanceof Error ? caught.message : "Unknown Support Hub error.");
+    } finally { if (request === dataRequest.current) setLoading(false); }
   }, []);
 
   const loadAuthenticated = useCallback(async () => {
     setLoading(true); setError("");
     try {
       const actor = await repository.getActorContext();
-      if (window.location.pathname === "/") {
-        const pendingPath = takePendingHelpPath();
-        if (pendingPath) navigate(pendingPath, { replace: true });
-      }
+      // A saved destination is used once: from the home address it opens; anywhere else it is discarded, so it cannot
+      // redirect a later sign-in.
+      const pendingPath = takePendingHelpPath();
+      if (pendingPath && window.location.pathname === "/") navigateRef.current(pendingPath, { replace: true });
       await load(actor);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Your session could not be checked.");
       setLoading(false);
     }
-  }, [load, navigate]);
+  }, [load]);
 
   useEffect(() => {
     if (config.demoMode) { void Promise.resolve().then(() => load()); return; }
@@ -1119,18 +1145,37 @@ export default function App() {
         setAuthenticated(session.authenticated);
         if (session.authenticated) await loadAuthenticated();
         else {
+          dataRequest.current += 1;
           setData(emptyData);
           if (isPublicHelpPath(window.location.pathname)) await loadPublicHelp();
           else setLoading(false);
         }
       } catch {
-        if (active) { setAuthenticated(false); setData(emptyData); setLoading(false); }
+        if (active) { dataRequest.current += 1; setAuthenticated(false); setData(emptyData); setLoading(false); }
       }
     };
     void refresh();
     const unsubscribe = appSession.subscribe(() => { void refresh(); });
     return () => { active = false; unsubscribe(); };
-  },[load,loadAuthenticated,loadPublicHelp,location.pathname]);
+  },[load,loadAuthenticated,loadPublicHelp]);
+
+  // The session is checked when the Hub opens and whenever it may have changed, not on every page: navigation keeps the
+  // shell (and each page's state) mounted. A signed-in move to another page refreshes the data in the background.
+  const ready = (config.demoMode || authenticated) && !loading && !error;
+  const refreshedPath = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ready) { if (!config.demoMode && !authenticated) refreshedPath.current = null; return; }
+    if (refreshedPath.current === null) { refreshedPath.current = location.pathname; return; }
+    if (refreshedPath.current === location.pathname) return;
+    refreshedPath.current = location.pathname;
+    void refreshInBackground();
+  }, [ready, authenticated, location.pathname, refreshInBackground]);
+
+  // A signed-out visitor who moves from the sign-in page to public help needs its articles and contacts.
+  const needsPublicHelp = !config.demoMode && !authenticated && !loading && !error && isPublicHelpPath(location.pathname) && data.products.length === 0;
+  useEffect(() => {
+    if (needsPublicHelp) void Promise.resolve().then(() => loadPublicHelp());
+  }, [needsPublicHelp, loadPublicHelp]);
 
   const changePersona = async (mode: "staff" | "customer" | "admin") => {
     demoRepository.setActorRole(mode);
