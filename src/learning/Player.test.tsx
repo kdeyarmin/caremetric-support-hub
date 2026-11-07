@@ -1,12 +1,23 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { courseSteps, type Course } from "./model";
 
-const api = vi.hoisted(() => ({ course: vi.fn(), media: vi.fn(), submit: vi.fn(), certificate: vi.fn() }));
+const api = vi.hoisted(() => ({ course: vi.fn(), media: vi.fn(), submit: vi.fn(), certificate: vi.fn(), enroll: vi.fn(), mine: vi.fn() }));
 vi.mock("./api", () => ({ learningApi: api }));
-const { CoursePlayer, LearningCertificate } = await import("./Player");
+const { CoursePlayer, LearningCertificate, MyLearning } = await import("./Player");
+
+function GoTo({ path }: { path: string }) {
+  const navigate = useNavigate();
+  return <button onClick={() => navigate(path)}>Another enrollment</button>;
+}
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
+}
 
 const ids = { item: "11111111-1111-4111-8111-111111111111", version: "22222222-2222-4222-8222-222222222222", enrollment: "33333333-3333-4333-8333-333333333333",
   text: "44444444-4444-4444-8444-444444444441", video: "44444444-4444-4444-8444-444444444442", quiz: "44444444-4444-4444-8444-444444444443",
@@ -127,4 +138,97 @@ it("shows the post-test score on the certificate", async () => {
   api.certificate.mockResolvedValue({ certificateId: ids.option, learnerName: "Learner One", courseTitle: "Falls prevention", completedAt: "2026-10-09T12:00:00Z", durationMinutes: 30, versionId: ids.version, finalScore: 90, passingScore: 80 });
   render(<MemoryRouter initialEntries={[`/learn/certificates/${ids.enrollment}`]}><Routes><Route path="/learn/certificates/:enrollmentId" element={<LearningCertificate />} /></Routes></MemoryRouter>);
   expect(await screen.findByText("Post-test score: 90% (passing score 80%)")).toBeTruthy();
+});
+
+it("retries a failed course load without leaving a permanent loading message", async () => {
+  api.course.mockRejectedValueOnce(new Error("Connection interrupted")).mockResolvedValue(course());
+  renderPlayer();
+  await screen.findByText("Connection interrupted");
+  expect(screen.queryByText("Loading course…")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Retry course" }));
+  await screen.findByRole("heading", { name: "Why falls happen" });
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("clears the previous enrollment and its video progress when another enrollment opens", async () => {
+  const nextId = "33333333-3333-4333-8333-333333333334";
+  const next = deferred<Course>();
+  api.course.mockResolvedValueOnce(course([ids.text])).mockReturnValueOnce(next.promise);
+  render(<MemoryRouter initialEntries={[`/learn/courses/${ids.item}?enrollment=${ids.enrollment}`]}>
+    <GoTo path={`/learn/courses/${ids.item}?enrollment=${nextId}`} />
+    <Routes><Route path="/learn/courses/:itemId" element={<CoursePlayer />} /></Routes>
+  </MemoryRouter>);
+  await screen.findByRole("heading", { name: "Room safety" });
+  const video = await waitFor(() => { const element = document.querySelector("video"); if (!element) throw new Error("video pending"); return element; });
+  fireEvent.ended(video);
+  expect((screen.getByRole("checkbox", { name: "I have completed this lesson." }) as HTMLInputElement).disabled).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "Another enrollment" }));
+  expect(screen.queryByRole("heading", { name: "Room safety" })).toBeNull();
+  await act(async () => next.resolve({ ...course([ids.text]), enrollmentId: nextId }));
+  await screen.findByRole("heading", { name: "Room safety" });
+  expect((screen.getByRole("checkbox", { name: "I have completed this lesson." }) as HTMLInputElement).disabled).toBe(true);
+});
+
+it("does not restore an old enrollment when its saved-progress refresh arrives late", async () => {
+  const oldRefresh = deferred<Course>();
+  const nextId = "33333333-3333-4333-8333-333333333334";
+  const next = { ...course(), enrollmentId: nextId, document: { ...course().document, title: "Current enrollment" } };
+  api.course.mockResolvedValueOnce(course()).mockReturnValueOnce(oldRefresh.promise).mockResolvedValueOnce(next);
+  api.submit.mockResolvedValue({ passed: true, score: null, attemptCount: 1, completedAt: null, certificateId: null });
+  render(<MemoryRouter initialEntries={[`/learn/courses/${ids.item}?enrollment=${ids.enrollment}`]}>
+    <GoTo path={`/learn/courses/${ids.item}?enrollment=${nextId}`} />
+    <Routes><Route path="/learn/courses/:itemId" element={<CoursePlayer />} /></Routes>
+  </MemoryRouter>);
+  fireEvent.click(await screen.findByRole("checkbox", { name: "I have completed this lesson." }));
+  fireEvent.click(screen.getByRole("button", { name: "Complete lesson" }));
+  await waitFor(() => expect(api.course).toHaveBeenCalledTimes(2));
+  fireEvent.click(screen.getByRole("button", { name: "Another enrollment" }));
+  await screen.findByRole("heading", { name: "Current enrollment" });
+  await act(async () => oldRefresh.resolve(course([ids.text])));
+  expect(screen.getByRole("heading", { name: "Current enrollment" })).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: "Falls prevention" })).toBeNull();
+});
+
+it("retries the progress read after a saved quiz without submitting another attempt", async () => {
+  api.course.mockResolvedValueOnce(course([ids.text, ids.video])).mockRejectedValueOnce(new Error("Progress unavailable")).mockResolvedValue(course([ids.text, ids.video, ids.quiz]));
+  api.submit.mockResolvedValue({ passed: true, score: 100, attemptCount: 1, completedAt: null, certificateId: null });
+  renderPlayer();
+  fireEvent.click(await screen.findByRole("radio", { name: "This one" }));
+  fireEvent.click(screen.getByRole("button", { name: "Submit answers" }));
+  await screen.findByText(/Progress unavailable/);
+  expect((screen.getByRole("button", { name: "Submit answers" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Retry progress update" }));
+  await screen.findByRole("button", { name: "Continue" });
+  expect(api.submit).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("hides the previous certificate while another certificate loads or fails", async () => {
+  const next = deferred<never>();
+  const certificate = { certificateId: ids.option, learnerName: "Learner One", courseTitle: "Falls prevention", completedAt: "2026-10-09T12:00:00Z", durationMinutes: 30, versionId: ids.version, finalScore: 90, passingScore: 80 };
+  api.certificate.mockResolvedValueOnce(certificate).mockReturnValueOnce(next.promise).mockResolvedValueOnce({ ...certificate, courseTitle: "Current certificate" });
+  render(<MemoryRouter initialEntries={[`/learn/certificates/${ids.enrollment}`]}>
+    <GoTo path="/learn/certificates/33333333-3333-4333-8333-333333333334" />
+    <Routes><Route path="/learn/certificates/:enrollmentId" element={<LearningCertificate />} /></Routes>
+  </MemoryRouter>);
+  await screen.findByText("Falls prevention");
+  fireEvent.click(screen.getByRole("button", { name: "Another enrollment" }));
+  expect(screen.queryByText("Falls prevention")).toBeNull();
+  expect((screen.getByRole("button", { name: "Print certificate" }) as HTMLButtonElement).disabled).toBe(true);
+  await act(async () => next.reject(new Error("Certificate unavailable")));
+  await screen.findByText("Certificate unavailable");
+  expect(screen.queryByText("Falls prevention")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Retry certificate" }));
+  await screen.findByText("Current certificate");
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect((screen.getByRole("button", { name: "Print certificate" }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+it("can retry loading personal learning records after a transient failure", async () => {
+  api.mine.mockRejectedValueOnce(new Error("Records unavailable")).mockResolvedValueOnce([]);
+  render(<MemoryRouter><MyLearning /></MemoryRouter>);
+  await screen.findByText("Records unavailable");
+  fireEvent.click(screen.getByRole("button", { name: "Retry my learning" }));
+  await screen.findByText("You have not started a course in the Hub yet.");
+  expect(screen.queryByRole("alert")).toBeNull();
 });

@@ -10,8 +10,14 @@ export function CoursePlayer() {
   const { itemId = "" } = useParams();
   const [params] = useSearchParams();
   const enrollment = params.get("enrollment");
+  return <CourseSession key={`${itemId}:${enrollment ?? ""}`} itemId={itemId} enrollment={enrollment} />;
+}
+
+// Enrollment changes also invalidate pending saves, lesson selection and local playback state.
+function CourseSession({ itemId, enrollment }: { itemId: string; enrollment: string | null }) {
   const [course, setCourse] = useState<Course | null>(null);
   const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   // Watching state lives with the course, not the lesson panel: switching lessons unmounts the panel.
@@ -22,7 +28,7 @@ export function CoursePlayer() {
     let active = true;
     void learningApi.course(itemId, enrollment).then(value => { if (active) { setCourse(value); setError(""); } }, caught => { if (active) setError(errorMessage(caught)); });
     return () => { active = false; };
-  }, [itemId, enrollment]);
+  }, [itemId, enrollment, attempt]);
   async function start() {
     setBusy(true); setError("");
     try { const id = await learningApi.enroll(itemId); setCourse(await learningApi.course(itemId, id)); }
@@ -31,8 +37,8 @@ export function CoursePlayer() {
   }
   return <div className="learning-workspace">
     <nav className="learning-links"><Link to="/learn">All courses</Link><Link to="/learn/my">My learning</Link></nav>
-    {error && <p role="alert" className="learning-error">{error}</p>}
-    {!course ? <p>Loading course…</p> : <>
+    {error && <p role="alert" className="learning-error">{error}{!course && <> <button onClick={() => { setError(""); setAttempt(value => value + 1); }}>Retry course</button></>}</p>}
+    {!course ? !error && <p role="status">Loading course…</p> : <>
       <header><p className="eyebrow">{course.document.category}</p><h1>{course.document.title}</h1><p>{course.document.summary}</p><p>{course.document.durationMinutes} minutes · {course.progress.filter(p => p.completedAt).length} of {course.document.units.length} lessons completed</p></header>
       {course.document.overview && <div className="lesson-body">{course.document.overview}</div>}
       {course.completedAt && <div className="panel learning-notice"><strong>Course completed</strong><Link to={`/learn/certificates/${course.enrollmentId}`}>View completion certificate</Link></div>}
@@ -53,6 +59,7 @@ function Lesson({ course, unit, playback, onRefresh, onNext }: { course: Course;
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refreshPending, setRefreshPending] = useState(false);
   const [watched, setWatched] = useState(saved?.watched ?? false);
   const pending = useRef<{ serialized: string; key: string } | null>(null);
   // Learners retake a quiz as many times as they need; each attempt shows its questions in a new order.
@@ -60,7 +67,17 @@ function Lesson({ course, unit, playback, onRefresh, onNext }: { course: Course;
   const questions = unit.type === "quiz" ? questionOrder(unit.questions, { enrollmentId: course.enrollmentId ?? "", unitId: unit.id, attemptNumber: attemptsSoFar }) : [];
   // A first viewing must reach the end before the lesson can be marked complete.
   const mustWatch = unit.type === "video" && Boolean(unit.mediaAssetId) && !progress?.completedAt && !watched;
+  async function refreshProgress() {
+    setBusy(true); setError("");
+    try {
+      await onRefresh();
+      pending.current = null;
+      setRefreshPending(false);
+    } catch (caught) { setError(`Your result was saved, but progress could not be refreshed. ${errorMessage(caught)}`); }
+    finally { setBusy(false); }
+  }
   async function submit() {
+    if (busy || refreshPending) return;
     setBusy(true); setError("");
     const serialized = JSON.stringify({ answers, attested });
     if (pending.current?.serialized !== serialized) pending.current = { serialized, key: crypto.randomUUID() };
@@ -69,8 +86,8 @@ function Lesson({ course, unit, playback, onRefresh, onNext }: { course: Course;
       setMessage(result.score === null ? "Lesson completed." : result.passed ? `${result.score}% — passed.` : `${result.score}% — not passed. Try again: the questions are in a new order.`);
       // A new attempt starts clean.
       if (result.score !== null && !result.passed) setAnswers({});
-      await onRefresh();
-      pending.current = null;
+      setRefreshPending(true);
+      await refreshProgress();
     } catch (caught) { setError(errorMessage(caught)); }
     finally { setBusy(false); }
   }
@@ -79,7 +96,7 @@ function Lesson({ course, unit, playback, onRefresh, onNext }: { course: Course;
     {unit.type !== "quiz" ? <div className="lesson-body">{unit.body}</div> : <>
       {unit.body && <div className="lesson-body">{unit.body}</div>}
       <p>Passing score: {unit.passingScore}%. {attemptsSoFar ? `Attempts so far: ${attemptsSoFar}. ` : ""}You can retake this quiz as many times as you need.</p>
-      {questions.map((question, index) => <fieldset key={question.id} disabled={busy || Boolean(progress?.completedAt)}><legend>{index + 1}. {question.prompt}</legend>{question.multiple && <p><em>Select all that apply.</em></p>}{question.options.map(option => {
+      {questions.map((question, index) => <fieldset key={question.id} disabled={busy || refreshPending || Boolean(progress?.completedAt)}><legend>{index + 1}. {question.prompt}</legend>{question.multiple && <p><em>Select all that apply.</em></p>}{question.options.map(option => {
         const chosen = answers[question.id], picked = Array.isArray(chosen) ? chosen : [];
         return question.multiple
           ? <label className="learning-check" key={option.id}><input type="checkbox" name={question.id} checked={picked.includes(option.id)} onChange={() => setAnswers({ ...answers, [question.id]: picked.includes(option.id) ? picked.filter(id => id !== option.id) : [...picked, option.id] })} />{option.text}</label>
@@ -87,11 +104,12 @@ function Lesson({ course, unit, playback, onRefresh, onNext }: { course: Course;
       })}</fieldset>)}
     </>}
     {error && <p className="learning-error" role="alert">{error}</p>}
+    {refreshPending && !busy && <button className="button button-secondary" onClick={() => void refreshProgress()}>Retry progress update</button>}
     {message && <p role="status">{message}</p>}
     {progress?.completedAt ? <button className="button button-primary" onClick={onNext}>Continue</button> : <>
       {mustWatch && <p role="status">Watch the full video to continue.</p>}
-      {unit.type !== "quiz" && <label className="learning-check"><input type="checkbox" checked={attested} disabled={busy || mustWatch} onChange={event => setAttested(event.target.checked)} />{unit.type === "attestation" ? "I agree to the attestation above." : "I have completed this lesson."}</label>}
-      <button className="button button-primary" disabled={busy || (unit.type === "quiz" ? unit.questions.some(q => { const answer = answers[q.id]; return Array.isArray(answer) ? answer.length === 0 : !answer; }) : !attested)} onClick={() => void submit()}>{busy ? "Saving…" : unit.type === "quiz" ? "Submit answers" : "Complete lesson"}</button>
+      {unit.type !== "quiz" && <label className="learning-check"><input type="checkbox" checked={attested} disabled={busy || refreshPending || mustWatch} onChange={event => setAttested(event.target.checked)} />{unit.type === "attestation" ? "I agree to the attestation above." : "I have completed this lesson."}</label>}
+      <button className="button button-primary" disabled={busy || refreshPending || (unit.type === "quiz" ? unit.questions.some(q => { const answer = answers[q.id]; return Array.isArray(answer) ? answer.length === 0 : !answer; }) : !attested || mustWatch)} onClick={() => void submit()}>{busy ? "Saving…" : unit.type === "quiz" ? "Submit answers" : "Complete lesson"}</button>
     </>}
   </section>;
 }
@@ -117,14 +135,20 @@ export function MyLearning() {
   const [rows, setRows] = useState<Awaited<ReturnType<typeof learningApi.mine>>>([]);
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
-  useEffect(() => { let active = true; void learningApi.mine().then(value => { if (active) { setRows(value); setLoaded(true); } }, caught => { if (active) setError(errorMessage(caught)); }); return () => { active = false; }; }, []);
-  return <div className="learning-workspace"><nav className="learning-links"><Link to="/learn">All courses</Link></nav><h1>My learning</h1>{error && <p role="alert">{error}</p>}{loaded && !rows.length && <p>You have not started a course in the Hub yet.</p>}{rows.map(row => <article className="panel learning-notice" key={row.enrollmentId}><div><h2>{row.title}</h2><p>{row.completedUnits} of {row.totalUnits} lessons completed</p></div>{row.completedAt ? <Link className="button button-secondary" to={`/learn/certificates/${row.enrollmentId}`}>Completion certificate</Link> : <Link className="button button-primary" to={`/learn/courses/${row.itemId}?enrollment=${row.enrollmentId}`}>Continue course</Link>}</article>)}</div>;
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => { let active = true; void learningApi.mine().then(value => { if (active) { setRows(value); setLoaded(true); } }, caught => { if (active) setError(errorMessage(caught)); }); return () => { active = false; }; }, [attempt]);
+  return <div className="learning-workspace"><nav className="learning-links"><Link to="/learn">All courses</Link></nav><h1>My learning</h1>{error && <p role="alert">{error} <button onClick={() => { setError(""); setAttempt(value => value + 1); }}>Retry my learning</button></p>}{!loaded && !error && <p role="status">Loading your learning…</p>}{loaded && !rows.length && <p>You have not started a course in the Hub yet.</p>}{rows.map(row => <article className="panel learning-notice" key={row.enrollmentId}><div><h2>{row.title}</h2><p>{row.completedUnits} of {row.totalUnits} lessons completed</p></div>{row.completedAt ? <Link className="button button-secondary" to={`/learn/certificates/${row.enrollmentId}`}>Completion certificate</Link> : <Link className="button button-primary" to={`/learn/courses/${row.itemId}?enrollment=${row.enrollmentId}`}>Continue course</Link>}</article>)}</div>;
 }
 
 export function LearningCertificate() {
   const { enrollmentId = "" } = useParams();
+  return <Certificate key={enrollmentId} enrollmentId={enrollmentId} />;
+}
+
+function Certificate({ enrollmentId }: { enrollmentId: string }) {
   const [certificate, setCertificate] = useState<Awaited<ReturnType<typeof learningApi.certificate>> | null>(null);
   const [error, setError] = useState("");
-  useEffect(() => { let active = true; void learningApi.certificate(enrollmentId).then(value => { if (active) setCertificate(value); }, caught => { if (active) setError(errorMessage(caught)); }); return () => { active = false; }; }, [enrollmentId]);
-  return <div className="learning-workspace"><nav className="learning-links"><Link to="/learn/my">My learning</Link><button onClick={() => window.print()}>Print certificate</button></nav>{error && <p role="alert">{error}</p>}{certificate && <section className="panel learning-certificate"><p>CareMetric Learning</p><h1>Certificate of completion</h1><h2>{certificate.learnerName}</h2><p>completed</p><h2>{certificate.courseTitle}</h2><p>{new Date(certificate.completedAt).toLocaleDateString()} · Estimated learning time: {certificate.durationMinutes} minutes</p>{certificate.finalScore != null && <p>Post-test score: {certificate.finalScore}%{certificate.passingScore != null && ` (passing score ${certificate.passingScore}%)`}</p>}<p>This certificate records course completion. It does not confer accredited continuing education credit.</p><small>Certificate {certificate.certificateId}<br />Course revision {certificate.versionId}</small></section>}</div>;
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => { let active = true; void learningApi.certificate(enrollmentId).then(value => { if (active) setCertificate(value); }, caught => { if (active) setError(errorMessage(caught)); }); return () => { active = false; }; }, [enrollmentId, attempt]);
+  return <div className="learning-workspace"><nav className="learning-links"><Link to="/learn/my">My learning</Link><button disabled={!certificate} onClick={() => window.print()}>Print certificate</button></nav>{error && <p role="alert">{error} <button onClick={() => { setError(""); setAttempt(value => value + 1); }}>Retry certificate</button></p>}{!certificate && !error && <p role="status">Loading certificate…</p>}{certificate && <section className="panel learning-certificate"><p>CareMetric Learning</p><h1>Certificate of completion</h1><h2>{certificate.learnerName}</h2><p>completed</p><h2>{certificate.courseTitle}</h2><p>{new Date(certificate.completedAt).toLocaleDateString()} · Estimated learning time: {certificate.durationMinutes} minutes</p>{certificate.finalScore != null && <p>Post-test score: {certificate.finalScore}%{certificate.passingScore != null && ` (passing score ${certificate.passingScore}%)`}</p>}<p>This certificate records course completion. It does not confer accredited continuing education credit.</p><small>Certificate {certificate.certificateId}<br />Course revision {certificate.versionId}</small></section>}</div>;
 }

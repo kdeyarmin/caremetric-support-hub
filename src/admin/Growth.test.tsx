@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Growth } from './Growth';
 const settings=vi.hoisted(()=>({demoMode:false}));
@@ -8,6 +8,13 @@ vi.mock('../lib/config',()=>({config:settings}));
 import { growthMutation } from './growthClient';
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); settings.demoMode=false; });
 const empty = { total:0,items:[],work:[],metrics:[],deliveries:[],policies:[],services:{sending:false,signing:false,postalAddress:false,research:false} };
+const opportunity = (id: string, name: string) => ({id,organization_id:`org-${id}`,product:'carebase',name,domain:'example.org',internal:false,tenant_id:null,contact_id:null,email:null,contact_name:null,eligibility:null,verified_at:null,contact_version:null,stage:'identified',goal:'',memory:{},next_action:'Research',next_at:'2026-11-03T12:00:00Z',trial_end:null,renewal_at:null,owner_agent:'marketing_manager',fit:null,intent:null,version:1});
+const evidence = (claim: string) => ({evidence:[{id:claim,source_url:'https://example.org/about',claim,confidence:'high',observed_at:'2026-11-03T12:00:00Z'}],messages:[],events:[]});
+function deferredResponse() {
+ let resolve!: (response: Response) => void;
+ const promise = new Promise<Response>(done => { resolve = done; });
+ return { promise, resolve: (data: unknown) => resolve(new Response(JSON.stringify(data))) };
+}
 it('blocks reads and mutations in preview without sending a credentialed request',async()=>{
  settings.demoMode=true;
  const request=vi.fn();vi.stubGlobal('fetch',request);
@@ -49,4 +56,45 @@ it('creates a prospect with an explicit product and reports uncertain results', 
   await waitFor(()=>expect(screen.getByRole('alert').textContent).toBe('Refresh before retrying.'));
   const posted=JSON.parse(String(request.mock.calls[1][1].body));
   expect(posted).toMatchObject({operation:'create',data:{name:'Example Care',domain:'example.org',product:'caremetric-intel'}});
+});
+
+it('ignores a delayed detail response for a previously selected organization',async()=>{
+ const first = deferredResponse();
+ vi.stubGlobal('fetch',vi.fn(async(_url:unknown,init:RequestInit)=>{
+  const {operation,data} = JSON.parse(String(init.body));
+  if(operation==='workspace')return new Response(JSON.stringify({...empty,total:2,items:[opportunity('a','First organization'),opportunity('b','Second organization')]}));
+  return data.id==='a'?first.promise:new Response(JSON.stringify(evidence('Second organization evidence')));
+ }));
+ render(<MemoryRouter><Growth/></MemoryRouter>);
+ fireEvent.click(await screen.findByRole('button',{name:'First organization'}));
+ fireEvent.click(screen.getByRole('button',{name:'Second organization'}));
+ await screen.findByText(/Second organization evidence/);
+ await act(async()=>first.resolve(evidence('First organization evidence')));
+ expect(screen.queryByText(/First organization evidence/)).toBeNull();
+ expect(screen.getByText(/Second organization evidence/)).toBeTruthy();
+});
+
+it('hides the old pipeline while another page loads and ignores a late refresh',async()=>{
+ const refresh = deferredResponse(), page = deferredResponse();
+ const request=vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({...empty,total:51,items:[opportunity('a','First page')]}))).mockReturnValueOnce(refresh.promise).mockReturnValueOnce(page.promise);
+ vi.stubGlobal('fetch',request);
+ render(<MemoryRouter><Growth/></MemoryRouter>);
+ await screen.findByRole('button',{name:'First page'});
+ fireEvent.click(screen.getByRole('button',{name:'Refresh'}));
+ fireEvent.click(screen.getByRole('button',{name:'Next'}));
+ expect(screen.queryByRole('button',{name:'First page'})).toBeNull();
+ await act(async()=>page.resolve({...empty,total:51,items:[opportunity('b','Second page')]}));
+ await screen.findByRole('button',{name:'Second page'});
+ await act(async()=>refresh.resolve({...empty,total:51,items:[opportunity('a','First page')]}));
+ expect(screen.queryByRole('button',{name:'First page'})).toBeNull();
+ expect(screen.getByRole('button',{name:'Second page'})).toBeTruthy();
+});
+
+it('clears a load error after a successful refresh',async()=>{
+ vi.stubGlobal('fetch',vi.fn().mockRejectedValueOnce(new Error('Connection interrupted')).mockResolvedValueOnce(new Response(JSON.stringify(empty))));
+ render(<MemoryRouter><Growth/></MemoryRouter>);
+ await screen.findByText('Connection interrupted');
+ fireEvent.click(screen.getByRole('button',{name:'Refresh'}));
+ await screen.findByText(/Sending: disabled/);
+ expect(screen.queryByRole('alert')).toBeNull();
 });

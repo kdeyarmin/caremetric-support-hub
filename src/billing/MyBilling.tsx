@@ -48,8 +48,8 @@ export function MyBilling({ client = customerBillingClient, demo = config.demoMo
       {!tenant.has_customer && <p className="billing-muted">Billing is not set up for this organization yet.</p>}
       {tenant.subscriptions.length ? <div className="billing-list">{tenant.subscriptions.map((subscription, index) => <article className="billing-card" key={index}>
         <div className="billing-card-head"><div><h3>{subscription.app ?? 'CareMetric'}</h3>
-          <p>{subscription.status === 'trialing' && subscription.trial_end ? `Free trial through ${dateLabel(subscription.trial_end)}` : subscription.cancel_at_period_end ? `Ends ${dateLabel(subscription.current_period_end)}` : subscription.current_period_end ? `Renews ${dateLabel(subscription.current_period_end)}` : ''}</p></div>
-          <StatusChip status={subscription.status} label={statusLabels[subscription.status as SubscriptionStatus] ?? subscription.status} /></div>
+          <p>{subscription.status === 'canceled' ? '' : subscription.status === 'trialing' && subscription.trial_end ? `Free trial through ${dateLabel(subscription.trial_end)}` : subscription.cancel_at_period_end ? `Ends ${dateLabel(subscription.current_period_end)}` : subscription.current_period_end && subscription.status !== 'paused' ? `Renews ${dateLabel(subscription.current_period_end)}` : ''}</p></div>
+          <div className="billing-actions"><StatusChip status={subscription.status} label={statusLabels[subscription.status as SubscriptionStatus] ?? subscription.status} />{subscription.paused && <StatusChip status="paused" label="Collection paused" />}</div></div>
         <ul className="billing-items">{subscription.items.map((item, itemIndex) => <li key={itemIndex}><div><strong>{item.name}</strong>{item.kind === 'addon' && <small className="billing-muted"> · add-on</small>}</div>
           <div>{itemPrice(item)}</div></li>)}</ul>
         {subscription.status === 'past_due' && <p className="billing-error">A payment is past due. Pay the open invoice below or update your payment method.</p>}

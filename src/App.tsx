@@ -1,4 +1,3 @@
-import { Growth } from './admin/Growth';
 import { isCentralHubApp, isHubAdminApp } from './hubScope';
 import {
   AlertCircle,
@@ -32,7 +31,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { demoRepository, repository } from "./data";
 import { defaultIntegrationRollout, integrationRolloutBySlug } from "./data/integrationRollout";
@@ -52,7 +51,6 @@ import {
   type SupportCase,
   type SupportContact,
 } from "./domain";
-import { CourseLibrary, CourseEditor } from "./learning/Editor";
 import { CoursePlayer, MyLearning, LearningCertificate } from "./learning/Player";
 import { LearningCatalog } from "./learning/Catalog";
 import { AiCaseTools } from "./support/AiCaseTools";
@@ -67,23 +65,12 @@ import { demoCommunicationsClient } from "./support/demoCommunications";
 import { PhoneRegistry } from "./support/PhoneRegistry";
 import { HelpArticlePage } from "./support/HelpArticle";
 import { helpArticlePath, isPublicHelpPath } from "./support/helpArticles";
-import { AdminWorkspace } from "./admin/AdminWorkspace";
-import { ControlCenter } from "./admin/ControlCenter";
-import { PortfolioRollup } from "./admin/PortfolioRollup";
-import { GoLiveReadiness } from "./admin/GoLiveReadiness";
-import { Team } from "./admin/Team";
-import { Leads } from "./admin/Leads";
-import { BillingWorkspace } from "./billing/BillingWorkspace";
-import { CustomerBilling } from "./billing/CustomerBilling";
-import { MyBilling } from "./billing/MyBilling";
-import { Subscriptions } from "./billing/Subscriptions";
 import { canManageOrganizationBilling } from "./billing/billingModel";
 import { CustomerCenter } from "./self-service/CustomerCenter";
 import { TrainingProfile } from "./self-service/TrainingProfile";
 import { Manuals } from "./self-service/Manuals";
 import { selfServiceClient } from "./self-service/client";
 import type { SelfServiceWorkspace } from "./self-service/protocol";
-import { BulkEmail } from "./admin/BulkEmail";
 import { SupportReadiness } from "./support/SupportReadiness";
 import { adminClient } from "./admin/client";
 import { safeLearningPath } from "./learning/model";
@@ -93,7 +80,6 @@ import { appSession } from "./lib/appSession";
 import { SmsSignIn } from "./auth/SmsSignIn";
 import { SignOutButton } from "./auth/SignOutButton";
 import { PrivateHubNotice } from "./auth/PrivateHubNotice";
-import { PublicationImport } from "./imports/PublicationImport";
 import { PublicationVideo } from "./imports/PublicationVideo";
 import { courseLaunchUrl } from "./security/courseLaunch";
 import { reconcileCaseSelection } from "./security/caseListState";
@@ -107,6 +93,24 @@ import {
   type CaseThreadStatus,
 } from "./security/caseThreadState";
 import { prepareMutationRequest, type PendingMutationRequest } from "./security/mutationRequestKey";
+
+import { PageBoundary } from "./PageBoundary";
+
+const Growth = lazy(() => import("./admin/Growth").then(module => ({ default: module.Growth })));
+const AdminWorkspace = lazy(() => import("./admin/AdminWorkspace").then(module => ({ default: module.AdminWorkspace })));
+const ControlCenter = lazy(() => import("./admin/ControlCenter").then(module => ({ default: module.ControlCenter })));
+const PortfolioRollup = lazy(() => import("./admin/PortfolioRollup").then(module => ({ default: module.PortfolioRollup })));
+const GoLiveReadiness = lazy(() => import("./admin/GoLiveReadiness").then(module => ({ default: module.GoLiveReadiness })));
+const Team = lazy(() => import("./admin/Team").then(module => ({ default: module.Team })));
+const Leads = lazy(() => import("./admin/Leads").then(module => ({ default: module.Leads })));
+const BulkEmail = lazy(() => import("./admin/BulkEmail").then(module => ({ default: module.BulkEmail })));
+const BillingWorkspace = lazy(() => import("./billing/BillingWorkspace").then(module => ({ default: module.BillingWorkspace })));
+const CustomerBilling = lazy(() => import("./billing/CustomerBilling").then(module => ({ default: module.CustomerBilling })));
+const MyBilling = lazy(() => import("./billing/MyBilling").then(module => ({ default: module.MyBilling })));
+const Subscriptions = lazy(() => import("./billing/Subscriptions").then(module => ({ default: module.Subscriptions })));
+const PublicationImport = lazy(() => import("./imports/PublicationImport").then(module => ({ default: module.PublicationImport })));
+const CourseLibrary = lazy(() => import("./learning/Editor").then(module => ({ default: module.CourseLibrary })));
+const CourseEditor = lazy(() => import("./learning/Editor").then(module => ({ default: module.CourseEditor })));
 
 interface HubData {
   actor: ActorContext;
@@ -375,6 +379,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
               <span><strong>Live implementation preview.</strong> Demo data stays in this session; the dedicated backend is provisioned and remains gated until administrator and compliance setup is complete.</span>
             </div>
           )}
+          <PageBoundary key={`${data.actor.id}:${location.pathname}`}>
           <Routes>
             <Route path="/self-service" element={<CustomerCenter key={data.actor.id} organizationBilling={tenantAdmin} />} />
             <Route path="/account/profile" element={<TrainingProfile key={data.actor.id} />} />
@@ -412,6 +417,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/learn" element={<LearningCatalog products={data.products} legacyContent={data.content} canAuthor={platformAdmin} />} />
             <Route path="*" element={<Navigate to={data.actor.role === "platform_admin" ? "/admin" : "/overview"} replace />} />
           </Routes>
+          </PageBoundary>
         </main>
       </div>
     </div>
