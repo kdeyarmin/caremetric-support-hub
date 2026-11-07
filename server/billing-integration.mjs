@@ -438,6 +438,8 @@ try {
   await rpc('save_tenant', { p_tenant_id: tenant, p_record: { name: 'Synthetic Billing Agency ' + suffix, industry: '', status: 'active' }, p_expected_updated_at: (await customer(tenant)).updated_at });
   sub = (await customer(tenant)).subscriptions[0];
   await command({ action: 'subscription.cancel', subscription: subscriptionId, when: 'immediately', prorate: false, expected_version: sub.version, request_key: key() });
+  // The proration choice reaches Stripe in the query string, where Stripe's own SDKs put DELETE parameters.
+  assert.deepEqual(stripe.requests.filter(request => request.method === 'DELETE' && request.path === `/v1/subscriptions/${subscriptionId}`).at(-1).params, { prorate: 'false', invoice_now: 'false' });
   entitlement = await billing.entitlements(bearer, { account });
   assert.deepEqual([entitlement.entitled, entitlement.status, entitlement.products], [false, 'none', []]);
 
