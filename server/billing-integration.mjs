@@ -446,6 +446,18 @@ try {
   entitlement = await billing.entitlements(bearer, { account });
   assert.deepEqual([entitlement.entitled, entitlement.status, entitlement.products], [false, 'none', []]);
 
+  // The customer is deleted in the Stripe Dashboard (Stripe cancels its subscriptions; the webhook marks the mirror deleted). The
+  // screen offers "Set up billing" again, and saving it creates a new customer while the old subscriptions keep their history.
+  const oldCustomerId = (await customer(tenant)).customer.id;
+  await admin.query('update private.billing_customers set deleted=true,version=version+1,updated_at=now() where tenant_id=$1', [tenant]);
+  assert.equal((await customer(tenant)).customer, null, 'a deleted customer reads as none');
+  const renewed = await command({ action: 'customer.save', tenant_id: tenant, email: 'renewed@test.invalid', name: 'Synthetic Billing Agency', expected_version: 0, request_key: key() });
+  assert.notEqual(renewed.id, oldCustomerId);
+  const afterRenewal = await customer(tenant);
+  assert.deepEqual([afterRenewal.customer.id, afterRenewal.customer.email], [renewed.id, 'renewed@test.invalid'], 'the tenant is billed through its new customer');
+  assert.ok(afterRenewal.subscriptions.some(item => item.id === subscriptionId), 'the old subscriptions keep their history');
+  assert.equal((await admin.query('select stripe_customer_id from private.billing_subscriptions where stripe_subscription_id=$1', [subscriptionId])).rows[0].stripe_customer_id, oldCustomerId);
+
   // Coupon lifecycle and key revocation.
   space = await workspace();
   await command({ action: 'coupon.update', coupon, name: 'Partner twenty', expected_version: space.coupons.find(item => item.id === coupon).version, request_key: key() });
