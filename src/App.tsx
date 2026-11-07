@@ -33,7 +33,7 @@ import {
   Zap,
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { demoRepository, repository } from "./data";
 import { defaultIntegrationRollout, integrationRolloutBySlug } from "./data/integrationRollout";
 import {
@@ -1065,7 +1065,6 @@ openHelp({
 }
 
 export default function App() {
-  const navigate = useNavigate();
   const location = useLocation();
   const [data, setData] = useState<HubData>(emptyData);
   const [loading, setLoading] = useState(true);
@@ -1074,10 +1073,9 @@ export default function App() {
   // Every load of the shell's data takes the next number; a response is used only while its number is still the latest,
   // so a slow read can never overwrite newer data or bring data back after sign-out.
   const dataRequest = useRef(0);
-  // React Router gives navigate a new identity on every location change; holding it in a ref keeps the session check
-  // below from re-running (and reloading the whole Hub) each time the visitor moves to another page.
-  const navigateRef = useRef(navigate);
-  useEffect(() => { navigateRef.current = navigate; }, [navigate]);
+  // A destination saved when the sign-in code was requested, opened once sign-in completes at the home address. It is rendered as a
+  // redirect, not navigated to: an imperative navigation runs as a transition and loses to the shell's own home redirect.
+  const [homeRedirect, setHomeRedirect] = useState<string | null>(null);
 
   const readHubData = useCallback(async (actorOverride?: ActorContext): Promise<HubData> => {
     const [actor, products, contacts, cases, content] = await Promise.all([
@@ -1129,7 +1127,7 @@ export default function App() {
       // A saved destination is used once: from the home address it opens; anywhere else it is discarded, so it cannot
       // redirect a later sign-in.
       const pendingPath = takePendingHelpPath();
-      if (pendingPath && window.location.pathname === "/") navigateRef.current(pendingPath, { replace: true });
+      if (pendingPath && window.location.pathname === "/") setHomeRedirect(pendingPath);
       await load(actor);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Your session could not be checked.");
@@ -1191,5 +1189,10 @@ export default function App() {
   if (loading) return <LoadingScreen />;
   if (error) return <ErrorScreen message={error} onRetry={() => void (publicPortal ? loadPublicHelp() : authenticated ? loadAuthenticated() : load())} />;
   if (publicPortal) return <PublicHelpShell data={data} />;
+  if (homeRedirect) {
+    if (location.pathname === "/") return <Navigate to={homeRedirect} replace />;
+    // Used once: having left the home address, it no longer applies.
+    setHomeRedirect(null);
+  }
   return <AppShell data={data} onPersonaChange={(mode) => void changePersona(mode)} />;
 }

@@ -64,6 +64,13 @@ describe("moving between pages", () => {
 });
 
 describe("a saved sign-in destination", () => {
+  it("opens once sign-in completes at the home address, ahead of the home page", async () => {
+    window.localStorage.setItem("caremetric.pendingHelpPath", "/help");
+    render(<MemoryRouter initialEntries={["/"]}><App /><WhereAmI /></MemoryRouter>);
+    await waitFor(() => expect(path()).toBe("/help"));
+    expect(window.localStorage.getItem("caremetric.pendingHelpPath")).toBeNull();
+  });
+
   it("is discarded when sign-in completes on another page, so it cannot redirect a later visit", async () => {
     window.localStorage.setItem("caremetric.pendingHelpPath", "/help");
     window.history.replaceState({}, "", "/cases");

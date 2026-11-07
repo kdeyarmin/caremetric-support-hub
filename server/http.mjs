@@ -284,8 +284,8 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
         }
         if(path==='/api/auth/sms/start' && req.method==='POST') {
           const {phone}=await jsonBody(req,2048);
+          // The same answer for every number: whether one is registered, or its text could be sent, is never revealed.
           const result=await auth.start(phone,visitorAddress(req));
-          if(result.unavailable) throw new HttpError(503,'SMS is temporarily unavailable. Please try again later.');
           return json({challengeId:result.id,retryAfter:60},200,[cookie(challengeCookie,result.browserToken,300)]);
         }
         if(path==='/api/auth/sms/verify' && req.method==='POST') {
