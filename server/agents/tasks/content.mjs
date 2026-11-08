@@ -19,7 +19,7 @@
  */
 import { contentDeclared } from '../content/executor.mjs';
 import { products } from '../content/facts.mjs';
-import { markets } from '../marketing.mjs';
+import { marketedNow, markets } from '../marketing.mjs';
 import { buildUserMessage, promptVersion, responseSchema, systemPrompt } from '../content/prompt.mjs';
 import { checkOutreach, composeOutreachEmail, outreachProducts, outreachPromptVersion, outreachSchema, outreachSystemPrompt, outreachUserMessage } from '../content/outreach.mjs';
 import { chooseTopic, topics as backlog } from '../content/topics.mjs';
@@ -54,8 +54,7 @@ const nextBudgetDay = (task, moment) => {
 const aborted = () => Object.assign(new Error('The agent task is no longer running.'), { code: 'task_cancelled' });
 
 export function contentHandlers({ store, notifier, model = null, features = null, topics: allTopics = backlog, marketed = null, log = line => console.warn(line) }) {
-  // Articles and outreach only for the products the team markets (marketing.mjs: Intel while CareBase is in its pilot).
-  const topics = allTopics.filter(item => markets(marketed, item.product));
+  // Articles and outreach only for the products the team markets (marketing.mjs: the owner's switches, read when each task starts).
   if (!contentDeclared(features) || model?.configured !== true) return {};
 
   async function weekly(task, { signal, now = () => new Date() } = {}) {
@@ -65,6 +64,8 @@ export function contentHandlers({ store, notifier, model = null, features = null
     // Observe reads and reports only: it could not propose the article, so it does not pay for one.
     if (task.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only' } };
 
+    const marketedList = await marketedNow(marketed);
+    const topics = allTopics.filter(item => markets(marketedList, item.product));
     if (!topics.length) return { result: { skipped: 'no_marketed_product' } };
     const state = await store.contentState(topics.map(item => item.slug));
     const topic = chooseTopic({ backlog: topics, articles: state?.articles ?? [], takenSlugs: state?.takenSlugs ?? [], questions: state?.questions ?? [], now: moment });
@@ -112,22 +113,23 @@ export function contentHandlers({ store, notifier, model = null, features = null
       if ((state?.outreachMonths ?? []).includes(month)) return { result: { skipped: 'already_sent', month } };
     }
     if (task.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only', month } };
-    if (!outreachProducts(marketed).pitches.length) return { result: { skipped: 'no_marketed_product', month } };
+    const marketedList = await marketedNow(marketed);
+    if (!outreachProducts(marketedList).pitches.length) return { result: { skipped: 'no_marketed_product', month } };
 
     let summary = null;
     const label = monthLabel.format(due);
     const ran = await model.run(task, {
-      promptVersion: outreachPromptVersion, system: [{ text: outreachSystemPrompt, cache: true }], user: outreachUserMessage(label, marketed),
+      promptVersion: outreachPromptVersion, system: [{ text: outreachSystemPrompt, cache: true }], user: outreachUserMessage(label, marketedList),
       schema: outreachSchema, maxTokens: 6000, effort: effortOf(task),
       describe: output => {
-        summary = checkOutreach(output, { marketed });
+        summary = checkOutreach(output, { marketed: marketedList });
         return `Drafted outreach for ${month}: ${plural(summary.listings.length, 'listing')} and ${plural(summary.pitches.length, 'pitch').replace('pitchs', 'pitches')} passed the checks${summary.dropped ? `, ${summary.dropped} left out (${summary.reasons.join(', ')})` : ''}.`;
       },
     }, { signal });
     if (ran.outcome === 'budget_exhausted') return { status: 'queued', retryAt: nextBudgetDay(task, moment), result: { deferred: 'budget', month } };
     if (ran.outcome === 'refused') return { result: { outcome: 'refused', month } };
 
-    const checked = summary ?? checkOutreach(ran.output, { marketed });
+    const checked = summary ?? checkOutreach(ran.output, { marketed: marketedList });
     if (signal?.aborted) throw aborted();
     const email = composeOutreachEmail({ month, label, ...checked });
     const results = await notifier.send({

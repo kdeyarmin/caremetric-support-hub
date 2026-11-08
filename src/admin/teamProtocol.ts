@@ -60,12 +60,21 @@ export const offerCouponSchema = z.object({
 });
 export const offersSchema = z.object({ offers: z.array(offerSchema), coupons: z.array(offerCouponSchema) });
 /**
+ * One product the team could market, switched on or off by the owner. The agents read the switches when each task starts: a product
+ * switched off gets no prospecting, cold email, posts, ads, articles or outreach drafts, and the Sales Executive leaves its prospects to
+ * the owner. Customers' onboarding and support do not depend on it. `changedAt` is handed back with a change.
+ */
+export const marketingProductSchema = z.object({
+  product: z.enum(["caremetric-intel", "carebase", "advisors"]), label: z.string().max(80), description: z.string().max(300), marketed: z.boolean(), changedAt: instant,
+});
+/**
  * `waitingActions` counts approved messages needing checking or completion, including external email recovery candidates; it is not
- * an unsent count. `autonomy` and `offers` are null (or absent) when the Hub's database does not have autonomy steps or the offer menu yet.
+ * an unsent count. `autonomy`, `offers` and `marketing` are null (or absent) when the Hub's database does not have autonomy steps, the offer
+ * menu or the marketing switches yet.
  */
 export const overviewSchema = z.object({
   team: teamSchema, services: servicesSchema, waitingActions: z.number().int().min(0), autonomy: z.array(autonomyStepSchema).nullable().optional(),
-  offers: offersSchema.nullable().optional(),
+  offers: offersSchema.nullable().optional(), marketing: z.array(marketingProductSchema).nullable().optional(),
 });
 /**
  * `error` is the code of why an approved action could not be carried out (see `errorLabel`). `needsSession` is the server saying it
@@ -113,6 +122,7 @@ export const auditSchema = page(auditItem);
 export type TeamOverview = z.infer<typeof overviewSchema>;
 export type AutonomyStep = z.infer<typeof autonomyStepSchema>;
 export type MenuOffer = z.infer<typeof offerSchema>;
+export type MarketingProduct = z.infer<typeof marketingProductSchema>;
 export type OfferCoupon = z.infer<typeof offerCouponSchema>;
 export type TeamAgent = z.infer<typeof agentSchema>;
 export type TeamSchedule = z.infer<typeof scheduleSchema>;

@@ -21,7 +21,7 @@ import { screenIdentifiers } from '../concierge/screen.mjs';
 import { replyBody } from '../concierge/templates.mjs';
 import { easternDate, easternMidnight } from '../accounts/week.mjs';
 import { permanent, recordRun } from '../tasks/shared.mjs';
-import { markets } from '../marketing.mjs';
+import { marketedNow, markets } from '../marketing.mjs';
 import { checkSalesReply, guideLinks, replyLinks, wordLimits } from './check.mjs';
 import { buildUserMessage, responseSchema, salesPromptVersion, systemPrompt } from './prompt.mjs';
 
@@ -163,7 +163,7 @@ export function salesReplyHandler({ store, notifier = null, drafting = null, boo
     if (inbound.body.length >= readChars) return { result: { outcome: 'skipped', reason: 'unread', reference: snapshot.reference } };
     const flagged = screenIdentifiers(`${snapshot.subject ?? ''}\n${inbound.body}`).flagged;
 
-    const marketedProduct = markets(marketed, payload.product);
+    const marketedProduct = markets(await marketedNow(marketed), payload.product);
     const asked = flagged ? { state: 'phi' } : !marketedProduct ? { state: 'not_marketed' } : drafting ? await askModel({ task, snapshot, inbound, route, payload, signal }) : { state: 'off' };
     if (signal?.aborted) throw Object.assign(new Error('The task was stopped.'), { code: 'task_timeout', transient: true });
 

@@ -88,6 +88,18 @@ describe("AI team client", () => {
     await expect(teamClient.setStep({ category: "account_emails", action: "hold", expectedChangedAt: step.changedAt })).rejects.toThrow();
   });
 
+  it("posts a marketing switch and checks the product it gets back", async () => {
+    const product = { product: "carebase", label: "CareMetric CareBase", description: "Off while CareBase is in its pilot.", marketed: true, changedAt: "2026-11-08T21:00:00.123456+00:00" };
+    const fetcher = respond(product);
+    vi.stubGlobal("fetch", fetcher);
+    expect(await teamClient.setMarketing({ product: "carebase", marketed: true, expectedChangedAt: "2026-11-08T20:00:00.000001+00:00" })).toEqual(product);
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/admin/team/marketing");
+    expect(JSON.parse(String(init.body))).toEqual({ product: "carebase", marketed: true, expectedChangedAt: "2026-11-08T20:00:00.000001+00:00" });
+    vi.stubGlobal("fetch", respond({ ...product, product: "breathe" }));
+    await expect(teamClient.setMarketing({ product: "carebase", marketed: true, expectedChangedAt: product.changedAt })).rejects.toThrow();
+  });
+
   it("asks the read RPCs for a page with the database's parameter names", async () => {
     const fetcher = respond({ items: [], total: 0, offset: 15, limit: 15 });
     vi.stubGlobal("fetch", fetcher);

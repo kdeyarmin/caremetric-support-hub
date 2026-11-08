@@ -2,7 +2,7 @@ import { contentBrief } from './content.mjs';
 import { weekStart } from '../agents/accounts/week.mjs';
 import { assessProspect } from './assessment.mjs';
 import { planOpportunity, products } from './policy.mjs';
-import { markets } from '../agents/marketing.mjs';
+import { marketedNow, markets } from '../agents/marketing.mjs';
 import { draftMessage } from './draft.mjs';
 import { renderEmail } from '../email-layout.mjs';
 import { evaluateGrowth } from './evaluation.mjs';
@@ -32,21 +32,23 @@ async function oneAnswer(call,signal) {
   catch(error) { if(signal?.aborted||error?.transient===true||!perOpportunityModelCodes.has(error?.code))throw error; return null; }
 }
 
-// `marketed` (agents/marketing.mjs): the products the Marketing Manager may find, research and email prospects for. A prospect of
-// another product (CareBase while it is in its pilot) gets no research, no plan and no email; customers' work is not affected.
+// `marketed` (agents/marketing.mjs): the products the Marketing Manager may find, research and email prospects for, read from the
+// owner's switches when each task starts. A prospect of another product (CareBase while it is in its pilot) gets no research, no plan
+// and no email; customers' work is not affected.
 export function growthHandlers({growth,model,notifier,features=null,marketed=null}) {
   if(!growth)return {};
   const autonomy=declared(features);
   async function sweep(task,{signal,now=()=>new Date()}={}) {
     await growth.store.maintenance?.();
     const owner=task.kind==='growth.success'?'account_manager':'marketing_manager'; let inspected=0,planned=0,drafted=0,offset=0,total=1;
+    const marketedList=owner==='marketing_manager'?await marketedNow(marketed):null;
     // Researched prospects that meet the qualification rules move to qualified before the pipeline is read (nothing is sent here).
     if(autonomy&&owner==='marketing_manager'&&task.agent?.autonomy!=='observe')await growth.store.autoQualify(qualifyLimit);
     while(offset<total) {
       signal?.throwIfAborted(); const page=await growth.store.snapshot(offset);total=page.total;offset+=page.items.length;if(!page.items.length)break;
       for(const o of page.items) {
         signal?.throwIfAborted(); if(o.owner_agent!==owner)continue; inspected++;
-        if(owner==='marketing_manager' && !markets(marketed,o.product))continue;
+        if(owner==='marketing_manager' && !markets(marketedList,o.product))continue;
         const plans=planOpportunity(o,now());
         if(task.agent?.autonomy==='observe')continue;
         if(owner==='marketing_manager' && ['identified','researched'].includes(o.stage) && (!o.assessed_at || (o.evidence??[]).some(e=>Date.parse(e.observed_at)>Date.parse(o.assessed_at)))) {
@@ -86,7 +88,8 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     if(!growth.research?.configured)return {result:{skipped:'research_not_configured'}};
     if(task.agent?.autonomy==='observe')return {result:{skipped:'observe_only'}};
     let candidates=0;
-    const searched=products.filter(product=>markets(marketed,product));
+    const marketedList=await marketedNow(marketed);
+    const searched=products.filter(product=>markets(marketedList,product));
     if(!searched.length)return {result:{skipped:'no_marketed_product'}};
     // A different segment-and-place search each day (playbook.mjs), so discovery keeps finding new organizations; CareBase stays in Pennsylvania.
     for(const product of searched){signal?.throwIfAborted(); const rows=await growth.research.search(product,{query:discoveryQuery(product,now()),signal});signal?.throwIfAborted();candidates+=await growth.store.discover(product,rows);}
@@ -122,8 +125,9 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     const week=weekStart(now()),context=await growth.store.contentContext(week);
     if(context.planned && task.sourceKind!=='owner')return {result:{skipped:'already_planned',contentWeek:week}};
     let proposals=0;
+    const marketedList=await marketedNow(marketed);
     for(const policy of context.policies) {
-      signal?.throwIfAborted(); if(!policy.approved_claim.trim()||!markets(marketed,policy.product))continue;
+      signal?.throwIfAborted(); if(!policy.approved_claim.trim()||!markets(marketedList,policy.product))continue;
       const sources=await growth.research.search(policy.product,{topic:policy.product==='carebase'?'staff training reporting questions':'provider referral development questions',signal});
       const brief=await contentBrief({product:policy.product,claim:policy.approved_claim,bookingUrl:policy.booking_url,sources,task,model,signal});
       signal?.throwIfAborted(); if(!brief)continue;

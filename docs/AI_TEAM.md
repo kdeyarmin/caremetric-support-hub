@@ -25,12 +25,16 @@ is built so far.
 > The **Social Media Manager** runs the Facebook Page, Instagram, the LinkedIn Page and the Meta and LinkedIn ad accounts for engagement: a weekly post plan,
 > replies to comments and messages, a daily ad review that pauses, refreshes and (only with your approval) re-budgets ads, and a
 > weekly report. See [Social media](SOCIAL_MEDIA.md).
-> **Only CareMetric Intel is marketed** while CareBase is in its pilot (see "What the team markets").
+> **Only CareMetric Intel is marketed** while CareBase is in its pilot. You switch products on and off under "Products we market" on
+> the AI team page (see "What the team markets").
 
 ## What the team markets
 
 On 2026-11-08 the owner decided **CareBase stays in a pilot** with a few facilities the owner chooses, and the team markets
-**CareMetric Intel only**. One setting, `HUB_MARKETED_PRODUCTS` (`server/agents/marketing.mjs`), decides it for every agent:
+**CareMetric Intel only**. The owner switches each product on or off under **Products we market** on the AI team page; the switches
+live in the database (`20261108210000_marketing_switches.sql`, gate `20261108210100_marketing_switches_contract.sql`, feature
+`platform.agents.marketing.v1`) and every marketing task reads them when it starts (`server/agents/marketing.mjs`), so a change applies
+to the next run without a restart. They decide it for every agent:
 
 - **Marketing Manager:** discovers, scores and emails prospects for marketed products only. A prospect of another product gets no
   research, plan or email. The five CareBase prospects found on 2026-11-08 were moved to `nurture` with the note "held for the CareBase
@@ -44,9 +48,9 @@ On 2026-11-08 the owner decided **CareBase stays in a pilot** with a few facilit
 Customers are not marketing: the Account Manager's onboarding, trial, renewal and support work for CareBase customers (the pilot
 facilities) goes on.
 
-Unset, the setting means Intel only. To market CareBase again, set `HUB_MARKETED_PRODUCTS=caremetric-intel,carebase` on Railway
-(`advisors` adds Healthcare Advisors articles and pitches; `none` stops all marketing). A misspelt product is ignored, so a mistake
-markets less, never more.
+Intel starts switched on; CareBase and Healthcare Advisors start off. To market CareBase when its pilot ends, press **Start marketing**
+beside it. Every change is audited (`agent.marketing`), and a change made from an out-of-date page is refused. Until the switches'
+migration is applied, the team markets Intel only.
 
 ## The model
 
