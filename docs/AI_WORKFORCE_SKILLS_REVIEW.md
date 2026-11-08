@@ -30,6 +30,22 @@ and sends a weekly pipeline review.
 | Chief of Staff | Morning brief, autonomy hand-overs | Fit for purpose; the brief already carries growth counts | Unchanged |
 | Platform Engineer | Health and lead form checks | Fit for purpose (no model) | Unchanged |
 
+## Addendum: the Social Media Manager
+
+The owner then asked for the team to run CareMetric's social media for engagement: posts, replies to social requests, the most
+appealing ads, and continual evaluation and change. A tenth agent, the **Social Media Manager**, does that for the Facebook Page,
+Instagram and the Meta ad account (LinkedIn posts are drafted for pasting; its API needs partner approval). Its skills:
+
+- **Content craft:** a hook in the first line, one idea per post, useful before promotional, one call to action, a weekly mix of tips,
+  capability, engagement questions and at most one offer, and a style for each platform.
+- **Learning:** each plan learns from the last four weeks' engagement.
+- **Ad copywriting:** distinct angles, written within Meta's personal-attributes policy.
+- **Replies:** short, warm and private-first.
+- **Evaluation:** a fixed set of rules (`social-rules.1`) that pauses losing ads, refreshes tiring ones and raises a budget only under the
+  owner's cap with the owner's approval.
+
+Everything is checked against the same fact-sheet rules. See [Social media](SOCIAL_MEDIA.md).
+
 ## Findings
 
 | Priority | Finding | Effect | Change |

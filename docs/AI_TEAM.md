@@ -22,6 +22,9 @@ is built so far.
 > The **Sales Executive** answers CareBase and Intel prospects with drafts checked against the go-to-market fact sheet and sends a
 > weekly pipeline review (see "The Sales Executive"). The revenue agents share one sales playbook, `server/growth/playbook.mjs`. The
 > [November 8 workforce skills review](AI_WORKFORCE_SKILLS_REVIEW.md) explains why.
+> The **Social Media Manager** runs the Facebook Page, Instagram and the Meta ad account for engagement: a weekly post plan,
+> replies to comments and messages, a daily ad review that pauses, refreshes and (only with your approval) re-budgets ads, and a
+> weekly report. See [Social media](SOCIAL_MEDIA.md).
 
 ## The model
 
@@ -859,6 +862,22 @@ no permitted contact. The stored body carries counts only; organization names tr
 `npm test -- server/agents/sales` runs its unit tests and `node server/agents-sales-integration.mjs` (with `HUB_TEST_DATABASE_URL`
 on a local Supabase) checks the hand-off through the real server role.
 
+## The Social Media Manager
+
+Runs CareMetric's Facebook Page, Instagram professional account and Meta ad account for engagement, and writes LinkedIn posts for
+the owner to paste. It starts **paused, in Propose**, trusted with nothing. Its five tasks:
+
+- `social.plan` ("Weekly social plan"): drafts and proposes a week of posts.
+- `social.inbox` and `social.interaction` ("Look for new comments and messages", "Answer a comment or message").
+- `social.ads` ("Daily ad review"): proposes pausing losers, new copy and measured budget increases.
+- `social.report` ("Weekly social report").
+
+Its six action kinds are `social.post`, `social.reply`, `social.moderate`, `social.ad_pause`, `social.ad_create` and
+`social.ad_budget`. Three autonomy steps, all off, hand over posts, replies (with hiding spam) and ad tuning (pausing and new ads inside
+existing budgets). A budget change is never automatic: the database refuses an automatically approved one and so does the executor.
+Comments and messages reach the model only with `HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true`, and no other person's words are stored. Setup,
+the ad rules, the checks and the Meta permissions are in [Social media](SOCIAL_MEDIA.md).
+
 ## The Content Marketer
 
 Writes the help center's public articles, one a week, for the owner to approve, and once a month drafts outreach for the
@@ -1254,6 +1273,12 @@ Apply the migrations in order with the usual procedure:
    Executive (paused, Propose) and its daily `sales.review` schedule, add the server-only `private.sales_handoff` and declare
    `platform.agents.sales-executive.v1` (it needs customer growth, the Concierge, the hardening and the communications inbox).
    Restart the Hub after it. Nothing changes until the owner resumes the Sales Executive.
+18. `20261108190000_social_manager.sql`, then its gate `20261108190100_social_manager_contract.sql`, which seed the Social Media
+   Manager (paused, Propose) and its four schedules, add the six `social.*` action kinds and four targets with their ownership check
+   (a budget change can never be automatically approved), the server-only `private.social_open_targets` and `private.social_schedule`,
+   and the three autonomy steps (off), and declare `platform.agents.social.v1` (it needs the control plane, the hardening, autonomy
+   steps and customer growth). Restart the Hub after it. Nothing reaches Meta until `HUB_META_ACCESS_TOKEN` and `HUB_META_PAGE_ID` are set
+   and the owner resumes the agent.
 
 The Hub build does not require any of these features, so a Hub whose database lacks them still starts and
 serves everything else. The AI team is opt-in twice over: nothing runs unless `HUB_AGENTS_ENABLED`

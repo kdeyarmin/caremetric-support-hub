@@ -55,9 +55,10 @@ export function actionExecutor({ store, executors = {}, log = line => console.wa
         ok = true;
       } catch (error) {
         const code = codeOf(error);
-        // Growth deferrals get a durable retry time; immediately releasing them would starve later ready actions.
+        // Growth deferrals get a durable retry time, and a post held for its time slot waits until then (the store routes by kind);
+        // immediately releasing them would starve later ready actions.
         if (code === 'action_deferred'
-          && await Promise.resolve(store.deferExecution?.(execution.id, execution.execution ?? null)).catch(() => false) === true) {
+          && await Promise.resolve(store.deferExecution?.(execution.id, execution.execution ?? null, execution.kind)).catch(() => false) === true) {
           return { executed: false, failed: false, skipped: true, needsSession: false };
         }
         // A session that lapsed before anything was sent waits for the owner's next press.

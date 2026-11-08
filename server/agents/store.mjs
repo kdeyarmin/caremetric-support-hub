@@ -14,12 +14,21 @@ import { transaction } from '../sms-auth.mjs';
  * work can be handed back. Against a database without those operations the calls keep their old shape
  * and the extras are ignored, so a server can be deployed before the migration is applied.
  */
-export function sqlAgentStore(pool, { fenced = false, growth = false } = {}) {
+export function sqlAgentStore(pool, { fenced = false, growth = false, social = false } = {}) {
   const call = (operation, args = []) => transaction(pool, async client =>
     (await client.query(`select ${operation}(${args.map((_, index) => `$${index + 1}`).join(', ')}) as result`, args)).rows[0].result);
   return {
     fenced,
-    ...(growth ? { deferExecution:(actionId,execution)=>call('private.growth_defer_action',[actionId,execution]) } : {}),
+    // A deferred growth message waits 15 minutes; a social post waits for its time slot (platform.agents.social.v1).
+    ...(growth || social ? { deferExecution:(actionId,execution,kind=null)=>(String(kind??'').startsWith('social.')
+      ? (social ? call('private.social_schedule',[actionId,execution]) : false)
+      : (growth ? call('private.growth_defer_action',[actionId,execution]) : false)) } : {}),
+    ...(social ? {
+      /** Targets with an open social action ("kind:target"), so a change is never proposed twice. */
+      socialOpenTargets: () => call('private.social_open_targets'),
+      /** Holds a proposed or approved post until its `scheduledFor`. */
+      socialSchedule: (actionId, execution = null) => call('private.social_schedule', [actionId, execution]),
+    } : {}),
     ...(growth ? { reserveBudget:(taskId,cents)=>call('private.growth_budget_reserve',[taskId,cents]),releaseBudget:id=>call('private.growth_budget_release',[id]),accountsPage: ({limit=200,offset=0}={})=>call('private.agent_accounts_page',[limit,offset]), notificationStatus: key=>call('private.growth_notification_status',[key]) } : {}),
     /** Turns due schedules of the given task kinds (the ones this server can handle) into tasks. */
     fireSchedules: (kinds, limit = 10) => call('private.agent_schedule_fire', [limit, kinds]),
