@@ -720,8 +720,11 @@ approves the exact text on the Team screen, or, for an agent on **Act**, when th
 | Trial check-in | When 5 days or fewer (and more than 2) are left in a trial | A personal check-in asking whether anything is in the way. It says it is not a billing notice |
 | Testimonial request | 45 to 60 days after the account's first paid invoice for the product, on any subscription it has had for it, with no open high or urgent case | Would they share a sentence or two: their words are used only with their permission, in the form they approve, with or without their name, and a reply is how they say yes |
 
-They are warm and short, in the branded layout under the product's own name (`server/email-layout.mjs`): a header
-with "CareMetric Intel" or "CareMetric CareBase", an inbox preview line, a headline, "Hello,", numbered first steps
+They are warm and short, in the branded layout and in the theme of the product's own app (`server/email-layout.mjs`),
+so a customer's emails from the Hub look like the ones the app sends: Intel's are in its Emberline theme (the Intel
+logo and "Set your marketing on FIRE!" over the fire image, the dark card, the ember accent and pill buttons, as in
+the Intel app's own emails), CareBase's in the Hub's look under the name "CareMetric CareBase". Each has an inbox
+preview line, a headline, "Hello,", numbered first steps
 with a button to the product's help, the Founders Sale terms in a highlighted box in the trial check-in, the consent
 terms in a highlighted box in the testimonial request, and a sign-off from the product's team with its website. Each
 has a plain-text part that says the same. They say nothing about AI, quote no price, promise no time or outcome, never

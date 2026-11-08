@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LAYOUT_MARKER, PRODUCT_WORDMARK, calloutTones, escapeHtml, palette, renderEmail } from './email-layout.mjs';
+import { LAYOUT_MARKER, PRODUCT_WORDMARK, calloutTones, emailThemes, escapeHtml, intelPalette, palette, renderEmail, themeFor } from './email-layout.mjs';
 import { htmlToText, replySubject, supportReplyEmail } from './communications.mjs';
 import { bulkEmailHtml, composeBulkEmail } from './bulk-email.mjs';
 import { lifecycleInput, renderLifecycleEmail } from './agents/accounts/lifecycle.mjs';
@@ -114,7 +114,7 @@ describe('product emails', () => {
     expect(email.html).toContain(`${LAYOUT_MARKER}="letter"`);
     expect(email.html).not.toContain(PRODUCT_WORDMARK);
     expect(email.html).not.toContain(palette.canvas);
-    expect(email.html).toContain('A question about your outreach.</div>');
+    expect(email.html).toContain('>A question about your outreach.&#847;');
     expect(email.html).toContain('<a href="https://www.caremetricintel.com/" target="_blank"');
     expect(email.html).toContain('>caremetricintel.com</a>');
     expect(email.text).toBe('Hello,\n\nTry it here:\nhttps://www.caremetricintel.com/\n\nThe CareMetric Intel team\nhttps://www.caremetricintel.com\n\nCareMetric\nUnsubscribe: https://hub.example.org/u/t');
@@ -126,6 +126,52 @@ describe('product emails', () => {
     expect(html.match(/<a href="([^"]+)"/g)).toEqual(['<a href="https://www.caremetricintel.com/Help"', '<a href="https://www.caremetricintel.com/"']);
     expect(html).toContain('https://evil.example/ and https://www.caremetricintel.com/Helpx');
     expect(renderEmail({ layout: 'personal', title: 'T', signature: [], footer: [], blocks: [{ type: 'message', text: 'https://www.caremetricintel.com/' }] }).html).not.toContain('<a href');
+  });
+});
+
+describe('product themes', () => {
+  const footer = ['You are receiving this email because Riverbend Home Health has a CareMetric Intel account.', { label: 'Unsubscribe', url: 'https://hub.example.org/u/t' }];
+  it('dresses an Intel email in Emberline, as the Intel app sends it: header, fire, dark card, pill button, its footer lines', () => {
+    const email = renderEmail({ theme: 'intel', title: 'Welcome', heading: 'Welcome to CareMetric Intel', preheader: 'Your first steps.',
+      blocks: [{ type: 'button', label: 'Open the Help page', url: 'https://www.caremetricintel.com/Help' }, { type: 'callout', tone: 'success', text: 'Founders Sale.' }],
+      signature: ['The CareMetric Intel team'], footer });
+    expect(email.html).toContain('data-theme="intel"');
+    expect(email.html).toContain('<meta name="color-scheme" content="dark">');
+    expect(email.html).toContain('https://caremetricintel.com/brand/caremetric-logo-reverse.png');
+    expect(email.html).toContain('https://caremetricintel.com/brand/emberline-fire.png');
+    expect(email.html).toContain('>Set your marketing on FIRE!</p>');
+    expect(email.html).toContain(`background-color:${intelPalette.canvas};`);
+    expect(email.html).toContain(`background-color:${intelPalette.card};`);
+    expect(email.html).toContain(`border-radius:999px;background-color:${intelPalette.heading};`);
+    expect(email.html).toContain(`background-color:${emailThemes.intel.callouts.success.fill};`);
+    expect(email.html).toContain("font-family:'Geist',");
+    expect(email.html).toContain('clicktracking="off"');
+    expect(email.html).not.toContain(PRODUCT_WORDMARK);
+    expect(email.html).not.toContain(palette.brand);
+    expect(email.text.endsWith('Unsubscribe: https://hub.example.org/u/t\nQuestions? Email support@caremetric.ai.\nSet your marketing on FIRE!\nCareMetric Intel · caremetricintel.com')).toBe(true);
+  });
+
+  it('writes an Intel letter as the Intel app\'s own letter: dark, no header, the ember accent on its links', () => {
+    const email = renderEmail({ layout: 'letter', theme: 'intel', title: 'T', blocks: [{ type: 'message', text: 'Hello,\n\nhttps://www.caremetricintel.com/', links: ['https://www.caremetricintel.com/'] }],
+      signature: ['The CareMetric Intel team', { label: 'caremetricintel.com', url: 'https://www.caremetricintel.com' }], footer });
+    expect(email.html).toContain(`${LAYOUT_MARKER}="letter" data-theme="intel"`);
+    expect(email.html).toContain(`<body bgcolor="${intelPalette.card}"`);
+    expect(email.html).toContain(`color:${intelPalette.body};`);
+    expect(email.html).toContain(`color:${intelPalette.brand};text-decoration:underline;">https://www.caremetricintel.com/</a>`);
+    expect(email.html).not.toContain('emberline-fire.png');
+    expect(email.text).not.toContain('Set your marketing on FIRE!');
+  });
+
+  it('keeps the Hub\'s own look by default and for every product without a theme here', () => {
+    expect(themeFor('caremetric-intel')).toBe('intel');
+    expect(themeFor('intel')).toBe('intel');
+    for (const product of ['carebase', 'advisors', null, undefined]) expect(themeFor(product)).toBe('hub');
+    const email = renderEmail({ title: 'T', heading: 'H', blocks: [], footer: ['F'] });
+    expect(email.html).toContain('data-theme="hub"');
+    expect(email.html).toContain(`>${PRODUCT_WORDMARK}</td></tr>`);
+    expect(email.html).toContain('<meta name="color-scheme" content="light">');
+    expect(email.html).not.toContain('clicktracking');
+    expect(renderEmail({ theme: 'nonsense', title: 'T', blocks: [], footer: [] }).html).toContain('data-theme="hub"');
   });
 });
 

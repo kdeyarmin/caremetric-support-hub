@@ -179,7 +179,7 @@ it('sends a growth message as a letter: Hello, the approved words, the product t
  const email=growthEmail({product:'caremetric-intel',subject:'Physician outreach',body,postalAddress:'1 Main St, Altoona, PA',unsubscribeUrl:'https://hub.example.org/api/growth/unsubscribe/t'});
  expect(email.text).toBe(`Hello,\n\n${body}\n\nThe CareMetric Intel team\nhttps://www.caremetricintel.com\n\nCareMetric\n1 Main St, Altoona, PA\nUnsubscribe from these emails: https://hub.example.org/api/growth/unsubscribe/t`);
  expect(email.html).toContain('data-caremetric-email="letter"');
- expect(email.html).toContain('Your agency covers three counties.</div>');
+ expect(email.html).toContain('>Your agency covers three counties.&#847;');
  expect(email.html).toContain('<a href="https://www.caremetricintel.com/" target="_blank"');
  expect(email.html).toContain('<a href="https://hub.example.org/api/growth/unsubscribe/t" target="_blank"');
  // The company is named once when the postal address already begins with it.

@@ -23,7 +23,7 @@
  * company's postal address.
  */
 import { createHash } from 'node:crypto';
-import { renderEmail } from '../../email-layout.mjs';
+import { renderEmail, themeFor } from '../../email-layout.mjs';
 
 export const lifecycleFeature = 'platform.agents.lifecycle.v1';
 export const lifecycleTemplates = Object.freeze(['welcome', 'setup_nudge', 'trial_checkin', 'testimonial_ask']);
@@ -221,7 +221,8 @@ const footerLines = (input, unsubscribe, postalAddress) => [
 ];
 const text = (input, footer) => {
   const { subject, preheader, heading, blocks, signature: signOff } = lifecycleEmail(input);
-  return { subject, ...renderEmail({ layout: 'branded', brand: input.productName, title: subject, preheader, heading, recipientName: null, blocks, signature: signOff, footer }) };
+  // In the theme of the product's app, so a customer's emails from the Hub look like the ones the app sends (Intel's Emberline).
+  return { subject, ...renderEmail({ layout: 'branded', theme: themeFor(input.product), brand: input.productName, title: subject, preheader, heading, recipientName: null, blocks, signature: signOff, footer }) };
 };
 
 /** The words the owner approves: the subject line and the message, without the footer every email carries. */

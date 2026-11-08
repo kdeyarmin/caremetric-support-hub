@@ -4,7 +4,7 @@ import { assessProspect } from './assessment.mjs';
 import { planOpportunity, products } from './policy.mjs';
 import { marketedNow, markets } from '../agents/marketing.mjs';
 import { draftMessage } from './draft.mjs';
-import { renderEmail } from '../email-layout.mjs';
+import { renderEmail, themeFor } from '../email-layout.mjs';
 import { evaluateGrowth } from './evaluation.mjs';
 import { discoveryQuery, linkablePages, senderFor } from './playbook.mjs';
 const deferred=()=>Object.assign(new Error('Action is deferred'),{code:'action_deferred'});
@@ -138,7 +138,8 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
   return {'growth.pipeline':sweep,'growth.success':sweep,'growth.discovery':discover,'growth.content':content,...(autonomy?{'growth.evaluate':evaluate}:{})};
 }
 /**
- * A growth message as it is sent: a letter (it reads like an email a person typed, so it is not filed as a promotion), opening with
+ * A growth message as it is sent, in the theme of the product's app (Intel's Emberline for Intel): a letter (it reads like an email a
+ * person typed, so it is not filed as a promotion), opening with
  * "Hello,", the approved words, the product team's sign-off and website, then the company, its postal address and the unsubscribe link.
  * The inbox preview is the message's first sentence. Only the product's own pages become links.
  */
@@ -149,7 +150,7 @@ export function growthEmail({product,subject,body,postalAddress,unsubscribeUrl})
   const address=String(postalAddress??'').trim();
   // The company's name once: the postal address often begins with it.
   const footer=[...(/^caremetric\b/i.test(address)?[]:['CareMetric']),...(address?[address]:[]),{label:'Unsubscribe from these emails',url:unsubscribeUrl}];
-  return renderEmail({layout:'letter',title:subject,preheader:preheader.slice(0,150),
+  return renderEmail({layout:'letter',theme:themeFor(product),title:subject,preheader:preheader.slice(0,150),
     blocks:[{type:'message',text:`Hello,\n\n${words}`,links:linkablePages(product).map(page=>page.url)}],
     signature:[sender.team,...(sender.site?[sender.site]:[])],footer});
 }
