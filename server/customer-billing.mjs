@@ -6,6 +6,7 @@ import { assertPlanFits } from '../src/billing/planSize.ts';
 import { selfServiceApps } from '../src/self-service/protocol.ts';
 import { normalizers, StripeError, withAllSubscriptionItems } from './stripe.mjs';
 import { customerCheckoutService } from './customer-checkout.mjs';
+import { FOUNDERS_COUPON, foundersAmounts, foundersEligibility, foundersPrice, foundersWindow } from './founders-sale.mjs';
 
 const rows = subscription => (subscription.items?.data ?? []).map(item => ({ price: item.price.id ?? item.price, quantity: item.quantity ?? 1 })).sort((a, b) => a.price.localeCompare(b.price));
 export const sameBillingLines = (a, b) => JSON.stringify([...a].sort((x, y) => x.price.localeCompare(y.price))) === JSON.stringify([...b].sort((x, y) => x.price.localeCompare(y.price)));
@@ -98,6 +99,15 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
     const workspace = customerBillingWorkspace.parse(await requester.context(connection));
     if (workspace.app === 'pennsync') throw new HttpError(403, 'PennSync does not accept payments.');
     if (!selfServiceApps.includes(workspace.app)) throw new HttpError(403, 'This application is independent of the centralized Hub.');
+    const salePlan = workspace.catalog.find(price => price.active && price.kind === 'plan' && foundersPrice(price.id));
+    if (salePlan && workspace.role === 'organization_admin' && (!workspace.subscription || workspace.subscription.status === 'trialing')) {
+      const live = await stripe();
+      const current = workspace.subscription ? await live.get(`/v1/subscriptions/${workspace.subscription.id}`, { expand: ['discounts'] }) : null;
+      if (!current?.discounts?.length && await foundersEligibility(live, { app: workspace.app, customer: workspace.customer,
+        lines: [{ price: salePlan.id, quantity: 1 }], ownSubscription: current?.id })) {
+        workspace.founders_sale_price_ids = workspace.catalog.filter(price => price.active && foundersPrice(price.id)).map(price => price.id);
+      }
+    }
     // Individual and flat organization products need no fabricated native facility.
     // Quantity-based products require their app-owned usage adapter instead.
     if (workspace.mode === 'legacy' && !workspace.facilities.length && !workspace.allocations.length && workspace.subscription?.items.length) {
@@ -187,6 +197,11 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
       currency: workspace.subscription.currency, recurring_subtotal: visibleLines.reduce((sum, line) => sum + catalog.get(line.price).amount * line.quantity, 0),
       effective_at: hasScheduled ? renewal : null, expires_at: new Date(now() + 300000).toISOString(), has_immediate_change: hasImmediate, has_scheduled_change: hasScheduled, cancels_scheduled_change: cancelSchedule,
       summary: visibleLines.map(line => ({ name: catalog.get(line.price).name, quantity: line.quantity, amount: catalog.get(line.price).amount * line.quantity })) };
+    const saleWindow = foundersWindow(sub);
+    if (saleWindow && (hasScheduled ? renewalOf(sub) : now() / 1000) < saleWindow.end && visibleLines.every(line => foundersPrice(line.price))
+      && sub.discounts?.length === 1 && reference(sub.discounts[0].source?.coupon ?? sub.discounts[0].coupon) === FOUNDERS_COUPON) {
+      Object.assign(quote, foundersAmounts(visibleLines));
+    }
     const execution = { mode: workspace.mode, app: workspace.app, customer: workspace.customer, billing_revision: workspace.billing_revision, facility_id: input.facility_id, immediate, next, immediateLines, nextLines,
       intent: { plan: input.plan, addons: [...input.addons].sort() }, originalLines: rows(sub), purchaseItems: subscriptionItemPatch(sub, immediateLines), renewal, prorationDate, interval: workspace.subscription.interval, hasImmediate, hasScheduled, cancelSchedule, maximumDue: quote.due_now, currency: quote.currency, schedule: reference(sub.schedule) ?? null, scheduleFingerprint: priorSchedule ? scheduleFingerprint(priorSchedule) : null };
     return requester.saveQuote(id, input.connection_id, input.facility_id, input.request_id, quote, execution, workspace.subscription.version, sub.id);

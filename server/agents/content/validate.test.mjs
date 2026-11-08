@@ -14,7 +14,7 @@ const withSentence = (sentence, which = fire) => ({ body: `${(which === fire ? f
 
 describe('an article that passes', () => {
   it('accepts the authorized temporary sale while still rejecting an unlisted discount', () => {
-    const offer = 'Ask CareMetric for FOUNDERS50 at paid activation: 50% off for the first 12 months of paid service, then standard pricing resumes. Other promotions cannot be combined.';
+    const offer = 'Founders Sale applies automatically to eligible subscriptions: 50% off for the first 12 months of paid service, then standard pricing resumes. Other promotions cannot be combined.';
     expect(reasons(withSentence(offer))).toEqual([]);
     expect(reasons(withSentence(offer, referral), referral)).toEqual([]);
     expect(reasons(withSentence(offer.replace('50%', '60%')))).toContain('unlisted_number');

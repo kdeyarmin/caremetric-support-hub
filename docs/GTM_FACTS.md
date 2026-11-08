@@ -107,8 +107,8 @@ The live coupon is `caremetric_founders_sale_50_12m_20261108`, with promotion co
 `acct_1SinLKB06O2UFlNz` account. [Research, full price table, customer copy and redemption steps](PRICING_RESEARCH_AND_FOUNDERS_SALE.md)
 and [the verified live configuration](evidence/founders-sale-20261108.json) are the sources for this offer.
 
-- New paid product subscriptions qualify, including existing free-trial users. Ask CareMetric for FOUNDERS50 when
-  activating a paid plan. CareMetric applies the discount when paid service starts, after the free trial.
+- New paid product subscriptions qualify, including existing free-trial users. The discount is applied automatically
+  when paid service starts, after the free trial. No code or activation request is needed.
 - Monthly subscriptions receive 50% off the regular monthly rate for the introductory year. Annual subscriptions receive
   50% off the published annual price, paid upfront. Standard pricing resumes after the introductory year.
 - Includes current CareBase Core, Complete, Compliance Suite, Small Home, Small Home Complete, Train, Train Single Facility,
@@ -119,8 +119,8 @@ and [the verified live configuration](evidence/founders-sale-20261108.json) are 
 - Setup fees, Intel extra seats/branches/states, taxes, legacy plans and custom contracts are excluded. Growth's existing
   annual onboarding waiver remains. Other promotional discounts cannot be combined. One introductory year per organization
   and product; cancellation/restart does not reset it. No enrollment deadline or redemption cap has been set.
-- This is assisted activation, not an automatic website checkout discount. Stripe's first-time-only code can reject a
-  prior trial; CareMetric applies the underlying coupon for eligible trial conversions after checking eligibility.
+- Checkout, paid subscription creation and eligible trial conversions apply the underlying coupon automatically after
+  server-side eligibility checks. Quotes show the saving before payment; existing agreements are preserved.
 - Existing lifetime founding-partner agreements and Intel's earlier 25%-forever coupon are separate and unchanged.
   The new sale is never advertised as a lifetime rate. Product-site, signup, billing, help and terms propagation is tracked in the pricing report. No customer was enrolled.
 
