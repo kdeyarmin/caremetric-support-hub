@@ -18,7 +18,7 @@ const task = (over = {}) => ({
 const scheduled = (at, kind = 'content.weekly') => task({ kind, sourceKind: 'schedule', requestKey: `schedule:11111111-1111-4111-8111-111111111111:${at.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')}` });
 
 /** The real runtime against a scripted model, the handler against a recording store and notifier. */
-function fixture({ answer = () => completion(fireDrillDraft), remaining = 150, state = {}, recheck = {}, features = new Set([contentFeature]), deliveries = [{ channel: 'email', delivery: 'sent' }] } = {}) {
+function fixture({ answer = () => completion(fireDrillDraft), remaining = 150, state = {}, recheck = {}, features = new Set([contentFeature]), deliveries = [{ channel: 'email', delivery: 'sent' }], marketed = null } = {}) {
   const logs = [];
   const requests = [];
   const store = {
@@ -32,7 +32,7 @@ function fixture({ answer = () => completion(fireDrillDraft), remaining = 150, s
   const client = { messages: { create: vi.fn(async body => { requests.push(body); const value = answer(body); if (value instanceof Error) throw value; return value; }) } };
   const model = modelRuntime({ client, store, log: line => logs.push(line) });
   const notifier = { send: vi.fn(async () => deliveries) };
-  const handlers = contentHandlers({ store, notifier, model, features, log: line => logs.push(line) });
+  const handlers = contentHandlers({ store, notifier, model, features, marketed, log: line => logs.push(line) });
   return { store, client, requests, notifier, logs, handlers, model };
 }
 
@@ -162,6 +162,27 @@ describe('the weekly help article', () => {
     const outcome = await handlers['content.weekly'](task(), { now: () => tuesday });
     expect(requests[0].messages[0].content).toContain('Product: CareMetric Intel');
     expect(outcome.result).toMatchObject({ outcome: 'proposed', topic: 'home-health-referral-marketing', slug: referralDraft.slug });
+  });
+});
+
+describe('only the products the team markets', () => {
+  it('writes articles and outreach for Intel only while CareBase is in its pilot, and nothing when no product is marketed', async () => {
+    const articles = fixture({ answer: () => completion(referralDraft), marketed: ['caremetric-intel'] });
+    const outcome = await articles.handlers['content.weekly'](task(), { now: () => tuesday });
+    expect(topics.find(item => item.key === outcome.result.topic)?.product).toBe('intel');
+    expect(articles.store.contentState.mock.calls[0][0].every(slug => topics.find(item => item.slug === slug).product === 'intel')).toBe(true);
+
+    const drafts = fixture({ answer: () => completion(outreachDraft), marketed: ['caremetric-intel'] });
+    const sent = await drafts.handlers['content.outreach'](task({ kind: 'content.outreach' }), { now: () => tuesday });
+    expect(JSON.stringify(drafts.requests[0].messages)).toContain('only for CareMetric Intel');
+    expect(JSON.stringify(drafts.requests[0].messages)).not.toContain('CareBase');
+    expect(sent.result.listings + sent.result.pitches).toBeGreaterThan(0);
+    expect(drafts.notifier.send.mock.calls[0][0].blocks.filter(block => block.type === 'paragraph').map(block => block.text).join('\n')).not.toMatch(/CareBase|Healthcare Advisors/);
+
+    const none = fixture({ marketed: [] });
+    expect((await none.handlers['content.weekly'](task(), { now: () => tuesday })).result).toEqual({ skipped: 'no_marketed_product' });
+    expect((await none.handlers['content.outreach'](task({ kind: 'content.outreach' }), { now: () => tuesday })).result).toMatchObject({ skipped: 'no_marketed_product' });
+    expect(none.client.messages.create).not.toHaveBeenCalled();
   });
 });
 

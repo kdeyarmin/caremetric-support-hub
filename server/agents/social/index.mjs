@@ -41,7 +41,7 @@ export function socialTeam({ social = null, features = null, fetchImpl = fetch, 
   const linkedin = givenLinkedin ?? linkedinClient({ ...(config.linkedin ?? {}), fetchImpl });
   return {
     meta, linkedin,
-    handlers: ({ store, notifier, model, customerTextToAi, publicOrigin, log }) => socialHandlers({ store, notifier, model, meta, linkedin, settings: config.settings, imageUrls: config.imageUrls, customerTextToAi, publicOrigin, log }),
+    handlers: ({ store, notifier, model, customerTextToAi, publicOrigin, marketed = null, log }) => socialHandlers({ store, notifier, model, meta, linkedin, settings: config.settings, imageUrls: config.imageUrls, customerTextToAi, publicOrigin, marketed, log }),
     executors: ({ notifier, log }) => socialExecutors({ meta, linkedin, settings: config.settings, notifier, log }),
   };
 }

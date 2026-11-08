@@ -23,7 +23,7 @@ const linkedinOf = (over = {}) => ({
   adsOverview: vi.fn(async () => ({ adsets: [], ads: [], current: [], previous: [] })),
   ...over,
 });
-const harness = ({ meta = metaOf(), linkedin = null, model = null, customerTextToAi = false, settings = {}, imageUrls = ['https://cdn.example.com/brand-1.jpg'], openTargets = [] } = {}) => {
+const harness = ({ meta = metaOf(), linkedin = null, model = null, customerTextToAi = false, settings = {}, imageUrls = ['https://cdn.example.com/brand-1.jpg'], openTargets = [], marketed = null } = {}) => {
   const sent = [];
   let next = 0;
   const store = {
@@ -32,7 +32,7 @@ const harness = ({ meta = metaOf(), linkedin = null, model = null, customerTextT
     startRun: vi.fn(async () => 'r'), finishRun: vi.fn(async () => undefined),
   };
   const notifier = { send: vi.fn(async input => { sent.push(input); return [{ channel: 'email', delivery: 'sent' }]; }) };
-  const handlers = socialHandlers({ store, notifier, model, meta, linkedin, settings, imageUrls, customerTextToAi, publicOrigin: 'https://help.caremetric.ai', log: () => {} });
+  const handlers = socialHandlers({ store, notifier, model, meta, linkedin, settings, imageUrls, customerTextToAi, publicOrigin: 'https://help.caremetric.ai', marketed, log: () => {} });
   return { store, notifier, sent, meta, linkedin, handlers };
 };
 const modelReturning = output => ({ configured: true, run: vi.fn(async () => ({ outcome: 'completed', output })) });
@@ -51,7 +51,7 @@ describe('the weekly social plan', () => {
     const h = harness({ model });
     const outcome = await h.handlers['social.plan'](task('social.plan'), { now });
     const request = model.run.mock.calls[0][1];
-    expect(request.promptVersion).toBe('social-plan.2');
+    expect(request.promptVersion).toBe('social-plan.3');
     expect(JSON.parse(request.user)).toMatchObject({ weekStarting: '2026-11-09', postsToWrite: { facebook: 3, instagram: 2, linkedin: 3 }, bestRecent: [{ platform: 'facebook', engagement: 28 }] });
     expect(h.store.proposeAction).toHaveBeenCalledTimes(2);
     const [facebook, instagram] = h.store.proposeAction.mock.calls.map(call => call[0]);
@@ -268,6 +268,50 @@ describe('the daily ad review on LinkedIn', () => {
     expect(outcome.result).toMatchObject({ adsets: 1, pause: 1 });
     const again = harness({ linkedin, openTargets: ['social.ad_pause:linkedin:820002'], meta: metaOf({ configured: { pages: true, instagram: true, ads: false } }) });
     expect((await again.handlers['social.ads'](task('social.ads'), { now })).result).toMatchObject({ pause: 0 });
+  });
+});
+
+describe('only the products the team markets', () => {
+  const intelOnly = ['caremetric-intel'];
+  it('plans posts for Intel only while CareBase is in its pilot, and leaves a question about CareBase to the owner', async () => {
+    const model = modelReturning({ posts: [
+      { platform: 'facebook', product: 'carebase', pillar: 'tip', day: 2, text: 'Annual training hours piling up? Keep each staff member\'s training in one place.', linkId: '', hashtags: [] },
+      { platform: 'facebook', product: 'caremetric-intel', pillar: 'capability', day: 3, text: 'CareMetric Intel keeps outreach, follow-up and recorded referrals in one place.', linkId: 'intel-home', hashtags: ['HomeHealth'] },
+    ] });
+    const h = harness({ model, marketed: intelOnly });
+    const outcome = await h.handlers['social.plan'](task('social.plan'), { now });
+    const user = JSON.parse(model.run.mock.calls[0][1].user);
+    expect(user.products).toEqual(['caremetric-intel']);
+    expect(Object.keys(user.links)).toEqual(['caremetric-intel']);
+    expect(h.store.proposeAction.mock.calls.map(call => call[0].input.product)).toEqual(['caremetric-intel']);
+    expect(outcome.result.rejected).toEqual({ not_marketed: 1 });
+    expect((await harness({ model, marketed: [] }).handlers['social.plan'](task('social.plan'), { now })).result).toEqual({ skipped: 'no_marketed_product' });
+
+    const item = { platform: 'facebook', kind: 'comment', id: '1_10', parentId: '1111_1', url: 'https://facebook.com/c/10' };
+    const question = harness({ customerTextToAi: true, marketed: intelOnly, model: modelReturning({ intent: 'pricing', possiblePhi: false, needsOwner: false, hide: false, product: 'carebase', reply: 'Thanks for asking. You can start a 30-day free trial: https://cmcarebase.com/signup' }) });
+    expect((await question.handlers['social.interaction'](task('social.interaction', { payload: item }), { now })).result).toMatchObject({ outcome: 'left_for_owner', reason: 'product_not_marketed' });
+    expect(question.store.proposeAction).not.toHaveBeenCalled();
+  });
+
+  it('writes no new CareBase ad and raises no CareBase budget, but may still pause a losing CareBase ad', async () => {
+    const overview = {
+      adsets: [{ id: '40', name: 'PA operators', active: true, dailyBudget: 2000, objective: 'OUTCOME_LEADS' }],
+      ads: [
+        { id: '50', name: 'Training hook', adsetId: '40', active: true, createdAt: '2026-10-01T00:00:00Z', imageHash: 'img1', copy: { message: 'Track annual training hours across your homes.', headline: 'Start free', description: '30-day trial', link: 'https://cmcarebase.com/signup' } },
+        { id: '51', name: 'Generic', adsetId: '40', active: true, createdAt: '2026-10-01T00:00:00Z', imageHash: 'img2', copy: { message: 'Software for care homes.', headline: 'Learn more', description: '', link: 'https://cmcarebase.com/' } },
+      ],
+      current: [{ adId: '50', impressions: 6000, clicks: 120, spendCents: 4000, frequency: 1.6, results: 5 }, { adId: '51', impressions: 6000, clicks: 20, spendCents: 3500, frequency: 1.6, results: 0 }],
+      previous: [],
+    };
+    const model = modelReturning({ variants: [{ angle: 'survey readiness', message: 'Getting ready for your next DHS inspection? CareBase keeps staff training, resident records and survey documentation in one place.', headline: 'Try CareBase free', description: '30-day free trial', callToAction: 'SIGN_UP' }] });
+    const h = harness({ model, marketed: intelOnly, meta: metaOf({ adsOverview: vi.fn(async () => overview) }) });
+    await h.handlers['social.ads'](task('social.ads'), { now });
+    expect(h.store.proposeAction.mock.calls.map(call => call[0].kind)).toEqual(['social.ad_pause']);
+    expect(model.run).not.toHaveBeenCalled();
+    const winning = { ...overview, current: [overview.current[0], { adId: '51', impressions: 6000, clicks: 110, spendCents: 3000, frequency: 1.6, results: 4 }] };
+    const budget = harness({ marketed: intelOnly, settings: { targetCostCents: 2000, maxDailyBudgetCents: 3000 }, meta: metaOf({ adsOverview: vi.fn(async () => winning) }) });
+    expect((await budget.handlers['social.ads'](task('social.ads'), { now })).result).toMatchObject({ budget: 0 });
+    expect(budget.store.proposeAction).not.toHaveBeenCalled();
   });
 });
 

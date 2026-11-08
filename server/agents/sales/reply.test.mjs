@@ -17,7 +17,7 @@ const now = () => new Date('2026-11-08T15:00:00Z');
 const answer = (over = {}) => ({ outcome: 'completed', output: { intent: 'pricing', possiblePhi: false, needsOwner: false, nextStep: 'start_trial',
   reply: 'CareBase Core is $199 per facility per month, with unlimited residents and staff.\n\nYou can start a 30-day free trial here:\nhttps://cmcarebase.com/signup', ...over } });
 
-const fixture = ({ snapshot = snapshotOf(`How much is CareBase? ${canary}`), model = null, bookingUrl = null, answers = false, guides = null, status = 'proposed' } = {}) => {
+const fixture = ({ snapshot = snapshotOf(`How much is CareBase? ${canary}`), model = null, bookingUrl = null, answers = false, guides = null, status = 'proposed', marketed = null } = {}) => {
   const sent = [];
   const store = {
     communicationSnapshot: vi.fn(async () => snapshot),
@@ -27,13 +27,28 @@ const fixture = ({ snapshot = snapshotOf(`How much is CareBase? ${canary}`), mod
     proposeAction: vi.fn(async () => ({ id: 'action-1', status, requestKey: 'k1', created: true })),
   };
   const notifier = { send: vi.fn(async input => { sent.push(input); return [{ channel: 'email', delivery: 'sent' }]; }) };
-  const handler = salesReplyHandler({ store, notifier, drafting: model ? { model, guides } : null, bookingUrl, answers, log: () => {} });
+  const handler = salesReplyHandler({ store, notifier, drafting: model ? { model, guides } : null, bookingUrl, answers, marketed, log: () => {} });
   return { store, notifier, sent, run: (task = taskOf()) => handler(task, { now }) };
 };
 const modelOf = (result = answer()) => ({ configured: true, run: vi.fn(async () => (typeof result === 'function' ? result() : result)) });
 const kept = harness => JSON.stringify([harness.sent, harness.store.finishRun.mock.calls, harness.store.startRun.mock.calls, harness.store.proposeAction.mock.calls.map(([input]) => ({ ...input, preview: null, input: { ...input.input, body: null } }))]);
 
 describe('the Sales Executive answering a prospect', () => {
+  it('drafts nothing for a product the team is not marketing (CareBase in its pilot): it acknowledges and tells the owner the prospect is theirs', async () => {
+    const model = modelOf();
+    const harness = fixture({ model, marketed: ['caremetric-intel'] });
+    const outcome = await harness.run();
+    expect(model.run).not.toHaveBeenCalled();
+    expect(harness.store.proposeAction).toHaveBeenCalledWith(expect.objectContaining({ kind: 'communication.reply', input: expect.objectContaining({ template: 'sales' }) }));
+    expect(harness.sent).toEqual([expect.objectContaining({ subject: 'CM-2048: a CareMetric CareBase inquiry for you', dedupeKey: `sales:not-marketed:${ids.communication}` })]);
+    expect(harness.sent[0].body).toContain('join the pilot');
+    expect(outcome.result).toMatchObject({ draft: 'not_marketed', reply: 'sales', alert: 'email:sent' });
+    expect(kept(harness)).not.toContain(canary);
+    // Intel is marketed: its prospects still get a drafted answer.
+    const intel = fixture({ model: modelOf(answer({ reply: 'You can start a 30-day free trial here:\nhttps://www.caremetricintel.com/' })), marketed: ['caremetric-intel'], snapshot: snapshotOf('How does the trial work?', { productSlug: 'caremetric-intel', sourceSystem: 'intel.web' }) });
+    expect((await intel.run(taskOf({ product: 'caremetric-intel' }))).result.draft).toBe('drafted');
+  });
+
   it('drafts a fact-checked answer, proposes it for approval and tells the owner, keeping no prospect text', async () => {
     const model = modelOf();
     const harness = fixture({ model });

@@ -10,6 +10,10 @@ LinkedIn connects through its own API once LinkedIn approves CareMetric's develo
 the weekly plan still writes LinkedIn posts and emails them to the owner, ready to paste. Meta and LinkedIn are independent: either can
 be connected alone.
 
+Only the products in `HUB_MARKETED_PRODUCTS` are marketed: CareMetric Intel by default, while CareBase is in its pilot (see "What the
+team markets" in [AI_TEAM.md](AI_TEAM.md)). Posts, links in replies, new ads and budget increases are for those products only; a
+comment asking about another product is left for the owner, and a losing ad for one may still be paused.
+
 ## What it does
 
 | Work (task) | When | What happens |

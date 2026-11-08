@@ -9,7 +9,9 @@
  *   acknowledgment the Concierge would have (a first message only), so handing a prospect over never leaves them without an answer;
  * - a message the model reads as carrying personal identifiers gets the fixed notice asking to resend without them;
  * - a request not to be contacted, a cancellation, a negotiation, a contract or security question and anything else the model routes to
- *   the owner gets nothing from the agent: the owner already has the alert.
+ *   the owner gets nothing from the agent: the owner already has the alert;
+ * - a prospect asking about a product the team does not market (marketing.mjs: CareBase while it is in its pilot) is not sent to the
+ *   model and gets no drafted answer: a first message gets the fixed acknowledgment, and the owner is told the conversation is theirs.
  *
  * It keeps no message text: the task result, the run summary and the owner's email carry kinds, the product and the reference only.
  */
@@ -19,6 +21,7 @@ import { screenIdentifiers } from '../concierge/screen.mjs';
 import { replyBody } from '../concierge/templates.mjs';
 import { easternDate, easternMidnight } from '../accounts/week.mjs';
 import { permanent, recordRun } from '../tasks/shared.mjs';
+import { markets } from '../marketing.mjs';
 import { checkSalesReply, guideLinks, replyLinks, wordLimits } from './check.mjs';
 import { buildUserMessage, responseSchema, salesPromptVersion, systemPrompt } from './prompt.mjs';
 
@@ -47,7 +50,7 @@ function skipReason(snapshot, payload) {
  * `communication.answer`, which goes out without the owner's session once approved, or on its own once the owner hands "Sales answers"
  * over. `bookingUrl` (HUB_BOOKING_URL) is used only by the fixed acknowledgment, as the Concierge's; drafts never offer a meeting.
  */
-export function salesReplyHandler({ store, notifier = null, drafting = null, bookingUrl = null, answers = false, log = line => console.warn(line) }) {
+export function salesReplyHandler({ store, notifier = null, drafting = null, bookingUrl = null, answers = false, marketed = null, log = line => console.warn(line) }) {
   async function askModel({ task, snapshot, inbound, route, payload, signal }) {
     const prior = (snapshot.messages ?? []).filter(message => message.id !== inbound.id).slice(-2);
     if (prior.some(message => message.body.length >= readChars)) return { state: 'unavailable', reason: 'thread_truncated' };
@@ -130,6 +133,22 @@ export function salesReplyHandler({ store, notifier = null, drafting = null, boo
     }
   }
 
+  /** A prospect asking about a product the team does not market: the owner decides (for CareBase, who joins the pilot). */
+  async function tellOwnerNotMarketed({ task, snapshot, payload }) {
+    if (!notifier) return null;
+    try {
+      const results = await notifier.send({
+        severity: 'info', subject: `CM-${snapshot.reference}: a ${products[payload.product]} inquiry for you`,
+        body: `A prospect asked about ${products[payload.product]}, which the AI team is not marketing right now, so the Sales Executive did not draft an answer. The conversation is yours: decide whether this organization should join the pilot and reply in Communications.`,
+        dedupeKey: `sales:not-marketed:${snapshot.id}`, agentKey: task.agentKey, taskId: task.id,
+      });
+      return results.map(item => `${item.channel}:${item.delivery}`).join(',') || 'none';
+    } catch {
+      log(JSON.stringify({ event: 'hub_agent_sales_alert_unsent', task_id: task.id }));
+      return 'unsent';
+    }
+  }
+
   return async function reply(task, { now = () => new Date(), signal } = {}) {
     const payload = task.payload ?? {};
     if (!uuid.test(payload.communicationId ?? '') || !uuid.test(payload.messageId ?? '') || !products[payload.product]) throw permanent('invalid_payload');
@@ -144,7 +163,8 @@ export function salesReplyHandler({ store, notifier = null, drafting = null, boo
     if (inbound.body.length >= readChars) return { result: { outcome: 'skipped', reason: 'unread', reference: snapshot.reference } };
     const flagged = screenIdentifiers(`${snapshot.subject ?? ''}\n${inbound.body}`).flagged;
 
-    const asked = flagged ? { state: 'phi' } : drafting ? await askModel({ task, snapshot, inbound, route, payload, signal }) : { state: 'off' };
+    const marketedProduct = markets(marketed, payload.product);
+    const asked = flagged ? { state: 'phi' } : !marketedProduct ? { state: 'not_marketed' } : drafting ? await askModel({ task, snapshot, inbound, route, payload, signal }) : { state: 'off' };
     if (signal?.aborted) throw Object.assign(new Error('The task was stopped.'), { code: 'task_timeout', transient: true });
 
     const first = (snapshot.outboundCount ?? 0) === 0;
@@ -157,6 +177,7 @@ export function salesReplyHandler({ store, notifier = null, drafting = null, boo
     else if (first && !['owner_only', 'refused'].includes(asked.state)) { template = 'sales'; body = replyBody('sales', route, { bookingUrl }); }
 
     let alert = null;
+    if (asked.state === 'not_marketed') alert = await tellOwnerNotMarketed({ task, snapshot, payload });
     if (template) {
       outcome = await propose({ task, snapshot, route, body, template, intent: asked.intent ?? null, payload, sources: asked.sources ?? [] });
       if (template === 'drafted' && ['proposed', 'answer_proposed', 'answer_approved'].includes(outcome)) alert = await tellOwner({ task, snapshot, payload, now, sent: outcome === 'answer_approved' });

@@ -1,12 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { renderOwnerEmail } from '../notify.mjs';
 import { outreachDraft } from './fixtures.mjs';
-import { checkOutreach, composeOutreachEmail, maxDrafts, outreachSchema, outreachSystemPrompt } from './outreach.mjs';
+import { checkOutreach, composeOutreachEmail, maxDrafts, outreachProducts, outreachSchema, outreachSystemPrompt, outreachUserMessage } from './outreach.mjs';
 
 const listing = (over = {}) => ({ ...outreachDraft.listings[0], ...over });
 const pitch = (over = {}) => ({ ...outreachDraft.pitches[0], ...over });
 
 describe('the monthly outreach drafts', () => {
+  it('leaves out a draft for a product the team is not marketing, and asks only for marketed products', () => {
+    const intelOnly = ['caremetric-intel'];
+    const result = checkOutreach({ listings: [listing({ product: 'carebase' }), listing({ product: 'intel' })], pitches: [pitch({ product: 'advisors' })] }, { marketed: intelOnly });
+    expect(result.listings.map(item => item.product)).toEqual(['intel']);
+    expect(result.pitches).toEqual([]);
+    expect(result.reasons).toContain('not_marketed');
+    expect(outreachProducts(intelOnly)).toEqual({ listings: ['intel'], pitches: ['intel'] });
+    expect(outreachUserMessage('November 2026', intelOnly)).toMatch(/only for CareMetric Intel; the other products are not marketed yet/);
+    expect(outreachUserMessage('November 2026')).toContain('covering both software products');
+  });
+
   it('keeps drafts that pass, exactly as written', () => {
     const result = checkOutreach(outreachDraft);
     expect(result).toEqual({ listings: outreachDraft.listings, pitches: outreachDraft.pitches, dropped: 0, reasons: [], rewrites: 0 });
