@@ -34,7 +34,8 @@ and sends a weekly pipeline review.
 
 The owner then asked for the team to run CareMetric's social media for engagement: posts, replies to social requests, the most
 appealing ads, and continual evaluation and change. A tenth agent, the **Social Media Manager**, does that for the Facebook Page,
-Instagram and the Meta ad account (LinkedIn posts are drafted for pasting; its API needs partner approval). Its skills:
+Instagram, the LinkedIn Company Page and the Meta and LinkedIn ad accounts (LinkedIn connects once LinkedIn approves CareMetric's
+developer app; until then its posts are drafted for pasting). Its skills:
 
 - **Content craft:** a hook in the first line, one idea per post, useful before promotional, one call to action, a weekly mix of tips,
   capability, engagement questions and at most one offer, and a style for each platform.

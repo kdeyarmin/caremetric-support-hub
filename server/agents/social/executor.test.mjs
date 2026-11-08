@@ -11,9 +11,19 @@ const metaOf = (over = {}) => ({
   readAdset: vi.fn(async () => ({ id: '40', dailyBudget: 2000, active: true })), setDailyBudget: vi.fn(async () => ({ success: true })),
   ...over,
 });
-const run = (kind, input, { meta = metaOf(), settings = {}, autoApproved = false, notifier = null, targetId = '' } = {}) => {
-  const executors = socialExecutors({ meta, settings, notifier, now, log: () => {} });
-  return { meta, promise: executors[kind]({ id: 'a1', kind, input, autoApproved, targetId, agentKey: 'social_manager', taskId: 't1' }) };
+const linkedinPost = 'urn:li:share:7100000000000000001';
+const linkedinComment = 'urn:li:comment:(urn:li:activity:7100000000000000009,7200000000000000002)';
+const linkedinOf = (over = {}) => ({
+  configured: { page: true, ads: true },
+  publishPost: vi.fn(async () => ({ id: 'urn:li:share:7100000000000000099' })), reply: vi.fn(async () => ({ id: 'urn:li:comment:(urn:li:activity:1,2)' })),
+  remove: vi.fn(async () => ({ deleted: true })), readItem: vi.fn(async () => ({ text: 'x', answered: false, fromPage: false, history: [] })),
+  pauseAd: vi.fn(async () => ({ success: true })), createAd: vi.fn(async () => ({ id: '820009', postId: 'urn:li:share:7100000000000000020' })),
+  readAdset: vi.fn(async () => ({ id: '610001', dailyBudget: 2000, currency: 'USD', active: true })), setDailyBudget: vi.fn(async () => ({ success: true })),
+  ...over,
+});
+const run = (kind, input, { meta = metaOf(), linkedin = linkedinOf(), settings = {}, autoApproved = false, notifier = null, targetId = '' } = {}) => {
+  const executors = socialExecutors({ meta, linkedin, settings, notifier, now, log: () => {} });
+  return { meta, linkedin, promise: executors[kind]({ id: 'a1', kind, input, autoApproved, targetId, agentKey: 'social_manager', taskId: 't1' }) };
 };
 
 describe('carrying out social actions', () => {
@@ -59,7 +69,7 @@ describe('carrying out social actions', () => {
     const settings = { maxDailyBudgetCents: 3000 };
     const ok = run('social.ad_budget', budget, { settings });
     expect(await ok.promise).toEqual({ dailyBudget: 2400 });
-    expect(ok.meta.setDailyBudget).toHaveBeenCalledWith('40', 2400);
+    expect(ok.meta.setDailyBudget).toHaveBeenCalledWith('40', 2400, { currency: 'USD' });
     await expect(run('social.ad_budget', budget, { settings, autoApproved: true }).promise).rejects.toMatchObject({ code: 'auto_approved_refused' });
     await expect(run('social.ad_budget', budget, { settings: {} }).promise).rejects.toMatchObject({ code: 'over_budget_cap' });
     await expect(run('social.ad_budget', { ...budget, to: 2900 }, { settings }).promise).rejects.toMatchObject({ code: 'budget_step_too_large' });
@@ -75,5 +85,67 @@ describe('carrying out social actions', () => {
 
   it('refuses everything while Meta is not connected', async () => {
     await expect(run('social.ad_pause', { adId: '51' }, { targetId: '51', meta: metaOf({ configured: { pages: true, instagram: false, ads: false } }) }).promise).rejects.toMatchObject({ code: 'meta_not_configured' });
+  });
+});
+
+describe('carrying out social actions on LinkedIn', () => {
+  it('publishes a LinkedIn post through LinkedIn, with its link as a card', async () => {
+    const post = { platform: 'linkedin', product: 'carebase', message, link: 'https://cmcarebase.com/pa-training-requirements', linkLabel: 'PA training requirements', scheduledFor: '2026-11-10T13:45:00.000Z' };
+    const { meta, linkedin, promise } = run('social.post', { ...post, scheduledFor: '2026-11-10T15:30:00.000Z' });
+    expect(await promise).toEqual({ published: true, id: 'urn:li:share:7100000000000000099' });
+    expect(linkedin.publishPost).toHaveBeenCalledWith({ message, link: 'https://cmcarebase.com/pa-training-requirements', linkTitle: 'PA training requirements', imageUrl: null });
+    expect(meta.publishPost).not.toHaveBeenCalled();
+    await expect(run('social.post', post, { linkedin: linkedinOf({ configured: { page: false, ads: false } }) }).promise).rejects.toMatchObject({ code: 'linkedin_not_configured' });
+    // Meta being connected or not does not matter to a LinkedIn post.
+    expect(await run('social.post', { ...post, scheduledFor: '2026-11-10T15:30:00.000Z' }, { meta: metaOf({ configured: { pages: false, instagram: false, ads: false } }) }).promise).toMatchObject({ published: true });
+  });
+
+  it('replies to a LinkedIn comment only while it is unanswered', async () => {
+    const reply = { platform: 'linkedin', kind: 'comment', id: linkedinComment, parentId: linkedinPost, message: 'Thanks for asking. You can start a 30-day free trial: https://cmcarebase.com/signup', product: 'carebase' };
+    const { linkedin, promise } = run('social.reply', reply);
+    expect(await promise).toEqual({ replied: true, id: 'urn:li:comment:(urn:li:activity:1,2)' });
+    expect(linkedin.reply).toHaveBeenCalledWith(expect.objectContaining({ platform: 'linkedin', id: linkedinComment, parentId: linkedinPost, message: reply.message }));
+    await expect(run('social.reply', reply, { linkedin: linkedinOf({ readItem: vi.fn(async () => ({ answered: true })) }) }).promise).rejects.toMatchObject({ code: 'already_answered' });
+  });
+
+  it('deletes a LinkedIn comment only on the owner\'s own approval, since a deletion cannot be undone', async () => {
+    const moderation = { operation: 'delete', platform: 'linkedin', kind: 'comment', id: linkedinComment, parentId: linkedinPost };
+    const { linkedin, promise } = run('social.moderate', moderation);
+    expect(await promise).toEqual({ deleted: true });
+    expect(linkedin.remove).toHaveBeenCalledWith({ id: linkedinComment, parentId: linkedinPost });
+    const automatic = run('social.moderate', moderation, { autoApproved: true });
+    await expect(automatic.promise).rejects.toMatchObject({ code: 'auto_approved_refused' });
+    expect(automatic.linkedin.remove).not.toHaveBeenCalled();
+    await expect(run('social.moderate', { ...moderation, operation: 'hide' }).promise).rejects.toMatchObject({ code: 'invalid_moderation' });
+    await expect(run('social.moderate', { ...moderation, id: '1_10' }).promise).rejects.toMatchObject({ code: 'invalid_moderation' });
+  });
+
+  it('pauses a LinkedIn creative, starts one, and changes a campaign budget in its own currency, under the same rules as Meta', async () => {
+    const paused = run('social.ad_pause', { adId: '820002', platform: 'linkedin' }, { targetId: 'linkedin:820002' });
+    expect(await paused.promise).toEqual({ paused: true });
+    expect(paused.linkedin.pauseAd).toHaveBeenCalledWith('820002');
+    expect(paused.meta.pauseAd).not.toHaveBeenCalled();
+    await expect(run('social.ad_pause', { adId: '820002', platform: 'linkedin' }, { targetId: '820002' }).promise).rejects.toMatchObject({ code: 'invalid_ad' });
+    const ad = { platform: 'linkedin', adsetId: '610001', name: 'PA operators · survey · 2026-11-09', message: 'Getting ready for your next DHS inspection? CareBase keeps staff training, resident records and survey documentation in one place.',
+      headline: 'Try CareBase free', description: '30-day free trial', link: 'https://cmcarebase.com/signup', imageHash: null, callToAction: 'SIGN_UP', product: 'carebase' };
+    const created = run('social.ad_create', ad);
+    expect(await created.promise).toEqual({ created: true, id: '820009' });
+    expect(created.linkedin.createAd).toHaveBeenCalledWith(expect.objectContaining({ adsetId: '610001', link: 'https://cmcarebase.com/signup', imageUrl: null }));
+    const branded = run('social.ad_create', { ...ad, imageUrl: 'https://cdn.example.com/brand-1.jpg' });
+    await branded.promise;
+    expect(branded.linkedin.createAd).toHaveBeenCalledWith(expect.objectContaining({ imageUrl: 'https://cdn.example.com/brand-1.jpg' }));
+    await expect(run('social.ad_create', { ...ad, adsetId: 'act_1' }).promise).rejects.toMatchObject({ code: 'invalid_ad' });
+    const settings = { maxDailyBudgetCents: 3000 };
+    const budget = run('social.ad_budget', { platform: 'linkedin', adsetId: '610001', from: 2000, to: 2400 }, { settings, linkedin: linkedinOf({ readAdset: vi.fn(async () => ({ dailyBudget: 2000, currency: 'CAD' })) }) });
+    expect(await budget.promise).toEqual({ dailyBudget: 2400 });
+    expect(budget.linkedin.setDailyBudget).toHaveBeenCalledWith('610001', 2400, { currency: 'CAD' });
+    await expect(run('social.ad_budget', { platform: 'linkedin', adsetId: '610001', from: 2000, to: 2400 }, { settings, autoApproved: true }).promise).rejects.toMatchObject({ code: 'auto_approved_refused' });
+  });
+
+  it('never retries a request LinkedIn may have received, and asks the owner to look', async () => {
+    const notifier = { send: vi.fn(async () => [{ channel: 'email', delivery: 'sent' }]) };
+    const linkedin = linkedinOf({ publishPost: vi.fn(async () => { throw Object.assign(new Error('x'), { code: 'linkedin_unconfirmed' }); }) });
+    await expect(run('social.post', { platform: 'linkedin', product: 'carebase', message, scheduledFor: '2026-11-10T15:00:00Z' }, { linkedin, notifier }).promise).rejects.toMatchObject({ code: 'social_unconfirmed' });
+    expect(notifier.send).toHaveBeenCalledWith(expect.objectContaining({ severity: 'warning', dedupeKey: 'social:unconfirmed:a1' }));
   });
 });

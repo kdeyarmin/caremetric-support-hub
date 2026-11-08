@@ -1,0 +1,279 @@
+import { describe, expect, it, vi } from 'vitest';
+import { linkedinClient, linkedinComment, linkedinPost, littleText } from './linkedin.mjs';
+
+const token = 'AQX-linkedin-member-token-0123456789';
+const fresh = 'AQX-renewed-linkedin-token-abcdefghij';
+const org = 'urn:li:organization:5550001';
+const post = 'urn:li:share:7100000000000000001';
+const comment = 'urn:li:comment:(urn:li:activity:7100000000000000009,7200000000000000002)';
+const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } });
+/** Routes on the method and the decoded path, e.g. "GET /rest/socialActions/urn:li:share:1/comments". */
+const route = handlers => vi.fn(async (url, init = {}) => {
+  const parsed = new URL(url);
+  const key = `${init.method ?? 'GET'} ${decodeURIComponent(parsed.pathname)}`;
+  for (const [pattern, reply] of handlers) if (pattern.test(key)) return typeof reply === 'function' ? reply(parsed, init) : reply instanceof Response ? reply.clone() : json(reply);
+  return json({ message: 'unknown path' }, 404);
+});
+const client = (fetchImpl, over = {}) => linkedinClient({ token, organizationId: '5550001', adAccountId: '5080001', fetchImpl, ...over });
+const bodyOf = call => JSON.parse(call[1].body);
+
+describe('LinkedIn text and ids', () => {
+  it('escapes LinkedIn\'s reserved characters, so nothing a draft says becomes a mention or markup, and keeps real hashtags', () => {
+    expect(littleText('Training (annual) @ 100% *done*_ok~ [x] <y> {z} | a\\b')).toBe('Training \\(annual\\) \\@ 100% \\*done\\*\\_ok\\~ \\[x\\] \\<y\\> \\{z\\} \\| a\\\\b');
+    expect(littleText('Ready for survey?\n\n#PersonalCareHome #Pennsylvania')).toBe('Ready for survey?\n\n{hashtag|\\#|PersonalCareHome} {hashtag|\\#|Pennsylvania}');
+    // A # inside a word or a link is not a hashtag.
+    expect(littleText('See https://cmcarebase.com/guide#steps and C#sharp')).toBe('See https://cmcarebase.com/guide\\#steps and C\\#sharp');
+  });
+
+  it('accepts only post and comment URNs of the expected shape', () => {
+    expect(linkedinPost(post)).toBe(post);
+    expect(linkedinPost('urn:li:ugcPost:1')).toBe('urn:li:ugcPost:1');
+    expect(linkedinPost('urn:li:share:1/../x')).toBeNull();
+    expect(linkedinComment(comment)).toBe(comment);
+    expect(linkedinComment('urn:li:comment:(urn:li:activity:1,abc)')).toBeNull();
+  });
+});
+
+describe('the LinkedIn client', () => {
+  it('knows what is connected, from valid ids and a token (or a way to renew one) only', () => {
+    expect(client(vi.fn()).configured).toEqual({ page: true, ads: true });
+    expect(linkedinClient({ token, organizationId: org }).configured).toEqual({ page: true, ads: false });
+    expect(linkedinClient({ token, organizationId: '5550001', adAccountId: 'urn:li:sponsoredAccount:5080001' }).ids).toEqual({ organization: '5550001', account: '5080001' });
+    expect(linkedinClient({ token: '', organizationId: '5550001', adAccountId: '5080001' }).configured).toEqual({ page: false, ads: false });
+    expect(linkedinClient({ refreshToken: 'AQX-refresh-token-0123456789', clientId: 'app', clientSecret: 'secret', organizationId: '5550001' }).configured).toEqual({ page: true, ads: false });
+    expect(linkedinClient({ token, organizationId: '../me', adAccountId: 'x' }).configured).toEqual({ page: false, ads: false });
+  });
+
+  it('calls only api.linkedin.com with the versioned Rest.li headers, and never puts a token in an error', async () => {
+    const fetchImpl = route([[/^POST \/rest\/posts$/, json({}, 201, { 'x-restli-id': post })]]);
+    const li = client(fetchImpl, { version: '202609' });
+    expect(await li.publishPost({ message: 'Annual training in one place. #PersonalCareHome', link: 'https://cmcarebase.com/pa-training-requirements', linkTitle: 'PA training requirements' })).toEqual({ id: post, image: false });
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(new URL(url).host).toBe('api.linkedin.com');
+    expect(init.redirect).toBe('error');
+    expect(init.headers).toMatchObject({ Authorization: `Bearer ${token}`, 'LinkedIn-Version': '202609', 'X-Restli-Protocol-Version': '2.0.0' });
+    expect(bodyOf(fetchImpl.mock.calls[0])).toMatchObject({
+      author: org, commentary: 'Annual training in one place. {hashtag|\\#|PersonalCareHome}', visibility: 'PUBLIC', lifecycleState: 'PUBLISHED',
+      distribution: { feedDistribution: 'MAIN_FEED' }, content: { article: { source: 'https://cmcarebase.com/pa-training-requirements', title: 'PA training requirements' } },
+    });
+    const error = await client(route([[/./, json({ message: `bad ${token}` }, 401)]])).recentPosts().catch(caught => caught);
+    expect(error).toMatchObject({ code: 'linkedin_token_invalid' });
+    expect(JSON.stringify({ message: error.message, code: error.code })).not.toContain(token);
+  });
+
+  it('maps LinkedIn errors to codes the Team screen shows, retrying only the transient ones, and never retries a write it may have made', async () => {
+    for (const [status, code, transient] of [[429, 'linkedin_rate_limited', true], [403, 'linkedin_permission', false], [503, 'linkedin_unavailable', true], [422, 'linkedin_invalid_request', false]]) {
+      await expect(client(route([[/./, json({}, status)]])).adsOverview()).rejects.toMatchObject({ code, transient });
+    }
+    const lost = client(vi.fn(async () => { throw new TypeError('socket hang up'); }));
+    await expect(lost.publishPost({ message: 'Hi' })).rejects.toMatchObject({ code: 'linkedin_unconfirmed', transient: false });
+    await expect(lost.recentPosts()).rejects.toMatchObject({ code: 'linkedin_unavailable', transient: true });
+  });
+
+  it('renews an expired token once through LinkedIn\'s OAuth endpoint and sends the request again with it', async () => {
+    const seen = [];
+    const fetchImpl = vi.fn(async (url, init = {}) => {
+      const parsed = new URL(url);
+      if (parsed.host === 'www.linkedin.com') {
+        const form = new URLSearchParams(init.body);
+        expect([parsed.pathname, form.get('grant_type'), form.get('refresh_token'), form.get('client_id')]).toEqual(['/oauth/v2/accessToken', 'refresh_token', 'AQX-refresh-token-0123456789', 'app']);
+        return json({ access_token: fresh, expires_in: 5_184_000 });
+      }
+      seen.push(init.headers.Authorization);
+      return init.headers.Authorization === `Bearer ${fresh}` ? json({ elements: [] }) : json({}, 401);
+    });
+    const li = client(fetchImpl, { refreshToken: 'AQX-refresh-token-0123456789', clientId: 'app', clientSecret: 'secret' });
+    expect(await li.recentPosts()).toEqual([]);
+    expect(seen).toEqual([`Bearer ${token}`, `Bearer ${fresh}`]);
+    // Without a way to renew, or when renewing fails, the token is reported invalid and nothing is sent twice.
+    const once = route([[/./, json({}, 401)]]);
+    await expect(client(once).recentPosts()).rejects.toMatchObject({ code: 'linkedin_token_invalid' });
+    expect(once).toHaveBeenCalledTimes(1);
+    const refused = vi.fn(async url => (new URL(url).host === 'www.linkedin.com' ? json({ error: 'invalid_grant' }, 400) : json({}, 401)));
+    await expect(client(refused, { refreshToken: 'AQX-refresh-token-0123456789', clientId: 'app', clientSecret: 'secret' }).recentPosts()).rejects.toMatchObject({ code: 'linkedin_token_invalid' });
+    expect(refused).toHaveBeenCalledTimes(2);
+  });
+
+  it('uploads an approved brand image as the link card\'s thumbnail, sending the token only to LinkedIn\'s upload address', async () => {
+    const image = 'urn:li:image:C4E10AQFxyz';
+    const calls = [];
+    const fetchImpl = vi.fn(async (url, init = {}) => {
+      const parsed = new URL(url);
+      calls.push([init.method ?? 'GET', parsed.host, parsed.pathname, init.headers?.Authorization ?? null]);
+      if (parsed.host === 'cdn.example.com') return new Response(new Uint8Array([0xff, 0xd8, 0xff]), { status: 200, headers: { 'Content-Type': 'image/jpeg' } });
+      if (parsed.pathname === '/rest/images') return json({ value: { uploadUrl: 'https://www.linkedin.com/dms-uploads/sp/v2/abc', image } });
+      if (parsed.pathname.startsWith('/dms-uploads/')) return new Response(null, { status: 201 });
+      return json({}, 201, { 'x-restli-id': post });
+    });
+    const li = client(fetchImpl);
+    expect(await li.publishPost({ message: 'Hello', link: 'https://cmcarebase.com/signup', linkTitle: 'Start', imageUrl: 'https://cdn.example.com/brand-1.jpg' })).toEqual({ id: post, image: true });
+    expect(calls).toEqual([
+      ['GET', 'cdn.example.com', '/brand-1.jpg', null],
+      ['POST', 'api.linkedin.com', '/rest/images', `Bearer ${token}`],
+      ['PUT', 'www.linkedin.com', '/dms-uploads/sp/v2/abc', `Bearer ${token}`],
+      ['POST', 'api.linkedin.com', '/rest/posts', `Bearer ${token}`],
+    ]);
+    expect(new URL(fetchImpl.mock.calls[1][0]).searchParams.get('action')).toBe('initializeUpload');
+    expect(bodyOf(fetchImpl.mock.calls[1])).toEqual({ initializeUploadRequest: { owner: org } });
+    expect(bodyOf(fetchImpl.mock.calls[3]).content).toEqual({ article: { source: 'https://cmcarebase.com/signup', title: 'Start', thumbnail: image } });
+    // Without a link the image is the post's media.
+    await li.publishPost({ message: 'Hello', imageUrl: 'https://cdn.example.com/brand-1.jpg' });
+    expect(bodyOf(fetchImpl.mock.calls.at(-1)).content).toEqual({ media: { id: image } });
+  });
+
+  it('posts without an image rather than send the token anywhere but LinkedIn, or upload something that is not an image', async () => {
+    for (const [uploadUrl, contentType] of [['https://uploads.example.com/x', 'image/png'], ['http://www.linkedin.com/dms-uploads/x', 'image/png'], ['https://www.linkedin.com/dms-uploads/x', 'text/html']]) {
+      const fetchImpl = vi.fn(async (url, init = {}) => {
+        const parsed = new URL(url);
+        if (parsed.host === 'cdn.example.com') return new Response('x', { status: 200, headers: { 'Content-Type': contentType } });
+        if (parsed.pathname === '/rest/images') return json({ value: { uploadUrl, image: 'urn:li:image:abc' } });
+        if (init.method === 'PUT') throw new Error('the token must not leave LinkedIn');
+        return json({}, 201, { 'x-restli-id': post });
+      });
+      expect(await client(fetchImpl).publishPost({ message: 'Hello', link: 'https://cmcarebase.com/signup', imageUrl: 'https://cdn.example.com/a.png' })).toEqual({ id: post, image: false });
+      expect(fetchImpl.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
+      expect(bodyOf(fetchImpl.mock.calls.at(-1)).content.article).not.toHaveProperty('thumbnail');
+    }
+    const unreachable = vi.fn(async url => (new URL(url).host === 'cdn.example.com' ? json({}, 404) : json({}, 201, { 'x-restli-id': post })));
+    expect(await client(unreachable).publishPost({ message: 'Hello', imageUrl: 'https://cdn.example.com/gone.jpg' })).toEqual({ id: post, image: false });
+  });
+
+  it('uses the ad account\'s own app token for ads when there is one, and renews it with that app\'s keys', async () => {
+    const adsToken = 'AQX-advertising-app-token-0123456789';
+    const renewed = 'AQX-advertising-app-renewed-abcdefghij';
+    const used = [];
+    const fetchImpl = vi.fn(async (url, init = {}) => {
+      const parsed = new URL(url);
+      if (parsed.host === 'www.linkedin.com') {
+        expect(new URLSearchParams(init.body).get('client_id')).toBe('ads-app');
+        return json({ access_token: renewed });
+      }
+      used.push([parsed.pathname.split('/')[2], init.headers.Authorization]);
+      if (init.headers.Authorization === `Bearer ${adsToken}`) return json({}, 401);
+      return parsed.pathname === '/rest/posts' && init.method === 'POST' ? json({}, 201, { 'x-restli-id': post }) : json({ elements: [] });
+    });
+    const li = client(fetchImpl, { adsToken, adsRefreshToken: 'AQX-advertising-refresh-0123456789', adsClientId: 'ads-app', adsClientSecret: 'ads-secret' });
+    await li.publishPost({ message: 'Hello' });
+    await li.adsOverview({ now: new Date('2026-11-08T15:00:00Z') });
+    expect(used[0]).toEqual(['posts', `Bearer ${token}`]);
+    expect(used.slice(1).every(([, auth]) => auth === `Bearer ${adsToken}` || auth === `Bearer ${renewed}`)).toBe(true);
+    expect(used.some(([, auth]) => auth === `Bearer ${renewed}`)).toBe(true);
+    expect(linkedinClient({ adsToken, adAccountId: '5080001' }).configured).toEqual({ page: false, ads: true });
+  });
+
+  it('reads the Page\'s recent posts with their engagement, leaving out sponsored-only posts', async () => {
+    const fetchImpl = route([
+      [/^GET \/rest\/posts$/, { elements: [
+        { id: post, commentary: 'Survey season is here.', publishedAt: Date.parse('2026-11-05T13:45:00Z'), lifecycleState: 'PUBLISHED' },
+        { id: 'urn:li:share:7100000000000000002', commentary: 'Sponsored', publishedAt: Date.parse('2026-11-05T13:45:00Z'), adContext: { dscStatus: 'ACTIVE' } },
+        { id: 'urn:li:share:7100000000000000003', commentary: 'Draft', lifecycleState: 'DRAFT' },
+      ] }],
+      [/^GET \/rest\/socialMetadata$/, { results: { [post]: { reactionSummaries: { LIKE: { count: 4 }, PRAISE: { count: 2 } }, commentSummary: { count: 3 } } } }],
+    ]);
+    expect(await client(fetchImpl).recentPosts()).toEqual([{ platform: 'linkedin', id: post, text: 'Survey season is here.', at: '2026-11-05T13:45:00.000Z',
+      url: `https://www.linkedin.com/feed/update/${post}/`, reactions: 6, comments: 3, shares: 0 }]);
+    const query = new URL(fetchImpl.mock.calls[0][0]).searchParams;
+    expect([query.get('author'), query.get('q')]).toEqual([org, 'author']);
+    expect(new URL(fetchImpl.mock.calls[1][0]).search).toContain(`ids=List(${encodeURIComponent(post)})`);
+  });
+
+  it('finds other people\'s new top-level comments by URN only, and reads one again to see whether the Page answered it', async () => {
+    const now = new Date('2026-11-08T15:00:00Z');
+    const other = 'urn:li:comment:(urn:li:activity:7100000000000000009,7200000000000000003)';
+    const fetchImpl = route([
+      [/^GET \/rest\/posts$/, { elements: [{ id: post, commentary: 'x', lifecycleState: 'PUBLISHED' }] }],
+      [/^GET \/rest\/socialActions\/urn:li:share:\d+\/comments$/, { elements: [
+        { commentUrn: comment, actor: 'urn:li:person:abc', message: { text: 'How much is it?' }, created: { time: Date.parse('2026-11-08T14:00:00Z') } },
+        { commentUrn: other, actor: org, message: { text: 'Ours' }, created: { time: Date.parse('2026-11-08T14:05:00Z') } },
+        { commentUrn: 'urn:li:comment:(urn:li:activity:7100000000000000009,7200000000000000004)', actor: 'urn:li:person:def', created: { time: Date.parse('2026-11-01T14:00:00Z') } },
+        { commentUrn: 'urn:li:comment:(urn:li:activity:7100000000000000009,7200000000000000005)', actor: 'urn:li:person:ghi', parentComment: comment, created: { time: Date.parse('2026-11-08T14:10:00Z') } },
+      ] }],
+      [/^GET \/rest\/socialActions\/urn:li:comment:.+\/comments$/, { elements: [{ commentUrn: 'urn:li:comment:(urn:li:activity:7100000000000000009,7200000000000000006)', actor: org }] }],
+    ]);
+    const li = client(fetchImpl);
+    const items = await li.recentInbox({ now });
+    expect(items).toEqual([{ platform: 'linkedin', kind: 'comment', id: comment, parentId: post, url: `https://www.linkedin.com/feed/update/${post}/`, at: '2026-11-08T14:00:00.000Z' }]);
+    expect(JSON.stringify(items)).not.toContain('How much');
+    expect(await li.readItem({ id: comment, parentId: post })).toEqual({ text: 'How much is it?', fromPage: false, answered: true, history: [] });
+    expect(await li.readItem({ id: 'urn:li:comment:(urn:li:activity:7100000000000000009,7299999999999999999)', parentId: post })).toEqual({ gone: true });
+    expect(await li.readItem({ id: 'not-a-urn', parentId: post })).toEqual({ gone: true });
+  });
+
+  it('replies under the comment itself and deletes a comment by what it is on and its id', async () => {
+    const fetchImpl = route([
+      [/^POST \/rest\/socialActions\/urn:li:comment:.+\/comments$/, json({}, 201, { 'x-restli-id': 'urn:li:comment:(urn:li:activity:7100000000000000009,7200000000000000007)' })],
+      [/^DELETE \/rest\/socialActions\/urn:li:activity:7100000000000000009\/comments\/7200000000000000002$/, new Response(null, { status: 204 })],
+    ]);
+    const li = client(fetchImpl);
+    expect(await li.reply({ id: comment, parentId: post, message: 'Thanks for asking.' })).toEqual({ id: 'urn:li:comment:(urn:li:activity:7100000000000000009,7200000000000000007)' });
+    expect(decodeURIComponent(new URL(fetchImpl.mock.calls[0][0]).pathname)).toBe(`/rest/socialActions/${comment}/comments`);
+    expect(bodyOf(fetchImpl.mock.calls[0])).toEqual({ actor: org, object: 'urn:li:activity:7100000000000000009', parentComment: comment, message: { text: 'Thanks for asking.' } });
+    expect(await li.remove({ id: comment, parentId: post })).toEqual({ deleted: true });
+    expect(new URL(fetchImpl.mock.calls[1][0]).searchParams.get('actor')).toBe(org);
+    await expect(li.reply({ id: 'urn:li:comment:bad', parentId: post, message: 'x' })).rejects.toMatchObject({ code: 'linkedin_invalid_request' });
+    await expect(li.remove({ id: comment, parentId: 'urn:li:share:x' })).rejects.toMatchObject({ code: 'linkedin_invalid_request' });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads the ad account as ad sets (campaigns, with budgets in cents) and ads (creatives, with the copy of the post they sponsor)', async () => {
+    const sponsored = 'urn:li:share:7100000000000000010';
+    const fetchImpl = route([
+      [/^GET \/rest\/adAccounts\/5080001\/adCampaigns$/, { elements: [{ id: 610001, name: 'PA operators', status: 'ACTIVE', dailyBudget: { amount: '25.00', currencyCode: 'USD' }, objectiveType: 'WEBSITE_VISIT' }] }],
+      [/^GET \/rest\/adAccounts\/5080001\/creatives$/, { elements: [
+        { id: 'urn:li:sponsoredCreative:820001', campaign: 'urn:li:sponsoredCampaign:610001', intendedStatus: 'ACTIVE', content: { reference: sponsored }, createdAt: Date.parse('2026-10-20T12:00:00Z'), name: 'Survey' },
+        { id: 'urn:li:sponsoredCreative:820002', campaign: 'urn:li:sponsoredCampaign:610001', intendedStatus: 'PAUSED', content: { reference: 'urn:li:share:7100000000000000011' } },
+      ] }],
+      [/^GET \/rest\/posts\/urn:li:share:7100000000000000010$/, { commentary: 'Getting ready for your next DHS inspection?', content: { article: { source: 'https://cmcarebase.com/signup', title: 'Try CareBase free', description: '30-day free trial', thumbnail: 'urn:li:image:C4E10AQbest' } } }],
+      [/^GET \/rest\/adAnalytics$/, { elements: [{ pivotValues: ['urn:li:sponsoredCreative:820001'], impressions: 4000, clicks: 70, landingPageClicks: 60, costInLocalCurrency: '84.50', approximateMemberReach: 2000, externalWebsiteConversions: 2, oneClickLeads: 1 }] }],
+    ]);
+    const overview = await client(fetchImpl).adsOverview({ now: new Date('2026-11-08T15:00:00Z') });
+    expect(overview.adsets).toEqual([{ id: '610001', name: 'PA operators', active: true, dailyBudget: 2500, currency: 'USD', objective: 'WEBSITE_VISIT', campaign: 'PA operators' }]);
+    expect(overview.ads).toEqual([
+      { id: '820001', name: 'Survey', adsetId: '610001', active: true, createdAt: '2026-10-20T12:00:00.000Z', imageHash: 'urn:li:image:C4E10AQbest',
+        copy: { message: 'Getting ready for your next DHS inspection?', headline: 'Try CareBase free', description: '30-day free trial', link: 'https://cmcarebase.com/signup' } },
+      { id: '820002', name: 'Creative 820002', adsetId: '610001', active: false, createdAt: null, imageHash: null, copy: { message: '', headline: '', description: '', link: null } },
+    ]);
+    expect(overview.current).toEqual([{ adId: '820001', impressions: 4000, clicks: 60, spendCents: 8450, frequency: 2, results: 3 }]);
+    const analytics = fetchImpl.mock.calls.map(([url]) => new URL(url)).filter(url => url.pathname === '/rest/adAnalytics').map(url => decodeURIComponent(url.search));
+    expect(analytics).toHaveLength(2);
+    expect(analytics[0]).toContain('pivot=CREATIVE');
+    expect(analytics[0]).toContain('accounts=List(urn:li:sponsoredAccount:5080001)');
+    expect(analytics[0]).toContain('dateRange=(start:(year:2026,month:11,day:1),end:(year:2026,month:11,day:7))');
+  });
+
+  it('pauses a creative and sets a campaign budget as partial updates, refusing an id that is not LinkedIn\'s before any call', async () => {
+    const fetchImpl = route([
+      [/^POST \/rest\/adAccounts\/5080001\/creatives\/urn:li:sponsoredCreative:820001$/, new Response(null, { status: 204 })],
+      [/^POST \/rest\/adAccounts\/5080001\/adCampaigns\/610001$/, new Response(null, { status: 204 })],
+      [/^GET \/rest\/adAccounts\/5080001\/adCampaigns\/610001$/, { id: 610001, status: 'ACTIVE', dailyBudget: { amount: '25.00', currencyCode: 'USD' } }],
+    ]);
+    const li = client(fetchImpl);
+    expect(await li.pauseAd('820001')).toEqual({ success: true });
+    expect(fetchImpl.mock.calls[0][1].headers['X-RestLi-Method']).toBe('PARTIAL_UPDATE');
+    expect(bodyOf(fetchImpl.mock.calls[0])).toEqual({ patch: { $set: { intendedStatus: 'PAUSED' } } });
+    expect(await li.readAdset('610001')).toEqual({ id: '610001', dailyBudget: 2500, currency: 'USD', active: true });
+    expect(await li.setDailyBudget('610001', 3000, { currency: 'USD' })).toEqual({ success: true });
+    expect(bodyOf(fetchImpl.mock.calls[2])).toEqual({ patch: { $set: { dailyBudget: { amount: '30.00', currencyCode: 'USD' } } } });
+    await expect(li.pauseAd('../1')).rejects.toMatchObject({ code: 'linkedin_invalid_request' });
+    await expect(li.setDailyBudget('610001', 30.5)).rejects.toMatchObject({ code: 'linkedin_invalid_request' });
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    await expect(linkedinClient({ token, organizationId: '5550001', fetchImpl }).pauseAd('820001')).rejects.toMatchObject({ code: 'linkedin_not_configured' });
+  });
+
+  it('starts a new ad as a sponsored-only post, then a creative in the campaign', async () => {
+    const dark = 'urn:li:share:7100000000000000020';
+    const fetchImpl = route([
+      [/^POST \/rest\/posts$/, json({}, 201, { 'x-restli-id': dark })],
+      [/^POST \/rest\/adAccounts\/5080001\/creatives$/, json({}, 201, { 'x-restli-id': 'urn:li:sponsoredCreative:820009' })],
+    ]);
+    const created = await client(fetchImpl).createAd({ adsetId: '610001', message: 'Survey prep, in one place.', headline: 'Try CareBase free', description: '30-day free trial', link: 'https://cmcarebase.com/signup',
+      imageHash: 'urn:li:image:C4E10AQbest' });
+    expect(created).toEqual({ id: '820009', postId: dark });
+    // The new ad reuses the image of the ad it is based on: nothing is uploaded.
+    expect(bodyOf(fetchImpl.mock.calls[0])).toMatchObject({ author: org, distribution: { feedDistribution: 'NONE' }, adContext: { dscAdAccount: 'urn:li:sponsoredAccount:5080001', dscStatus: 'ACTIVE' },
+      content: { article: { source: 'https://cmcarebase.com/signup', title: 'Try CareBase free', description: '30-day free trial', thumbnail: 'urn:li:image:C4E10AQbest' } } });
+    expect(bodyOf(fetchImpl.mock.calls[1])).toEqual({ campaign: 'urn:li:sponsoredCampaign:610001', content: { reference: dark }, intendedStatus: 'ACTIVE' });
+    const unconfirmed = route([[/^POST \/rest\/posts$/, json({}, 201)]]);
+    await expect(client(unconfirmed).createAd({ adsetId: '610001', message: 'x', headline: 'y', description: 'z', link: 'https://cmcarebase.com/signup' })).rejects.toMatchObject({ code: 'linkedin_unconfirmed' });
+  });
+});

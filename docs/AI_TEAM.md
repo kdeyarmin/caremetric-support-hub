@@ -22,7 +22,7 @@ is built so far.
 > The **Sales Executive** answers CareBase and Intel prospects with drafts checked against the go-to-market fact sheet and sends a
 > weekly pipeline review (see "The Sales Executive"). The revenue agents share one sales playbook, `server/growth/playbook.mjs`. The
 > [November 8 workforce skills review](AI_WORKFORCE_SKILLS_REVIEW.md) explains why.
-> The **Social Media Manager** runs the Facebook Page, Instagram and the Meta ad account for engagement: a weekly post plan,
+> The **Social Media Manager** runs the Facebook Page, Instagram, the LinkedIn Page and the Meta and LinkedIn ad accounts for engagement: a weekly post plan,
 > replies to comments and messages, a daily ad review that pauses, refreshes and (only with your approval) re-budgets ads, and a
 > weekly report. See [Social media](SOCIAL_MEDIA.md).
 
@@ -872,8 +872,9 @@ on a local Supabase) checks the hand-off through the real server role.
 
 ## The Social Media Manager
 
-Runs CareMetric's Facebook Page, Instagram professional account and Meta ad account for engagement, and writes LinkedIn posts for
-the owner to paste. It starts **paused, in Propose**, trusted with nothing. Its five tasks:
+Runs CareMetric's Facebook Page, Instagram professional account, LinkedIn Company Page and the Meta and LinkedIn ad accounts for
+engagement (LinkedIn posts are emailed to the owner to paste until LinkedIn is connected). It starts **paused, in Propose**, trusted with
+nothing. Its five tasks:
 
 - `social.plan` ("Weekly social plan"): drafts and proposes a week of posts.
 - `social.inbox` and `social.interaction` ("Look for new comments and messages", "Answer a comment or message").
@@ -883,8 +884,10 @@ the owner to paste. It starts **paused, in Propose**, trusted with nothing. Its 
 Its six action kinds are `social.post`, `social.reply`, `social.moderate`, `social.ad_pause`, `social.ad_create` and
 `social.ad_budget`. Three autonomy steps, all off, hand over posts, replies (with hiding spam) and ad tuning (pausing and new ads inside
 existing budgets). A budget change is never automatic: the database refuses an automatically approved one and so does the executor.
+Nor is deleting a LinkedIn comment (LinkedIn has no "hide"): the executor refuses an automatically approved deletion, and once replies
+are handed over such a comment is left for the owner.
 Comments and messages reach the model only with `HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true`, and no other person's words are stored. Setup,
-the ad rules, the checks and the Meta permissions are in [Social media](SOCIAL_MEDIA.md).
+the ad rules, the checks and the Meta and LinkedIn permissions are in [Social media](SOCIAL_MEDIA.md).
 
 ## The Content Marketer
 

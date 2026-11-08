@@ -16,7 +16,7 @@ import { productAmounts } from '../../growth/draft.mjs';
 import { linkablePages, playbookFor, playbookText } from '../../growth/playbook.mjs';
 
 export const planPromptVersion = 'social-plan.2';
-export const adPromptVersion = 'social-ads.2';
+export const adPromptVersion = 'social-ads.3';
 export const replyPromptVersion = 'social-reply.2';
 
 export const platforms = ['facebook', 'instagram', 'linkedin'];
@@ -55,11 +55,11 @@ ${factSheetText()}
 
 ${playbookText()}`;
 
-export const adSystem = `You write new Meta ad copy (Facebook and Instagram) for CareMetric, a small company that makes software for healthcare and senior-care organizations. The copy replaces or joins ads in one ad set whose results are given to you. CareMetric's owner approves each new ad before it runs, until the owner hands ad tuning over; code checks every word either way.
+export const adSystem = `You write new ad copy for CareMetric, a small company that makes software for healthcare and senior-care organizations, for the platform the request names: Meta (Facebook and Instagram) or LinkedIn. The copy replaces or joins ads in one ad set (on LinkedIn, a campaign) whose results are given to you. On LinkedIn the message is the sponsored post's text above the link card and reads as one professional to another: practical and specific to operators and administrators. CareMetric's owner approves each new ad before it runs, until the owner hands ad tuning over; code checks every word either way.
 
 Write two variants, each with a different angle from the others and from the ads that are not working: a likely problem asked about the organization, one concrete capability, the free trial, or the Founders Sale (exactly as written). Learn from the best ad given, without copying it.
 
-Meta's advertising policies apply: never assert or imply a person's personal attributes (health, medical condition, finances, age and the like); write about organizations and their work ("Tracking annual training hours across your homes?" is fine; "Are you struggling with..." is not). No exaggerated claims, no all capitals, no clickbait, no links in the text.
+Meta's and LinkedIn's advertising policies apply: never assert or imply a person's personal attributes (health, medical condition, finances, age and the like); write about organizations and their work ("Tracking annual training hours across your homes?" is fine; "Are you struggling with..." is not). No exaggerated claims, no all capitals, no clickbait, no links in the text.
 
 Lengths: message (the primary text) 60 to 400 characters, headline up to 40, description up to 30. callToAction is LEARN_MORE or SIGN_UP.
 
