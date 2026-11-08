@@ -113,18 +113,19 @@ describe('what one run proposes', () => {
 });
 
 describe('the emails', () => {
-  it('greets, says one thing, offers help by reply and signs off as the team, with the subject first', () => {
+  it('greets, says one thing, offers help by reply and signs off as the product team, with the subject and headline first', () => {
     const preview = lifecyclePreview(lifecycleInput(trial(), 'welcome'), { postalAddress: postal });
     expect(preview).toBe([
       'Subject: Welcome to CareMetric CareBase', '',
+      'Welcome to CareMetric CareBase', '',
       'Hello,', '',
-      'Thank you for starting a CareMetric CareBase trial for Maple Grove Senior Living. A good way to begin:', '',
+      'Thank you for starting a CareMetric CareBase trial for Maple Grove Senior Living. Here is the quickest way to see it working with your own team:', '',
       '1. Add your facility, whether it is a personal care home or an Assisted Living Facility (ALF).',
       '2. Import your staff roster from a spreadsheet, or add a few people by hand.',
       '3. Choose the training each role needs and assign it.', '',
       'Open the help center:', 'https://cmcarebase.com/app/help', '',
-      'If anything is unclear, reply to this email. We are glad to help.', '',
-      'The CareMetric team', '',
+      'Each step has a short guide. If anything is unclear, reply to this email and we will help you through it.', '',
+      'The CareMetric CareBase team', 'https://cmcarebase.com', '',
       'You are receiving this email because Maple Grove Senior Living has a CareMetric CareBase account.',
       `${unsubscribeLabel}: a personal link is added when the email is sent`,
       postal,
@@ -223,7 +224,10 @@ describe('the sent email', () => {
       const preview = lifecyclePreview(input, { postalAddress: postal });
       expect(`Subject: ${email.subject}\n\n${email.text}`).toBe(preview.replace(`${unsubscribeLabel}: a personal link is added when the email is sent`, `${unsubscribeLabel}: ${unsubscribeUrl}`));
       expect(preview.startsWith(lifecycleWording(input))).toBe(true);
-      expect(email.html).toContain(`${LAYOUT_MARKER}="personal"`);
+      // The branded layout under the product's own name, with its inbox preview.
+      expect(email.html).toContain(`${LAYOUT_MARKER}="branded"`);
+      expect(email.html).toContain(`>${escapeHtml(input.productName)}</td></tr>`);
+      expect(email.html).toContain(escapeHtml(lifecycleEmail(input).preheader));
       expect(email.html).toContain(`<a href="${unsubscribeUrl}" target="_blank"`);
       expect(email.html).toContain(`>${unsubscribeLabel}</a>`);
       expect(email.html).toContain(escapeHtml(postal));

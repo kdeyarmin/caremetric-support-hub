@@ -32,11 +32,13 @@ export const proposalLimit = 20;
 export const dailySendLimit = 20;
 export const templateWords = Object.freeze({ welcome: 'welcome', setup_nudge: 'setup help', trial_checkin: 'trial check-in', testimonial_ask: 'testimonial request' });
 export const unsubscribeLabel = 'Unsubscribe from CareMetric check-in emails';
-export const signature = Object.freeze(['The CareMetric team']);
+/** Customer emails sign off as the product's own team, with its website. */
+export const signatureFor = (productName, site) => Object.freeze([`The ${productName} team`, ...(site ? [site] : [])]);
 
 /** The products with customer emails: the help each email links to, and the first steps the welcome lists. */
 export const lifecycleProducts = Object.freeze({
   carebase: Object.freeze({
+    site: Object.freeze({ label: 'cmcarebase.com', url: 'https://cmcarebase.com' }),
     helpUrl: 'https://cmcarebase.com/app/help',
     helpLabel: 'Open the help center',
     firstSteps: Object.freeze([
@@ -47,6 +49,7 @@ export const lifecycleProducts = Object.freeze({
     setup: 'Most teams start by importing their staff roster and assigning the training each role needs, so their training records are kept in one place for when a surveyor asks to see them. The help center walks through each step for a personal care home or an Assisted Living Facility.',
   }),
   'caremetric-intel': Object.freeze({
+    site: Object.freeze({ label: 'caremetricintel.com', url: 'https://www.caremetricintel.com' }),
     helpUrl: 'https://www.caremetricintel.com/Help',
     helpLabel: 'Open the Help page',
     firstSteps: Object.freeze([
@@ -139,66 +142,75 @@ export function planEmails(accounts, now = new Date()) {
 /** The Founders Sale as the trial check-in states it: the offer's exact terms (billing applies it automatically at conversion), no price. */
 export const foundersWords = productName => `If you decide to keep ${productName}, the Founders Sale applies on its own: eligible subscription charges are 50% off for the first 12 months of paid service, starting when your trial ends, with no code needed. Standard pricing resumes after that year.`;
 
-/** The subject, the message blocks and the sign-off of one email, from the facts kept on its action. */
+/**
+ * One customer email, from the facts kept on its action: the subject, the inbox preview, the headline, the message blocks and the
+ * sign-off. It is sent in the branded layout under the product's own name, and greets "Hello," before the blocks.
+ */
 export function lifecycleEmail({ template, tenantName, productName, product, helpUrl, bookingUrl = null }) {
   const words = lifecycleProducts[product];
   if (!words || !lifecycleTemplates.includes(template)) throw new TypeError('Unknown customer email.');
   const help = { type: 'button', label: words.helpLabel, url: helpUrl };
   const booking = bookingLink(bookingUrl);
   const together = label => (booking ? [{ type: 'button', label, url: booking }] : []);
-  const hello = { type: 'paragraph', text: 'Hello,' };
+  const signature = signatureFor(productName, words.site);
   if (template === 'welcome') {
     return {
       subject: `Welcome to ${productName}`,
+      preheader: `The first steps to get ${tenantName} up and running in ${productName}.`,
+      heading: `Welcome to ${productName}`,
       blocks: [
-        hello,
-        { type: 'paragraph', text: `Thank you for starting a ${productName} trial for ${tenantName}. A good way to begin:` },
-        { type: 'message', text: words.firstSteps.map((step, index) => `${index + 1}. ${step}`).join('\n') },
+        { type: 'paragraph', text: `Thank you for starting a ${productName} trial for ${tenantName}. Here is the quickest way to see it working with your own team:` },
+        { type: 'steps', items: words.firstSteps },
         help,
         ...together('Pick a time to go through setup together'),
-        { type: 'paragraph', text: 'If anything is unclear, reply to this email. We are glad to help.' },
+        { type: 'paragraph', text: 'Each step has a short guide. If anything is unclear, reply to this email and we will help you through it.' },
       ],
-      signature: [...signature],
+      signature,
     };
   }
   if (template === 'setup_nudge') {
     return {
       subject: `Need a hand getting set up in ${productName}?`,
+      preheader: 'Where most teams start, and how to get help with any step.',
+      heading: 'Need a hand with setup?',
       blocks: [
-        hello,
         { type: 'paragraph', text: `You are a few days into your ${productName} trial for ${tenantName}, and we wanted to offer a hand with setup.` },
-        { type: 'paragraph', text: words.setup },
+        { type: 'callout', tone: 'info', title: 'Where most teams start:', text: words.setup },
         help,
-        { type: 'paragraph', text: 'If something is slowing you down, or you are not sure where to start, reply to this email and tell us what you would like to get done first.' },
+        { type: 'paragraph', text: 'If something is slowing you down, or you are not sure where to start, reply to this email and tell us what you would like to get done first. We will send you the steps for it.' },
         ...together('Pick a time to go through it together'),
       ],
-      signature: [...signature],
+      signature,
     };
   }
   if (template === 'trial_checkin') {
     return {
       subject: `How is your ${productName} trial going?`,
+      preheader: 'A personal check-in, not a billing notice.',
+      heading: 'How is your trial going?',
       blocks: [
-        hello,
         { type: 'paragraph', text: 'This is a personal check-in, not a billing notice.' },
         { type: 'paragraph', text: `Your ${productName} trial for ${tenantName} is nearing its end, and we wanted to ask how it is going. Is anything getting in the way: a step that is unclear, something you expected to find and did not, or a question from your team?` },
-        { type: 'paragraph', text: 'Reply to this email and let us know.' },
+        { type: 'paragraph', text: 'Reply to this email and let us know. We will answer here.' },
         // Owner decision 2026-11-08: the trial check-in names the Founders Sale, in its exact terms (docs/GTM_FACTS.md).
-        { type: 'paragraph', text: foundersWords(productName) },
+        { type: 'callout', tone: 'success', title: 'The Founders Sale.', text: foundersWords(productName) },
         ...together('Pick a time to go through it together'),
       ],
-      signature: [...signature],
+      signature,
     };
   }
   return {
     subject: `Would you share a sentence about ${productName}?`,
+    preheader: 'A sentence from you helps other teams decide whether it fits them.',
+    heading: 'Would you share a sentence?',
     blocks: [
-      hello,
       { type: 'paragraph', text: `Thank you for choosing ${productName} for ${tenantName}. We are glad to have you with us.` },
       { type: 'paragraph', text: 'Would you be willing to share a sentence or two about your experience? Teams deciding whether it fits them find it helpful to hear from people who use it.' },
-      { type: 'paragraph', text: 'If you are willing, reply to this email to say yes, and include your sentence if you have it ready. We would use your words only with your permission, only in the form you approve, and with or without your name and organization, as you prefer. If you would rather not, there is no need to reply.' },
+      { type: 'paragraph', text: 'If you are willing, reply to this email to say yes, and include your sentence if you have it ready.' },
+      { type: 'callout', tone: 'info', text: 'We would use your words only with your permission, only in the form you approve, and with or without your name and organization, as you prefer.' },
+      { type: 'paragraph', text: 'If you would rather not, there is no need to reply.' },
     ],
-    signature: [...signature],
+    signature,
   };
 }
 
@@ -208,8 +220,8 @@ const footerLines = (input, unsubscribe, postalAddress) => [
   ...(String(postalAddress ?? '').trim() ? [String(postalAddress).trim()] : []),
 ];
 const text = (input, footer) => {
-  const { subject, blocks, signature: signOff } = lifecycleEmail(input);
-  return { subject, ...renderEmail({ layout: 'personal', title: subject, blocks, signature: signOff, footer }) };
+  const { subject, preheader, heading, blocks, signature: signOff } = lifecycleEmail(input);
+  return { subject, ...renderEmail({ layout: 'branded', brand: input.productName, title: subject, preheader, heading, recipientName: null, blocks, signature: signOff, footer }) };
 };
 
 /** The words the owner approves: the subject line and the message, without the footer every email carries. */

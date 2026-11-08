@@ -3,15 +3,23 @@
    CareMetric email standard (the same structure, type and neutrals as the other
    CareMetric products; only the brand accent differs).
 
-   Two layouts:
-   - "branded": a product notification. Header band with the wordmark, heading,
-     greeting, content blocks, sign-off and footer.
+   Three layouts:
+   - "branded": a product notification or customer email. Header band with the wordmark
+     (the product's own name when the email is about one product), heading, greeting,
+     content blocks, sign-off and footer.
    - "personal": a person-to-person message, such as a support agent's reply. Same
      fonts and colors, no header band; the writer's words are shown exactly as
      written, followed by a signature and a short footer.
+   - "letter": a first message to someone who does not know CareMetric yet (a prospect).
+     It looks like an email a person typed: white, left-aligned, no card, no band, no
+     images, so it reads as a note and is not filed as a promotion. The signature carries
+     the product and its website; the footer stays small.
+
+   Every layout can carry a preheader: the line an inbox shows beside the subject.
 
    Every interpolated value is escaped here. Only links the caller built itself may be
-   passed as a button or link URL; message text is never turned into links. */
+   passed as a button or link URL. Message text is turned into links only where it holds
+   one of the exact addresses the caller lists for that block (a product's own pages). */
 
 export const SUPPORT_TEAM_NAME = 'CareMetric Support';
 export const SUPPORT_EMAIL = 'support@caremetric.ai';
@@ -62,9 +70,18 @@ function verbatimLine(line) {
   return escapeHtml(line).replace(/\t/g, '    ').replace(/^ +/, spaces => '&nbsp;'.repeat(spaces.length)).replace(/ {2,}/g, spaces => ' ' + '&nbsp;'.repeat(spaces.length - 1));
 }
 const blankLine = /\n(?:[ \t]*\n)+/;
+/** A verbatim line in which each exact address from `links` (https only, longest first) becomes a link; nothing else does. */
+function linkedLine(line, links) {
+  const html = verbatimLine(line);
+  const allowed = [...new Set((Array.isArray(links) ? links : []).filter(url => typeof url === 'string' && /^https:\/\/[^\s"<>]+$/i.test(url)))].sort((a, b) => b.length - a.length);
+  if (!allowed.length) return html;
+  const pattern = new RegExp(`(${allowed.map(url => escapeHtml(url).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?=$|[\\s.,;:!?)])`, 'g');
+  return html.replace(pattern, match => `<a href="${match}" target="_blank" style="color:${palette.brand};text-decoration:underline;">${match}</a>`);
+}
 const font = `font-family:${fontStack};`;
 const paragraphStyle = `margin:0 0 16px;${font}font-size:16px;line-height:24px;color:${palette.body};`;
 const smallStyle = `margin:0 0 8px;${font}font-size:13px;line-height:20px;color:${palette.muted};`;
+const listText = items => (Array.isArray(items) ? items : []).map(item => String(item ?? '')).filter(item => item.trim());
 const linkStyle = `color:${palette.brand};text-decoration:underline;`;
 // Link a caller-supplied reference without accepting raw HTML from email copy.
 function linkedText(text, link) {
@@ -77,9 +94,9 @@ const blocks = {
     html: ({ text, referenceLink }) => `<p style="${paragraphStyle}">${linkedText(text, referenceLink)}</p>`,
     text: ({ text }) => String(text),
   },
-  /** Words a person wrote: shown exactly as written, paragraph by paragraph. */
+  /** Words a person wrote: shown exactly as written, paragraph by paragraph. `links`: exact addresses in it that may be links. */
   message: {
-    html: ({ text }) => String(text).split(blankLine).map(part => `<p style="${paragraphStyle}">${part.split('\n').map(verbatimLine).join('<br>')}</p>`).join('\n'),
+    html: ({ text, links }) => String(text).split(blankLine).map(part => `<p style="${paragraphStyle}">${part.split('\n').map(line => linkedLine(line, links)).join('<br>')}</p>`).join('\n'),
     text: ({ text }) => String(text),
   },
   button: {
@@ -89,6 +106,20 @@ const blocks = {
 </td></tr></table>
 <p style="${smallStyle}margin-bottom:16px;">If the button doesn't work, copy this link into your browser:<br><a href="${href(url)}" target="_blank" style="${linkStyle}word-break:break-all;">${escapeHtml(url)}</a></p>`,
     text: ({ label, url }) => `${label}:\n${url}`,
+  },
+  /** Numbered steps: a brand-colored number beside each step. */
+  steps: {
+    html: ({ items }) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;">
+${listText(items).map((item, index) => `<tr><td valign="top" width="36" style="padding:0 12px 12px 0;width:36px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" valign="middle" width="28" height="28" bgcolor="${palette.brand}" style="width:28px;height:28px;border-radius:14px;background-color:${palette.brand};${font}font-size:14px;line-height:28px;font-weight:700;color:${palette.onBrand};">${index + 1}</td></tr></table></td><td valign="top" style="padding:3px 0 12px;${font}font-size:16px;line-height:24px;color:${palette.body};">${escapeHtml(item)}</td></tr>`).join('\n')}
+</table>`,
+    text: ({ items }) => listText(items).map((item, index) => `${index + 1}. ${item}`).join('\n'),
+  },
+  /** A short list of points, each with a check mark. */
+  checklist: {
+    html: ({ items }) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;">
+${listText(items).map(item => `<tr><td valign="top" width="24" style="padding:0 10px 8px 0;width:24px;${font}font-size:16px;line-height:24px;font-weight:700;color:${palette.brand};">&#10003;</td><td valign="top" style="padding:0 0 8px;${font}font-size:16px;line-height:24px;color:${palette.body};">${escapeHtml(item)}</td></tr>`).join('\n')}
+</table>`,
+    text: ({ items }) => listText(items).map(item => `- ${item}`).join('\n'),
   },
   details: {
     html: ({ rows }) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;background-color:${palette.panel};border:1px solid ${palette.hairline};border-radius:8px;border-collapse:separate;">
@@ -107,6 +138,51 @@ ${rows.map(([label, value]) => `<tr><td valign="top" style="padding:4px 12px 4px
   },
 };
 const footerHtml = line => (typeof line === 'string' ? escapeHtml(line) : `<a href="${href(line.url)}" target="_blank" style="${linkStyle}">${escapeHtml(line.label)}</a>`);
+/** A signature line is text or a { label, url } link (a website). In plain text a link is its address. */
+const signatureText = line => (typeof line === 'string' ? line : String(line?.url ?? ''));
+const preheaderHtml = (preheader, background) => (preheader && String(preheader).trim()
+  ? `<div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;mso-hide:all;font-size:1px;line-height:1px;color:${background};">${escapeHtml(String(preheader).trim())}</div>\n` : '');
+const headDocument = title => `<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>${escapeHtml(title)}</title>`;
+
+/** A letter: what a person would type in their email program, with a small footer. */
+function renderLetter({ title, preheader, blocks: content, signature, footer }) {
+  const letterFont = `font-family:${fontStack};font-size:15px;line-height:23px;color:#1F2937;`;
+  const paragraphs = content.map(block => renderBlock(block, 'html')).join('\n')
+    .replace(new RegExp(paragraphStyle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), `margin:0 0 14px;${letterFont}`);
+  const [signer, ...details] = signature;
+  const html = `${headDocument(title)}
+</head>
+<body style="margin:0;padding:0;background-color:#FFFFFF;">
+${preheaderHtml(preheader, '#FFFFFF')}<table role="presentation" ${LAYOUT_MARKER}="letter" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFFFFF" style="background-color:#FFFFFF;">
+<tr><td style="padding:24px 20px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;">
+<tr><td style="${letterFont}word-break:break-word;overflow-wrap:break-word;">
+${paragraphs}
+${signer ? `<p style="margin:18px 0 0;${letterFont}">${escapeHtml(signer)}</p>` : ''}
+${details.map(line => `<p style="margin:0;font-family:${fontStack};font-size:14px;line-height:21px;color:${palette.muted};">${typeof line === 'string' ? escapeHtml(line) : `<a href="${href(line.url)}" target="_blank" style="color:${palette.brand};text-decoration:none;">${escapeHtml(line.label)}</a>`}</p>`).join('\n')}
+<p style="margin:28px 0 0;padding-top:12px;border-top:1px solid ${palette.hairline};font-family:${fontStack};font-size:12px;line-height:18px;color:${palette.muted};">${footer.map(footerHtml).join('<br>')}</p>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>
+`;
+  const text = [
+    ...content.map(block => renderBlock(block, 'text')),
+    signature.length ? signature.map(signatureText).join('\n') : null,
+    footer.map(line => (typeof line === 'string' ? line : `${line.label}: ${line.url}`)).join('\n'),
+  ].filter(part => part !== null && part !== '').join('\n\n');
+  return { html, text };
+}
 function renderBlock(block, kind) {
   const renderer = blocks[block?.type];
   if (!renderer) throw new TypeError(`Unknown email block: ${block?.type}`);
@@ -116,17 +192,19 @@ function renderBlock(block, kind) {
 /**
  * Builds one email. Returns { html, text }.
  * @param {object} email
- * @param {'branded'|'personal'} [email.layout] branded notification (default) or person-to-person message
+ * @param {'branded'|'personal'|'letter'} [email.layout] branded notification (default), person-to-person message, or a letter to a prospect
  * @param {string} email.title the subject, used as the document title
- * @param {string} [email.preheader] one-sentence inbox preview (branded layout)
+ * @param {string} [email.brand] the wordmark in the branded header: the product's name for an email about one product
+ * @param {string} [email.preheader] one-sentence inbox preview (every layout)
  * @param {string} [email.heading] the headline (branded layout)
  * @param {string|null} [email.recipientName] greets "Hi <name>," or "Hello," (branded layout)
- * @param {Array<object>} email.blocks paragraph | message | button | details | callout
- * @param {string[]} [email.signature] sign-off lines; the first is the signer
+ * @param {Array<object>} email.blocks paragraph | message | steps | checklist | button | details | callout
+ * @param {Array<string|{label: string, url: string}>} [email.signature] sign-off lines; the first is the signer, a { label, url } line a link
  * @param {Array<string|{label: string, url: string}>} email.footer why they received it, how to get help;
  *   a { label, url } line is a link (an unsubscribe link, say)
  */
-export function renderEmail({ layout = 'branded', title, preheader, heading, recipientName, blocks: content, signature = [`— The ${SUPPORT_TEAM_NAME} team`], footer, referenceLink = null }) {
+export function renderEmail({ layout = 'branded', title, brand = PRODUCT_WORDMARK, preheader, heading, recipientName, blocks: content, signature = [`— The ${SUPPORT_TEAM_NAME} team`], footer, referenceLink = null }) {
+  if (layout === 'letter') return renderLetter({ title, preheader, blocks: content, signature, footer });
   const branded = layout !== 'personal';
   const greeting = branded ? (recipientName && String(recipientName).trim() ? `Hi ${String(recipientName).trim()},` : 'Hello,') : null;
   const [signer, ...signatureDetails] = signature;
@@ -136,18 +214,10 @@ export function renderEmail({ layout = 'branded', title, preheader, heading, rec
     greeting ? `<p style="${paragraphStyle}">${escapeHtml(greeting)}</p>` : '',
     ...content.map(block => renderBlock({ ...block, referenceLink }, 'html')),
     signer ? `<p style="margin:24px 0 0;${font}font-size:16px;line-height:24px;font-weight:600;color:${palette.heading};">${escapeHtml(signer)}</p>` : '',
-    ...signatureDetails.map(line => `<p style="margin:0;${font}font-size:14px;line-height:20px;color:${palette.muted};">${escapeHtml(line)}</p>`),
+    ...signatureDetails.map(line => `<p style="margin:0;${font}font-size:14px;line-height:20px;color:${palette.muted};">${typeof line === 'string' ? escapeHtml(line) : `<a href="${href(line.url)}" target="_blank" style="${linkStyle}">${escapeHtml(line.label)}</a>`}</p>`),
   ].filter(Boolean).join('\n');
 
-  const html = `<!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="X-UA-Compatible" content="IE=edge">
-<meta name="color-scheme" content="light">
-<meta name="supported-color-schemes" content="light">
-<title>${escapeHtml(title)}</title>
+  const html = `${headDocument(title)}
 <style>
 body { margin: 0; padding: 0; }
 @media only screen and (max-width: 620px) {
@@ -158,11 +228,11 @@ body { margin: 0; padding: 0; }
 </style>
 </head>
 <body style="margin:0;padding:0;background-color:${palette.canvas};">
-${branded && preheader ? `<div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;mso-hide:all;font-size:1px;line-height:1px;color:${palette.canvas};">${escapeHtml(preheader)}</div>\n` : ''}<table role="presentation" ${LAYOUT_MARKER}="${branded ? 'branded' : 'personal'}" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${palette.canvas}" style="background-color:${palette.canvas};">
+${preheaderHtml(preheader, palette.canvas)}<table role="presentation" ${LAYOUT_MARKER}="${branded ? 'branded' : 'personal'}" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${palette.canvas}" style="background-color:${palette.canvas};">
 <tr><td class="cm-canvas" align="center" style="padding:32px 16px;">
 <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${palette.card}" style="max-width:600px;background-color:${palette.card};border:1px solid ${palette.hairline};border-radius:12px;border-collapse:separate;">
-${branded ? `<tr><td bgcolor="${palette.brand}" style="padding:20px 32px;background-color:${palette.brand};border-radius:11px 11px 0 0;${font}font-size:20px;line-height:28px;font-weight:700;color:${palette.onBrand};">${escapeHtml(PRODUCT_WORDMARK)}</td></tr>\n` : ''}<tr><td class="cm-body" style="padding:32px;${font}font-size:16px;line-height:24px;color:${palette.body};word-break:break-word;overflow-wrap:break-word;">
+${branded ? `<tr><td bgcolor="${palette.brand}" style="padding:20px 32px;background-color:${palette.brand};border-radius:11px 11px 0 0;${font}font-size:20px;line-height:28px;font-weight:700;color:${palette.onBrand};">${escapeHtml(brand || PRODUCT_WORDMARK)}</td></tr>\n` : ''}<tr><td class="cm-body" style="padding:32px;${font}font-size:16px;line-height:24px;color:${palette.body};word-break:break-word;overflow-wrap:break-word;">
 ${body}
 </td></tr>
 <tr><td class="cm-footer" align="center" style="padding:20px 32px 24px;border-top:1px solid ${palette.hairline};">
@@ -180,7 +250,7 @@ ${footer.map(line => `<p style="${smallStyle}text-align:center;">${footerHtml(li
     branded && heading ? heading : null,
     greeting,
     ...content.map(block => renderBlock(block, 'text')),
-    signature.length ? signature.join('\n') : null,
+    signature.length ? signature.map(signatureText).join('\n') : null,
     footer.map(line => (typeof line === 'string' ? line : `${line.label}: ${line.url}`)).join('\n'),
   ].filter(part => part !== null && part !== '').join('\n\n');
 

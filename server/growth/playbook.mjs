@@ -197,6 +197,14 @@ export const lifecyclePlays = deepFreeze({
 });
 export const lifecyclePlay = kind => lifecyclePlays[kind] ?? lifecyclePlays.outreach;
 
+/** Who a message about `product` comes from: the product team's sign-off and the product's website. */
+export function senderFor(product) {
+  const book = salesPlaybook[product];
+  const fact = book ? facts[book.factsKey] : null;
+  if (!fact) return { team: 'The CareMetric team', site: null };
+  return { team: `The ${fact.name} team`, site: { label: fact.site.replace(/^https:\/\/(?:www\.)?/, '').replace(/\/$/, ''), url: fact.site } };
+}
+
 /** The pages a message about `product` may link to (that product's own pages from the fact sheet), plus nothing else. */
 export function linkablePages(product) {
   const book = salesPlaybook[product];

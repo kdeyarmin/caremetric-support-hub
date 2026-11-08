@@ -91,6 +91,44 @@ describe('layout behavior', () => {
   });
 });
 
+describe('product emails', () => {
+  it('puts the product\'s own name in the branded header, and numbered steps and check marks in both parts', () => {
+    const email = renderEmail({ title: 'Welcome', brand: 'CareMetric Intel', heading: 'Welcome', preheader: 'Your first steps.', blocks: [
+      { type: 'steps', items: ['Name your agency.', 'Pick your counties.', ' '] },
+      { type: 'checklist', items: ['Only with your permission', 'Only in the form you approve'] },
+    ], footer: ['Footer'] });
+    expect(email.html).toContain('>CareMetric Intel</td></tr>');
+    expect(email.html).not.toContain(PRODUCT_WORDMARK);
+    expect(email.html).toMatch(/>1<\/td><\/tr><\/table><\/td><td [^>]+>Name your agency\.<\/td>/);
+    expect(email.html).toContain('&#10003;');
+    expect(email.text).toContain('1. Name your agency.\n2. Pick your counties.');
+    expect(email.text).not.toContain('3.');
+    expect(email.text).toContain('- Only with your permission\n- Only in the form you approve');
+  });
+
+  it('writes a letter to a prospect: white, no card or header, with a preview, a sign-off with the website and a small footer', () => {
+    const email = renderEmail({ layout: 'letter', title: 'Physician outreach', preheader: 'A question about your outreach.',
+      blocks: [{ type: 'message', text: 'Hello,\n\nTry it here:\nhttps://www.caremetricintel.com/', links: ['https://www.caremetricintel.com/'] }],
+      signature: ['The CareMetric Intel team', { label: 'caremetricintel.com', url: 'https://www.caremetricintel.com' }],
+      footer: ['CareMetric', { label: 'Unsubscribe', url: 'https://hub.example.org/u/t' }] });
+    expect(email.html).toContain(`${LAYOUT_MARKER}="letter"`);
+    expect(email.html).not.toContain(PRODUCT_WORDMARK);
+    expect(email.html).not.toContain(palette.canvas);
+    expect(email.html).toContain('A question about your outreach.</div>');
+    expect(email.html).toContain('<a href="https://www.caremetricintel.com/" target="_blank"');
+    expect(email.html).toContain('>caremetricintel.com</a>');
+    expect(email.text).toBe('Hello,\n\nTry it here:\nhttps://www.caremetricintel.com/\n\nThe CareMetric Intel team\nhttps://www.caremetricintel.com\n\nCareMetric\nUnsubscribe: https://hub.example.org/u/t');
+  });
+
+  it('turns only the exact approved addresses in a message into links, never other text or a longer address', () => {
+    const html = renderEmail({ layout: 'personal', title: 'T', signature: [], footer: [], blocks: [{ type: 'message',
+      text: 'See https://www.caremetricintel.com/Help or https://www.caremetricintel.com/ and https://evil.example/ and https://www.caremetricintel.com/Helpx', links: ['https://www.caremetricintel.com/', 'https://www.caremetricintel.com/Help', 'javascript:alert(1)'] }] }).html;
+    expect(html.match(/<a href="([^"]+)"/g)).toEqual(['<a href="https://www.caremetricintel.com/Help"', '<a href="https://www.caremetricintel.com/"']);
+    expect(html).toContain('https://evil.example/ and https://www.caremetricintel.com/Helpx');
+    expect(renderEmail({ layout: 'personal', title: 'T', signature: [], footer: [], blocks: [{ type: 'message', text: 'https://www.caremetricintel.com/' }] }).html).not.toContain('<a href');
+  });
+});
+
 describe('support reply email', () => {
   const body = 'Hi Jordan,\n\nWe reissued the certificate.\n  1. Sign out\n  2. Sign in\n\nThanks,\nSam';
   const reply = supportReplyEmail({ subject: 'RE: Course certificate missing [CM-1001]', reference: 1042, body });
