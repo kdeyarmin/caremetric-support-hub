@@ -94,6 +94,12 @@ export async function applyFoundersToInvoice(live, invoiceId) {
   if (!['carebase', 'caremetric-intel'].includes(app) || !sub.metadata?.hub_tenant_id) return;
   const lines = (sub.items?.data ?? []).map(item => ({ price: ref(item.price), quantity: item.quantity ?? 1 }));
   let window = foundersWindow(sub);
+  const subDiscounts = discounts(sub), invoiceDiscounts = discounts(invoice);
+  const subHas = subDiscounts.some(isFounders), invoiceHas = invoiceDiscounts.some(isFounders);
+  const previouslyApplied = sub.metadata?.hub_founders_origin === 'paid' || Boolean(sub.metadata?.hub_founders_start);
+  // Expired or deliberately removed offers do not re-enroll, or constrain later ordinary contracts.
+  // A trial awaiting its first paid invoice has neither a paid origin nor a saved paid-service start.
+  if (window && previouslyApplied && !subHas && !invoiceHas) return;
   // Existing paid contracts are never enrolled retroactively. A trial's zero-dollar invoice is skipped.
   if (!window) {
     if (!sub.trial_end || sub.status === 'trialing' || invoice.billing_reason !== 'subscription_cycle' || invoice.subtotal <= 0
@@ -102,29 +108,30 @@ export async function applyFoundersToInvoice(live, invoiceId) {
     sub = { ...sub, metadata: { ...sub.metadata, ...foundersMetadata, hub_founders_start: String(sub.trial_end) } };
     window = foundersWindow(sub);
   }
-  if (!await selectionEligible(live, app, lines)) {
+  // Existing administrator-selected agreements take precedence over automatic enrollment and its price restrictions.
+  // Still reconcile a lingering Founders coupon on service beyond the original introductory year.
+  const replacementAgreement = subDiscounts.some(discount => !isFounders(discount)) || invoiceDiscounts.some(discount => !isFounders(discount));
+  if (replacementAgreement && !subHas && !invoiceHas) return;
+  if (!replacementAgreement && !await selectionEligible(live, app, lines)) {
     if (invoice.status === 'draft') await live.post(`/v1/invoices/${invoice.id}`, { auto_advance: false }, { idempotencyKey: `hub-founders-hold-${invoice.id}` });
     throw new HttpError(409, 'This subscription changed to pricing outside the Founders Sale. Reconcile its agreement before payment.');
   }
   const invoiceLines = await live.list(`/v1/invoices/${invoice.id}/lines`, {}, 1000);
   if (invoiceLines.truncated) throw new HttpError(503, 'The Founders Sale invoice needs reconciliation before payment.');
-  const eligibleLines = invoiceLines.filter(line => foundersPrice(line.price ?? line.pricing?.price_details?.price) && line.amount > 0);
+  const eligibleLines = invoiceLines.filter(line => line.amount > 0 && (replacementAgreement || foundersPrice(line.price ?? line.pricing?.price_details?.price)));
   if (!eligibleLines.length) return;
   const inside = eligibleLines.every(line => line.period?.start >= window.start && line.period?.end <= window.end);
   const outside = eligibleLines.every(line => line.period?.start >= window.end);
+  if (replacementAgreement && !outside) return;
   if (!inside && !outside) {
     if (invoice.status === 'draft') await live.post(`/v1/invoices/${invoice.id}`, { auto_advance: false }, { idempotencyKey: `hub-founders-hold-${invoice.id}` });
     throw new HttpError(409, 'This invoice crosses the Founders Sale renewal boundary. Review its service dates before payment.');
   }
-  const subDiscounts = discounts(sub), invoiceDiscounts = discounts(invoice);
-  // Explicit customer agreements win; never stack a campaign with another discount.
-  if (inside && (subDiscounts.some(discount => !isFounders(discount)) || invoiceDiscounts.some(discount => !isFounders(discount)))) return;
-  const subHas = subDiscounts.some(isFounders), invoiceHas = invoiceDiscounts.some(isFounders);
   if (invoice.status !== 'draft') {
     if (inside !== invoiceHas) throw new HttpError(409, 'The finalized invoice needs Founders Sale reconciliation.');
     return;
   }
-  if (inside && !subHas) {
+  if (inside && !subHas && !previouslyApplied) {
     await verifyFoundersCoupon(live);
     await live.post(`/v1/subscriptions/${sub.id}`, { discounts: [{ coupon: FOUNDERS_COUPON }], proration_behavior: 'none',
       metadata: { ...foundersMetadata, hub_founders_start: String(window.start) } }, { idempotencyKey: `hub-founders-subscription-${sub.id}` });
