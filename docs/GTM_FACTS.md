@@ -4,8 +4,10 @@ The single source of truth for what CareMetric says about itself in marketing: w
 live prices and trials, the founding-partner offer, the claims we may and may not make, and the words we always (and never)
 use. Anything written for a prospect, by a person or by the AI team, starts here.
 
-Status: **every fact on this page is "owner to confirm".** Each one was read on 2026-11-03 from the live code of the product it
-describes, and the source file is named beside it. None of it is a contract, a quote or a legal statement.
+Status: base product and claims facts remain "owner to confirm". They were read on 2026-11-03 from the product code,
+with sources named below. The Founders Sale was requested by the owner on 2026-11-08 and its coupon and product scope
+were verified in the live CareMetric Stripe account. Current regular prices were also checked against that account.
+The sale's billing terms are recorded below; the remaining product claims are not newly certified by this pricing review.
 
 - The machine-readable copy is [`server/agents/content/facts.mjs`](../server/agents/content/facts.mjs). The Content Marketer (see
   [AI_TEAM.md](AI_TEAM.md#the-content-marketer)) shows the model that copy and checks every draft against it, so a price that is
@@ -64,10 +66,11 @@ Owner to confirm.
 | CareMetric Train (training only, per organization, unlimited learners) | $239 | $2,390 |
 | Train Single Facility | $119 | $1,190 |
 
-**Founding-partner offer** (`About.tsx`, "Founding partners" band). Owner to confirm before an article repeats it.
+**Legacy founding-partner offer** (`About.tsx`, "Founding partners" band). Preserve previously agreed terms; use the new
+Founders Sale below for new offers. Do not advertise lifetime pricing as part of the new sale.
 
-- Early Pennsylvania personal care home and ALF operators can ask about founding-partner terms by emailing
-  hello@caremetric.ai; anyone can still start the standard free trial online.
+- The older page invited early Pennsylvania personal care home and ALF operators to ask about founding-partner terms by
+  emailing hello@caremetric.ai; anyone can still start the standard free trial online.
 - They get: help setting up their facilities and staff roster, a direct line to the founder, their workflow prioritized on the
   roadmap, and **founding-partner pricing locked for as long as they subscribe**.
 - CareMetric asks them to use at least one real workflow in CareBase, join a short feedback call every few weeks, and let
@@ -96,6 +99,30 @@ Plans (`planLimits.ts`, `docs/marketing-copy.md`). Annual billing saves about 17
 | Enterprise | custom | annual only, from about $3,500 per month | larger footprints by agreement |
 
 Extra branches are $99 per month each and extra states $199 per month each.
+
+## Founders Sale — CareBase, Train and Intel
+
+Owner-requested 2026-11-08. **50% off eligible subscription charges for the first 12 months of paid service.**
+The live coupon is `caremetric_founders_sale_50_12m_20261108`, with promotion code **FOUNDERS50** in CareMetric's
+`acct_1SinLKB06O2UFlNz` account. [Research, full price table, customer copy and redemption steps](PRICING_RESEARCH_AND_FOUNDERS_SALE.md)
+and [the verified live configuration](evidence/founders-sale-20261108.json) are the sources for this offer.
+
+- New paid product subscriptions qualify, including existing free-trial users. Ask CareMetric for FOUNDERS50 when
+  activating a paid plan. CareMetric applies the discount when paid service starts, after the free trial.
+- Monthly subscriptions receive 50% off the regular monthly rate for the introductory year. Annual subscriptions receive
+  50% off the published annual price, paid upfront. Standard pricing resumes after the introductory year.
+- Includes current CareBase Core, Complete, Compliance Suite, Small Home, Small Home Complete, Train, Train Single Facility,
+  and the eMAR, Staff Training, Workforce, Survey & Compliance and Resident Billing & Payments add-ons; Intel Starter,
+  Growth and Pro. Small Home and single-facility eligibility and all capacity limits still apply.
+- Core example: **$99.50 per facility per month**, or **$995 for the first annual payment**, then the regular rate.
+  Intel Starter example: **$174.50 per organization per month**, or **$1,740 for the first annual payment**, then the regular rate.
+- Setup fees, Intel extra seats/branches/states, taxes, legacy plans and custom contracts are excluded. Growth's existing
+  annual onboarding waiver remains. Other promotional discounts cannot be combined. One introductory year per organization
+  and product; cancellation/restart does not reset it. No enrollment deadline or redemption cap has been set.
+- This is assisted activation, not an automatic website checkout discount. Stripe's first-time-only code can reject a
+  prior trial; CareMetric applies the underlying coupon for eligible trial conversions after checking eligibility.
+- Existing lifetime founding-partner agreements and Intel's earlier 25%-forever coupon are separate and unchanged.
+  The new sale is never advertised as a lifetime rate. No website deployment or customer enrollment was performed.
 
 ## CareMetric Healthcare Advisors
 
@@ -167,7 +194,8 @@ Extra branches are $99 per month each and extra states $199 per month each.
 
 - [ ] CareBase prices, add-ons, Complete, Compliance Suite, Small Home and Train prices, and the 30-day trial.
 - [ ] Intel plans, annual prices, seats, onboarding fees, add-ons, the Enterprise floor and the 14-day trial.
-- [ ] The founding-partner offer may be repeated in articles and pitches as worded above.
+- [x] The one-year Founders Sale was requested by the owner and configured in live billing; use the complete terms above.
+- [ ] Legacy founding-partner agreements: confirm individual terms before referring to them; do not offer lifetime pricing to new prospects.
 - [ ] Advisors has no published prices, and the consultation form is the first step.
 - [ ] The claims lists, including that SOC 2 and HIPAA wording stays on CareBase's security page only.
 - [ ] cms.gov and census.gov as citation hosts for Intel's topics.

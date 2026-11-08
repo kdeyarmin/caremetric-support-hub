@@ -6,10 +6,11 @@
  *
  * Every value was read from the live code of the product it describes (the source is named beside it). A change to a price
  * or a trial is made in the product first, then here and in docs/GTM_FACTS.md; facts.test.mjs keeps the two copies together.
- * The whole sheet is "owner to confirm": nothing here is a legal or financial commitment.
+ * Base product claims remain "owner to confirm". The owner requested the Founders Sale on 2026-11-08;
+ * its coupon, duration and product scope were verified in the live CareMetric billing account.
  */
 
-export const factsVersion = '2026-11-03';
+export const factsVersion = '2026-11-08';
 
 /** Where public help articles live. The canonical address of an article is `${helpCenterOrigin}/help/articles/<slug>`. */
 export const helpCenterOrigin = 'https://help.caremetric.ai';
@@ -19,6 +20,9 @@ const deepFreeze = value => {
   if (value && typeof value === 'object') for (const child of Object.values(value)) deepFreeze(child);
   return Object.freeze(value);
 };
+
+// Redeemed through assisted billing activation, not an automatic checkout promotion. Keep the complete terms together.
+const foundersSaleTerms = 'Founders Sale: 50% off eligible subscription charges for the first 12 months of paid service on new paid product subscriptions, including existing free-trial users. Ask CareMetric for FOUNDERS50 when activating a paid plan; CareMetric applies the discount after the trial, when paid service starts. Monthly billing receives 50% off the regular monthly rate; annual billing receives 50% off the published annual price paid upfront. Standard pricing resumes after the introductory year. Setup fees, Intel extra seats/branches/states, taxes, legacy plans and custom contracts are excluded. Other promotional discounts cannot be combined. One introductory year per organization and product; plan eligibility and capacity limits still apply. No enrollment deadline or cap has been set. Source: live Stripe offer verified 2026-11-08; docs/PRICING_RESEARCH_AND_FOUNDERS_SALE.md.';
 
 /** The three things CareMetric sells. `slug` is the Hub's product slug, which is where an article about the product is published. */
 export const products = deepFreeze({
@@ -38,7 +42,9 @@ export const products = deepFreeze({
     ],
     offers: [
       'A 30-day free trial, started online at cmcarebase.com/signup.',
-      'Founding partners: early Pennsylvania personal care home and ALF operators can ask about founding-partner terms by emailing hello@caremetric.ai. They get help setting up their facilities and staff roster, a direct line to the founder, their workflow prioritized on the roadmap, and founding-partner pricing held for as long as they subscribe. CareMetric asks them to use at least one real workflow, give feedback every few weeks, and let CareMetric quote agreed results without identifying residents or staff. (Source: About.tsx, owner to confirm before it is repeated in an article.)',
+      foundersSaleTerms,
+      'Eligible CareBase/Train products: Core, Complete, Compliance Suite, Small Home, Small Home Complete, Train, Train Single Facility, and the eMAR, Staff Training, Workforce, Survey & Compliance and Resident Billing & Payments add-ons. CareBase Core is $99.50 per facility per month during the introductory year, or $995 for the first annual payment, then the regular rate.',
+      'Legacy founding partners: preserve previously agreed founding-partner pricing held for as long as they subscribe. The older About.tsx program is separate from the Founders Sale; do not offer lifetime pricing to new applicants or describe the new sale as a lifetime rate.',
     ],
   },
   intel: {
@@ -54,7 +60,11 @@ export const products = deepFreeze({
       'Enterprise: a custom annual agreement starting at about $3,500 per month.',
       'Extra branches are $99 per month each and extra states $199 per month each. Annual billing saves about 17%.',
     ],
-    offers: ['A 14-day free trial with no credit card, covering one county with 3 marketer seats and 1 manager seat, then a subscription bought online.'],
+    offers: [
+      'A 14-day free trial with no credit card, covering one county with 3 marketer seats and 1 manager seat, then request paid plan activation from CareMetric.',
+      foundersSaleTerms,
+      'Eligible Intel products: Starter, Growth and Pro. Intel Starter is $174.50 per organization per month during the introductory year, or $1,740 for the first annual payment, then the regular rate. Existing onboarding fees and the Growth annual onboarding waiver remain unchanged.',
+    ],
   },
   advisors: {
     slug: 'advisors', name: 'CareMetric Healthcare Advisors', site: 'https://caremetricadvisors.com',
@@ -200,7 +210,7 @@ export const allowedAmounts = Object.freeze([...new Set(Object.values(products).
   .flatMap(line => line.match(/\$\d{1,3}(?:,\d{3})*(?:\.\d+)?(?!\d)/g) ?? []))].sort());
 
 /** Every percentage on the sheet. */
-export const allowedPercents = Object.freeze([...new Set(Object.values(products).flatMap(product => product.pricing)
+export const allowedPercents = Object.freeze([...new Set(Object.values(products).flatMap(product => [...product.pricing, ...product.offers])
   .flatMap(line => (line.match(/\d+(?:\.\d+)?%/g) ?? [])))].sort());
 
 /** The fact sheet as the model reads it. A constant: it is cached with the system prompt and never carries anything per request. */
