@@ -53,7 +53,7 @@ describe('the fact sheet', () => {
       expect(offer).toContain('Standard pricing resumes');
       expect(offer).toContain('custom contracts are excluded');
       expect(offer).toContain('Other promotional discounts cannot be combined');
-      expect(offer).toContain('FOUNDERS50');
+      expect(offer).toContain('applied automatically');
     }
     expect(products.advisors.offers.join(' ')).not.toContain('FOUNDERS50');
   });

@@ -94,7 +94,7 @@ Examples: Core monthly costs **$1,194** over the first twelve months versus **$2
 >
 > CareBase Core starts at **$99.50/month per facility** during the offer, and Intel Starter starts at **$174.50/month per organization** on monthly billing. Annual plans are also 50% off their published annual subscription price.
 >
-> Start your free trial, then ask CareMetric for **FOUNDERS50** when you activate your paid plan.
+> Start your free trial. **Your 50% discount is applied automatically to eligible subscriptions — no code needed.**
 >
 > For new paid subscriptions to eligible plans; existing free-trial users qualify. Standard subscription pricing resumes after the introductory year. Setup fees, Intel extra seats/branches/states, taxes and custom contracts are excluded. Other promotional discounts cannot be combined. Plan eligibility, capacity limits and regular cancellation terms apply.
 
@@ -102,35 +102,22 @@ CTA destinations: [CareBase / Train trial](https://cmcarebase.com/signup), [Trai
 
 No enrollment deadline or redemption cap was supplied, so none was invented. The one-year limit applies to each redeemed discount, not to a global countdown. This copy is implemented across the product sites, signup, billing, help, terms, and Hub sales guidance. Release and production verification are recorded below.
 
-## Live configuration and redemption
+## Automatic application
 
-- Account: CareMetric, `acct_1SinLKB06O2UFlNz`, live mode.
-- Coupon: `caremetric_founders_sale_50_12m_20261108`.
-- Code: **FOUNDERS50**, `promo_1UZPYfB06O2UFlNzAFfrHuqr`.
-- Coupon settings: **50%**, **repeating**, **12 months**, explicitly limited to **15 current products** (12 CareBase/Train plans and modules, 3 Intel tiers).
-- The retired $499 CareBase package, Breathe, onboarding fees, and custom Enterprise contracts are outside the product allowlist.
-- Evidence: [verified catalog and offer snapshot](evidence/founders-sale-20261108.json).
-- The percentage, duration and product scope are Stripe-enforced. New-paid-product eligibility, no stacking, and one redemption per organization/product are checked by CareMetric at assisted activation; metadata documents them but does not enforce them.
-- The promotion code uses Stripe's first-time-transaction restriction. Stripe also excludes customers who previously started a trial or initiated a payment, even if unsuccessful. **Eligible trial conversions therefore receive the underlying coupon through CareMetric's billing administration after the eligibility check.** A prior purchase of another CareMetric product is also reviewed per product.
-- This configures an offer, not a new self-service checkout integration. Current public Intel copy already directs customers to request activation. Hub customer checkout does not currently accept this promotion in its quote contract. Do not add a promotional entry box to an existing exact-amount checkout without updating and verifying its quote/receipt checks.
+The existing live coupon `caremetric_founders_sale_50_12m_20261108` remains 50%, repeating for 12 months, restricted to the same 15 products. Customers do not enter FOUNDERS50 or request assisted activation. The billing service applies the underlying coupon after server-side paid-history checks, including eligible trial conversions.
 
-### Applying the offer
+- Checkout previews and sessions use the same coupon, with the exact saving persisted in the quote and checked against the paid receipt. Customers see standard price, saving, discounted recurring subtotal, and amount due before payment.
+- New paid subscriptions created in Hub administration automatically receive the offer unless an explicit agreement/discount was selected. Published price IDs are allowlisted; private contract prices and retired plans are excluded. Setup, onboarding and Intel expansions remain full price.
+- Existing free trials qualify. On the first paid `invoice.created` event, the billing service checks complete subscription and paid-invoice history and applies the coupon to both the subscription and draft invoice. The trial itself does not consume the discount. The year is anchored to trial end, even if delivery is delayed.
+- Automatic subscriptions restore standard pricing at the first renewal outside the introductory year, including the edge case where the coupon was attached slightly after the paid-service boundary. Duplicate events and partial provider failures use stable idempotency keys.
+- Prior paid service or prior redemption prevents a new introductory year. Other coupons are not stacked. Existing customer agreements remain unchanged. History that cannot be fully read fails closed.
+- Keep the billing cadence and renewal anchor during the introductory year. An unusual invoice spanning the end of the year is held for billing reconciliation rather than applying a discount to a second annual period.
 
-1. In Hub Billing, sync the catalog from Stripe. Confirm the verified coupon and code appear and check the new paid subscription's product and prior billing history.
-2. Give the customer the regular price, discounted price, excluded fees, chosen cadence and renewal terms before activation. Confirm there is no other discount at customer, subscription or item level; do not combine FOUNDERS50 with INTELFOUNDING or another coupon.
-3. Start the discount at the beginning of paid service, with the billing cycle aligned to that date. Do not attach the repeating coupon at free-trial signup: its clock starts when applied, not after the free trial. A subscription still in trial needs an aligned end-of-trial activation, not early redemption.
-4. Use the Hub's subscription discount controls for a trial conversion, or select the promotion when creating an eligible new paid subscription. Do not create a second subscription if the account already has a trial/subscription; reconcile the existing subscription first. Do not attach the coupon at the whole-customer level.
-5. Inspect the actual preview/invoice, discount start/end and renewal price before requesting payment. The exact-amount customer Checkout flow cannot be discounted out of band.
-6. Keep the initial monthly/annual cadence and renewal anchor for the introductory year. Eligible plan changes retain the original discount end; do not reapply the coupon or grant a new year. Review annual prorations and cadence changes manually: a repeating coupon discounts invoices generated inside its window, and a new full annual invoice inside that window could extend discounted service beyond the intended year. Schedule cadence changes for the first standard-price renewal.
-7. At the first standard-price renewal, the temporary discount expires. Cancellation and restart do not create another eligible first year. Provide renewal reminders through the existing customer communications process.
-
-The old Intel 25%-forever coupons/code and CareBase's legacy founding-partner terms were not modified. Honor previously agreed arrangements. Use the clearly named Founders Sale for new offers; do not advertise it as lifetime pricing.
-
-Stripe's [coupon documentation](https://docs.stripe.com/billing/subscriptions/coupons) explains duration, trial-related first-time restrictions, product scopes and stackable discounts. No automatic tax setting was changed. Prices exclude tax; use the existing tax treatment and review [Stripe Tax for subscriptions](https://docs.stripe.com/billing/taxes/collect-taxes) with applicable registrations before enabling collection.
+`server/founders-sale.mjs` owns these decisions; `server/founders-catalog.mjs` records the verified public price allowlist. Update that list deliberately when publishing new eligible prices. Coupon scope and terms are re-read from Stripe before application; unexpected terms stop the purchase. The signed invoice webhook must remain enabled and monitored. A missed or finalized invoice requiring reconciliation returns an error and must be investigated; do not blindly retry a customer charge.
 
 ## Validation and follow-up
 
-Read-after-write verification confirmed the live coupon's exact product allowlist, 50% discount, 12-month duration and active code. No customer was charged or enrolled. A full paid customer conversion and twelve-month renewal simulation were not performed in this task; the assisted process above includes invoice and expiry review before use.
+Read-after-write verification confirmed the live coupon's exact product allowlist, 50% discount, 12-month duration and active code. No customer was charged or enrolled. Automated provider fixtures cover checkout discounts and receipt validation, trial conversion, monthly and annual first-year service, standard renewal, duplicate events, interrupted writes, prior paid service, and exclusions. No real customer was charged for testing; these tests do not constitute a live payment or a Stripe test-clock simulation.
 
 Track trial-to-paid conversion, activation by workflow, support hours, AI/video costs, collected recurring revenue net of discounts, retention and discount-expiry renewals separately by product and billing cadence. Review after the initial cohorts activate and again before year-two renewals. A practical planning target is at least **70% contribution margin after direct service costs**; it is a proposed internal target, not measured performance. At 50% of list price, that leaves a cost budget of 15% of regular revenue: **$29.85/month per Core facility** or **$134.85/month per Intel Growth organization** on monthly billing. Annual sale plans have a lower monthly revenue equivalent and need a tighter budget.
 
@@ -142,7 +129,7 @@ The evidence supports the current pricing structure and a temporary acquisition 
 - Intel: public announcement, monthly/annual plan cards, signup, billing offer and plan requests, Help inventory, owner manual/PDF, terms and crawler-readable plans.
 - CareBase/Train: all marketing routes, complete plan and add-on pricing, About/How it works, signup, billing, FAQ/guide bot, terms and savings explanation.
 - Support Hub: admin billing, customer billing and self-service, generated-content facts, pricing report and activation runbook.
-- Regular catalog prices, existing customer contracts, invoice calculations and exact-amount checkout validation are retained. The sale is assisted activation.
+- Regular catalog prices and existing customer contracts are retained. Automatic sale quotes and receipts validate the discounted totals. Public cards lead with the sale price and clearly show standard renewal pricing.
 - Release tracking: [Intel #394](https://github.com/kdeyarmin/intel/pull/394), [CareBase/Train #866](https://github.com/kdeyarmin/PennTrain/pull/866), and [Support Hub #151](https://github.com/kdeyarmin/caremetric-support-hub/pull/151). These pull requests contain validation results and merge status; Railway deploys their main-branch commits.
 
-Legacy-code review: `INTELFOUNDING` (`promo_1UV1uvB06O2UFlNz4wIpiWU7`) remains active in Stripe with zero redemptions at the November 8 read-back. All new-offer app copy now uses FOUNDERS50. The connected Stripe API does not expose promotion-code updates, so the older code has not been deactivated. Staff must use FOUNDERS50 for new sales; existing agreed lifetime terms are preserved.
+Legacy-code review: `INTELFOUNDING` (`promo_1UV1uvB06O2UFlNz4wIpiWU7`) remains active in Stripe with zero redemptions at the November 8 read-back. All new-offer app copy now uses FOUNDERS50. The connected Stripe API does not expose promotion-code updates, so the older code has not been deactivated. New eligible subscriptions use the automatic Founders Sale; existing agreed lifetime terms are preserved.

@@ -4,6 +4,7 @@ import { initialSubscriptionLines } from '../src/billing/facilityAllocations.ts'
 import { assertPlanFits } from '../src/billing/planSize.ts';
 import { selfServiceApps } from '../src/self-service/protocol.ts';
 import { CHECKOUT_API_VERSION, normalizers, StripeError, withAllSubscriptionItems } from './stripe.mjs';
+import { FOUNDERS_COUPON, foundersAmounts, foundersEligibility, foundersMetadata } from './founders-sale.mjs';
 
 const reference = value => typeof value === 'string' ? value : value?.id;
 const linesOf = subscription => (subscription.items?.data ?? []).map(item => ({ price: reference(item.price), quantity: item.quantity ?? 1 }));
@@ -51,19 +52,27 @@ export function customerCheckoutService({ stripe, service, mirrorCustomer, mirro
     await noExistingSubscription(live, workspace);
     const catalog = new Map(workspace.catalog.map(price => [price.id, price]));
     const currency = catalog.get(input.plan).currency;
+    const founders = await foundersEligibility(live, { app: workspace.app, customer: workspace.customer, lines });
     const invoice = await live.post('/v1/invoices/create_preview', { ...(workspace.customer ? { customer: workspace.customer } : {}),
-      subscription_details: { items: lines }, currency });
+      subscription_details: { items: lines }, currency, ...(founders ? { discounts: [{ coupon: FOUNDERS_COUPON }] } : {}) });
     if (invoice.currency !== currency || !Number.isSafeInteger(invoice.amount_due) || invoice.amount_due < 0) throw new HttpError(409, 'The billing preview could not be verified. Refresh billing.');
     const id = randomUUID();
     const quote = { id, kind: 'checkout', facility_name: 'Organization subscription', due_now: invoice.amount_due, currency,
       recurring_subtotal: lines.reduce((total, line) => total + catalog.get(line.price).amount * line.quantity, 0), effective_at: null,
       expires_at: new Date(now() + 300000).toISOString(), has_immediate_change: true, has_scheduled_change: false,
       summary: lines.map(line => ({ name: catalog.get(line.price).name, quantity: line.quantity, amount: catalog.get(line.price).amount * line.quantity })) };
+    if (founders) {
+      Object.assign(quote, foundersAmounts(lines.map(line => ({ ...line, amount: catalog.get(line.price).amount }))));
+      if (invoice.total_discount_amounts?.reduce((sum, item) => sum + item.amount, 0) !== quote.founders_sale.savings) {
+        throw new HttpError(409, 'The Founders Sale preview could not be verified. Refresh billing before paying.');
+      }
+    }
     // An application's customer returns from Checkout to the application's own page, fixed here so every retry of the
     // idempotent session request sends identical parameters. Hub customers return to the customer center.
     const execution = { kind: 'checkout', mode: 'legacy', app: workspace.app, customer: workspace.customer, account_name: workspace.account_name,
       billing_revision: workspace.billing_revision, facility_id: null, lines, intent: { plan: input.plan, addons: [...input.addons].sort() },
       maximumDue: quote.due_now, currency, interval: catalog.get(input.plan).interval, facility_ids: workspace.facilities.map(site => site.id).sort(),
+      ...(founders ? { founders_coupon: FOUNDERS_COUPON, founders_savings: quote.founders_sale.savings } : {}),
       ...(requester.returnUrl ? { return_url: requester.returnUrl } : {}) };
     return requester.saveQuote(id, input.connection_id, null, input.request_id, quote, execution, 0, null);
   }
@@ -101,6 +110,13 @@ export function customerCheckoutService({ stripe, service, mirrorCustomer, mirro
     }
     const invoice = await live.get(`/v1/invoices/${invoiceId}`);
     const normalized = normalizers.invoice(invoice);
+    if (quote.execution.founders_coupon) {
+      const discount = await live.get(`/v1/subscriptions/${subscriptionId}`, { expand: ['discounts'] });
+      if (discount.discounts?.length !== 1 || reference(discount.discounts[0].source?.coupon ?? discount.discounts[0].coupon) !== quote.execution.founders_coupon
+        || checkout.total_details?.amount_discount !== quote.execution.founders_savings) {
+        throw new HttpError(409, 'The Founders Sale payment receipt needs reconciliation before access can be granted.');
+      }
+    }
     const lines = await live.list(`/v1/checkout/sessions/${checkout.id}/line_items`, {}, 100);
     if (reference(subscription.customer) !== quote.execution.customer || subscription.metadata?.hub_checkout_quote !== quote.id
       || subscription.metadata?.hub_tenant_id !== quote.tenant_id || subscription.metadata?.app !== quote.execution.app
@@ -128,6 +144,9 @@ export function customerCheckoutService({ stripe, service, mirrorCustomer, mirro
     if (execution.app !== workspace.app || quote.tenant_id !== workspace.tenant_id
       || JSON.stringify(execution.facility_ids) !== JSON.stringify(workspace.facilities.map(site => site.id).sort())) throw new HttpError(409, 'Facility setup changed. Cancel this checkout and review a new selection.');
     await noExistingSubscription(live, workspace, quote.id);
+    if (execution.founders_coupon && !await foundersEligibility(live, { app: workspace.app, customer: workspace.customer, lines: execution.lines, ownQuote: quote.id })) {
+      throw new HttpError(409, 'Offer eligibility changed. Cancel this checkout and review a new preview.');
+    }
     let customer = execution.customer ?? workspace.customer;
     if (!customer) {
       const created = await live.post('/v1/customers', { name: execution.account_name, metadata: { hub_tenant_id: quote.tenant_id } },
@@ -156,9 +175,10 @@ export function customerCheckoutService({ stripe, service, mirrorCustomer, mirro
       returned.searchParams.set('checkout', 'returned'); cancelled.searchParams.set('checkout', 'cancelled');
       await service('mark_customer_purchase_started', [quote.id]);
       try { checkout = await live.post('/v1/checkout/sessions', { mode: 'subscription', customer, line_items: execution.lines,
+        ...(execution.founders_coupon ? { discounts: [{ coupon: execution.founders_coupon }] } : {}),
         client_reference_id: quote.id, integration_identifier: integrationIdentifier(quote.id),
         metadata: { hub_checkout_quote: quote.id, hub_tenant_id: quote.tenant_id, app: execution.app },
-        subscription_data: { metadata: { hub_checkout_quote: quote.id, hub_tenant_id: quote.tenant_id, app: execution.app } },
+        subscription_data: { metadata: { hub_checkout_quote: quote.id, hub_tenant_id: quote.tenant_id, app: execution.app, ...(execution.founders_coupon ? foundersMetadata : {}) } },
         expires_at: Math.floor(Date.parse(quote.confirmed_at) / 1000) + 3600,
         success_url: returned.href, cancel_url: cancelled.href,
       }, { ...options, idempotencyKey: `hub-checkout-${quote.id}` }); }
