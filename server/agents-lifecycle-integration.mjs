@@ -245,7 +245,8 @@ try {
     assert.ok(!JSON.stringify([action.input, action.preview]).includes('@'), 'no address in what the owner approves');
   }
   const welcomeAction = await actionFor('welcome');
-  assert.ok(welcomeAction.preview.startsWith('Subject: Welcome to CareMetric CareBase\n\nHello,'));
+  // The subject, then the headline of the branded email, then the greeting.
+  assert.ok(welcomeAction.preview.startsWith('Subject: Welcome to CareMetric CareBase\n\nWelcome to CareMetric CareBase\n\nHello,'));
   assert.ok(welcomeAction.preview.includes(`Pick a time to go through setup together:\n${booking}`), 'with the owner\'s booking link');
   assert.ok(welcomeAction.preview.includes(`${unsubscribeLabel}: a personal link is added when the email is sent\n${postal}`));
   assert.equal((await lastRun()).summary, 'Proposed 10 customer emails (7 welcome, 1 setup help, 1 trial check-in, 1 testimonial request) for your approval. Skipped 1 account with no billing email. Skipped 1 account that unsubscribed. 1 more waits for the next run.');
