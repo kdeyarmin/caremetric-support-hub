@@ -26,7 +26,7 @@ export function PasswordSignIn({ rememberPath }: { rememberPath:(path?:string) =
       <label htmlFor="sign-in-username">Username</label><input id="sign-in-username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={event => setUsername(event.target.value)} maxLength={64} disabled={busy} required autoFocus />
       <label htmlFor="sign-in-password">Password</label><input id="sign-in-password" name="password" type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} maxLength={128} disabled={busy} required />
       <button className="button button-primary" disabled={busy}>{busy ? <LoaderCircle className="spin" size={17} /> : <LockKeyhole size={17} />}{busy ? 'Signing in…' : 'Sign in'}</button>
-      <button type="button" className="text-link" disabled={busy} onClick={() => { setPassword(''); setMessage(''); setRecovery(true); }}>Set up or reset your password</button>
+      <button type="button" className="button button-secondary" disabled={busy} onClick={() => { setPassword(''); setMessage(''); setRecovery(true); }}>Set up or reset your password</button>
       {message && <p className="form-message" role="alert">{message}</p>}
     </form>
     <div className="sign-in-support" aria-label="Central support contacts"><a href={`tel:${config.centralSupportPhone}`}><Phone size={17} /><span><small>Call central support</small><strong>{config.centralSupportPhoneDisplay}</strong></span></a><a href={`mailto:${config.centralSupportEmail}`}><Mail size={17} /><span><small>Email central support</small><strong>{config.centralSupportEmail}</strong></span></a></div>
