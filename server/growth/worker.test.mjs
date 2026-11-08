@@ -1,5 +1,5 @@
 import {it,expect,vi} from 'vitest';
-import {growthDay,growthExecutors,growthHandlers} from './worker.mjs';
+import {growthDay,growthEmail,growthExecutors,growthHandlers} from './worker.mjs';
 const base={id:'opp',product:'carebase',stage:'qualified',owner_agent:'marketing_manager',internal:false,next_at:'2026-01-01T00:00:00Z',touches:0,work:[],events:[],eligibility:'review'};
 it('Observe inspects but creates no work or proposals',async()=>{
  const store={snapshot:vi.fn(async()=>({total:1,items:[base]})),plan:vi.fn(),propose:vi.fn()};
@@ -173,4 +173,17 @@ it('markets only the owner\'s products: a CareBase prospect gets no discovery, r
  const research={configured:true,search:vi.fn(async()=>[])};
  expect((await growthHandlers({growth:{store:content,research},marketed:intelOnly})['growth.content']({id:'t',agent:{autonomy:'propose'},sourceKind:'schedule'})).result).toMatchObject({proposals:0});
  expect(research.search).not.toHaveBeenCalled();
+});
+it('sends a growth message as a letter: Hello, the approved words, the product team\'s sign-off and website, a preview and the unsubscribe link',()=>{
+ const body='Your agency covers three counties. How do your liaisons track which physicians they have reached?\n\nYou can try it with your own team:\nhttps://www.caremetricintel.com/';
+ const email=growthEmail({product:'caremetric-intel',subject:'Physician outreach',body,postalAddress:'1 Main St, Altoona, PA',unsubscribeUrl:'https://hub.example.org/api/growth/unsubscribe/t'});
+ expect(email.text).toBe(`Hello,\n\n${body}\n\nThe CareMetric Intel team\nhttps://www.caremetricintel.com\n\nCareMetric\n1 Main St, Altoona, PA\nUnsubscribe from these emails: https://hub.example.org/api/growth/unsubscribe/t`);
+ expect(email.html).toContain('data-caremetric-email="letter"');
+ expect(email.html).toContain('>Your agency covers three counties.&#847;');
+ expect(email.html).toContain('<a href="https://www.caremetricintel.com/" target="_blank"');
+ expect(email.html).toContain('<a href="https://hub.example.org/api/growth/unsubscribe/t" target="_blank"');
+ // The company is named once when the postal address already begins with it.
+ expect(growthEmail({product:'caremetric-intel',subject:'S',body:'B',postalAddress:'CareMetric, 1 Main St',unsubscribeUrl:'https://hub.example.org/u/t'}).text.endsWith('\n\nCareMetric, 1 Main St\nUnsubscribe from these emails: https://hub.example.org/u/t')).toBe(true);
+ // A CareBase page in an Intel message is never made a link.
+ expect(growthEmail({product:'caremetric-intel',subject:'S',body:'See https://cmcarebase.com/signup',postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'}).html).not.toContain('href="https://cmcarebase.com/signup"');
 });

@@ -47,11 +47,12 @@ describe('the customer email run', () => {
     const [first, second] = store.proposeAction.mock.calls.map(call => call[0]);
     const expected = lifecycleInput(fact('alpha'), 'welcome', { bookingUrl: ready.bookingUrl });
     expect(first).toEqual({ taskId: 't1', kind: 'email.send', targetKind: 'billing_account', targetId: 'alpha', input: expected, preview: lifecyclePreview(expected, { postalAddress: postal }) });
-    expect(first.preview.startsWith('Subject: Welcome to CareMetric CareBase\n\nHello,')).toBe(true);
+    expect(first.preview.startsWith('Subject: Welcome to CareMetric CareBase\n\nWelcome to CareMetric CareBase\n\nHello,')).toBe(true);
     expect(parseLifecycleInput(first.input)).toEqual(first.input);
     expect(first.input.textHash).toBe(wordingHash(first.input));
     expect([second.targetId, second.input.template, second.input.periodKey]).toEqual(['beta', 'trial_checkin', 'account:trial_checkin:beta:carebase']);
-    expect(JSON.stringify(store.proposeAction.mock.calls)).not.toContain('@');
+    // No address of the customer's: the only one is CareMetric's own support address in the theme's footer.
+    expect(JSON.stringify(store.proposeAction.mock.calls).replaceAll('support@caremetric.ai', '')).not.toContain('@');
     expect(outcome).toEqual({ result: {
       mode: 'live', read: 2, due: 2, deferred: 0, noAddress: 0, suppressed: 0, truncated: false, outcome: 'proposed', proposed: 2, autoApproved: 0, alreadyProposed: 0,
       byTemplate: { welcome: 1, setup_nudge: 0, trial_checkin: 1, testimonial_ask: 0 },

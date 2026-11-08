@@ -113,21 +113,25 @@ describe('what one run proposes', () => {
 });
 
 describe('the emails', () => {
-  it('greets, says one thing, offers help by reply and signs off as the team, with the subject first', () => {
+  it('greets, says one thing, offers help by reply and signs off as the product team, with the subject and headline first', () => {
     const preview = lifecyclePreview(lifecycleInput(trial(), 'welcome'), { postalAddress: postal });
     expect(preview).toBe([
       'Subject: Welcome to CareMetric CareBase', '',
+      'Welcome to CareMetric CareBase', '',
       'Hello,', '',
-      'Thank you for starting a CareMetric CareBase trial for Maple Grove Senior Living. A good way to begin:', '',
+      'Thank you for starting a CareMetric CareBase trial for Maple Grove Senior Living. Here is the quickest way to see it working with your own team:', '',
       '1. Add your facility, whether it is a personal care home or an Assisted Living Facility (ALF).',
       '2. Import your staff roster from a spreadsheet, or add a few people by hand.',
       '3. Choose the training each role needs and assign it.', '',
       'Open the help center:', 'https://cmcarebase.com/app/help', '',
-      'If anything is unclear, reply to this email. We are glad to help.', '',
-      'The CareMetric team', '',
+      'Each step has a short guide. If anything is unclear, reply to this email and we will help you through it.', '',
+      'The CareMetric CareBase team', 'https://cmcarebase.com', '',
       'You are receiving this email because Maple Grove Senior Living has a CareMetric CareBase account.',
       `${unsubscribeLabel}: a personal link is added when the email is sent`,
       postal,
+      // The CareBase theme's own footer lines.
+      'Questions? Email support@caremetric.ai.',
+      'CareMetric CareBase · cmcarebase.com',
     ].join('\n'));
   });
 
@@ -173,7 +177,8 @@ describe('the emails', () => {
   it('says nothing about AI, calls, prices, promises or Stripe\'s notices, in any email', () => {
     for (const { input, template, product, link } of every()) {
       // The trial check-in's Founders Sale paragraph (owner decision 2026-11-08) is checked word for word elsewhere; everything else holds.
-      const text = lifecyclePreview(input, { postalAddress: postal }).replace(foundersWords(input.productName), '');
+      // The support address (support@caremetric.ai, in Intel's footer) is an address, not a mention of AI.
+      const text = lifecyclePreview(input, { postalAddress: postal }).replace(foundersWords(input.productName), '').replace(/[\w.+-]+@caremetric\.ai\b/g, '');
       const label = `${product}/${template}/${link ? 'booking' : 'plain'}`;
       expect(text, label).not.toMatch(/\bAI\b|artificial|assistant|robot|\bbots?\b|automat/i);
       expect(text, label).not.toMatch(/\bcall(?:s|ed|ing)?\b|phone|voicemail|\bdial/i);
@@ -223,7 +228,18 @@ describe('the sent email', () => {
       const preview = lifecyclePreview(input, { postalAddress: postal });
       expect(`Subject: ${email.subject}\n\n${email.text}`).toBe(preview.replace(`${unsubscribeLabel}: a personal link is added when the email is sent`, `${unsubscribeLabel}: ${unsubscribeUrl}`));
       expect(preview.startsWith(lifecycleWording(input))).toBe(true);
-      expect(email.html).toContain(`${LAYOUT_MARKER}="personal"`);
+      // The branded layout in the theme of the product's app, with its inbox preview: Intel's Emberline header (its logo, tagline
+      // and fire image), or CareBase's navy wordmark band.
+      expect(email.html).toContain(`${LAYOUT_MARKER}="branded"`);
+      if (input.product === 'caremetric-intel') {
+        expect(email.html).toContain('data-theme="intel"');
+        expect(email.html).toContain('https://caremetricintel.com/brand/emberline-fire.png');
+        expect(email.html).toContain('Set your marketing on FIRE!');
+      } else {
+        expect(email.html).toContain('data-theme="carebase"');
+        expect(email.html).toContain('CareMetric <span style="font-weight:500;color:#b9e4ff;">CareBase</span>');
+      }
+      expect(email.html).toContain(escapeHtml(lifecycleEmail(input).preheader));
       expect(email.html).toContain(`<a href="${unsubscribeUrl}" target="_blank"`);
       expect(email.html).toContain(`>${unsubscribeLabel}</a>`);
       expect(email.html).toContain(escapeHtml(postal));

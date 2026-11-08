@@ -49,6 +49,14 @@ The owner chose (2026-11-04) to let the Marketing Manager send two kinds of emai
 (`growth.sales_followup`, `growth.cold_email`); a supervised week or Keep approving takes it off, and every message then waits for
 the owner, model-written or not.
 
+- **How a growth email looks.** A letter, not a newsletter (`growthEmail` in `server/growth/worker.mjs`): left-aligned and
+  without images, so it reads like an email a person typed and is not filed as a promotion. It is in the theme of the
+  product's app: an Intel letter is the Intel app's own dark Emberline letter, with the ember accent on its links. It opens with "Hello,", then
+  the approved words (the product's own pages are clickable links, nothing else is), then a sign-off from the product's team
+  ("The CareMetric Intel team") with its website, and a small footer with the company, its postal address and the unsubscribe
+  link. The inbox preview is the message's first sentence. The writing rules (`growth.5`) ask for a specific, true opening
+  about the organization from its public sources, one likely problem as a question, one concrete way the product helps, and
+  one easy next step with its link, in short paragraphs.
 - **Contact finder.** After the daily discovery search, the finder reads each new business's own website: https only, its
   domain or `www.` name only (redirects included), robots.txt honoured, never an address literal or a name that resolves to a
   private address, at most four pages (`/`, `/contact`, `/contact-us`, `/about`) of 300 KB each (`server/growth/contacts.mjs`).
