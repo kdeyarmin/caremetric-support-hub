@@ -143,6 +143,6 @@ The evidence supports the current pricing structure and a temporary acquisition 
 - CareBase/Train: all marketing routes, complete plan and add-on pricing, About/How it works, signup, billing, FAQ/guide bot, terms and savings explanation.
 - Support Hub: admin billing, customer billing and self-service, generated-content facts, pricing report and activation runbook.
 - Regular catalog prices, existing customer contracts, invoice calculations and exact-amount checkout validation are retained. The sale is assisted activation.
-- Release status: implementation complete; validation, CI and production verification pending.
+- Release tracking: [Intel #394](https://github.com/kdeyarmin/intel/pull/394), [CareBase/Train #866](https://github.com/kdeyarmin/PennTrain/pull/866), and [Support Hub #151](https://github.com/kdeyarmin/caremetric-support-hub/pull/151). These pull requests contain validation results and merge status; Railway deploys their main-branch commits.
 
 Legacy-code review: `INTELFOUNDING` (`promo_1UV1uvB06O2UFlNz4wIpiWU7`) remains active in Stripe with zero redemptions at the November 8 read-back. All new-offer app copy now uses FOUNDERS50. The connected Stripe API does not expose promotion-code updates, so the older code has not been deactivated. Staff must use FOUNDERS50 for new sales; existing agreed lifetime terms are preserved.
