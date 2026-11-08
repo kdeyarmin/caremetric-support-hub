@@ -80,9 +80,10 @@ describe('agent administration', () => {
   it('returns the roster with the services the team can use', async () => {
     const steps = [{ category: 'account_emails', status: 'supervised' }];
     const menu = { offers: [{ key: 'trial_extension_14', enabled: false }], coupons: [] };
-    const { admin, queries } = fixture({ results: { 'hub.get_agent_team': { agents: [], approvalCount: 0 }, 'hub.get_agent_autonomy': steps, 'hub.get_agent_offers': menu } });
-    expect(await admin.overview('token', {})).toEqual({ team: { agents: [], approvalCount: 0 }, services: { enabled: true, handlers: ['probe.sweep'] }, waitingActions: 0, autonomy: steps, offers: menu });
-    expect(queries.map(([sql]) => sql)).toEqual(['select hub.get_agent_team() as result', 'select hub.get_agent_autonomy() as result', 'select hub.get_agent_offers() as result']);
+    const marketing = [{ product: 'caremetric-intel', marketed: true }, { product: 'carebase', marketed: false }];
+    const { admin, queries } = fixture({ results: { 'hub.get_agent_team': { agents: [], approvalCount: 0 }, 'hub.get_agent_autonomy': steps, 'hub.get_agent_offers': menu, 'hub.get_marketing_products': marketing } });
+    expect(await admin.overview('token', {})).toEqual({ team: { agents: [], approvalCount: 0 }, services: { enabled: true, handlers: ['probe.sweep'] }, waitingActions: 0, autonomy: steps, offers: menu, marketing });
+    expect(queries.map(([sql]) => sql)).toEqual(['select hub.get_agent_team() as result', 'select hub.get_agent_autonomy() as result', 'select hub.get_agent_offers() as result', 'select hub.get_marketing_products() as result']);
   });
 
   it('shows no autonomy steps against a database that does not have them yet, and passes any other failure on', async () => {
@@ -90,6 +91,8 @@ describe('agent administration', () => {
     expect((await missing.admin.overview('token', {})).autonomy).toBeNull();
     const noMenu = fixture({ results: { 'hub.get_agent_team': { agents: [] }, 'hub.get_agent_autonomy': [], 'hub.get_agent_offers': databaseError('42883', 'function hub.get_agent_offers() does not exist') } });
     expect((await noMenu.admin.overview('token', {})).offers).toBeNull();
+    const noSwitches = fixture({ results: { 'hub.get_agent_team': { agents: [] }, 'hub.get_agent_autonomy': [], 'hub.get_agent_offers': null, 'hub.get_marketing_products': databaseError('42883', 'function hub.get_marketing_products() does not exist') } });
+    expect((await noSwitches.admin.overview('token', {})).marketing).toBeNull();
     const refused = fixture({ results: { 'hub.get_agent_team': { agents: [] }, 'hub.get_agent_autonomy': databaseError('28000', 'Current administrator session required.') } });
     await expect(refused.admin.overview('token', {})).rejects.toMatchObject({ status: 401 });
   });
@@ -110,8 +113,10 @@ describe('agent administration', () => {
     await admin.offer('token', { key: 'trial_extension_14', enabled: true, monthlyCap: 4, expectedChangedAt: version });
     await admin.addOffer('token', { label: ' 20% off ', kind: 'coupon', couponId: 'SPRING20', apps: ['carebase'], windowDays: 7, monthlyCap: 5 });
     await admin.addOffer('token', { label: 'Two more weeks', kind: 'trial_extension', trialDays: 14, apps: ['carebase', 'caremetric-intel'], windowDays: 5, monthlyCap: 3 });
+    await admin.marketing('token', { product: 'carebase', marketed: true, expectedChangedAt: version });
     expect(queries.map(([sql]) => /select (\S+)\(/.exec(sql)[1])).toEqual(['hub.set_agent_status', 'hub.set_agent_autonomy', 'hub.set_agent_budget', 'hub.cancel_agent_task', 'hub.set_agent_autonomy_step',
-      'hub.set_agent_offer', 'hub.add_agent_offer', 'hub.add_agent_offer']);
+      'hub.set_agent_offer', 'hub.add_agent_offer', 'hub.add_agent_offer', 'hub.set_marketing_product']);
+    expect(queries[8][1]).toEqual(['carebase', true, version]);
     expect(queries[4][1]).toEqual(['account_emails', 'hold', version]);
     expect(queries[5][1]).toEqual(['trial_extension_14', true, 4, version]);
     expect(queries[6][1]).toEqual(['20% off', 'coupon', null, 'SPRING20', ['carebase'], 7, 5]);
@@ -153,6 +158,10 @@ describe('agent administration', () => {
       () => admin.addOffer('token', { label: 'Days', kind: 'trial_extension', trialDays: 7, apps: [], windowDays: 7, monthlyCap: 5 }),
       () => admin.addOffer('token', { label: 'Days', kind: 'trial_extension', trialDays: 7, apps: ['Care Base'], windowDays: 7, monthlyCap: 5 }),
       () => admin.addOffer('token', { label: 'Days', kind: 'discount', trialDays: 7, apps: ['carebase'], windowDays: 7, monthlyCap: 5 }),
+      () => admin.marketing('token', { product: 'breathe', marketed: true, expectedChangedAt: version }),
+      () => admin.marketing('token', { product: 'carebase', marketed: 'on', expectedChangedAt: version }),
+      () => admin.marketing('token', { product: 'carebase', marketed: true }),
+      () => admin.marketing('token', { product: 'carebase', marketed: true, expectedChangedAt: version, all: true }),
     ];
     for (const attempt of bad) await expect(attempt()).rejects.toMatchObject({ status: 400 });
     expect(session).not.toHaveBeenCalled();
@@ -235,8 +244,9 @@ describe('agent administration', () => {
       const steps = [{ category: 'account_emails', status: 'supervised' }];
       const { admin, queries, actions } = fixture({ externalReady, ready: [{ id: 'reply1', kind: 'communication.reply' }], results: { 'hub.get_agent_autonomy': steps } });
       expect(await admin.overview('token', {})).toMatchObject({ waitingActions: 2, autonomy: steps });
-      // Read-only: the team, the autonomy steps and the offer menu, nothing else.
-      expect(queries).toEqual([['select hub.get_agent_team() as result', []], ['select hub.get_agent_autonomy() as result', []], ['select hub.get_agent_offers() as result', []]]);
+      // Read-only: the team, the autonomy steps, the offer menu and the marketing switches, nothing else.
+      expect(queries).toEqual([['select hub.get_agent_team() as result', []], ['select hub.get_agent_autonomy() as result', []], ['select hub.get_agent_offers() as result', []],
+        ['select hub.get_marketing_products() as result', []]]);
       expect(externalReady).toHaveBeenCalledExactlyOnceWith(false);
       expect(actions.executeOne).not.toHaveBeenCalled();
       expect(actions.executeSessionActions).not.toHaveBeenCalled();

@@ -44,6 +44,11 @@ describe('the Sales Executive answering a prospect', () => {
     expect(harness.sent[0].body).toContain('join the pilot');
     expect(outcome.result).toMatchObject({ draft: 'not_marketed', reply: 'sales', alert: 'email:sent' });
     expect(kept(harness)).not.toContain(canary);
+    // The owner's switch is read for each message: once CareBase is switched on, its prospects get a drafted answer too.
+    const switches = vi.fn().mockResolvedValueOnce(['caremetric-intel']).mockResolvedValueOnce(['caremetric-intel', 'carebase']);
+    const flipped = fixture({ model: modelOf(), marketed: switches });
+    expect((await flipped.run()).result.draft).toBe('not_marketed');
+    expect((await flipped.run()).result.draft).toBe('drafted');
     // Intel is marketed: its prospects still get a drafted answer.
     const intel = fixture({ model: modelOf(answer({ reply: 'You can start a 30-day free trial here:\nhttps://www.caremetricintel.com/' })), marketed: ['caremetric-intel'], snapshot: snapshotOf('How does the trial work?', { productSlug: 'caremetric-intel', sourceSystem: 'intel.web' }) });
     expect((await intel.run(taskOf({ product: 'caremetric-intel' }))).result.draft).toBe('drafted');

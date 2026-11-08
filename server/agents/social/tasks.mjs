@@ -28,7 +28,7 @@ import {
   replyUserMessage, socialLinks, socialProducts, withHashtags,
 } from './content.mjs';
 import { evaluateAds, rankPosts, rulesVersion } from './rules.mjs';
-import { markets } from '../marketing.mjs';
+import { marketedNow, markets } from '../marketing.mjs';
 
 const day = 86_400_000;
 const labels = { facebook: 'Facebook', instagram: 'Instagram', messenger: 'Messenger', linkedin: 'LinkedIn' };
@@ -41,8 +41,8 @@ const firstLine = text => String(text ?? '').split('\n')[0].slice(0, 90);
 const productOf = url => { try { const host = new URL(url).hostname.replace(/^www\./, ''); return host === 'cmcarebase.com' ? 'carebase' : host === 'caremetricintel.com' ? 'caremetric-intel' : null; } catch { return null; } };
 
 export function socialHandlers({ store, notifier, model = null, meta, linkedin = null, settings = {}, imageUrls = [], customerTextToAi = false, publicOrigin = null, marketed = null, log = line => console.warn(line) }) {
-  // Only the products the team markets (marketing.mjs) get posts, replies with links, new ads and budget increases.
-  const offered = socialProducts.filter(product => markets(marketed, product));
+  // Only the products the team markets (marketing.mjs, read when each task starts) get posts, reply links, new ads and budget increases.
+  const offeredNow = async () => { const list = await marketedNow(marketed); return socialProducts.filter(product => markets(list, product)); };
   // LinkedIn is optional: without its token and Page id, LinkedIn posts are emailed to the owner to paste, as before.
   const li = linkedin ?? { configured: { page: false, ads: false } };
   const clientFor = platform => (platform === 'linkedin' ? li : meta);
@@ -74,6 +74,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
   async function plan(task, { now = () => new Date(), signal } = {}) {
     if (!model?.configured) return { result: { skipped: 'model_not_configured' } };
     if (task.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only' } };
+    const offered = await offeredNow();
     if (!offered.length) return { result: { skipped: 'no_marketed_product' } };
     const moment = now();
     const week = weekStart(dueMoment(task) ?? moment);
@@ -225,6 +226,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     if (flagged) return personal();
     if (!drafting) return { result: { outcome: 'left_for_owner', reason: 'customer_text_to_ai_off', platform: item.platform, kind: item.kind } };
 
+    const offered = await offeredNow();
     const text = redact(read.text, { limit: 2000 }).text;
     const history = (read.history ?? []).map(message => ({ direction: message.direction, text: redact(message.text, { limit: 600 }).text }));
     const result = await runModel(task, {
@@ -266,6 +268,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     if (!sources.length) return { result: { skipped: 'ads_not_configured' } };
     if (task.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only' } };
     const moment = now();
+    const marketedList = await marketedNow(marketed);
     const targets = await open();
     const today = easternDate(moment);
     const counts = { pause: 0, budget: 0, create: 0, skipped: 0, rejected: 0 };
@@ -295,13 +298,13 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
         } else if (rec.kind === 'budget') {
           if (targets.has(`social.ad_budget:${source.key(rec.adsetId)}`)) { counts.skipped += 1; continue; }
           // No more money for an ad set that sends people to a product the team is not marketing.
-          if (overview.ads.some(ad => ad.adsetId === rec.adsetId && productOf(ad.copy?.link) && !markets(marketed, productOf(ad.copy?.link)))) { counts.skipped += 1; continue; }
+          if (overview.ads.some(ad => ad.adsetId === rec.adsetId && productOf(ad.copy?.link) && !markets(marketedList, productOf(ad.copy?.link)))) { counts.skipped += 1; continue; }
           if (await propose(task, { kind: 'social.ad_budget', targetKind: 'social_adset', targetId: source.key(rec.adsetId),
             preview: `Raise the daily budget of the ${source.name} ${where} "${rec.adsetName}" from ${money(rec.from)} to ${money(rec.to)}: ${rec.reason}. Your cap is ${money(settings.maxDailyBudgetCents)} a day. Only you can approve a budget change.`,
             input: { adsetId: rec.adsetId, from: rec.from, to: rec.to, reason: rec.reason, ...platform } })) counts.budget += 1;
         } else if (rec.kind === 'refresh') {
           if (!model?.configured || [...targets].some(value => value.startsWith(`social.ad_create:${source.key(rec.adsetId)}:`))) { counts.skipped += 1; continue; }
-          counts.create += await refresh(task, rec, overview, today, signal, counts, source);
+          counts.create += await refresh(task, rec, overview, today, signal, counts, source, marketedList);
         }
       }
     }
@@ -316,10 +319,10 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     return { status: proposed ? 'awaiting_approval' : 'done', result: { adsets: adsetCount, recommendations: recommendationCount, ...counts, ...(refused.length ? { refused } : {}) } };
   }
 
-  async function refresh(task, rec, overview, today, signal, counts, source) {
+  async function refresh(task, rec, overview, today, signal, counts, source, marketedList) {
     const base = overview.ads.find(ad => ad.id === rec.basedOn);
     const product = productOf(base?.copy?.link);
-    if (!base || !product || !markets(marketed, product)) { counts.skipped += 1; return 0; }
+    if (!base || !product || !markets(marketedList, product)) { counts.skipped += 1; return 0; }
     const allowed = socialLinks(product).map(link => link.url);
     const link = allowed.includes(base.copy.link) ? base.copy.link : playbookFor(product).nextStep.url;
     const adset = overview.adsets.find(item => item.id === rec.adsetId);

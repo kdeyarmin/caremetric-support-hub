@@ -14,7 +14,7 @@ import { transaction } from '../sms-auth.mjs';
  * work can be handed back. Against a database without those operations the calls keep their old shape
  * and the extras are ignored, so a server can be deployed before the migration is applied.
  */
-export function sqlAgentStore(pool, { fenced = false, growth = false, social = false } = {}) {
+export function sqlAgentStore(pool, { fenced = false, growth = false, social = false, marketing = false } = {}) {
   const call = (operation, args = []) => transaction(pool, async client =>
     (await client.query(`select ${operation}(${args.map((_, index) => `$${index + 1}`).join(', ')}) as result`, args)).rows[0].result);
   return {
@@ -29,6 +29,8 @@ export function sqlAgentStore(pool, { fenced = false, growth = false, social = f
       /** Holds a proposed or approved post until its `scheduledFor`. */
       socialSchedule: (actionId, execution = null) => call('private.social_schedule', [actionId, execution]),
     } : {}),
+    // The owner's marketing switches (platform.agents.marketing.v1): the product keys switched on right now.
+    ...(marketing ? { marketedProducts: () => call('private.marketed_products') } : {}),
     ...(growth ? { reserveBudget:(taskId,cents)=>call('private.growth_budget_reserve',[taskId,cents]),releaseBudget:id=>call('private.growth_budget_release',[id]),accountsPage: ({limit=200,offset=0}={})=>call('private.agent_accounts_page',[limit,offset]), notificationStatus: key=>call('private.growth_notification_status',[key]) } : {}),
     /** Turns due schedules of the given task kinds (the ones this server can handle) into tasks. */
     fireSchedules: (kinds, limit = 10) => call('private.agent_schedule_fire', [limit, kinds]),

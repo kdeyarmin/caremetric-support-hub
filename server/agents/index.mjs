@@ -1,4 +1,5 @@
 import { growthHandlers, growthExecutors } from '../growth/worker.mjs';
+import { defaultMarketed, marketingFeature } from './marketing.mjs';
 import { sqlAgentStore } from './store.mjs';
 import { agentScheduler } from './scheduler.mjs';
 import { actionExecutor, recordOnlyExecutors } from './actions.mjs';
@@ -43,8 +44,12 @@ export function agentTeam({
   social = null, meta = null, marketed = null,
 }) {
   // Fenced operations (the attempt a task was claimed under, the execution an action started) exist once the database declares the hardening feature.
+  const marketing = features?.has?.(marketingFeature) === true;
   const store = givenStore ?? sqlAgentStore(pool, { fenced: features?.has?.('platform.agents.hardening.v1') === true, growth: features?.has?.('platform.agents.customer-growth.v1') === true,
-    social: socialDeclared(features) });
+    social: socialDeclared(features), marketing });
+  // What the team markets: the owner's switches on the AI team page, read when each marketing task starts (marketing.mjs). Until the
+  // database declares them, CareMetric Intel only. A caller (a test) may pass its own list or reader.
+  const marketedSource = marketed ?? (marketing && typeof store.marketedProducts === 'function' ? () => store.marketedProducts() : [...defaultMarketed]);
   const notifier = ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log });
   const runtime = model ?? modelRuntime({ apiKey: anthropicApiKey, store, record, notifier, log, now });
   const growth = features?.has?.('platform.agents.customer-growth.v1') ? givenGrowth : null;
@@ -59,10 +64,9 @@ export function agentTeam({
     ...(typeof executors === 'function' ? executors(shared) : executors),
   }, log });
   // The handlers every server ships with, then any the caller adds (a caller's handler for the same kind wins).
-  // `marketed` is the products the team markets to new customers (marketing.mjs; the Hub passes HUB_MARKETED_PRODUCTS, Intel by default).
-  const registry = { ...growthHandlers({growth,model:runtime,notifier,features,marketed}),
-    ...salesHandlers({ store, notifier, model: runtime, growth, features, customerTextToAi, bookingUrl, publicOrigin, guides, marketed, log }),
-    ...socialWork.handlers({ store, notifier, model: runtime, customerTextToAi, publicOrigin, marketed, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, bookingUrl, leadSecrets, lifecycle: customerEmail, marketed, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
+  const registry = { ...growthHandlers({growth,model:runtime,notifier,features,marketed:marketedSource}),
+    ...salesHandlers({ store, notifier, model: runtime, growth, features, customerTextToAi, bookingUrl, publicOrigin, guides, marketed: marketedSource, log }),
+    ...socialWork.handlers({ store, notifier, model: runtime, customerTextToAi, publicOrigin, marketed: marketedSource, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, bookingUrl, leadSecrets, lifecycle: customerEmail, marketed: marketedSource, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   const scheduler = agentScheduler({ store, handlers: registry, actions, enabled, log, now });
   const admin = agentAdmin({
     pool, actions, kick: () => scheduler.tick(), waiting: scheduler.runWaiting,

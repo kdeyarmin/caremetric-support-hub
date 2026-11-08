@@ -65,7 +65,6 @@ export const integrationCatalog = Object.freeze([
   { id: 'customer-growth', name: 'Customer growth', purpose: 'CareBase and Intel prospecting, customer success, activity and delivery events.', docs: 'docs/CUSTOMER_GROWTH.md',
     variables: [
       { name: 'HUB_GROWTH_SEND_ENABLED', secret: false, required: false, flag: true, purpose: 'Master switch for sending reviewed growth messages.' },
-      { name: 'HUB_MARKETED_PRODUCTS', secret: false, required: false, purpose: 'The products the AI team markets to new customers, separated by commas: caremetric-intel, carebase, advisors (or none). Unset means CareMetric Intel only, while CareBase is in its pilot. Customers keep their onboarding and support either way.' },
       { name: 'HUB_GROWTH_SIGNING_KEY', secret: true, minLength: 32, required: true, purpose: 'At least 32 characters; signs stable unsubscribe links. Keep it across releases.' },
       { name: 'HUB_GROWTH_SEARCH_API_KEY', secret: true, required: false, purpose: 'Brave Search API key for attributable organization discovery; manual evidence also works.' },
       { name: 'HUB_GROWTH_CAREBASE_EVENT_KEY', secret: true, minLength: 32, required: false, purpose: 'CareBase server-only activity signing key, at least 32 characters.' },

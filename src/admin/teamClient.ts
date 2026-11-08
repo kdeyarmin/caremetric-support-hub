@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { config } from "../lib/config";
 import { sessionEvent } from "../lib/appSession";
-import { activitySchemas, agentSchema, auditSchema, autonomyStepSchema, decisionSchema, externalEmailProposalSchema, offerSchema, overviewSchema, taskResultSchema, waitingSchema } from "./teamProtocol";
-import type { ActivityKind, ActivityPage, AuditPage, AutonomyStep, Decision, ExternalEmailDraft, ExternalEmailProposal, MenuOffer, TeamAgent, TeamOverview } from "./teamProtocol";
+import { activitySchemas, agentSchema, auditSchema, autonomyStepSchema, decisionSchema, externalEmailProposalSchema, marketingProductSchema, offerSchema, overviewSchema, taskResultSchema, waitingSchema } from "./teamProtocol";
+import type { ActivityKind, ActivityPage, AuditPage, AutonomyStep, Decision, ExternalEmailDraft, ExternalEmailProposal, MarketingProduct, MenuOffer, TeamAgent, TeamOverview } from "./teamProtocol";
 
 /**
  * A failed AI team request. The message is the server's reviewed text (for example "This agent
@@ -53,6 +53,8 @@ export interface TeamClient {
   setOffer(input: { key: string; enabled: boolean; monthlyCap: number; expectedChangedAt: string }): Promise<MenuOffer>;
   /** Adds an offer to the menu (switched off): a trial extension of 1 to 30 days, or one of the owner's Stripe coupons. */
   addOffer(input: { label: string; kind: "trial_extension" | "coupon"; trialDays?: number; couponId?: string; apps: string[]; windowDays: number; monthlyCap: number }): Promise<MenuOffer>;
+  /** Switches marketing of one product on or off. The agents follow it from their next run. */
+  setMarketing(input: { product: MarketingProduct["product"]; marketed: boolean; expectedChangedAt: string }): Promise<MarketingProduct>;
   activity<K extends ActivityKind>(input: { kind: K; agentKey: string | null; offset: number; limit: number }, options: { signal: AbortSignal }): Promise<ActivityPage<K>>;
   audit(input: { prefix: string | null; offset: number; limit: number }, options: { signal: AbortSignal }): Promise<AuditPage>;
 }
@@ -74,6 +76,7 @@ export const teamClient: TeamClient = {
   setStep: input => post("admin/team/step", input, autonomyStepSchema),
   setOffer: input => post("admin/team/offer", input, offerSchema),
   addOffer: input => post("admin/team/addOffer", input, offerSchema),
+  setMarketing: input => post("admin/team/marketing", input, marketingProductSchema),
   activity: (input, { signal }) => post("rpc/list_agent_activity", { p_kind: input.kind, p_agent_key: input.agentKey, p_offset: input.offset, p_limit: input.limit }, activitySchemas[input.kind], signal) as never,
   audit: (input, { signal }) => post("rpc/list_audit_events", { p_action_prefix: input.prefix, p_offset: input.offset, p_limit: input.limit }, auditSchema, signal),
 };

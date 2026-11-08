@@ -10,7 +10,7 @@ import { externalEmailRequestKey } from "./externalEmailDraft";
 import {
   actionLabel, approvalTitle, autonomyHelp, autonomyLabels, cadenceLabel, centsLabel, errorLabel, externalEmailFailure, externalEmailRecipient, failedActionLabel, outcomeLabel, statusLabel, stepHelpText, targetLabel, taskLabel, tierLabels,
 } from "./teamProtocol";
-import type { ActivityKind, ActivityPage, AuditPage, AutonomyStep, ExternalEmailDraft, ExternalEmailProposal, MenuOffer, OfferCoupon, TeamAgent, TeamApproval, TeamOverview, TeamServices } from "./teamProtocol";
+import type { ActivityKind, ActivityPage, AuditPage, AutonomyStep, ExternalEmailDraft, ExternalEmailProposal, MarketingProduct, MenuOffer, OfferCoupon, TeamAgent, TeamApproval, TeamOverview, TeamServices } from "./teamProtocol";
 import "./admin.css";
 
 type Notice = { ok: boolean; text: string } | null;
@@ -227,6 +227,26 @@ function AddOfferForm({ coupons, apps, busy, onAdd }: { coupons: OfferCoupon[]; 
     </div>
     {coupons.length === 0 && <p className="muted">To offer a discount, create the coupon in Stripe first; it appears here once the Hub has seen it.</p>}
   </details>;
+}
+
+/**
+ * Which products the team markets to new customers. The agents read these switches when each task starts, so a change applies to their
+ * next run. Customers' onboarding and support go on whatever is switched off.
+ */
+function MarketingPanel({ products, busy, onMarketing }: { products: MarketingProduct[]; busy: string; onMarketing: (product: MarketingProduct, marketed: boolean) => void }) {
+  return <section className="panel team-marketing" aria-labelledby="team-marketing-title">
+    <div className="admin-section-title"><div><h2 id="team-marketing-title">Products we market</h2>
+      <p>The team finds prospects, sends cold email, posts, runs ads and writes articles only for the products switched on here. A prospect asking about a product that is off is left for you. Customers' onboarding and support go on either way.</p></div></div>
+    <ul className="team-service-list">{products.map(product => <li key={`${product.product}:${product.changedAt}`}>
+      <span className="team-service-name">{product.label}</span>
+      <Pill good={product.marketed}>{product.marketed ? "Marketed" : "Not marketed"}</Pill>
+      <span className="muted">{product.description}</span>
+      <span className="button-row">
+        <button type="button" className={`button button-small ${product.marketed ? "button-secondary" : "button-primary"}`} disabled={Boolean(busy)}
+          aria-label={`${product.marketed ? "Stop marketing" : "Start marketing"} ${product.label}`} onClick={() => onMarketing(product, !product.marketed)}>{product.marketed ? "Stop marketing" : "Start marketing"}</button>
+      </span>
+    </li>)}</ul>
+  </section>;
 }
 
 /**
@@ -486,6 +506,9 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
     () => client.setOffer({ key: offer.key, enabled, monthlyCap, expectedChangedAt: offer.changedAt }),
     enabled === offer.enabled ? `${offer.label}: at most ${plural(monthlyCap, "offer")} a month.` : `${offer.label} is switched ${enabled ? "on" : "off"}.`);
   const onAddOffer = (offer: NewOffer) => void change("offer:new", () => client.addOffer(offer), `${offer.label} is on the menu, switched off. Switch it on when you are ready.`);
+  const onMarketing = (product: MarketingProduct, marketed: boolean) => void change(`marketing:${product.product}`,
+    () => client.setMarketing({ product: product.product, marketed, expectedChangedAt: product.changedAt }),
+    marketed ? `The team markets ${product.label} from its next run.` : `The team stops marketing ${product.label} from its next run.`);
   const onRunWaiting = () => {
     let started = 0;
     let sending = 0;
@@ -534,6 +557,7 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
     {shown && <>
       <p className="admin-read-time">Loaded {timeLabel(shown.receivedAt)}.</p>
       <ServicesPanel services={shown.data.services} awaitingSession={shown.data.team.awaitingSessionCount} waitingActions={shown.data.waitingActions} busy={busy} onRunWaiting={onRunWaiting} />
+      {shown.data.marketing && shown.data.marketing.length > 0 && <MarketingPanel products={shown.data.marketing} busy={busy} onMarketing={onMarketing} />}
       {shown.data.autonomy && shown.data.autonomy.length > 0 && <AutonomyPanel steps={shown.data.autonomy} busy={busy} onStep={onStep} />}
       <EmailComposer client={client} ready={shown.data.services.externalEmail === true && shown.data.services.email} busy={busy} change={change} terminalDecisions={terminalEmailDecisions} />
       {shown.data.offers && <OffersPanel menu={shown.data.offers} busy={busy} onOffer={onOffer} onAdd={onAddOffer} />}

@@ -50,6 +50,10 @@ const menu: NonNullable<TeamOverview["offers"]> = {
     eligibility: "trial_ending", windowDays: 7, monthlyCap: 10, enabled: false, changedAt: "2026-11-05T08:00:00.123456+00:00", usedThisMonth: 2, appliedTotal: 5 }],
   coupons: [{ id: "SPRING20", name: "Spring", percentOff: 20, amountOff: null, currency: null, duration: "repeating", durationInMonths: 3 }],
 };
+const marketing: NonNullable<TeamOverview["marketing"]> = [
+  { product: "caremetric-intel", label: "CareMetric Intel", description: "Prospecting and cold email to home health and hospice agencies.", marketed: true, changedAt: "2026-11-08T21:00:00.123456+00:00" },
+  { product: "carebase", label: "CareMetric CareBase", description: "Off while CareBase is in its pilot.", marketed: false, changedAt: "2026-11-08T21:00:00.654321+00:00" },
+];
 const emptyPage = { items: [], total: 0, offset: 0, limit: 15 };
 function fakeClient(data: TeamOverview = overview(), overrides: Partial<TeamClient> = {}): TeamClient {
   return {
@@ -57,7 +61,7 @@ function fakeClient(data: TeamOverview = overview(), overrides: Partial<TeamClie
     decide: vi.fn(async () => ({ id: ids.action, kind: "communication.reply", status: "executed", decided: true })), run: vi.fn(async () => ({ id: ids.task, status: "queued" })),
     prepareEmail: vi.fn(async (input: ExternalEmailDraft & { requestKey: string }) => ({ id: ids.action, kind: "email.external" as const, status: "proposed" as const, created: true, requestKey: input.requestKey })),
     cancel: vi.fn(async () => ({ id: ids.task, status: "cancelled" })), waiting: vi.fn(async () => ({ started: 2, actions: 0 })),
-    setStep: vi.fn(async () => steps[0]), setOffer: vi.fn(async () => menu.offers[0]), addOffer: vi.fn(async () => menu.offers[0]),
+    setStep: vi.fn(async () => steps[0]), setOffer: vi.fn(async () => menu.offers[0]), addOffer: vi.fn(async () => menu.offers[0]), setMarketing: vi.fn(async () => marketing[1]),
     activity: vi.fn(async () => emptyPage) as TeamClient["activity"], audit: vi.fn(async () => emptyPage), ...overrides,
   };
 }
@@ -314,6 +318,25 @@ describe("AI team screen", () => {
     fireEvent.change(within(panel).getByLabelText("Coupon"), { target: { value: "SPRING20" } });
     fireEvent.click(within(panel).getByRole("button", { name: "Add offer (switched off)" }));
     await waitFor(() => expect(client.addOffer).toHaveBeenCalledWith({ label: "20% off for 3 months", kind: "coupon", couponId: "SPRING20", apps: ["carebase", "caremetric-intel"], windowDays: 7, monthlyCap: 5 }));
+  });
+
+  it("shows which products the team markets and switches one with the version it was shown", async () => {
+    const client = fakeClient({ ...overview(), marketing });
+    render(<Team client={client} />);
+    const panel = await screen.findByRole("region", { name: "Products we market" });
+    expect(within(panel).getByText("Marketed")).toBeTruthy();
+    expect(within(panel).getByText("Not marketed")).toBeTruthy();
+    fireEvent.click(within(panel).getByRole("button", { name: "Start marketing CareMetric CareBase" }));
+    await waitFor(() => expect(client.setMarketing).toHaveBeenCalledWith({ product: "carebase", marketed: true, expectedChangedAt: "2026-11-08T21:00:00.654321+00:00" }));
+    expect(await screen.findByText("The team markets CareMetric CareBase from its next run.")).toBeTruthy();
+    fireEvent.click(within(panel).getByRole("button", { name: "Stop marketing CareMetric Intel" }));
+    await waitFor(() => expect(client.setMarketing).toHaveBeenLastCalledWith({ product: "caremetric-intel", marketed: false, expectedChangedAt: "2026-11-08T21:00:00.123456+00:00" }));
+  });
+
+  it("leaves the marketing switches out against a database that does not have them yet", async () => {
+    render(<Team client={fakeClient({ ...overview(), marketing: null })} />);
+    await screen.findByRole("region", { name: "What the team can use" });
+    expect(screen.queryByRole("region", { name: "Products we market" })).toBeNull();
   });
 
   it("leaves the offer menu out against a database that does not have it yet", async () => {
