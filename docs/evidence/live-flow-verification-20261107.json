@@ -1,12 +1,14 @@
 {
-  "inspected_at": "2026-11-07T23:59:46.580Z",
-  "kind": "read_only_reconciliation_of_existing_provider_activity",
+  "inspected_at": "2026-11-08T00:04:10.598Z",
+  "kind": "provider_record_reconciliation_and_owner_assisted_live_verification",
   "production": {
     "origin": "https://help.caremetric.ai",
     "sms": {
-      "matched_provider_challenges_and_sessions": 15,
-      "latest_successful_signin": "2026-11-07T13:02:59.566058Z",
-      "fresh_signin_performed": false
+      "matched_provider_challenges_and_sessions": 16,
+      "latest_successful_signin": "2026-11-08T00:01:52.453013+00:00",
+      "fresh_signin_performed": true,
+      "initiated_by": "owner_in_production_app",
+      "active_sessions_at_check": 1
     },
     "native_reads": {
       "products": [
@@ -15,9 +17,14 @@
         "intel",
         "advisors"
       ],
-      "http_window": "2026-11-07T13:05:00Z/2026-11-07T13:06:00Z",
+      "http_window": "2026-11-08T00:01:56Z/2026-11-08T00:02:01Z",
       "hub_http_status": 200,
-      "one_use_capabilities_consumed": true
+      "one_use_capabilities_consumed": true,
+      "fresh_successful_reads": 8,
+      "operations": [
+        "capabilities",
+        "overview"
+      ]
     },
     "stripe": {
       "account": "acct_1SinLKB06O2UFlNz",
@@ -90,18 +97,85 @@
     "unsigned_stripe_webhook": 400
   },
   "remaining": [
-    "fresh_owner_authenticated_run_of_current_release",
     "positive_value_production_payment",
     "hosted_checkout_to_hub_fulfillment",
     "outbound_support_sms",
     "provider_mutations",
     "private_media_playback",
     "course_publication",
-    "ai_generation"
+    "ai_generation",
+    "full_cli_authenticated_replay_and_logout"
   ],
   "effects": {
-    "new_sms_sent": false,
+    "new_sms_sent": true,
     "new_payments": false,
-    "provider_writes": false
+    "provider_writes": false,
+    "sms_initiated_by": "owner"
+  },
+  "fresh_authenticated_checks": {
+    "at": "2026-11-08T00:01:52.453013+00:00",
+    "sms_provider_challenge_and_session_matched": true,
+    "owner_authorization_http_status": 200,
+    "billing_workspace_http_status": 200,
+    "dashboard_http_failures": 0,
+    "provider_delegations": [
+      {
+        "issued": 1,
+        "latest": "2026-11-08T00:01:57.037008+00:00",
+        "audience": "advisors",
+        "consumed": 1,
+        "operation": "capabilities"
+      },
+      {
+        "issued": 1,
+        "latest": "2026-11-08T00:01:57.914773+00:00",
+        "audience": "advisors",
+        "consumed": 1,
+        "operation": "overview"
+      },
+      {
+        "issued": 1,
+        "latest": "2026-11-08T00:01:57.536329+00:00",
+        "audience": "breathe",
+        "consumed": 1,
+        "operation": "capabilities"
+      },
+      {
+        "issued": 1,
+        "latest": "2026-11-08T00:01:58.914934+00:00",
+        "audience": "breathe",
+        "consumed": 1,
+        "operation": "overview"
+      },
+      {
+        "issued": 1,
+        "latest": "2026-11-08T00:01:57.400037+00:00",
+        "audience": "carebase",
+        "consumed": 1,
+        "operation": "capabilities"
+      },
+      {
+        "issued": 1,
+        "latest": "2026-11-08T00:01:59.065274+00:00",
+        "audience": "carebase",
+        "consumed": 1,
+        "operation": "overview"
+      },
+      {
+        "issued": 1,
+        "latest": "2026-11-08T00:01:56.759676+00:00",
+        "audience": "intel",
+        "consumed": 1,
+        "operation": "capabilities"
+      },
+      {
+        "issued": 1,
+        "latest": "2026-11-08T00:01:57.589763+00:00",
+        "audience": "intel",
+        "consumed": 1,
+        "operation": "overview"
+      }
+    ],
+    "sms_verify_http_status": 200
   }
 }
