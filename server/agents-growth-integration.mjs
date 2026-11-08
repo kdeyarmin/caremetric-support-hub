@@ -155,6 +155,9 @@ try {
   await assert.rejects(pool.query('select count(*) from private.leads'), refused('42501'), 'the server role has no direct access to the leads');
   // Each operation checks what it is given.
   const day = 86_400_000;
+  // Exact boundary cases must share one clock reading. Separate reads can make
+  // a zero-length interval positive, or push exactly 93 days over the limit.
+  const periodEnd = new Date();
   for (const [fn, args, message] of [
     ['private.agent_growth_pending', [0, 24], /between 1 and 100 leads/], ['private.agent_growth_pending', [101, 24], /between 1 and 100 leads/],
     ['private.agent_growth_pending', [null, 24], /between 1 and 100 leads/], ['private.agent_growth_pending', [10, 0], /between 1 and 720 hours/],
@@ -167,14 +170,14 @@ try {
     ['private.agent_growth_unanswered', [[60], 0, 10], /longest wait between 1 and 44640/], ['private.agent_growth_unanswered', [[60], 44_641, 10], /longest wait between 1 and 44640/],
     ['private.agent_growth_unanswered', [[60], null, 10], /longest wait between 1 and 44640/],
     ['private.agent_growth_unanswered', [[60], 10080, 0], /between 1 and 100 conversations/], ['private.agent_growth_unanswered', [[60], 10080, 101], /between 1 and 100 conversations/],
-    ['private.agent_growth_facts', [null, new Date()], /up to 93 days/], ['private.agent_growth_facts', [new Date(), new Date()], /up to 93 days/],
-    ['private.agent_growth_facts', [new Date(), new Date(Date.now() - day)], /up to 93 days/], ['private.agent_growth_facts', [new Date(Date.now() - 94 * day), new Date()], /up to 93 days/],
+    ['private.agent_growth_facts', [null, periodEnd], /up to 93 days/], ['private.agent_growth_facts', [periodEnd, periodEnd], /up to 93 days/],
+    ['private.agent_growth_facts', [periodEnd, new Date(periodEnd.getTime() - day)], /up to 93 days/], ['private.agent_growth_facts', [new Date(periodEnd.getTime() - 93 * day - 1), periodEnd], /up to 93 days/],
     ['private.agent_lead_probe_seen', ['breathe', new Date()], /carebase, intel or advisors/], ['private.agent_lead_probe_seen', [null, new Date()], /carebase, intel or advisors/],
     ['private.agent_lead_probe_seen', ['carebase', null], /within the last day/], ['private.agent_lead_probe_seen', ['carebase', new Date(Date.now() - 2 * day)], /within the last day/],
   ]) {
     await assert.rejects(call(fn, args), refused('22023', message), `${fn}(${JSON.stringify(args).slice(0, 60)}) is refused`);
   }
-  assert.deepEqual(await call('private.agent_growth_facts', [new Date(Date.now() - 93 * day), new Date()]).then(facts => Object.keys(facts).sort()),
+  assert.deepEqual(await call('private.agent_growth_facts', [new Date(periodEnd.getTime() - 93 * day), periodEnd]).then(facts => Object.keys(facts).sort()),
     ['generatedAt', 'leads', 'replies', 'since', 'trials', 'unanswered', 'until'], 'a period of exactly 93 days is allowed');
 
   // The Team screen's own schemas accept the new agent and its schedules.
