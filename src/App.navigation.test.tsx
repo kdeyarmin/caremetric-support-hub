@@ -12,7 +12,7 @@ const repo = vi.hoisted(() => ({
   updateCase: vi.fn(async () => undefined),
   listContent: vi.fn(),
 }));
-const session = vi.hoisted(() => ({ current: vi.fn(), subscribe: vi.fn(() => () => {}), signOut: vi.fn() }));
+const session = vi.hoisted(() => ({ current: vi.fn(), subscribe: vi.fn(() => () => {}), signOut: vi.fn(), start: vi.fn(), verify: vi.fn(), passwordSettings: vi.fn() }));
 vi.mock("./lib/config", () => ({ config: { demoMode: false, supabaseUrl: "https://hub.test", supabasePublishableKey: "key", helpBaseUrl: "https://hub.test", centralSupportEmail: "support@caremetric.ai", centralSupportPhone: "+18775212890", centralSupportPhoneDisplay: "(877) 521-2890", pennTrainBaseUrl: "" } }));
 vi.mock("./data", () => ({ repository: repo, demoRepository: {} }));
 vi.mock("./lib/appSession", () => ({
@@ -147,7 +147,7 @@ describe("session refresh ordering", () => {
     session.current.mockResolvedValue({ authenticated: false });
     await act(async () => { (session.subscribe.mock.calls[0] as unknown as [() => void])[0](); });
     await act(async () => { resolveSession({ authenticated: true }); });
-    expect(screen.queryByRole("heading", { name: "Sign in with a text message." })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Sign in to CareMetric." })).toBeTruthy();
     expect(document.querySelector(".app-shell")).toBeNull();
   });
 
@@ -160,7 +160,7 @@ describe("session refresh ordering", () => {
     await act(async () => { (session.subscribe.mock.calls[0] as unknown as [() => void])[0](); });
     await act(async () => { resolveActor(owner); });
     expect(repo.listCases).not.toHaveBeenCalled();
-    expect(screen.getByRole("heading", { name: "Sign in with a text message." })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Sign in to CareMetric." })).toBeTruthy();
   });
 
   it("does not reload an empty public catalog indefinitely", async () => {
@@ -176,6 +176,18 @@ describe("session refresh ordering", () => {
 });
 
 describe("a saved sign-in destination", () => {
+  it("takes password recovery from an admin link to account security", async () => {
+    session.current.mockResolvedValue({ authenticated: false });
+    session.start.mockResolvedValue({ challengeId: "recovery", retryAfter: 60 });
+    render(<MemoryRouter initialEntries={["/admin"]}><App /><WhereAmI /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: "Set up or reset your password" }));
+    fireEvent.change(screen.getByLabelText("Mobile number"), { target: { value: "+12025550123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Text me a code" }));
+    await screen.findByLabelText("SMS code");
+    expect(path()).toBe("/security");
+    expect(window.localStorage.getItem("caremetric.pendingHelpPath")).toBe("/security");
+  });
+
   it("opens once sign-in completes at the home address, ahead of the home page", async () => {
     window.localStorage.setItem("caremetric.pendingHelpPath", "/help");
     render(<MemoryRouter initialEntries={["/"]}><App /><WhereAmI /></MemoryRouter>);

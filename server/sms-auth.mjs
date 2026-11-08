@@ -124,15 +124,17 @@ export async function withSession(pool, sessionToken, operation, required = true
   return transaction(pool, async db => {
     let session = null;
     if (sessionToken) {
-      const result = await db.query(`select s.id,s.user_id from private.sms_sessions s
+      const result = await db.query(`select s.id,s.user_id,s.auth_method from private.sms_sessions s
         join private.sms_identities i on i.user_id=s.user_id and i.identity_version=s.identity_version
-        where s.token_hash=$1 and s.revoked_at is null and s.expires_at>now() and i.revoked_at is null`, [digest(sessionToken)]);
+        where s.token_hash=$1 and s.revoked_at is null and s.expires_at>now() and i.revoked_at is null
+          and (s.auth_method='sms' or exists(select 1 from private.password_credentials c
+            where c.user_id=s.user_id and c.identity_version=s.identity_version and c.credential_version=s.credential_version))`, [digest(sessionToken)]);
       session = result.rows[0] ?? null;
     }
-    if (!session && required) throw new HttpError(401, 'Sign in with an SMS code to continue.');
+    if (!session && required) throw new HttpError(401, 'Sign in to continue.');
     await db.query(session ? 'set local role authenticated' : 'set local role anon');
     await db.query("select set_config('request.jwt.claims',$1,true)", [JSON.stringify(session
-      ? { sub: session.user_id, role: 'authenticated', sms_session_id: session.id, amr: [{ method: 'sms' }] }
+      ? { sub: session.user_id, role: 'authenticated', sms_session_id: session.id, amr: [{ method: session.auth_method ?? 'sms' }] }
       : { role: 'anon' })]);
     return operation(db, session);
   });

@@ -36,6 +36,12 @@ export const appSession = {
     await appRequest('auth/sms/verify',{ challengeId,code });
     window.dispatchEvent(new Event(authEvent));
   },
+  async signInWithPassword(username:string,password:string) {
+    await appRequest('auth/password/login',{ username,password });
+    window.dispatchEvent(new Event(authEvent));
+  },
+  passwordSettings: (signal?:AbortSignal) => appRequest<{username:string;configured:boolean;can_reset:boolean}>('auth/password/settings',undefined,signal),
+  savePassword: (input:{username:string;password:string;currentPassword?:string}) => appRequest('auth/password/settings',input),
   startInvitation: (input:{claimCode:string;phone:string;consent:true})=>appRequest<{challengeId:string;retryAfter:number}>('auth/invitation/start',input),
   async verifyInvitation(challengeId:string,code:string){
     await appRequest('auth/invitation/verify',{challengeId,code});
