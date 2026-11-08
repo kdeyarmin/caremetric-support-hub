@@ -1,6 +1,13 @@
 import { products, planOpportunity, qualify } from './policy.mjs';
 import { draftMessage, growthPromptVersion } from './draft.mjs';
+import { discoveryQuery, operatorHost } from './playbook.mjs';
 import { assessProspect } from './assessment.mjs';
+
+/**
+ * The key the database's send claim requires for a recent passing evaluation (`version='growth.1'` in private.growth_claim_message).
+ * It names this guardrail suite, not the drafting prompt: the suite may grow, and the prompt's own version is recorded on every run.
+ */
+export const growthEvaluationVersion = 'growth.1';
 
 /** Golden behavioral cases. These evaluate the decision boundary, not live model persuasiveness. */
 export async function evaluateGrowth(now = new Date()) {
@@ -30,9 +37,16 @@ export async function evaluateGrowth(now = new Date()) {
     check('unapproved link rejected', await invoke({ ...draft, body: 'Visit https://unsupported.example.org' }) === null);
     check('unsupported commitment abstains', await invoke({ ...draft, needsHuman: true }) === null);
     check('missing approved claim abstains', await draftMessage({ opportunity: { ...base, policy: {} }, work, task: {} }) === null);
+    check('model draft with an unlisted price rejected', await invoke({ ...draft, body: 'Plans start at $27 a month. Would a short conversation help?' }) === null);
+    check('model draft with a guarantee rejected', await invoke({ ...draft, body: 'We guarantee you will pass your next inspection.' }) === null);
+    check('model draft naming a competitor rejected', await invoke({ ...draft, body: 'Unlike PointClickCare, we keep training in one place. Worth a look?' }) === null);
+    check('product page link allowed', (await invoke({ ...draft, body: `Would a free trial help?\n\n${product === 'carebase' ? 'https://cmcarebase.com/signup' : 'https://www.caremetricintel.com/'}` }))?.modelGenerated === true);
+    check('other product page link rejected', await invoke({ ...draft, body: `Would a free trial help?\n\n${product === 'carebase' ? 'https://www.caremetricintel.com/' : 'https://cmcarebase.com/signup'}` }) === null);
+    check('discovery rotates daily', discoveryQuery(product, now) !== discoveryQuery(product, new Date(now.getTime() + 86400000)));
+    check('directories are not prospects', !operatorHost('www.aplaceformom.com') && !operatorHost('pa.gov'));
     const fit = await assessProspect(base, {}, model({ fit: 70, rationale: 'Observed services fit the audience; buyer unknown.', citations: ['source-a'], nextAction: 'Verify the buyer.' }));
     check('intent stays unknown without customer action', fit?.intent === null);
-    reports.push({ product, version: growthPromptVersion, passed: results.every(r => r.passed), results, scope: 'synthetic behavioral guardrails; live model quality and conversion require reviewed pilot results' });
+    reports.push({ product, version: growthEvaluationVersion, prompt: growthPromptVersion, passed: results.every(r => r.passed), results, scope: 'synthetic behavioral guardrails; live model quality and conversion require reviewed pilot results' });
   }
   return reports;
 }

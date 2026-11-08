@@ -47,7 +47,7 @@ const identifierToken = /\b(?=[A-Za-z0-9-]*\d)[A-Za-z0-9-]{5,40}\b|\b[A-Z]{4,20}
 const capitalizedWord = /\b[A-Z][a-z]{2,20}\b/g;
 
 /** Names and identifier-like tokens in the customer's message that a reply must not repeat (those the guides use are fine). */
-function echoCandidates(text, vocabulary) {
+export function echoCandidates(text, vocabulary) {
   const found = new Set();
   for (const match of text.matchAll(capitalizedWord)) {
     // A capital that starts a sentence is usually only grammar, unless another capitalized word follows it (a name: "Pat Example").
@@ -59,7 +59,7 @@ function echoCandidates(text, vocabulary) {
   return [...found].filter(word => !vocabulary.has(word.toLowerCase()) && !everyday.has(word.toLowerCase()));
 }
 
-function quotesCustomer(reply, text, size = 8) {
+export function quotesCustomer(reply, text, size = 8) {
   const source = wordsOf(text);
   if (source.length < size) return false;
   const grams = new Set();

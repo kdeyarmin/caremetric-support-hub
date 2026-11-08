@@ -11,6 +11,7 @@ import { externalEmailAvailable, externalEmailExecutors, externalEmailRecovery }
 import { offerExecutors } from './accounts/offers.mjs';
 import { contentExecutors } from './content/executor.mjs';
 import { modelRuntime } from './runtime/index.mjs';
+import { salesHandlers } from './sales/index.mjs';
 
 const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 
@@ -52,7 +53,8 @@ export function agentTeam({
     ...contentExecutors({ store, features, log }), ...externalEmailExecutors({ store, features, email, log }), ...(typeof executors === 'function' ? executors(shared) : executors),
   }, log });
   // The handlers every server ships with, then any the caller adds (a caller's handler for the same kind wins).
-  const registry = { ...growthHandlers({growth,model:runtime,notifier,features}), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, bookingUrl, leadSecrets, lifecycle: customerEmail, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
+  const registry = { ...growthHandlers({growth,model:runtime,notifier,features}),
+    ...salesHandlers({ store, notifier, model: runtime, growth, features, customerTextToAi, bookingUrl, publicOrigin, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, bookingUrl, leadSecrets, lifecycle: customerEmail, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   const scheduler = agentScheduler({ store, handlers: registry, actions, enabled, log, now });
   const admin = agentAdmin({
     pool, actions, kick: () => scheduler.tick(), waiting: scheduler.runWaiting,

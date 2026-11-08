@@ -63,6 +63,11 @@ export function sqlAgentStore(pool, { fenced = false, growth = false } = {}) {
     /** Conversations whose newest inbound message has settled and nobody has answered or triaged. Ids and counts only. */
     conciergePending: ({ limit = 10, settleSeconds = 90, windowHours = 72, channels = null } = {}) =>
       call('private.agent_concierge_pending', [limit, settleSeconds, windowHours, channels]),
+    /**
+     * Hands one prospect message to the Sales Executive when it is working and the message is a CareBase or Intel prospect's
+     * (platform.agents.sales-executive.v1): `{ handoff: true, product }`, or `{ handoff: false, reason }`. Ids only, never text.
+     */
+    salesHandoff: ({ communicationId, messageId }) => call('private.sales_handoff', [communicationId, messageId]),
     /** A minimal view of one conversation (no contact details, no notes) with up to `messages` recent messages clipped to `chars`. */
     communicationSnapshot: ({ id, requestKey = null, messages = 0, chars = 2000 }) =>
       call('private.agent_communication_snapshot', [id, requestKey, messages, chars]),

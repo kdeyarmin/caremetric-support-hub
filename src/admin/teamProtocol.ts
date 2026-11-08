@@ -156,6 +156,7 @@ const taskLabels: Record<string, string> = {
   "accounts.lifecycle": "Customer emails", "autonomy.graduate": "Hand over work after its supervised week", "accounts.offers": "Offers from your menu",
   "growth.pipeline": "Review sales pipeline", "growth.success": "Review customer success", "growth.discovery": "Discover prospective organizations", "growth.content": "Propose product content",
   "growth.evaluate": "Check the outreach guardrails",
+  "sales.reply": "Answer a prospect", "sales.review": "Weekly pipeline review",
 };
 export const taskLabel = (kind: string) => taskLabels[kind] ?? kind;
 

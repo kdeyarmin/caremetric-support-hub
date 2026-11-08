@@ -109,6 +109,16 @@ it('discovery reads each new business\'s own site for one role address and recor
  await growthHandlers({growth,features:autonomy})['growth.discovery']({id:'t',agent:{autonomy:'observe'}});
  expect(contacts.find).not.toHaveBeenCalled();
 });
+it('discovery searches a new Pennsylvania place for CareBase each day instead of the same query',async()=>{
+ const store={discover:vi.fn(async()=>0)};
+ const search=vi.fn(async()=>[]);
+ const handlers=growthHandlers({growth:{store,research:{configured:true,search}}});
+ await handlers['growth.discovery']({id:'t',agent:{autonomy:'propose'}},{now:()=>new Date('2026-11-08T13:00:00Z')});
+ await handlers['growth.discovery']({id:'t',agent:{autonomy:'propose'}},{now:()=>new Date('2026-11-09T13:00:00Z')});
+ const queries=search.mock.calls.map(([product,options])=>[product,options.query]);
+ expect(queries.filter(([product])=>product==='carebase').every(([,query])=>/ PA$/.test(query))).toBe(true);
+ expect(new Set(queries.map(([,query])=>query)).size).toBe(4);
+});
 it('dedupes growth notices on the Eastern day, including after UTC midnight',async()=>{
  expect(growthDay(new Date('2026-11-08T03:30:00Z'))).toBe('2026-11-07');
  expect(growthDay(new Date('2026-07-15T03:30:00Z'))).toBe('2026-07-14');

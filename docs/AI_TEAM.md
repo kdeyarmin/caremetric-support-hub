@@ -19,6 +19,9 @@ is built so far.
 > leaves the Hub. The SEO Analyst also calls the model, with the company's own public pages only, to suggest
 > titles and descriptions ("The SEO Analyst").
 > The Marketing Manager and shared customer-success workspace add CareBase and Intel prospecting, activation and retention workflows. See [Customer growth](CUSTOMER_GROWTH.md) for their separate controls and activation. Breathe remains deferred.
+> The **Sales Executive** answers CareBase and Intel prospects with drafts checked against the go-to-market fact sheet and sends a
+> weekly pipeline review (see "The Sales Executive"). The revenue agents share one sales playbook, `server/growth/playbook.mjs`. The
+> [November 8 workforce skills review](AI_WORKFORCE_SKILLS_REVIEW.md) explains why.
 
 ## The model
 
@@ -354,6 +357,10 @@ Notices every new conversation in the Communications inbox within minutes and te
 it uses no model and keeps no message text: this is customer service by simple rules, so the owner finds out
 quickly and nothing a customer wrote leaves the Hub. The owner can switch on drafted answers (see "Drafted
 answers" below), which adds one model call for the plainest questions.
+
+Once the Sales Executive is resumed, a CareBase or Intel prospect's message (a website lead, a sales inquiry or a reply to the
+Marketing Manager's outreach) is handed to it right after the owner's alert, instead of getting the Concierge's fixed sales
+acknowledgment; see "The Sales Executive".
 
 Every five minutes (task `concierge.sweep`, "Look for new messages") it asks the database which
 conversations have a newest inbound message that has **settled** (90 seconds old, so a burst of texts counts
@@ -803,6 +810,55 @@ accounts that qualify, at most once per account for each offer and at most each 
 The customer sees an extension as a later trial end in their product and billing portal, and a coupon on their next invoice;
 the Account Manager sends no separate email about it.
 
+## The Sales Executive
+
+The closer. It works the middle of the sales cycle, where a prospect has written to CareMetric and is deciding whether to try and
+then buy: until now every such message got a fixed "I will follow up personally today" note and waited for the owner. It starts
+**paused, in Propose** (`20261108180000_sales_executive.sql`, gate `20261108180100_sales_executive_contract.sql`, feature
+`platform.agents.sales-executive.v1`), with a daily budget of $3.00 on the Draft tier.
+
+**Answering prospects** (task `sales.reply`, "Answer a prospect"). After the Support Concierge has alerted the owner about a new
+message, it asks the database whether the message is a prospect's (`private.sales_handoff`): a CareBase or Intel website lead or a
+conversation filed as a sales inquiry, or an email from a growth contact on file whose CareBase or Intel opportunity is still open
+(not yet a trial or a customer). Only an email received through the signed provider path binds a growth contact; an address typed
+into a chat or a form is a visitor's claim. Billing and closed conversations, Advisors and every other product stay with the
+Concierge and the owner, and so does any message with identifiers, one too long to have been read, or one about a cancellation, an
+outage, security or a legal matter. While the Sales Executive is paused or in Observe, nothing is handed over and the Concierge
+behaves exactly as before.
+
+For a handed-over message it reads the newest message and up to two earlier ones, scrubbed of personal details, and, only while
+`HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true` and a model key is set, asks the model for a reading and a draft. The model is given the
+product, the prospect's stage, whether CareMetric wrote first, a word limit for the channel, the product's own pages it may link to
+and the owner's booking page, with the fact sheet (`server/agents/content/facts.mjs`) and the sales playbook
+(`server/growth/playbook.mjs`) in its cached system prompt. Its method: answer what was asked from the fact sheet (exact plan prices
+and the Founders Sale terms when cost comes up), offer one next step (usually the free trial; for a trial, activating a paid plan with
+FOUNDERS50), ask at most one qualifying question, handle objections the playbook's way, and never pressure. The code then checks the
+draft (`server/agents/sales/check.mjs`): only that product's listed prices, no other product's; links only to that product's pages
+or the booking page; no guarantee, compliance assurance, certification, named competitor, testimonial, call or demo as a step, voice
+AI, trial extension, special pricing, refund, time frame, mention of AI, identifier, name from the message or long quotation; the
+fixed vocabulary is rewritten (ALF, surveyor). A draft that passes is proposed as a `communication.reply` for the owner to approve
+in Team, and the owner gets one email saying a drafted answer is waiting (at most 20 a day). The reply executor refuses any reply
+nobody approved, so the Sales Executive never sends on its own, whatever its autonomy.
+
+When prospect text may not go to the model, or the model is unavailable, over budget, abstains or its draft fails a check, a first
+message gets the same fixed sales acknowledgment the Concierge would have offered. A message the model reads as carrying identifiers
+gets the fixed notice asking to resend without them. A request not to be contacted, a "no", a wrong person, a negotiation, a contract
+or security question, a cancellation or anything the fact sheet does not answer is left to the owner (the alert already went out).
+Nothing the prospect wrote is kept in the task, the run or the owner's email.
+
+**Weekly pipeline review** (task `sales.review`, "Weekly pipeline review", daily at 07:45 Eastern, sent once a week). It reads every
+page of the growth pipeline, leaves out internal organizations and emails the owner, per product, how many prospects, conversations,
+trials and customers there are, what moved this week (replies, meetings, trials started, new paying customers), and which deals
+need the owner now: a trial that ended with no decision or ends within a week without first value, a prospect who said yes in the
+last two weeks but has no trial, an overdue next step or a conversation with no movement for two weeks, and a qualified prospect with
+no permitted contact. The stored body carries counts only; organization names travel in the email's blocks. It uses no model.
+
+**To switch it on:** apply the two migrations, restart the Hub so it reads the feature, then resume the Sales Executive on
+**AI team** in **Propose** and press **Run now** on "Weekly pipeline review". Prospect replies are drafted only with
+`HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true` and `ANTHROPIC_API_KEY`; `HUB_BOOKING_URL` lets drafts offer the owner's booking page.
+`npm test -- server/agents/sales` runs its unit tests and `node server/agents-sales-integration.mjs` (with `HUB_TEST_DATABASE_URL`
+on a local Supabase) checks the hand-off through the real server role.
+
 ## The Content Marketer
 
 Writes the help center's public articles, one a week, for the owner to approve, and once a month drafts outreach for the
@@ -1194,6 +1250,10 @@ Apply the migrations in order with the usual procedure:
    withdrawn and the versions it was drafted against, so the Marketing Manager no longer pays for a new draft of work whose last
    message was cancelled while nothing changed. No gate and no new feature: a Hub on a database without it drafts as before. No restart
    is needed.
+17. `20261108180000_sales_executive.sql`, then its gate `20261108180100_sales_executive_contract.sql`, which seed the Sales
+   Executive (paused, Propose) and its daily `sales.review` schedule, add the server-only `private.sales_handoff` and declare
+   `platform.agents.sales-executive.v1` (it needs customer growth, the Concierge, the hardening and the communications inbox).
+   Restart the Hub after it. Nothing changes until the owner resumes the Sales Executive.
 
 The Hub build does not require any of these features, so a Hub whose database lacks them still starts and
 serves everything else. The AI team is opt-in twice over: nothing runs unless `HUB_AGENTS_ENABLED`

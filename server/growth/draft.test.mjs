@@ -20,3 +20,35 @@ it('fit assessment cannot turn model opinion into buying intent',async()=>{
  expect(await assessProspect(opportunity,{},model)).toMatchObject({fit:70,intent:null});
  expect(await assessProspect({...opportunity,events:[{kind:'positive_reply'}]}, {},model)).toMatchObject({intent:75});
 });
+it('tells the writer which touch it is writing, the playbook angle for it and the pages it may link to',async()=>{
+ const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Staff training records',body:'How do you track annual training hours today?\n\nhttps://cmcarebase.com/signup',citations:['source-1'],needsHuman:false}}))};
+ const draft=await draftMessage({opportunity:{...opportunity,touches:1,policy:{...opportunity.policy,max_touches:3}},work,task:{},model});
+ expect(draft).toMatchObject({modelGenerated:true});
+ const request=model.run.mock.calls[0][1];
+ const input=JSON.parse(request.user);
+ expect(input).toMatchObject({touch:2,maxTouches:3});
+ expect(input.touchPlan).toMatch(/different angle/);
+ expect(input.links.map(link=>link.url)).toContain('https://cmcarebase.com/signup');
+ expect(input.links.map(link=>link.url)).not.toContain('https://www.caremetricintel.com/');
+ expect(request.system[0].text).toContain('CareMetric fact sheet');
+ expect(request.system[0].text).toContain('sales playbook');
+ expect(request.promptVersion).toBe('growth.2');
+});
+it('gives a customer-success message the play for its moment instead of a touch',async()=>{
+ const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Before your trial ends',body:'What is left to decide before your trial ends?',citations:[],needsHuman:false}}))};
+ expect(await draftMessage({opportunity:{...opportunity,stage:'trial'},work:{kind:'trial',action:'Review trial progress',success:'Decision'},task:{},model})).toMatchObject({modelGenerated:true});
+ const input=JSON.parse(model.run.mock.calls[0][1].user);
+ expect(input.play).toMatch(/FOUNDERS50/);
+ expect(input.touch).toBeUndefined();
+});
+it('refuses drafts that break the fact sheet or claim rules, and fixes the vocabulary it can',async()=>{
+ const run=output=>draftMessage({opportunity,work,task:{},model:{configured:true,run:async()=>({outcome:'completed',output:{subject:'Training',citations:['source-1'],needsHuman:false,...output}})}});
+ expect(await run({body:'CareBase is $59 per facility. Interested?'})).toBeNull();
+ expect(await run({body:'CareBase ensures compliance with every survey.'})).toBeNull();
+ expect(await run({body:'Better than Yardi for your home. Interested?'})).toBeNull();
+ expect(await run({body:'Start here: https://www.caremetricintel.com/'})).toBeNull();
+ expect(await run({subject:'Re: training',body:'Would a free trial help?'})).toBeNull();
+ expect(await run({body:'Would a **free trial** help?'})).toBeNull();
+ expect((await run({body:'Built for every Assisted Living Residence and ready for the auditor.'}))?.body).toBe('Built for every Assisted Living Facility and ready for the surveyor.');
+ expect((await run({body:'CareBase Core is $199 per facility per month, with a 30-day free trial.\n\nhttps://cmcarebase.com/signup.'}))?.modelGenerated).toBe(true);
+});
