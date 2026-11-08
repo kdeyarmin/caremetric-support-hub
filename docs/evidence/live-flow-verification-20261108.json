@@ -1,0 +1,169 @@
+{
+  "verified_at_utc": "2026-11-08T03:57:09Z",
+  "kind": "owner_authenticated_browser_and_approved_live_trial_conversion",
+  "production": {
+    "origin": "https://help.caremetric.ai",
+    "commit": "40121ee1c9c7ddb1ec5dcfdef8cf72317c3a5a47",
+    "stripe_account": "acct_1SinLKB06O2UFlNz",
+    "livemode": true
+  },
+  "release_validation": {
+    "application_tests": 2705,
+    "sdk_tests": 24,
+    "pgtap_assertions": 1191,
+    "password_postgres_http_runs": 2,
+    "pr_ci_run": 42441014410,
+    "main_ci_run": 42441530527,
+    "ci_result": "success",
+    "migrations": [
+      "20261108010205_owner_password_login",
+      "20261108025633_owner_email_login"
+    ],
+    "canonical_migration_versions_verified": true
+  },
+  "authentication": {
+    "email_login_enrolled": true,
+    "enrolled_at": "2026-11-08T03:18:24.368662+00:00",
+    "fresh_password_session_created_at": "2026-11-08T03:22:12.886657+00:00",
+    "authenticated_dashboard_loaded": true,
+    "owner_actor_http_status": 200,
+    "credentials_entered_only_by_owner": true
+  },
+  "catalog": {
+    "mode": "live",
+    "objects_synced": 135,
+    "audit_at": "2026-11-08T03:24:32.339208+00:00",
+    "ui_refresh_completed": true,
+    "hub_http_status": 200
+  },
+  "native_reads": {
+    "products": [
+      "carebase",
+      "breathe",
+      "intel",
+      "advisors"
+    ],
+    "operations": [
+      "capabilities",
+      "overview"
+    ],
+    "browser_overviews_passed": true,
+    "one_use_capabilities_consumed": true
+  },
+  "course_provider_reads": {
+    "product": "carebase",
+    "operations": [
+      "context",
+      "commands"
+    ],
+    "http_statuses": [
+      200,
+      200
+    ],
+    "consumed_one_use_capabilities": true,
+    "provider_writes": false
+  },
+  "logout": {
+    "http_status": 200,
+    "session_revoked_at": "2026-11-08T03:25:50.601183+00:00",
+    "browser_admin_route_signed_out": true,
+    "browser_billing_route_signed_out": true,
+    "other_owner_session_preserved": true,
+    "raw_cookie_replay_performed": false
+  },
+  "payment": {
+    "flow": "existing Intel trial converted through a hosted Stripe invoice",
+    "owner_approved": true,
+    "normal_monthly_price_cents": 34900,
+    "one_time_discount_cents": 34800,
+    "currency": "usd",
+    "preview_total_cents": 100,
+    "actual_invoice_total_cents": 100,
+    "amount_paid_cents": 100,
+    "amount_remaining_cents": 0,
+    "taxes_cents": 0,
+    "starting_customer_balance_cents": 0,
+    "paid_at": "2026-11-08T03:54:30Z",
+    "invoice_status": "paid",
+    "payment_intent_status": "succeeded",
+    "payment_intent_amount_received_cents": 100,
+    "invoice_payment_links_exact_payment_intent": true,
+    "invoice_payment_links_exact_invoice": true,
+    "invoice_links_exact_subscription": true,
+    "new_subscription_created": false
+  },
+  "fulfillment": {
+    "stripe_subscription_active_after_payment": true,
+    "hub_invoice_paid": true,
+    "hub_subscription_active": true,
+    "hub_intel_starter_entitled": true,
+    "applied_webhooks": [
+      {
+        "type": "customer.subscription.updated",
+        "outcome": "applied",
+        "received_at": "2026-11-08T03:54:31.275564+00:00"
+      },
+      {
+        "type": "invoice.paid",
+        "outcome": "applied",
+        "received_at": "2026-11-08T03:54:31.510387+00:00"
+      },
+      {
+        "type": "invoice.payment_succeeded",
+        "outcome": "applied",
+        "received_at": "2026-11-08T03:54:31.611918+00:00"
+      }
+    ]
+  },
+  "cleanup": {
+    "stripe_subscription_status": "canceled",
+    "ended_at": "2026-11-08T03:55:48Z",
+    "prorated": false,
+    "final_invoice_created": false,
+    "renewal_possible": false,
+    "hub_subscription_status": "canceled",
+    "hub_entitled": false,
+    "hub_products": [],
+    "cancellation_webhook": {
+      "type": "customer.subscription.deleted",
+      "outcome": "applied",
+      "received_at": "2026-11-08T03:55:49.040012+00:00"
+    },
+    "invoices_with_balance": 0,
+    "total_paid_cents": 100,
+    "refund_issued": false
+  },
+  "effects": {
+    "catalog_mirror_refreshed": true,
+    "single_use_discount_created": true,
+    "existing_test_trial_ended": true,
+    "test_subscription_canceled": true,
+    "outbound_support_messages_sent": false,
+    "provider_content_writes": false
+  },
+  "not_exercised": [
+    "raw_cookie_http_replay_against_production",
+    "new_customer_checkout_onboarding",
+    "completed_customer_portal_flow",
+    "native_intel_end_user_billing_screen",
+    "hosted_sandbox_decline_and_duplicate_event_matrix",
+    "outbound_support_sms",
+    "provider_mutations",
+    "private_media_playback",
+    "course_publication",
+    "ai_generation"
+  ],
+  "sources": [
+    "authenticated saved-browser run",
+    "direct Stripe account, invoice, invoice-payment, PaymentIntent and subscription reads",
+    "Hub production session, audit, billing mirror, webhook and entitlement records",
+    "Railway production HTTP logs"
+  ],
+  "redactions": [
+    "credentials and session material",
+    "owner and customer contact information",
+    "hosted payment URLs",
+    "payment, customer, subscription and event identifiers",
+    "raw provider payloads"
+  ]
+}
