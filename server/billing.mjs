@@ -3,6 +3,7 @@ import { HttpError, transaction, withSession } from './sms-auth.mjs';
 import { billingCommandSchema, localBillingActions, entitlementRequestSchema, usageReportSchema, trialRequestSchema, appPortalRequestSchema, appBillingRequestSchema } from '../src/billing/billingProtocol.ts';
 import { stripeClient, StripeError, STRIPE_ACCOUNT_ID, verifyStripeSignature, eventTarget, retrievePaths, normalizers, withAllSubscriptionItems } from './stripe.mjs';
 import { customerBillingService } from './customer-billing.mjs';
+import { FOUNDERS_COUPON, applyFoundersToInvoice, foundersEligibility, foundersMetadata } from './founders-sale.mjs';
 import { facilityEntitlementRequest, facilityEntitlementSnapshot } from '../src/billing/facilityEntitlements.ts';
 import { selfServiceApps } from '../src/self-service/protocol.ts';
 
@@ -153,6 +154,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
       || !Number.isInteger(event.created) || !event.data?.object) throw new HttpError(400, 'Invalid event.');
     const live = client && (await verify()) ? client : null;
     try {
+      if (live && event.type === 'invoice.created' && event.data.object.subtotal > 0) await applyFoundersToInvoice(live, event.data.object.id);
       const receipt = await transaction(pool, async db => {
         await db.query("select pg_advisory_xact_lock(hashtextextended('billing_event:'||$1,0))", [event.id]);
         if ((await one(db, 'select private.billing_event_seen($1) as seen', [event.id])).seen) return { received: true, duplicate: true };
@@ -269,19 +271,24 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         }
         if (!recurring.length) throw new HttpError(400, 'Choose at least one plan or add-on with a recurring price.');
         const charge = request.collection_method === 'charge_automatically';
+        const founders = !request.coupon && !request.promotion_code && await foundersEligibility(live,
+          { app: request.app, customer: context.stripe_customer_id, lines: recurring, ownRequest: request.request_key });
         const subscription = await live.post('/v1/subscriptions', {
           customer: context.stripe_customer_id, items: recurring, ...(fees.length ? { add_invoice_items: fees } : {}),
           collection_method: request.collection_method, ...(charge ? { payment_behavior: 'allow_incomplete' } : { days_until_due: request.days_until_due }),
           ...(request.trial_days ? { trial_period_days: request.trial_days, trial_settings: { end_behavior: { missing_payment_method: 'create_invoice' } } } : {}),
-          ...(request.coupon || request.promotion_code ? { discounts: [request.coupon ? { coupon: request.coupon } : { promotion_code: request.promotion_code }] } : {}),
+          ...(request.coupon || request.promotion_code ? { discounts: [request.coupon ? { coupon: request.coupon } : { promotion_code: request.promotion_code }] }
+            : founders && !request.trial_days ? { discounts: [{ coupon: FOUNDERS_COUPON }] } : {}),
           payment_settings: { save_default_payment_method: 'on_subscription' },
-          metadata: { app: request.app, hub_tenant_id: request.tenant_id }, expand: ['discounts'],
+          metadata: { app: request.app, hub_tenant_id: request.tenant_id, hub_creation_request: request.request_key,
+            ...(founders ? { ...foundersMetadata, hub_founders_origin: request.trial_days ? 'trial' : 'paid' } : {}) }, expand: ['discounts'],
         }, { idempotencyKey: idem(request) });
         await mirror(db, 'subscription', subscription, new Date(now()), { live });
         if (subscription.latest_invoice) await refresh(db, live, 'invoice', typeof subscription.latest_invoice === 'string' ? subscription.latest_invoice : subscription.latest_invoice.id);
         await audit(db, actor, 'billing.subscription.create', request.tenant_id, app, {
           subscription: subscription.id, status: subscription.status, items: recurring.length, fees: fees.length, trial_days: request.trial_days,
-          collection_method: request.collection_method, coupon: request.coupon, promotion_code: request.promotion_code,
+          collection_method: request.collection_method, coupon: request.coupon ?? (founders && !request.trial_days ? FOUNDERS_COUPON : null), promotion_code: request.promotion_code,
+          ...(founders ? { automatic_offer: 'founders_sale_20261108' } : {}),
         });
         return done({ id: subscription.id });
       }

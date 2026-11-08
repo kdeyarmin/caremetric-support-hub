@@ -33,6 +33,7 @@ export type FacilityAllocation = z.infer<typeof allocation>;
 export const customerBillingWorkspace = z.object({ connection_id: z.uuid().nullable(), tenant_id: z.uuid(), app: z.string(), role: z.string(),
   mode: z.enum(['legacy', 'facility']), can_activate: z.boolean(), configuration_version: z.number().int(),
   purchasing_enabled: z.boolean().default(false),
+  founders_sale_price_ids: z.array(z.string()).optional(),
   billing_revision: z.number().int().nonnegative().default(0),
   account_name: z.string().default('Organization'),
   pending_checkout: z.object({ id: z.uuid(), state: z.enum(['confirming', 'pending_payment']), due_now: z.number().int(), currency: z.string().length(3) }).nullable().default(null),
@@ -44,6 +45,8 @@ export const customerBillingWorkspace = z.object({ connection_id: z.uuid().nulla
 });
 export type CustomerBillingWorkspace = z.infer<typeof customerBillingWorkspace>;
 export const customerQuoteSchema = z.object({ id: z.uuid(), facility_name: z.string(), due_now: z.number().int(), currency: z.string(), recurring_subtotal: z.number().int(),
+  standard_recurring_subtotal: z.number().int().nonnegative().optional(),
+  founders_sale: z.object({ percent_off: z.literal(50), months: z.literal(12), savings: z.number().int().nonnegative() }).optional(),
   kind: z.enum(['change', 'checkout']).default('change'),
   effective_at: z.string().nullable(), expires_at: z.string(), has_immediate_change: z.boolean(), has_scheduled_change: z.boolean(),
   cancels_scheduled_change: z.boolean().default(false),

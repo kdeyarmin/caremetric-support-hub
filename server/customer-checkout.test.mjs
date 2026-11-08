@@ -1,18 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
 import { customerBillingService } from './customer-billing.mjs';
 import { checkoutUrl } from './customer-checkout.mjs';
+import { FOUNDERS_COUPON } from './founders-sale.mjs';
+import { foundersCatalog } from './founders-catalog.mjs';
 import { CHECKOUT_API_VERSION, StripeError } from './stripe.mjs';
 
 const connection = '95000000-0000-4000-8000-000000000011', tenant = '95000000-0000-4000-8000-000000000012';
-function fixture({ customer = null, role = 'organization_admin', enabled = true } = {}) {
+function fixture({ customer = null, role = 'organization_admin', enabled = true, sale = false } = {}) {
   const quotes = new Map(), events = [], requests = new Map();
+  const selectedPrice = sale ? 'price_1UUyUyB06O2UFlNzdfXwJUXW' : 'price_core';
+  const total = sale ? 19900 : 2000;
   let time = Date.parse('2026-10-27T00:00:00Z'), checkout, subscription, invoice;
   let subscriptions = [], otherSessions = [];
   const workspace = { connection_id: connection, tenant_id: tenant, app: 'carebase', role, mode: 'legacy', can_activate: false,
     configuration_version: 0, billing_revision: 0, account_name: 'Synthetic organization', pending_checkout: null,
     facilities: ['site-a', 'site-b'].map(id => ({ id, name: id, permissions: ['billing.manage'] })), allocations: [], subscription: null,
-    customer, loaded_at: new Date(time).toISOString(), catalog: [{ id: 'price_core', product: 'prod_core', name: 'Core', description: '', kind: 'plan',
-      key: 'core', features: [], allows_addons: true, active: true, amount: 1000, currency: 'usd', interval: 'month', interval_count: 1, model: 'per_unit', unit_label: 'facility' }] };
+    customer, loaded_at: new Date(time).toISOString(), catalog: [{ id: selectedPrice, product: sale ? foundersCatalog[selectedPrice].product : 'prod_core', name: 'Core', description: '', kind: 'plan',
+      key: 'core', features: [], allows_addons: true, active: true, amount: sale ? 19900 : 1000, currency: 'usd', interval: 'month', interval_count: 1, model: 'per_unit', unit_label: 'facility' }] };
   const query = vi.fn(async (sql, args = []) => {
     let result;
     if (sql.includes('private.customer_billing_context')) result = structuredClone(workspace);
@@ -41,11 +45,11 @@ function fixture({ customer = null, role = 'organization_admin', enabled = true 
   });
   const live = {
     list: vi.fn(async path => structuredClone(path === '/v1/subscriptions' ? subscriptions : path === '/v1/checkout/sessions' ? [...otherSessions, ...(checkout ? [checkout] : [])]
-      : workspace.catalog.filter(price => price.id === 'price_core').map(price => ({ price: { id: price.id }, quantity: price.model === 'flat' ? 1 : 2 })))),
-    get: vi.fn(async path => structuredClone(path.startsWith('/v1/checkout/sessions/') ? checkout : path.startsWith('/v1/subscriptions/') ? subscription
+      : workspace.catalog.filter(price => price.id === selectedPrice).map(price => ({ price: { id: price.id }, quantity: price.model === 'flat' ? 1 : 2 })))),
+    get: vi.fn(async path => structuredClone(path.startsWith('/v1/coupons/') ? { valid: true, percent_off: 50, duration: 'repeating', duration_in_months: 12, applies_to: { products: [...new Set(Object.values(foundersCatalog).map(price => price.product))] } } : path.startsWith('/v1/checkout/sessions/') ? checkout : path.startsWith('/v1/subscriptions/') ? subscription
       : path.startsWith('/v1/invoices/') ? invoice : { id: workspace.customer, metadata: { hub_tenant_id: tenant } })),
     post: vi.fn(async (path, params, options) => {
-      if (path === '/v1/invoices/create_preview') return { amount_due: 2000, currency: 'usd' };
+      if (path === '/v1/invoices/create_preview') return { amount_due: total, currency: 'usd', ...(sale ? { total_discount_amounts: [{ amount: 19900 }] } : {}) };
       if (path === '/v1/customers') { events.push('customer'); return { id: 'cus_new', name: params.name, metadata: params.metadata }; }
       if (path === '/v1/checkout/sessions') {
         expect(events).toContain('reserved');
@@ -53,7 +57,7 @@ function fixture({ customer = null, role = 'organization_admin', enabled = true 
         if (prior) { expect(params).toEqual(prior); return structuredClone(checkout); }
         requests.set(options.idempotencyKey, structuredClone(params)); events.push('checkout_created');
         checkout = { id: 'cs_test_new', object: 'checkout.session', mode: params.mode, customer: params.customer,
-          client_reference_id: params.client_reference_id, metadata: params.metadata, currency: 'usd', amount_total: 2000,
+          client_reference_id: params.client_reference_id, metadata: params.metadata, currency: 'usd', amount_total: total, ...(sale ? { total_details: { amount_discount: 19900 } } : {}),
           status: 'open', payment_status: 'unpaid', url: 'https://checkout.stripe.com/c/pay/cs_test_new' };
         return structuredClone(checkout);
       }
@@ -66,13 +70,13 @@ function fixture({ customer = null, role = 'organization_admin', enabled = true 
     mirrorCustomer: async value => { workspace.customer = value.id; events.push('customer_mirrored'); },
     mirrorSubscription: async () => { events.push('subscription_mirrored'); }, mirrorInvoice: async () => { events.push('invoice_mirrored'); },
     authorize, now: () => time, purchasingEnabled: enabled, publicOrigin: 'https://hub.test' });
-  const preview = () => service.handle('session', { action: 'quote', connection_id: connection, facility_id: null, plan: 'price_core', addons: [], request_id: crypto.randomUUID() });
+  const preview = () => service.handle('session', { action: 'quote', connection_id: connection, facility_id: null, plan: selectedPrice, addons: [], request_id: crypto.randomUUID() });
   const confirm = quote => service.handle('session', { action: 'confirm', quote_id: quote.id, confirmed: true });
   const manage = (quote, action = 'checkout_resume') => service.handle('new-session', { action, connection_id: connection, quote_id: quote.id, ...(action === 'checkout_cancel' ? { confirmed: true } : {}) });
   function complete(paymentStatus = 'paid') {
     checkout = { ...checkout, status: 'complete', payment_status: paymentStatus, subscription: 'sub_new', invoice: 'in_new', url: null };
-    subscription = { id: 'sub_new', customer: 'cus_new', metadata: checkout.metadata, status: 'active', items: { data: [{ id: 'si_new', price: { id: 'price_core' }, quantity: 2 }] } };
-    invoice = { id: 'in_new', customer: 'cus_new', subscription: 'sub_new', status: 'paid', billing_reason: 'subscription_create', currency: 'usd', amount_due: 2000, amount_remaining: 0 };
+    subscription = { id: 'sub_new', customer: 'cus_new', metadata: checkout.metadata, status: 'active', ...(sale ? { discounts: [{ id: 'di_sale', coupon: { id: FOUNDERS_COUPON } }] } : {}), items: { data: [{ id: 'si_new', price: { id: selectedPrice }, quantity: 2 }] } };
+    invoice = { id: 'in_new', customer: 'cus_new', subscription: 'sub_new', status: 'paid', billing_reason: 'subscription_create', currency: 'usd', amount_due: total, amount_remaining: 0 };
   }
   return { service, workspace, live, events, quotes, authorize, query, preview, confirm, manage, complete,
     mutateCheckout: values => { checkout = { ...checkout, ...values }; }, mutateSubscription: values => { subscription = { ...subscription, ...values }; },
@@ -81,6 +85,21 @@ function fixture({ customer = null, role = 'organization_admin', enabled = true 
 }
 
 describe('initial subscription Checkout', () => {
+  it('automatically discounts the quote and Checkout, and verifies the discount on the paid receipt', async () => {
+    const test = fixture({ sale: true }), quote = await test.preview();
+    expect(quote).toMatchObject({ due_now: 19900, recurring_subtotal: 19900, standard_recurring_subtotal: 39800, founders_sale: { savings: 19900, percent_off: 50 } });
+    expect(test.live.post.mock.calls.find(([path]) => path === '/v1/invoices/create_preview')[1].discounts).toEqual([{ coupon: FOUNDERS_COUPON }]);
+    await test.confirm(quote);
+    expect(test.live.post.mock.calls.find(([path]) => path === '/v1/checkout/sessions')[1].discounts).toEqual([{ coupon: FOUNDERS_COUPON }]);
+    test.complete();
+    await expect(test.manage(quote)).resolves.toMatchObject({ state: 'applied' });
+  });
+  it('refuses a sale receipt when the provider subscription lost its discount', async () => {
+    const test = fixture({ sale: true }), quote = await test.preview();
+    await test.confirm(quote); test.complete(); test.mutateSubscription({ discounts: [] });
+    await expect(test.manage(quote)).rejects.toMatchObject({ status: 409 });
+    expect(test.events).not.toContain('applied');
+  });
   it('refuses PennSync before any payment provider request', async () => {
     const test = fixture(); test.workspace.app = 'pennsync';
     await expect(test.service.handle('session', { action: 'workspace', connection_id: connection })).rejects.toMatchObject({ status: 403 });
