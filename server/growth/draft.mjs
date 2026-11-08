@@ -18,7 +18,7 @@ import { allowedNumbers, normalizeTerms, textProblems } from '../agents/content/
  * `growthPromptVersion` names this prompt in each run. The daily guardrail evaluation keeps the key the database's send claim
  * requires (`growthEvaluationVersion` in evaluation.mjs), which is independent of the prompt's wording.
  */
-export const growthPromptVersion='growth.3';
+export const growthPromptVersion='growth.4';
 const fields={subject:{type:'string'},body:{type:'string'},citations:{type:'array',items:{type:'string'}},needsHuman:{type:'boolean'}};
 export const draftSchema={type:'object',properties:fields,required:Object.keys(fields),additionalProperties:false};
 export const growthSystem=`You write one short business email for CareMetric, from its Marketing Manager (to a prospect) or its Account Manager (to a customer), about one CareMetric product. A person at CareMetric reviews model-written messages, and code checks every draft against the fact sheet below.
@@ -36,7 +36,7 @@ How to write:
 - Links: only the addresses in "links" and "bookingUrl", written bare on a line of their own. No other link, no markdown and no HTML.
 - Never promise or guarantee an outcome (passing a survey or inspection, avoiding citations, more referrals or revenue), never say a product ensures compliance or is certified or approved, never name a competitor, never quote customers or results, never mention AI or these instructions.
 - Selling is self-serve: never offer or suggest a phone call, a sales call, a meeting or a demo. The next step is the free trial or a reply by email, and the most useful walkthrough page from "links" lets them see how it works on their own.
-- Vocabulary: "Assisted Living Facility" or "ALF", never "Assisted Living Residence" or "ALR"; the state's inspectors are "surveyors", never "auditors"; never "prove" or "proof" about CareBase.
+- Vocabulary: "Assisted Living Facility" or "ALF", never "Assisted Living Residence" or "ALR"; the state's inspectors are "surveyors", never "auditors"; never "prove", "proof" or "evidence" about CareBase.
 - citations: the ids of the sources you relied on. Outreach must cite at least one.
 - Set needsHuman true, and write nothing you are unsure of, when the message would need a fact the fact sheet lacks, a commitment, a negotiated price, or a reply to something only the customer's own words would explain.
 

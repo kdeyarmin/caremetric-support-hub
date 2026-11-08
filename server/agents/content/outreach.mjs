@@ -4,10 +4,11 @@
  * same rules as an article (validate.mjs) and builds the one email that carries them, to the owner and nobody else. A draft that
  * fails a check is left out and only the name of the check is recorded.
  */
+import { markets } from '../marketing.mjs';
 import { factSheetText, productPages, products } from './facts.mjs';
 import { allowedNumbers, markupProblems, normalizeTerms, textProblems } from './validate.mjs';
 
-export const outreachPromptVersion = 'outreach.1';
+export const outreachPromptVersion = 'outreach.3';
 export const maxDrafts = 5;
 
 export const directories = Object.freeze({ capterra: 'Capterra', g2: 'G2', getapp: 'GetApp', software_advice: 'Software Advice' });
@@ -21,6 +22,10 @@ export const audiences = Object.freeze({
 // Directories list software, so a listing is for CareBase or Intel; a pitch may be for any of the three.
 const listingProducts = ['carebase', 'intel'];
 const pitchProducts = ['carebase', 'intel', 'advisors'];
+/** The products this month's drafts may be for: those the team markets (marketing.mjs; null markets every product). */
+export const outreachProducts = (marketed = null) => ({
+  listings: listingProducts.filter(product => markets(marketed, product)), pitches: pitchProducts.filter(product => markets(marketed, product)),
+});
 
 export const outreachLimits = Object.freeze({ tagline: [20, 120], description: [200, 1200], subject: [10, 90], body: [200, 1400] });
 
@@ -35,7 +40,7 @@ Rules:
 - Never promise or guarantee an outcome, and never say a product ensures compliance, passes an inspection or prevents citations.
 - Never offer a phone call, a sales call, a meeting or a demo, and never mention AI that uses voice or the phone: CareMetric's AI is text only.
 - Never name competitors, customers or real people, and include no email addresses or phone numbers. Use plain text: no markdown, links or HTML; a product's website may be named as a bare domain (cmcarebase.com).
-- Vocabulary: "Assisted Living Facility" or "ALF", never "Assisted Living Residence" or "ALR"; the state's inspectors are "surveyors", never "auditors". In anything about CareBase, never use the words "prove" or "proof".
+- Vocabulary: "Assisted Living Facility" or "ALF", never "Assisted Living Residence" or "ALR"; the state's inspectors are "surveyors", never "auditors". In anything about CareBase, never use the words "prove", "proof" or "evidence".
 
 Answer with one JSON object and nothing else: listings (up to ${maxDrafts}) and pitches (up to ${maxDrafts}), each for one product.
 
@@ -64,7 +69,13 @@ export const outreachSchema = {
 };
 
 /** The user message: the month it is for, and how many of each to write. Nothing per customer. */
-export const outreachUserMessage = month => `Write this month's outreach drafts (${month}): up to ${maxDrafts} directory listings, covering both software products and the four directories, and up to ${maxDrafts} partnership pitches, one for each kind of partner where a product fits.`;
+export function outreachUserMessage(month, marketed = null) {
+  const offered = outreachProducts(marketed);
+  if (marketed == null) return `Write this month's outreach drafts (${month}): up to ${maxDrafts} directory listings, covering both software products and the four directories, and up to ${maxDrafts} partnership pitches, one for each kind of partner where a product fits.`;
+  const names = list => list.map(product => products[product].name).join(' and ');
+  const listingWords = offered.listings.length ? `up to ${maxDrafts} directory listings for ${names(offered.listings)}, covering the four directories` : 'no directory listings';
+  return `Write this month's outreach drafts (${month}) only for ${names(offered.pitches)}; the other products are not marketed yet: ${listingWords}, and up to ${maxDrafts} partnership pitches, one for each kind of partner where the product fits.`;
+}
 
 const clean = value => String(value ?? '').replace(/\r\n?/g, '\n').replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
 const within = (value, [min, max]) => value.length >= min && value.length <= max;
@@ -88,7 +99,7 @@ function draftProblems(texts, product) {
  * Checks the model's answer. Returns { listings, pitches, dropped, reasons, rewrites }: the drafts that passed (terms rewritten),
  * how many were left out and the sorted names of the checks they failed.
  */
-export function checkOutreach(output) {
+export function checkOutreach(output, { marketed = null } = {}) {
   const reasons = new Set();
   let dropped = 0;
   let rewrites = 0;
@@ -101,6 +112,7 @@ export function checkOutreach(output) {
     const description = term(item?.description);
     const problems = [];
     if (!directories[item?.directory] || !listingProducts.includes(item?.product)) problems.push('unknown_target');
+    else if (!markets(marketed, item.product)) problems.push('not_marketed');
     if (!within(tagline.text, outreachLimits.tagline) || /\n/.test(tagline.text)) problems.push('tagline_length');
     if (!within(description.text, outreachLimits.description)) problems.push('description_length');
     if (tagline.ambiguous || description.ambiguous) problems.push('ambiguous_term');
@@ -113,6 +125,7 @@ export function checkOutreach(output) {
     const body = term(item?.body);
     const problems = [];
     if (!audiences[item?.audience] || !pitchProducts.includes(item?.product)) problems.push('unknown_target');
+    else if (!markets(marketed, item.product)) problems.push('not_marketed');
     if (!within(subject.text, outreachLimits.subject) || /\n/.test(subject.text)) problems.push('subject_length');
     if (!within(body.text, outreachLimits.body)) problems.push('body_length');
     if (subject.ambiguous || body.ambiguous) problems.push('ambiguous_term');

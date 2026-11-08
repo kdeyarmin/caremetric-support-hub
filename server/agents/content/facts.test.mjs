@@ -29,7 +29,8 @@ describe('the fact sheet', () => {
   });
 
   it('distinguishes base claims from the authorized sale and names each source', () => {
-    expect(doc).toContain('base product and claims facts remain "owner to confirm"');
+    expect(doc).toContain('the owner confirmed every fact, claim and rule on this page on 2026-11-08');
+    expect(doc).not.toMatch(/owner to confirm/i);
     expect(doc).toContain('Founders Sale was requested by the owner on 2026-11-08');
     for (const product of Object.values(products)) expect(product.source).toMatch(/^kdeyarmin\/[A-Za-z]+@[0-9a-f]{7} /);
     for (const file of ['marketingPricing.ts', 'About.tsx', 'planLimits.ts', 'marketing-copy.md', 'competitive-marketing-review.md', 'site-content.mjs']) expect(doc, file).toContain(file);
@@ -85,7 +86,7 @@ describe('the fact sheet', () => {
 
   it('shows the model the vocabulary, the claims it may not make and the disclaimer wording', () => {
     const text = factSheetText();
-    for (const words of ['Assisted Living Facility', 'surveyors', '"prove" or "proof"', 'text only', 'You may never say:']) expect(text, words).toContain(words);
+    for (const words of ['Assisted Living Facility', 'surveyors', '"prove", "proof" or "evidence"', 'text only', 'You may never say:']) expect(text, words).toContain(words);
     expect(claims.mayNot.join(' ')).toMatch(/ensures compliance/);
     expect(legalDisclaimer).toMatch(/not legal advice/);
     expect(articleUrl('pa-fire-drills')).toBe('https://help.caremetric.ai/help/articles/pa-fire-drills');

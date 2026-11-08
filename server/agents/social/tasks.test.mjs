@@ -13,7 +13,17 @@ const metaOf = (over = {}) => ({
   adsOverview: vi.fn(async () => ({ adsets: [], ads: [], current: [], previous: [] })),
   ...over,
 });
-const harness = ({ meta = metaOf(), model = null, customerTextToAi = false, settings = {}, imageUrls = ['https://cdn.example.com/brand-1.jpg'], openTargets = [] } = {}) => {
+const linkedinPost = 'urn:li:share:7100000000000000001';
+const linkedinComment = 'urn:li:comment:(urn:li:activity:7100000000000000009,7200000000000000002)';
+const linkedinOf = (over = {}) => ({
+  configured: { page: true, ads: true },
+  recentPosts: vi.fn(async () => [{ platform: 'linkedin', id: linkedinPost, text: 'Referral sources you can see in one place.', at: '2026-11-04T13:45:00Z', reactions: 9, comments: 2, shares: 0, url: 'https://www.linkedin.com/feed/update/x/' }]),
+  recentInbox: vi.fn(async () => []),
+  readItem: vi.fn(async () => ({ text: `Does this work for hospice? ${canary}`, fromPage: false, answered: false, history: [] })),
+  adsOverview: vi.fn(async () => ({ adsets: [], ads: [], current: [], previous: [] })),
+  ...over,
+});
+const harness = ({ meta = metaOf(), linkedin = null, model = null, customerTextToAi = false, settings = {}, imageUrls = ['https://cdn.example.com/brand-1.jpg'], openTargets = [], marketed = null } = {}) => {
   const sent = [];
   let next = 0;
   const store = {
@@ -22,8 +32,8 @@ const harness = ({ meta = metaOf(), model = null, customerTextToAi = false, sett
     startRun: vi.fn(async () => 'r'), finishRun: vi.fn(async () => undefined),
   };
   const notifier = { send: vi.fn(async input => { sent.push(input); return [{ channel: 'email', delivery: 'sent' }]; }) };
-  const handlers = socialHandlers({ store, notifier, model, meta, settings, imageUrls, customerTextToAi, publicOrigin: 'https://help.caremetric.ai', log: () => {} });
-  return { store, notifier, sent, meta, handlers };
+  const handlers = socialHandlers({ store, notifier, model, meta, linkedin, settings, imageUrls, customerTextToAi, publicOrigin: 'https://help.caremetric.ai', marketed, log: () => {} });
+  return { store, notifier, sent, meta, linkedin, handlers };
 };
 const modelReturning = output => ({ configured: true, run: vi.fn(async () => ({ outcome: 'completed', output })) });
 
@@ -41,7 +51,7 @@ describe('the weekly social plan', () => {
     const h = harness({ model });
     const outcome = await h.handlers['social.plan'](task('social.plan'), { now });
     const request = model.run.mock.calls[0][1];
-    expect(request.promptVersion).toBe('social-plan.1');
+    expect(request.promptVersion).toBe('social-plan.3');
     expect(JSON.parse(request.user)).toMatchObject({ weekStarting: '2026-11-09', postsToWrite: { facebook: 3, instagram: 2, linkedin: 3 }, bestRecent: [{ platform: 'facebook', engagement: 28 }] });
     expect(h.store.proposeAction).toHaveBeenCalledTimes(2);
     const [facebook, instagram] = h.store.proposeAction.mock.calls.map(call => call[0]);
@@ -70,6 +80,23 @@ describe('the weekly social plan', () => {
     expect(outcome.result.proposed).toBe(0);
   });
 
+  it('with LinkedIn connected, proposes LinkedIn posts too (the link beside the text, as a card) and learns from their engagement', async () => {
+    const model = modelReturning({ posts });
+    const linkedin = linkedinOf();
+    const h = harness({ model, linkedin });
+    const outcome = await h.handlers['social.plan'](task('social.plan'), { now });
+    expect(linkedin.recentPosts).toHaveBeenCalled();
+    expect(JSON.parse(model.run.mock.calls[0][1].user).bestRecent.map(post => post.platform)).toEqual(['facebook', 'linkedin']);
+    const proposed = h.store.proposeAction.mock.calls.map(call => call[0]);
+    expect(proposed.map(call => call.targetId)).toEqual(['facebook:2026-11-09:1', 'instagram:2026-11-09:1', 'linkedin:2026-11-09:1']);
+    expect(proposed[2]).toMatchObject({ kind: 'social.post', input: { platform: 'linkedin', product: 'caremetric-intel', link: 'https://www.caremetricintel.com/', linkLabel: expect.any(String),
+      scheduledFor: '2026-11-10T13:45:00.000Z', imageUrl: 'https://cdn.example.com/brand-1.jpg' } });
+    expect(proposed[2].preview).toContain('Image: https://cdn.example.com/brand-1.jpg');
+    expect(proposed[2].input.message).not.toContain('https://');
+    expect(outcome.result).toMatchObject({ proposed: 3, linkedin: 0 });
+    expect(JSON.stringify(h.sent[0].blocks)).not.toContain('LinkedIn post 1');
+  });
+
   it('schedules each post at least an hour ahead and within the week', () => {
     expect(slotFor({ week: '2026-11-09', day: 1, platform: 'facebook', now: new Date('2026-11-09T15:00:00Z') })).toBe('2026-11-10T15:30:00.000Z');
     expect(slotFor({ week: '2026-11-09', day: 7, platform: 'instagram', now: now() })).toBe('2026-11-15T17:15:00.000Z');
@@ -94,6 +121,47 @@ describe('comments and messages', () => {
     const h = harness({ meta });
     expect((await h.handlers['social.inbox'](task('social.inbox'), { now })).result).toEqual({ skipped: 'meta_token_invalid' });
     expect(h.sent[0]).toMatchObject({ severity: 'warning', dedupeKey: 'social:access:meta_token_invalid:2026-11-09' });
+  });
+
+  it('reads LinkedIn comments beside Meta\'s, and one platform refusing does not stop the other', async () => {
+    const onLinkedIn = { platform: 'linkedin', kind: 'comment', id: linkedinComment, parentId: linkedinPost, url: 'https://www.linkedin.com/feed/update/x/' };
+    const both = harness({ meta: metaOf({ recentInbox: vi.fn(async () => [item]) }), linkedin: linkedinOf({ recentInbox: vi.fn(async () => [onLinkedIn]) }) });
+    expect((await both.handlers['social.inbox'](task('social.inbox'), { now })).result).toEqual({ seen: 2, enqueued: 2, comments: 2, messages: 0 });
+    expect(both.store.enqueue.mock.calls[1][2]).toBe(`social:linkedin:comment:${linkedinComment}`);
+    const refused = harness({ meta: metaOf({ recentInbox: vi.fn(async () => [item]) }),
+      linkedin: linkedinOf({ recentInbox: vi.fn(async () => { throw Object.assign(new Error('x'), { code: 'linkedin_token_invalid' }); }) }) });
+    expect((await refused.handlers['social.inbox'](task('social.inbox'), { now })).result).toEqual({ seen: 1, enqueued: 1, comments: 1, messages: 0, refused: ['linkedin_token_invalid'] });
+    expect(refused.sent[0]).toMatchObject({ severity: 'warning', subject: 'The Social Media Manager cannot reach LinkedIn', dedupeKey: 'social:access:linkedin_token_invalid:2026-11-09' });
+    expect(refused.sent[0].body).toContain('HUB_LINKEDIN_ACCESS_TOKEN');
+  });
+
+  it('on LinkedIn, replies through LinkedIn and proposes deleting spam (LinkedIn has no hide), but never once deletions would be automatic', async () => {
+    const onLinkedIn = { platform: 'linkedin', kind: 'comment', id: linkedinComment, parentId: linkedinPost, url: 'https://www.linkedin.com/feed/update/x/' };
+    const reply = harness({ customerTextToAi: true, linkedin: linkedinOf(), model: modelReturning({ intent: 'question', possiblePhi: false, needsOwner: false, hide: false, product: 'caremetric-intel',
+      reply: 'Yes, it is built for home health and hospice teams. You can start a 30-day free trial: https://www.caremetricintel.com/' }) });
+    await reply.handlers['social.interaction'](task('social.interaction', { payload: onLinkedIn }), { now });
+    expect(reply.linkedin.readItem).toHaveBeenCalled();
+    expect(reply.meta.readItem).not.toHaveBeenCalled();
+    expect(reply.store.proposeAction).toHaveBeenCalledWith(expect.objectContaining({ kind: 'social.reply', targetId: `linkedin:${linkedinComment}`,
+      input: expect.objectContaining({ platform: 'linkedin', kind: 'comment', id: linkedinComment, parentId: linkedinPost }) }));
+    const spamReading = { intent: 'spam', possiblePhi: false, needsOwner: false, hide: true, product: 'unknown', reply: '' };
+    const spam = harness({ customerTextToAi: true, linkedin: linkedinOf(), model: modelReturning(spamReading) });
+    await spam.handlers['social.interaction'](task('social.interaction', { payload: onLinkedIn }), { now });
+    expect(spam.store.proposeAction.mock.calls[0][0]).toMatchObject({ kind: 'social.moderate', input: { operation: 'delete', platform: 'linkedin', id: linkedinComment, parentId: linkedinPost, reason: 'spam' } });
+    expect(spam.store.proposeAction.mock.calls[0][0].preview).toMatch(/^Delete a LinkedIn comment/);
+    const trusted = { autonomy: 'act', config: { auto_approve_kinds: ['social.reply', 'social.moderate'] } };
+    const handedOver = harness({ customerTextToAi: true, linkedin: linkedinOf(), model: modelReturning(spamReading) });
+    expect((await handedOver.handlers['social.interaction'](task('social.interaction', { payload: onLinkedIn, agent: trusted }), { now })).result).toMatchObject({ outcome: 'left_for_owner', reason: 'spam' });
+    expect(handedOver.store.proposeAction).not.toHaveBeenCalled();
+    const personal = harness({ customerTextToAi: true, model: modelReturning({}), linkedin: linkedinOf({ readItem: vi.fn(async () => ({ text: 'Dad\'s MRN 1234567', fromPage: false, answered: false, history: [] })) }) });
+    expect((await personal.handlers['social.interaction'](task('social.interaction', { payload: onLinkedIn, agent: trusted }), { now })).result).toMatchObject({ outcome: 'left_for_owner', reason: 'personal_information' });
+    expect(personal.store.proposeAction).not.toHaveBeenCalled();
+    expect(personal.sent[0].body).toContain('Please delete it yourself');
+    // A hidden Meta comment can be shown again, so hiding stays automatic once handed over.
+    const meta = harness({ customerTextToAi: true, model: modelReturning(spamReading) });
+    await meta.handlers['social.interaction'](task('social.interaction', { payload: item, agent: trusted }), { now });
+    expect(meta.store.proposeAction).toHaveBeenCalledWith(expect.objectContaining({ kind: 'social.moderate', input: expect.objectContaining({ operation: 'hide' }) }));
+    await expect(harness().handlers['social.interaction'](task('social.interaction', { payload: { ...onLinkedIn, kind: 'message' } }), { now })).rejects.toMatchObject({ code: 'invalid_payload' });
   });
 
   it('drafts a checked reply when customer text may reach the model, and keeps no word of the comment', async () => {
@@ -161,7 +229,7 @@ describe('the daily ad review', () => {
     const outcome = await h.handlers['social.ads'](task('social.ads'), { now });
     const calls = h.store.proposeAction.mock.calls.map(call => call[0]);
     expect(calls[0]).toMatchObject({ kind: 'social.ad_pause', targetKind: 'social_ad', targetId: '51', input: { adId: '51', adsetId: '40' } });
-    expect(calls[0].preview).toMatch(/^Pause the ad "Generic" in "PA operators": it spent \$35\.00 in 7 days with no result\.$/);
+    expect(calls[0].preview).toMatch(/^Pause the Meta ad "Generic" in the ad set "PA operators": it spent \$35\.00 in 7 days with no result\.$/);
     expect(calls[1]).toMatchObject({ kind: 'social.ad_create', targetKind: 'social_adset', targetId: '40:2026-11-09:1',
       input: { adsetId: '40', imageHash: 'img1', link: 'https://cmcarebase.com/signup', callToAction: 'SIGN_UP', product: 'carebase', basedOn: '50' } });
     expect(outcome.result).toMatchObject({ pause: 1, create: 1, rejected: 1, budget: 0 });
@@ -176,6 +244,74 @@ describe('the daily ad review', () => {
     expect(h.store.proposeAction.mock.calls[0][0].preview).toContain('Only you can approve a budget change.');
     const again = harness({ settings: { targetCostCents: 2000, maxDailyBudgetCents: 3000 }, openTargets: ['social.ad_budget:40'], meta: metaOf({ adsOverview: vi.fn(async () => winning) }) });
     expect((await again.handlers['social.ads'](task('social.ads'), { now })).result).toMatchObject({ budget: 0, skipped: 1 });
+  });
+});
+
+describe('the daily ad review on LinkedIn', () => {
+  it('reviews LinkedIn creatives with the same rules, under targets that never collide with Meta\'s', async () => {
+    const overview = {
+      adsets: [{ id: '610001', name: 'PA operators', active: true, dailyBudget: 2000, currency: 'USD', objective: 'WEBSITE_VISIT' }],
+      ads: [
+        { id: '820001', name: 'Survey', adsetId: '610001', active: true, createdAt: '2026-10-01T00:00:00Z', imageHash: null, copy: { message: 'Track annual training hours across your homes.', headline: 'Start free', description: '30-day trial', link: 'https://cmcarebase.com/signup' } },
+        { id: '820002', name: 'Generic', adsetId: '610001', active: true, createdAt: '2026-10-01T00:00:00Z', imageHash: null, copy: { message: 'Software for care homes.', headline: 'Learn more', description: '', link: 'https://cmcarebase.com/' } },
+      ],
+      current: [{ adId: '820001', impressions: 6000, clicks: 120, spendCents: 4000, frequency: 1.6, results: 5 }, { adId: '820002', impressions: 6000, clicks: 20, spendCents: 3500, frequency: 1.6, results: 0 }],
+      previous: [],
+    };
+    const linkedin = linkedinOf({ adsOverview: vi.fn(async () => overview) });
+    const h = harness({ linkedin, meta: metaOf({ configured: { pages: true, instagram: true, ads: false } }), model: modelReturning({ variants: [] }) });
+    const outcome = await h.handlers['social.ads'](task('social.ads'), { now });
+    expect(h.meta.adsOverview).not.toHaveBeenCalled();
+    const [pause] = h.store.proposeAction.mock.calls.map(call => call[0]);
+    expect(pause).toMatchObject({ kind: 'social.ad_pause', targetKind: 'social_ad', targetId: 'linkedin:820002', input: { adId: '820002', adsetId: '610001', platform: 'linkedin' } });
+    expect(pause.preview).toMatch(/^Pause the LinkedIn ad "Generic" in the LinkedIn campaign "PA operators"/);
+    expect(outcome.result).toMatchObject({ adsets: 1, pause: 1 });
+    const again = harness({ linkedin, openTargets: ['social.ad_pause:linkedin:820002'], meta: metaOf({ configured: { pages: true, instagram: true, ads: false } }) });
+    expect((await again.handlers['social.ads'](task('social.ads'), { now })).result).toMatchObject({ pause: 0 });
+  });
+});
+
+describe('only the products the team markets', () => {
+  const intelOnly = ['caremetric-intel'];
+  it('plans posts for Intel only while CareBase is in its pilot, and leaves a question about CareBase to the owner', async () => {
+    const model = modelReturning({ posts: [
+      { platform: 'facebook', product: 'carebase', pillar: 'tip', day: 2, text: 'Annual training hours piling up? Keep each staff member\'s training in one place.', linkId: '', hashtags: [] },
+      { platform: 'facebook', product: 'caremetric-intel', pillar: 'capability', day: 3, text: 'CareMetric Intel keeps outreach, follow-up and recorded referrals in one place.', linkId: 'intel-home', hashtags: ['HomeHealth'] },
+    ] });
+    const h = harness({ model, marketed: intelOnly });
+    const outcome = await h.handlers['social.plan'](task('social.plan'), { now });
+    const user = JSON.parse(model.run.mock.calls[0][1].user);
+    expect(user.products).toEqual(['caremetric-intel']);
+    expect(Object.keys(user.links)).toEqual(['caremetric-intel']);
+    expect(h.store.proposeAction.mock.calls.map(call => call[0].input.product)).toEqual(['caremetric-intel']);
+    expect(outcome.result.rejected).toEqual({ not_marketed: 1 });
+    expect((await harness({ model, marketed: [] }).handlers['social.plan'](task('social.plan'), { now })).result).toEqual({ skipped: 'no_marketed_product' });
+
+    const item = { platform: 'facebook', kind: 'comment', id: '1_10', parentId: '1111_1', url: 'https://facebook.com/c/10' };
+    const question = harness({ customerTextToAi: true, marketed: intelOnly, model: modelReturning({ intent: 'pricing', possiblePhi: false, needsOwner: false, hide: false, product: 'carebase', reply: 'Thanks for asking. You can start a 30-day free trial: https://cmcarebase.com/signup' }) });
+    expect((await question.handlers['social.interaction'](task('social.interaction', { payload: item }), { now })).result).toMatchObject({ outcome: 'left_for_owner', reason: 'product_not_marketed' });
+    expect(question.store.proposeAction).not.toHaveBeenCalled();
+  });
+
+  it('writes no new CareBase ad and raises no CareBase budget, but may still pause a losing CareBase ad', async () => {
+    const overview = {
+      adsets: [{ id: '40', name: 'PA operators', active: true, dailyBudget: 2000, objective: 'OUTCOME_LEADS' }],
+      ads: [
+        { id: '50', name: 'Training hook', adsetId: '40', active: true, createdAt: '2026-10-01T00:00:00Z', imageHash: 'img1', copy: { message: 'Track annual training hours across your homes.', headline: 'Start free', description: '30-day trial', link: 'https://cmcarebase.com/signup' } },
+        { id: '51', name: 'Generic', adsetId: '40', active: true, createdAt: '2026-10-01T00:00:00Z', imageHash: 'img2', copy: { message: 'Software for care homes.', headline: 'Learn more', description: '', link: 'https://cmcarebase.com/' } },
+      ],
+      current: [{ adId: '50', impressions: 6000, clicks: 120, spendCents: 4000, frequency: 1.6, results: 5 }, { adId: '51', impressions: 6000, clicks: 20, spendCents: 3500, frequency: 1.6, results: 0 }],
+      previous: [],
+    };
+    const model = modelReturning({ variants: [{ angle: 'survey readiness', message: 'Getting ready for your next DHS inspection? CareBase keeps staff training, resident records and survey documentation in one place.', headline: 'Try CareBase free', description: '30-day free trial', callToAction: 'SIGN_UP' }] });
+    const h = harness({ model, marketed: intelOnly, meta: metaOf({ adsOverview: vi.fn(async () => overview) }) });
+    await h.handlers['social.ads'](task('social.ads'), { now });
+    expect(h.store.proposeAction.mock.calls.map(call => call[0].kind)).toEqual(['social.ad_pause']);
+    expect(model.run).not.toHaveBeenCalled();
+    const winning = { ...overview, current: [overview.current[0], { adId: '51', impressions: 6000, clicks: 110, spendCents: 3000, frequency: 1.6, results: 4 }] };
+    const budget = harness({ marketed: intelOnly, settings: { targetCostCents: 2000, maxDailyBudgetCents: 3000 }, meta: metaOf({ adsOverview: vi.fn(async () => winning) }) });
+    expect((await budget.handlers['social.ads'](task('social.ads'), { now })).result).toMatchObject({ budget: 0 });
+    expect(budget.store.proposeAction).not.toHaveBeenCalled();
   });
 });
 
@@ -200,5 +336,9 @@ describe('registration', () => {
     expect(team.meta.configured).toEqual({ pages: true, instagram: false, ads: false });
     expect(Object.keys(team.handlers({ store: {}, notifier: {} })).sort()).toEqual(['social.ads', 'social.inbox', 'social.interaction', 'social.plan', 'social.report']);
     expect(Object.keys(team.executors({})).sort()).toEqual(['social.ad_budget', 'social.ad_create', 'social.ad_pause', 'social.moderate', 'social.post', 'social.reply']);
+    expect(team.linkedin.configured).toEqual({ page: false, ads: false });
+    const withLinkedIn = socialConfig({ HUB_LINKEDIN_ACCESS_TOKEN: 'AQX-linkedin-member-token-0123456789', HUB_LINKEDIN_ORGANIZATION_ID: '5550001', HUB_LINKEDIN_AD_ACCOUNT_ID: '5080001' });
+    expect(withLinkedIn.linkedin).toMatchObject({ organizationId: '5550001', adAccountId: '5080001', version: '202609' });
+    expect(socialTeam({ social: withLinkedIn, features: ['platform.agents.social.v1'] }).linkedin.configured).toEqual({ page: true, ads: true });
   });
 });

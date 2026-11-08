@@ -1,16 +1,18 @@
 /**
- * The Social Media Manager's work. Every task reads Meta live and proposes actions the owner approves (or, once a kind of work is
- * handed over after its supervised week, that the agent is trusted with); nothing here posts, replies or changes an ad by itself.
+ * The Social Media Manager's work. Every task reads Meta and LinkedIn live and proposes actions the owner approves (or, once a kind of
+ * work is handed over after its supervised week, that the agent is trusted with); nothing here posts, replies or changes an ad by itself.
  *
  * - `social.plan` (each morning, once a week): drafts the week's posts for Facebook, Instagram and LinkedIn from the fact sheet, the
- *   sales playbook and what earned engagement in the last four weeks; checks every word; proposes each Facebook and Instagram post held
- *   for its time slot; and emails the owner the plan with LinkedIn posts ready to paste (LinkedIn is not connected).
+ *   sales playbook and what earned engagement in the last four weeks; checks every word; proposes each post held for its time slot; and
+ *   emails the owner the plan. Without a LinkedIn connection the LinkedIn posts are in that email, ready to paste.
  * - `social.inbox` (every 15 minutes): finds new comments and messages from other people and gives each its own task.
- * - `social.interaction`: reads one comment or message from Meta, and with the owner's switch for customer text to AI on, drafts a
+ * - `social.interaction`: reads one comment or message again, and with the owner's switch for customer text to AI on, drafts a
  *   checked reply (or proposes hiding spam); a public comment that appears to carry personal or health information is proposed for
- *   hiding and the owner is warned. Without the switch the owner is told and answers on Meta.
- * - `social.ads` (each morning): evaluates every ad with rules.mjs and proposes pausing losers, new copy where an ad set needs it, and
- *   (only with a cap set) a measured budget increase that only the owner can approve.
+ *   hiding and the owner is warned. Without the switch the owner is told and answers on the platform. LinkedIn has no "hide", so there
+ *   the proposal is to delete, and because a deletion cannot be undone it is proposed only while the owner approves each one: once
+ *   replies are handed over, a LinkedIn comment that should go is left for the owner.
+ * - `social.ads` (each morning): evaluates every Meta ad and LinkedIn creative with rules.mjs and proposes pausing losers, new copy
+ *   where an ad set or campaign needs it, and (only with a cap set) a measured budget increase that only the owner can approve.
  * - `social.report` (each morning, once a week): how posts and ads did, and what is waiting for the owner.
  *
  * Nothing another person wrote is kept: not in a task, a run, an action or an owner email. Posts and replies are CareMetric's words.
@@ -26,18 +28,25 @@ import {
   replyUserMessage, socialLinks, socialProducts, withHashtags,
 } from './content.mjs';
 import { evaluateAds, rankPosts, rulesVersion } from './rules.mjs';
+import { markets } from '../marketing.mjs';
 
 const day = 86_400_000;
 const labels = { facebook: 'Facebook', instagram: 'Instagram', messenger: 'Messenger', linkedin: 'LinkedIn' };
 const productNames = { carebase: 'CareBase', 'caremetric-intel': 'CareMetric Intel' };
 const weekly = { facebook: 3, instagram: 2, linkedin: 3 };
-const slots = { facebook: [10, 30], instagram: [12, 15] };
+const slots = { facebook: [10, 30], instagram: [12, 15], linkedin: [8, 45] };
 const modelAttempts = 3;
 const money = cents => `$${(cents / 100).toFixed(2)}`;
 const firstLine = text => String(text ?? '').split('\n')[0].slice(0, 90);
 const productOf = url => { try { const host = new URL(url).hostname.replace(/^www\./, ''); return host === 'cmcarebase.com' ? 'carebase' : host === 'caremetricintel.com' ? 'caremetric-intel' : null; } catch { return null; } };
 
-export function socialHandlers({ store, notifier, model = null, meta, settings = {}, imageUrls = [], customerTextToAi = false, publicOrigin = null, log = line => console.warn(line) }) {
+export function socialHandlers({ store, notifier, model = null, meta, linkedin = null, settings = {}, imageUrls = [], customerTextToAi = false, publicOrigin = null, marketed = null, log = line => console.warn(line) }) {
+  // Only the products the team markets (marketing.mjs) get posts, replies with links, new ads and budget increases.
+  const offered = socialProducts.filter(product => markets(marketed, product));
+  // LinkedIn is optional: without its token and Page id, LinkedIn posts are emailed to the owner to paste, as before.
+  const li = linkedin ?? { configured: { page: false, ads: false } };
+  const clientFor = platform => (platform === 'linkedin' ? li : meta);
+  const metaPosts = meta.configured.pages || meta.configured.instagram;
   const drafting = customerTextToAi === true && model?.configured === true;
   const open = async () => new Set(await store.socialOpenTargets());
   const effort = task => (['low', 'medium', 'high'].includes(task.agent?.config?.effort) ? task.agent.config.effort : 'medium');
@@ -65,6 +74,7 @@ export function socialHandlers({ store, notifier, model = null, meta, settings =
   async function plan(task, { now = () => new Date(), signal } = {}) {
     if (!model?.configured) return { result: { skipped: 'model_not_configured' } };
     if (task.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only' } };
+    if (!offered.length) return { result: { skipped: 'no_marketed_product' } };
     const moment = now();
     const week = weekStart(dueMoment(task) ?? moment);
     const asked = task.sourceKind === 'owner';
@@ -72,13 +82,16 @@ export function socialHandlers({ store, notifier, model = null, meta, settings =
     if (!asked && await store.notificationCount({ prefix: key, channel: 'email', since: new Date(0) }) > 0) return { result: { skipped: 'already_planned', week } };
     const counts = { facebook: meta.configured.pages ? weekly.facebook : 0, instagram: meta.configured.instagram && imageUrls.length ? weekly.instagram : 0, linkedin: weekly.linkedin };
     let posts = [];
-    let performance = 'read';
-    try { if (meta.configured.pages || meta.configured.instagram) posts = await meta.recentPosts({ signal }); else performance = 'not_connected'; }
-    catch (error) { if (signal?.aborted || error?.transient) throw error; performance = error?.code ?? 'meta_error'; }
+    let performance = metaPosts || li.configured.page ? 'read' : 'not_connected';
+    for (const [on, client] of [[metaPosts, meta], [li.configured.page, li]]) {
+      if (!on) continue;
+      try { posts = posts.concat(await client.recentPosts({ signal })); }
+      catch (error) { if (signal?.aborted || error?.transient) throw error; performance = error?.code ?? 'social_error'; }
+    }
     const ranked = rankPosts(posts, { now: moment });
-    const links = Object.fromEntries(socialProducts.map(product => [product, socialLinks(product).map(({ id, label }) => ({ id, label }))]));
+    const links = Object.fromEntries(offered.map(product => [product, socialLinks(product).map(({ id, label }) => ({ id, label }))]));
     const user = JSON.stringify({
-      weekStarting: week, postsToWrite: counts, links,
+      weekStarting: week, products: offered, postsToWrite: counts, links,
       bestRecent: ranked.slice(0, 3).map(post => ({ platform: post.platform, engagement: post.engagement, text: post.text.slice(0, 240) })),
       weakestRecent: ranked.length > 3 ? ranked.slice(-2).map(post => ({ platform: post.platform, engagement: post.engagement, text: post.text.slice(0, 160) })) : [],
       recentOpenings: posts.slice(0, 12).map(post => firstLine(post.text)),
@@ -94,34 +107,38 @@ export function socialHandlers({ store, notifier, model = null, meta, settings =
     let proposed = 0;
     for (const draft of result.output.posts ?? []) {
       signal?.throwIfAborted();
-      if (!socialProducts.includes(draft.product) || used[draft.platform] === undefined || used[draft.platform] >= counts[draft.platform]) continue;
+      if (socialProducts.includes(draft.product) && !offered.includes(draft.product)) { rejected.not_marketed = (rejected.not_marketed ?? 0) + 1; continue; }
+      if (!offered.includes(draft.product) || used[draft.platform] === undefined || used[draft.platform] >= counts[draft.platform]) continue;
       const page = draft.linkId ? socialLinks(draft.product).find(link => link.id === draft.linkId) : null;
       if (draft.linkId && !page) { rejected.link = (rejected.link ?? 0) + 1; continue; }
       const link = draft.platform === 'instagram' ? null : page?.url ?? null;
-      // A Facebook link travels beside the text (it renders as a card); LinkedIn copy is pasted by hand, so it carries the address.
-      const text = withHashtags(draft.platform === 'linkedin' && link ? `${draft.text.trim()}\n\n${link}` : draft.text, draft.hashtags);
+      // A Facebook or connected LinkedIn link travels beside the text (it renders as a card); LinkedIn copy pasted by hand carries it.
+      const pasted = draft.platform === 'linkedin' && !li.configured.page;
+      const text = withHashtags(pasted && link ? `${draft.text.trim()}\n\n${link}` : draft.text, draft.hashtags);
       const checked = checkSocialText(text, { surface: draft.platform, product: draft.product });
       if (!checked.ok) { rejected[checked.reason] = (rejected[checked.reason] ?? 0) + 1; continue; }
       used[draft.platform] += 1;
-      if (draft.platform === 'linkedin') { linkedin.push({ product: draft.product, pillar: draft.pillar, text: checked.text }); continue; }
+      if (pasted) { linkedin.push({ product: draft.product, pillar: draft.pillar, text: checked.text }); continue; }
       const scheduledFor = slotFor({ week, day: draft.day, platform: draft.platform, index: used[draft.platform], now: moment });
       const targetId = `${draft.platform}:${week}:${used[draft.platform]}`;
       if (targets.has(`social.post:${targetId}`)) continue;
-      const imageUrl = draft.platform === 'instagram' ? imageUrls[(Number(week.replaceAll('-', '')) + used.instagram) % imageUrls.length] : null;
+      // Instagram needs an image; a LinkedIn post shows one beside its link (LinkedIn builds no preview for an API post).
+      const imageUrl = ['instagram', 'linkedin'].includes(draft.platform) && imageUrls.length ? imageUrls[(Number(week.replaceAll('-', '')) + used[draft.platform]) % imageUrls.length] : null;
       const proposal = await propose(task, {
         kind: 'social.post', targetKind: 'social_post', targetId,
         preview: `${labels[draft.platform]} post about ${productNames[draft.product]} (${draft.pillar}), to publish ${when(scheduledFor)}:\n\n${checked.text}${link ? `\n\nLink: ${link}` : ''}${imageUrl ? `\n\nImage: ${imageUrl}` : ''}`,
-        input: { platform: draft.platform, product: draft.product, pillar: draft.pillar, message: checked.text, link, imageUrl, scheduledFor },
+        input: { platform: draft.platform, product: draft.product, pillar: draft.pillar, message: checked.text, link, imageUrl, scheduledFor,
+          ...(draft.platform === 'linkedin' && link ? { linkLabel: page.label } : {}) },
       });
       if (!proposal) break;
       if (proposal.created !== false) { await store.socialSchedule(proposal.id, null); proposed += 1; }
     }
 
-    const body = `${plural(proposed, 'post')} proposed for Facebook and Instagram, ${plural(linkedin.length, 'LinkedIn post')} to paste.${Object.keys(rejected).length ? ` ${Object.values(rejected).reduce((a, b) => a + b, 0)} drafts failed the checks and were dropped.` : ''}`;
+    const body = `${plural(proposed, 'post')} proposed${linkedin.length ? `, ${plural(linkedin.length, 'LinkedIn post')} to paste` : ''}.${Object.keys(rejected).length ? ` ${Object.values(rejected).reduce((a, b) => a + b, 0)} drafts failed the checks and were dropped.` : ''}`;
     const blocks = [
       { type: 'callout', tone: 'info', title: `Social plan for the week of ${week}.`, text: body },
-      { type: 'paragraph', text: proposed ? 'Approve each Facebook and Instagram post in the AI team. An approved post waits for its time slot.' : 'No Facebook or Instagram post is waiting: the accounts are not connected, or no draft passed the checks.' },
-      ...(performance === 'read' ? [] : [{ type: 'paragraph', text: performance === 'not_connected' ? 'Facebook and Instagram are not connected, so this plan could not learn from past posts.' : `Past posts could not be read from Meta (${performance.replaceAll('_', ' ')}).` }]),
+      { type: 'paragraph', text: proposed ? 'Approve each post in the AI team. An approved post waits for its time slot.' : 'No post is waiting: the accounts are not connected, or no draft passed the checks.' },
+      ...(performance === 'read' ? [] : [{ type: 'paragraph', text: performance === 'not_connected' ? 'No social account is connected, so this plan could not learn from past posts.' : `Some past posts could not be read (${performance.replaceAll('_', ' ')}).` }]),
       ...linkedin.flatMap((post, index) => [{ type: 'paragraph', text: `LinkedIn post ${index + 1} (${productNames[post.product]}, ${post.pillar})` }, { type: 'message', text: post.text }]),
       ...(/^https:\/\//i.test(publicOrigin ?? '') && proposed ? [{ type: 'button', label: 'Open the AI team', url: `${publicOrigin.replace(/\/+$/, '')}/admin/team` }] : []),
     ];
@@ -131,15 +148,21 @@ export function socialHandlers({ store, notifier, model = null, meta, settings =
 
   // ---- The inbox ----------------------------------------------------------------------------------------------------------------------
   async function inbox(task, { now = () => new Date(), signal } = {}) {
-    if (!meta.configured.pages && !meta.configured.instagram) return { result: { skipped: 'meta_not_configured' } };
+    if (!metaPosts && !li.configured.page) return { result: { skipped: 'meta_not_configured' } };
     if (task.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only' } };
-    let items;
-    try { items = await meta.recentInbox({ signal, now: now() }); }
-    catch (error) {
-      if (signal?.aborted || error?.transient) throw error;
-      await tellAboutAccess(task, error?.code ?? 'meta_error', now());
-      return { result: { skipped: error?.code ?? 'meta_error' } };
+    let items = [];
+    const refused = [];
+    let reached = 0;
+    for (const [on, client] of [[metaPosts, meta], [li.configured.page, li]]) {
+      if (!on) continue;
+      try { items = items.concat(await client.recentInbox({ signal, now: now() })); reached += 1; }
+      catch (error) {
+        if (signal?.aborted || error?.transient) throw error;
+        refused.push(error?.code ?? 'social_error');
+        await tellAboutAccess(task, error?.code ?? 'social_error', now());
+      }
     }
+    if (!reached) return { result: { skipped: refused[0] } };
     const fresh = { comment: 0, message: 0 };
     for (const item of items.slice(0, 40)) {
       signal?.throwIfAborted();
@@ -152,43 +175,52 @@ export function socialHandlers({ store, notifier, model = null, meta, settings =
     if (total && notifier) {
       await notifier.send({
         severity: 'info', subject: `${total} new social ${total === 1 ? 'comment or message' : 'comments and messages'}`,
-        body: `${plural(fresh.comment, 'comment')} and ${plural(fresh.message, 'private message')} arrived on Facebook or Instagram.\n\n${drafting ? 'Drafted replies wait for you in the AI team; anything that needs you personally is left for you.' : 'Answer them on your Facebook Page and Instagram. Turning on customer text to AI lets the team draft replies for you to approve.'}`,
+        body: `${plural(fresh.comment, 'comment')} and ${plural(fresh.message, 'private message')} arrived on Facebook, Instagram or LinkedIn.\n\n${drafting ? 'Drafted replies wait for you in the AI team; anything that needs you personally is left for you.' : 'Answer them on the platforms. Turning on customer text to AI lets the team draft replies for you to approve.'}`,
         dedupeKey: `social:inbox:${task.id}`, agentKey: task.agentKey, taskId: task.id,
       });
     }
-    return { result: { seen: items.length, enqueued: total, comments: fresh.comment, messages: fresh.message } };
+    return { result: { seen: items.length, enqueued: total, comments: fresh.comment, messages: fresh.message, ...(refused.length ? { refused } : {}) } };
   }
 
   async function tellAboutAccess(task, code, moment) {
-    if (!notifier || !['meta_token_invalid', 'meta_permission'].includes(code)) return;
-    await notifier.send({ severity: 'warning', subject: 'The Social Media Manager cannot reach Meta',
-      body: `Meta refused the Social Media Manager's token (${code.replaceAll('_', ' ')}). Renew the system user token or its permissions and update HUB_META_ACCESS_TOKEN; until then no comment or message is read.`,
+    if (!notifier || !['meta_token_invalid', 'meta_permission', 'linkedin_token_invalid', 'linkedin_permission'].includes(code)) return;
+    const onLinkedIn = code.startsWith('linkedin_');
+    await notifier.send({ severity: 'warning', subject: `The Social Media Manager cannot reach ${onLinkedIn ? 'LinkedIn' : 'Meta'}`,
+      body: onLinkedIn
+        ? `LinkedIn refused the Social Media Manager's token (${code.replaceAll('_', ' ')}). Renew the access token (or its refresh token) or its permissions and update HUB_LINKEDIN_ACCESS_TOKEN; until then LinkedIn is not read.`
+        : `Meta refused the Social Media Manager's token (${code.replaceAll('_', ' ')}). Renew the system user token or its permissions and update HUB_META_ACCESS_TOKEN; until then no comment or message is read.`,
       dedupeKey: `social:access:${code}:${easternDate(moment)}`, agentKey: task.agentKey, taskId: task.id });
   }
 
   // ---- One comment or message --------------------------------------------------------------------------------------------------------
   async function interaction(task, { now = () => new Date(), signal } = {}) {
     const item = task.payload ?? {};
-    if (!['facebook', 'instagram', 'messenger'].includes(item.platform) || !['comment', 'message'].includes(item.kind) || typeof item.id !== 'string' || !item.id || item.id.length > 150
+    if (!['facebook', 'instagram', 'messenger', 'linkedin'].includes(item.platform) || !['comment', 'message'].includes(item.kind) || typeof item.id !== 'string' || !item.id || item.id.length > 150
+      || (item.platform === 'linkedin' && (item.kind !== 'comment' || typeof item.parentId !== 'string'))
       || (item.kind === 'message' && (typeof item.parentId !== 'string' || !item.parentId))) throw permanent('invalid_payload');
+    // LinkedIn has no "hide": its moderation deletes the comment, which the owner approves like any other action.
+    const removal = item.platform === 'linkedin' ? { operation: 'delete', verb: 'Delete', pending: 'Deleting' } : { operation: 'hide', verb: 'Hide', pending: 'Hiding' };
+    // A deletion is never automatic: with replies handed over (social.moderate approved on the spot), it is not proposed at all.
+    const handedOver = task.agent?.autonomy === 'act' && Array.isArray(task.agent?.config?.auto_approve_kinds) && task.agent.config.auto_approve_kinds.includes('social.moderate');
+    const canRemove = item.kind === 'comment' && !(removal.operation === 'delete' && handedOver);
     const where = `${labels[item.platform]} ${item.kind === 'comment' ? 'comment' : 'message'}`;
     const target = `${item.platform}:${item.id}`;
     let read;
-    try { read = await meta.readItem(item, { signal, now: now() }); }
-    catch (error) { if (signal?.aborted || error?.transient) throw error; return { result: { outcome: 'skipped', reason: error?.code ?? 'meta_error' } }; }
+    try { read = await clientFor(item.platform).readItem(item, { signal, now: now() }); }
+    catch (error) { if (signal?.aborted || error?.transient) throw error; return { result: { outcome: 'skipped', reason: error?.code ?? 'social_error' } }; }
     const skip = read.gone ? 'gone' : read.fromPage ? 'own' : read.answered ? 'answered' : item.kind === 'message' && !read.open ? 'window_closed' : !String(read.text ?? '').trim() ? 'no_text' : null;
     if (skip) return { result: { outcome: 'skipped', reason: skip, platform: item.platform, kind: item.kind } };
 
     const flagged = screenIdentifiers(read.text).flagged || (read.history ?? []).some(message => screenIdentifiers(message.text).flagged);
     const personal = async () => {
       if (notifier) await notifier.send({ severity: 'warning', subject: `A ${where} may contain personal information`,
-        body: `A ${where} appears to contain personal or health information. Nothing has been posted in reply.${item.kind === 'comment' ? ' Hiding it is waiting for your approval in the AI team.' : ''}${item.url ? `\n\nReview it on Meta: ${item.url}` : ''}`,
+        body: `A ${where} appears to contain personal or health information. Nothing has been posted in reply.${canRemove ? ` ${removal.pending} it is waiting for your approval in the AI team.` : item.kind === 'comment' ? ' Please delete it yourself if it should not stay public.' : ''}${item.url ? `\n\nReview it: ${item.url}` : ''}`,
         dedupeKey: `social:phi:${item.platform}:${item.id}`, agentKey: task.agentKey, taskId: task.id });
-      if (item.kind !== 'comment') return { result: { outcome: 'left_for_owner', reason: 'personal_information', platform: item.platform, kind: item.kind } };
+      if (!canRemove) return { result: { outcome: 'left_for_owner', reason: 'personal_information', platform: item.platform, kind: item.kind } };
       const proposal = await propose(task, { kind: 'social.moderate', targetKind: 'social_item', targetId: target,
-        preview: `Hide a ${where} that appears to contain personal or health information.${item.url ? `\n\nOpen it on Meta: ${item.url}` : ''}`,
-        input: { operation: 'hide', platform: item.platform, kind: item.kind, id: item.id, url: item.url ?? null, reason: 'personal_information' } });
-      return { status: proposal ? 'awaiting_approval' : 'done', result: { outcome: proposal ? 'proposed' : 'observe_only', reply: 'hide', reason: 'personal_information', platform: item.platform, kind: item.kind } };
+        preview: `${removal.verb} a ${where} that appears to contain personal or health information.${item.url ? `\n\nOpen it: ${item.url}` : ''}`,
+        input: { operation: removal.operation, platform: item.platform, kind: item.kind, id: item.id, parentId: item.parentId ?? null, url: item.url ?? null, reason: 'personal_information' } });
+      return { status: proposal ? 'awaiting_approval' : 'done', result: { outcome: proposal ? 'proposed' : 'observe_only', reply: removal.operation, reason: 'personal_information', platform: item.platform, kind: item.kind } };
     };
     if (flagged) return personal();
     if (!drafting) return { result: { outcome: 'left_for_owner', reason: 'customer_text_to_ai_off', platform: item.platform, kind: item.kind } };
@@ -197,19 +229,22 @@ export function socialHandlers({ store, notifier, model = null, meta, settings =
     const history = (read.history ?? []).map(message => ({ direction: message.direction, text: redact(message.text, { limit: 600 }).text }));
     const result = await runModel(task, {
       promptVersion: replyPromptVersion, system: [{ text: replySystem, cache: true }], schema: replySchema, maxTokens: 2000, effort: effort(task),
-      user: replyUserMessage({ platform: labels[item.platform], kind: item.kind, words: item.kind === 'message' ? 100 : 50, links: socialLinks(null), text, history }),
+      user: replyUserMessage({ platform: labels[item.platform], kind: item.kind, words: item.kind === 'message' ? 100 : 50, links: offered.flatMap(product => socialLinks(product)), text, history }),
       describe: output => `Read a ${where}: ${output.intent}${output.needsOwner ? ', needs the owner' : ''}${output.hide ? ', hide' : ''}.`,
     }, signal);
     if (result.outcome !== 'completed') return { result: { outcome: 'left_for_owner', reason: result.code ?? result.outcome, platform: item.platform, kind: item.kind } };
     const reading = result.output;
     if (reading.possiblePhi) return personal();
+    if (reading.hide && item.kind === 'comment' && !canRemove) return { result: { outcome: 'left_for_owner', reason: 'spam', intent: reading.intent, platform: item.platform, kind: item.kind } };
     if (reading.hide && item.kind === 'comment') {
       const proposal = await propose(task, { kind: 'social.moderate', targetKind: 'social_item', targetId: target,
-        preview: `Hide a ${where} that reads as spam or abuse.${item.url ? `\n\nOpen it on Meta: ${item.url}` : ''}`,
-        input: { operation: 'hide', platform: item.platform, kind: item.kind, id: item.id, url: item.url ?? null, reason: 'spam' } });
-      return { status: proposal ? 'awaiting_approval' : 'done', result: { outcome: proposal ? 'proposed' : 'observe_only', reply: 'hide', intent: reading.intent, platform: item.platform, kind: item.kind } };
+        preview: `${removal.verb} a ${where} that reads as spam or abuse.${item.url ? `\n\nOpen it: ${item.url}` : ''}`,
+        input: { operation: removal.operation, platform: item.platform, kind: item.kind, id: item.id, parentId: item.parentId ?? null, url: item.url ?? null, reason: 'spam' } });
+      return { status: proposal ? 'awaiting_approval' : 'done', result: { outcome: proposal ? 'proposed' : 'observe_only', reply: removal.operation, intent: reading.intent, platform: item.platform, kind: item.kind } };
     }
     if (reading.needsOwner || reading.hide || !reading.reply.trim()) return { result: { outcome: 'left_for_owner', reason: 'needs_owner', intent: reading.intent, platform: item.platform, kind: item.kind } };
+    // A question about a product the team is not marketing yet (CareBase in its pilot) is the owner's to answer.
+    if (socialProducts.includes(reading.product) && !offered.includes(reading.product)) return { result: { outcome: 'left_for_owner', reason: 'product_not_marketed', intent: reading.intent, platform: item.platform, kind: item.kind } };
     const product = socialProducts.includes(reading.product) ? reading.product : null;
     const checked = checkSocialText(reading.reply, { surface: item.kind === 'message' ? 'message' : 'comment', product, theirText: [text, ...history.map(message => message.text)].join('\n') });
     if (!checked.ok) return { result: { outcome: 'left_for_owner', reason: `draft_${checked.reason}`, intent: reading.intent, platform: item.platform, kind: item.kind } };
@@ -220,57 +255,82 @@ export function socialHandlers({ store, notifier, model = null, meta, settings =
   }
 
   // ---- The daily ad review ------------------------------------------------------------------------------------------------------------
+  // Meta's ads keep their ids as targets; LinkedIn's carry a "linkedin:" prefix, so the two never collide.
+  const adSources = () => [
+    { platform: 'meta', name: 'Meta', client: meta, on: meta.configured.ads, key: id => id },
+    { platform: 'linkedin', name: 'LinkedIn', client: li, on: li.configured.ads, key: id => `linkedin:${id}` },
+  ].filter(source => source.on);
+
   async function ads(task, { now = () => new Date(), signal } = {}) {
-    if (!meta.configured.ads) return { result: { skipped: 'ads_not_configured' } };
+    const sources = adSources();
+    if (!sources.length) return { result: { skipped: 'ads_not_configured' } };
     if (task.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only' } };
     const moment = now();
-    let overview;
-    try { overview = await meta.adsOverview({ signal, now: moment }); }
-    catch (error) { if (signal?.aborted || error?.transient) throw error; await tellAboutAccess(task, error?.code ?? 'meta_error', moment); return { result: { skipped: error?.code ?? 'meta_error' } }; }
-    const { recommendations, adsets } = evaluateAds({ ...overview, now: moment, settings });
     const targets = await open();
     const today = easternDate(moment);
     const counts = { pause: 0, budget: 0, create: 0, skipped: 0, rejected: 0 };
-    for (const rec of recommendations) {
-      signal?.throwIfAborted();
-      if (rec.kind === 'pause') {
-        if (targets.has(`social.ad_pause:${rec.adId}`)) { counts.skipped += 1; continue; }
-        if (await propose(task, { kind: 'social.ad_pause', targetKind: 'social_ad', targetId: rec.adId, preview: `Pause the ad "${rec.adName}" in "${rec.adsetName}": it ${rec.reason}.`, input: { adId: rec.adId, adsetId: rec.adsetId, reason: rec.reason } })) counts.pause += 1;
-      } else if (rec.kind === 'budget') {
-        if (targets.has(`social.ad_budget:${rec.adsetId}`)) { counts.skipped += 1; continue; }
-        if (await propose(task, { kind: 'social.ad_budget', targetKind: 'social_adset', targetId: rec.adsetId,
-          preview: `Raise the daily budget of "${rec.adsetName}" from ${money(rec.from)} to ${money(rec.to)}: ${rec.reason}. Your cap is ${money(settings.maxDailyBudgetCents)} a day. Only you can approve a budget change.`,
-          input: { adsetId: rec.adsetId, from: rec.from, to: rec.to, reason: rec.reason } })) counts.budget += 1;
-      } else if (rec.kind === 'refresh') {
-        if (!model?.configured || [...targets].some(value => value.startsWith(`social.ad_create:${rec.adsetId}:`))) { counts.skipped += 1; continue; }
-        counts.create += await refresh(task, rec, overview, today, signal, counts);
+    let adsetCount = 0;
+    let recommendationCount = 0;
+    const refused = [];
+    for (const source of sources) {
+      let overview;
+      try { overview = await source.client.adsOverview({ signal, now: moment }); }
+      catch (error) {
+        if (signal?.aborted || error?.transient) throw error;
+        refused.push(error?.code ?? 'social_error');
+        await tellAboutAccess(task, error?.code ?? 'social_error', moment);
+        continue;
+      }
+      const { recommendations, adsets } = evaluateAds({ ...overview, now: moment, settings });
+      adsetCount += adsets.length;
+      recommendationCount += recommendations.length;
+      const platform = source.platform === 'linkedin' ? { platform: 'linkedin' } : {};
+      const where = source.platform === 'linkedin' ? 'LinkedIn campaign' : 'ad set';
+      for (const rec of recommendations) {
+        signal?.throwIfAborted();
+        if (rec.kind === 'pause') {
+          if (targets.has(`social.ad_pause:${source.key(rec.adId)}`)) { counts.skipped += 1; continue; }
+          if (await propose(task, { kind: 'social.ad_pause', targetKind: 'social_ad', targetId: source.key(rec.adId),
+            preview: `Pause the ${source.name} ad "${rec.adName}" in the ${where} "${rec.adsetName}": it ${rec.reason}.`, input: { adId: rec.adId, adsetId: rec.adsetId, reason: rec.reason, ...platform } })) counts.pause += 1;
+        } else if (rec.kind === 'budget') {
+          if (targets.has(`social.ad_budget:${source.key(rec.adsetId)}`)) { counts.skipped += 1; continue; }
+          // No more money for an ad set that sends people to a product the team is not marketing.
+          if (overview.ads.some(ad => ad.adsetId === rec.adsetId && productOf(ad.copy?.link) && !markets(marketed, productOf(ad.copy?.link)))) { counts.skipped += 1; continue; }
+          if (await propose(task, { kind: 'social.ad_budget', targetKind: 'social_adset', targetId: source.key(rec.adsetId),
+            preview: `Raise the daily budget of the ${source.name} ${where} "${rec.adsetName}" from ${money(rec.from)} to ${money(rec.to)}: ${rec.reason}. Your cap is ${money(settings.maxDailyBudgetCents)} a day. Only you can approve a budget change.`,
+            input: { adsetId: rec.adsetId, from: rec.from, to: rec.to, reason: rec.reason, ...platform } })) counts.budget += 1;
+        } else if (rec.kind === 'refresh') {
+          if (!model?.configured || [...targets].some(value => value.startsWith(`social.ad_create:${source.key(rec.adsetId)}:`))) { counts.skipped += 1; continue; }
+          counts.create += await refresh(task, rec, overview, today, signal, counts, source);
+        }
       }
     }
+    if (!adsetCount && refused.length === sources.length) return { result: { skipped: refused[0] } };
     const proposed = counts.pause + counts.budget + counts.create;
     if (proposed && notifier) {
       await notifier.send({ severity: 'info', subject: `Ad review: ${plural(proposed, 'change')} to approve`,
         body: `${plural(counts.pause, 'ad')} to pause, ${plural(counts.create, 'new ad')} to start and ${plural(counts.budget, 'budget change')}, from the last seven days' results (rules ${rulesVersion}). Open the AI team to review them.`,
         dedupeKey: task.sourceKind === 'owner' ? `social:ads:run:${task.id}` : `social:ads:${today}`, agentKey: task.agentKey, taskId: task.id });
     }
-    await recordRun({ store, log }, task, { promptVersion: rulesVersion, summary: `Reviewed ${plural(adsets.length, 'ad set')}: ${plural(recommendations.length, 'recommendation')}, ${plural(proposed, 'change')} proposed.` });
-    return { status: proposed ? 'awaiting_approval' : 'done', result: { adsets: adsets.length, recommendations: recommendations.length, ...counts } };
+    await recordRun({ store, log }, task, { promptVersion: rulesVersion, summary: `Reviewed ${plural(adsetCount, 'ad set')}: ${plural(recommendationCount, 'recommendation')}, ${plural(proposed, 'change')} proposed.` });
+    return { status: proposed ? 'awaiting_approval' : 'done', result: { adsets: adsetCount, recommendations: recommendationCount, ...counts, ...(refused.length ? { refused } : {}) } };
   }
 
-  async function refresh(task, rec, overview, today, signal, counts) {
+  async function refresh(task, rec, overview, today, signal, counts, source) {
     const base = overview.ads.find(ad => ad.id === rec.basedOn);
     const product = productOf(base?.copy?.link);
-    if (!base || !product) { counts.skipped += 1; return 0; }
+    if (!base || !product || !markets(marketed, product)) { counts.skipped += 1; return 0; }
     const allowed = socialLinks(product).map(link => link.url);
     const link = allowed.includes(base.copy.link) ? base.copy.link : playbookFor(product).nextStep.url;
     const adset = overview.adsets.find(item => item.id === rec.adsetId);
     const thisWeek = new Map(overview.current.map(row => [row.adId, row]));
     const peers = overview.ads.filter(ad => ad.adsetId === rec.adsetId && ad.id !== base.id).slice(0, 4);
     const user = JSON.stringify({
-      product: productNames[product], adSet: adset?.name ?? '', objective: adset?.objective ?? null, why: rec.reason,
+      platform: source.name, product: productNames[product], adSet: adset?.name ?? '', objective: adset?.objective ?? null, why: rec.reason,
       best: { copy: base.copy, results: thisWeek.get(base.id) ?? null }, others: peers.map(ad => ({ copy: ad.copy, active: ad.active, results: thisWeek.get(ad.id) ?? null })),
     });
     const result = await runModel(task, { promptVersion: adPromptVersion, system: [{ text: adSystem, cache: true }], user, schema: adSchema, maxTokens: 3000, effort: effort(task),
-      describe: output => `Wrote ${plural(output.variants.length, 'ad variant')} for an ad set.` }, signal);
+      describe: output => `Wrote ${plural(output.variants.length, 'ad variant')} for a ${source.name} ad set.` }, signal);
     if (result.outcome !== 'completed') { counts.skipped += 1; return 0; }
     let made = 0;
     for (const [index, variant] of (result.output.variants ?? []).slice(0, 2).entries()) {
@@ -279,9 +339,12 @@ export function socialHandlers({ store, notifier, model = null, meta, settings =
       const [message, headline, description] = parts.map(part => part.text);
       const callToAction = variant.callToAction === 'SIGN_UP' ? 'SIGN_UP' : 'LEARN_MORE';
       const name = `${adset?.name ?? 'Ad set'} · ${String(variant.angle ?? 'variant').slice(0, 30)} · ${today}`;
-      const proposal = await propose(task, { kind: 'social.ad_create', targetKind: 'social_adset', targetId: `${rec.adsetId}:${today}:${index + 1}`,
-        preview: `New ad for "${adset?.name ?? rec.adsetId}" (${rec.reason}). It runs inside the ad set's existing budget.\n\nPrimary text: ${message}\nHeadline: ${headline}\nDescription: ${description}\nButton: ${callToAction === 'SIGN_UP' ? 'Sign up' : 'Learn more'}\nLink: ${link}\nImage: the same as "${base.name}"`,
-        input: { adsetId: rec.adsetId, name, message, headline, description, link, imageHash: base.imageHash ?? null, callToAction, product, basedOn: base.id } });
+      const linkedinAd = source.platform === 'linkedin';
+      const brandImage = linkedinAd && !base.imageHash && imageUrls.length ? imageUrls[index % imageUrls.length] : null;
+      const imageLine = base.imageHash ? `Image: the same as "${base.name}"` : brandImage ? `Image: ${brandImage}` : 'Image: none';
+      const proposal = await propose(task, { kind: 'social.ad_create', targetKind: 'social_adset', targetId: `${source.key(rec.adsetId)}:${today}:${index + 1}`,
+        preview: `New ${source.name} ad for "${adset?.name ?? rec.adsetId}" (${rec.reason}). It runs inside the ${linkedinAd ? 'campaign' : 'ad set'}'s existing budget.\n\n${linkedinAd ? 'Post text' : 'Primary text'}: ${message}\nHeadline: ${headline}\nDescription: ${description}\n${linkedinAd ? '' : `Button: ${callToAction === 'SIGN_UP' ? 'Sign up' : 'Learn more'}\n`}Link: ${link}\n${imageLine}`,
+        input: { adsetId: rec.adsetId, name, message, headline, description, link, imageHash: base.imageHash ?? null, callToAction, product, basedOn: base.id, ...(linkedinAd ? { platform: 'linkedin', imageUrl: brandImage } : {}) } });
       if (proposal) made += 1;
     }
     return made;
@@ -289,19 +352,28 @@ export function socialHandlers({ store, notifier, model = null, meta, settings =
 
   // ---- The weekly report --------------------------------------------------------------------------------------------------------------
   async function report(task, { now = () => new Date(), signal } = {}) {
-    if (!meta.configured.pages && !meta.configured.instagram && !meta.configured.ads) return { result: { skipped: 'meta_not_configured' } };
+    const sources = adSources();
+    if (!metaPosts && !li.configured.page && !sources.length) return { result: { skipped: 'meta_not_configured' } };
     const moment = now();
     const week = weekStart(dueMoment(task) ?? moment);
     const asked = task.sourceKind === 'owner';
     const notes = [];
     let posts = [];
-    try { if (meta.configured.pages || meta.configured.instagram) posts = rankPosts(await meta.recentPosts({ signal }), { now: moment, days: 7 }); }
-    catch (error) { if (signal?.aborted || error?.transient) throw error; notes.push(`Posts could not be read (${String(error?.code ?? 'meta_error').replaceAll('_', ' ')}).`); }
+    for (const [on, client, name] of [[metaPosts, meta, 'Meta'], [li.configured.page, li, 'LinkedIn']]) {
+      if (!on) continue;
+      try { posts = posts.concat(await client.recentPosts({ signal })); }
+      catch (error) { if (signal?.aborted || error?.transient) throw error; notes.push(`${name} posts could not be read (${String(error?.code ?? 'social_error').replaceAll('_', ' ')}).`); }
+    }
+    posts = rankPosts(posts, { now: moment, days: 7 });
     let adsets = [];
-    try { if (meta.configured.ads) adsets = evaluateAds({ ...(await meta.adsOverview({ signal, now: moment })), now: moment, settings }).adsets.filter(item => item.impressions > 0 || item.active); }
-    catch (error) { if (signal?.aborted || error?.transient) throw error; notes.push(`Ads could not be read (${String(error?.code ?? 'meta_error').replaceAll('_', ' ')}).`); }
+    for (const source of sources) {
+      try { adsets = adsets.concat(evaluateAds({ ...(await source.client.adsOverview({ signal, now: moment })), now: moment, settings }).adsets
+        .filter(item => item.impressions > 0 || item.active).map(item => ({ ...item, name: `${source.name}: ${item.name}` }))); }
+      catch (error) { if (signal?.aborted || error?.transient) throw error; notes.push(`${source.name} ads could not be read (${String(error?.code ?? 'social_error').replaceAll('_', ' ')}).`); }
+    }
     const waiting = (await open()).size;
-    const byPlatform = ['facebook', 'instagram'].map(platform => { const mine = posts.filter(post => post.platform === platform); return [platform, mine.length, mine.reduce((sum, post) => sum + post.engagement, 0)]; });
+    const platforms = ['facebook', 'instagram', ...(li.configured.page ? ['linkedin'] : [])];
+    const byPlatform = platforms.map(platform => { const mine = posts.filter(post => post.platform === platform); return [platform, mine.length, mine.reduce((sum, post) => sum + post.engagement, 0)]; });
     const spend = adsets.reduce((sum, item) => sum + item.spendCents, 0);
     const results = adsets.reduce((sum, item) => sum + item.results, 0);
     const body = `${plural(posts.length, 'post')} in the last 7 days with ${posts.reduce((sum, post) => sum + post.engagement, 0)} engagement points; ads spent ${money(spend)} for ${plural(results, 'result')}. ${plural(waiting, 'change')} waiting for you.`;
@@ -311,14 +383,14 @@ export function socialHandlers({ store, notifier, model = null, meta, settings =
       { type: 'details', rows: byPlatform.map(([platform, count, points]) => [labels[platform], `${plural(count, 'post')}, ${points} engagement points`]) },
       ...(posts.length ? [{ type: 'paragraph', text: 'What earned the most engagement' }, { type: 'details', rows: posts.slice(0, 3).map(post => [`${labels[post.platform]}: ${firstLine(post.text)}`, `${post.engagement} (${post.reactions} reactions, ${post.comments} comments, ${post.shares} shares)`]) }] : []),
       ...(adsets.length ? [{ type: 'paragraph', text: 'Ads, last 7 days' }, { type: 'details', rows: adsets.map(item => [item.name.slice(0, 80), `${money(item.spendCents)} spent, ${item.impressions} impressions, ${(item.ctr * 100).toFixed(1)}% click rate, ${plural(item.results, 'result')}${item.costPerResult !== null ? ` at ${money(item.costPerResult)} each` : ''}, ${plural(item.activeAds, 'active ad')}`]) }] : []),
-      { type: 'paragraph', text: 'Engagement points count reactions, comments twice and shares three times. Results are leads and sign-ups as Meta reports them.' },
+      { type: 'paragraph', text: 'Engagement points count reactions, comments twice and shares three times. Results are leads and sign-ups as Meta and LinkedIn report them.' },
       ...notes.map(text => ({ type: 'paragraph', text })),
       ...(/^https:\/\//i.test(publicOrigin ?? '') && waiting ? [{ type: 'button', label: 'Open the AI team', url: `${publicOrigin.replace(/\/+$/, '')}/admin/team` }] : []),
     ];
     const sent = await notifier.send({ severity: 'info', subject: `Social media weekly: ${plural(posts.length, 'post')}, ${money(spend)} ad spend`, body, blocks,
       dedupeKey: asked ? `social:report:run:${task.id}` : `social:report:${week}`, agentKey: task.agentKey, taskId: task.id });
     if (!asked && sent.every(item => item.delivery === 'duplicate')) return { result: { skipped: sent.some(delivered) ? 'already_sent' : 'earlier_attempt_unconfirmed', week } };
-    await recordRun({ store, log }, task, { promptVersion: 'social-report.1', summary: `Sent the weekly social report: ${body}` });
+    await recordRun({ store, log }, task, { promptVersion: 'social-report.2', summary: `Sent the weekly social report: ${body}` });
     return { result: { week, posts: posts.length, spendCents: spend, results, waiting } };
   }
 
@@ -326,7 +398,8 @@ export function socialHandlers({ store, notifier, model = null, meta, settings =
 }
 
 /**
- * When a post in the plan should publish: its day of the week at the platform's slot (10:30 Eastern on Facebook, 12:15 on Instagram),
+ * When a post in the plan should publish: its day of the week at the platform's slot (10:30 Eastern on Facebook, 12:15 on Instagram,
+ * 8:45 on LinkedIn),
  * moved forward a day at a time until it is at least an hour away, and never more than seven days ahead.
  */
 export function slotFor({ week, day: dayOfWeek, platform, index = 1, now = new Date() }) {

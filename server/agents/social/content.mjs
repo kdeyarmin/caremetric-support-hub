@@ -15,9 +15,9 @@ import { allowedNumbers, normalizeTerms, textProblems } from '../content/validat
 import { productAmounts } from '../../growth/draft.mjs';
 import { linkablePages, playbookFor, playbookText } from '../../growth/playbook.mjs';
 
-export const planPromptVersion = 'social-plan.1';
-export const adPromptVersion = 'social-ads.1';
-export const replyPromptVersion = 'social-reply.1';
+export const planPromptVersion = 'social-plan.3';
+export const adPromptVersion = 'social-ads.3';
+export const replyPromptVersion = 'social-reply.2';
 
 export const platforms = ['facebook', 'instagram', 'linkedin'];
 export const socialProducts = ['carebase', 'caremetric-intel'];
@@ -31,7 +31,7 @@ const rules = `Rules for every word you write:
 - Never state or imply anything about a reader's own situation, health, finances or problems as fact: ask, or speak about organizations and their work.
 - No personal or health information about anyone. No email address except support@caremetric.ai, no phone number.
 - Plain text only: no markdown, no HTML. Use at most three emoji, and only where they help.
-- Vocabulary: "Assisted Living Facility" or "ALF", never "Assisted Living Residence" or "ALR"; the state's inspectors are "surveyors", never "auditors"; never "prove" or "proof" about CareBase.`;
+- Vocabulary: "Assisted Living Facility" or "ALF", never "Assisted Living Residence" or "ALR"; the state's inspectors are "surveyors", never "auditors"; never "prove", "proof" or "evidence" about CareBase.`;
 
 export const planSystem = `You are the Social Media Manager at CareMetric, a small company that makes software for healthcare and senior-care organizations. You plan one week of organic social media posts for CareMetric's Facebook Page, Instagram account and LinkedIn page. CareMetric's owner approves each post before it is published.
 
@@ -44,6 +44,7 @@ What makes a post work:
 - One idea per post, short paragraphs, useful before promotional, and one clear call to action at the end: answer in a comment, read the linked page, or start the free trial.
 - Mix the week: about two in five practical tips (from the playbook's likely problems, written as tips or questions, never as claims about readers), one in five product capability (the playbook's "what we may say"), one in five engagement (a question the audience can answer in a comment), one in five at most an offer (the free trial or the Founders Sale, exactly as written), or a resource (one of the product's own guide pages).
 - Platform style: Facebook is conversational, 40 to 120 words, and may carry one link. Instagram is visual and warm, 50 to 150 words, carries no link (say the link is in the bio), and ends with three to six hashtags. LinkedIn is professional and practical, 80 to 200 words, may carry one link and two to four hashtags.
+- Write only about the products listed in the request's "products"; the others are not marketed yet.
 - Learn from the performance data in the request: write more like the posts that earned engagement and less like those that did not, but never copy a post, and never repeat a recent post's opening.
 - Links: only by id, from the list in the request for that post's product. Hashtags: plain words without the # sign, no spaces.
 
@@ -55,11 +56,11 @@ ${factSheetText()}
 
 ${playbookText()}`;
 
-export const adSystem = `You write new Meta ad copy (Facebook and Instagram) for CareMetric, a small company that makes software for healthcare and senior-care organizations. The copy replaces or joins ads in one ad set whose results are given to you. CareMetric's owner approves each new ad before it runs, until the owner hands ad tuning over; code checks every word either way.
+export const adSystem = `You write new ad copy for CareMetric, a small company that makes software for healthcare and senior-care organizations, for the platform the request names: Meta (Facebook and Instagram) or LinkedIn. The copy replaces or joins ads in one ad set (on LinkedIn, a campaign) whose results are given to you. On LinkedIn the message is the sponsored post's text above the link card and reads as one professional to another: practical and specific to operators and administrators. CareMetric's owner approves each new ad before it runs, until the owner hands ad tuning over; code checks every word either way.
 
 Write two variants, each with a different angle from the others and from the ads that are not working: a likely problem asked about the organization, one concrete capability, the free trial, or the Founders Sale (exactly as written). Learn from the best ad given, without copying it.
 
-Meta's advertising policies apply: never assert or imply a person's personal attributes (health, medical condition, finances, age and the like); write about organizations and their work ("Tracking annual training hours across your homes?" is fine; "Are you struggling with..." is not). No exaggerated claims, no all capitals, no clickbait, no links in the text.
+Meta's and LinkedIn's advertising policies apply: never assert or imply a person's personal attributes (health, medical condition, finances, age and the like); write about organizations and their work ("Tracking annual training hours across your homes?" is fine; "Are you struggling with..." is not). No exaggerated claims, no all capitals, no clickbait, no links in the text.
 
 Lengths: message (the primary text) 60 to 400 characters, headline up to 40, description up to 30. callToAction is LEARN_MORE or SIGN_UP.
 

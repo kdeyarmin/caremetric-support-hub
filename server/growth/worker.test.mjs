@@ -149,3 +149,28 @@ it('a withdrawn hand-over or an already contacted business fails the action inst
  for(const status of ['outreach_off','business_contacted']) {store.claim.mockResolvedValueOnce({send:false,status});await expect(exec({id:'a',input:{messageId:'m'}})).rejects.toMatchObject({code:status});}
  store.claim.mockResolvedValueOnce({send:false,status:'cancelled'});expect(await exec({id:'a',input:{messageId:'m'}})).toEqual({delivery:'cancelled'});
 });
+it('markets only the owner\'s products: a CareBase prospect gets no discovery, research, plan or content while CareBase is in its pilot',async()=>{
+ const search=vi.fn(async()=>[]);
+ const store={discover:vi.fn(async()=>0)};
+ const intelOnly=['caremetric-intel'];
+ await growthHandlers({growth:{store,research:{configured:true,search}},marketed:intelOnly})['growth.discovery']({id:'t',agent:{autonomy:'propose'}});
+ expect(search.mock.calls.map(([product])=>product)).toEqual(['caremetric-intel']);
+ expect((await growthHandlers({growth:{store,research:{configured:true,search}},marketed:[]})['growth.discovery']({id:'t',agent:{autonomy:'propose'}})).result).toEqual({skipped:'no_marketed_product'});
+ const intel={...base,id:'intel',product:'caremetric-intel'};
+ const unassessed={...base,id:'carebase-new',stage:'identified',assessed_at:null};
+ const sweep={snapshot:vi.fn(async()=>({total:3,items:[base,unassessed,intel]})),plan:vi.fn(async()=>'work'),assess:vi.fn()};
+ const model={configured:true,run:vi.fn()};
+ await growthHandlers({growth:{store:sweep},model,marketed:intelOnly})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'});
+ expect(sweep.plan.mock.calls.map(([id])=>id)).toEqual(['intel']);
+ expect(model.run).not.toHaveBeenCalled();
+ expect(sweep.assess).not.toHaveBeenCalled();
+ // Customers are not marketing: a pilot facility's onboarding goes on.
+ const pilot={...base,id:'pilot',owner_agent:'account_manager',stage:'trial',created_at:'2026-01-01T00:00:00Z'};
+ const success={snapshot:vi.fn(async()=>({total:1,items:[pilot]})),plan:vi.fn(async()=>'work')};
+ await growthHandlers({growth:{store:success},marketed:intelOnly})['growth.success']({id:'task',agent:{autonomy:'propose'},kind:'growth.success'});
+ expect(success.plan).toHaveBeenCalledWith('pilot',expect.objectContaining({kind:'onboarding'}));
+ const content={contentContext:vi.fn(async()=>({planned:false,policies:[{product:'carebase',approved_claim:'Staff training in one place.'}]}))};
+ const research={configured:true,search:vi.fn(async()=>[])};
+ expect((await growthHandlers({growth:{store:content,research},marketed:intelOnly})['growth.content']({id:'t',agent:{autonomy:'propose'},sourceKind:'schedule'})).result).toMatchObject({proposals:0});
+ expect(research.search).not.toHaveBeenCalled();
+});

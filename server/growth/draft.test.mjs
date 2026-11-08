@@ -32,7 +32,7 @@ it('tells the writer which touch it is writing, the playbook angle for it and th
  expect(input.links.map(link=>link.url)).not.toContain('https://www.caremetricintel.com/');
  expect(request.system[0].text).toContain('CareMetric fact sheet');
  expect(request.system[0].text).toContain('sales playbook');
- expect(request.promptVersion).toBe('growth.3');
+ expect(request.promptVersion).toBe('growth.4');
 });
 it('gives a customer-success message the play for its moment instead of a touch',async()=>{
  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Before your trial ends',body:'What is left to decide before your trial ends?',citations:[],needsHuman:false}}))};

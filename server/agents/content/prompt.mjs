@@ -10,7 +10,7 @@
 import { factSheetText, legalDisclaimer, officialSources, productPage, productPageIds } from './facts.mjs';
 import { limits } from './validate.mjs';
 
-export const promptVersion = 'content.1';
+export const promptVersion = 'content.2';
 
 const range = ([min, max]) => `${min} to ${max}`;
 
@@ -41,7 +41,7 @@ Answer with one JSON object and nothing else. Its fields:
 - internalLinks: ${range(limits.links)} page ids from the fact sheet's list, the most useful next pages for this reader, starting with the topic's suggestions.
 - citations: up to ${limits.citations[1]} source addresses copied exactly from the topic's sources. For a regulation topic, cite at least one.
 
-Vocabulary: "Assisted Living Facility" or "ALF", never "Assisted Living Residence" or "ALR". The Department of Human Services' inspectors are "surveyors" and their visit is a survey or an inspection, never an "auditor" or an "audit". In anything about CareBase, never use the words "prove" or "proof".
+Vocabulary: "Assisted Living Facility" or "ALF", never "Assisted Living Residence" or "ALR". The Department of Human Services' inspectors are "surveyors" and their visit is a survey or an inspection, never an "auditor" or an "audit". In anything about CareBase, never use the words "prove", "proof" or "evidence".
 
 The disclaimer added to regulation articles reads: "${legalDisclaimer}"
 
