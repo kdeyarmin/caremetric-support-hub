@@ -38,7 +38,7 @@ it('gives a customer-success message the play for its moment instead of a touch'
  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Before your trial ends',body:'What is left to decide before your trial ends?',citations:[],needsHuman:false}}))};
  expect(await draftMessage({opportunity:{...opportunity,stage:'trial'},work:{kind:'trial',action:'Review trial progress',success:'Decision'},task:{},model})).toMatchObject({modelGenerated:true});
  const input=JSON.parse(model.run.mock.calls[0][1].user);
- expect(input.play).toMatch(/FOUNDERS50/);
+ expect(input.play).toMatch(/Founders Sale/);
  expect(input.touch).toBeUndefined();
 });
 it('refuses drafts that break the fact sheet or claim rules, and fixes the vocabulary it can',async()=>{

@@ -20,9 +20,9 @@ and sends a weekly pipeline review.
 
 | Agent | Job | Skill before | What changed |
 | --- | --- | --- | --- |
-| **Sales Executive** (new) | Answer prospects and move them to a free trial and a paid plan; weekly pipeline review | Did not exist. Prospect replies got a fixed acknowledgment | Drafts answers from the fact sheet and playbook (exact prices, trial, FOUNDERS50, one next step, one qualifying question, objection handling), checked by code, approved by the owner; weekly review of stuck deals, warm prospects and trials at risk |
+| **Sales Executive** (new) | Answer prospects and move them to a free trial and a paid plan; weekly pipeline review | Did not exist. Prospect replies got a fixed acknowledgment | Drafts answers from the fact sheet and playbook (exact prices, the trial, the Founders Sale, one next step, one qualifying question, objection handling), checked by code, approved by the owner; weekly review of stuck deals, warm prospects and trials at risk |
 | Marketing Manager | Find, qualify and first contact prospects | Static search; no fit rubric; prompt without product facts; touches unaware of each other | Daily rotating, Pennsylvania-only CareBase search; directory filter; written fit rubric aligned to qualification; touch plan; fact sheet, playbook and product pages in its prompt; drafts held to the Content Marketer's claim rules and to their own product's prices |
-| Account Manager | Onboard, activate, renew and keep customers | Model drafts for customer moments had one-line generic steps | Each customer moment has a play (the trial play explains activating with FOUNDERS50; support issues come before any upsell) |
+| Account Manager | Onboard, activate, renew and keep customers | Model drafts for customer moments had one-line generic steps | Each customer moment has a play (the trial play explains activating a paid plan, with the Founders Sale applied automatically; support issues come before any upsell) |
 | Support Concierge | Triage every message; answer from guides | Correctly cautious, but sales was out of its scope | Hands CareBase and Intel prospects to the Sales Executive after the owner's alert; everything else unchanged |
 | Content Marketer | Weekly help article; monthly outreach drafts | Strong: fact sheet, claim validator, curated links | Unchanged; its validator now also guards the Marketing Manager and Sales Executive |
 | Growth Manager | No website lead waits | Fit for purpose (alerts and reminders, no model) | Unchanged |
@@ -67,7 +67,7 @@ Everything is checked against the same fact-sheet rules. See [Social media](SOCI
   opportunity is still open. Billing, closed conversations, Advisors, identifiers, unread long messages, cancellations, outages,
   security and legal matters never reach it. Paused or in Observe, it takes nothing and the Concierge behaves as before.
 - **How it sells.** Answer the actual question first; quote listed prices exactly (never totals); offer one next step (the free trial,
-  or activating a paid plan with FOUNDERS50); ask at most one qualifying question; handle price, timing, current-system, switching,
+  or activating a paid plan, with the Founders Sale applied automatically); ask at most one qualifying question; handle price, timing, current-system, switching,
   authority, security, fit, data-trust and results objections the playbook's way; say "not now" gracefully and ask when to check back;
   route negotiations, contracts, security questionnaires, cancellations and opt-outs to the owner.
 - **What it may never do.** Send anything itself (the reply executor refuses unapproved replies), state an unlisted price or the other
@@ -92,9 +92,9 @@ Everything is checked against the same fact-sheet rules. See [Social media](SOCI
 
 ## Owner decisions (November 8)
 
-- **Founders Sale in the trial check-in email: yes.** The fixed trial check-in now says "ask us for FOUNDERS50 when you activate your
-  paid plan", in the offer's exact terms. The Account Manager's offer menu also applies the Founders coupon to CareBase and Intel trials
-  ending within a week, so converting trials get it without asking.
+- **Founders Sale in the trial check-in email: yes.** The fixed trial check-in now states the Founders Sale in its exact terms: 50% off
+  eligible subscription charges for the first 12 months of paid service, applied on its own when the trial converts, with no code
+  needed. Billing applies the coupon automatically at checkout and conversion (#152).
 - **No demos.** Every agent sells self-serve: walkthrough pages, matching help-center guides and manuals, the free trial and written
   answers; none offers a call or a meeting. The Sales Executive can be handed "Sales answers" to answer prospects on its own.
 - **Cold email: approved.** It was already automatic in production (Nov 5), but discovery has never run: `HUB_GROWTH_SEARCH_API_KEY` is

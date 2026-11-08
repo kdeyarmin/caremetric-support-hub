@@ -839,8 +839,8 @@ For a handed-over message it reads the newest message and up to two earlier ones
 product, the prospect's stage, whether CareMetric wrote first, a word limit for the channel, the product's own pages it may link to
 and the owner's booking page, with the fact sheet (`server/agents/content/facts.mjs`) and the sales playbook
 (`server/growth/playbook.mjs`) in its cached system prompt. Its method: answer what was asked from the fact sheet (exact plan prices
-and the Founders Sale terms when cost comes up), offer one next step (usually the free trial; for a trial, activating a paid plan with
-FOUNDERS50), ask at most one qualifying question, handle objections the playbook's way, and never pressure. The code then checks the
+and the Founders Sale terms when cost comes up), offer one next step (usually the free trial; for a trial, activating a paid plan, with the Founders Sale
+applied automatically), ask at most one qualifying question, handle objections the playbook's way, and never pressure. The code then checks the
 draft (`server/agents/sales/check.mjs`): only that product's listed prices, no other product's; links only to that product's pages
 or the booking page; no guarantee, compliance assurance, certification, named competitor, testimonial, call or demo as a step, voice
 AI, trial extension, special pricing, refund, time frame, mention of AI, identifier, name from the message or long quotation; the

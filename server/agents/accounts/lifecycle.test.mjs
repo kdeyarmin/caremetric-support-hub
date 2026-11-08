@@ -144,7 +144,7 @@ describe('the emails', () => {
     expect(words('setup_nudge')).toContain('reply to this email and tell us what you would like to get done first');
     expect(words('trial_checkin')).toContain('This is a personal check-in, not a billing notice.');
     expect(words('trial_checkin')).toContain('Is anything getting in the way');
-    expect(words('trial_checkin')).toContain('If you decide to keep CareMetric Intel, ask us for FOUNDERS50 when you activate your paid plan. Under the Founders Sale, eligible subscription charges are 50% off for the first 12 months of paid service, starting when your trial ends; standard pricing resumes after that year.');
+    expect(words('trial_checkin')).toContain('If you decide to keep CareMetric Intel, the Founders Sale applies on its own: eligible subscription charges are 50% off for the first 12 months of paid service, starting when your trial ends, with no code needed. Standard pricing resumes after that year.');
     expect(words('trial_checkin')).not.toContain('https://www.caremetricintel.com/Help');
   });
 

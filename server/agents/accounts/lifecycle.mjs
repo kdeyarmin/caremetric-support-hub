@@ -7,13 +7,13 @@
  *                    help (a report of zero, which the usage API accepts, is not usage).
  * - trial_checkin    when 5 days or fewer (and more than 2) are left in a trial: a personal check-in, and it says it is not a billing
  *                    notice. Stripe's own trial and payment emails stay on; nothing here repeats them. It names the Founders Sale (ask
- *                    for FOUNDERS50 at activation, in the offer's exact terms; owner decision 2026-11-08).
+ *                    in the offer's exact terms: it applies automatically when paid service starts; owner decision 2026-11-08).
  * - testimonial_ask  45 to 60 days after the account's first paid invoice for the product (across every subscription it has had for
  *                    it, so a replaced subscription changes nothing), with no open high or urgent case: would they share a
  *                    sentence, with consent wording, and a reply is how they say yes.
  *
  * Each is proposed at most once per account and product (its period key, account:<template>:<tenant>:<product>). The emails say
- * nothing about AI, quote no price (the trial check-in states the Founders Sale's code and percentage only), promise no time or outcome, never mention a phone call or voicemail, and use the company's
+ * nothing about AI, quote no price (the trial check-in states the Founders Sale's percentage and term only), promise no time or outcome, never mention a phone call or voicemail, and use the company's
  * vocabulary for CareBase (an Assisted Living Facility, ALF, and a surveyor; never the regulation's own name for the facility type or
  * an auditor). The owner's booking link appears only when HUB_BOOKING_URL is an https address.
  *
@@ -136,8 +136,8 @@ export function planEmails(accounts, now = new Date()) {
   return { candidates, skipped };
 }
 
-/** The Founders Sale as the trial check-in states it: the code to ask for and the offer's exact terms, no price. */
-export const foundersWords = productName => `If you decide to keep ${productName}, ask us for FOUNDERS50 when you activate your paid plan. Under the Founders Sale, eligible subscription charges are 50% off for the first 12 months of paid service, starting when your trial ends; standard pricing resumes after that year.`;
+/** The Founders Sale as the trial check-in states it: the offer's exact terms (billing applies it automatically at conversion), no price. */
+export const foundersWords = productName => `If you decide to keep ${productName}, the Founders Sale applies on its own: eligible subscription charges are 50% off for the first 12 months of paid service, starting when your trial ends, with no code needed. Standard pricing resumes after that year.`;
 
 /** The subject, the message blocks and the sign-off of one email, from the facts kept on its action. */
 export function lifecycleEmail({ template, tenantName, productName, product, helpUrl, bookingUrl = null }) {

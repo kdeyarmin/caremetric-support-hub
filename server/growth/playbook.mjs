@@ -187,7 +187,7 @@ export const touchAngle = touch => sequencePlan[Math.min(Math.max(Number(touch) 
 export const lifecyclePlays = deepFreeze({
   onboarding: 'Welcome them, ask what outcome would make the product worth keeping, and point to the guide for the single first setup step that leads to it.',
   activation: 'They have not reached first value yet. Name the one setup step that is usually missing, point to its guide, and ask what is in the way.',
-  trial: 'Before the trial ends: recap the goal they named, ask what is left to decide, and explain how to activate a paid plan, including asking CareMetric for FOUNDERS50 (the Founders Sale terms on the fact sheet). Never pressure and never invent an extension.',
+  trial: 'Before the trial ends: recap the goal they named, ask what is left to decide, and explain how to activate a paid plan; the Founders Sale (its terms on the fact sheet) applies automatically when paid service starts, with no code needed. Never pressure and never invent an extension.',
   adoption: 'Use has stalled. Ask whether the workflow still fits and what is in the way, and point to the guide for one specific step.',
   renewal: 'Ahead of renewal, recap the goals they set, ask what is working and what is not, and invite open questions.',
   support: 'An open support issue comes first: acknowledge it and say the team is working with them on it. No sales or upgrade talk.',

@@ -54,7 +54,7 @@ describe('sales playbook', () => {
     expect(touchAngle(1)).toBe(sequencePlan[0].angle);
     expect(touchAngle(9)).toBe(sequencePlan.at(-1).angle);
     expect(touchAngle(0)).toBe(sequencePlan[0].angle);
-    expect(lifecyclePlay('trial')).toMatch(/FOUNDERS50/);
+    expect(lifecyclePlay('trial')).toMatch(/Founders Sale .*applies automatically/);
     expect(lifecyclePlay('support')).toMatch(/No sales/);
     expect(lifecyclePlay('unknown')).toBe(lifecyclePlay('outreach'));
   });

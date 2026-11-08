@@ -92,7 +92,7 @@ claim still comes from the fact sheet (`server/agents/content/facts.mjs`, the co
 - **Drafting** (`growth.3`) gives the writer the fact sheet and the playbook in the cached system prompt, the touch it is writing
   and that touch's job (1: a likely problem as a question and the free trial; 2: a different angle, a resource or the Founders Sale,
   and one qualifying question; 3: a short close-the-loop), or the play for a customer moment (the trial play explains activating a
-  paid plan with FOUNDERS50), the organization's name and domain, and the product's own pages it may link to. Every model draft must
+  paid plan, with the Founders Sale applied automatically), the organization's name and domain, and the product's own pages it may link to. Every model draft must
   then pass the Content Marketer's claim rules (no unlisted price or number, guarantee, compliance assurance, certification,
   competitor, testimonial, call or demo as a step, "prove" about CareBase), may state only its own product's prices, may link only to
   its product's pages or the booking page, and has its vocabulary fixed (ALF, surveyor). A draft that fails is dropped. The template
@@ -108,9 +108,9 @@ or a meeting. Outreach and customer emails point to the free trial and the produ
 template path (used without a model) says "You can see how it works and try it free" with the trial link instead of offering a
 conversation. The playbook has a "demo" objection for both products: send the walkthrough, the matching guide and the free trial.
 
-**The Founders Sale reaches trials on its own (`20261108200000_founders_sale_offer.sql`).** The Account Manager's offer menu holds the
-live Founders coupon for CareBase and Intel trials ending within seven days (at most 50 a month, switched on); the existing menu rules
-and the "Offers" step decide each use. The trial check-in email names it ("ask us for FOUNDERS50", in its exact terms).
+**The Founders Sale in the trial check-in.** Billing applies the Founders coupon automatically at checkout and trial conversion (#152),
+so every agent says it applies on its own, with no code needed. The Account Manager's trial check-in email states it in its exact
+terms (owner decision 2026-11-08).
 
 Changing the playbook's wording changes what the models read: bump `playbookVersion`, run `npm test -- server/growth` and
 `npm run evaluate:growth`, and review the next drafts before widening any autonomy.

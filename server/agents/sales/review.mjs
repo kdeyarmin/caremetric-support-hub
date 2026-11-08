@@ -78,7 +78,7 @@ export function composeReview({ items, now = new Date(), publicOrigin = null }) 
         ['This week: replies', String(moved.replies)], ['This week: meetings', String(moved.meetings)], ['This week: trials started', String(moved.trials)], ['This week: became paying', String(moved.paid)],
       ] },
     ]),
-    { type: 'paragraph', text: 'Trials that convert in the introductory year qualify for the Founders Sale (FOUNDERS50). Counts come from the growth records and the products\' own events; a missing event is not proof that nothing happened.' },
+    { type: 'paragraph', text: 'Trials that convert get the Founders Sale automatically (50% off eligible charges for the first 12 months of paid service). Counts come from the growth records and the products\' own events; a missing event is not proof that nothing happened.' },
     ...(needs.length && origin ? [{ type: 'button', label: 'Open Growth', url: `${origin}/admin/growth` }] : []),
   ];
   return {
