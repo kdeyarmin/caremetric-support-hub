@@ -1,3 +1,4 @@
+import { FoundersSaleNotice } from './FoundersSaleNotice';
 import { isCentralHubApp } from '../hubScope';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -79,6 +80,7 @@ export function Subscriptions() {
   const choices = workspace?.catalog.filter(price => price.active && (price.model === 'flat' || workspace.facilities.length > 0 && /^facilit(?:y|ies)$/i.test(price.unit_label)) && (!workspace.subscription || price.interval === workspace.subscription.interval && price.currency === workspace.subscription.currency) && (price.kind === 'plan' || !base || price.currency === base.currency && price.interval === base.interval)) ?? [];
   const mayPurchase = workspace?.mode === 'facility' || workspace?.role === 'organization_admin';
   return <div className="learning-workspace"><header><span className="eyebrow">Customer self-service</span><h1>Plans &amp; add-ons</h1><p>Published prices and your current services. Review a server-calculated preview before confirming a purchase.</p>{workspace?.role === 'organization_admin' && <Link to="/billing">Invoices, payment methods &amp; payment recovery</Link>}</header>
+    <FoundersSaleNotice />
     {error && <p className="panel" role="alert">{error}</p>}{message && <p className="panel" role="status">{message}</p>}
     {paymentUrl && <p><a className="button button-primary" href={paymentUrl} target="_blank" rel="noopener noreferrer">Continue to secure payment</a></p>}
     <label>Application<select value={connection} disabled={busy} onChange={event => { const id = event.target.value; setConnection(id); setWorkspace(null); setQuote(null); setMessage(''); setPaymentUrl(null); if (id) void run(() => load(id)); }}><option value="">Choose a connected application</option>{connections.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>

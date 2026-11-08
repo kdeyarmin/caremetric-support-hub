@@ -56,6 +56,9 @@ connections, intake, delegated actions, and purchases for those apps are disable
   Marketer writes help-center articles only from it, and nothing it drafts is
   published until the owner approves it on **AI team** (`/admin/team`); see
   [the AI team](docs/AI_TEAM.md#the-content-marketer).
+- **Pricing research and Founders Sale** ([comparison and offer terms](docs/PRICING_RESEARCH_AND_FOUNDERS_SALE.md)):
+  official-source competitor pricing, recommended models, and the live **FOUNDERS50** offer for eligible CareBase/Train
+  and Intel subscriptions: 50% off the first 12 months of paid service, applied through CareMetric billing activation.
 
 What the Hub can show depends on what each application's administration
 connection provides. As documented for each connection today:

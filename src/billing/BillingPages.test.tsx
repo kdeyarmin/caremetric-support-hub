@@ -41,7 +41,7 @@ describe('Billing workspace', () => {
     // 25% off the $597.00 subscription: Stripe still applies a coupon deleted after it was given.
     expect(within(await screen.findByLabelText('Subscription totals')).getByText('$447.75')).toBeTruthy();
     fireEvent.click(within(screen.getByRole('navigation', { name: 'Billing sections' })).getByRole('button', { name: 'Discounts' }));
-    expect(await screen.findByText('Founding agency')).toBeTruthy();
+    expect(await screen.findByText('Legacy founding agency')).toBeTruthy();
     expect(screen.queryByText('Retired partner')).toBeNull();
   });
   it('opens on the application named in the link', async () => {
