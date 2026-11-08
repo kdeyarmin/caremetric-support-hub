@@ -243,7 +243,7 @@ try {
     assert.equal(action.preview, lifecyclePreview(action.input, { postalAddress: postal }), 'the preview is the exact email');
     assert.equal(action.input.tenantName, `Lifecycle ${action.target_id.slice(prefix.length + 1)} ${run}`);
     // No customer address: the only ones are CareMetric's own, in the theme's footer.
-    assert.ok(!JSON.stringify([action.input, action.preview]).replace(/\b(?:support|hello)@caremetric\.ai\b/g, '').includes('@'), 'no address in what the owner approves');
+    assert.ok(!JSON.stringify([action.input, action.preview]).replace(/\bsupport@caremetric\.ai\b/g, '').includes('@'), 'no address in what the owner approves');
   }
   const welcomeAction = await actionFor('welcome');
   // The subject, then the headline of the branded email, then the greeting.

@@ -35,9 +35,8 @@ export const integrationCatalog = Object.freeze([
     variables: [
       { name: 'HUB_SENDGRID_INBOUND_PUBLIC_KEY', secret: true, required: true, purpose: 'Verifies signed Inbound Parse posts.' },
       { name: 'HUB_SENDGRID_API_KEY', secret: true, required: false, purpose: 'Mail Send key for replies and bulk email.' },
-      { name: 'HUB_SUPPORT_FROM_EMAIL', secret: false, required: false, purpose: 'Reply sender (default support@caremetric.ai).' },
-      { name: 'HUB_SUPPORT_REPLY_TO', secret: false, required: false, purpose: 'Reply-To on support replies and customer emails: the address Inbound Parse receives (e.g. support@inbound.caremetric.ai), so answers join the conversation. Default: the reply sender.' },
-      { name: 'HUB_BULK_EMAIL_FROM', secret: false, required: false, purpose: 'Bulk email sender (default the reply sender); replies go to the reply sender.' },
+      { name: 'HUB_SUPPORT_FROM_EMAIL', secret: false, required: false, purpose: 'The one address every Hub email comes from: replies, alerts, cold, customer and bulk email (default support@caremetric.ai).' },
+      { name: 'HUB_SUPPORT_REPLY_TO', secret: false, required: false, purpose: 'Reply-To on support replies and customer emails: the address Inbound Parse receives (e.g. support@inbound.caremetric.ai), so answers join the conversation. Default: the sender itself.' },
       { name: 'HUB_BULK_EMAIL_POSTAL_ADDRESS', secret: false, required: false, purpose: 'Mailing address in every bulk email footer; include it for marketing email (CAN-SPAM).' },
     ] },
   { id: 'chat', name: 'Website chat', purpose: 'The chat panel on every Help page.', docs: 'docs/UNIFIED_COMMUNICATIONS.md',

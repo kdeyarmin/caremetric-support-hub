@@ -8,7 +8,9 @@
      (kdeyarmin/PennTrain supabase/functions/_shared/emailLayout.ts): a white header with the
      official CareBase logo over a 3px brand-blue rule, the app's primary blue (#2563EB) for
      buttons and links, the shared CareMetric neutrals, a plain sign-off and a footer with
-     the app's help line (hello@caremetric.ai) and "CareMetric CareBase · cmcarebase.com".
+     the help line and "CareMetric CareBase · cmcarebase.com". The help line names the one
+     address every CareMetric email comes from and replies to (support@caremetric.ai), not the
+     app's own hello@ line, so a customer has one address to write to.
    - "intel": CareMetric Intel's Emberline, exactly as the Intel app sends it
      (kdeyarmin/intel server/lib/emailLayout.ts): near-black canvas, dark card, the ember
      accent, the Geist type, a header with the Intel logo and its "Set your marketing on
@@ -89,7 +91,6 @@ export const intelPalette = Object.freeze({
 });
 /** CareMetric CareBase's email colors (kdeyarmin/PennTrain supabase/functions/_shared/emailLayout.ts, EMAIL_COLORS). */
 export const CAREBASE_SITE = 'https://cmcarebase.com';
-export const CAREBASE_HELP_EMAIL = 'hello@caremetric.ai';
 export const carebasePalette = Object.freeze({
   brand: '#2563EB', brandDark: '#1D4ED8', onBrand: '#FFFFFF', heading: '#0F172A', body: '#334155', muted: '#64748B',
   hairline: '#E2E8F0', panel: '#F8FAFC', canvas: '#F1F5F9', card: '#FFFFFF',
@@ -124,7 +125,7 @@ export const emailThemes = Object.freeze({
     fontStack,
     button: Object.freeze({ fill: carebasePalette.brand, text: carebasePalette.onBrand, weight: 700, radius: 8 }),
     linkAttributes: '', header: carebaseHeader, signerStrong: false,
-    footerAfter: Object.freeze([`Need help? Email ${CAREBASE_HELP_EMAIL}.`, 'CareMetric CareBase · cmcarebase.com']),
+    footerAfter: Object.freeze([`Need help? Email ${SUPPORT_EMAIL}.`, 'CareMetric CareBase · cmcarebase.com']),
     letter: Object.freeze({ background: '#FFFFFF', text: carebasePalette.heading, fontSize: 15, lineHeight: 23 }),
   }),
   intel: Object.freeze({

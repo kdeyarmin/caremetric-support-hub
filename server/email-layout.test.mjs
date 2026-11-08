@@ -196,7 +196,7 @@ describe('the CareBase theme', () => {
     expect(email.html).toContain('border-radius:8px;background-color:#2563EB;');
     expect(email.html).toContain('background-color:#F1F5F9;');
     expect(email.html).not.toContain(PRODUCT_WORDMARK);
-    expect(email.text.endsWith('Reason.\nNeed help? Email hello@caremetric.ai.\nCareMetric CareBase · cmcarebase.com')).toBe(true);
+    expect(email.text.endsWith('Reason.\nNeed help? Email support@caremetric.ai.\nCareMetric CareBase · cmcarebase.com')).toBe(true);
   });
 });
 

@@ -724,7 +724,7 @@ They are warm and short, in the branded layout and in the theme of the product's
 so a customer's emails from the Hub look like the ones the app sends: Intel's are in its Emberline theme (the Intel
 logo and "Set your marketing on FIRE!" over the fire image, the dark card, the ember accent and pill buttons, as in
 the Intel app's own emails), CareBase's in the CareBase app's email standard (PennTrain: its logo on white over a
-blue rule, the app's blue buttons, its footer with hello@caremetric.ai). Each has an inbox
+blue rule, the app's blue buttons, its footer with support@caremetric.ai). Each has an inbox
 preview line, a headline, "Hello,", numbered first steps
 with a button to the product's help, the Founders Sale terms in a highlighted box in the trial check-in, the consent
 terms in a highlighted box in the testimonial request, and a sign-off from the product's team with its website. Each

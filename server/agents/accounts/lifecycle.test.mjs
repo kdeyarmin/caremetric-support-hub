@@ -130,7 +130,7 @@ describe('the emails', () => {
       `${unsubscribeLabel}: a personal link is added when the email is sent`,
       postal,
       // The CareBase theme's own footer lines.
-      'Need help? Email hello@caremetric.ai.',
+      'Need help? Email support@caremetric.ai.',
       'CareMetric CareBase · cmcarebase.com',
     ].join('\n'));
   });
@@ -177,8 +177,8 @@ describe('the emails', () => {
   it('says nothing about AI, calls, prices, promises or Stripe\'s notices, in any email', () => {
     for (const { input, template, product, link } of every()) {
       // The trial check-in's Founders Sale paragraph (owner decision 2026-11-08) is checked word for word elsewhere; everything else holds.
-      // CareMetric's own addresses in the themes' footers (support@ and hello@caremetric.ai) are addresses, not a mention of AI.
-      const text = lifecyclePreview(input, { postalAddress: postal }).replace(foundersWords(input.productName), '').replace(/[\w.+-]+@caremetric\.ai\b/g, '');
+      // CareMetric's own address in the themes' footers (support@caremetric.ai) is an address, not a mention of AI.
+      const text = lifecyclePreview(input, { postalAddress: postal }).replace(foundersWords(input.productName), '').replace(/\bsupport@caremetric\.ai\b/g, '');
       const label = `${product}/${template}/${link ? 'booking' : 'plain'}`;
       expect(text, label).not.toMatch(/\bAI\b|artificial|assistant|robot|\bbots?\b|automat/i);
       expect(text, label).not.toMatch(/\bcall(?:s|ed|ing)?\b|phone|voicemail|\bdial/i);

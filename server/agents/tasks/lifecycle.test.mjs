@@ -52,7 +52,7 @@ describe('the customer email run', () => {
     expect(first.input.textHash).toBe(wordingHash(first.input));
     expect([second.targetId, second.input.template, second.input.periodKey]).toEqual(['beta', 'trial_checkin', 'account:trial_checkin:beta:carebase']);
     // No address of the customer's: the only ones are CareMetric's own, in the theme's footer.
-    expect(JSON.stringify(store.proposeAction.mock.calls).replace(/\b(?:support|hello)@caremetric\.ai\b/g, '')).not.toContain('@');
+    expect(JSON.stringify(store.proposeAction.mock.calls).replace(/\bsupport@caremetric\.ai\b/g, '')).not.toContain('@');
     expect(outcome).toEqual({ result: {
       mode: 'live', read: 2, due: 2, deferred: 0, noAddress: 0, suppressed: 0, truncated: false, outcome: 'proposed', proposed: 2, autoApproved: 0, alreadyProposed: 0,
       byTemplate: { welcome: 1, setup_nudge: 0, trial_checkin: 1, testimonial_ask: 0 },
