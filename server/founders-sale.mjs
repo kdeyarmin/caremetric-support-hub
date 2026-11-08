@@ -109,17 +109,20 @@ export async function applyFoundersToInvoice(live, invoiceId) {
     window = foundersWindow(sub);
   }
   // Existing administrator-selected agreements take precedence over automatic enrollment and its price restrictions.
-  if (subDiscounts.some(discount => !isFounders(discount)) || invoiceDiscounts.some(discount => !isFounders(discount))) return;
-  if (!await selectionEligible(live, app, lines)) {
+  // Still reconcile a lingering Founders coupon on service beyond the original introductory year.
+  const replacementAgreement = subDiscounts.some(discount => !isFounders(discount)) || invoiceDiscounts.some(discount => !isFounders(discount));
+  if (replacementAgreement && !subHas && !invoiceHas) return;
+  if (!replacementAgreement && !await selectionEligible(live, app, lines)) {
     if (invoice.status === 'draft') await live.post(`/v1/invoices/${invoice.id}`, { auto_advance: false }, { idempotencyKey: `hub-founders-hold-${invoice.id}` });
     throw new HttpError(409, 'This subscription changed to pricing outside the Founders Sale. Reconcile its agreement before payment.');
   }
   const invoiceLines = await live.list(`/v1/invoices/${invoice.id}/lines`, {}, 1000);
   if (invoiceLines.truncated) throw new HttpError(503, 'The Founders Sale invoice needs reconciliation before payment.');
-  const eligibleLines = invoiceLines.filter(line => foundersPrice(line.price ?? line.pricing?.price_details?.price) && line.amount > 0);
+  const eligibleLines = invoiceLines.filter(line => line.amount > 0 && (replacementAgreement || foundersPrice(line.price ?? line.pricing?.price_details?.price)));
   if (!eligibleLines.length) return;
   const inside = eligibleLines.every(line => line.period?.start >= window.start && line.period?.end <= window.end);
   const outside = eligibleLines.every(line => line.period?.start >= window.end);
+  if (replacementAgreement && !outside) return;
   if (!inside && !outside) {
     if (invoice.status === 'draft') await live.post(`/v1/invoices/${invoice.id}`, { auto_advance: false }, { idempotencyKey: `hub-founders-hold-${invoice.id}` });
     throw new HttpError(409, 'This invoice crosses the Founders Sale renewal boundary. Review its service dates before payment.');

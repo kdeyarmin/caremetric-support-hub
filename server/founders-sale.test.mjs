@@ -134,4 +134,34 @@ describe('automatic Founders Sale', () => {
     expect(t.sub.discounts).toEqual([replacement]); expect(t.invoice.discounts).toEqual([replacement]);
     expect(t.live.list).not.toHaveBeenCalled();
   });
+  it.each([price, 'price_private_contract'])('removes an expired invoice offer without changing the replacement agreement on %s', async renewalPrice => {
+    const t = fixture(), replacement = { id: 'di_contract', coupon: { id: 'contract' } };
+    t.sub.metadata = { ...t.sub.metadata, hub_founders_sale: FOUNDERS_OFFER, hub_founders_start: String(start) };
+    t.sub.discounts = [replacement]; t.invoice.discounts = [saleDiscount, replacement];
+    t.sub.items.data[0].price.id = renewalPrice;
+    const end = foundersWindow(t.sub).end;
+    t.invoiceLines([{ price: { id: renewalPrice }, amount: 19900, period: { start: end, end: end + 31 * 86400 } }]);
+    await applyFoundersToInvoice(t.live, t.invoice.id);
+    expect(t.live.post).toHaveBeenCalledTimes(1);
+    expect(t.live.post).toHaveBeenCalledWith('/v1/invoices/in_first', { discounts: [{ discount: 'di_contract' }] }, { idempotencyKey: 'hub-founders-expire-invoice-in_first' });
+    expect(t.sub.discounts).toEqual([replacement]);
+  });
+  it('removes only the expired subscription offer when a replacement agreement is also present', async () => {
+    const t = fixture(), replacement = { id: 'di_contract', coupon: { id: 'contract' } };
+    t.sub.metadata = { ...t.sub.metadata, hub_founders_sale: FOUNDERS_OFFER, hub_founders_start: String(start) };
+    t.sub.discounts = [saleDiscount, replacement]; t.invoice.discounts = [replacement];
+    const end = foundersWindow(t.sub).end;
+    t.invoiceLines([{ price: { id: price }, amount: 19900, period: { start: end, end: end + 31 * 86400 } }]);
+    await applyFoundersToInvoice(t.live, t.invoice.id);
+    expect(t.live.post).toHaveBeenCalledTimes(1);
+    expect(t.live.post).toHaveBeenCalledWith('/v1/subscriptions/sub_trial', { discounts: [{ discount: 'di_contract' }], proration_behavior: 'none' }, { idempotencyKey: 'hub-founders-expire-subscription-sub_trial' });
+    expect(t.invoice.discounts).toEqual([replacement]);
+  });
+  it('keeps an earlier valid sale invoice when the subscription has a replacement agreement', async () => {
+    const t = fixture();
+    t.sub.metadata = { ...t.sub.metadata, hub_founders_sale: FOUNDERS_OFFER, hub_founders_start: String(start) };
+    t.sub.discounts = [{ id: 'di_contract', coupon: { id: 'contract' } }]; t.invoice.discounts = [saleDiscount];
+    await applyFoundersToInvoice(t.live, t.invoice.id);
+    expect(t.live.post).not.toHaveBeenCalled();
+  });
 });
