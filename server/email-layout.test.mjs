@@ -186,19 +186,17 @@ describe('product themes', () => {
 });
 
 describe('the CareBase theme', () => {
-  it('dresses a CareBase email as the CareBase app: the navy wordmark band, its blue, Inter with serif headlines', () => {
+  it('dresses a CareBase email as the CareBase app sends it: its logo on white over the blue rule, its blue, its footer', () => {
     const email = renderEmail({ theme: 'carebase', title: 'Welcome', heading: 'Welcome to CareMetric CareBase', preheader: 'First steps.',
       blocks: [{ type: 'button', label: 'Open the help center', url: 'https://cmcarebase.com/app/help' }, { type: 'steps', items: ['Add your facility.'] }],
       signature: ['The CareMetric CareBase team'], footer: ['Reason.'] });
     expect(email.html).toContain('data-theme="carebase"');
-    expect(email.html).toContain('CareMetric <span style="font-weight:500;color:#b9e4ff;">CareBase</span>');
-    expect(email.html).toContain('border-bottom:3px solid #59b2ff;');
-    expect(email.html).toContain("font-family:'Source Serif 4', Georgia");
-    expect(email.html).toContain('font-family:Inter,');
-    expect(email.html).toContain('border-radius:12px;background-color:#1b6fc2;');
-    expect(email.html).toContain('background-color:#f4f7fb;');
+    expect(email.html).toContain('<img src="https://cmcarebase.com/brand/email-lockup-carebase.png" width="200" height="50" alt="CareMetric CareBase"');
+    expect(email.html).toContain('border-bottom:3px solid #2563EB;');
+    expect(email.html).toContain('border-radius:8px;background-color:#2563EB;');
+    expect(email.html).toContain('background-color:#F1F5F9;');
     expect(email.html).not.toContain(PRODUCT_WORDMARK);
-    expect(email.text.endsWith('Reason.\nQuestions? Email support@caremetric.ai.\nCareMetric CareBase · cmcarebase.com')).toBe(true);
+    expect(email.text.endsWith('Reason.\nNeed help? Email hello@caremetric.ai.\nCareMetric CareBase · cmcarebase.com')).toBe(true);
   });
 });
 
