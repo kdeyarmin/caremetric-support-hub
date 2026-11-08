@@ -74,7 +74,7 @@ export function gateway(pool) {
       if (!session) return { authenticated:false };
       // The actor RPC rechecks Auth-user usability and current relational permissions.
       const actor = (await db.query('select hub.get_support_actor_context() as actor')).rows[0].actor;
-      return { authenticated:true, userId:actor.id, method:'sms' };
+      return { authenticated:true, userId:actor.id, method:session.auth_method ?? 'sms' };
     },false),
   };
 }

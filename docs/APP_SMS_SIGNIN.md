@@ -1,6 +1,6 @@
 # Application SMS sign-in
 
-The Hub accepts a registered mobile number and a six-digit SMS code directly in its own sign-in screen. Telnyx Verify sends and checks codes. The Railway application creates an opaque, eight-hour HttpOnly session; Supabase Auth does not send or verify codes. Existing database identity, role and tenant records remain authoritative.
+The Hub's primary login is now [username and password](OWNER_PASSWORD_LOGIN.md). The SMS flow remains for initial password setup and recovery: Telnyx Verify sends and checks six-digit codes for an already registered mobile number. The Railway application creates an opaque, eight-hour HttpOnly session; Supabase Auth does not send or verify codes. Existing database identity, role and tenant records remain authoritative.
 
 ## Deployment
 
@@ -35,7 +35,7 @@ Public pages that need no sign-in, such as the help center, learning catalog and
 
 Every protected request rechecks the current relational permissions and account usability. Codes are bound to the requesting browser, expire after five minutes, have five attempts, and cannot be reused. Resends wait 60 seconds; persisted number, client and global limits survive restarts. Unknown numbers receive a generic response without sending a message or creating an account. Cookies use Secure, HttpOnly and SameSite=Strict; mutations require the exact application Origin.
 
-Application sessions cannot be asserted through a client JWT: the database also requires the actual `hub_app_server` connection role and a live session record. Legacy Supabase AAL2 semantics remain unchanged for existing integrations. App sessions identify their verification method as SMS and never claim AAL2. Delegations expire after 30 seconds, bind a single read operation or storage object, and recheck permissions when consumed.
+Application sessions cannot be asserted through a client JWT: the database also requires the actual `hub_app_server` connection role and a live session record. Legacy Supabase AAL2 semantics remain unchanged for existing integrations. App sessions identify their actual verification method (`sms` or `password`) and never claim AAL2. Delegations expire after 30 seconds, bind a single read operation or storage object, and recheck permissions when consumed.
 
 Number recovery is an operator action: verify the account holder through the established support process before updating a private identity binding. Revoking a binding or session takes effect on the next request. No registration or recovery endpoint silently grants administrator access.
 
@@ -47,5 +47,5 @@ The migration is additive and retains legacy authorization. Roll the Railway app
 
 The repository includes unit tests for provider verdicts, fixed RPC boundaries, cookies, origins and object paths; pgTAP authorization contracts; and an isolated HTTP/PostgreSQL test for browser binding, rate limits, retries, real role enforcement, course authoring, delegation replay and logout. Automated tests use synthetic numbers and a fake SMS sender. They do not establish real SMS delivery; record that separately after the owner signs in.
 
-On September 11, the SMS branch at `ba98048` passed both CI jobs: 287 application/unit tests, 24 SDK tests, 219 pgTAP assertions, Edge checks, database advisors and HTTP/PostgreSQL integration. The paired CareBase PR #519 and Breathe PR #1375 also passed their full CI suites. The approved owner binding, dedicated Telnyx profile/server variables and storage-only `app-media` function are configured in production. The dedicated database role remains login-disabled and `HUB_DATABASE_URL` is not configured. No production SMS has been sent, no SMS session has been established, and no Node runtime cutover has occurred. Hold further production authentication changes until the database connection and combined release contract are ready.
+On September 11, the SMS branch at `ba98048` passed both CI jobs: 287 application/unit tests, 24 SDK tests, 219 pgTAP assertions, Edge checks, database advisors and HTTP/PostgreSQL integration. The paired CareBase PR #519 and Breathe PR #1375 also passed their full CI suites. That historical pre-cutover status is superseded: on November 8 at 00:01:52 UTC, production records and HTTP logs confirmed an owner SMS sign-in and authenticated dashboard/provider reads. Password sign-in requires its separate migration, application release and owner enrollment described in [Owner username and password](OWNER_PASSWORD_LOGIN.md).
 

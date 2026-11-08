@@ -1,6 +1,7 @@
 import pg from 'pg';
 import { smsProvider } from './sms-provider.mjs';
 import { smsAuth, ownerAccess } from './sms-auth.mjs';
+import { passwordAuth } from './password-auth.mjs';
 import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
 import { appServer } from './http.mjs';
@@ -33,6 +34,8 @@ import { learningMediaImport, mediaImportFeature, mediaImportHosts } from './lea
 
 const storageUrl='https://xgauehtwksmnoqhgqegm.supabase.co';
 const pool=new pg.Pool(databaseConfig());
+// Refuse an incomplete release before replacing the running application.
+await pool.query('select c.credential_version,s.auth_method from private.password_credentials c,private.sms_sessions s limit 0');
 const provider=smsProvider({apiKey:process.env.HUB_TELNYX_API_KEY,profileId:process.env.HUB_TELNYX_VERIFY_PROFILE_ID});
 const api=gateway(pool);
 const contract=await api.rpc('get_backend_contract',{});
@@ -106,7 +109,7 @@ const mediaImport=learningMediaImport({pool,hosts:importHosts,enabled:features.h
 const setup=integrationSetup({rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
 // Public articles as HTML for crawlers, read exactly as an anonymous visitor's app reads them, at their canonical address.
 const help=helpCenter({load:()=>api.rpc('list_published_content',{}),origin:helpCenterOrigin});
-const server=appServer({auth:smsAuth({pool,provider}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,growth,leads,leadAdmin:leadDesk,mediaImport,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help});
+const server=appServer({auth:smsAuth({pool,provider}),password:passwordAuth({pool}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,growth,leads,leadAdmin:leadDesk,mediaImport,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help});
 let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;

@@ -1,0 +1,18 @@
+begin;
+select plan(14);
+select has_table('private','password_credentials','Password credentials are in the private schema');
+select has_table('private','password_attempts','Password attempts are persisted');
+select ok((select relrowsecurity from pg_class where oid='private.password_credentials'::regclass),'Password credentials have RLS');
+select ok((select relrowsecurity from pg_class where oid='private.password_attempts'::regclass),'Password attempts have RLS');
+select ok(not has_table_privilege('anon','private.password_credentials','SELECT'),'Anonymous clients cannot read password hashes');
+select ok(not has_table_privilege('authenticated','private.password_credentials','SELECT'),'Authenticated Data API clients cannot read password hashes');
+select ok(not has_table_privilege('service_role','private.password_credentials','SELECT'),'Data API service credentials cannot read password hashes');
+select ok(not has_table_privilege('authenticated','private.password_credentials','INSERT,UPDATE,DELETE'),'Authenticated clients cannot write credentials');
+select ok(has_table_privilege('hub_app_server','private.password_credentials','SELECT,INSERT,UPDATE'),'The first-party server owns credential access');
+select ok(not has_function_privilege('anon','private.password_owner_is_usable(uuid,uuid)','EXECUTE'),'Anonymous clients cannot probe owner identities');
+select ok(not has_function_privilege('authenticated','private.password_owner_is_usable(uuid,uuid)','EXECUTE'),'A browser JWT cannot probe owner identities');
+select ok(has_function_privilege('hub_app_server','private.password_owner_is_usable(uuid,uuid)','EXECUTE'),'The server can check current owner identity');
+select ok(position('credential_version' in pg_get_functiondef('private.current_app_session_verified()'::regprocedure))>0,'SQL authorization checks the password credential version');
+select ok(not has_function_privilege('authenticated','private.password_credential_changed()','EXECUTE'),'Clients cannot invoke credential-change triggers');
+select * from finish();
+rollback;

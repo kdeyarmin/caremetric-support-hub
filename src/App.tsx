@@ -33,7 +33,7 @@ import {
   Zap,
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { demoRepository, repository } from "./data";
 import { defaultIntegrationRollout, integrationRolloutBySlug } from "./data/integrationRollout";
 import {
@@ -90,7 +90,8 @@ import { safeLearningPath } from "./learning/model";
 import { currentPage, visibleNavSections } from "./navigation";
 import { config } from "./lib/config";
 import { appSession } from "./lib/appSession";
-import { SmsSignIn } from "./auth/SmsSignIn";
+import { PasswordSignIn } from "./auth/PasswordSignIn";
+import { PasswordSettings } from "./auth/PasswordSettings";
 import { PrivateHubNotice } from "./auth/PrivateHubNotice";
 import { PublicationImport } from "./imports/PublicationImport";
 import { PublicationVideo } from "./imports/PublicationVideo";
@@ -173,7 +174,7 @@ function rememberPendingPortalPath(value = `${window.location.pathname}${window.
   try {
     const parsed = new URL(value, window.location.origin);
     if (parsed.origin !== window.location.origin) return;
-    if (safeLearningPath(parsed.pathname)) { window.localStorage.setItem(pendingHelpPathKey, parsed.pathname); return; }
+    if (safeLearningPath(parsed.pathname) || parsed.pathname === '/security') { window.localStorage.setItem(pendingHelpPathKey, parsed.pathname); return; }
     if (!["/help", "/cases"].includes(parsed.pathname)) return;
     if (parsed.pathname === "/cases") {
       const product = (parsed.searchParams.get("product") ?? "").toLowerCase();
@@ -196,7 +197,7 @@ function takePendingHelpPath(): string | null {
     if (!value || value.length > 2048) return null;
     const parsed = new URL(value, window.location.origin);
     if (parsed.origin !== window.location.origin) return null;
-    if (safeLearningPath(parsed.pathname)) return parsed.pathname;
+    if (safeLearningPath(parsed.pathname) || parsed.pathname === '/security') return parsed.pathname;
     if (!["/help", "/cases"].includes(parsed.pathname)) return null;
     if (parsed.pathname === "/help") return "/help";
     const product = (parsed.searchParams.get("product") ?? "").toLowerCase();
@@ -246,10 +247,11 @@ function ErrorScreen({ message, onRetry }: { message: string; onRetry: () => voi
 }
 
 function SecurityPage({ actor }: { actor: ActorContext }) {
-  return <><PageHeading eyebrow="Account protection" title="SMS sign-in" description={`Secure CareMetric access for ${actor.name}.`} />
-    <section className="panel security-factor-panel"><h2>Your CareMetric session</h2><p>Sign in using a six-digit code sent to your registered mobile number. Codes expire after five minutes and can be used once. This session expires after eight hours.</p>
+  return <><PageHeading eyebrow="Account protection" title="Account security" description={`Secure CareMetric access for ${actor.name}.`} />
+    {!config.demoMode && <PasswordSettings />}
+    <section className="panel security-factor-panel"><h2>Your CareMetric session</h2><p>Sign in with your username and password. Your session expires after eight hours. SMS verification is available to set up or reset your password.</p>
     <p>To change your registered number or recover access, contact CareMetric support.</p>
-    {!config.demoMode && <button className="button button-secondary" onClick={() => void appSession.signOut()}>Sign out</button>}</section></>;
+    </section></>;
 }
 
 /** The control center is the administrator's home. Links from before it existed carried the per-application workspace's query and still open that workspace. */
@@ -1088,6 +1090,7 @@ openHelp({
 
 export default function App() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [data, setData] = useState<HubData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1207,7 +1210,10 @@ export default function App() {
   const publicPortal = !authenticated && !config.demoMode && isPublicHelpPath(location.pathname);
   // The Hub is private to its owner: the old customer account-setup links explain that instead.
   if(['/connect','/join'].includes(location.pathname)&&!config.demoMode)return <PrivateHubNotice/>;
-  if (!authenticated && !config.demoMode && !publicPortal) return <SmsSignIn rememberPath={rememberPendingPortalPath} />;
+  if (!authenticated && !config.demoMode && !publicPortal) return <PasswordSignIn rememberPath={path => {
+    rememberPendingPortalPath(path);
+    if (path === '/security') navigate('/security', { replace:true });
+  }} />;
   if (loading) return <LoadingScreen />;
   if (error) return <ErrorScreen message={error} onRetry={() => void (publicPortal ? loadPublicHelp() : authenticated ? loadAuthenticated() : load())} />;
   if (publicPortal) return <PublicHelpShell data={data} />;

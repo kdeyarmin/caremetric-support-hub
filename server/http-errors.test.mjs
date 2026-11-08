@@ -33,7 +33,7 @@ describe('database errors reaching the browser', () => {
 
   it('keeps sign-in, permission and unexpected errors generic', async () => {
     expect(await rpc(databaseError('42501', 'permission denied for table private.sms_sessions'))).toEqual([403, 'You do not have access to this action.']);
-    expect(await rpc(databaseError('28000', 'Sign in to continue'))).toEqual([401, 'Sign in with an SMS code to continue.']);
+    expect(await rpc(databaseError('28000', 'Sign in to continue'))).toEqual([401, 'Sign in to continue.']);
     const [status, message] = await rpc(databaseError('23514', 'new row for relation "billing_customers" violates check constraint "billing_customers_email_check"'));
     expect(status).toBe(500);
     expect(message).not.toMatch(/billing_customers/);

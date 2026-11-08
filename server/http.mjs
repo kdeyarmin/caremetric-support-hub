@@ -54,7 +54,7 @@ export const privateHubMessage='This Hub is private. Only its owner can sign in.
  * treated as signed out, a sign-in that fails it is revoked at once, and the routes that create
  * sign-ins for anyone else (invitation claims and application self-service) are closed.
  */
-export function appServer({auth,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,selfService,agents,growth,leads,leadAdmin,mediaImport=null,health,owner,origins,helpCenter=null,dist=resolve('dist')}) {
+export function appServer({auth,password,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,selfService,agents,growth,leads,leadAdmin,mediaImport=null,health,owner,origins,helpCenter=null,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -280,6 +280,18 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
           throw new HttpError(404,'Publication resource unavailable.');
         }
         if(path==='/api/auth/session' && req.method==='GET') return json(await gateway.session(session));
+        if(path==='/api/auth/password/login' || path==='/api/auth/password/settings') {
+          if(url.search) throw new HttpError(400,'Authentication query parameters are not supported.');
+          if(!password) throw new HttpError(503,'Password sign-in is unavailable.');
+          if(path.endsWith('/settings') && req.method==='GET') return json(await password.settings(session));
+          if(req.method!=='POST') throw new HttpError(405,'Method not allowed.');
+          const input=await jsonBody(req,4096);
+          const value=path.endsWith('/login')
+            ? await password.login(input,visitorAddress(req),session)
+            : await password.save(session,input,visitorAddress(req));
+          if(owner && !(await owner.allows(value))) { await auth.logout(value); throw new HttpError(403,privateHubMessage); }
+          return json({authenticated:true},200,[cookie(sessionCookie,value,28800),cookie(challengeCookie,'',0)]);
+        }
         if(path==='/api/auth/invitation/start' && req.method==='POST') {
           if(url.search)throw new HttpError(400,'Invitation query parameters are not supported.');
           const result=await delegations.registration.start(await jsonBody(req,2048),visitorAddress(req));
@@ -453,7 +465,7 @@ export function appServer({auth,gateway,delegations,publications,aiCases,readine
       if(res.headersSent) { res.destroy(); return; }
       const reviewed=reviewedDatabaseError(error);
       const status=error instanceof HttpError?error.status:reviewed?reviewed.status:error?.code==='28000'?401:error?.code==='42501'?403:500;
-      const message=error instanceof HttpError?error.message:reviewed?reviewed.message:error?.code==='P0001'?'The action could not be completed. Check the form and try again.':status===401?'Sign in with an SMS code to continue.':status===403?'You do not have access to this action.':'The service is temporarily unavailable.';
+      const message=error instanceof HttpError?error.message:reviewed?reviewed.message:error?.code==='P0001'?'The action could not be completed. Check the form and try again.':status===401?'Sign in to continue.':status===403?'You do not have access to this action.':'The service is temporarily unavailable.';
       json({error:error instanceof HttpError && error.code ? {code:error.code,...(typeof error.publicMessage==='string'?{message:error.publicMessage}:{})} : message},status);
     }
   });
