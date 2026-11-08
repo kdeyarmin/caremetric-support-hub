@@ -100,7 +100,7 @@ Examples: Core monthly costs **$1,194** over the first twelve months versus **$2
 
 CTA destinations: [CareBase / Train trial](https://cmcarebase.com/signup), [Train-only trial](https://cmcarebase.com/signup?product=train), and [Intel plans and trial](https://www.caremetricintel.com/#pricing).
 
-No enrollment deadline or redemption cap was supplied, so none was invented. The one-year limit applies to each redeemed discount, not to a global countdown. This copy is prepared for the product sites; the product websites were not deployed during this work.
+No enrollment deadline or redemption cap was supplied, so none was invented. The one-year limit applies to each redeemed discount, not to a global countdown. This copy is implemented across the product sites, signup, billing, help, terms, and Hub sales guidance. Release and production verification are recorded below.
 
 ## Live configuration and redemption
 
@@ -136,3 +136,13 @@ Track trial-to-paid conversion, activation by workflow, support hours, AI/video 
 
 The evidence supports the current pricing structure and a temporary acquisition offer. It does not establish price elasticity or justify claims of guaranteed customer savings, referrals, revenue, or survey outcomes.
 
+
+## Cross-product rollout
+
+- Intel: public announcement, monthly/annual plan cards, signup, billing offer and plan requests, Help inventory, owner manual/PDF, terms and crawler-readable plans.
+- CareBase/Train: all marketing routes, complete plan and add-on pricing, About/How it works, signup, billing, FAQ/guide bot, terms and savings explanation.
+- Support Hub: admin billing, customer billing and self-service, generated-content facts, pricing report and activation runbook.
+- Regular catalog prices, existing customer contracts, invoice calculations and exact-amount checkout validation are retained. The sale is assisted activation.
+- Release status: implementation complete; validation, CI and production verification pending.
+
+Legacy-code review: `INTELFOUNDING` (`promo_1UV1uvB06O2UFlNz4wIpiWU7`) remains active in Stripe with zero redemptions at the November 8 read-back. All new-offer app copy now uses FOUNDERS50. The connected Stripe API does not expose promotion-code updates, so the older code has not been deactivated. Staff must use FOUNDERS50 for new sales; existing agreed lifetime terms are preserved.

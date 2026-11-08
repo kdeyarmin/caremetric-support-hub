@@ -1,3 +1,4 @@
+import { FoundersSaleNotice } from './FoundersSaleNotice';
 import { useEffect, useState } from 'react';
 import { CreditCard } from 'lucide-react';
 import { config } from '../lib/config';
@@ -39,6 +40,7 @@ export function MyBilling({ client = customerBillingClient, demo = config.demoMo
     <div className="page-heading"><div><span className="eyebrow">Your organization</span><h1>Billing</h1>
       <p>Your CareMetric plans and invoices. Pay an open invoice or update your payment method through Stripe's secure pages.</p></div></div>
     {demo && <p className="billing-banner">Sign in to see your organization's billing.</p>}
+    <FoundersSaleNotice />
     <Notice error={error} />
     {!demo && !data && !error && <p role="status">Loading billing…</p>}
     {data && !data.tenants.length && <p className="billing-banner">Billing is available to your organization's administrators. Ask CareMetric support if you should have access.</p>}

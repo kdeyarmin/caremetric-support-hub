@@ -1,3 +1,4 @@
+import { FoundersSaleNotice } from './FoundersSaleNotice';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
@@ -54,6 +55,7 @@ export function CustomerBilling({ client = billingClient, demo = config.demoMode
   const products = catalog?.products ?? [];
   const productOf = (price: CatalogPrice) => products.find(product => product.id === price.product);
   return <div className="billing">
+    <FoundersSaleNotice admin />
     <Link to="/admin/billing?tab=customers" className="text-link"><ArrowLeft size={14} aria-hidden="true" /> Billing</Link>
     <Notice text={notice} error={error || action.error} />
     {!detail && !error && <p role="status">Loading customer…</p>}

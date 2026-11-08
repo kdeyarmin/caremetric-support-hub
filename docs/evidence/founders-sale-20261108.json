@@ -466,6 +466,13 @@
       "founders_amount_cents": 174000
     }
   ],
-  "verification_scope": "Read back live coupon, exact product allowlist, promotion and active catalog. No customer subscriptions or invoices changed; no payment or time-clock test performed. Redemption uses CareMetric-assisted billing activation; no website or checkout rollout performed."
+  "verification_scope": "Read back live coupon, exact product allowlist, promotion and active catalog. No customer subscriptions or invoices changed; no payment or time-clock test performed. Redemption uses CareMetric-assisted billing activation; no website or checkout rollout performed.",
+  "legacy_intel_promotion_review": {
+    "id": "promo_1UV1uvB06O2UFlNz4wIpiWU7",
+    "code": "INTELFOUNDING",
+    "active": true,
+    "times_redeemed": 0,
+    "checked_at": "2026-11-08",
+    "note": "Removed from all new-offer app copy. Existing lifetime coupon and agreements are preserved. Promotion-code updates are not exposed by the connected Stripe tool; the code has not been deactivated. Staff must use FOUNDERS50 for new offers."
+  }
 }
-

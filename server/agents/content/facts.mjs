@@ -44,7 +44,7 @@ export const products = deepFreeze({
       'A 30-day free trial, started online at cmcarebase.com/signup.',
       foundersSaleTerms,
       'Eligible CareBase/Train products: Core, Complete, Compliance Suite, Small Home, Small Home Complete, Train, Train Single Facility, and the eMAR, Staff Training, Workforce, Survey & Compliance and Resident Billing & Payments add-ons. CareBase Core is $99.50 per facility per month during the introductory year, or $995 for the first annual payment, then the regular rate.',
-      'Legacy founding partners: preserve previously agreed founding-partner pricing held for as long as they subscribe. The older About.tsx program is separate from the Founders Sale; do not offer lifetime pricing to new applicants or describe the new sale as a lifetime rate.',
+      'Legacy founding partners: preserve previously agreed founding-partner pricing held for as long as they subscribe. Previously agreed lifetime terms are separate from the current Founders Sale; do not offer lifetime pricing to new applicants or describe the new sale as a lifetime rate.',
     ],
   },
   intel: {
@@ -96,7 +96,7 @@ export const productPages = deepFreeze([
   { id: 'carebase-survey-guide', product: 'carebase', label: 'Free survey readiness guide', url: 'https://cmcarebase.com/survey-readiness-guide' },
   { id: 'carebase-regulatory-updates', product: 'carebase', label: 'PA regulatory updates for personal care homes and ALFs', url: 'https://cmcarebase.com/regulatory-updates' },
   { id: 'carebase-faq', product: 'carebase', label: 'CareBase questions and answers', url: 'https://cmcarebase.com/faq' },
-  { id: 'carebase-about', product: 'carebase', label: 'About CareBase and the founding-partner program', url: 'https://cmcarebase.com/about' },
+  { id: 'carebase-about', product: 'carebase', label: 'About CareBase and the Founders Sale', url: 'https://cmcarebase.com/about' },
   { id: 'carebase-signup', product: 'carebase', label: 'Start a CareBase free trial', url: 'https://cmcarebase.com/signup' },
   { id: 'intel-home', product: 'intel', label: 'CareMetric Intel', url: 'https://www.caremetricintel.com/' },
   { id: 'intel-pricing', product: 'intel', label: 'CareMetric Intel plans and pricing', url: 'https://www.caremetricintel.com/#pricing' },

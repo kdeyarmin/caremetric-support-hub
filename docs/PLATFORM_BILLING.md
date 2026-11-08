@@ -340,3 +340,7 @@ account that already has billing gets its current answer and no second trial.
   facility enforcement across privileged readers, background jobs and offline sync.
   Keep the account-verification guard and disabled purchasing capability in place
   until those gates pass.
+
+## Current Founders Sale
+
+Use **FOUNDERS50** for eligible new paid CareBase, Train and Intel subscriptions: **50% off the first 12 paid months**, then regular renewal pricing. Apply it through the assisted activation process before payment; self-service checkout does not apply it automatically. Trial conversions may need the underlying coupon after eligibility review. See [pricing, exclusions, exact live IDs and the activation runbook](PRICING_RESEARCH_AND_FOUNDERS_SALE.md). Preserve existing founding agreements and review invoice amounts, discount expiry and billing-cycle changes.

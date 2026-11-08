@@ -66,7 +66,7 @@ Owner to confirm.
 | CareMetric Train (training only, per organization, unlimited learners) | $239 | $2,390 |
 | Train Single Facility | $119 | $1,190 |
 
-**Legacy founding-partner offer** (`About.tsx`, "Founding partners" band). Preserve previously agreed terms; use the new
+**Legacy founding-partner agreements** (historical program). Preserve previously agreed terms; use the new
 Founders Sale below for new offers. Do not advertise lifetime pricing as part of the new sale.
 
 - The older page invited early Pennsylvania personal care home and ALF operators to ask about founding-partner terms by
@@ -122,7 +122,7 @@ and [the verified live configuration](evidence/founders-sale-20261108.json) are 
 - This is assisted activation, not an automatic website checkout discount. Stripe's first-time-only code can reject a
   prior trial; CareMetric applies the underlying coupon for eligible trial conversions after checking eligibility.
 - Existing lifetime founding-partner agreements and Intel's earlier 25%-forever coupon are separate and unchanged.
-  The new sale is never advertised as a lifetime rate. No website deployment or customer enrollment was performed.
+  The new sale is never advertised as a lifetime rate. Product-site, signup, billing, help and terms propagation is tracked in the pricing report. No customer was enrolled.
 
 ## CareMetric Healthcare Advisors
 

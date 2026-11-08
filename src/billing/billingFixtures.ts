@@ -17,7 +17,7 @@ export const fixtureSubscription = (overrides: Partial<Subscription> = {}): Subs
 });
 
 export const fixtureCoupon = (overrides: Partial<Coupon> = {}): Coupon => ({
-  id: 'co_founding', name: 'Founding agency', percent_off: 25, amount_off: null, currency: null, duration: 'forever', duration_in_months: null,
+  id: 'co_founding', name: 'Legacy founding agency', percent_off: 25, amount_off: null, currency: null, duration: 'forever', duration_in_months: null,
   max_redemptions: null, times_redeemed: 0, redeem_by: null, valid: true, applies_to: [], app: 'caremetric-intel', created: '2026-10-01T00:00:00Z', version: 1, deleted: false,
   ...overrides,
 });
