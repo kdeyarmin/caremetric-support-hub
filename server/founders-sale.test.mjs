@@ -111,4 +111,27 @@ describe('automatic Founders Sale', () => {
     expect(t.live.post).toHaveBeenCalledWith('/v1/invoices/in_first', { auto_advance: false }, { idempotencyKey: 'hub-founders-hold-in_first' });
     expect(t.sub.discounts).toEqual([]);
   });
+  it.each(['expired', 'removed'])('leaves an %s offer out of later ordinary contract pricing', async reason => {
+    const t = fixture(); t.sub.metadata = { ...t.sub.metadata, hub_founders_sale: FOUNDERS_OFFER, hub_founders_start: String(start) };
+    t.sub.items.data[0].price.id = 'price_private_contract';
+    t.invoice.created = reason === 'expired' ? foundersWindow(t.sub).end : start + 86400;
+    await applyFoundersToInvoice(t.live, t.invoice.id);
+    expect(t.live.post).not.toHaveBeenCalled(); expect(t.live.list).not.toHaveBeenCalled();
+  });
+  it('does not put a removed subscription discount back when its earlier draft invoice still has it', async () => {
+    const t = fixture(); t.sub.metadata = { ...t.sub.metadata, hub_founders_sale: FOUNDERS_OFFER, hub_founders_start: String(start) };
+    t.invoice.discounts = [saleDiscount];
+    await applyFoundersToInvoice(t.live, t.invoice.id);
+    expect(t.live.post).not.toHaveBeenCalled();
+  });
+  it('leaves an explicit replacement agreement and its private pricing unchanged', async () => {
+    const t = fixture(), replacement = { id: 'di_contract', coupon: { id: 'contract' } };
+    t.sub.metadata = { ...t.sub.metadata, hub_founders_sale: FOUNDERS_OFFER, hub_founders_start: String(start) };
+    t.sub.discounts = [replacement]; t.invoice.discounts = [replacement];
+    t.sub.items.data[0].price.id = 'price_private_contract';
+    await applyFoundersToInvoice(t.live, t.invoice.id);
+    expect(t.live.post).not.toHaveBeenCalled();
+    expect(t.sub.discounts).toEqual([replacement]); expect(t.invoice.discounts).toEqual([replacement]);
+    expect(t.live.list).not.toHaveBeenCalled();
+  });
 });
