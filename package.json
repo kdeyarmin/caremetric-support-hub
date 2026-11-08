@@ -19,6 +19,7 @@
     "test:sdk": "npm run test --workspace @caremetric/help-sdk",
     "pack:sdk": "npm pack --workspace @caremetric/help-sdk",
     "evaluate:growth": "node scripts/evaluate-growth.mjs",
+    "verify:live": "node --use-env-proxy scripts/verify-live-flows.mjs",
     "test:growth:db": "node server/growth-integration.mjs",
     "test:growth-autonomy:db": "node server/agents-growth-autonomy-integration.mjs",
     "test:watch": "vitest",

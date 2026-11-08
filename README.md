@@ -168,16 +168,16 @@ Version `0.1.0` now runs as the first production vertical slice:
   playback, quizzes, and completion continue through controlled CareBase launches.
 - Native authoring and delivery for new Hub courses, including reviewed private
   media, server-graded quizzes, revision-pinned progress, and completion records.
-- An SMS-verified `/admin` workspace with the app-function inventory and a
+- An authenticated `/admin` workspace with the app-function inventory and a
   CareBase connection for aggregate counts, shared course metadata, and lesson
   titles. Live authenticated adapter operations remain unverified.
 - A governed import of 70 published CareBase help articles; no learner, employee, resident, organization, assignment, progress, or ticket records were copied.
 - An owner-approved product/contact registry that publishes only approved contact values; mailbox delivery readiness is tracked separately.
 - A framework-neutral `@caremetric/help-sdk` that opens Help or the shared Learning Library while passing only an allowlisted product and safe, static context.
 - A dedicated `hub`/`private` Supabase schema design, RLS policies, narrow grants, atomic case RPCs, physically separate internal notes, and metadata-only audit records.
-- [SMS sign-in](docs/APP_SMS_SIGNIN.md): a registered mobile number receives a six-digit code and the server issues an app session that every protected database path rechecks. Authenticator apps (TOTP) are turned off; the database keeps its legacy AAL2 checks only for existing integrations.
+- [Owner username and password](docs/OWNER_PASSWORD_LOGIN.md): the owner chooses credentials in Security and signs in without an SMS code. [SMS verification](docs/APP_SMS_SIGNIN.md) remains available for setup and recovery. Every protected database path rechecks the app session. Authenticator apps (TOTP) are turned off; the database keeps its legacy AAL2 checks only for existing integrations.
 - Fail-closed, per-tenant/product case-intake settings plus UUID request keys that make case creation and replies safely retryable without putting support text in the idempotency ledger. Runtime checks immediately reject deleted, banned, or anonymous principals and keep dual-role staff/customer authority paths separate.
-- A credential-free DocStudio publication preview plus an SMS-authorized [publication import executor](docs/PUBLICATION_IMPORTS.md): exact streamed asset checks, immutable catalog revisions, explicit placement confirmations, private media, and bounded staging cleanup.
+- A credential-free DocStudio publication preview plus an app-session-authorized [publication import executor](docs/PUBLICATION_IMPORTS.md): exact streamed asset checks, immutable catalog revisions, explicit placement confirmations, private media, and bounded staging cleanup.
 - Pull-request CI for both the application and a clean local Supabase migration/pgTAP stack.
 - A polished implementation preview that works without credentials. Demo mode is never a production data store.
 
@@ -220,7 +220,7 @@ The first deployment is a modular monolith. Services can be extracted only when 
 
 ## Run locally
 
-Requirements: Node.js 22 or newer.
+Requirements: Node.js 24 or newer (see `.nvmrc`).
 
 ```bash
 npm install

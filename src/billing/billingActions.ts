@@ -28,6 +28,7 @@ export function useBillingAction() {
 
 /** A calendar date this many days from now, as YYYY-MM-DD in the viewer's time zone. */
 export const dayAfter = (days: number, from = new Date()) => {
-  const date = new Date(from.getTime() + days * 86400000);
+  const date = new Date(from.getTime());
+  date.setDate(date.getDate() + days);
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
 };

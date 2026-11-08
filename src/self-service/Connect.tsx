@@ -4,11 +4,16 @@ import { appRequest, appSession } from '../lib/appSession';
 import { selfServiceClient } from './client';
 
 const storageKey = 'caremetric.pendingConnection';
+const validToken = (value: string | null) => value !== null && /^cmc_[A-Za-z0-9_-]{43}$/.test(value);
 function takeConnection() {
   const fragment = window.location.hash.slice(1);
   window.history.replaceState(null, '', window.location.pathname);
-  if (/^cmc_[A-Za-z0-9_-]{43}$/.test(fragment)) { window.sessionStorage.setItem(storageKey, fragment); return fragment; }
-  return window.sessionStorage.getItem(storageKey) ?? '';
+  if (validToken(fragment)) {
+    try { window.sessionStorage.setItem(storageKey, fragment); } catch { /* The current connection can proceed without storage. */ }
+    return fragment;
+  }
+  try { const saved = window.sessionStorage.getItem(storageKey); return validToken(saved) ? saved! : ''; }
+  catch { return ''; }
 }
 export function Connect({ authenticated }: { authenticated: boolean }) {
   const [token] = useState(takeConnection);
@@ -21,7 +26,11 @@ export function Connect({ authenticated }: { authenticated: boolean }) {
   const navigate = useNavigate();
   async function complete(work: () => Promise<unknown>) {
     setBusy(true); setError('');
-    try { await work(); window.sessionStorage.removeItem(storageKey); window.dispatchEvent(new Event('caremetric:session')); navigate('/self-service', { replace: true }); }
+    try {
+      await work();
+      try { window.sessionStorage.removeItem(storageKey); } catch { /* A consumed connection must still finish when storage is blocked. */ }
+      window.dispatchEvent(new Event('caremetric:session')); navigate('/self-service', { replace: true });
+    }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'The account could not be connected.'); }
     finally { setBusy(false); }
   }

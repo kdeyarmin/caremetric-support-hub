@@ -45,8 +45,10 @@ export function CustomerBilling({ client = billingClient, demo = config.demoMode
   const sendInvoice = async (invoiceId: string, version: number) => {
     const result = await action.run(['invoice.send', invoiceId], request_key => client.command({ action: 'invoice.send', invoice: invoiceId, expected_version: version, request_key }));
     if (!result) return;
-    if (result.url) { try { await navigator.clipboard.writeText(result.url); } catch { /* the link is also shown below */ } }
-    refresh(result.id === 'emailed' ? 'Invoice emailed to the billing contact with its payment link.' : `Payment link copied: ${result.url ?? 'open the invoice to pay'}`);
+    if (result.id === 'emailed') { refresh('Invoice emailed to the billing contact with its payment link.'); return; }
+    if (!result.url) { refresh('Open the invoice to view its payment link.'); return; }
+    try { await navigator.clipboard.writeText(result.url); refresh(`Payment link copied: ${result.url}`); }
+    catch { refresh(`The payment link could not be copied. Copy it manually: ${result.url}`); }
   };
 
   const products = catalog?.products ?? [];

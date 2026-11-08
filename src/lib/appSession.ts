@@ -3,19 +3,29 @@ import { config } from './config';
 const authEvent = 'caremetric:session';
 /** Raised whenever the sign-in may have changed (or lapsed) so the shell re-checks it. */
 export const sessionEvent = authEvent;
+export class AppRequestError extends Error {
+  constructor(message: string, readonly status: number) { super(message); this.name = 'AppRequestError'; }
+}
 export async function appRequest<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`/api/${path}`, {
     method: body === undefined ? 'GET' : 'POST', credentials:'same-origin', cache:'no-store', redirect:'error',
     headers: body === undefined ? {} : { 'Content-Type':'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body), signal,
   });
-  const data = await response.json() as { error?:string | { code?:string; message?:string } } & T;
+  // Gateways can return HTML or an empty body during an outage. Session expiry
+  // must still reach the shell, even when that response is not valid JSON.
+  if (response.status === 401 && !path.startsWith('auth/')) window.dispatchEvent(new Event(authEvent));
+  let data: { error?:string | { code?:string; message?:string } } & T;
+  try { data = await response.json(); }
+  catch (error) {
+    if (signal?.aborted) throw error;
+    throw new AppRequestError(response.ok ? 'The server returned an unreadable response. Please try again.' : 'The request could not be completed. Please try again.', response.status);
+  }
   if (!response.ok) {
-    if (response.status === 401 && !path.startsWith('auth/')) window.dispatchEvent(new Event(authEvent));
     // A coded error carries a message only when the server marked it as safe to show.
-    const error = data.error;
+    const error = data?.error;
     const message = typeof error === 'string' ? error : typeof error === 'object' && error !== null && typeof error.message === 'string' ? error.message : null;
-    throw new Error(message ?? 'The request could not be completed.');
+    throw new AppRequestError(message ?? 'The request could not be completed.', response.status);
   }
   return data;
 }
