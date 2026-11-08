@@ -16,9 +16,9 @@ const admin=new pg.Pool({connectionString:databaseUrl});
 await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
 const appUrl=new URL(databaseUrl);appUrl.username='hub_app_server';appUrl.password='ephemeral-test-only';
 const pool=new pg.Pool({connectionString:appUrl.href});
-const owner=randomUUID(), stranger=randomUUID(), suffix=randomUUID().slice(0,8), username=`owner-${suffix}`;
+const owner=randomUUID(), stranger=randomUUID(), suffix=randomUUID().slice(0,8), username=`owner+${suffix}@test.invalid`, legacyUsername=`owner-${suffix}`;
 const phone=`+1202${String(Math.floor(Math.random()*9000000)+1000000)}`;
-const firstPassword='First test-only password phrase', nextPassword='Next test-only password phrase';
+const firstPassword='H7!mQ2vR8z', nextPassword='Next test-only password phrase';
 const origin='https://hub.test';
 const provider={send:async()=>randomUUID(),verify:async(_id,_phone,code)=>code==='123456'};
 const password=passwordAuth({pool});
@@ -46,7 +46,7 @@ async function smsBrowser(number=phone) {
 async function clearLoginLimit(name=username) { await admin.query('delete from private.password_attempts where username_hash=$1',[digest(name)]); }
 
 try {
-  await admin.query(`insert into auth.users(id,email,raw_user_meta_data,is_anonymous) values($1,$3,'{"display_name":"Password test owner"}',false),($2,$4,'{}',false)`,[owner,stranger,`${username}@test.invalid`,`stranger-${suffix}@test.invalid`]);
+  await admin.query(`insert into auth.users(id,email,raw_user_meta_data,is_anonymous) values($1,$3,'{"display_name":"Password test owner"}',false),($2,$4,'{}',false)`,[owner,stranger,username,`stranger-${suffix}@test.invalid`]);
   await admin.query("insert into private.staff_permissions(user_id,permission,granted_by) values($1,'platform.admin',$1)",[owner]);
   await admin.query('insert into private.sms_identities(user_id,phone_e164) values($1,$2)',[owner,phone]);
   const anonymous=browser();
@@ -59,13 +59,25 @@ try {
   // password or username is seeded into production by a migration.
   const enrolled=await smsBrowser(), original=enrolled.jar[sessionCookie];
   assert.equal((await enrolled.call('auth/password/settings')).body.configured,false);
+  assert.equal(firstPassword.length,10);
+  assert.equal((await enrolled.call('auth/password/settings',{username,password:firstPassword.slice(0,9)})).status,400);
+  assert.equal((await enrolled.call('auth/password/settings')).body.configured,false);
   const saved=await enrolled.call('auth/password/settings',{username:username.toUpperCase(),password:firstPassword});
   assert.equal(saved.status,200);assert.deepEqual(saved.body,{authenticated:true});
   assert.match(saved.cookies[0],/HttpOnly; Secure; SameSite=Strict; Max-Age=28800/);
   assert.equal((await browser(original).call('auth/session')).body.authenticated,false);
   assert.equal((await enrolled.call('auth/session')).body.method,'password');
-  const stored=await row('select password_hash from private.password_credentials where user_id=$1',[owner]);
+  const stored=await row('select username,password_hash from private.password_credentials where user_id=$1',[owner]);
+  assert.equal(stored.username,username);
   assert.notEqual(stored.password_hash,firstPassword);assert.match(stored.password_hash,/^scrypt\$32768\$8\$3\$/);
+  // The database enforces the same email boundary even for direct writes.
+  for (const invalid of ['owner@','owner@example','owner..name@example.com','OWNER@example.com',
+    'owner@-example.com','owner@example-.com',`${'x'.repeat(65)}@example.com`,
+    `${'a'.repeat(64)}@${'b'.repeat(63)}.${'c'.repeat(63)}.${'d'.repeat(62)}`]) {
+    await assert.rejects(admin.query('update private.password_credentials set username=$2 where user_id=$1',[owner,invalid]),
+      error=>error.code==='23514' && error.constraint==='password_credentials_username_check');
+  }
+  assert.equal((await enrolled.call('auth/session')).body.authenticated,true);
   const authority=await withSession(pool,enrolled.jar[sessionCookie],async db=>(await db.query('select hub.authorize_app_admin() as value')).rows[0].value);
   assert.equal(authority.method,'password');assert.equal(authority.user_id,owner);
   await withSession(pool,enrolled.jar[sessionCookie],async(db,current)=>{
@@ -137,11 +149,15 @@ try {
   const rebound=await smsBrowser(nextPhone);
   assert.equal((await rebound.call('auth/password/settings',{username,password:firstPassword})).status,200);
   const final=browser();assert.equal((await final.call('auth/password/login',{username,password:firstPassword})).status,200);
-  const loggedOut=final.jar[sessionCookie];assert.equal((await final.call('auth/logout',{})).status,200);
+  // Existing username login remains supported when an owner changes identifiers.
+  assert.equal((await final.call('auth/password/settings',{username:legacyUsername,password:firstPassword,currentPassword:firstPassword})).status,200);
+  assert.equal((await browser().call('auth/password/login',{username,password:firstPassword})).status,401);
+  const legacy=browser();assert.equal((await legacy.call('auth/password/login',{username:legacyUsername.toUpperCase(),password:firstPassword})).status,200);
+  const loggedOut=legacy.jar[sessionCookie];assert.equal((await legacy.call('auth/logout',{})).status,200);
   assert.equal((await browser(loggedOut).call('auth/session')).body.authenticated,false);
   assert.equal((await row("select count(*)::int as n from private.audit_events where actor_id=$1 and action='auth.password.created'",[owner])).n,1);
-  assert.equal((await row("select count(*)::int as n from private.audit_events where actor_id=$1 and action='auth.password.changed'",[owner])).n,4);
-  console.log('Password setup, login, recovery, rotation, revocation, rate limit and logout PostgreSQL/HTTP integration passed.');
+  assert.equal((await row("select count(*)::int as n from private.audit_events where actor_id=$1 and action='auth.password.changed'",[owner])).n,5);
+  console.log('Email/username login, 10-character password setup, recovery, rotation, revocation, rate limit and logout PostgreSQL/HTTP integration passed.');
 } finally {
   await new Promise(resolve=>server.close(resolve));
   await pool.end();
@@ -154,6 +170,6 @@ try {
   await admin.query('delete from private.staff_permissions where user_id=$1',[owner]);
   await admin.query('delete from hub.profiles where id=any($1::uuid[])',[[owner,stranger]]);
   await admin.query('delete from auth.users where id=any($1::uuid[])',[[owner,stranger]]);
-  await admin.query('delete from private.password_attempts where username_hash=any($1::text[])',[[username,`unknown-${suffix}`,`limited-${suffix}`,`change:${owner}`].map(digest)]);
+  await admin.query('delete from private.password_attempts where username_hash=any($1::text[])',[[username,legacyUsername,`unknown-${suffix}`,`limited-${suffix}`,`change:${owner}`].map(digest)]);
   await admin.end();
 }

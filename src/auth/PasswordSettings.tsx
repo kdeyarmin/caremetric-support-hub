@@ -29,7 +29,7 @@ export function PasswordSettings() {
       await appSession.savePassword({ username,password,...(settings.configured && !settings.can_reset ? {currentPassword} : {}) });
       setSettings({ username:username.trim().toLowerCase(),configured:true,can_reset:false });
       setUsername(username.trim().toLowerCase());
-      setNotice('Your username and password are saved. Other sessions have been signed out. Use your password the next time you sign in.');
+      setNotice('Your sign-in details are saved. Other sessions have been signed out. Use your password the next time you sign in.');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Your password could not be saved.');
       if (settings.can_reset) {
@@ -48,17 +48,17 @@ export function PasswordSettings() {
     catch { setError('Sign-out could not be completed. Please try again.'); }
     finally { setBusy(false); }
   }
-  return <section className="panel security-factor-panel"><h2>Username and password</h2>
+  return <section className="panel security-factor-panel"><h2>Sign-in details</h2>
     {!settings ? <><p>{error || 'Loading password settings…'}</p>{error && <button className="button button-secondary" onClick={() => setReload(value => value+1)}>Try again</button>}</> : <>
-      <p>{settings.configured ? 'Change your username or password below.' : 'Choose your username and password. You can then sign in without requesting an SMS code.'} Saving signs out your other sessions.</p>
+      <p>{settings.configured ? 'Change your email, username, or password below.' : 'Choose your email or username and password. You can then sign in without requesting an SMS code.'} Saving signs out your other sessions.</p>
       <form className="sign-in-form" onSubmit={submit}>
-        <label htmlFor="password-username">Username</label><input id="password-username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={event => setUsername(event.target.value)} minLength={3} maxLength={64} pattern="[a-zA-Z0-9][a-zA-Z0-9._\-]{2,63}" disabled={busy} required aria-describedby="username-help" />
-        <p id="username-help" className="muted">3–64 letters, numbers, dots, underscores or hyphens. Usernames are not case sensitive.</p>
+        <label htmlFor="password-username">Email or username</label><input id="password-username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={event => setUsername(event.target.value)} minLength={3} maxLength={254} disabled={busy} required aria-describedby="username-help" />
+        <p id="username-help" className="muted">Use your email address or a 3–64 character username with letters, numbers, dots, underscores or hyphens. Sign-in is not case sensitive.</p>
         {settings.configured && !settings.can_reset && <><label htmlFor="password-current">Current password</label><input id="password-current" name="currentPassword" type="password" autoComplete="current-password" value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} maxLength={128} disabled={busy} required /><p className="muted">Forgot your password? Sign out and choose “Set up or reset your password” to verify your mobile number.</p></>}
-        <label htmlFor="password-new">New password</label><input id="password-new" name="newPassword" type="password" autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} minLength={15} maxLength={128} disabled={busy} required aria-describedby="password-help" />
-        <p id="password-help" className="muted">Use 15–128 characters. A unique passphrase or a password manager works well.</p>
-        <label htmlFor="password-confirm">Confirm new password</label><input id="password-confirm" name="confirmPassword" type="password" autoComplete="new-password" value={confirm} onChange={event => setConfirm(event.target.value)} minLength={15} maxLength={128} disabled={busy} required />
-        <button className="button button-primary" disabled={busy}>{busy ? 'Saving…' : settings.configured ? 'Save username and password' : 'Set username and password'}</button>
+        <label htmlFor="password-new">New password</label><input id="password-new" name="newPassword" type="password" autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} minLength={10} maxLength={128} disabled={busy} required aria-describedby="password-help" />
+        <p id="password-help" className="muted">Use 10–128 characters. A unique passphrase or a password manager works well.</p>
+        <label htmlFor="password-confirm">Confirm new password</label><input id="password-confirm" name="confirmPassword" type="password" autoComplete="new-password" value={confirm} onChange={event => setConfirm(event.target.value)} minLength={10} maxLength={128} disabled={busy} required />
+        <button className="button button-primary" disabled={busy}>{busy ? 'Saving…' : settings.configured ? 'Save sign-in details' : 'Set sign-in details'}</button>
         {error && <p className="form-message" role="alert">{error}</p>}
         {notice && <p className="form-message" role="status">{notice}</p>}
       </form>

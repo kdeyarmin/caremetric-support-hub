@@ -254,7 +254,7 @@ function ErrorScreen({ message, onRetry }: { message: string; onRetry: () => voi
 function SecurityPage({ actor }: { actor: ActorContext }) {
   return <><PageHeading eyebrow="Account protection" title="Account security" description={`Secure CareMetric access for ${actor.name}.`} />
     {!config.demoMode && <PasswordSettings />}
-    <section className="panel security-factor-panel"><h2>Your CareMetric session</h2><p>Sign in with your username and password. Your session expires after eight hours. SMS verification is available to set up or reset your password.</p>
+    <section className="panel security-factor-panel"><h2>Your CareMetric session</h2><p>Sign in with your email or username and password. Your session expires after eight hours. SMS verification is available to set up or reset your password.</p>
     <p>To change your registered number or recover access, contact CareMetric support.</p>
     </section></>;
 }

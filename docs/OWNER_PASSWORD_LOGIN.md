@@ -1,10 +1,10 @@
-# Owner username and password
+# Owner email or username and password
 
-The private Hub's primary sign-in is a username and password. There is no public registration and no default credential. The existing owner chooses both in the app; credentials never need to be shared with an operator or entered into deployment variables.
+The private Hub's primary sign-in is an email or username and password. There is no public registration and no default credential. The existing owner chooses both in the app; credentials never need to be shared with an operator or entered into deployment variables.
 
 ## First setup and recovery
 
-An owner who is already signed in opens **Security** (`/security`) and chooses a username and a password. Usernames contain 3–64 ASCII letters, numbers, dots, underscores or hyphens and are case insensitive. Passwords contain 15–128 Unicode characters, are normalized to NFC without trimming, and reject a small set of common/repeated passwords. Password managers can recognize the username, current-password and new-password fields.
+An owner who is already signed in opens **Security** (`/security`) and chooses an email address or username and a password. Email addresses support up to 254 ASCII characters, with a local part of up to 64 characters and a dotted domain; common aliases such as `owner+hub@example.com` work. Emails are normalized to lowercase and used only as login identifiers; this does not change the registered recovery mobile number or verify email ownership. Existing usernames remain supported and contain 3–64 ASCII letters, numbers, dots, underscores or hyphens and are case insensitive. Passwords contain 10–128 Unicode characters, are normalized to NFC without trimming, and reject a small set of common/repeated passwords. Password managers can recognize the username, current-password and new-password fields.
 
 When signed out, **Set up or reset your password** verifies the existing registered mobile number through the normal Telnyx SMS flow, then opens Security. This creates no user, permission or identity binding. Initial enrollment accepts an existing valid owner SMS session. Replacing an existing password requires the current password or an SMS session created within the last ten minutes. Password login itself does not request an SMS code.
 
@@ -25,6 +25,8 @@ Deploy the paired Intel, Advisors, Breathe and CareBase adapters first. They acc
 
 Then apply `20261108010205_owner_password_login.sql` before deploying its paired application code. Startup refuses a database missing the password schema. It is additive, creates no credentials, and preserves existing SMS sessions. The old release can still use the migrated schema. Follow the repository PR/CI workflow; Railway deploys from main.
 
-`server/password-auth-integration.mjs` runs only against disposable PostgreSQL at `127.0.0.1:54322`. It exercises the real hash implementation and HTTP handlers for enrollment, case-insensitive username login, bad credentials, current-password changes, stale/fresh SMS recovery, credential races, persisted limits, account/permission/identity revocation and logout replay. CI runs it twice after the complete Supabase migration chain. `supabase/tests/071_password_auth.test.sql` checks RLS and database grants. Component and HTTP unit tests cover browser forms, failure notices, cookies, Origin checks and query rejection.
+The email-login update additionally requires `20261108025633_owner_email_login.sql` before its application release. This additive migration relaxes only the identifier constraint; existing credentials, sessions and permissions are preserved.
+
+`server/password-auth-integration.mjs` runs only against disposable PostgreSQL at `127.0.0.1:54322`. It exercises the real hash implementation and HTTP handlers for enrollment, case-insensitive email and username login, the 10-character password boundary, bad credentials, current-password changes, stale/fresh SMS recovery, credential races, persisted limits, account/permission/identity revocation and logout replay. CI runs it twice after the complete Supabase migration chain. `supabase/tests/071_password_auth.test.sql` checks RLS and database grants. Component and HTTP unit tests cover browser forms, failure notices, cookies, Origin checks and query rejection.
 
 These automated fixtures do not establish a production owner password sign-in. After release, the owner sets their password in the app, signs out, signs in with that password, and saves the authenticated browser profile. Catalog refresh and production payment fulfillment retain their own verification requirements.

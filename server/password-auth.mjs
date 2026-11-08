@@ -17,9 +17,11 @@ async function key(password, salt) {
   finally { hashing--; }
 }
 export function normalizeUsername(value) {
-  if (typeof value !== 'string' || value.length > 128) return null;
+  if (typeof value !== 'string' || value.length > 512) return null;
   const username = value.trim().toLowerCase();
-  return /^[a-z0-9][a-z0-9._-]{2,63}$/.test(username) ? username : null;
+  if (/^[a-z0-9][a-z0-9._-]{2,63}$/.test(username)) return username;
+  const email = /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
+  return username.length <= 254 && username.indexOf('@') <= 64 && email.test(username) ? username : null;
 }
 const normalizedPassword = value => typeof value === 'string' && value.length <= 256 && Buffer.byteLength(value) <= 1024
   && [...value.normalize('NFC')].length <= 128 ? value.normalize('NFC') : null;
@@ -33,13 +35,13 @@ export async function verifyPassword(password, encoded) {
   const actual = await key(password, Buffer.from(salt, 'hex'));
   return timingSafeEqual(actual, Buffer.from(expected, 'hex')) && Boolean(match);
 }
-const invalidLogin = () => new HttpError(401, 'The username or password is incorrect.');
-const commonPasswords = new Set(['passwordpassword', 'passwordpassword123', '123456789012345', '1234567890123456', 'qwertyuiopasdfgh', 'letmeinletmeinletmein']);
+const invalidLogin = () => new HttpError(401, 'The sign-in details are incorrect.');
+const commonPasswords = new Set(['password12', 'password123', '1234567890', 'qwertyuiop', 'letmein1234', 'passwordpassword', 'passwordpassword123', '123456789012345', '1234567890123456', 'qwertyuiopasdfgh', 'letmeinletmeinletmein']);
 function credentials(input, setting = false) {
   const username = normalizeUsername(input?.username), password = normalizedPassword(input?.password);
-  if (!username || password === null) throw new HttpError(400, setting ? 'Use a username of 3–64 letters, numbers, dots, underscores or hyphens and a password of 15–128 characters.' : 'Enter your username and password.');
-  if (setting && ([...password].length < 15 || commonPasswords.has(password.toLowerCase()) || /^(.)\1+$/u.test(password))) {
-    throw new HttpError(400, 'Choose a password of 15–128 characters that is not a common or repeated password.');
+  if (!username || password === null) throw new HttpError(400, setting ? 'Use a valid email address or a username of 3–64 letters, numbers, dots, underscores or hyphens and a password of 10–128 characters.' : 'Enter your email or username and password.');
+  if (setting && ([...password].length < 10 || commonPasswords.has(password.toLowerCase()) || /^(.)\1+$/u.test(password))) {
+    throw new HttpError(400, 'Choose a password of 10–128 characters that is not a common or repeated password.');
   }
   return { username, password };
 }
@@ -134,7 +136,7 @@ export function passwordAuth({ pool }) {
         // password session only after that write, in this same transaction.
         return session(db, saved);
       }).catch(error => {
-        if (error?.code === '23505') throw new HttpError(409, 'That username is unavailable. Choose another.');
+        if (error?.code === '23505') throw new HttpError(409, 'That email or username is unavailable. Choose another.');
         throw error;
       });
     },

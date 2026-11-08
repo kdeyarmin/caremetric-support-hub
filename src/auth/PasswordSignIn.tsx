@@ -21,9 +21,9 @@ export function PasswordSignIn({ rememberPath }: { rememberPath:(path?:string) =
   if (recovery) return <SmsSignIn rememberPath={() => rememberPath('/security')} onBack={() => setRecovery(false)} />;
   return <main className="sign-in-page"><section className="sign-in-panel">
     <div className="brand-lockup brand-lockup-large"><span className="brand-icon"><CircleHelp size={25} /></span><span><strong>CareMetric</strong><small>Support Hub</small></span></div>
-    <div className="sign-in-copy"><span className="eyebrow">Private owner access</span><h1>Sign in to CareMetric.</h1><p>Enter your username and password to open your Support Hub.</p></div>
+    <div className="sign-in-copy"><span className="eyebrow">Private owner access</span><h1>Sign in to CareMetric.</h1><p>Enter your email or username and password to open your Support Hub.</p></div>
     <form onSubmit={submit} className="sign-in-form">
-      <label htmlFor="sign-in-username">Username</label><input id="sign-in-username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={event => setUsername(event.target.value)} maxLength={64} disabled={busy} required autoFocus />
+      <label htmlFor="sign-in-username">Email or username</label><input id="sign-in-username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={event => setUsername(event.target.value)} maxLength={254} disabled={busy} required autoFocus />
       <label htmlFor="sign-in-password">Password</label><input id="sign-in-password" name="password" type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} maxLength={128} disabled={busy} required />
       <button className="button button-primary" disabled={busy}>{busy ? <LoaderCircle className="spin" size={17} /> : <LockKeyhole size={17} />}{busy ? 'Signing in…' : 'Sign in'}</button>
       <button type="button" className="button button-secondary" disabled={busy} onClick={() => { setPassword(''); setMessage(''); setRecovery(true); }}>Set up or reset your password</button>
