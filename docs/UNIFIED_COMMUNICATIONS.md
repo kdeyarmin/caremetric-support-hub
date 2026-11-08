@@ -145,7 +145,28 @@ accepting messages that may contain PHI.
    replies, the AI team's customer emails and bulk email then carry it as
    Reply-To, so customers' answers join the conversation (and a reply still
    stops a growth sequence). A value that is not an email address is ignored
-   with a warning; without it, answers go to the reply sender.
+   with a warning; without it, answers go to the sender itself.
+
+### One address
+
+Every email the Hub sends comes from **support@caremetric.ai** (`HUB_SUPPORT_FROM_EMAIL`) and
+replies to it (or to `HUB_SUPPORT_REPLY_TO` when set): staff replies, the AI team's alerts and
+external emails, cold email, customer lifecycle emails and bulk email. There is no second sender
+setting (`HUB_BULK_EMAIL_FROM` is no longer read). The email footers name the same address, in
+every theme.
+
+It receives replies: `caremetric.ai`'s MX record is `mx.sendgrid.net`, so every address on the
+domain is delivered to SendGrid Inbound Parse and from there to Communications. Audit of
+2026-11-08: SendGrid domain authentication (DKIM `s1`/`s2`) for `caremetric.ai` is in the same
+SendGrid account as `cmcarebase.com`; answers from CMS to two emails the AI team sent from the
+address arrived in Communications. The Hub is configured with no `HUB_SUPPORT_FROM_EMAIL`,
+`HUB_SUPPORT_REPLY_TO` or `HUB_BULK_EMAIL_FROM`, so production uses the default.
+
+The applications' own emails are configured in each application: CareBase's
+(`NOTIFICATION_FROM_EMAIL`, a CareBase Supabase function secret) and Intel's
+(`SENDGRID_FROM_EMAIL`, on Intel's Railway service, sending through a different SendGrid account
+that authenticates only `caremetricintel.com`). Replies to an address on `cmcarebase.com` or
+`caremetricintel.com` go to those domains' own mail hosts, not to Communications.
 
 ### Chat
 

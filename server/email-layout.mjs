@@ -4,11 +4,13 @@
 
    - "hub" (the default): the Support Hub's own look, for its notices and support replies,
      and for products without a theme of their own here.
-   - "carebase": CareMetric CareBase's look, from the CareBase app's design tokens
-     (kdeyarmin/caremetric-carebase src/styles.css and src/components/brand.tsx): the navy
-     band with the "CareMetric CareBase" wordmark as the app writes it on navy, a light-blue
-     rule, the app's primary blue, Inter text with Source Serif 4 headlines, its soft
-     blue-grey canvas and rounded cards.
+   - "carebase": CareMetric CareBase's email standard, exactly as the CareBase app sends it
+     (kdeyarmin/PennTrain supabase/functions/_shared/emailLayout.ts): a white header with the
+     official CareBase logo over a 3px brand-blue rule, the app's primary blue (#2563EB) for
+     buttons and links, the shared CareMetric neutrals, a plain sign-off and a footer with
+     the help line and "CareMetric CareBase · cmcarebase.com". The help line names the one
+     address every CareMetric email comes from and replies to (support@caremetric.ai), not the
+     app's own hello@ line, so a customer has one address to write to.
    - "intel": CareMetric Intel's Emberline, exactly as the Intel app sends it
      (kdeyarmin/intel server/lib/emailLayout.ts): near-black canvas, dark card, the ember
      accent, the Geist type, a header with the Intel logo and its "Set your marketing on
@@ -87,14 +89,15 @@ export const intelPalette = Object.freeze({
   brand: '#ff7a45', brandDark: '#ff5a1f', onBrand: '#1a0700', heading: '#f4f4f6', body: '#b9bcc6', muted: '#8d919c',
   hairline: '#2b2d35', panel: '#191b21', canvas: '#07080a', card: '#101116',
 });
-/** CareMetric CareBase's design tokens (kdeyarmin/caremetric-carebase src/styles.css), as its emails use them. */
+/** CareMetric CareBase's email colors (kdeyarmin/PennTrain supabase/functions/_shared/emailLayout.ts, EMAIL_COLORS). */
 export const CAREBASE_SITE = 'https://cmcarebase.com';
 export const carebasePalette = Object.freeze({
-  brand: '#1b6fc2', brandDark: '#16324f', onBrand: '#ffffff', heading: '#0b1220', body: '#0b1220', muted: '#5b6b7c',
-  hairline: '#d5dee8', panel: '#e8eef6', canvas: '#f4f7fb', card: '#ffffff', navy: '#0a1a2e', accent: '#59b2ff', accentSoft: '#b9e4ff',
+  brand: '#2563EB', brandDark: '#1D4ED8', onBrand: '#FFFFFF', heading: '#0F172A', body: '#334155', muted: '#64748B',
+  hairline: '#E2E8F0', panel: '#F8FAFC', canvas: '#F1F5F9', card: '#FFFFFF',
 });
-// The CareBase app's wordmark on navy (its footer and hero): "CareMetric" in white, "CareBase" in the soft accent, then the accent rule.
-const carebaseHeader = ({ font, theme: { palette: p } }) => `<tr><td bgcolor="${p.navy}" style="padding:22px 32px;background-color:${p.navy};border-radius:15px 15px 0 0;border-bottom:3px solid ${p.accent};${font}font-size:20px;line-height:28px;font-weight:600;letter-spacing:-0.2px;color:#ffffff;">CareMetric <span style="font-weight:500;color:${p.accentSoft};">CareBase</span></td></tr>
+// The CareBase app's email header: its official logo lockup on white over the brand-blue rule. With images blocked, the alt text
+// shows the product name in the heading style.
+const carebaseHeader = ({ font, theme: { palette: p } }) => `<tr><td class="cm-header" bgcolor="${p.card}" style="background-color:${p.card};border-radius:11px 11px 0 0;border-bottom:3px solid ${p.brand};padding:20px 32px;"><img src="${CAREBASE_SITE}/brand/email-lockup-carebase.png" width="200" height="50" alt="CareMetric CareBase" style="display:block;width:200px;height:50px;border:0;outline:none;text-decoration:none;${font}font-size:20px;line-height:28px;font-weight:700;color:${p.heading};"></td></tr>
 `;
 const hubHeader = ({ brand, font, theme }) => `<tr><td bgcolor="${theme.palette.brand}" style="padding:20px 32px;background-color:${theme.palette.brand};border-radius:11px 11px 0 0;${font}font-size:20px;line-height:28px;font-weight:700;color:${theme.palette.onBrand};">${escapeHtml(brand || PRODUCT_WORDMARK)}</td></tr>\n`;
 // The Intel app's header: its reverse logo, the product name and tagline, then a still of the Emberline fire.
@@ -112,18 +115,17 @@ export const emailThemes = Object.freeze({
     letter: Object.freeze({ background: '#FFFFFF', text: '#1F2937', fontSize: 15, lineHeight: 23 }),
   }),
   carebase: Object.freeze({
-    key: 'carebase', palette: carebasePalette, colorScheme: 'light', cardRadius: 16,
+    key: 'carebase', palette: carebasePalette, colorScheme: 'light', cardRadius: 12,
     callouts: Object.freeze({
-      info: Object.freeze({ fill: '#eaf5ff', border: carebasePalette.accentSoft, accent: carebasePalette.brand, text: '#102a43' }),
-      success: Object.freeze({ fill: '#d9f0e3', border: '#b7dcc7', accent: '#1f7a4d', text: '#174f37' }),
-      warning: Object.freeze({ fill: '#f3e6d0', border: '#e3cba3', accent: '#8a5a1b', text: '#5e3d12' }),
-      danger: Object.freeze({ fill: '#f3d9d6', border: '#e5b9b4', accent: '#8f2d2d', text: '#6b2020' }),
+      info: Object.freeze({ fill: '#EFF6FF', border: '#BFDBFE', accent: carebasePalette.brand, text: '#1E3A8A' }),
+      success: Object.freeze({ fill: '#F0FDF4', border: '#BBF7D0', accent: '#16A34A', text: '#14532D' }),
+      warning: Object.freeze({ fill: '#FFFBEB', border: '#FDE68A', accent: '#D97706', text: '#78350F' }),
+      danger: Object.freeze({ fill: '#FEF2F2', border: '#FECACA', accent: '#DC2626', text: '#7F1D1D' }),
     }),
-    fontStack: "Inter, 'Segoe UI', system-ui, -apple-system, Helvetica, Arial, sans-serif",
-    headingFontStack: "'Source Serif 4', Georgia, 'Times New Roman', serif",
-    button: Object.freeze({ fill: carebasePalette.brand, text: carebasePalette.onBrand, weight: 600, radius: 12 }),
-    linkAttributes: '', header: carebaseHeader, signerStrong: true,
-    footerAfter: Object.freeze([`Questions? Email ${SUPPORT_EMAIL}.`, 'CareMetric CareBase · cmcarebase.com']),
+    fontStack,
+    button: Object.freeze({ fill: carebasePalette.brand, text: carebasePalette.onBrand, weight: 700, radius: 8 }),
+    linkAttributes: '', header: carebaseHeader, signerStrong: false,
+    footerAfter: Object.freeze([`Need help? Email ${SUPPORT_EMAIL}.`, 'CareMetric CareBase · cmcarebase.com']),
     letter: Object.freeze({ background: '#FFFFFF', text: carebasePalette.heading, fontSize: 15, lineHeight: 23 }),
   }),
   intel: Object.freeze({

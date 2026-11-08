@@ -38,8 +38,8 @@ handed to SendGrid; messages already in flight finish.
 
 ## What every message contains
 
-Messages come from `CareMetric <HUB_BULK_EMAIL_FROM>` with replies to the
-support address. Each one has two parts that say the same thing: plain text,
+Messages come from `CareMetric <HUB_SUPPORT_FROM_EMAIL>` (support@caremetric.ai), the one
+address every Hub email comes from, with replies to the support address. Each one has two parts that say the same thing: plain text,
 and HTML in the shared CareMetric email layout (`server/email-layout.mjs`, the
 personal style also used for support replies). The HTML shows the
 administrator's words exactly as written, with no product header, then the same
@@ -108,7 +108,7 @@ only by the Hub server role.
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `HUB_SENDGRID_API_KEY` | Yes | Mail Send key, shared with support replies. Without it, sending and tests are refused. |
-| `HUB_BULK_EMAIL_FROM` | No | Sender address; defaults to `HUB_SUPPORT_FROM_EMAIL`, then `support@caremetric.ai`. Must be a verified SendGrid sender. |
+| `HUB_SUPPORT_FROM_EMAIL` | No | The one sender for every Hub email, bulk email included (default `support@caremetric.ai`). Must be on a domain authenticated in SendGrid. `HUB_BULK_EMAIL_FROM` is no longer read. |
 | `HUB_BULK_EMAIL_POSTAL_ADDRESS` | No | Mailing address shown in every footer. Required for the Account Manager's customer emails. |
 | `HUB_PUBLIC_ORIGIN` | No | Origin used in unsubscribe links (the existing webhook origin setting). |
 

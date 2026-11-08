@@ -130,7 +130,7 @@ describe('the emails', () => {
       `${unsubscribeLabel}: a personal link is added when the email is sent`,
       postal,
       // The CareBase theme's own footer lines.
-      'Questions? Email support@caremetric.ai.',
+      'Need help? Email support@caremetric.ai.',
       'CareMetric CareBase · cmcarebase.com',
     ].join('\n'));
   });
@@ -177,8 +177,8 @@ describe('the emails', () => {
   it('says nothing about AI, calls, prices, promises or Stripe\'s notices, in any email', () => {
     for (const { input, template, product, link } of every()) {
       // The trial check-in's Founders Sale paragraph (owner decision 2026-11-08) is checked word for word elsewhere; everything else holds.
-      // The support address (support@caremetric.ai, in Intel's footer) is an address, not a mention of AI.
-      const text = lifecyclePreview(input, { postalAddress: postal }).replace(foundersWords(input.productName), '').replace(/[\w.+-]+@caremetric\.ai\b/g, '');
+      // CareMetric's own address in the themes' footers (support@caremetric.ai) is an address, not a mention of AI.
+      const text = lifecyclePreview(input, { postalAddress: postal }).replace(foundersWords(input.productName), '').replace(/\bsupport@caremetric\.ai\b/g, '');
       const label = `${product}/${template}/${link ? 'booking' : 'plain'}`;
       expect(text, label).not.toMatch(/\bAI\b|artificial|assistant|robot|\bbots?\b|automat/i);
       expect(text, label).not.toMatch(/\bcall(?:s|ed|ing)?\b|phone|voicemail|\bdial/i);
@@ -229,7 +229,7 @@ describe('the sent email', () => {
       expect(`Subject: ${email.subject}\n\n${email.text}`).toBe(preview.replace(`${unsubscribeLabel}: a personal link is added when the email is sent`, `${unsubscribeLabel}: ${unsubscribeUrl}`));
       expect(preview.startsWith(lifecycleWording(input))).toBe(true);
       // The branded layout in the theme of the product's app, with its inbox preview: Intel's Emberline header (its logo, tagline
-      // and fire image), or CareBase's navy wordmark band.
+      // and fire image), or CareBase's logo on white over its blue rule.
       expect(email.html).toContain(`${LAYOUT_MARKER}="branded"`);
       if (input.product === 'caremetric-intel') {
         expect(email.html).toContain('data-theme="intel"');
@@ -237,7 +237,7 @@ describe('the sent email', () => {
         expect(email.html).toContain('Set your marketing on FIRE!');
       } else {
         expect(email.html).toContain('data-theme="carebase"');
-        expect(email.html).toContain('CareMetric <span style="font-weight:500;color:#b9e4ff;">CareBase</span>');
+        expect(email.html).toContain('https://cmcarebase.com/brand/email-lockup-carebase.png');
       }
       expect(email.html).toContain(escapeHtml(lifecycleEmail(input).preheader));
       expect(email.html).toContain(`<a href="${unsubscribeUrl}" target="_blank"`);
