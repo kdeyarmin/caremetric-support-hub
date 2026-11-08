@@ -1,6 +1,6 @@
 # Application SMS sign-in
 
-The Hub's primary login is now [username and password](OWNER_PASSWORD_LOGIN.md). The SMS flow remains for initial password setup and recovery: Telnyx Verify sends and checks six-digit codes for an already registered mobile number. The Railway application creates an opaque, eight-hour HttpOnly session; Supabase Auth does not send or verify codes. Existing database identity, role and tenant records remain authoritative.
+The Hub's primary login is now [email or username and password](OWNER_PASSWORD_LOGIN.md). The SMS flow remains for initial password setup and recovery: Telnyx Verify sends and checks six-digit codes for an already registered mobile number. The Railway application creates an opaque, eight-hour HttpOnly session; Supabase Auth does not send or verify codes. Existing database identity, role and tenant records remain authoritative.
 
 ## Deployment
 
@@ -49,5 +49,5 @@ The repository includes unit tests for provider verdicts, fixed RPC boundaries, 
 
 The September 11 pre-cutover check at `ba98048` passed both CI jobs, including the isolated SMS integration tests. That historical deployment hold is superseded: the Node service and database connection are deployed, and production records contain 16 provider-backed challenges matched to successful SMS sessions. During this audit, the owner completed a fresh sign-in on November 8 at 00:01:52 UTC; SMS verification, owner authorization, billing/dashboard reads, and all eight connected-application capability/overview reads returned HTTP 200. See [live flow verification](LIVE_FLOW_VERIFICATION.md) for evidence, remaining scope, and the interactive `npm run verify:live` command. These checks do not verify every later release, mutation, or provider workflow.
 
-Password sign-in requires its separate migration, application release and owner enrollment described in [Owner username and password](OWNER_PASSWORD_LOGIN.md).
+Password sign-in requires its separate migration, application release and owner enrollment described in [Owner email or username and password](OWNER_PASSWORD_LOGIN.md).
 

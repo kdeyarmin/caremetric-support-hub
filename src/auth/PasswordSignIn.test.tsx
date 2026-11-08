@@ -5,23 +5,23 @@ import { PasswordSignIn } from './PasswordSignIn';
 const api=vi.hoisted(()=>({signInWithPassword:vi.fn(),start:vi.fn(),verify:vi.fn()}));
 vi.mock('../lib/appSession',()=>({appSession:api}));
 afterEach(()=>{cleanup();vi.resetAllMocks();});
-it('uses username/password by default and lets the password manager recognize the fields',async()=>{
+it('uses email/password by default and lets the password manager recognize the fields',async()=>{
   api.signInWithPassword.mockResolvedValue(undefined);const remember=vi.fn();
   render(<PasswordSignIn rememberPath={remember}/>);
   expect(screen.queryByLabelText('Mobile number')).toBeNull();
-  const username=screen.getByLabelText('Username'),password=screen.getByLabelText('Password');
+  const username=screen.getByLabelText('Email or username'),password=screen.getByLabelText('Password');
   expect(username.getAttribute('autocomplete')).toBe('username');expect(password.getAttribute('autocomplete')).toBe('current-password');
-  fireEvent.change(username,{target:{value:'owner'}});fireEvent.change(password,{target:{value:'test-only long password'}});
+  fireEvent.change(username,{target:{value:'owner@example.com'}});fireEvent.change(password,{target:{value:'H7!mQ2vR8z'}});
   fireEvent.click(screen.getByRole('button',{name:'Sign in'}));
-  await waitFor(()=>expect(api.signInWithPassword).toHaveBeenCalledWith('owner','test-only long password'));
+  await waitFor(()=>expect(api.signInWithPassword).toHaveBeenCalledWith('owner@example.com','H7!mQ2vR8z'));
   expect(remember).toHaveBeenCalledWith();expect(api.start).not.toHaveBeenCalled();
 });
 it('shows a failed login without retaining its password or claiming success',async()=>{
-  api.signInWithPassword.mockRejectedValue(new Error('The username or password is incorrect.'));
+  api.signInWithPassword.mockRejectedValue(new Error('The sign-in details are incorrect.'));
   render(<PasswordSignIn rememberPath={vi.fn()}/>);
-  fireEvent.change(screen.getByLabelText('Username'),{target:{value:'owner'}});fireEvent.change(screen.getByLabelText('Password'),{target:{value:'wrong password'}});
+  fireEvent.change(screen.getByLabelText('Email or username'),{target:{value:'owner@example.com'}});fireEvent.change(screen.getByLabelText('Password'),{target:{value:'wrong password'}});
   fireEvent.click(screen.getByRole('button',{name:'Sign in'}));
-  expect((await screen.findByRole('alert')).textContent).toBe('The username or password is incorrect.');
+  expect((await screen.findByRole('alert')).textContent).toBe('The sign-in details are incorrect.');
   expect(screen.getByLabelText('Password')).toHaveProperty('value','');
 });
 it('uses SMS only when requested for setup/recovery and returns to the Security page',async()=>{
