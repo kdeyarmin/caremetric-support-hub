@@ -1,7 +1,8 @@
 -- The Sales Executive: a new member of the AI team for CareBase and CareMetric Intel. It answers prospects (website leads, sales
 -- inquiries and replies to the Marketing Manager's outreach) with drafts checked against the go-to-market fact sheet, moves each one
--- toward a free trial and a paid plan, and sends the owner a weekly pipeline review. Every reply it drafts is a `communication.reply`
--- action, which the reply executor refuses to send unless the owner approved it, whatever the agent's autonomy.
+-- toward a free trial and a paid plan, without demos or meetings, and sends the owner a weekly pipeline review. A drafted answer by email or
+-- chat is a `communication.answer`, which waits for the owner until the owner hands "Sales answers" over; everything else is a
+-- `communication.reply`, which the reply executor refuses to send unless the owner approved it, whatever the agent's autonomy.
 --
 -- It starts paused, in Propose. Nothing here sends anything or changes another agent. While it is paused, the Support Concierge keeps
 -- handling prospects exactly as before (its fixed sales acknowledgment); once the owner resumes it, the Concierge hands each prospect
@@ -86,6 +87,15 @@ begin
   return jsonb_build_object('handoff', true, 'product', v_product);
 end;
 $$;
+
+-- "Sales answers" (off): after a supervised week, a checked, drafted answer to a prospect, going back by email or chat with at least
+-- one cited source, is sent without waiting for the owner, as a `communication.answer` (the session-less path the Concierge's support
+-- answers use, which re-checks the agent's trust before sending and authors the message as the CareMetric AI Assistant). The fixed
+-- acknowledgment and anything sent by text message still wait for the owner.
+insert into private.agent_autonomy_steps (category, label, requires_feature, changes) values
+  ('sales_answers', 'Sales answers', 'platform.agents.sales-executive.v1',
+    '[{"agent": "sales_executive", "config_key": "auto_approve_kinds", "values": ["communication.answer"]}]')
+on conflict (category) do nothing;
 
 revoke all on function private.sales_handoff(uuid, uuid) from public, anon, authenticated, service_role;
 grant execute on function private.sales_handoff(uuid, uuid) to hub_app_server;

@@ -89,7 +89,7 @@ claim still comes from the fact sheet (`server/agents/content/facts.mjs`, the co
 - **Fit assessment** (`growth-fit.2`) scores with a written rubric whose bands line up with qualification (`qualify.1`, fit 75 or
   more): only an operator in the product's segment and territory, shown by its own sources, can reach 75; a directory, a vendor or an
   out-of-territory organization stays below 30.
-- **Drafting** (`growth.2`) gives the writer the fact sheet and the playbook in the cached system prompt, the touch it is writing
+- **Drafting** (`growth.3`) gives the writer the fact sheet and the playbook in the cached system prompt, the touch it is writing
   and that touch's job (1: a likely problem as a question and the free trial; 2: a different angle, a resource or the Founders Sale,
   and one qualifying question; 3: a short close-the-loop), or the play for a customer moment (the trial play explains activating a
   paid plan with FOUNDERS50), the organization's name and domain, and the product's own pages it may link to. Every model draft must
@@ -102,6 +102,15 @@ claim still comes from the fact sheet (`server/agents/content/facts.mjs`, the co
   named competitor, product-page links, the other product's page, daily discovery rotation and directory filtering.
 - The **Sales Executive** (see [AI team](AI_TEAM.md#the-sales-executive)) answers prospects' replies and inquiries from the same
   playbook and sends a weekly pipeline review.
+
+**Selling without demos (owner decision 2026-11-08, `sales-playbook.2`, `growth.3`).** No agent offers or suggests a demo, a sales call
+or a meeting. Outreach and customer emails point to the free trial and the product's walkthrough pages and invite a reply by email; the
+template path (used without a model) says "You can see how it works and try it free" with the trial link instead of offering a
+conversation. The playbook has a "demo" objection for both products: send the walkthrough, the matching guide and the free trial.
+
+**The Founders Sale reaches trials on its own (`20261108200000_founders_sale_offer.sql`).** The Account Manager's offer menu holds the
+live Founders coupon for CareBase and Intel trials ending within seven days (at most 50 a month, switched on); the existing menu rules
+and the "Offers" step decide each use. The trial check-in email names it ("ask us for FOUNDERS50", in its exact terms).
 
 Changing the playbook's wording changes what the models read: bump `playbookVersion`, run `npm test -- server/growth` and
 `npm run evaluate:growth`, and review the next drafts before widening any autonomy.

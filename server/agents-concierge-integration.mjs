@@ -241,7 +241,7 @@ try {
   assert.deepEqual([outcomeOf(flow.lead).result.category, outcomeOf(flow.lead).result.product, outcomeOf(flow.lead).result.severity, outcomeOf(flow.lead).result.reply, outcomeOf(flow.lead).result.template],
     ['sales', 'advisors', 'warning', 'proposed', 'sales']);
   assert.match((await row("select preview from private.agent_actions where target_id = $1 and kind = 'communication.reply'", [`CM-${flow.lead.reference}`])).preview,
-    /^Hello,\n\nThank you for reaching out to CareMetric\. I have your request, and I will follow up with you personally today\.$/);
+    /^Hello,\n\nThank you for reaching out to CareMetric\. We have your request and will reply here with the information you need\.$/);
   assert.deepEqual(outcomeOf(flow.autoReply).result, { outcome: 'skipped', reason: 'auto_reply', reference: flow.autoReply.reference });
   assert.deepEqual(outcomeOf(flow.handled).result, { outcome: 'skipped', reason: 'answered', reference: flow.handled.reference }, 'a conversation a person answered is left alone');
   const supersededTasks = triage.filter(entry => entry.source_ref === `CM-${flow.superseded.reference}`);

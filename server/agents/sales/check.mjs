@@ -5,7 +5,7 @@
  *
  * - Terms are rewritten where the meaning is plain (Assisted Living Residence and ALR become Assisted Living Facility and ALF, an
  *   auditor becomes a surveyor); an auditor of another kind rejects the draft.
- * - Rejected: an empty or overlong reply; markup; a link that is not one of the product's own pages or the owner's booking page; an
+ * - Rejected: an empty or overlong reply; markup; a link that is not one of the product's own pages or a help-center guide it was given; an
  *   identifier; anything the fact-sheet rules refuse (an unlisted price or number, a guarantee or compliance assurance, a
  *   certification, voice AI, a call or demo as a step, a named competitor, testimonials, "prove" about CareBase, contact details);
  *   a price of the other product; a promise of a refund, a credit, a trial extension, special pricing or a time frame; a mention of
@@ -13,8 +13,8 @@
  */
 import { echoCandidates, quotesCustomer, wordsOf } from '../concierge/draft.mjs';
 import { screenIdentifiers } from '../concierge/screen.mjs';
-import { bookingLink, smsLimit, wrapReply } from '../concierge/templates.mjs';
-import { factSheetText } from '../content/facts.mjs';
+import { smsLimit, wrapReply } from '../concierge/templates.mjs';
+import { factSheetText, helpCenterOrigin } from '../content/facts.mjs';
 import { allowedNumbers, normalizeTerms, textProblems } from '../content/validate.mjs';
 import { productAmounts } from '../../growth/draft.mjs';
 import { linkablePages, playbookFor, playbookText } from '../../growth/playbook.mjs';
@@ -31,10 +31,16 @@ const trailing = /[.,;:!?)\]]+$/;
 const promise = /\b(?:refund(?:s|ed)?|credit(?:s|ed)? (?:to|back|your)|extend(?:ed|ing)? (?:your |the )?trial|trial extension|special (?:price|pricing|rate|discount)|custom (?:price|pricing|discount)|price match|(?:extra|additional) discount|within (?:\d+|a|an|one|two|three|four|five|the next) (?:minutes?|hours?|days?|business|weeks?)|by (?:tomorrow|today|tonight|monday|tuesday|wednesday|thursday|friday|end of (?:the )?(?:day|week))|we will (?:fix|resolve|refund|credit|waive))\b/i;
 const aiMention = /\b(?:as an ai|language model|artificial intelligence|ai assistant|automated (?:reply|response|assistant)|chatbot|i am an? (?:ai|assistant|bot|model))\b|\bsystem prompt\b|\b(?:my|these|the) instructions\b/i;
 
-/** The links a reply about `product` may contain: the product's own pages and the owner's booking page. */
-export function replyLinks(product, bookingUrl = null) {
-  const booking = bookingLink(bookingUrl);
-  return [...linkablePages(product).map(page => ({ label: page.label, url: page.url })), ...(booking ? [{ label: 'Pick a time that suits you', url: booking }] : [])];
+/** The links a reply about `product` may contain: the product's own pages. No booking page: CareMetric sells without meetings. */
+export function replyLinks(product) {
+  return linkablePages(product).map(page => ({ label: page.label, url: page.url }));
+}
+
+/** Published, public help-center guides as links (`{ label, url }`), only on the help center's own article addresses. */
+export function guideLinks(guides = []) {
+  const prefix = `${helpCenterOrigin}/help/articles/`;
+  return (Array.isArray(guides) ? guides : []).filter(guide => typeof guide?.url === 'string' && guide.url.startsWith(prefix) && /^[a-z0-9.-]+$/.test(guide.url.slice(prefix.length)))
+    .slice(0, 3).map(guide => ({ label: String(guide.title ?? 'Guide').slice(0, 150), url: guide.url }));
 }
 
 /**
@@ -42,11 +48,11 @@ export function replyLinks(product, bookingUrl = null) {
  * @param {string} input.reply the model's draft
  * @param {'carebase'|'caremetric-intel'} input.product
  * @param {'sms'|'email'|'chat'} input.route
- * @param {string|null} input.bookingUrl the owner's booking page
+ * @param {{ url: string }[]} input.guides the help-center guides the model was offered
  * @param {string} input.text the scrubbed prospect text the model was shown (with any history)
  * @returns {{ ok: true, reply: string, body: string } | { ok: false, reason: string }}
  */
-export function checkSalesReply({ reply, product, route, bookingUrl = null, text = '' }) {
+export function checkSalesReply({ reply, product, route, guides = [], text = '' }) {
   const book = playbookFor(product);
   if (!book) return { ok: false, reason: 'product' };
   const terms = normalizeTerms(String(reply ?? '').replace(/\r\n?/g, '\n').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim());
@@ -56,7 +62,7 @@ export function checkSalesReply({ reply, product, route, bookingUrl = null, text
   const body = wrapReply(normalized, route);
   if (route === 'sms' ? body.length > smsLimit : normalized.length > emailReplyLimit) return { ok: false, reason: 'too_long' };
   if (markup.test(normalized)) return { ok: false, reason: 'markup' };
-  const allowed = new Set(replyLinks(product, bookingUrl).map(link => link.url));
+  const allowed = new Set([...replyLinks(product), ...guides].map(link => link.url));
   const links = (normalized.match(linkPattern) ?? []).map(url => url.replace(trailing, ''));
   if (links.some(url => !allowed.has(url))) return { ok: false, reason: 'link' };
   const words = normalized.replace(linkPattern, ' ');

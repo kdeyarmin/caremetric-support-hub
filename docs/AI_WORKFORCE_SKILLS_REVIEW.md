@@ -90,14 +90,16 @@ Everything is checked against the same fact-sheet rules. See [Social media](SOCI
    [Customer growth](CUSTOMER_GROWTH.md#native-product-event-integration)). Without them the review cannot see trials at risk and the
    Account Manager cannot time its plays.
 
-## Decisions left to the owner
+## Owner decisions (November 8)
 
-- **Founders Sale in the Account Manager's trial check-in email.** The fixed check-in template deliberately quotes no price or discount and
-  can be sent without review once "Account emails" is handed over. Adding "ask us for FOUNDERS50 when you activate" there would likely
-  lift conversion; it changes an auto-sendable template, so it was not made here. The model-drafted trial play already says it.
-- **Confirm the GTM facts** still marked "owner to confirm" (prices, claims, cms.gov and census.gov as sources). The agents repeat them.
-- **Cold email:** the earlier recommendation to have counsel review cold email to public role addresses still stands before handing that
-  step over.
+- **Founders Sale in the trial check-in email: yes.** The fixed trial check-in now says "ask us for FOUNDERS50 when you activate your
+  paid plan", in the offer's exact terms. The Account Manager's offer menu also applies the Founders coupon to CareBase and Intel trials
+  ending within a week, so converting trials get it without asking.
+- **No demos.** Every agent sells self-serve: walkthrough pages, matching help-center guides and manuals, the free trial and written
+  answers; none offers a call or a meeting. The Sales Executive can be handed "Sales answers" to answer prospects on its own.
+- **Cold email: approved.** It was already automatic in production (Nov 5), but discovery has never run: `HUB_GROWTH_SEARCH_API_KEY` is
+  not set, so no business has been found to write to. Setting it starts the daily discovery.
+- **Confirm the GTM facts** still marked "owner to confirm": a PDF of the fact sheet was sent for review.
 - **Widen autonomy only on evidence:** review a few weeks of Sales Executive drafts (edit rate, objections, replies, trials started) before
   considering any hand-over. This change adds no autonomy step for it.
 

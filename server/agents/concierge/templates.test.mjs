@@ -43,9 +43,9 @@ describe('the fixed replies', () => {
     }
   });
 
-  it('names no day, except the owner\'s promise to follow up personally in the sales reply', () => {
-    for (const template of ['standard', 'phi']) for (const route of ['email', 'chat', 'sms']) expect(replyBody(template, route), template).not.toMatch(/today|tomorrow/i);
-    for (const route of ['email', 'chat', 'sms']) expect(replyBody('sales', route)).toMatch(/I .*follow up with you personally today\.$/);
+  it('names no day and promises no personal follow-up, in any reply (CareMetric sells without meetings)', () => {
+    for (const template of ['standard', 'phi', 'sales']) for (const route of ['email', 'chat', 'sms']) expect(replyBody(template, route), template).not.toMatch(/today|tomorrow|personally|call|meeting|demo/i);
+    for (const route of ['email', 'chat', 'sms']) expect(replyBody('sales', route)).toMatch(/will reply here with/);
   });
 
   it('refuses a template it does not know', () => {
@@ -56,17 +56,17 @@ describe('the fixed replies', () => {
 const booking = 'https://cal.example.test/caremetric/intro';
 
 describe('the sales reply', () => {
-  it('thanks the prospect in the owner\'s voice and says the owner will follow up personally today', () => {
-    expect(replyBody('sales', 'email')).toBe('Hello,\n\nThank you for reaching out to CareMetric. I have your request, and I will follow up with you personally today.');
+  it('thanks the prospect and says the information will come here', () => {
+    expect(replyBody('sales', 'email')).toBe('Hello,\n\nThank you for reaching out to CareMetric. We have your request and will reply here with the information you need.');
     expect(replyBody('sales', 'chat')).toBe(replyBody('sales', 'email'));
-    expect(replyBody('sales', 'sms')).toBe('Hello, Thanks for reaching out to CareMetric. I have your request and will follow up with you personally today.');
+    expect(replyBody('sales', 'sms')).toBe('Hello, Thanks for reaching out to CareMetric. We have your request and will reply here with what you need.');
   });
 
   it('offers the owner\'s booking page when one is set', () => {
     expect(replyBody('sales', 'email', { bookingUrl: booking })).toBe(
-      `Hello,\n\nThank you for reaching out to CareMetric. I have your request, and I will follow up with you personally today.\n\nIf you would like to set a time now, pick a time that suits you: ${booking}`);
+      `Hello,\n\nThank you for reaching out to CareMetric. We have your request and will reply here with the information you need.\n\nIf you would like to set a time now, pick a time that suits you: ${booking}`);
     expect(replyBody('sales', 'sms', { bookingUrl: booking })).toBe(
-      `Hello, Thanks for reaching out to CareMetric. I have your request and will follow up with you personally today. Or pick a time that suits you: ${booking}`);
+      `Hello, Thanks for reaching out to CareMetric. We have your request and will reply here with what you need. Or pick a time that suits you: ${booking}`);
   });
 
   it('leaves the link out of a text message it would not fit, and out of every other reply', () => {

@@ -16,10 +16,14 @@ export const salesDeclared = features => (features instanceof Set ? features.has
 export const salesDraftingFor = ({ model = null, customerTextToAi = false } = {}) =>
   (customerTextToAi === true && model?.configured === true && typeof model.run === 'function' ? { model } : null);
 
-export function salesHandlers({ store, notifier, model = null, growth = null, features = null, customerTextToAi = false, bookingUrl = null, publicOrigin = null, log }) {
+const answersFeature = 'platform.agents.concierge-autosend.v1';
+
+export function salesHandlers({ store, notifier, model = null, growth = null, features = null, customerTextToAi = false, bookingUrl = null, publicOrigin = null, guides = null, log }) {
   if (!salesDeclared(features)) return {};
+  const drafting = salesDraftingFor({ model, customerTextToAi });
+  const answers = features instanceof Set ? features.has(answersFeature) : Array.isArray(features) && features.includes(answersFeature);
   return {
-    'sales.reply': salesReplyHandler({ store, notifier, drafting: salesDraftingFor({ model, customerTextToAi }), bookingUrl, log }),
+    'sales.reply': salesReplyHandler({ store, notifier, drafting: drafting ? { ...drafting, guides } : null, bookingUrl, answers, log }),
     ...(growth?.store?.snapshot ? { 'sales.review': salesReviewHandler({ store, growth, notifier, publicOrigin, log }) } : {}),
   };
 }

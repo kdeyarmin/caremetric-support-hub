@@ -16,10 +16,10 @@
 import { replyRoute } from '../concierge/policy.mjs';
 import { redact } from '../concierge/redact.mjs';
 import { screenIdentifiers } from '../concierge/screen.mjs';
-import { bookingLink, replyBody } from '../concierge/templates.mjs';
+import { replyBody } from '../concierge/templates.mjs';
 import { easternDate, easternMidnight } from '../accounts/week.mjs';
 import { permanent, recordRun } from '../tasks/shared.mjs';
-import { checkSalesReply, replyLinks, wordLimits } from './check.mjs';
+import { checkSalesReply, guideLinks, replyLinks, wordLimits } from './check.mjs';
 import { buildUserMessage, responseSchema, salesPromptVersion, systemPrompt } from './prompt.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -41,10 +41,13 @@ function skipReason(snapshot, payload) {
 }
 
 /**
- * `drafting` is `{ model }` when prospect text may go to the model (the owner's explicit switch and a model key), and null otherwise.
- * `bookingUrl` is the owner's booking page (HUB_BOOKING_URL).
+ * `drafting` is `{ model, guides? }` when prospect text may go to the model (the owner's explicit switch and a model key), and null
+ * otherwise; `guides` is the published guide library, whose public guides a reply may link to. `answers` is true when the database
+ * admits session-less answers (platform.agents.concierge-autosend.v1): a checked, drafted answer going back by email or chat is then a
+ * `communication.answer`, which goes out without the owner's session once approved, or on its own once the owner hands "Sales answers"
+ * over. `bookingUrl` (HUB_BOOKING_URL) is used only by the fixed acknowledgment, as the Concierge's; drafts never offer a meeting.
  */
-export function salesReplyHandler({ store, notifier = null, drafting = null, bookingUrl = null, log = line => console.warn(line) }) {
+export function salesReplyHandler({ store, notifier = null, drafting = null, bookingUrl = null, answers = false, log = line => console.warn(line) }) {
   async function askModel({ task, snapshot, inbound, route, payload, signal }) {
     const prior = (snapshot.messages ?? []).filter(message => message.id !== inbound.id).slice(-2);
     if (prior.some(message => message.body.length >= readChars)) return { state: 'unavailable', reason: 'thread_truncated' };
@@ -52,8 +55,10 @@ export function salesReplyHandler({ store, notifier = null, drafting = null, boo
     const history = prior.map(message => ({ direction: message.direction, text: redact(message.body, { limit: 1000 }).text }));
     const text = redact(inbound.body).text;
     if (text.length < 4) return { state: 'no_text' };
-    const links = replyLinks(payload.product, bookingUrl);
-    const booking = bookingLink(bookingUrl);
+    const links = replyLinks(payload.product);
+    // The published guides that match the question, as manuals the prospect can read on their own (public ones only).
+    let guides = [];
+    try { guides = guideLinks(await drafting.guides?.top?.(text, { productSlug: payload.product }) ?? []); } catch { guides = []; }
     const effort = efforts.has(task.agent?.config?.effort) ? task.agent.config.effort : 'medium';
     let result;
     try {
@@ -61,7 +66,7 @@ export function salesReplyHandler({ store, notifier = null, drafting = null, boo
         promptVersion: salesPromptVersion, system: [{ text: systemPrompt, cache: true }], schema: responseSchema, effort, maxTokens: 3000,
         user: buildUserMessage({
           product: products[payload.product], channel: snapshot.channel, stage: payload.opportunity?.stage ?? null, contacted: payload.opportunity?.contacted === true,
-          firstMessage: (snapshot.outboundCount ?? 0) === 0, words: wordLimits[route], links, booking, text, history,
+          firstMessage: (snapshot.outboundCount ?? 0) === 0, words: wordLimits[route], links, guides, text, history,
         }),
         describe: output => `Read CM-${snapshot.reference} (${products[payload.product]} prospect): ${output.intent}${output.needsOwner ? ', needs the owner' : ''}${output.possiblePhi ? ', possible identifiers' : ''}; next step ${output.nextStep}.`,
       }, { signal });
@@ -76,37 +81,46 @@ export function salesReplyHandler({ store, notifier = null, drafting = null, boo
     if (ownerOnly.has(reading.intent)) return { state: 'owner_only', intent: reading.intent };
     if (reading.intent === 'support') return { state: 'support', intent: reading.intent };
     if (reading.needsOwner || !reading.reply.trim()) return { state: 'needs_owner', intent: reading.intent };
-    const checked = checkSalesReply({ reply: reading.reply, product: payload.product, route, bookingUrl, text: [text, ...history.map(message => message.text)].join('\n') });
+    const checked = checkSalesReply({ reply: reading.reply, product: payload.product, route, guides, text: [text, ...history.map(message => message.text)].join('\n') });
     if (!checked.ok) return { state: 'rejected', reason: checked.reason, intent: reading.intent };
-    return { state: 'drafted', intent: reading.intent, nextStep: reading.nextStep, draft: checked };
+    const cited = guides.filter(guide => checked.reply.includes(guide.url)).map(guide => guide.label);
+    return { state: 'drafted', intent: reading.intent, nextStep: reading.nextStep, draft: checked, sources: ['CareMetric fact sheet', 'Sales playbook', ...cited].slice(0, 5) };
   }
 
-  async function propose({ task, snapshot, route, body, template, intent, payload }) {
+  async function propose({ task, snapshot, route, body, template, intent, payload, sources = [] }) {
+    const base = { communicationId: snapshot.id, reference: snapshot.reference, channel: snapshot.channel, route, basedOnMessageId: snapshot.headMessageId, body };
+    // A checked draft going back by email or chat is an answer: exactly the fields the database admits for one.
+    const answer = answers && template === 'drafted' && (route === 'email' || route === 'chat') && sources.length >= 1;
     try {
-      const proposal = await store.proposeAction({
-        taskId: task.id, kind: 'communication.reply', targetKind: 'communication', targetId: `CM-${snapshot.reference}`, preview: body,
-        input: {
-          communicationId: snapshot.id, reference: snapshot.reference, channel: snapshot.channel, route, basedOnMessageId: snapshot.headMessageId,
-          body, classification: { category: template === 'standard' ? 'general' : 'sales', phi: template === 'phi', ...(template === 'drafted' ? { drafted: true } : {}) }, template,
-          ...(template === 'drafted' ? { sources: ['CareMetric fact sheet', 'Sales playbook'], intent } : {}), product: payload.product,
-        },
-      });
-      return proposal.created === false ? 'already_proposed' : 'proposed';
+      const proposal = await store.proposeAction(answer
+        ? { taskId: task.id, kind: 'communication.answer', targetKind: 'communication', targetId: `CM-${snapshot.reference}`, preview: body,
+          input: { ...base, classification: { category: 'sales', phi: false, drafted: true }, template: 'drafted', sources } }
+        : { taskId: task.id, kind: 'communication.reply', targetKind: 'communication', targetId: `CM-${snapshot.reference}`, preview: body,
+          input: {
+            ...base, classification: { category: template === 'standard' ? 'general' : 'sales', phi: template === 'phi', ...(template === 'drafted' ? { drafted: true } : {}) }, template,
+            ...(template === 'drafted' ? { sources: sources.length ? sources : ['CareMetric fact sheet', 'Sales playbook'], intent } : {}), product: payload.product,
+          } });
+      if (proposal.created === false) return 'already_proposed';
+      return answer ? (proposal.status === 'auto_approved' ? 'answer_approved' : 'answer_proposed') : 'proposed';
     } catch (error) {
       if (error?.code === '42501') return 'observe_only';
       throw error;
     }
   }
 
-  // The owner already has the Concierge's alert about the message; this one says a drafted answer is waiting for approval.
-  async function tellOwner({ task, snapshot, payload, now }) {
+  // The owner already has the Concierge's alert about the message; this one says a drafted answer is waiting for approval, or that it
+  // is going out on its own because the owner handed sales answers over.
+  async function tellOwner({ task, snapshot, payload, now, sent = false }) {
     if (!notifier) return null;
     try {
       const since = easternMidnight(easternDate(now()));
       if (await store.notificationCount({ prefix: 'sales:draft:', channel: 'email', since }) >= dailyDraftAlerts) return 'capped';
       const results = await notifier.send({
-        severity: 'info', subject: `Reply drafted for CM-${snapshot.reference}, a ${products[payload.product]} prospect`,
-        body: `The Sales Executive drafted an answer to CM-${snapshot.reference} from the fact sheet and the sales playbook.\n\nOpen the AI team to read it, edit it if you like, and approve it. Nothing has been sent to the prospect.`,
+        severity: 'info',
+        subject: sent ? `Answered CM-${snapshot.reference}, a ${products[payload.product]} prospect` : `Reply drafted for CM-${snapshot.reference}, a ${products[payload.product]} prospect`,
+        body: sent
+          ? `The Sales Executive answered CM-${snapshot.reference} on its own, from the fact sheet, the sales playbook and your published guides.\n\nOpen the conversation in Communications to read it. Anything that needs you personally is still left for you.`
+          : `The Sales Executive drafted an answer to CM-${snapshot.reference} from the fact sheet, the sales playbook and your published guides.\n\nOpen the AI team to read it and approve it. Nothing has been sent to the prospect.`,
         dedupeKey: `sales:draft:${payload.messageId}`, agentKey: task.agentKey, taskId: task.id, communicationReference: snapshot.reference,
       });
       return results.map(item => `${item.channel}:${item.delivery}`).join(',');
@@ -144,11 +158,12 @@ export function salesReplyHandler({ store, notifier = null, drafting = null, boo
 
     let alert = null;
     if (template) {
-      outcome = await propose({ task, snapshot, route, body, template, intent: asked.intent ?? null, payload });
-      if (template === 'drafted' && outcome === 'proposed') alert = await tellOwner({ task, snapshot, payload, now });
+      outcome = await propose({ task, snapshot, route, body, template, intent: asked.intent ?? null, payload, sources: asked.sources ?? [] });
+      if (template === 'drafted' && ['proposed', 'answer_proposed', 'answer_approved'].includes(outcome)) alert = await tellOwner({ task, snapshot, payload, now, sent: outcome === 'answer_approved' });
     }
-    const proposed = ['proposed', 'already_proposed'].includes(outcome);
-    const words = { drafted: 'drafted answer', phi: 'identifier notice', sales: 'sales acknowledgment', standard: 'acknowledgment' }[template] ?? null;
+    // An answer waits like a reply: for the owner, or for the drain that sends it once approved on its own.
+    const proposed = ['proposed', 'already_proposed', 'answer_proposed', 'answer_approved'].includes(outcome);
+    const words = { drafted: outcome === 'answer_approved' ? 'answer approved to send' : 'drafted answer', phi: 'identifier notice', sales: 'sales acknowledgment', standard: 'acknowledgment' }[template] ?? null;
     const why = asked.state === 'drafted' ? '' : asked.state === 'rejected' ? `; draft not used (${asked.reason.replaceAll('_', ' ')})`
       : asked.state === 'unavailable' ? `; the model was unavailable (${asked.reason.replaceAll('_', ' ')})` : asked.state === 'off' ? '; prospect text to AI is off' : `; ${asked.state.replaceAll('_', ' ')}`;
     await recordRun({ store, log }, task, {

@@ -10,7 +10,14 @@
  */
 import { products as facts, productPages } from '../agents/content/facts.mjs';
 
-export const playbookVersion = 'sales-playbook.1';
+export const playbookVersion = 'sales-playbook.2';
+
+/**
+ * How CareMetric sells (owner decision 2026-11-08): entirely self-serve. Nobody offers a demo, a sales call or a meeting. A prospect gets
+ * whatever they need to decide on their own: the walkthrough pages, the guides and manuals in the help center, the free trial, and
+ * written answers to every question.
+ */
+export const sellingPrinciple = 'Selling is self-serve. Never offer or suggest a demo, a sales call or a meeting. Give the prospect what they need to decide on their own: the product\'s walkthrough pages, the most relevant guide or manual, the free trial to try it with their own team, and a written answer to every question.';
 
 const deepFreeze = value => {
   if (value && typeof value === 'object') for (const child of Object.values(value)) deepFreeze(child);
@@ -98,6 +105,7 @@ export const salesPlaybook = deepFreeze({
       { key: 'switching', when: 'Switching is hard, or staff will not adopt it.', answer: 'Suggest starting with one workflow, such as staff training, during the free trial, and offer help setting up facilities and the staff roster.' },
       { key: 'authority', when: 'They must ask an owner, a partner or a corporate office.', answer: 'Offer a short summary they can forward (who it is for, what it does, the price for their homes, the trial) and ask who else should see it.' },
       { key: 'security', when: 'Security, privacy or HIPAA questions.', answer: 'Do not state certifications. Say the owner will answer security questions personally and set needsOwner.' },
+      { key: 'demo', when: 'They ask for a demo, a call or a meeting.', answer: 'CareMetric does not do live demos or sales calls. Offer the written walkthrough instead: the how-it-works page or the guide that shows what they want to see, the 30-day free trial to try it with their own staff and records, and answers to any question by email.' },
       { key: 'fit', when: 'They are not a Pennsylvania personal care home or ALF.', answer: 'Be honest that CareBase is built for Pennsylvania Chapter 2600 and 2800 homes. If they are a home health, hospice or other agency that markets to referral sources, CareMetric Intel may fit instead.' },
     ],
   },
@@ -155,6 +163,7 @@ export const salesPlaybook = deepFreeze({
       { key: 'current_system', when: 'They already use a CRM, a spreadsheet or another data tool.', answer: 'Ask what it leaves out (territory analysis, focused lists, recorded referrals in one place). Never name or criticize another product.' },
       { key: 'data_trust', when: 'They ask whether the data shows real referrals.', answer: 'Be precise: public Medicare and Census figures are research signals; referrals are what the organization records in Intel.' },
       { key: 'authority', when: 'They must ask an owner or a corporate office.', answer: 'Offer a short summary they can forward and ask who else should see it.' },
+      { key: 'demo', when: 'They ask for a demo, a call or a meeting.', answer: 'CareMetric does not do live demos or sales calls. Offer the written walkthrough instead: the resource or guide that shows what they want to see, the 14-day free trial (no credit card) on one county, and answers to any question by email.' },
       { key: 'results', when: 'They ask for proof of results or case studies.', answer: 'There are no approved customer results to share. Suggest the free trial on one county so they can judge it on their own market.' },
     ],
   },
@@ -176,10 +185,10 @@ export const touchAngle = touch => sequencePlan[Math.min(Math.max(Number(touch) 
 
 /** How the Account Manager and the Sales Executive handle each customer-success moment. */
 export const lifecyclePlays = deepFreeze({
-  onboarding: 'Welcome them, ask what outcome would make the product worth keeping, and offer the single first setup step that leads to it.',
-  activation: 'They have not reached first value yet. Name the one setup step that is usually missing and offer help with it; ask what is in the way.',
+  onboarding: 'Welcome them, ask what outcome would make the product worth keeping, and point to the guide for the single first setup step that leads to it.',
+  activation: 'They have not reached first value yet. Name the one setup step that is usually missing, point to its guide, and ask what is in the way.',
   trial: 'Before the trial ends: recap the goal they named, ask what is left to decide, and explain how to activate a paid plan, including asking CareMetric for FOUNDERS50 (the Founders Sale terms on the fact sheet). Never pressure and never invent an extension.',
-  adoption: 'Use has stalled. Ask whether the workflow still fits and what is in the way, and offer help with one specific step.',
+  adoption: 'Use has stalled. Ask whether the workflow still fits and what is in the way, and point to the guide for one specific step.',
   renewal: 'Ahead of renewal, recap the goals they set, ask what is working and what is not, and invite open questions.',
   support: 'An open support issue comes first: acknowledge it and say the team is working with them on it. No sales or upgrade talk.',
   recovery: 'They asked to cancel. Ask what led to it and whether anything would change their mind. No pressure and no invented offers.',
@@ -233,7 +242,7 @@ export function operatorHost(host) {
 
 /** The playbook as the model reads it: constant text, cached with the system prompt. */
 export function playbookText(only = null) {
-  const lines = [`CareMetric sales playbook (version ${playbookVersion}). Method only: every fact you state still comes from the fact sheet.`];
+  const lines = [`CareMetric sales playbook (version ${playbookVersion}). Method only: every fact you state still comes from the fact sheet.`, sellingPrinciple];
   for (const book of Object.values(salesPlaybook)) {
     if (only && book.product !== only) continue;
     lines.push('', `${book.name}`, `Territory: ${book.territory}`,

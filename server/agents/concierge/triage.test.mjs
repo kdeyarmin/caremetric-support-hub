@@ -257,7 +257,7 @@ describe('proposing a fixed reply', () => {
 
 describe('a website lead', () => {
   const lead = (body, overrides = {}) => snapshotOf(body, { channel: 'web_form', productSlug: 'carebase', inquiryType: 'sales', sourceSystem: 'carebase.web', subject: null, ...overrides });
-  const thanks = 'Hello,\n\nThank you for reaching out to CareMetric. I have your request, and I will follow up with you personally today.';
+  const thanks = 'Hello,\n\nThank you for reaching out to CareMetric. We have your request and will reply here with the information you need.';
   const booking = 'https://cal.example.test/caremetric/intro';
 
   it('is a sales inquiry whatever its words say: a warning to the owner, and the sales acknowledgment proposed', async () => {

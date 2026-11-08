@@ -17,17 +17,17 @@ const now = () => new Date('2026-11-08T15:00:00Z');
 const answer = (over = {}) => ({ outcome: 'completed', output: { intent: 'pricing', possiblePhi: false, needsOwner: false, nextStep: 'start_trial',
   reply: 'CareBase Core is $199 per facility per month, with unlimited residents and staff.\n\nYou can start a 30-day free trial here:\nhttps://cmcarebase.com/signup', ...over } });
 
-const fixture = ({ snapshot = snapshotOf(`How much is CareBase? ${canary}`), model = null, bookingUrl = null } = {}) => {
+const fixture = ({ snapshot = snapshotOf(`How much is CareBase? ${canary}`), model = null, bookingUrl = null, answers = false, guides = null, status = 'proposed' } = {}) => {
   const sent = [];
   const store = {
     communicationSnapshot: vi.fn(async () => snapshot),
     notificationCount: vi.fn(async () => 0),
     startRun: vi.fn(async () => 'run-1'),
     finishRun: vi.fn(async () => undefined),
-    proposeAction: vi.fn(async () => ({ id: 'action-1', status: 'proposed', requestKey: 'k1', created: true })),
+    proposeAction: vi.fn(async () => ({ id: 'action-1', status, requestKey: 'k1', created: true })),
   };
   const notifier = { send: vi.fn(async input => { sent.push(input); return [{ channel: 'email', delivery: 'sent' }]; }) };
-  const handler = salesReplyHandler({ store, notifier, drafting: model ? { model } : null, bookingUrl, log: () => {} });
+  const handler = salesReplyHandler({ store, notifier, drafting: model ? { model, guides } : null, bookingUrl, answers, log: () => {} });
   return { store, notifier, sent, run: (task = taskOf()) => handler(task, { now }) };
 };
 const modelOf = (result = answer()) => ({ configured: true, run: vi.fn(async () => (typeof result === 'function' ? result() : result)) });
@@ -39,7 +39,7 @@ describe('the Sales Executive answering a prospect', () => {
     const harness = fixture({ model });
     const outcome = await harness.run();
     const request = model.run.mock.calls[0][1];
-    expect(request.promptVersion).toBe('sales.1');
+    expect(request.promptVersion).toBe('sales.2');
     expect(request.user).toContain(`How much is CareBase? ${canary}`);
     expect(request.system[0].text).not.toContain(canary);
     expect(harness.store.proposeAction).toHaveBeenCalledWith(expect.objectContaining({
@@ -55,7 +55,8 @@ describe('the Sales Executive answering a prospect', () => {
 
   it('tells the model the stage, whether CareMetric wrote first, the word limit and the allowed links', async () => {
     const model = modelOf();
-    const harness = fixture({ model, bookingUrl: 'https://cal.example.com/caremetric', snapshot: snapshotOf('Thanks. How does the trial work?', { outboundCount: 1, inquiryType: 'unclassified', sourceSystem: 'hub.email' }) });
+    const harness = fixture({ model, bookingUrl: 'https://cal.example.com/caremetric', snapshot: snapshotOf('Thanks. How does the trial work?', { outboundCount: 1, inquiryType: 'unclassified', sourceSystem: 'hub.email' }),
+      guides: { top: vi.fn(async () => [{ title: 'Build a provider list', url: 'https://help.caremetric.ai/help/articles/build-a-provider-list' }, { title: 'Private guide' }]) } });
     await harness.run(taskOf({ product: 'caremetric-intel', opportunity: { stage: 'contacted', contacted: true } }));
     const user = model.run.mock.calls[0][1].user;
     expect(user).toContain('product: CareMetric Intel');
@@ -63,7 +64,9 @@ describe('the Sales Executive answering a prospect', () => {
     expect(user).toContain('caremetric_wrote_first: yes');
     expect(user).toContain('first_message_in_this_conversation: no');
     expect(user).toContain('word_limit: 170');
-    expect(user).toContain('booking_page: https://cal.example.com/caremetric');
+    expect(user).not.toContain('cal.example.com');
+    expect(user).toContain('- Build a provider list: https://help.caremetric.ai/help/articles/build-a-provider-list');
+    expect(user).not.toContain('Private guide');
     expect(user).toContain('https://www.caremetricintel.com/#pricing');
     expect(user).not.toContain('cmcarebase.com');
   });
@@ -72,7 +75,7 @@ describe('the Sales Executive answering a prospect', () => {
     const harness = fixture({ bookingUrl: 'https://cal.example.com/caremetric' });
     const outcome = await harness.run();
     expect(harness.store.proposeAction.mock.calls[0][0]).toMatchObject({ kind: 'communication.reply', input: { template: 'sales', classification: { category: 'sales', phi: false } } });
-    expect(harness.store.proposeAction.mock.calls[0][0].preview).toContain('I will follow up with you personally today');
+    expect(harness.store.proposeAction.mock.calls[0][0].preview).toContain('We have your request and will reply here with the information you need.');
     expect(harness.sent).toEqual([]);
     expect(outcome.result).toMatchObject({ reply: 'sales', draft: 'off' });
   });
@@ -140,5 +143,44 @@ describe('the Sales Executive answering a prospect', () => {
     expect((await harness.run()).result).toMatchObject({ reply: 'drafted', alert: 'capped' });
     expect(harness.sent).toEqual([]);
     expect(harness.store.notificationCount).toHaveBeenCalledWith({ prefix: 'sales:draft:', channel: 'email', since: new Date('2026-11-08T05:00:00Z') });
+  });
+});
+
+describe('answering on its own once handed over', () => {
+  const withGuide = answer({ reply: 'CareBase keeps staff training in one place. This guide walks through assigning annual training:\nhttps://help.caremetric.ai/help/articles/assign-annual-training\n\nYou can start a 30-day free trial here:\nhttps://cmcarebase.com/signup' });
+  const guides = { top: vi.fn(async () => [{ title: 'Assign annual training', url: 'https://help.caremetric.ai/help/articles/assign-annual-training' }]) };
+
+  it('proposes a session-less answer with exactly the fields the database admits, citing the guide it links', async () => {
+    const harness = fixture({ model: modelOf(withGuide), answers: true, guides });
+    const outcome = await harness.run();
+    const proposal = harness.store.proposeAction.mock.calls[0][0];
+    expect(proposal.kind).toBe('communication.answer');
+    expect(Object.keys(proposal.input).sort()).toEqual(['basedOnMessageId', 'body', 'channel', 'classification', 'communicationId', 'reference', 'route', 'sources', 'template']);
+    expect(proposal.input).toMatchObject({ template: 'drafted', classification: { category: 'sales', phi: false, drafted: true }, sources: ['CareMetric fact sheet', 'Sales playbook', 'Assign annual training'] });
+    expect(outcome.result).toMatchObject({ outcome: 'proposed', reply: 'drafted' });
+    expect(harness.sent[0].subject).toBe('Reply drafted for CM-2048, a CareMetric CareBase prospect');
+  });
+
+  it('tells the owner it answered on its own when "Sales answers" is handed over', async () => {
+    const harness = fixture({ model: modelOf(withGuide), answers: true, guides, status: 'auto_approved' });
+    const outcome = await harness.run();
+    expect(outcome).toMatchObject({ status: 'awaiting_approval', result: { outcome: 'proposed', reply: 'drafted' } });
+    expect(harness.sent[0]).toMatchObject({ subject: 'Answered CM-2048, a CareMetric CareBase prospect' });
+    expect(harness.sent[0].body).toContain('on its own');
+    expect(harness.store.finishRun.mock.calls[0][3]).toContain('answer approved to send');
+  });
+
+  it('keeps a text message, and a database without answers, on the owner-approved reply', async () => {
+    const sms = fixture({ model: modelOf(answer({ reply: 'CareBase has a 30-day free trial: https://cmcarebase.com/signup' })), answers: true, guides, snapshot: snapshotOf('How much?', { channel: 'sms', canEmail: false, canText: true }) });
+    await sms.run();
+    expect(sms.store.proposeAction.mock.calls[0][0].kind).toBe('communication.reply');
+    const older = fixture({ model: modelOf(withGuide), answers: false, guides });
+    await older.run();
+    expect(older.store.proposeAction.mock.calls[0][0].kind).toBe('communication.reply');
+  });
+
+  it('refuses a link to a guide it was not given', async () => {
+    const harness = fixture({ model: modelOf(answer({ reply: 'See https://help.caremetric.ai/help/articles/made-up-guide' })), answers: true, guides });
+    expect((await harness.run()).result).toMatchObject({ draft: 'rejected', draftReason: 'link', reply: 'sales' });
   });
 });

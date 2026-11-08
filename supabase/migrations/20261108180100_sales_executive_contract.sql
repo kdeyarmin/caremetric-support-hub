@@ -10,8 +10,8 @@ declare
   signature constant text := 'private.sales_handoff(uuid,uuid)';
   definition text;
 begin
-  if (contract @> '{"api_version":4,"features":["platform.agents.customer-growth.v1","platform.agents.concierge.v1","platform.agents.hardening.v1","support.communications.v1"]}'::jsonb) is not true then
-    raise exception 'Apply customer growth, the Support Concierge, the AI team hardening and the communications inbox first' using errcode = '55000';
+  if (contract @> '{"api_version":4,"features":["platform.agents.customer-growth.v1","platform.agents.concierge.v1","platform.agents.hardening.v1","support.communications.v1","platform.agents.autonomy.v1"]}'::jsonb) is not true then
+    raise exception 'Apply customer growth, the Support Concierge, the AI team hardening, the communications inbox and autonomy steps first' using errcode = '55000';
   end if;
 
   if not exists (select 1 from private.agents where key = 'sales_executive') then
@@ -36,6 +36,11 @@ begin
     or position('provider_message_id like ''email:%''' in definition) = 0
     or position('private.agent_task_enqueue(''sales_executive'', ''sales.reply''' in definition) = 0 then
     raise exception 'The sales hand-off must check the Sales Executive, keep billing out, bind contacts from signed email only and enqueue only its own task' using errcode = '55000';
+  end if;
+
+  if not exists (select 1 from private.agent_autonomy_steps where category = 'sales_answers' and requires_feature = feature
+      and changes = '[{"agent": "sales_executive", "config_key": "auto_approve_kinds", "values": ["communication.answer"]}]'::jsonb) then
+    raise exception 'The "Sales answers" step must exist and hand over answers alone' using errcode = '55000';
   end if;
 
   if not (contract -> 'features' @> to_jsonb(array[feature])) then

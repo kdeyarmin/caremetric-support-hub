@@ -829,6 +829,11 @@ Concierge and the owner, and so does any message with identifiers, one too long 
 outage, security or a legal matter. While the Sales Executive is paused or in Observe, nothing is handed over and the Concierge
 behaves exactly as before.
 
+CareMetric sells without demos or meetings (owner decision 2026-11-08). The Sales Executive gives each prospect what they need to
+decide on their own: the product's walkthrough pages, the published help-center guides that match their question (public ones, linked
+on help.caremetric.ai), the free trial and a written answer. Asked for a demo or a call, it says so kindly and sends the walkthrough
+instead.
+
 For a handed-over message it reads the newest message and up to two earlier ones, scrubbed of personal details, and, only while
 `HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true` and a model key is set, asks the model for a reading and a draft. The model is given the
 product, the prospect's stage, whether CareMetric wrote first, a word limit for the channel, the product's own pages it may link to
@@ -839,12 +844,15 @@ FOUNDERS50), ask at most one qualifying question, handle objections the playbook
 draft (`server/agents/sales/check.mjs`): only that product's listed prices, no other product's; links only to that product's pages
 or the booking page; no guarantee, compliance assurance, certification, named competitor, testimonial, call or demo as a step, voice
 AI, trial extension, special pricing, refund, time frame, mention of AI, identifier, name from the message or long quotation; the
-fixed vocabulary is rewritten (ALF, surveyor). A draft that passes is proposed as a `communication.reply` for the owner to approve
-in Team, and the owner gets one email saying a drafted answer is waiting (at most 20 a day). The reply executor refuses any reply
-nobody approved, so the Sales Executive never sends on its own, whatever its autonomy.
+fixed vocabulary is rewritten (ALF, surveyor); links may go only to the product's pages and the guides it was given. A draft that passes
+and goes back by email or chat is proposed as a `communication.answer` (the session-less path the Concierge's support answers use, with
+the same database checks); by text message it is a `communication.reply`. The owner gets one email per draft (at most 20 a day). The
+**Sales answers** autonomy step (off) hands answers over after a supervised week: they then go out on their own, authored as the
+CareMetric AI Assistant, and the owner's email says it answered. Replies by text message and the fixed acknowledgment always wait.
 
 When prospect text may not go to the model, or the model is unavailable, over budget, abstains or its draft fails a check, a first
-message gets the same fixed sales acknowledgment the Concierge would have offered. A message the model reads as carrying identifiers
+message gets the same fixed sales acknowledgment the Concierge would have offered ("We have your request and will reply here with the
+information you need": it promises no personal follow-up). A message the model reads as carrying identifiers
 gets the fixed notice asking to resend without them. A request not to be contacted, a "no", a wrong person, a negotiation, a contract
 or security question, a cancellation or anything the fact sheet does not answer is left to the owner (the alert already went out).
 Nothing the prospect wrote is kept in the task, the run or the owner's email.

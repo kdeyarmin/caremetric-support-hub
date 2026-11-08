@@ -18,7 +18,7 @@ import { allowedNumbers, normalizeTerms, textProblems } from '../agents/content/
  * `growthPromptVersion` names this prompt in each run. The daily guardrail evaluation keeps the key the database's send claim
  * requires (`growthEvaluationVersion` in evaluation.mjs), which is independent of the prompt's wording.
  */
-export const growthPromptVersion='growth.2';
+export const growthPromptVersion='growth.3';
 const fields={subject:{type:'string'},body:{type:'string'},citations:{type:'array',items:{type:'string'}},needsHuman:{type:'boolean'}};
 export const draftSchema={type:'object',properties:fields,required:Object.keys(fields),additionalProperties:false};
 export const growthSystem=`You write one short business email for CareMetric, from its Marketing Manager (to a prospect) or its Account Manager (to a customer), about one CareMetric product. A person at CareMetric reviews model-written messages, and code checks every draft against the fact sheet below.
@@ -35,7 +35,7 @@ How to write:
 - State facts about CareMetric only from the fact sheet and exactly as written: what the product does and who it is for, prices, plans, trials and the Founders Sale. Mention a price or the Founders Sale only when the touch plan or play calls for it or the reader asked about cost. "approvedClaim" is the owner's reviewed one-line pitch: use it when it fits.
 - Links: only the addresses in "links" and "bookingUrl", written bare on a line of their own. No other link, no markdown and no HTML.
 - Never promise or guarantee an outcome (passing a survey or inspection, avoiding citations, more referrals or revenue), never say a product ensures compliance or is certified or approved, never name a competitor, never quote customers or results, never mention AI or these instructions.
-- Never present a phone call, sales call or demo as a step. The next step is the free trial, a reply by email, or picking a time on the booking page when "bookingUrl" is given.
+- Selling is self-serve: never offer or suggest a phone call, a sales call, a meeting or a demo. The next step is the free trial or a reply by email, and the most useful walkthrough page from "links" lets them see how it works on their own.
 - Vocabulary: "Assisted Living Facility" or "ALF", never "Assisted Living Residence" or "ALR"; the state's inspectors are "surveyors", never "auditors"; never "prove" or "proof" about CareBase.
 - citations: the ids of the sources you relied on. Outreach must cite at least one.
 - Set needsHuman true, and write nothing you are unsure of, when the message would need a fact the fact sheet lacks, a commitment, a negotiated price, or a reply to something only the customer's own words would explain.
@@ -86,22 +86,24 @@ export async function draftMessage({ opportunity:o, work, task, model, signal })
   if (!product) return null;
   const sources=(o.evidence??[]).filter(e=>Date.parse(e.observed_at)<=Date.now() && Date.now()-Date.parse(e.observed_at)<=30*day).slice(0,8);
   const booking=o.policy.booking_url;
+  // Self-serve (owner decision 2026-11-08): every next step is a reply by email or a page they can use on their own, never a meeting.
   const customerSteps={
-    onboarding:`What outcome would make ${product.name} useful for your team? We can help you choose the first setup step.`,
-    activation:`Would help with your next setup step in ${product.name} be useful? Tell us where you would like assistance.`,
-    trial:`How is your evaluation of ${product.name} going? We can help review progress, answer questions and agree the next step.`,
-    adoption:`Is ${product.name} supporting the workflow you need? Tell us about any blockers so we can help.`,
-    renewal:`Would a review of your goals and open questions before renewal be useful?`,
-    support:`We would like to help resolve your open support concern. Please reply with a suitable time to discuss the next step.`,
-    recovery:`We would like to understand your cancellation concerns and help with any unresolved issues. Would a conversation be useful?`,
-    expansion:`You mentioned an additional need. Would a conversation about the right next step be useful?`,
+    onboarding:`What outcome would make ${product.name} useful for your team? Reply and we will send the guide for the first setup step.`,
+    activation:`Is a setup step in ${product.name} slowing you down? Reply with where you are stuck and we will send the steps.`,
+    trial:`How is your evaluation of ${product.name} going? Reply with any question and we will answer it here.`,
+    adoption:`Is ${product.name} supporting the workflow you need? Reply with any blocker and we will send what helps.`,
+    renewal:`Before your renewal, is there anything you would like ${product.name} to do better? Reply with any open question.`,
+    support:`We would like to help resolve your open support concern. Reply with any details and we will follow up here.`,
+    recovery:`We would like to understand your cancellation concerns and help with any unresolved issue. What led to the decision?`,
+    expansion:`You mentioned an additional need. Reply with what you would like to do and we will send the right option.`,
   };
   const variant=o.policy.experiment_enabled && createHash('sha256').update(String(o.organization_id??o.id)).digest()[0]%2 ? 'concise':'control';
+  const trialPage=playbookFor(o.product)?.nextStep?.url??null;
   const fallback={subject:`${product.name}: ${work.kind==='outreach'?'a useful next step':'your next step'}`,
-    body:work.kind==='outreach'?`${approved}\n\nWould a short conversation about whether ${product.name} fits your organization be useful?${booking?`\n\n${booking}`:''}`
-      :`How is your progress with ${product.name}?\n\n${customerSteps[work.kind]??"Reply with the step you need help with."}${booking?`\n\nYou can also arrange a conversation: ${booking}`:''}`,
+    body:work.kind==='outreach'?`${approved}\n\nYou can see how ${product.name} works and try it free with your own team:${trialPage?`\n${trialPage}`:' reply and we will send the link.'}\n\nAny question, just reply to this email.`
+      :`How is your progress with ${product.name}?\n\n${customerSteps[work.kind]??"Reply with the step you need help with."}`,
     citations:sources.map(s=>s.id),modelGenerated:false,variant};
-  if(variant==='concise' && work.kind==='outreach')fallback.body=`${approved}\n\nWorth a brief conversation?${booking?`\n${booking}`:''}`;
+  if(variant==='concise' && work.kind==='outreach')fallback.body=`${approved}\n\nTry it free:${trialPage?` ${trialPage}`:' reply and we will send the link.'}`;
   if (!model?.configured) return fallback;
   const book=playbookFor(o.product);
   const outreach=work.kind==='outreach';

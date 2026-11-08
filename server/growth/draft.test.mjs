@@ -32,7 +32,7 @@ it('tells the writer which touch it is writing, the playbook angle for it and th
  expect(input.links.map(link=>link.url)).not.toContain('https://www.caremetricintel.com/');
  expect(request.system[0].text).toContain('CareMetric fact sheet');
  expect(request.system[0].text).toContain('sales playbook');
- expect(request.promptVersion).toBe('growth.2');
+ expect(request.promptVersion).toBe('growth.3');
 });
 it('gives a customer-success message the play for its moment instead of a touch',async()=>{
  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Before your trial ends',body:'What is left to decide before your trial ends?',citations:[],needsHuman:false}}))};
@@ -51,4 +51,17 @@ it('refuses drafts that break the fact sheet or claim rules, and fixes the vocab
  expect(await run({body:'Would a **free trial** help?'})).toBeNull();
  expect((await run({body:'Built for every Assisted Living Residence and ready for the auditor.'}))?.body).toBe('Built for every Assisted Living Facility and ready for the surveyor.');
  expect((await run({body:'CareBase Core is $199 per facility per month, with a 30-day free trial.\n\nhttps://cmcarebase.com/signup.'}))?.modelGenerated).toBe(true);
+});
+it('never offers a call, a meeting or a demo: templates point to the free trial and invite a reply (owner decision 2026-11-08)',async()=>{
+ const outreach=await draftMessage({opportunity,work,task:{}});
+ expect(outreach.body).toContain('https://cmcarebase.com/signup');
+ expect(outreach.body).not.toContain(opportunity.policy.booking_url);
+ for(const kind of ['onboarding','activation','trial','adoption','renewal','support','recovery','expansion']){
+  const draft=await draftMessage({opportunity,work:{kind,action:'x',success:'y'},task:{}});
+  expect(draft.body,kind).not.toMatch(/conversation|call|meeting|demo|a suitable time|https?:/i);
+ }
+ const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Training',body:'Would it help?',citations:['source-1'],needsHuman:false}}))};
+ await draftMessage({opportunity,work,task:{},model});
+ expect(model.run.mock.calls[0][1].system[0].text).toContain('never offer or suggest a phone call, a sales call, a meeting or a demo');
+ expect(model.run.mock.calls[0][1].system[0].text).toContain('Never offer or suggest a demo, a sales call or a meeting.');
 });
