@@ -9,7 +9,7 @@ import { MyBilling } from './MyBilling';
 import { fixtureCustomer, fixtureTenantId, fixtureWorkspace } from './billingFixtures';
 
 vi.hoisted(() => { vi.stubEnv('VITE_DEMO_MODE', 'true'); });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 const adminClient = (overrides: Partial<BillingClient> = {}): BillingClient => ({
   workspace: vi.fn(async () => fixtureWorkspace()),
@@ -110,6 +110,19 @@ describe('Customer billing', () => {
     await waitFor(() => expect(client.command).toHaveBeenCalledWith(expect.objectContaining({ action: 'invoice.send', invoice: 'in_1', expected_version: 1 })));
     expect(await screen.findByText(/Invoice emailed to the billing contact/)).toBeTruthy();
   });
+
+  it('provides the payment link without claiming it was copied when clipboard permission is denied', async () => {
+    const customer = fixtureCustomer();
+    customer.invoices[0].collection_method = 'charge_automatically';
+    const url = 'https://invoice.stripe.com/i/synthetic';
+    vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('Permission denied')) } });
+    const client = adminClient({ customer: vi.fn(async () => customer), command: vi.fn(async () => ({ ok: true as const, url })) });
+    renderCustomer(client);
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy payment link' }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain(url));
+    expect(screen.getByRole('status').textContent).toMatch(/could not.*cop|copy.*manually/i);
+    expect(screen.getByRole('status').textContent).not.toContain('Payment link copied');
+  });
 });
 
 describe('My billing', () => {
@@ -154,5 +167,14 @@ describe('My billing', () => {
   it('tells a member without billing access whom to ask', async () => {
     render(<MyBilling client={{ read: vi.fn(async () => ({ tenants: [], loaded_at: '2026-10-27T00:00:00Z' })), portal: vi.fn() }} demo={false} />);
     expect(await screen.findByText(/available to your organization's administrators/)).toBeTruthy();
+  });
+
+  it('identifies paused collection and never promises renewal of a canceled subscription', async () => {
+    const paused = { ...data.tenants[0].subscriptions[0], paused: true };
+    const canceled = { ...data.tenants[0].subscriptions[0], status: 'canceled', app: 'Canceled plan' };
+    render(<MyBilling client={{ read: vi.fn(async () => ({ ...data, tenants: [{ ...data.tenants[0], subscriptions: [paused, canceled] }] })), portal: vi.fn() }} demo={false} />);
+    await screen.findByText('Collection paused');
+    const card = screen.getByRole('heading', { name: 'Canceled plan' }).closest('article')!;
+    expect(within(card).queryByText(/Renews|Ends/)).toBeNull();
   });
 });

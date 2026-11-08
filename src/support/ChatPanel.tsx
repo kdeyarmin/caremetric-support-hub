@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { MessageCircle, Send } from "lucide-react";
 import { chatClient, type ChatClient, type ChatThread } from "./communicationsClient";
 import "./communications.css";
@@ -12,22 +12,43 @@ export function ChatPanel({ productSlug, productName, client = chatClient, avail
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [enabled, setEnabled] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [retry, setRetry] = useState(0);
+  const version = useRef(0);
+  const sending = useRef(false);
 
   useEffect(() => {
     if (!available) return;
     const controller = new AbortController();
+    let loading = false;
     // An open chat stays readable; new chats start only when the owner has enabled chat.
     void client.availability(controller.signal).then(value => setEnabled(value.chat)).catch(() => { if (!controller.signal.aborted) setEnabled(false); });
-    const load = () => client.thread(controller.signal).then(setThread).catch(() => { if (!controller.signal.aborted) setThread(null); }).finally(() => { if (!controller.signal.aborted) setChecked(true); });
+    const load = async () => {
+      if (loading || sending.current) return;
+      loading = true;
+      const request = version.current;
+      try {
+        const next = await client.thread(controller.signal);
+        if (!controller.signal.aborted && request === version.current) { setThread(next); setLoadError(""); setChecked(true); }
+      } catch {
+        if (!controller.signal.aborted && request === version.current) {
+          setLoadError("Your chat could not be refreshed. Your conversation is still saved. Please try again.");
+          setChecked(true);
+        }
+      } finally { loading = false; }
+    };
     void load();
     const timer = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, 10000);
     return () => { controller.abort(); window.clearInterval(timer); };
-  }, [client, available]);
+  }, [client, available, retry]);
 
   async function run(work: () => Promise<void>) {
+    if (sending.current) return;
+    sending.current = true;
+    version.current += 1;
     setBusy(true); setError("");
-    try { await work(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Your message could not be sent. Please try again or call (877) 521-2890."); }
-    finally { setBusy(false); }
+    try { await work(); setLoadError(""); } catch (cause) { setError(cause instanceof Error ? cause.message : "Your message could not be sent. Please try again or call (877) 521-2890."); }
+    finally { sending.current = false; setBusy(false); }
   }
   function start(event: FormEvent) {
     event.preventDefault();
@@ -56,6 +77,7 @@ export function ChatPanel({ productSlug, productName, client = chatClient, avail
             <textarea id="chat-message" maxLength={4000} value={message} onChange={event => setMessage(event.target.value)} />
             <button className="button button-primary" type="submit" disabled={busy || !message.trim()}><Send size={15} aria-hidden="true" />Send</button></form>}
       </>
+      : loadError ? null
       : !enabled ? <p>Chat is not available yet. Call (877) 521-2890, email support@caremetric.ai, or open a support request.</p>
       : <form className="chat-start" onSubmit={start}>
         <p>Ask about {productName ?? "any CareMetric application"}. Business hours replies usually arrive the same day.</p>
@@ -66,5 +88,6 @@ export function ChatPanel({ productSlug, productName, client = chatClient, avail
         <button className="button button-primary" type="submit" disabled={busy}>Start chat</button>
       </form>}
     {error && <p className="communications-error" role="alert">{error}</p>}
+    {loadError && <div role="alert"><p>{loadError}</p><button type="button" className="button button-secondary" disabled={busy} onClick={() => setRetry(value => value + 1)}>Retry chat</button></div>}
   </section>;
 }

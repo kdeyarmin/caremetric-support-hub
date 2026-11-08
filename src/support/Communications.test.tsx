@@ -166,7 +166,7 @@ describe("inbox safety", () => {
 describe("website chat", () => {
   const thread = { reference: 1003, status: "new" as const, messages: [{ id: "33333333-3333-4333-8333-333333333333", from: "visitor" as const, body: "Hello", createdAt: "2026-10-20T00:00:00Z" }] };
   it("requires the patient-information acknowledgment before starting", async () => {
-    const chat: ChatClient = { availability: vi.fn(async () => ({ chat: true })), start: vi.fn(async () => ({ reference: 1003 })), thread: vi.fn().mockRejectedValueOnce(new Error("none")).mockResolvedValue(thread), send: vi.fn(), end: vi.fn() };
+    const chat: ChatClient = { availability: vi.fn(async () => ({ chat: true })), start: vi.fn(async () => ({ reference: 1003 })), thread: vi.fn().mockResolvedValueOnce(null).mockResolvedValue(thread), send: vi.fn(), end: vi.fn() };
     render(<ChatPanel productSlug="breathe" productName="CareMetric Breathe" client={chat} />);
     fireEvent.change(await screen.findByLabelText("Name"), { target: { value: "Visitor" } });
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "visitor@agency.test" } });
@@ -180,7 +180,7 @@ describe("website chat", () => {
     expect(await screen.findByText(/Reference CM-1003/)).toBeTruthy();
   });
   it("offers phone and email instead of a form until the owner enables chat", async () => {
-    const chat: ChatClient = { availability: vi.fn(async () => ({ chat: false })), start: vi.fn(), thread: vi.fn().mockRejectedValue(new Error("none")), send: vi.fn(), end: vi.fn() };
+    const chat: ChatClient = { availability: vi.fn(async () => ({ chat: false })), start: vi.fn(), thread: vi.fn().mockResolvedValue(null), send: vi.fn(), end: vi.fn() };
     render(<ChatPanel client={chat} />);
     expect(await screen.findByText(/Chat is not available yet/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Start chat" })).toBeNull();
