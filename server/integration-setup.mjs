@@ -71,6 +71,16 @@ export const integrationCatalog = Object.freeze([
       { name: 'HUB_GROWTH_INTEL_EVENT_KEY', secret: true, minLength: 32, required: false, purpose: 'Intel server-only activity signing key, at least 32 characters.' },
       { name: 'HUB_SENDGRID_EVENT_PUBLIC_KEY', secret: true, required: false, purpose: 'Verifies delivery, bounce, complaint and unsubscribe webhooks.' },
     ] },
+  { id: 'social-media', name: 'Social media (Meta)', purpose: 'The Social Media Manager\'s connection to your Facebook Page, Instagram professional account and Meta ad account: weekly posts, replies to comments and messages, the daily ad review and the weekly report. Every post, reply and ad change waits for your approval until you hand that work over on the AI team screen; budget increases always do.', docs: 'docs/SOCIAL_MEDIA.md',
+    variables: [
+      { name: 'HUB_META_ACCESS_TOKEN', secret: true, minLength: 20, required: true, purpose: 'A system user access token from your Meta Business account with access to the Page, the Instagram account and the ad account (see docs/SOCIAL_MEDIA.md for the permissions). The Hub sends it only to graph.facebook.com and never shows or logs it.' },
+      { name: 'HUB_META_PAGE_ID', secret: false, required: true, purpose: 'Your Facebook Page\'s numeric id.' },
+      { name: 'HUB_META_INSTAGRAM_ID', secret: false, required: false, purpose: 'The numeric id of the Instagram professional account linked to the Page. Leave it unset to leave Instagram out.' },
+      { name: 'HUB_META_AD_ACCOUNT_ID', secret: false, required: false, purpose: 'The ad account id (act_ followed by digits, or the digits). Leave it unset to leave ads out.' },
+      { name: 'HUB_SOCIAL_IMAGE_URLS', secret: false, required: false, purpose: 'Https addresses of brand images you approve for Instagram posts, separated by commas. Instagram posts need an image; without any, the plan leaves Instagram out.' },
+      { name: 'HUB_SOCIAL_TARGET_COST_PER_RESULT_CENTS', secret: false, required: false, purpose: 'Your target cost per lead or sign-up, in cents (2500 is $25). The ad review judges ads against it; without it, ads are judged against each other only.' },
+      { name: 'HUB_SOCIAL_AD_MAX_DAILY_BUDGET_CENTS', secret: false, required: false, purpose: 'The most any ad set may be given per day, in cents. The Social Media Manager may propose a budget increase only up to it, and only you can approve one. Unset means no increase is ever proposed.' },
+    ] },
   { id: 'website-leads', name: 'Website leads', purpose: 'CareBase, Intel and Healthcare Advisors forward every lead from their public forms to the Hub (POST /api/leads), where it appears on Leads and, when the person asked to be contacted, in Communications. Each product signs its leads with its own secret; a product without one keeps its leads to itself.', docs: 'docs/LEAD_INTAKE.md',
     variables: [
       { name: 'HUB_LEAD_SECRET_CAREBASE', secret: true, minLength: 32, required: false, purpose: 'The secret CareBase signs its website leads with: the same value as CareBase\'s HUB_LEAD_SECRET. Use at least 32 random characters; a shorter value counts as not set.' },

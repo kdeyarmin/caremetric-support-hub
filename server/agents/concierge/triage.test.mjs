@@ -257,7 +257,7 @@ describe('proposing a fixed reply', () => {
 
 describe('a website lead', () => {
   const lead = (body, overrides = {}) => snapshotOf(body, { channel: 'web_form', productSlug: 'carebase', inquiryType: 'sales', sourceSystem: 'carebase.web', subject: null, ...overrides });
-  const thanks = 'Hello,\n\nThank you for reaching out to CareMetric. I have your request, and I will follow up with you personally today.';
+  const thanks = 'Hello,\n\nThank you for reaching out to CareMetric. We have your request and will reply here with the information you need.';
   const booking = 'https://cal.example.test/caremetric/intro';
 
   it('is a sales inquiry whatever its words say: a warning to the owner, and the sales acknowledgment proposed', async () => {
@@ -848,4 +848,59 @@ it('does not send earlier identifiers from a follow-up thread to the model',asyn
 it('can propose a grounded how-to answer within a priority-product sales conversation',async()=>{
  const h=withModel({snapshot:snapshotOf('How do I export the staff roster by month?',{inquiryType:'sales'}),followups:true});
  expect((await h.run()).result.reply).toBe('proposed');expect(h.model.run).toHaveBeenCalledTimes(1);
+});
+
+describe('handing a prospect to the Sales Executive', () => {
+  const salesFixture = ({ snapshot, handoff = { handoff: true, product: 'carebase' } } = {}) => {
+    const base = fixture({ snapshot });
+    base.store.salesHandoff = vi.fn(async () => handoff);
+    const handler = triageHandler({ store: base.store, notifier: base.notifier, sales: true, log: () => {} });
+    return { ...base, run: (task = taskOf()) => handler(task, { now }) };
+  };
+
+  it('alerts the owner first, then hands a lead over instead of proposing the acknowledgment', async () => {
+    const harness = salesFixture({ snapshot: snapshotOf(`How much is CareBase for two homes? ${canary}`, { sourceSystem: 'carebase.web', inquiryType: 'sales' }) });
+    const outcome = await harness.run();
+    expect(harness.sent).toHaveLength(1);
+    expect(harness.store.salesHandoff).toHaveBeenCalledWith({ communicationId: ids.communication, messageId: ids.message });
+    expect(harness.store.proposeAction).not.toHaveBeenCalled();
+    expect(outcome).toMatchObject({ result: { outcome: 'alerted', category: 'sales', reply: 'sales_handoff', salesProduct: 'carebase' } });
+    expect(outcome.status).toBeUndefined();
+    expect(harness.store.finishRun.mock.calls[0][3]).toMatch(/handed to the Sales Executive\.$/);
+    expect(everywhere(harness, outcome)).not.toContain(canary);
+  });
+
+  it('asks the database about an ordinary message too, since a reply to outreach arrives unclassified', async () => {
+    const harness = salesFixture({ snapshot: snapshotOf('Thanks for the note. How does the trial work?'), handoff: { handoff: true, product: 'caremetric-intel' } });
+    expect((await harness.run()).result).toMatchObject({ reply: 'sales_handoff', salesProduct: 'caremetric-intel' });
+  });
+
+  it('keeps the Concierge\'s own handling when the database says no (the Sales Executive is paused, or it is not a prospect)', async () => {
+    const harness = salesFixture({ snapshot: snapshotOf('How do I export the staff roster by month?'), handoff: { handoff: false, reason: 'sales_executive_off' } });
+    const outcome = await harness.run();
+    expect(harness.store.salesHandoff).toHaveBeenCalledTimes(1);
+    expect(outcome.result).toMatchObject({ reply: 'proposed', template: 'standard' });
+  });
+
+  it('never hands over identifiers, billing, cancellations, outages, security or legal matters, or a message without a route', async () => {
+    for (const snapshot of [
+      snapshotOf('Her SSN is 000-12-3456, can you help?', { sourceSystem: 'carebase.web', inquiryType: 'sales' }),
+      snapshotOf('We were charged twice this month.'),
+      snapshotOf('Please send pricing.', { inquiryType: 'billing' }),
+      snapshotOf('We will cancel unless this is fixed today.'),
+      snapshotOf('Everything is down for every user.'),
+      snapshotOf('Please send pricing.', { sourceSystem: 'carebase.web', inquiryType: 'sales', canEmail: false, canText: false }),
+    ]) {
+      const harness = salesFixture({ snapshot });
+      await harness.run();
+      expect(harness.store.salesHandoff).not.toHaveBeenCalled();
+    }
+  });
+
+  it('does nothing new without the feature', async () => {
+    const harness = fixture({ snapshot: snapshotOf('Please send pricing.', { sourceSystem: 'carebase.web', inquiryType: 'sales' }) });
+    harness.store.salesHandoff = vi.fn();
+    expect((await harness.run()).result).toMatchObject({ reply: 'proposed', template: 'sales' });
+    expect(harness.store.salesHandoff).not.toHaveBeenCalled();
+  });
 });

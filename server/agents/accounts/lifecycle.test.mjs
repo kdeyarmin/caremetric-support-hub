@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { LAYOUT_MARKER, escapeHtml } from '../../email-layout.mjs';
 import {
-  bookingLink, dueTemplates, httpsOrigin, lifecycleEmail, lifecycleInput, lifecyclePreview, lifecycleProducts, lifecycleReadiness, lifecycleTemplates,
+  bookingLink, dueTemplates, foundersWords, httpsOrigin, lifecycleEmail, lifecycleInput, lifecyclePreview, lifecycleProducts, lifecycleReadiness, lifecycleTemplates,
   lifecycleWording, parseLifecycleInput, periodKey, planEmails, renderLifecycleEmail, stillApplies, unsubscribeLabel, wordingHash,
 } from './lifecycle.mjs';
 
@@ -144,6 +144,7 @@ describe('the emails', () => {
     expect(words('setup_nudge')).toContain('reply to this email and tell us what you would like to get done first');
     expect(words('trial_checkin')).toContain('This is a personal check-in, not a billing notice.');
     expect(words('trial_checkin')).toContain('Is anything getting in the way');
+    expect(words('trial_checkin')).toContain('If you decide to keep CareMetric Intel, the Founders Sale applies on its own: eligible subscription charges are 50% off for the first 12 months of paid service, starting when your trial ends, with no code needed. Standard pricing resumes after that year.');
     expect(words('trial_checkin')).not.toContain('https://www.caremetricintel.com/Help');
   });
 
@@ -171,7 +172,8 @@ describe('the emails', () => {
 
   it('says nothing about AI, calls, prices, promises or Stripe\'s notices, in any email', () => {
     for (const { input, template, product, link } of every()) {
-      const text = lifecyclePreview(input, { postalAddress: postal });
+      // The trial check-in's Founders Sale paragraph (owner decision 2026-11-08) is checked word for word elsewhere; everything else holds.
+      const text = lifecyclePreview(input, { postalAddress: postal }).replace(foundersWords(input.productName), '');
       const label = `${product}/${template}/${link ? 'booking' : 'plain'}`;
       expect(text, label).not.toMatch(/\bAI\b|artificial|assistant|robot|\bbots?\b|automat/i);
       expect(text, label).not.toMatch(/\bcall(?:s|ed|ing)?\b|phone|voicemail|\bdial/i);
@@ -179,7 +181,7 @@ describe('the emails', () => {
       expect(text, label).not.toMatch(/guarantee|promise|within \d|\bhours?\b|\bminutes?\b|by tomorrow|\btoday\b|\bsoon\b|\bwill be\b/i);
       expect(text, label).not.toMatch(/\btrial (?:ends|expires) on\b|\d{1,2}\/\d{1,2}|\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\b/);
       // No digits beyond the numbered first steps and the links and the footer's postal address.
-      const words = lifecycleWording(input).replace(/https:\/\/\S+/g, '').replace(/^\d\. /gm, '');
+      const words = lifecycleWording(input).replace(foundersWords(input.productName), '').replace(/https:\/\/\S+/g, '').replace(/^\d\. /gm, '');
       expect(words, label).not.toMatch(/\d/);
     }
   });

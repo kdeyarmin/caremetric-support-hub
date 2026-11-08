@@ -60,7 +60,7 @@ describe('action executor', () => {
     const deferred = async () => { throw Object.assign(new Error('Rate limited'), { code: 'action_deferred' }); };
     const { executor, store } = fixture({ started: execution({ kind: 'growth.message', execution: 3 }), executors: { 'growth.message': deferred } });
     expect(await executor.executeOne('a1')).toMatchObject({ skipped: true, failed: false, needsSession: false });
-    expect(store.deferExecution).toHaveBeenCalledWith('a1', 3);
+    expect(store.deferExecution).toHaveBeenCalledWith('a1', 3, 'growth.message');
     expect(store.releaseExecution).not.toHaveBeenCalled();
     expect(store.completeExecution).not.toHaveBeenCalled();
   });

@@ -144,6 +144,10 @@ const stepHelp: Record<string, string> = {
   offers: "Offers from the menu you set (a trial extension or one of your coupons), to accounts that qualify, within the menu's caps.",
   sales_followups: "The Marketing Manager's follow-ups and replies to people who contacted CareMetric or that you added, within each product's daily limit and touch cap, each with an unsubscribe link.",
   cold_email: "First emails to businesses found online, sent only to the public role address on the business's own website (such as info@), at most 10 a day, each business once, never a text, each with an unsubscribe link and your postal address.",
+  sales_answers: "The Sales Executive's answers to prospects by email or chat, drafted from your fact sheet, the sales playbook and your published guides and passing every check. Negotiations, contracts, security questions, cancellations and anything with personal details always come to you.",
+  social_posts: "Facebook and Instagram posts from the weekly plan that pass the fact-sheet checks, each published at its time slot.",
+  social_replies: "Replies to comments and private messages on Facebook and Instagram that pass the checks, and hiding spam. Complaints, account questions and anything with personal details always come to you.",
+  ad_tuning: "Pausing ads that are losing and starting new ad copy inside each ad set's existing budget. Budget increases always come to you.",
 };
 export const stepHelpText = (category: string) => stepHelp[category] ?? "";
 
@@ -156,6 +160,9 @@ const taskLabels: Record<string, string> = {
   "accounts.lifecycle": "Customer emails", "autonomy.graduate": "Hand over work after its supervised week", "accounts.offers": "Offers from your menu",
   "growth.pipeline": "Review sales pipeline", "growth.success": "Review customer success", "growth.discovery": "Discover prospective organizations", "growth.content": "Propose product content",
   "growth.evaluate": "Check the outreach guardrails",
+  "sales.reply": "Answer a prospect", "sales.review": "Weekly pipeline review",
+  "social.plan": "Weekly social plan", "social.inbox": "Look for new comments and messages", "social.interaction": "Answer a comment or message",
+  "social.ads": "Daily ad review", "social.report": "Weekly social report",
 };
 export const taskLabel = (kind: string) => taskLabels[kind] ?? kind;
 
@@ -183,6 +190,8 @@ const actionLabels: Record<string, string> = {
   "incident.open": "Open an incident", "incident.resolve": "Resolve an incident", "import.run": "Import messages",
   "email.send": "Email a customer", "offer.apply": "Make an offer from your menu",
   "email.external": "Send an email",
+  "social.post": "Publish a social post", "social.reply": "Reply on social media", "social.moderate": "Hide a social comment",
+  "social.ad_pause": "Pause an ad", "social.ad_create": "Start a new ad", "social.ad_budget": "Change an ad budget",
 };
 export const actionLabel = (kind: string) => actionLabels[kind] ?? kind;
 

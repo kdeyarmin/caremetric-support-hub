@@ -9,6 +9,7 @@ import { answerExecutor } from './answers.mjs';
 import { replyExecutor } from './executor.mjs';
 import { sweepHandler } from './sweep.mjs';
 import { triageHandler } from './triage.mjs';
+import { salesDeclared } from '../sales/index.mjs';
 
 export const conciergeFeature = 'platform.agents.concierge.v1';
 /** Support answers the Concierge may send without the owner's session (supabase/migrations/20261105120000_concierge_answers.sql). */
@@ -30,7 +31,9 @@ export function conciergeHandlers({ store, notifier, features = null, log, model
   const followups=features?.has?.('platform.agents.customer-growth.v1')===true || (Array.isArray(features)&&features.includes('platform.agents.customer-growth.v1'));
   return {
     'concierge.sweep': sweepHandler({ store }),
-    'concierge.communication': triageHandler({ store, notifier, log, drafting: drafting?{...drafting,followups}:null, bookingUrl, answers: has(features, answersFeature) }),
+    // A prospect's message goes to the Sales Executive once the database declares it and the owner has resumed it (sales_handoff decides).
+    'concierge.communication': triageHandler({ store, notifier, log, drafting: drafting?{...drafting,followups}:null, bookingUrl, answers: has(features, answersFeature),
+      sales: salesDeclared(features) && typeof store.salesHandoff === 'function' }),
   };
 }
 

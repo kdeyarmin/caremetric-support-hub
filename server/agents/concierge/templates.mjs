@@ -7,10 +7,10 @@
  * - standard: the message arrived and a person will review it.
  * - phi: the message appears to carry patient or resident information, which these channels are not set up
  *   for. It does not quote, confirm or deny anything the customer wrote, and makes no claim about what happens to it.
- * - sales: for a prospect (a website lead or a conversation filed as a sale), in the owner's own voice: thanks, and the
- *   owner will follow up personally today. It is the only reply that names a day, because the owner approves it the day
- *   they send it. When the owner's booking page is configured (HUB_BOOKING_URL, https only) it also offers "pick a time
- *   that suits you" with that link: this is the only place the Concierge ever offers a link.
+ * - sales: for a prospect (a website lead or a conversation filed as a sale): thanks, the information they need will come
+ *   in this conversation. CareMetric sells without demos or meetings (owner decision
+ *   2026-11-08), so it promises no personal follow-up and names no day. When the owner's booking page is configured
+ *   (HUB_BOOKING_URL, https only) it also offers "pick a time that suits you" with that link: leave it unset to offer none.
  */
 export const smsLimit = 320;
 
@@ -25,8 +25,8 @@ const bodies = {
     short: 'CareMetric Support: please do not send patient or resident details here. Send your question again without names, birth dates or record numbers and we will review it.',
   },
   sales: {
-    long: 'Thank you for reaching out to CareMetric. I have your request, and I will follow up with you personally today.',
-    short: 'Thanks for reaching out to CareMetric. I have your request and will follow up with you personally today.',
+    long: 'Thank you for reaching out to CareMetric. We have your request and will reply here with the information you need.',
+    short: 'Thanks for reaching out to CareMetric. We have your request and will reply here with what you need.',
   },
 };
 const booking = { long: 'If you would like to set a time now, pick a time that suits you: ', short: 'Or pick a time that suits you: ' };

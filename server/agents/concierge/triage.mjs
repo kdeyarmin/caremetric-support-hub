@@ -77,7 +77,7 @@ function skipReason(snapshot, payload, settings) {
  * and the guide library), and null otherwise, which keeps the handler exactly as it is without a model.
  * `bookingUrl` is the owner's booking page (HUB_BOOKING_URL): the sales acknowledgment offers it, and nothing else does.
  */
-export function triageHandler({ store, notifier, drafting = null, bookingUrl = null, answers = false, log = line => console.warn(line) }) {
+export function triageHandler({ store, notifier, drafting = null, bookingUrl = null, answers = false, sales = false, log = line => console.warn(line) }) {
   // Whether this alert has been tried before in a channel: its key already has a row there. A refused try counts toward the caps like any
   // other, so a retry has to resume the alert under its own key and channels instead of being judged by the caps again, which would turn it
   // into an email-only alert or a rollup because of itself.
@@ -235,6 +235,26 @@ export function triageHandler({ store, notifier, drafting = null, bookingUrl = n
     const minutes = minutesBetween(inbound.at, now());
     const alert = alertWords({ category: ruleCategory, phi: screen.flagged, severity, channel: snapshot.channel, productSlug: snapshot.productSlug, reference: snapshot.reference, minutes, unread });
     const delivery = await tellOwner({ task, snapshot, payload, words: alert, severity, now });
+
+    // A CareBase or Intel prospect's message (a website lead, a sales inquiry or a reply to the Marketing Manager's outreach) goes to the
+    // Sales Executive when the owner has it working: it drafts the answer from the fact sheet, or offers the same acknowledgment. The
+    // alert above has already gone out; a message with identifiers, one too long to have been read, or one about billing, a cancellation,
+    // an outage, security or a legal matter stays here. The database decides whether the message is a prospect's (private.sales_handoff).
+    if (sales && !screen.flagged && !unread && ['general', 'sales'].includes(ruleCategory) && snapshot.inquiryType !== 'billing' && replyRoute(snapshot) !== null) {
+      const handed = await store.salesHandoff({ communicationId: snapshot.id, messageId: inbound.id });
+      if (handed?.handoff === true) {
+        await recordRun({ store, log }, task, {
+          promptVersion: 'rules.1',
+          summary: `Triaged CM-${snapshot.reference} (${channelWord(snapshot.channel)}): ${categoryWord(ruleCategory)}; ${severity} alert (${delivery.join(', ')}); handed to the Sales Executive.`,
+        });
+        return {
+          result: {
+            outcome: 'alerted', reference: snapshot.reference, channel: snapshot.channel, product: snapshot.productSlug ?? null, category: ruleCategory, phi: false,
+            severity, delivery, reply: 'sales_handoff', screen: screen.kinds, rules: reasons, ...(handed.product ? { salesProduct: handed.product } : {}),
+          },
+        };
+      }
+    }
 
     // Ordinary product questions may use reviewed guides, including bounded follow-ups when the growth feature is present.
     // Pricing, cancellation, incidents and identifiers remain owner-only; the existing customer-text opt-in still applies.

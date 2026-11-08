@@ -5,6 +5,7 @@ import { planOpportunity, products } from './policy.mjs';
 import { draftMessage } from './draft.mjs';
 import { renderEmail } from '../email-layout.mjs';
 import { evaluateGrowth } from './evaluation.mjs';
+import { discoveryQuery } from './playbook.mjs';
 const deferred=()=>Object.assign(new Error('Action is deferred'),{code:'action_deferred'});
 const easternDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'});
 /** The calendar day in America/New_York, matching every other send cap and notice. */
@@ -77,11 +78,12 @@ export function growthHandlers({growth,model,notifier,features=null}) {
     if(planned && notifier)await notifier.send({severity:'info',subject:'Customer growth work is ready',body:`${planned} follow-up tasks reviewed; ${drafted} message drafts prepared. Open Growth to review next actions.`,dedupeKey:`growth:${owner}:${growthDay(now())}`,agentKey:owner,taskId:task.id});
     return {result:{inspected,planned,drafted}};
   }
-  async function discover(task,{signal}={}) {
+  async function discover(task,{signal,now=()=>new Date()}={}) {
     if(!growth.research?.configured)return {result:{skipped:'research_not_configured'}};
     if(task.agent?.autonomy==='observe')return {result:{skipped:'observe_only'}};
     let candidates=0;
-    for(const product of products){signal?.throwIfAborted(); const rows=await growth.research.search(product,{signal});signal?.throwIfAborted();candidates+=await growth.store.discover(product,rows);}
+    // A different segment-and-place search each day (playbook.mjs), so discovery keeps finding new organizations; CareBase stays in Pennsylvania.
+    for(const product of products){signal?.throwIfAborted(); const rows=await growth.research.search(product,{query:discoveryQuery(product,now()),signal});signal?.throwIfAborted();candidates+=await growth.store.discover(product,rows);}
     if(!autonomy||!growth.contacts?.configured)return {result:{candidates}};
     // The contact finder reads each new business's own website for one public role address; a business with none stays without a
     // contact (and is not read again for 90 days). Only the counts are kept here: never an address.

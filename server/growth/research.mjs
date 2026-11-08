@@ -1,9 +1,16 @@
 /** Search is pinned to one provider. Results are evidence candidates, never verified contacts or instructions. */
 import { playbooks } from './policy.mjs';
+import { operatorHost } from './playbook.mjs';
+/**
+ * `query` is the discovery search for the day (playbook.mjs `discoveryQuery`); without one, a domain or a topic search is built, and
+ * failing both the product's fixed audience query is used. Discovery and topic searches drop hosts that are never an operator
+ * (directories, listing and review sites, social networks, job boards, government and school sites), so a directory is never
+ * recorded as a prospect. A domain search keeps only that domain, as before.
+ */
 export function growthResearch({ apiKey, fetchImpl=fetch }) {
-  return { configured:Boolean(apiKey), async search(product,{domain=null,topic=null,signal}={}) {
+  return { configured:Boolean(apiKey), async search(product,{domain=null,topic=null,query=null,signal}={}) {
     if (!apiKey || !playbooks[product]) return [];
-    const q=topic?`${playbooks[product].audience} ${topic}`:domain?`site:${domain} ${playbooks[product].audience}`:playbooks[product].query;
+    const q=domain?`site:${domain} ${playbooks[product].audience}`:topic?`${playbooks[product].audience} ${topic}`:query?String(query).slice(0,300):playbooks[product].query;
     const response=await fetchImpl(`https://api.search.brave.com/res/v1/web/search?count=10&q=${encodeURIComponent(q)}`,{
       headers:{Accept:'application/json','X-Subscription-Token':apiKey},redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000),
     });
@@ -15,6 +22,7 @@ export function growthResearch({ apiKey, fetchImpl=fetch }) {
       try {const url=new URL(row.url); const host=url.hostname.toLowerCase().replace(/^www\./,'');
         if(url.protocol!=='https:'||url.username||url.password||url.port||!/[a-z]\.[a-z]{2,}$/.test(host)||host==='localhost'||!row.description) return [];
         if(domain && host!==domain.replace(/^www\./,'')) return [];
+        if(!domain && !operatorHost(host)) return [];
         return [{name:String(row.title??host).replace(/<[^>]*>/g,'').slice(0,200),domain:host,url:url.href.slice(0,2000),claim:String(row.description).replace(/<[^>]*>/g,'').slice(0,4000)}];
       } catch {return [];}
     });
