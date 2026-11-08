@@ -175,11 +175,13 @@ describe('each check that rejects a draft', () => {
     expect(reasons(withSentence('Liaisons make calls to physician offices and schedule visits.', referral), referral)).toEqual([]);
   });
 
-  it('rejects competitors, testimonials, a claim to be an AI, and "prove" or "proof" about CareBase', () => {
+  it('rejects competitors, testimonials, a claim to be an AI, and "prove", "proof" or "evidence" about CareBase', () => {
     expect(reasons(withSentence('Unlike PointClickCare, it is simple.'))).toEqual(['competitor_named']);
     expect(reasons(withSentence('Our customers love it.'))).toEqual(['testimonial']);
     expect(reasons(withSentence('As an AI, I recommend monthly drills.'))).toEqual(['ai_mention']);
     expect(reasons(withSentence('Records prove the drill happened.'))).toEqual(['prove_word']);
+    // The owner confirmed on 2026-11-08 that "evidence" is avoided in everything about CareBase, articles included.
+    expect(reasons(withSentence('Keep evidence of each drill for the surveyor.'))).toEqual(['prove_word']);
     expect(reasons(withSentence('Keep proof of every drill.'))).toEqual(['prove_word']);
   });
 

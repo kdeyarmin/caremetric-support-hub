@@ -7,7 +7,7 @@
 import { factSheetText, productPages, products } from './facts.mjs';
 import { allowedNumbers, markupProblems, normalizeTerms, textProblems } from './validate.mjs';
 
-export const outreachPromptVersion = 'outreach.1';
+export const outreachPromptVersion = 'outreach.2';
 export const maxDrafts = 5;
 
 export const directories = Object.freeze({ capterra: 'Capterra', g2: 'G2', getapp: 'GetApp', software_advice: 'Software Advice' });
@@ -35,7 +35,7 @@ Rules:
 - Never promise or guarantee an outcome, and never say a product ensures compliance, passes an inspection or prevents citations.
 - Never offer a phone call, a sales call, a meeting or a demo, and never mention AI that uses voice or the phone: CareMetric's AI is text only.
 - Never name competitors, customers or real people, and include no email addresses or phone numbers. Use plain text: no markdown, links or HTML; a product's website may be named as a bare domain (cmcarebase.com).
-- Vocabulary: "Assisted Living Facility" or "ALF", never "Assisted Living Residence" or "ALR"; the state's inspectors are "surveyors", never "auditors". In anything about CareBase, never use the words "prove" or "proof".
+- Vocabulary: "Assisted Living Facility" or "ALF", never "Assisted Living Residence" or "ALR"; the state's inspectors are "surveyors", never "auditors". In anything about CareBase, never use the words "prove", "proof" or "evidence".
 
 Answer with one JSON object and nothing else: listings (up to ${maxDrafts}) and pitches (up to ${maxDrafts}), each for one product.
 

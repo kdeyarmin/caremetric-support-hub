@@ -15,9 +15,9 @@ import { allowedNumbers, normalizeTerms, textProblems } from '../content/validat
 import { productAmounts } from '../../growth/draft.mjs';
 import { linkablePages, playbookFor, playbookText } from '../../growth/playbook.mjs';
 
-export const planPromptVersion = 'social-plan.1';
-export const adPromptVersion = 'social-ads.1';
-export const replyPromptVersion = 'social-reply.1';
+export const planPromptVersion = 'social-plan.2';
+export const adPromptVersion = 'social-ads.2';
+export const replyPromptVersion = 'social-reply.2';
 
 export const platforms = ['facebook', 'instagram', 'linkedin'];
 export const socialProducts = ['carebase', 'caremetric-intel'];
@@ -31,7 +31,7 @@ const rules = `Rules for every word you write:
 - Never state or imply anything about a reader's own situation, health, finances or problems as fact: ask, or speak about organizations and their work.
 - No personal or health information about anyone. No email address except support@caremetric.ai, no phone number.
 - Plain text only: no markdown, no HTML. Use at most three emoji, and only where they help.
-- Vocabulary: "Assisted Living Facility" or "ALF", never "Assisted Living Residence" or "ALR"; the state's inspectors are "surveyors", never "auditors"; never "prove" or "proof" about CareBase.`;
+- Vocabulary: "Assisted Living Facility" or "ALF", never "Assisted Living Residence" or "ALR"; the state's inspectors are "surveyors", never "auditors"; never "prove", "proof" or "evidence" about CareBase.`;
 
 export const planSystem = `You are the Social Media Manager at CareMetric, a small company that makes software for healthcare and senior-care organizations. You plan one week of organic social media posts for CareMetric's Facebook Page, Instagram account and LinkedIn page. CareMetric's owner approves each post before it is published.
 

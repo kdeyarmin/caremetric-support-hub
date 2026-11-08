@@ -152,7 +152,8 @@ const claimRules = [
   ['ai_mention', /\bas an ai\b|\blanguage model\b|\bi am an? (?:ai|assistant|bot|model)\b|\bchatgpt\b|\bthis (?:article|draft|pitch) was (?:written|generated|drafted) by\b|\bsystem prompt\b/i],
   ['testimonial', /\b(?:our|happy|satisfied)\s+(?:customers?|clients?|users?)\b|\b(?:customers?|clients?|users?)\s+(?:say|said|tell us|love|rave)\b|\bcase stud(?:y|ies)\b|\btestimonials?\b/i],
 ];
-const proveWords = /\b(?:prove[sdn]?|proving|proof)\b/i;
+// "Evidence" joins them on the owner's confirmation of 2026-11-08 (docs/GTM_FACTS.md, Vocabulary).
+const proveWords = /\b(?:prove[sdn]?|proving|proof|evidence[ds]?|evidencing)\b/i;
 const honorificName = /\b(?:Mr|Mrs|Ms|Miss|Mx|Dr)\.?\s+[A-Z][a-z]+(?:\s+[A-Z]\.?)?(?:\s+[A-Z][a-z]+)?/g;
 const namedPerson = /\b(?:resident|patient|client|employee|aide|caregiver)\s+(?:named|called)\s+[A-Z]/;
 const emailPattern = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;

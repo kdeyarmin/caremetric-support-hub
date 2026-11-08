@@ -6,7 +6,7 @@
  *
  * Every value was read from the live code of the product it describes (the source is named beside it). A change to a price
  * or a trial is made in the product first, then here and in docs/GTM_FACTS.md; facts.test.mjs keeps the two copies together.
- * Base product claims remain "owner to confirm". The owner requested the Founders Sale on 2026-11-08;
+ * The owner confirmed every fact and claim here on 2026-11-08. The owner requested the Founders Sale on 2026-11-08;
  * its coupon, duration and product scope were verified in the live CareMetric billing account.
  */
 
@@ -156,7 +156,7 @@ export const officialSources = deepFreeze({
 /**
  * Hosts a citation or a link in an article may point to: the state's official sources the owner named (pa.gov and its
  * subdomains such as dhs.pa.gov, pacodeandbulletin.gov, palegis.us), the federal data sources Intel itself reads (cms.gov,
- * census.gov; owner to confirm), and the company's own sites. A subdomain of a listed host counts; nothing else does.
+ * census.gov; confirmed 2026-11-08), and the company's own sites. A subdomain of a listed host counts; nothing else does.
  */
 export const citationHosts = Object.freeze([
   'pa.gov', 'pacodeandbulletin.gov', 'palegis.us', 'cms.gov', 'census.gov',
@@ -200,7 +200,7 @@ export const vocabulary = deepFreeze({
   rules: [
     'Write "Assisted Living Facility" or "ALF", never "Assisted Living Residence" or "ALR", even though Chapter 2800 itself says "assisted living residence".',
     'Call the Department of Human Services inspectors "surveyors" and their visit a survey or an inspection, never "auditors" or an audit.',
-    'In anything about CareBase, never use the words "prove" or "proof": talk about survey readiness, documentation and records.',
+    'In anything about CareBase, never use the words "prove", "proof" or "evidence": talk about survey readiness, documentation and records.',
     'Name the products CareMetric CareBase (or CareBase), CareMetric Intel (or Intel) and CareMetric Healthcare Advisors.',
   ],
 });
