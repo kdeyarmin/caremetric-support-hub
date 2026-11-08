@@ -30,7 +30,15 @@ export function PasswordSettings() {
       setSettings({ username:username.trim().toLowerCase(),configured:true,can_reset:false });
       setUsername(username.trim().toLowerCase());
       setNotice('Your username and password are saved. Other sessions have been signed out. Use your password the next time you sign in.');
-    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Your password could not be saved.'); }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Your password could not be saved.');
+      if (settings.can_reset) {
+        // Recovery may expire while the form is open. Keep the entered username
+        // and rejection visible, but expose current-password entry when needed.
+        try { setSettings(await appSession.passwordSettings()); }
+        catch { setSettings({ ...settings,can_reset:false }); }
+      }
+    }
     finally { setPassword(''); setConfirm(''); setCurrentPassword(''); setBusy(false); }
   }
   async function signOut() {

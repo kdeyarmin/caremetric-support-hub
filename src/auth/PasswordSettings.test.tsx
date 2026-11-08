@@ -34,3 +34,20 @@ it('reports failed sign-out instead of pretending the session ended',async()=>{
   render(<PasswordSettings/>);await screen.findByLabelText('Username');fireEvent.click(screen.getByRole('button',{name:'Sign out'}));
   expect((await screen.findByRole('alert')).textContent).toContain('Sign-out could not be completed');
 });
+it('refreshes expired SMS recovery so the current-password field becomes usable',async()=>{
+  api.passwordSettings.mockResolvedValueOnce({username:'owner',configured:true,can_reset:true})
+    .mockResolvedValue({username:'owner',configured:true,can_reset:false});
+  api.savePassword.mockRejectedValueOnce(new Error('Enter your current password, or sign in with a new SMS code to reset it.'))
+    .mockResolvedValue({authenticated:true});
+  render(<PasswordSettings/>);await screen.findByLabelText('Username');fill();
+  expect(screen.queryByLabelText('Current password')).toBeNull();
+  fireEvent.click(screen.getByRole('button',{name:'Save username and password'}));
+  await screen.findByLabelText('Current password');
+  expect(screen.getByRole('alert').textContent).toContain('Enter your current password');
+  expect(screen.getByLabelText('Username')).toHaveProperty('value','Owner');
+  expect(screen.getByLabelText('New password')).toHaveProperty('value','');
+  fill();fireEvent.change(screen.getByLabelText('Current password'),{target:{value:'current test password'}});
+  fireEvent.click(screen.getByRole('button',{name:'Save username and password'}));
+  expect((await screen.findByRole('status')).textContent).toContain('are saved');
+  expect(api.savePassword).toHaveBeenLastCalledWith({username:'Owner',password:'test-only long passphrase',currentPassword:'current test password'});
+});
