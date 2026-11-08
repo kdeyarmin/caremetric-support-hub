@@ -129,6 +129,9 @@ describe('the emails', () => {
       'You are receiving this email because Maple Grove Senior Living has a CareMetric CareBase account.',
       `${unsubscribeLabel}: a personal link is added when the email is sent`,
       postal,
+      // The CareBase theme's own footer lines.
+      'Questions? Email support@caremetric.ai.',
+      'CareMetric CareBase · cmcarebase.com',
     ].join('\n'));
   });
 
@@ -226,15 +229,15 @@ describe('the sent email', () => {
       expect(`Subject: ${email.subject}\n\n${email.text}`).toBe(preview.replace(`${unsubscribeLabel}: a personal link is added when the email is sent`, `${unsubscribeLabel}: ${unsubscribeUrl}`));
       expect(preview.startsWith(lifecycleWording(input))).toBe(true);
       // The branded layout in the theme of the product's app, with its inbox preview: Intel's Emberline header (its logo, tagline
-      // and fire image), or the product's own name in the Hub's header.
+      // and fire image), or CareBase's navy wordmark band.
       expect(email.html).toContain(`${LAYOUT_MARKER}="branded"`);
       if (input.product === 'caremetric-intel') {
         expect(email.html).toContain('data-theme="intel"');
         expect(email.html).toContain('https://caremetricintel.com/brand/emberline-fire.png');
         expect(email.html).toContain('Set your marketing on FIRE!');
       } else {
-        expect(email.html).toContain('data-theme="hub"');
-        expect(email.html).toContain(`>${escapeHtml(input.productName)}</td></tr>`);
+        expect(email.html).toContain('data-theme="carebase"');
+        expect(email.html).toContain('CareMetric <span style="font-weight:500;color:#b9e4ff;">CareBase</span>');
       }
       expect(email.html).toContain(escapeHtml(lifecycleEmail(input).preheader));
       expect(email.html).toContain(`<a href="${unsubscribeUrl}" target="_blank"`);

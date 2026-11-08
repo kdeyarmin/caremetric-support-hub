@@ -4,6 +4,11 @@
 
    - "hub" (the default): the Support Hub's own look, for its notices and support replies,
      and for products without a theme of their own here.
+   - "carebase": CareMetric CareBase's look, from the CareBase app's design tokens
+     (kdeyarmin/caremetric-carebase src/styles.css and src/components/brand.tsx): the navy
+     band with the "CareMetric CareBase" wordmark as the app writes it on navy, a light-blue
+     rule, the app's primary blue, Inter text with Source Serif 4 headlines, its soft
+     blue-grey canvas and rounded cards.
    - "intel": CareMetric Intel's Emberline, exactly as the Intel app sends it
      (kdeyarmin/intel server/lib/emailLayout.ts): near-black canvas, dark card, the ember
      accent, the Geist type, a header with the Intel logo and its "Set your marketing on
@@ -82,6 +87,15 @@ export const intelPalette = Object.freeze({
   brand: '#ff7a45', brandDark: '#ff5a1f', onBrand: '#1a0700', heading: '#f4f4f6', body: '#b9bcc6', muted: '#8d919c',
   hairline: '#2b2d35', panel: '#191b21', canvas: '#07080a', card: '#101116',
 });
+/** CareMetric CareBase's design tokens (kdeyarmin/caremetric-carebase src/styles.css), as its emails use them. */
+export const CAREBASE_SITE = 'https://cmcarebase.com';
+export const carebasePalette = Object.freeze({
+  brand: '#1b6fc2', brandDark: '#16324f', onBrand: '#ffffff', heading: '#0b1220', body: '#0b1220', muted: '#5b6b7c',
+  hairline: '#d5dee8', panel: '#e8eef6', canvas: '#f4f7fb', card: '#ffffff', navy: '#0a1a2e', accent: '#59b2ff', accentSoft: '#b9e4ff',
+});
+// The CareBase app's wordmark on navy (its footer and hero): "CareMetric" in white, "CareBase" in the soft accent, then the accent rule.
+const carebaseHeader = ({ font, theme: { palette: p } }) => `<tr><td bgcolor="${p.navy}" style="padding:22px 32px;background-color:${p.navy};border-radius:15px 15px 0 0;border-bottom:3px solid ${p.accent};${font}font-size:20px;line-height:28px;font-weight:600;letter-spacing:-0.2px;color:#ffffff;">CareMetric <span style="font-weight:500;color:${p.accentSoft};">CareBase</span></td></tr>
+`;
 const hubHeader = ({ brand, font, theme }) => `<tr><td bgcolor="${theme.palette.brand}" style="padding:20px 32px;background-color:${theme.palette.brand};border-radius:11px 11px 0 0;${font}font-size:20px;line-height:28px;font-weight:700;color:${theme.palette.onBrand};">${escapeHtml(brand || PRODUCT_WORDMARK)}</td></tr>\n`;
 // The Intel app's header: its reverse logo, the product name and tagline, then a still of the Emberline fire.
 const intelHeader = ({ font, theme: { palette: p } }) => `<tr><td class="cm-header" bgcolor="${p.canvas}" style="${font}background-color:${p.canvas};border-radius:21px 21px 0 0;padding:28px 32px;color:${p.heading};">
@@ -96,6 +110,21 @@ export const emailThemes = Object.freeze({
     button: Object.freeze({ fill: palette.brand, text: palette.onBrand, weight: 700, radius: 8 }),
     linkAttributes: '', header: hubHeader, signerStrong: true, footerAfter: Object.freeze([]),
     letter: Object.freeze({ background: '#FFFFFF', text: '#1F2937', fontSize: 15, lineHeight: 23 }),
+  }),
+  carebase: Object.freeze({
+    key: 'carebase', palette: carebasePalette, colorScheme: 'light', cardRadius: 16,
+    callouts: Object.freeze({
+      info: Object.freeze({ fill: '#eaf5ff', border: carebasePalette.accentSoft, accent: carebasePalette.brand, text: '#102a43' }),
+      success: Object.freeze({ fill: '#d9f0e3', border: '#b7dcc7', accent: '#1f7a4d', text: '#174f37' }),
+      warning: Object.freeze({ fill: '#f3e6d0', border: '#e3cba3', accent: '#8a5a1b', text: '#5e3d12' }),
+      danger: Object.freeze({ fill: '#f3d9d6', border: '#e5b9b4', accent: '#8f2d2d', text: '#6b2020' }),
+    }),
+    fontStack: "Inter, 'Segoe UI', system-ui, -apple-system, Helvetica, Arial, sans-serif",
+    headingFontStack: "'Source Serif 4', Georgia, 'Times New Roman', serif",
+    button: Object.freeze({ fill: carebasePalette.brand, text: carebasePalette.onBrand, weight: 600, radius: 12 }),
+    linkAttributes: '', header: carebaseHeader, signerStrong: true,
+    footerAfter: Object.freeze([`Questions? Email ${SUPPORT_EMAIL}.`, 'CareMetric CareBase · cmcarebase.com']),
+    letter: Object.freeze({ background: '#FFFFFF', text: carebasePalette.heading, fontSize: 15, lineHeight: 23 }),
   }),
   intel: Object.freeze({
     key: 'intel', palette: intelPalette, colorScheme: 'dark', cardRadius: 22,
@@ -114,8 +143,8 @@ export const emailThemes = Object.freeze({
     letter: Object.freeze({ background: intelPalette.card, text: intelPalette.body, fontSize: 16, lineHeight: 24 }),
   }),
 });
-/** The theme of the app a product's customers use: Intel's Emberline for Intel, the Hub's own look otherwise. */
-export const themeFor = product => (product === 'caremetric-intel' || product === 'intel' ? 'intel' : 'hub');
+/** The theme of the app a product's customers use: Intel's Emberline, CareBase's look, or the Hub's own for anything else. */
+export const themeFor = product => (product === 'caremetric-intel' || product === 'intel' ? 'intel' : product === 'carebase' ? 'carebase' : 'hub');
 
 /** The styles one email is built with, from its theme. */
 function stylesFor(themeKey) {
@@ -285,7 +314,7 @@ export function renderEmail({ layout = 'branded', theme = 'hub', title, brand = 
   const { p, font } = s;
 
   const body = [
-    branded && heading ? `<h1 style="margin:0 0 16px;${font}font-size:22px;line-height:30px;font-weight:700;color:${p.heading};">${linkedText(heading, referenceLink, s)}</h1>` : '',
+    branded && heading ? `<h1 style="margin:0 0 16px;font-family:${s.theme.headingFontStack ?? s.theme.fontStack};font-size:${s.theme.headingFontStack ? '26px;line-height:32px;font-weight:600' : '22px;line-height:30px;font-weight:700'};color:${p.heading};">${linkedText(heading, referenceLink, s)}</h1>` : '',
     greeting ? `<p style="${s.paragraph}">${escapeHtml(greeting)}</p>` : '',
     ...content.map(block => renderBlock({ ...block, referenceLink }, 'html', s)),
     signer ? `<p style="margin:24px 0 0;${font}font-size:16px;line-height:24px;${s.theme.signerStrong ? `font-weight:600;color:${p.heading}` : `color:${p.body}`};">${escapeHtml(signer)}</p>` : '',

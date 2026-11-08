@@ -5,7 +5,12 @@ import { bulkEmailHtml, composeBulkEmail } from './bulk-email.mjs';
 import { lifecycleInput, renderLifecycleEmail } from './agents/accounts/lifecycle.mjs';
 
 const hostile = '<script>alert(1)</script>';
-const allowedColors = new Set([...Object.values(palette), ...Object.values(calloutTones).flatMap(tone => Object.values(tone))].map(color => color.toUpperCase()));
+/** The colors an email in a theme may use: its palette, callouts, letter and button colors. */
+const themeColors = key => {
+  const theme = emailThemes[key] ?? emailThemes.hub;
+  return new Set([...Object.values(theme.palette), ...Object.values(theme.callouts).flatMap(tone => Object.values(tone)), theme.letter.background, theme.letter.text, theme.button.fill, theme.button.text]
+    .map(color => color.toUpperCase()));
+};
 
 /** Every email the Hub sends, plus the branded layout every future notification will use. */
 const emails = {
@@ -16,6 +21,9 @@ const emails = {
   },
   'customer check-in email': () => renderLifecycleEmail(
     lifecycleInput({ tenant: 'maple-grove', tenantName: `Maple ${hostile}`, product: 'carebase', productName: 'CareMetric CareBase' }, 'welcome', { bookingUrl: 'https://cal.example.com/owner' }),
+    { unsubscribeUrl: `https://hub.example/api/email/unsubscribe/${'a'.repeat(64)}`, postalAddress: `1 Main St ${hostile}` }),
+  'Intel customer email': () => renderLifecycleEmail(
+    lifecycleInput({ tenant: 'riverbend', tenantName: `Riverbend ${hostile}`, product: 'caremetric-intel', productName: 'CareMetric Intel' }, 'trial_checkin', {}),
     { unsubscribeUrl: `https://hub.example/api/email/unsubscribe/${'a'.repeat(64)}`, postalAddress: `1 Main St ${hostile}` }),
   'branded notification layout': () => renderEmail({
     title: `Update for ${hostile}`, preheader: `A summary for ${hostile}.`, heading: `Your request ${hostile}`, recipientName: hostile,
@@ -37,7 +45,7 @@ describe('every outgoing email uses the shared layout', () => {
         expect(email.html).toContain(`${LAYOUT_MARKER}=`);
         expect(email.html).toMatch(/^<!DOCTYPE html>\n<html lang="en"/);
         expect(email.html).toContain('<meta charset="utf-8">');
-        expect(email.html).toContain('<meta name="color-scheme" content="light">');
+        expect(email.html).toMatch(/<meta name="color-scheme" content="(light|dark)">/);
         expect(email.html).toContain('role="presentation"');
       });
       it('escapes every interpolated value', () => {
@@ -50,10 +58,11 @@ describe('every outgoing email uses the shared layout', () => {
         expect(email.text).not.toMatch(/<\/?(p|div|table|tr|td|a|h1|br|strong)\b|style="/i);
         expect(email.text).toContain(hostile);
       });
-      it('uses only the shared palette', () => {
+      it('uses only its theme\'s palette', () => {
         const colors = email.html.match(/#[0-9A-Fa-f]{6}\b/g) ?? [];
+        const allowed = themeColors(/data-theme="([a-z]+)"/.exec(email.html)?.[1]);
         expect(colors.length).toBeGreaterThan(0);
-        expect(colors.filter(color => !allowedColors.has(color.toUpperCase()))).toEqual([]);
+        expect(colors.filter(color => !allowed.has(color.toUpperCase()))).toEqual([]);
       });
     });
   }
@@ -165,13 +174,31 @@ describe('product themes', () => {
   it('keeps the Hub\'s own look by default and for every product without a theme here', () => {
     expect(themeFor('caremetric-intel')).toBe('intel');
     expect(themeFor('intel')).toBe('intel');
-    for (const product of ['carebase', 'advisors', null, undefined]) expect(themeFor(product)).toBe('hub');
+    expect(themeFor('carebase')).toBe('carebase');
+    for (const product of ['advisors', null, undefined]) expect(themeFor(product)).toBe('hub');
     const email = renderEmail({ title: 'T', heading: 'H', blocks: [], footer: ['F'] });
     expect(email.html).toContain('data-theme="hub"');
     expect(email.html).toContain(`>${PRODUCT_WORDMARK}</td></tr>`);
     expect(email.html).toContain('<meta name="color-scheme" content="light">');
     expect(email.html).not.toContain('clicktracking');
     expect(renderEmail({ theme: 'nonsense', title: 'T', blocks: [], footer: [] }).html).toContain('data-theme="hub"');
+  });
+});
+
+describe('the CareBase theme', () => {
+  it('dresses a CareBase email as the CareBase app: the navy wordmark band, its blue, Inter with serif headlines', () => {
+    const email = renderEmail({ theme: 'carebase', title: 'Welcome', heading: 'Welcome to CareMetric CareBase', preheader: 'First steps.',
+      blocks: [{ type: 'button', label: 'Open the help center', url: 'https://cmcarebase.com/app/help' }, { type: 'steps', items: ['Add your facility.'] }],
+      signature: ['The CareMetric CareBase team'], footer: ['Reason.'] });
+    expect(email.html).toContain('data-theme="carebase"');
+    expect(email.html).toContain('CareMetric <span style="font-weight:500;color:#b9e4ff;">CareBase</span>');
+    expect(email.html).toContain('border-bottom:3px solid #59b2ff;');
+    expect(email.html).toContain("font-family:'Source Serif 4', Georgia");
+    expect(email.html).toContain('font-family:Inter,');
+    expect(email.html).toContain('border-radius:12px;background-color:#1b6fc2;');
+    expect(email.html).toContain('background-color:#f4f7fb;');
+    expect(email.html).not.toContain(PRODUCT_WORDMARK);
+    expect(email.text.endsWith('Reason.\nQuestions? Email support@caremetric.ai.\nCareMetric CareBase · cmcarebase.com')).toBe(true);
   });
 });
 
