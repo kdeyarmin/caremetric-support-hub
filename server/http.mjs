@@ -54,7 +54,7 @@ export const privateHubMessage='This Hub is private. Only its owner can sign in.
  * treated as signed out, a sign-in that fails it is revoked at once, and the routes that create
  * sign-ins for anyone else (invitation claims and application self-service) are closed.
  */
-export function appServer({auth,password,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,selfService,agents,growth,leads,leadAdmin,mediaImport=null,health,owner,origins,helpCenter=null,publicArticles=null,dist=resolve('dist')}) {
+export function appServer({auth,password,gateway,delegations,publications,aiCases,readiness,integrationSetup,settings=null,communications,bulkEmail,billing,selfService,agents,growth,leads,leadAdmin,mediaImport=null,health,owner,origins,helpCenter=null,publicArticles=null,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -336,6 +336,12 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           const input=await jsonBody(req,2048); if(Object.keys(input).length) throw new HttpError(400,'Invalid integration setup request.');
           if(!integrationSetup) throw new HttpError(503,'Integration setup is not configured.');
           return json(await integrationSetup.handle(session));
+        }
+        // The Hub's settings (server/hub-settings.mjs): switches and values the owner changes here instead of in Railway variables.
+        if(path==='/api/admin/settings') {
+          if(req.method!=='POST'||url.search) throw new HttpError(400,'Use the Settings page.');
+          if(!settings) throw new HttpError(503,'Settings are not configured.');
+          return json(await settings.admin(session,await jsonBody(req,32768)));
         }
         if(path==='/api/admin/growth') {
           if(req.method!=='POST'||url.search)throw new HttpError(400,'Use the growth workspace.');

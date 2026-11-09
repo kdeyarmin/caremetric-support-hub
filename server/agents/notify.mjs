@@ -1,4 +1,5 @@
 import { renderEmail } from '../email-layout.mjs';
+import { live } from '../live.mjs';
 
 /**
  * Messages from the AI team to the owner. Each one is recorded in the database before it is
@@ -70,9 +71,11 @@ export function ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log
       if (!sms?.configured || !contact?.phone) return { delivery: 'suppressed', id: null };
       return sms.send(contact.phone, clip(`CareMetric: ${subject}. ${paragraphs(body)[0] ?? ''}`, smsLimit));
     }
-    if (!email?.configured || !emailAddress.test(ownerEmail ?? '')) return { delivery: 'suppressed', id: null };
+    // The owner's address is a Hub setting (Settings → AI team) and may be a function, read on each alert.
+    const to = live(ownerEmail);
+    if (!email?.configured || !emailAddress.test(to ?? '')) return { delivery: 'suppressed', id: null };
     const { html, text } = renderOwnerEmail({ subject, body, severity, publicOrigin, blocks, communicationReference });
-    return email.send(ownerEmail, subject, { text, html });
+    return email.send(to, subject, { text, html });
   }
 
   async function deliver(channel, input) {

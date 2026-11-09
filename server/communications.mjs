@@ -3,6 +3,7 @@ import { isHubAdminApp } from '../src/hubScope.ts';
 import { createHmac, createPublicKey, timingSafeEqual, verify } from 'node:crypto';
 import { HttpError, digest, token, transaction, withSession } from './sms-auth.mjs';
 import { normalizePhone } from './sms-provider.mjs';
+import { live } from './live.mjs';
 import { SUPPORT_PHONE_DISPLAY, SUPPORT_TEAM_NAME, renderEmail } from './email-layout.mjs';
 
 /* Unified communications: inbound SMS and email webhooks, website chat, staff
@@ -120,11 +121,14 @@ export function inquiryImportItem(inquiry) {
 
 /** Twilio Programmable Messaging for staff replies by text. */
 export function twilioMessaging({ accountSid, authToken, messagingServiceSid, from, fetchImpl = fetch }) {
-  const configured = /^AC[0-9a-f]{32}$/.test(accountSid || '') && !!authToken && (/^MG[0-9a-f]{32}$/.test(messagingServiceSid || '') || e164.test(from || ''));
+  // The sender may be a function (the Hub's text message settings), read on each send.
+  const service = () => { const value = live(messagingServiceSid); return typeof value === 'string' && /^MG[0-9a-f]{32}$/.test(value) ? value : null; };
+  const number = () => { const value = live(from); return typeof value === 'string' && e164.test(value) ? value : null; };
   return {
-    configured,
+    get configured() { return /^AC[0-9a-f]{32}$/.test(accountSid || '') && !!authToken && (service() !== null || number() !== null); },
     async send(to, body) {
-      const form = new URLSearchParams({ To: to, Body: body, ...(messagingServiceSid ? { MessagingServiceSid: messagingServiceSid } : { From: from }) });
+      const serviceSid = service();
+      const form = new URLSearchParams({ To: to, Body: body, ...(serviceSid ? { MessagingServiceSid: serviceSid } : { From: number() ?? '' }) });
       let response;
       try {
         response = await fetchImpl(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
@@ -143,12 +147,14 @@ export function twilioMessaging({ accountSid, authToken, messagingServiceSid, fr
     { text, html } to send both parts (text/plain first, as SendGrid requires). `replyTo`, when set to a valid address, is where
     the customer's answer goes: the address SendGrid Inbound Parse receives, so the answer joins the conversation. */
 export function sendgridMail({ apiKey, from = 'support@caremetric.ai', replyTo = null, fetchImpl = fetch }) {
-  const configured = typeof apiKey === 'string' && apiKey.startsWith('SG.') && emailAddress.test(from);
-  const reply = typeof replyTo === 'string' && emailAddress.test(replyTo.trim()) ? { reply_to: { email: replyTo.trim() } } : {};
+  // `from` and `replyTo` may be functions (the Hub's email settings), read on each send.
+  const sender = () => { const value = live(from); return typeof value === 'string' ? value : ''; };
+  const replyField = () => { const value = live(replyTo); return typeof value === 'string' && emailAddress.test(value.trim()) ? { reply_to: { email: value.trim() } } : {}; };
   return {
-    configured,
+    get configured() { return typeof apiKey === 'string' && apiKey.startsWith('SG.') && emailAddress.test(sender()); },
     async send(to, subject, content) {
       const { text, html } = typeof content === 'string' ? { text: content, html: null } : content;
+      const from = sender(), reply = replyField();
       let response;
       try {
         response = await fetchImpl('https://api.sendgrid.com/v3/mail/send', {
@@ -170,6 +176,8 @@ export function sendgridMail({ apiKey, from = 'support@caremetric.ai', replyTo =
 const unsettledDelivery = 'The provider answered, but the delivery could not be recorded. Check the conversation before sending again.';
 
 export function communications({ pool, delegations, publicOrigin = defaultPublicOrigin, twilioAuthToken, sendgridInboundPublicKey, sms, email, chatEnabled = false, now = () => new Date() }) {
+  // Website chat is a Hub setting the owner switches on the Settings page; `chatEnabled` may be a function, read on each request.
+  const chatOn = () => live(chatEnabled) === true;
   let inboundKey = null;
   // A malformed key disables inbound email rather than stopping the whole Hub.
   try { if (sendgridInboundPublicKey) inboundKey = createPublicKey({ key: Buffer.from(sendgridInboundPublicKey, 'base64'), format: 'der', type: 'spki' }); }
@@ -256,9 +264,9 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
       return { received: true, reference: result.reference };
     },
     /** Public: whether website chat accepts new conversations. Off until the owner enables it. */
-    availability() { return { chat: chatEnabled }; },
+    availability() { return { chat: chatOn() }; },
     async startChat(input, clientAddress) {
-      if (!chatEnabled) throw new HttpError(503, 'Chat is not available yet. Call (877) 521-2890 or email support@caremetric.ai.');
+      if (!chatOn()) throw new HttpError(503, 'Chat is not available yet. Call (877) 521-2890 or email support@caremetric.ai.');
       only(input, ['name', 'email', 'product', 'message', 'noPhi']);
       if (input.noPhi !== true) throw new HttpError(400, 'Confirm that your message contains no patient information.');
       for (const key of ['name', 'email', 'message']) if (typeof input[key] !== 'string') throw new HttpError(400, 'Enter your name, email address and question.');
@@ -273,7 +281,7 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
       return server('select private.read_chat($1) as result', [digest(chat)]);
     },
     async postChat(chat, input, clientAddress) {
-      if (!chatEnabled) throw new HttpError(503, 'Chat is not available yet. Call (877) 521-2890 or email support@caremetric.ai.');
+      if (!chatOn()) throw new HttpError(503, 'Chat is not available yet. Call (877) 521-2890 or email support@caremetric.ai.');
       if (!chat) throw new HttpError(404, 'No chat is open in this browser.');
       only(input, ['message']);
       if (typeof input.message !== 'string') throw new HttpError(400, 'Write a message.');
@@ -281,7 +289,7 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
     },
     async channels(sessionToken) {
       await staff(sessionToken, 'select hub.list_communications(null,null,null,null,0,1) as result', []);
-      return { sms: { inbound: !!twilioAuthToken, replies: !!sms?.configured }, email: { inbound: !!inboundKey, replies: !!email?.configured }, chat: { enabled: chatEnabled }, phone: { sync: true }, webForm: { sync: true } };
+      return { sms: { inbound: !!twilioAuthToken, replies: !!sms?.configured }, email: { inbound: !!inboundKey, replies: !!email?.configured }, chat: { enabled: chatOn() }, phone: { sync: true }, webForm: { sync: true } };
     },
     async list(sessionToken, input) {
       only(input, ['status', 'channel', 'productId', 'search', 'offset', 'limit']);

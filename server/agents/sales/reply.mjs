@@ -2,7 +2,7 @@
  * `sales.reply`: one task per prospect message the Support Concierge hands over (private.sales_handoff), after the owner's alert
  * has gone out. The Sales Executive reads a minimal view of the conversation (never contact details or internal notes), and:
  *
- * - when customer text may go to the model (HUB_AGENTS_CUSTOMER_TEXT_TO_AI and a model key), it sends the scrubbed message, up to two
+ * - when customer text may go to the model (the owner's switch in Settings and a model key), it sends the scrubbed message, up to two
  *   earlier messages, the product and the prospect's stage to the model with the fact sheet and the sales playbook, checks the draft
  *   (check.mjs) and proposes it to the owner as a `communication.reply`, which only the owner can approve;
  * - otherwise, or when the model abstains, is unavailable, over budget or its draft fails a check, it proposes the same fixed sales
@@ -24,6 +24,7 @@ import { permanent, recordRun } from '../tasks/shared.mjs';
 import { marketedNow, markets } from '../marketing.mjs';
 import { checkSalesReply, guideLinks, replyLinks, wordLimits } from './check.mjs';
 import { buildUserMessage, responseSchema, salesPromptVersion, systemPrompt } from './prompt.mjs';
+import { live } from '../../live.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const products = { carebase: 'CareMetric CareBase', 'caremetric-intel': 'CareMetric Intel' };
@@ -50,8 +51,9 @@ function skipReason(snapshot, payload) {
  * `communication.answer`, which goes out without the owner's session once approved, or on its own once the owner hands "Sales answers"
  * over. Nothing it proposes offers a demo, a call or a meeting (owner decisions 2026-11-08 and 2026-11-09).
  */
-export function salesReplyHandler({ store, notifier = null, drafting = null, answers = false, marketed = null, log = line => console.warn(line) }) {
-  async function askModel({ task, snapshot, inbound, route, payload, signal }) {
+export function salesReplyHandler({ store, notifier = null, drafting: draftingOption = null, answers = false, marketed = null, log = line => console.warn(line) }) {
+  // `drafting` may be a function (the owner's switch in Settings), read once per message.
+  async function askModel({ task, snapshot, inbound, route, payload, signal, drafting }) {
     const prior = (snapshot.messages ?? []).filter(message => message.id !== inbound.id).slice(-2);
     if (prior.some(message => message.body.length >= readChars)) return { state: 'unavailable', reason: 'thread_truncated' };
     if (prior.some(message => screenIdentifiers(message.body).flagged)) return { state: 'phi' };
@@ -150,6 +152,7 @@ export function salesReplyHandler({ store, notifier = null, drafting = null, ans
   }
 
   return async function reply(task, { now = () => new Date(), signal } = {}) {
+    const drafting = live(draftingOption);
     const payload = task.payload ?? {};
     if (!uuid.test(payload.communicationId ?? '') || !uuid.test(payload.messageId ?? '') || !products[payload.product]) throw permanent('invalid_payload');
     const snapshot = await store.communicationSnapshot({ id: payload.communicationId, messages: 3, chars: readChars });
@@ -164,7 +167,7 @@ export function salesReplyHandler({ store, notifier = null, drafting = null, ans
     const flagged = screenIdentifiers(`${snapshot.subject ?? ''}\n${inbound.body}`).flagged;
 
     const marketedProduct = markets(await marketedNow(marketed), payload.product);
-    const asked = flagged ? { state: 'phi' } : !marketedProduct ? { state: 'not_marketed' } : drafting ? await askModel({ task, snapshot, inbound, route, payload, signal }) : { state: 'off' };
+    const asked = flagged ? { state: 'phi' } : !marketedProduct ? { state: 'not_marketed' } : drafting ? await askModel({ task, snapshot, inbound, route, payload, signal, drafting }) : { state: 'off' };
     if (signal?.aborted) throw Object.assign(new Error('The task was stopped.'), { code: 'task_timeout', transient: true });
 
     const first = (snapshot.outboundCount ?? 0) === 0;

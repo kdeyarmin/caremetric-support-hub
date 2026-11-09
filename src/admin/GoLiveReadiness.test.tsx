@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import { GoLiveReadiness } from "./GoLiveReadiness";
 import type { ReadinessClient } from "./readinessClient";
 import type { GoLiveReadinessReport } from "./readinessProtocol";
@@ -43,7 +44,7 @@ function fakeReadiness(report: GoLiveReadinessReport): ReadinessClient {
 
 describe("go-live readiness panel", () => {
   it("shows all four prerequisites as still needed when none are satisfied", async () => {
-    render(<GoLiveReadiness readiness={fakeReadiness(stillNeeded)} />);
+    render(<MemoryRouter><GoLiveReadiness readiness={fakeReadiness(stillNeeded)} /></MemoryRouter>);
     const migrations = await screen.findByRole("region", { name: "Production migrations" });
     expect(within(migrations).getByText("Still needed")).toBeTruthy();
     expect(within(migrations).getByText(/20261015120000/)).toBeTruthy();
@@ -65,7 +66,7 @@ describe("go-live readiness panel", () => {
   });
 
   it("shows each prerequisite done separately when all are satisfied, including what the domain resolves to", async () => {
-    render(<GoLiveReadiness readiness={fakeReadiness(allDone)} />);
+    render(<MemoryRouter><GoLiveReadiness readiness={fakeReadiness(allDone)} /></MemoryRouter>);
     const migrations = await screen.findByRole("region", { name: "Production migrations" });
     expect(within(migrations).getAllByText("Applied")).toHaveLength(2);
     for (const name of ["Production migrations", "Anthropic API key", "AI automation", "Help domain"]) {
@@ -89,7 +90,7 @@ describe("go-live readiness panel", () => {
       },
       anthropicKey: { present: true },
     };
-    render(<GoLiveReadiness readiness={fakeReadiness(mixed)} />);
+    render(<MemoryRouter><GoLiveReadiness readiness={fakeReadiness(mixed)} /></MemoryRouter>);
     const migrations = await screen.findByRole("region", { name: "Production migrations" });
     expect(within(migrations).getByText("Still needed")).toBeTruthy();
     expect(within(migrations).getByText("Applied")).toBeTruthy();

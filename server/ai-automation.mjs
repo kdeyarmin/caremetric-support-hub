@@ -1,3 +1,4 @@
+import { live } from './live.mjs';
 import { transaction } from './sms-auth.mjs';
 
 // The durable system identity created by the AI case assistance migration. AI
@@ -177,7 +178,8 @@ function latestCustomerMessage(work) {
  */
 export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 * 60 * 60 * 1000, retryDelayMs = 5 * 60 * 1000, maxRetryDelayMs = 30 * 60 * 1000, draftTier = 'draft', now = () => new Date(), log = (line) => console.log(line) }) {
   let running = false;
-  const active = () => enabled === true && Boolean(ai?.configured);
+  // `enabled`, `draftTier` and `followUpDelayMs` may be functions (Hub settings), read on each use.
+  const active = () => live(enabled) === true && Boolean(ai?.configured);
 
   // A step that went through ends any failure streak and its backoff. Always
   // written, never inferred from the state this process loaded: during a deploy
@@ -194,7 +196,7 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
       context: { caseId: work.caseId, actor: 'automation' },
       messages: threadForAi(work).filter((entry) => entry.visibility === 'customer'),
       knowledge,
-      tier: draftTier,
+      tier: live(draftTier) === 'quality' ? 'quality' : 'draft',
       automated: true,
       attempt: state.attempts + 1,
       failureContext: state.lastCustomerResponse,
@@ -207,7 +209,7 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
       lastAttemptAt: attemptedAt,
       lastAiMessageId: messageId,
       lastSeenCustomerMessageId: latest?.id ?? null,
-      followUpDueAt: new Date(attemptedAt.getTime() + followUpDelayMs),
+      followUpDueAt: new Date(attemptedAt.getTime() + live(followUpDelayMs)),
       followUpSentAt: null,
       respondedAt: null,
       ...recovered,

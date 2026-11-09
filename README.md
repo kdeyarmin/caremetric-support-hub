@@ -17,12 +17,16 @@ connections, intake, delegated actions, and purchases for those apps are disable
   (secrets by presence only). Every figure is read live and links into the
   workspace that manages it. The per-application workspace moved to
   `/admin/apps`. See [the control center](docs/CONTROL_CENTER.md).
+- **Settings** (`/admin/settings`): every switch and value the Hub uses that is not a secret, such as the AI
+  team, chat, AI answers, email senders, customer purchasing, social media accounts and ad limits. Turn a
+  feature on or off and it applies within a minute, with nothing to redeploy. Only secrets stay in Railway. See
+  [Settings](docs/SETTINGS.md).
 - **Customer growth** (`/admin/growth`): CareBase and CareMetric Intel prospect research, reviewed outreach, onboarding and retention work, contact suppression, and cohort outcomes. Breathe is deferred. See [setup and operation](docs/CUSTOMER_GROWTH.md). The AI team's revenue agents share one [sales playbook](server/growth/playbook.mjs), and the **Sales Executive** drafts fact-checked answers to prospects for the owner's approval and sends a weekly pipeline review ([AI team](docs/AI_TEAM.md#the-sales-executive), [skills review](docs/AI_WORKFORCE_SKILLS_REVIEW.md)). The **Social Media Manager** plans posts, answers comments and messages, and evaluates and tunes ads every day on Facebook, Instagram and LinkedIn, each change approved by the owner until handed over ([social media](docs/SOCIAL_MEDIA.md)).
 - **Communications** (`/communications`): customer service and technical
   support from the (877) 521-2890 phone line, text messages, email, website chat
   land in one queue with triage, internal notes and
   replies on the original channel. Text, email and chat stay off until their
-  provider settings (or `HUB_CHAT_ENABLED`) are set. See
+  provider credentials are set (chat: the **Website chat** switch in [Settings](docs/SETTINGS.md)). See
   [unified communications](docs/UNIFIED_COMMUNICATIONS.md).
 - **Leads** (`/admin/leads`): every lead from the CareBase, Intel and Healthcare
   Advisors websites (demo and consultation requests, contact forms, trial and

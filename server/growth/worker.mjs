@@ -1,3 +1,4 @@
+import { live } from '../live.mjs';
 import { contentBrief } from './content.mjs';
 import { weekStart } from '../agents/accounts/week.mjs';
 import { assessProspect } from './assessment.mjs';
@@ -176,7 +177,7 @@ export function growthExecutors({growth,mail,publicOrigin,postalAddress}) {
     const token=growth.unsubscribeToken(claimed.workId);
     if(claimed.unsubscribeHash && growth.hash(token)!==claimed.unsubscribeHash){await growth.store.finish(claimed.id,'failed',null);throw Object.assign(new Error('Regenerate the message after signing configuration changed'),{code:'unsubscribe_key_changed'});}
     const link=`${publicOrigin.replace(/\/+$/,'')}/api/growth/unsubscribe/${token}`;
-    const email=growthEmail({product:claimed.product,subject:claimed.subject,body:claimed.body,postalAddress,unsubscribeUrl:link});
+    const email=growthEmail({product:claimed.product,subject:claimed.subject,body:claimed.body,postalAddress:live(postalAddress),unsubscribeUrl:link});
     let outcome;
     try {outcome=await mail.send({to:claimed.to,subject:claimed.subject,text:email.text,html:email.html,unsubscribeUrl:link,messageId:claimed.id});}
     catch {outcome={delivery:'unknown',id:null};}

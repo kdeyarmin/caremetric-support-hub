@@ -1,6 +1,7 @@
 import { createHmac, createPublicKey, createHash, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { HttpError } from '../sms-auth.mjs';
+import { live } from '../live.mjs';
 import { sendgridSignatureValid } from '../communications.mjs';
 import { activitySchema } from './protocol.mjs';
 import { products, stages } from './policy.mjs';
@@ -19,16 +20,18 @@ export { activitySchema } from './protocol.mjs';
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const equal=(a,b)=>{const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length&&timingSafeEqual(x,y);};
 export function growthService({store,research,contacts=null,features,enabled=false,signingKey='',eventKeys={},webhookPublicKey='',publicOrigin,postalAddress=''}) {
+  // The sending switch and the footer's postal address are Hub settings; either may be a function, read on each use.
+  const sending=()=>live(enabled)===true; const postal=()=>String(live(postalAddress)??'');
   const ready=()=>{if(!features?.has('platform.agents.customer-growth.v1'))throw new HttpError(503,'Apply the growth database migration first.');};
   const safe=async work=>{try{return await work();}catch(e){if(e instanceof HttpError)throw e; if(['22023','22007','23514','23503','23505'].includes(e?.code))throw new HttpError(400,'Check the growth record and its references.'); if(e?.code==='40001')throw new HttpError(409,'This record changed. Refresh and review it again.'); if(e?.code==='28000')throw new HttpError(401,'Sign in again.'); if(e?.code==='42501')throw new HttpError(403,'Not permitted.'); throw e;}};
   const parse=(schema,input)=>{const parsed=schema.safeParse(input); if(!parsed.success)throw new HttpError(400,'Invalid growth request.');return parsed.data;};
   const unsubscribeToken=workId=>createHmac('sha256',signingKey).update(`growth:${workId}`).digest('hex');
   return {
-    ready, store, research, contacts, enabled, unsubscribeToken, hash, signingReady:signingKey.length>=32,
-    configured:()=>enabled&&signingKey.length>=32&&postalAddress.trim().length>0&&/^https:\/\//.test(publicOrigin??''),
+    ready, store, research, contacts, get enabled(){return sending();}, unsubscribeToken, hash, signingReady:signingKey.length>=32,
+    configured:()=>sending()&&signingKey.length>=32&&postal().trim().length>0&&/^https:\/\//.test(publicOrigin??''),
     async admin(token,input) {
       ready(); const {operation,data}=parse(z.object({operation:z.string(),data:z.record(z.string(),z.unknown()).default({})}).strict(),input);
-      if(operation==='workspace') {const {offset}=parse(z.object({offset:z.number().int().min(0).default(0)}).strict(),data);return safe(async()=>({...await store.workspace(token,offset),services:{sending:enabled,signing:signingKey.length>=32,postalAddress:Boolean(postalAddress),research:Boolean(research?.configured)}}));}
+      if(operation==='workspace') {const {offset}=parse(z.object({offset:z.number().int().min(0).default(0)}).strict(),data);return safe(async()=>({...await store.workspace(token,offset),services:{sending:sending(),signing:signingKey.length>=32,postalAddress:Boolean(postal().trim()),research:Boolean(research?.configured)}}));}
       if(operation==='detail')return safe(()=>store.detail(token,parse(z.object({id:uuid}).strict(),data).id));
       if(operation==='research') {
         const parsed=parse(z.object({id:uuid}).strict(),data);

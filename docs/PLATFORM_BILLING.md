@@ -30,11 +30,16 @@ platform billing and stay in those applications.
 | --- | --- | --- |
 | `STRIPE_SECRET_KEY` | yes | Secret or restricted key of `acct_1SinLKB06O2UFlNz`. `sk_test_` for test mode, `sk_live_` for live. |
 | `STRIPE_WEBHOOK_SECRET` | yes | Signing secret of the Hub's webhook endpoint. Comma-separate two secrets while rolling one. |
-| `STRIPE_PORTAL_CONFIGURATION_ID` | no | `bpc_…` Customer Portal configuration for Hub customers; Stripe's default configuration otherwise. |
 | `HUB_PUBLIC_ORIGIN` | no | Return address of the customer portal (`https://help.caremetric.ai`). |
-| `HUB_CUSTOMER_PURCHASING_ENABLED` | no | Defaults off. Enables reviewed customer purchase confirmations only after the sandbox and native entitlement rollout gates pass. Existing checkout status and cancellation remain reachable when new purchasing is off. |
-| `HUB_APP_CATALOG_SYNC` | no | `off` stops the Intel price sync (below). On by default. |
 | `INTEL_CATALOG_URL` | no | Reads Intel's price catalog from another Intel (staging) instead of `https://www.caremetricintel.com/api/billing/catalog`. |
+
+In [Settings](SETTINGS.md) → Billing:
+
+- **Customers can buy subscriptions** (off by default). Enables reviewed customer purchase confirmations only after the
+  sandbox and native entitlement rollout gates pass. Existing checkout status and cancellation remain reachable when it is off.
+- **Keep Stripe in step with Intel's prices** (on by default). Switching it off stops the Intel price sync (below).
+- **Stripe customer portal configuration**: the `bpc_…` Customer Portal configuration for Hub customers; Stripe's default
+  configuration otherwise.
 
 Webhook endpoint: `POST https://<hub>/api/webhooks/stripe`, API version
 `2026-02-25.clover`, events: customer, subscription, discount, product, price,
@@ -336,7 +341,7 @@ subscription pays in Stripe Checkout and returns to `return_url` with `?checkout
 - A key reaches only its own application's linked accounts (`private.app_customer_billing_tenant`,
   resolved like entitlements): an unlinked account or another application's account is 404, and a
   suspended or closed organization is 403. Browser requests (an `Origin` or a cookie) are refused.
-- Workspace and quote work while `HUB_CUSTOMER_PURCHASING_ENABLED` is off; `confirm` answers 503 and a
+- Workspace and quote work while **Customers can buy subscriptions** is off; `confirm` answers 503 and a
   pending Checkout can be checked or cancelled but never newly created.
 - A quote belongs to the administrator who reviewed it (`app_actor`); only they can confirm it. A
   pending Checkout belongs to the organization: any of its administrators can check or cancel it.

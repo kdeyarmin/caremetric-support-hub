@@ -102,8 +102,8 @@ accepting messages that may contain PHI.
 ### Text messages (Twilio)
 
 1. In Railway, set `HUB_TWILIO_AUTH_TOKEN` (inbound signature check) and, for
-   replies, `HUB_TWILIO_ACCOUNT_SID` plus `HUB_TWILIO_MESSAGING_SERVICE_SID`
-   (preferred) or `HUB_TWILIO_FROM_NUMBER`. `HUB_PUBLIC_ORIGIN` must match the
+   replies, `HUB_TWILIO_ACCOUNT_SID`. Then in Settings → Text messages enter the
+   Twilio Messaging Service SID (preferred) or the sending number. `HUB_PUBLIC_ORIGIN` must match the
    exact origin Twilio calls (default
    `https://support-hub-web-production.up.railway.app`). The support number
    belongs to the "CareMetric AI" Messaging Service
@@ -138,22 +138,22 @@ accepting messages that may contain PHI.
    signed webhooks. Set `HUB_SENDGRID_INBOUND_PUBLIC_KEY` to the verification
    key. Unsigned or stale (older than ten minutes) posts are refused.
 3. For replies, authenticate the sending domain in SendGrid and set
-   `HUB_SENDGRID_API_KEY` (Mail Send only). `HUB_SUPPORT_FROM_EMAIL` defaults
-   to `support@caremetric.ai`.
+   `HUB_SENDGRID_API_KEY` (Mail Send only). The support sender (Settings →
+   Email) defaults to `support@caremetric.ai`.
 4. If Inbound Parse receives on a different address (for example
-   `support@inbound.caremetric.ai`), set `HUB_SUPPORT_REPLY_TO` to it. Staff
+   `support@inbound.caremetric.ai`), enter it as the Reply-To in Settings → Email. Staff
    replies, the AI team's customer emails and bulk email then carry it as
    Reply-To, so customers' answers join the conversation (and a reply still
-   stops a growth sequence). A value that is not an email address is ignored
-   with a warning; without it, answers go to the sender itself.
+   stops a growth sequence). Settings refuses a value that is not an email
+   address; without one, answers go to the sender itself.
 
 ### One address
 
-Every email the Hub sends comes from **support@caremetric.ai** (`HUB_SUPPORT_FROM_EMAIL`) and
-replies to it (or to `HUB_SUPPORT_REPLY_TO` when set): staff replies, the AI team's alerts and
-external emails, customer lifecycle emails and bulk email. `HUB_BULK_EMAIL_FROM` is no longer read.
-The one exception is growth email (cold email and sales follow-ups): when `HUB_GROWTH_FROM_EMAIL`
-is set it comes from that address, on its own subdomain, and still replies to the support inbox
+Every email the Hub sends comes from **support@caremetric.ai** (the support sender in Settings → Email) and
+replies to it (or to the Reply-To set there): staff replies, the AI team's alerts and
+external emails, customer lifecycle emails and bulk email.
+The one exception is growth email (cold email and sales follow-ups): when the growth email sender
+is set (Settings → Email) it comes from that address, on its own subdomain, and still replies to the support inbox
 (see [Customer growth](CUSTOMER_GROWTH.md#a-separate-sender-for-prospecting)). Unset, growth
 email comes from the support address too. The email footers name the same address, in
 every theme.
@@ -162,8 +162,8 @@ It receives replies: `caremetric.ai`'s MX record is `mx.sendgrid.net`, so every 
 domain is delivered to SendGrid Inbound Parse and from there to Communications. Audit of
 2026-11-08: SendGrid domain authentication (DKIM `s1`/`s2`) for `caremetric.ai` is in the same
 SendGrid account as `cmcarebase.com`; answers from CMS to two emails the AI team sent from the
-address arrived in Communications. The Hub is configured with no `HUB_SUPPORT_FROM_EMAIL`,
-`HUB_SUPPORT_REPLY_TO` or `HUB_BULK_EMAIL_FROM`, so production uses the default.
+address arrived in Communications. At that audit no support sender or Reply-To was configured, so
+production used the default.
 
 The applications' own emails are configured in each application: CareBase's
 (`NOTIFICATION_FROM_EMAIL`, a CareBase Supabase function secret) and Intel's
@@ -173,7 +173,7 @@ that authenticates only `caremetricintel.com`). Replies to an address on `cmcare
 
 ### Chat
 
-Set `HUB_CHAT_ENABLED=true`. Until then the Help page offers the phone number,
+Switch on **Website chat** in Settings → Customer support. Until then the Help page offers the phone number,
 email and support form instead.
 
 ## Imports

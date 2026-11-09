@@ -3,11 +3,12 @@
  * Concierge hands over (`sales.reply`) and sends the owner a weekly pipeline review (`sales.review`). Its handlers register only when
  * the database declares `platform.agents.sales-executive.v1`; the review also needs the customer-growth records.
  *
- * Prospect text goes to the model only when the owner's switch for customer text (HUB_AGENTS_CUSTOMER_TEXT_TO_AI) is on and a model
+ * Prospect text goes to the model only when the owner's switch for customer text (Settings → AI team) is on and a model
  * key is set. Without them every handed-over prospect still gets the fixed sales acknowledgment, exactly as before.
  */
 import { salesReplyHandler } from './reply.mjs';
 import { salesReviewHandler } from './review.mjs';
+import { live } from '../../live.mjs';
 
 export const salesFeature = 'platform.agents.sales-executive.v1';
 export const salesDeclared = features => (features instanceof Set ? features.has(salesFeature) : Array.isArray(features) && features.includes(salesFeature));
@@ -20,10 +21,11 @@ const answersFeature = 'platform.agents.concierge-autosend.v1';
 
 export function salesHandlers({ store, notifier, model = null, growth = null, features = null, customerTextToAi = false, publicOrigin = null, guides = null, marketed = null, log }) {
   if (!salesDeclared(features)) return {};
-  const drafting = salesDraftingFor({ model, customerTextToAi });
+  // The owner's switch (Settings → AI team) is read for each message.
+  const drafting = () => { const allowed = salesDraftingFor({ model, customerTextToAi: live(customerTextToAi) }); return allowed ? { ...allowed, guides } : null; };
   const answers = features instanceof Set ? features.has(answersFeature) : Array.isArray(features) && features.includes(answersFeature);
   return {
-    'sales.reply': salesReplyHandler({ store, notifier, drafting: drafting ? { ...drafting, guides } : null, answers, marketed, log }),
+    'sales.reply': salesReplyHandler({ store, notifier, drafting, answers, marketed, log }),
     ...(growth?.store?.snapshot ? { 'sales.review': salesReviewHandler({ store, growth, notifier, publicOrigin, log }) } : {}),
   };
 }

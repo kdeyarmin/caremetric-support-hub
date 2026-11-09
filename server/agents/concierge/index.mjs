@@ -10,6 +10,7 @@ import { replyExecutor } from './executor.mjs';
 import { sweepHandler } from './sweep.mjs';
 import { triageHandler } from './triage.mjs';
 import { salesDeclared } from '../sales/index.mjs';
+import { live } from '../../live.mjs';
 
 export const conciergeFeature = 'platform.agents.concierge.v1';
 /** Support answers the Concierge may send without the owner's session (supabase/migrations/20261105120000_concierge_answers.sql). */
@@ -19,7 +20,7 @@ const has = (features, feature) => (features instanceof Set ? features.has(featu
 const declared = features => has(features, conciergeFeature);
 
 /**
- * `customerTextToAi` is the owner's explicit switch (HUB_AGENTS_CUSTOMER_TEXT_TO_AI, exactly "true"). Customer text can go to the
+ * `customerTextToAi` is the owner's explicit switch (Settings → AI team → "Let agents send customer messages to the AI"). Customer text can go to the
  * model only when it is on, a model key is set and the guide library is there; otherwise triage is rules-only, as before.
  */
 export const draftingFor = ({ model = null, guides = null, customerTextToAi = false } = {}) =>
@@ -27,12 +28,13 @@ export const draftingFor = ({ model = null, guides = null, customerTextToAi = fa
 
 export function conciergeHandlers({ store, notifier, features = null, log, model = null, guides = null, customerTextToAi = false }) {
   if (!declared(features)) return {};
-  const drafting=draftingFor({model,guides,customerTextToAi});
+  // The owner's switch (Settings → AI team) is read for each message, so turning it off stops the next draft.
+  const drafting=()=>{const allowed=draftingFor({model,guides,customerTextToAi:live(customerTextToAi)});return allowed?{...allowed,followups}:null;};
   const followups=features?.has?.('platform.agents.customer-growth.v1')===true || (Array.isArray(features)&&features.includes('platform.agents.customer-growth.v1'));
   return {
     'concierge.sweep': sweepHandler({ store }),
     // A prospect's message goes to the Sales Executive once the database declares it and the owner has resumed it (sales_handoff decides).
-    'concierge.communication': triageHandler({ store, notifier, log, drafting: drafting?{...drafting,followups}:null, answers: has(features, answersFeature),
+    'concierge.communication': triageHandler({ store, notifier, log, drafting, answers: has(features, answersFeature),
       sales: salesDeclared(features) && typeof store.salesHandoff === 'function' }),
   };
 }

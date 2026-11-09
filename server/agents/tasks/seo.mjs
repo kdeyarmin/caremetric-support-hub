@@ -5,7 +5,7 @@
  * Three parts, each optional except the first:
  * - The crawl (no model): each site's findings, the pages that are app shells, and any two of the company's hosts that
  *   serve the same page ("pick one canonical home page").
- * - Search Console, when HUB_SEARCH_CONSOLE_CREDENTIALS and HUB_SEARCH_CONSOLE_SITES are set: clicks, impressions,
+ * - Search Console, when HUB_SEARCH_CONSOLE_CREDENTIALS and the properties (Settings → Search) are set: clicks, impressions,
  *   click-through rate and position against the 28 days before, the top searches and pages, searches close to the
  *   first page, pages seen often but rarely clicked, and searches two of the company's sites compete for. Without it
  *   the report says so once, with the steps to connect it. It is read while the sites are crawled.
@@ -30,6 +30,9 @@ import { sites as defaultSites } from '../seo/sites.mjs';
 import { weekStart } from '../accounts/week.mjs';
 import { delivered } from '../notify.mjs';
 import { heldForScorecard, heldResult, plural, recordRun } from './shared.mjs';
+import { live, rebuilt } from '../../live.mjs';
+// The Settings page keeps the properties as a list; the reader takes them as one comma-separated text, as the old variable held them.
+const consoleSites = value => (Array.isArray(value) ? value.join(',') : value);
 
 const dayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
 const dayLabel = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' });
@@ -63,15 +66,15 @@ const duplicateReason = entry => [
   entry.reasons.includes('same_title') ? (entry.sharedTitles === 1 ? 'they have a page with the same title' : `they have ${entry.sharedTitles} titles in common`) : null,
 ].filter(Boolean).join('; ');
 
-const connectSteps = 'To connect it: in Google Cloud, create a service account with a JSON key and enable the Google Search Console API for its project; in Search Console, add the service account\'s email address as a user on each property; then set HUB_SEARCH_CONSOLE_CREDENTIALS (the whole key file) and HUB_SEARCH_CONSOLE_SITES (the properties, for example sc-domain:cmcarebase.com) on the Hub service.';
+const connectSteps = 'To connect it: in Google Cloud, create a service account with a JSON key and enable the Google Search Console API for its project; in Search Console, add the service account\'s email address as a user on each property; then set HUB_SEARCH_CONSOLE_CREDENTIALS (the whole key file) on the Hub service and list the properties in the Hub\'s Settings, under Search (for example sc-domain:cmcarebase.com).';
 const notConnected = {
   not_configured: `Search Console is not connected, so this report has no clicks, impressions or searches. ${connectSteps}`,
-  credentials_missing: `Search Console is not connected: HUB_SEARCH_CONSOLE_SITES is set but HUB_SEARCH_CONSOLE_CREDENTIALS is empty. ${connectSteps}`,
+  credentials_missing: `Search Console is not connected: properties are listed in Settings but HUB_SEARCH_CONSOLE_CREDENTIALS is empty. ${connectSteps}`,
   credentials_invalid: `Search Console is not connected: the key in HUB_SEARCH_CONSOLE_CREDENTIALS could not be read. Paste the service account's whole JSON key file, as Google downloads it. ${connectSteps}`,
-  no_properties: 'Search Console is not connected: HUB_SEARCH_CONSOLE_SITES names no property it can read. Write each one as Search Console shows it, for example sc-domain:cmcarebase.com or https://www.caremetricintel.com/, separated by commas.',
+  no_properties: 'Search Console is not connected: the properties in Settings, under Search, name none it can read. Write each one as Search Console shows it, for example sc-domain:cmcarebase.com or https://www.caremetricintel.com/, one per line.',
 };
 
-const writtenAsShown = 'Write it in HUB_SEARCH_CONSOLE_SITES exactly as Search Console shows it: an address prefix ends with /.';
+const writtenAsShown = 'Write it in Settings, under Search, exactly as Search Console shows it: an address prefix ends with /.';
 const failureWords = (code, account) => ({
   not_permitted: `the service account${account ? ` (${account})` : ''} cannot read this property. Add it in Search Console under Settings, Users and permissions. ${writtenAsShown}`,
   property_not_found: `Search Console does not know this property. ${writtenAsShown}`,
@@ -112,7 +115,7 @@ function searchSection(search) {
   const { insights, account } = search;
   const body = [];
   const blocks = [];
-  const skipped = search.invalidProperties > 0 ? ` ${search.invalidProperties === 1 ? '1 entry' : `${search.invalidProperties} entries`} in HUB_SEARCH_CONSOLE_SITES ${search.invalidProperties === 1 ? 'was' : 'were'} not understood and skipped.` : '';
+  const skipped = search.invalidProperties > 0 ? ` ${search.invalidProperties === 1 ? '1 entry' : `${search.invalidProperties} entries`} in the Search Console properties ${search.invalidProperties === 1 ? 'was' : 'were'} not understood and skipped.` : '';
   const intro = `Search Console, ${windowWords(insights.window)}, against the 28 days before.${skipped}`;
   body.push([intro, ...insights.sites.map(site => `${site.property}: ${totalsWords(site)}`), ...insights.failures.map(failure => `${failure.property} could not be read: ${failureWords(failure.code, account)}`)].join('\n'));
   blocks.push({ type: 'paragraph', text: intro });
@@ -288,11 +291,14 @@ function searchResult(search) {
 
 export function seoHandlers({
   store, notifier, publicOrigin, fetchImpl = fetch, sites = defaultSites, audit = auditSite, log = line => console.warn(line),
-  model = null, searchConsole = undefined, env = process.env, clock = () => Date.now(), limits = {},
+  model = null, searchConsole = undefined, searchConsoleSites = undefined, env = process.env, clock = () => Date.now(), limits = {},
 }) {
-  // Search Console is read only when the owner has set both variables; `searchConsole` replaces the reader in tests (null: none at all).
+  // Search Console is read only when the key (Railway) and the properties (Settings → Search) are both set; `searchConsole` replaces
+  // the reader in tests (null: none at all).
   const reader = searchConsole === undefined
-    ? searchConsoleReader({ credentials: env.HUB_SEARCH_CONSOLE_CREDENTIALS, sites: env.HUB_SEARCH_CONSOLE_SITES, fetchImpl, log })
+    // The properties are a Hub setting (`searchConsoleSites`, Settings → Search) read on each run; the key stays in Railway.
+    ? rebuilt(() => ({ credentials: env.HUB_SEARCH_CONSOLE_CREDENTIALS, sites: consoleSites(searchConsoleSites === undefined ? env.HUB_SEARCH_CONSOLE_SITES : live(searchConsoleSites)) }),
+      input => searchConsoleReader({ ...input, fetchImpl, log }))
     : searchConsole;
   // The suggestions need the shared model runtime with a key, as the Concierge's drafting does. Without it the section is left out.
   const rewriter = model?.configured === true && typeof model.run === 'function' ? model : null;

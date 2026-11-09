@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { HttpError, withSession, transaction } from './sms-auth.mjs';
+import { live } from './live.mjs';
 import { customerBillingRequest, customerBillingWorkspace } from '../src/billing/customerBillingProtocol.ts';
 import { aggregateFacilityLines, planFacilityChange } from '../src/billing/facilityAllocations.ts';
 import { assertPlanFits } from '../src/billing/planSize.ts';
@@ -65,6 +66,8 @@ function verifyAccount(subscription, execution) {
  * acting, with its application key, for its own organization administrator.
  */
 export function customerBillingService({ pool, stripe, mirrorSubscription, mirrorCustomer, mirrorInvoice, publicOrigin, authorize, now = () => Date.now(), purchasingEnabled = false }) {
+  // Whether customers may buy subscriptions: the Hub setting (Settings → Billing). `purchasingEnabled` may be a function, read on each request.
+  const purchasing = () => live(purchasingEnabled) === true;
   const one = async (db, query, values) => (await db.query(query, values)).rows[0]?.result;
   const rpc = (session, name, values) => withSession(pool, session, async db => {
     await db.query('reset role');
@@ -343,7 +346,7 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
       const facility = workspace.role === 'organization_admin' ? null : workspace.facilities.find(site => site.permissions.includes('billing.manage'))?.id;
       if (facility === undefined) throw new HttpError(403, 'Purchasing permission is required.');
       await requester.authorize(request.connection_id, facility);
-      return { ...publicWorkspace(await context(requester, request.connection_id)), purchasing_enabled: purchasingEnabled };
+      return { ...publicWorkspace(await context(requester, request.connection_id)), purchasing_enabled: purchasing() };
     }
     if (request.action === 'quote') return preview(requester, request);
     if (request.action === 'checkout_resume' || request.action === 'checkout_cancel') {
@@ -351,9 +354,9 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
       await verifyScope(requester, workspace, null);
       const quote = await requester.checkoutStatus(request.quote_id, request.connection_id);
       const fresh = await context(requester, request.connection_id);
-      return request.action === 'checkout_cancel' ? checkout.cancel(quote, fresh) : checkout.start(quote, fresh, { allowCreate: purchasingEnabled });
+      return request.action === 'checkout_cancel' ? checkout.cancel(quote, fresh) : checkout.start(quote, fresh, { allowCreate: purchasing() });
     }
-    if (!purchasingEnabled) throw new HttpError(503, 'Subscription purchasing is not yet enabled. Your existing subscription and payment services remain available.');
+    if (!purchasing()) throw new HttpError(503, 'Subscription purchasing is not yet enabled. Your existing subscription and payment services remain available.');
     return confirm(requester, request);
   }
   async function handle(session, input) {
@@ -361,7 +364,7 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
     if (!parsed.success) throw new HttpError(400, 'Review your subscription selection.');
     const request = parsed.data;
     if (request.action !== 'activate_facility_billing') return run(sessionRequester(session), request);
-    if (!purchasingEnabled) throw new HttpError(503, 'Subscription purchasing is not yet enabled. Your existing subscription and payment services remain available.');
+    if (!purchasing()) throw new HttpError(503, 'Subscription purchasing is not yet enabled. Your existing subscription and payment services remain available.');
     const workspace = await context(sessionRequester(session), request.connection_id);
     const authority = await authorize(session, request.connection_id, null);
     if (!workspace.can_activate || !authority.capabilities?.includes('facility.entitlements.v1')) throw new HttpError(409, 'Separate facility plans are not yet enabled by this application.');

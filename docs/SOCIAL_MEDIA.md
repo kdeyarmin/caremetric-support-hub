@@ -19,11 +19,12 @@ comment asking about another product is left for the owner, and a losing ad for 
 | Work (task) | When | What happens |
 | --- | --- | --- |
 | Weekly social plan (`social.plan`) | Each morning at 08:15 Eastern; plans once a week | Drafts 3 Facebook, 2 Instagram and 3 LinkedIn posts. It works from the fact sheet, the sales playbook and the last four weeks' engagement (more like what worked, never a repeat). Each draft is checked. Each post is proposed with a time slot (10:30 Eastern for Facebook, 12:15 for Instagram, 8:45 for LinkedIn); an approved post is held until then and published. The owner gets the plan by email, with the LinkedIn posts to paste while LinkedIn is not connected. |
-| Comments and messages (`social.inbox`, `social.interaction`) | Every 15 minutes | Finds new comments on the Facebook Page's, Instagram's and the LinkedIn Page's recent posts, and new Messenger messages. Each gets its own task. With `HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true` it drafts a short, checked reply for approval, or proposes hiding spam (deleting it on LinkedIn). Without it, the owner is told and answers on the platform. |
+| Comments and messages (`social.inbox`, `social.interaction`) | Every 15 minutes | Finds new comments on the Facebook Page's, Instagram's and the LinkedIn Page's recent posts, and new Messenger messages. Each gets its own task. With Settings → AI team → "Let agents send customer messages to the AI" on, it drafts a short, checked reply for approval, or proposes hiding spam (deleting it on LinkedIn). Without it, the owner is told and answers on the platform. |
 | Daily ad review (`social.ads`) | Each morning at 09:10 Eastern | Judges every Meta ad and LinkedIn creative on the last seven days against the seven before, with the rules below. It proposes pausing losers and new copy where an ad set needs it, plus a budget increase only under the owner's cap. |
 | Weekly social report (`social.report`) | Each morning at 08:05 Eastern; sends once a week | Shows posts and engagement per platform, the top posts, and ad spend, impressions, click rate, results and cost per result per ad set. It also counts what is waiting for the owner. While the [Monday scorecard](MONDAY_SCORECARD.md) carries it ("Send the individual weekly reports" off), its scheduled run sends nothing; Run now still emails it. |
 
-Instagram posts need an image. They use the brand images in `HUB_SOCIAL_IMAGE_URLS` in turn; with none, the plan leaves Instagram out.
+Instagram posts need an image. They use the images listed in Settings → Social media → "Approved brand images" in turn; with none,
+the plan leaves Instagram out.
 LinkedIn posts use the same images, as the thumbnail of their link card: LinkedIn builds no preview for a post made through its API, so
 the image is uploaded with the post. New ad copy reuses the image of the ad set's (or LinkedIn campaign's) best ad.
 
@@ -42,8 +43,8 @@ only after three days and 1,000 impressions or $20 of spend in the last seven da
   - an ad set has fewer than two active ads; or
   - an ad is tiring: seen more than 3.5 times per person, with its click rate down 30% on the week before.
 - **Raise a budget** when an ad set has three or more results at 70% of the target cost or better. The step is at most 20%, never above
-  `HUB_SOCIAL_AD_MAX_DAILY_BUDGET_CENTS`. With no cap set, no increase is ever proposed. The executor re-checks the cap, refuses a step
-  over 25%, and refuses if the budget changed since the proposal. The database refuses any automatic approval of a budget change.
+  the owner's cap, Settings → Social media → "Most any ad may spend per day". With no cap set, no increase is ever proposed.
+  The executor re-checks the cap, refuses a step over 25%, and refuses if the budget changed since the proposal. The database refuses any automatic approval of a budget change.
 
 Results are leads and sign-ups as Meta and LinkedIn report them (LinkedIn: website conversions and Lead Gen Form leads). On LinkedIn a
 campaign plays the part of an ad set (it holds the daily budget) and a creative the part of an ad, and the same rules apply. A new ad
@@ -105,13 +106,15 @@ A draft that fails is dropped. The run records only the check's name.
    - `business_management`.
 
    Meta may ask for app review of some permissions before they work outside development mode.
-3. **Set the Hub variables** on Railway:
-   - required: `HUB_META_ACCESS_TOKEN` and `HUB_META_PAGE_ID`;
-   - optional: `HUB_META_INSTAGRAM_ID`, `HUB_META_AD_ACCOUNT_ID`, `HUB_SOCIAL_IMAGE_URLS`, `HUB_SOCIAL_TARGET_COST_PER_RESULT_CENTS` and
-     `HUB_SOCIAL_AD_MAX_DAILY_BUDGET_CENTS`.
+3. **Set the token and the account ids.**
+   - On Railway, the secret: `HUB_META_ACCESS_TOKEN` (required). The Control center's integration panel shows whether it is set.
+   - In the Hub, under Settings → Social media: "Facebook Page id" (required), and optionally "Instagram account id", "Meta ad
+     account id", "Approved brand images" (one https address per line, at most 20), "Target cost per lead or sign-up" and "Most any
+     ad may spend per day" (both in dollars).
 
-   The Control center's integration panel shows which are set. To draft replies, `HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true` and the Anthropic
-   key are needed too.
+   To draft replies, Settings → AI team → "Let agents send customer messages to the AI" must be on and the Anthropic key set too.
+   The ids, images and ad limits used to be Railway variables (`HUB_META_PAGE_ID` and the others); the Hub copies them into Settings
+   once on its first start after the settings migration, and they can then be deleted. [Settings](SETTINGS.md) lists every setting.
 4. **Apply the two migrations and restart the Hub** so it reads the feature. Then resume the Social Media Manager on **AI team**, in
    **Propose**, and press **Run now** on "Weekly social report" to check the connection, then on "Weekly social plan".
 5. **Review a few weeks** of posts, replies and ad changes. Then hand work over one kind at a time under "Work the team does on its
@@ -135,8 +138,9 @@ LinkedIn decides who may use its Page and advertising APIs. Approval is a review
 3. **Request the Community Management API** product for the app (posts, comments and engagement on the Page). LinkedIn reviews the
    request. LinkedIn may require this product to be the only one on its app.
 4. **Request the Advertising API** product for ads: on the same app if LinkedIn allows, otherwise on a second app. If it is a second
-   app, its token goes in `HUB_LINKEDIN_ADS_ACCESS_TOKEN` (and its refresh token, client id and secret in the matching `HUB_LINKEDIN_ADS_*`
-   variables).
+   app, its token goes in `HUB_LINKEDIN_ADS_ACCESS_TOKEN` on Railway (and its refresh token and client secret in
+   `HUB_LINKEDIN_ADS_REFRESH_TOKEN` and `HUB_LINKEDIN_ADS_CLIENT_SECRET`), and its client id in Settings → Social media →
+   "LinkedIn advertising app client id".
 5. **Generate the tokens** (OAuth 2.0 authorization code flow, or the developer portal's token generator), signed in as the Page's admin:
    - Page app: `r_organization_social`, `w_organization_social` and `rw_organization_admin`, plus any comment scopes LinkedIn adds to
      the product (such as `r_organization_social_feed` and `w_organization_social_feed`);
@@ -145,11 +149,13 @@ LinkedIn decides who may use its Page and advertising APIs. Approval is a review
 
    An access token lasts 60 days. If LinkedIn also issues a refresh token, set it with the app's client id and secret and the Hub
    renews the access token by itself. Otherwise, renew the token before it expires; the Hub warns once a day when LinkedIn refuses it.
-6. **Set the Hub variables** on Railway:
-   - required: `HUB_LINKEDIN_ACCESS_TOKEN` and `HUB_LINKEDIN_ORGANIZATION_ID` (the Page's numeric id);
-   - optional: `HUB_LINKEDIN_AD_ACCOUNT_ID`, `HUB_LINKEDIN_REFRESH_TOKEN`, `HUB_LINKEDIN_CLIENT_ID`, `HUB_LINKEDIN_CLIENT_SECRET`, the
-     `HUB_LINKEDIN_ADS_*` variables of a second app, and `HUB_LINKEDIN_API_VERSION` (default `202609`; set a newer YYYYMM when
-     LinkedIn retires it).
+6. **Set the tokens and the ids.**
+   - On Railway, the secrets: `HUB_LINKEDIN_ACCESS_TOKEN` (required), and optionally `HUB_LINKEDIN_REFRESH_TOKEN`,
+     `HUB_LINKEDIN_CLIENT_SECRET` and a second app's `HUB_LINKEDIN_ADS_ACCESS_TOKEN`, `HUB_LINKEDIN_ADS_REFRESH_TOKEN` and
+     `HUB_LINKEDIN_ADS_CLIENT_SECRET`.
+   - In the Hub, under Settings → Social media: "LinkedIn Company Page id" (required; the Page's numeric id), and optionally
+     "LinkedIn ad account id", "LinkedIn app client id" (needed with the refresh token and client secret), "LinkedIn advertising
+     app client id" (a second app only) and "LinkedIn API version" (default `202609`; enter a newer YYYYMM when LinkedIn retires it).
 7. **Restart the Hub**, then press **Run now** on "Weekly social report" to check the connection. The same hand-over steps cover
    LinkedIn: "Social posts", "Social replies" (except deletions, which always wait for you) and "Ad tuning". A LinkedIn budget change,
    like Meta's, only ever happens on your own approval and under your cap.

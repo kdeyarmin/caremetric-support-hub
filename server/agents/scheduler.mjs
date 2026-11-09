@@ -1,3 +1,4 @@
+import { live } from '../live.mjs';
 /**
  * The AI team's clock. One tick, once a minute: housekeeping, turn due schedules into tasks,
  * claim a few tasks under a lease, run each through its handler, and carry out any approved
@@ -27,7 +28,8 @@ export function agentScheduler({
   now = () => new Date(), log = line => console.warn(line),
 }) {
   let running = false;
-  const active = () => enabled === true;
+  // "Run the AI team" (Settings → AI team); `enabled` may be a function, read on every tick.
+  const active = () => live(enabled) === true;
   const kinds = () => Object.keys(handlers).filter(kind => typeof handlers[kind] === 'function').sort();
   const backoff = attempts => Math.min(retryDelayMs * 2 ** Math.max(attempts - 1, 0), maxRetryDelayMs);
 
