@@ -84,6 +84,43 @@ Nothing is sent until `HUB_GROWTH_SEND_ENABLED=true`, a signing key and an enabl
 runs only with `HUB_GROWTH_SEARCH_API_KEY`. A counsel check of cold email to businesses' public addresses was recommended to the
 owner before enabling it. `npm run test:growth-autonomy:db` runs the integration checks against a disposable local database.
 
+## A separate sender for prospecting
+
+Cold email and sales follow-ups (every `growth.message`, whichever step approved it) can come from their own address, so that
+complaints, bounces and spam-folder placement from prospecting are scored against that address's domain and never against
+support@caremetric.ai, which carries support replies, owner alerts, the Account Manager's customer emails and bulk email. Those
+keep coming from `HUB_SUPPORT_FROM_EMAIL` whatever is set here.
+
+- `HUB_GROWTH_FROM_EMAIL` (optional): the growth sender, on a subdomain of its own, for example `hello@go.caremetric.ai`.
+  Unset (or blank) keeps today's behavior: growth email comes from the support address. A value that is not an email address
+  is ignored with a warning in the service log, and growth email keeps the support address; a growth address on the support
+  address's own domain is used but warns, because it would not keep reputation apart.
+- `HUB_GROWTH_FROM_NAME` (optional): the display name, at most 64 characters with no quotes or angle brackets (default
+  "CareMetric"). An unusable name is ignored with a warning.
+- **Reply-To does not change.** Growth email still replies to the support inbox (`HUB_SUPPORT_REPLY_TO`, else the support
+  address), so a prospect's answer reaches the signed Inbound Parse route, joins Communications and is handed to the Sales
+  Executive as before. The unsubscribe link and headers, the postal address and the delivery webhook's message id are the same.
+- The integration setup panel (Customer growth) shows both settings and their values; an address the service would ignore shows
+  as set but not satisfied.
+
+What the owner must do before setting it (in this order; none of it is done by the Hub):
+
+1. **Authenticate the subdomain in SendGrid.** Settings → Sender Authentication → Authenticate Your Domain, for the subdomain
+   (for example `go.caremetric.ai`), and publish the CNAME records SendGrid gives at the DNS host. They cover SPF (the
+   return-path CNAME) and DKIM (`s1`/`s2`); wait until SendGrid reports the domain verified.
+2. **Publish DMARC for the subdomain**: a TXT record at `_dmarc.go.caremetric.ai`, starting with monitoring, for example
+   `v=DMARC1; p=none; rua=mailto:<a mailbox you read>`, and move to `p=quarantine` once reports show only SendGrid sending.
+   Without its own record the subdomain inherits caremetric.ai's policy.
+3. **Optionally receive mail at the subdomain.** Replies go to the support inbox, but a person who writes to the From address
+   directly reaches nothing unless the subdomain has an MX record to `mx.sendgrid.net` and an Inbound Parse host for it.
+4. **Warm the address up slowly.** A new subdomain has no reputation. Keep the cold email cap at ten a day for the first weeks,
+   watch bounces, blocks and spam reports in SendGrid's statistics for the subdomain, and raise volume in small steps only
+   while they stay low. Raising the cap is a separate change.
+5. Set `HUB_GROWTH_FROM_EMAIL` (and, if wanted, `HUB_GROWTH_FROM_NAME`) on the Hub service and redeploy, then check the setup
+   panel and send one approved message to an address you own to confirm the From, the Reply-To and the unsubscribe link.
+
+Nothing in the database changes: no migration is involved.
+
 ## The sales playbook (November 8 skills upgrade)
 
 The [workforce skills review](AI_WORKFORCE_SKILLS_REVIEW.md) found the Marketing Manager's method thin: one fixed search per
@@ -108,9 +145,15 @@ claim still comes from the fact sheet (`server/agents/content/facts.mjs`, the co
   competitor, testimonial, call or demo as a step, "prove" about CareBase), may state only its own product's prices, may link only to
   its product's pages or the booking page, and has its vocabulary fixed (ALF, surveyor). A draft that fails is dropped. The template
   path used without a model, and every send rule, are unchanged.
+- **Campaign tags**: the product pages in every growth message, model-written or template, carry utm_source `caremetric`,
+  utm_medium `email` and utm_campaign `growth-<product>-touch<n>` for outreach or `account-<product>-<moment>` for a customer play
+  (`server/agents/links.mjs`; the booking link is never tagged). The tags are added after the checks and the tagged message is checked
+  again; the link check reads a tagged page as that page only when the tags are well formed, so a tag can never carry another host
+  or path. The sent email makes the tagged addresses links like the plain ones.
 - **Evaluation**: `growth.1` remains the key the database's send claim requires for a recent passing evaluation; it now names the
   guardrail suite, not the prompt (each run records the prompt version). The suite adds cases for an unlisted price, a guarantee, a
-  named competitor, product-page links, the other product's page, daily discovery rotation and directory filtering.
+  named competitor, product-page links, the other product's page, a tagged product-page link (accepted and given its own tags),
+  a tagged link to another host and a tag carrying another address (both rejected), daily discovery rotation and directory filtering.
 - The **Sales Executive** (see [AI team](AI_TEAM.md#the-sales-executive)) answers prospects' replies and inquiries from the same
   playbook and sends a weekly pipeline review.
 

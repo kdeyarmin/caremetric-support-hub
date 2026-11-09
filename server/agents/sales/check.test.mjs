@@ -10,7 +10,34 @@ describe('checking a sales reply', () => {
     const reply = 'CareBase Core is $199 per facility per month, with unlimited residents and staff, so two homes would be $398 a month.';
     expect(ok(reply)).toMatchObject({ ok: false, reason: 'unlisted_price' });
     const good = 'CareBase Core is $199 per facility per month, with unlimited residents and staff. Under the Founders Sale, eligible subscription charges are 50% off for the first 12 months of paid service.\n\nYou can start a 30-day free trial here:\nhttps://cmcarebase.com/signup\n\nHow to assign annual training:\nhttps://help.caremetric.ai/help/articles/assign-annual-training';
-    expect(ok(good)).toEqual({ ok: true, reply: good, body: `Hello,\n\n${good}` });
+    // The trial page gets the Sales Executive's campaign tags; the help-center guide is never tagged.
+    const tagged = good.replace('https://cmcarebase.com/signup\n', 'https://cmcarebase.com/signup?utm_source=caremetric&utm_medium=email&utm_campaign=sales-carebase\n');
+    expect(ok(good)).toEqual({ ok: true, reply: tagged, body: `Hello,\n\n${tagged}` });
+    // A reply the model already tagged is read as the page and tagged again, the same way.
+    expect(ok(tagged)).toEqual({ ok: true, reply: tagged, body: `Hello,\n\n${tagged}` });
+  });
+
+  it('tags product links for the route, accepts well-formed tags and refuses a tag that carries anything else', () => {
+    const trial = 'You can start a 30-day free trial here:\nhttps://cmcarebase.com/signup';
+    expect(ok(trial, { route: 'chat' }).reply).toBe('You can start a 30-day free trial here:\nhttps://cmcarebase.com/signup?utm_source=caremetric&utm_medium=chat&utm_campaign=sales-carebase');
+    expect(ok('See plans:\nhttps://cmcarebase.com/#pricing.').reply).toBe('See plans:\nhttps://cmcarebase.com/?utm_source=caremetric&utm_medium=email&utm_campaign=sales-carebase#pricing.');
+    expect(ok('Start:\nhttps://cmcarebase.com/signup?utm_source=x&utm_medium=y&utm_campaign=z')).toMatchObject({ ok: true });
+    for (const smuggled of [
+      'https://cmcarebase.com/signup?utm_source=x&utm_medium=y&utm_campaign=z&next=https://evil.example',
+      'https://cmcarebase.com/signup?utm_source=x&utm_medium=y&utm_campaign=evil.example/path',
+      'https://cmcarebase.com/signup?utm_source=x@evil.example&utm_medium=y&utm_campaign=z',
+      'https://cmcarebase.com/signup?utm_source=x%2F&utm_medium=y&utm_campaign=z',
+      'https://cmcarebase.com/other?utm_source=x&utm_medium=y&utm_campaign=z',
+      'https://cmcarebase.com.evil.example/signup?utm_source=x&utm_medium=y&utm_campaign=z',
+      'https://evil.example/?utm_source=x&utm_medium=y&utm_campaign=z',
+      'https://www.caremetricintel.com/?utm_source=x&utm_medium=y&utm_campaign=z',
+    ]) expect(ok(`Start:\n${smuggled}`), smuggled).toMatchObject({ ok: false, reason: 'link' });
+  });
+
+  it('keeps a text message\'s link untagged when the tags would not fit in one message', () => {
+    const sms = checkSalesReply({ reply: 'Start a 30-day free trial: https://cmcarebase.com/signup', product: 'carebase', route: 'sms', text: 'How do I start?' });
+    expect(sms).toMatchObject({ ok: true });
+    expect(sms.reply).toMatch(/https:\/\/cmcarebase\.com\/signup(?:\?utm_source=caremetric&utm_medium=sms&utm_campaign=sales-carebase)?$/);
   });
 
   it('refuses the other product\'s prices and pages, and any other link', () => {

@@ -51,3 +51,22 @@ export async function recordRun({ store, log }, task, { promptVersion, summary, 
     log(JSON.stringify({ event: 'hub_agent_run_unrecorded', agent: task.agentKey, kind: task.kind }));
   }
 }
+
+/**
+ * Whether a weekly report's scheduled run is held because the Monday scorecard carries it (platform.agents.scorecard.v1 is declared and
+ * the owner's "Send the individual weekly reports" is off). A report the owner asks for with Run now is never held. The store has
+ * `individualReports` only when the database declares the scorecard, so without it nothing is held. A setting that cannot be read
+ * holds nothing either: a second email is better than a missing one.
+ */
+export async function heldForScorecard({ store, log = line => console.warn(line) }, task) {
+  if (task?.sourceKind === 'owner' || typeof store?.individualReports !== 'function') return false;
+  try {
+    return (await store.individualReports()) === false;
+  } catch {
+    log(JSON.stringify({ event: 'hub_agent_report_setting_unread', agent: task?.agentKey, kind: task?.kind }));
+    return false;
+  }
+}
+
+/** The result of a weekly report's scheduled run that the scorecard carries instead. Nothing is sent and no run row is written. */
+export const heldResult = extra => ({ result: { skipped: 'in_scorecard', ...extra } });

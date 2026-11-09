@@ -69,13 +69,19 @@ export const marketingProductSchema = z.object({
   product: z.enum(["caremetric-intel", "carebase", "advisors"]), label: z.string().max(80), description: z.string().max(300), marketed: z.boolean(), changedAt: instant,
 });
 /**
+ * The Monday scorecard's setting. While `individualReports` is false, the five weekly reports (accounts, growth, SEO, pipeline and
+ * social) stop emailing on their schedule and the Chief of Staff's scorecard carries their figures; Run now on each still emails it.
+ */
+export const scorecardSettingsSchema = z.object({ individualReports: z.boolean(), changedAt: instant });
+/**
  * `waitingActions` counts approved messages needing checking or completion, including external email recovery candidates; it is not
- * an unsent count. `autonomy`, `offers` and `marketing` are null (or absent) when the Hub's database does not have autonomy steps, the offer
- * menu or the marketing switches yet.
+ * an unsent count. `autonomy`, `offers`, `marketing` and `reports` are null (or absent) when the Hub's database does not have autonomy steps,
+ * the offer menu, the marketing switches or the Monday scorecard yet.
  */
 export const overviewSchema = z.object({
   team: teamSchema, services: servicesSchema, waitingActions: z.number().int().min(0), autonomy: z.array(autonomyStepSchema).nullable().optional(),
   offers: offersSchema.nullable().optional(), marketing: z.array(marketingProductSchema).nullable().optional(),
+  reports: scorecardSettingsSchema.nullable().optional(),
 });
 /**
  * `error` is the code of why an approved action could not be carried out (see `errorLabel`). `needsSession` is the server saying it
@@ -124,6 +130,7 @@ export type TeamOverview = z.infer<typeof overviewSchema>;
 export type AutonomyStep = z.infer<typeof autonomyStepSchema>;
 export type MenuOffer = z.infer<typeof offerSchema>;
 export type MarketingProduct = z.infer<typeof marketingProductSchema>;
+export type ScorecardSettings = z.infer<typeof scorecardSettingsSchema>;
 export type OfferCoupon = z.infer<typeof offerCouponSchema>;
 export type TeamAgent = z.infer<typeof agentSchema>;
 export type TeamSchedule = z.infer<typeof scheduleSchema>;
@@ -167,7 +174,7 @@ export const stepHelpText = (category: string) => stepHelp[category] ?? "";
 const taskLabels: Record<string, string> = {
   "content.weekly": "Weekly help article", "content.outreach": "Monthly outreach drafts",
   "probe.sweep": "Health check", "probe.incident": "Handle an incident", "probe.recovery": "Write a recovery note", "probe.forms": "Lead form check",
-  "brief.daily": "Morning brief", "seo.weekly": "Weekly SEO check", "concierge.sweep": "Look for new messages", "concierge.communication": "Triage a message",
+  "brief.daily": "Morning brief", "scorecard.weekly": "Monday scorecard", "seo.weekly": "Weekly SEO check", "concierge.sweep": "Look for new messages", "concierge.communication": "Triage a message",
   "import.advisors": "Import Advisors requests", "import.breathe": "Import phone messages", "accounts.weekly": "Weekly account report",
   "growth.leads": "Look for new leads", "growth.followup": "Chase unanswered leads", "growth.weekly": "Weekly growth report",
   "accounts.lifecycle": "Customer emails", "autonomy.graduate": "Hand over work after its supervised week", "accounts.offers": "Offers from your menu",

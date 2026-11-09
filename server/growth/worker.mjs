@@ -7,6 +7,7 @@ import { draftMessage } from './draft.mjs';
 import { renderEmail, themeFor } from '../email-layout.mjs';
 import { evaluateGrowth } from './evaluation.mjs';
 import { discoveryQuery, linkablePages, senderFor } from './playbook.mjs';
+import { untaggedUrl } from '../agents/links.mjs';
 const deferred=()=>Object.assign(new Error('Action is deferred'),{code:'action_deferred'});
 const easternDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'});
 /** The calendar day in America/New_York, matching every other send cap and notice. */
@@ -143,6 +144,13 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
  * "Hello,", the approved words, the product team's sign-off and website, then the company, its postal address and the unsubscribe link.
  * The inbox preview is the message's first sentence. Only the product's own pages become links.
  */
+const linkTrailing=/[.,;:!?)\]]+$/;
+/** The addresses in a message that may be links: the product's own pages, as written or with well-formed campaign tags (links.mjs). */
+export function messageLinks(product,words) {
+  const pages=new Set(linkablePages(product).map(page=>page.url));
+  const tagged=(String(words??'').match(/https:\/\/[^\s<>"]+/g)??[]).map(url=>url.replace(linkTrailing,'')).filter(url=>pages.has(untaggedUrl(url)));
+  return [...pages,...new Set(tagged)];
+}
 export function growthEmail({product,subject,body,postalAddress,unsubscribeUrl}) {
   const sender=senderFor(product);
   const words=String(body??'').trim();
@@ -151,7 +159,7 @@ export function growthEmail({product,subject,body,postalAddress,unsubscribeUrl})
   // The company's name once: the postal address often begins with it.
   const footer=[...(/^caremetric\b/i.test(address)?[]:['CareMetric']),...(address?[address]:[]),{label:'Unsubscribe from these emails',url:unsubscribeUrl}];
   return renderEmail({layout:'letter',theme:themeFor(product),title:subject,preheader:preheader.slice(0,150),
-    blocks:[{type:'message',text:`Hello,\n\n${words}`,links:linkablePages(product).map(page=>page.url)}],
+    blocks:[{type:'message',text:`Hello,\n\n${words}`,links:messageLinks(product,words)}],
     signature:[sender.team,...(sender.site?[sender.site]:[])],footer});
 }
 export function growthExecutors({growth,mail,publicOrigin,postalAddress}) {

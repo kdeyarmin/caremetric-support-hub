@@ -21,14 +21,15 @@ import { weekStart, easternDate, easternMidnight } from '../accounts/week.mjs';
 import { delivered } from '../notify.mjs';
 import { redact } from '../concierge/redact.mjs';
 import { screenIdentifiers } from '../concierge/screen.mjs';
-import { dueMoment, permanent, plural, recordRun, when } from '../tasks/shared.mjs';
+import { dueMoment, heldForScorecard, heldResult, permanent, plural, recordRun, when } from '../tasks/shared.mjs';
 import { playbookFor } from '../../growth/playbook.mjs';
 import {
   adPromptVersion, adSchema, adSystem, checkSocialText, planPromptVersion, planSchema, planSystem, replyPromptVersion, replySchema, replySystem,
-  replyUserMessage, socialLinks, socialProducts, withHashtags,
+  replyUserMessage, socialLinks, socialProducts, tagSocialLink, tagSocialText, withHashtags,
 } from './content.mjs';
 import { evaluateAds, rankPosts, rulesVersion } from './rules.mjs';
 import { marketedNow, markets } from '../marketing.mjs';
+import { untaggedUrl } from '../links.mjs';
 
 const day = 86_400_000;
 const labels = { facebook: 'Facebook', instagram: 'Instagram', messenger: 'Messenger', linkedin: 'LinkedIn' };
@@ -131,10 +132,12 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       if (!offered.includes(draft.product) || used[draft.platform] === undefined || used[draft.platform] >= counts[draft.platform]) continue;
       const page = draft.linkId ? socialLinks(draft.product).find(link => link.id === draft.linkId) : null;
       if (draft.linkId && !page) { rejected.link = (rejected.link ?? 0) + 1; continue; }
-      const link = draft.platform === 'instagram' ? null : page?.url ?? null;
+      // The page's address with campaign tags for this platform (links.mjs): social-<product>, utm_content post.
+      const link = draft.platform === 'instagram' ? null : tagSocialLink(page?.url ?? null, { platform: draft.platform, product: draft.product, content: 'post' });
       // A Facebook or connected LinkedIn link travels beside the text (it renders as a card); LinkedIn copy pasted by hand carries it.
       const pasted = draft.platform === 'linkedin' && !li.configured.page;
-      const text = withHashtags(pasted && link ? `${draft.text.trim()}\n\n${link}` : draft.text, draft.hashtags);
+      // A product link the model wrote into the text gets the same tags as the one beside it.
+      const text = tagSocialText(withHashtags(pasted && link ? `${draft.text.trim()}\n\n${link}` : draft.text, draft.hashtags), { platform: draft.platform, product: draft.product, content: 'post' });
       const checked = checkSocialText(text, { surface: draft.platform, product: draft.product });
       if (!checked.ok) { rejected[checked.reason] = (rejected[checked.reason] ?? 0) + 1; continue; }
       used[draft.platform] += 1;
@@ -276,7 +279,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     // A question about a product the team is not marketing yet (CareBase in its pilot) is the owner's to answer.
     if (socialProducts.includes(reading.product) && !offered.includes(reading.product)) return { result: { outcome: 'left_for_owner', reason: 'product_not_marketed', intent: reading.intent, platform: item.platform, kind: item.kind } };
     const product = socialProducts.includes(reading.product) ? reading.product : null;
-    const checked = checkSocialText(reading.reply, { surface: item.kind === 'message' ? 'message' : 'comment', product, theirText: [text, ...history.map(message => message.text)].join('\n') });
+    const checked = checkSocialText(tagSocialText(reading.reply, { platform: item.platform, product, content: 'reply' }), { surface: item.kind === 'message' ? 'message' : 'comment', product, theirText: [text, ...history.map(message => message.text)].join('\n') });
     if (!checked.ok) return { result: { outcome: 'left_for_owner', reason: `draft_${checked.reason}`, intent: reading.intent, platform: item.platform, kind: item.kind } };
     const proposal = await propose(task, { kind: 'social.reply', targetKind: 'social_item', targetId: target,
       preview: `Reply to a ${where}${item.url ? ` (${item.url})` : ''}:\n\n${checked.text}`,
@@ -356,7 +359,9 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     const fromCreative = await creativeAd(task, rec, overview, today, source, product);
     if (fromCreative !== null) return fromCreative;
     const allowed = socialLinks(product).map(link => link.url);
-    const link = allowed.includes(base.copy.link) ? base.copy.link : playbookFor(product).nextStep.url;
+    // The base ad's page (read through any campaign tags it already carries), else the product's next step, tagged as a paid ad.
+    const page = [base.copy.link, untaggedUrl(base.copy.link)].find(url => allowed.includes(url)) ?? playbookFor(product).nextStep.url;
+    const link = tagSocialLink(page, { platform: source.platform === 'linkedin' ? 'linkedin' : 'facebook', product, content: 'ad', paid: true });
     const adset = overview.adsets.find(item => item.id === rec.adsetId);
     const thisWeek = new Map(overview.current.map(row => [row.adId, row]));
     const peers = overview.ads.filter(ad => ad.adsetId === rec.adsetId && ad.id !== base.id).slice(0, 4);
@@ -413,6 +418,8 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     const moment = now();
     const week = weekStart(dueMoment(task) ?? moment);
     const asked = task.sourceKind === 'owner';
+    // The Monday scorecard carries this report (ad spend and failing ads) while the owner's "Send the individual weekly reports" is off.
+    if (await heldForScorecard({ store, log }, task)) return heldResult({ week });
     const notes = [];
     let posts = [];
     for (const [on, client, name] of [[metaPosts, meta, 'Meta'], [li.configured.page, li, 'LinkedIn']]) {

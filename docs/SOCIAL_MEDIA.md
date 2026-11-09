@@ -21,7 +21,7 @@ comment asking about another product is left for the owner, and a losing ad for 
 | Weekly social plan (`social.plan`) | Each morning at 08:15 Eastern; plans once a week | Drafts 3 Facebook, 2 Instagram and 3 LinkedIn posts. It works from the fact sheet, the sales playbook and the last four weeks' engagement (more like what worked, never a repeat). Each draft is checked. Each post is proposed with a time slot (10:30 Eastern for Facebook, 12:15 for Instagram, 8:45 for LinkedIn); an approved post is held until then and published. The owner gets the plan by email, with the LinkedIn posts to paste while LinkedIn is not connected. |
 | Comments and messages (`social.inbox`, `social.interaction`) | Every 15 minutes | Finds new comments on the Facebook Page's, Instagram's and the LinkedIn Page's recent posts, and new Messenger messages. Each gets its own task. With `HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true` it drafts a short, checked reply for approval, or proposes hiding spam (deleting it on LinkedIn). Without it, the owner is told and answers on the platform. |
 | Daily ad review (`social.ads`) | Each morning at 09:10 Eastern | Judges every Meta ad and LinkedIn creative on the last seven days against the seven before, with the rules below. It proposes pausing losers and new copy where an ad set needs it, plus a budget increase only under the owner's cap. |
-| Weekly social report (`social.report`) | Each morning at 08:05 Eastern; sends once a week | Shows posts and engagement per platform, the top posts, and ad spend, impressions, click rate, results and cost per result per ad set. It also counts what is waiting for the owner. |
+| Weekly social report (`social.report`) | Each morning at 08:05 Eastern; sends once a week | Shows posts and engagement per platform, the top posts, and ad spend, impressions, click rate, results and cost per result per ad set. It also counts what is waiting for the owner. While the [Monday scorecard](MONDAY_SCORECARD.md) carries it ("Send the individual weekly reports" off), its scheduled run sends nothing; Run now still emails it. |
 
 Instagram posts need an image. They use the brand images in `HUB_SOCIAL_IMAGE_URLS` in turn; with none, the plan leaves Instagram out.
 LinkedIn posts use the same images, as the thumbnail of their link card: LinkedIn builds no preview for a post made through its API, so
@@ -63,7 +63,8 @@ It also passes these social rules:
 
 - a length per surface;
 - no markup;
-- links only to that product's own pages, none in an Instagram caption or in ad text;
+- links only to that product's own pages, none in an Instagram caption or in ad text; a page with well-formed campaign tags counts as
+  that page, and a tag carrying anything else fails (see "Campaign tags on product links" in [AI_TEAM.md](AI_TEAM.md));
 - at most five hashtags (eight on Instagram) and three emoji;
 - only that product's prices;
 - no promise of a refund, extension or special pricing;
@@ -162,3 +163,12 @@ LinkedIn decides who may use its Page and advertising APIs. Approval is a review
 
 None of this was run against a live Meta or LinkedIn account. Connect a Page first and watch the first week in Propose before handing
 anything over.
+
+## Campaign tags
+
+Every product link the Social Media Manager places carries campaign tags (`server/agents/links.mjs`), so the weekly growth report can
+count the leads it brings: a post's link and a link in a reply get utm_source `facebook`, `instagram` or `linkedin` (a Messenger reply
+counts as `facebook`), utm_medium `social`, utm_campaign `social-<product>` and utm_content `post` or `reply`; a new ad's link gets
+utm_medium `paid_social` and utm_content `ad`, with utm_source `facebook` for a Meta ad (it may also run on Instagram) or `linkedin`.
+A new ad based on an ad whose link already carries tags keeps that page and gets these tags instead. Before it publishes a post the
+executor checks its link again: only a product page, as written or with well-formed tags.

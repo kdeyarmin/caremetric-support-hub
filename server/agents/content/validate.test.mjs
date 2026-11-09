@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { legalDisclaimer, officialSources } from './facts.mjs';
 import { fireDrillDraft, referralDraft } from './fixtures.mjs';
 import { topics } from './topics.mjs';
-import { allowedNumbers, allowedUrl, checkArticle, checkDraft, limits, normalizeTerms, numbersIn, previewOf, textProblems } from './validate.mjs';
+import { allowedNumbers, allowedUrl, checkArticle, checkDraft, limits, markupProblems, normalizeTerms, numbersIn, previewOf, textProblems } from './validate.mjs';
 
 const topic = key => topics.find(item => item.key === key);
 const fire = topic('pa-fire-drill-requirements');
@@ -29,7 +29,10 @@ describe('an article that passes', () => {
     expect(body.startsWith(`**In short:** ${fireDrillDraft.summary}\n\n${fireDrillDraft.body.slice(0, 40)}`)).toBe(true);
     expect(body).toContain('## Frequently asked questions\n\n### How often must a Pennsylvania personal care home hold a fire drill?\n\nAt least once a month');
     expect(body).toContain(`## Sources\n\n- [55 Pa. Code § 2600.132, fire drills](${officialSources['pacode-2600-132'].url})`);
-    expect(body).toContain('## Learn more\n\n- [CareBase features](https://cmcarebase.com/features)\n- [Free survey readiness guide](https://cmcarebase.com/survey-readiness-guide)');
+    // Product pages carry the Content Marketer's campaign tags; the official sources it cites never do.
+    const tags = '?utm_source=help_center&utm_medium=article&utm_campaign=content-carebase';
+    expect(body).toContain(`## Learn more\n\n- [CareBase features](https://cmcarebase.com/features${tags})\n- [Free survey readiness guide](https://cmcarebase.com/survey-readiness-guide${tags})`);
+    expect(body).not.toMatch(/pacodeandbulletin\.gov[^)\s]*utm_/);
     expect(body.endsWith(`*${legalDisclaimer}*`)).toBe(true);
     expect(checkArticle(result.article)).toEqual([]);
   });
@@ -209,6 +212,20 @@ describe('each check that rejects a draft', () => {
 describe('the last check before publishing', () => {
   const stored = check().article;
   it('passes the stored article as proposed', () => expect(checkArticle(stored)).toEqual([]));
+
+  it('accepts a product page with well-formed campaign tags and refuses a tag that carries anything else', () => {
+    expect(stored.body).toContain('https://cmcarebase.com/features?utm_source=help_center&utm_medium=article&utm_campaign=content-carebase');
+    expect(markupProblems('See [features](https://cmcarebase.com/features?utm_source=a&utm_medium=b&utm_campaign=c).')).toEqual([]);
+    expect(markupProblems('See https://www.caremetricintel.com/county-report?utm_source=a&utm_medium=b&utm_campaign=c')).toEqual([]);
+    for (const url of [
+      'https://cmcarebase.com/features?utm_source=a&utm_medium=b&utm_campaign=c&next=https://evil.example',
+      'https://cmcarebase.com/features?utm_source=a&utm_medium=b&utm_campaign=evil.example/x',
+      'https://cmcarebase.com/not-a-page?utm_source=a&utm_medium=b&utm_campaign=c',
+      'https://help.caremetric.ai/help/articles/x?utm_source=a&utm_medium=b&utm_campaign=c',
+    ]) expect(markupProblems(`See [it](${url})`), url).toEqual(['link_unlisted']);
+    expect(markupProblems('See [it](https://evil.example/?utm_source=a&utm_medium=b&utm_campaign=c)')).toEqual(['link_not_allowed']);
+    expect(checkArticle({ ...stored, body: stored.body.replace('utm_campaign=content-carebase', 'utm_campaign=content-carebase&to=evil') })).toEqual(['link_unlisted']);
+  });
 
   it('refuses a stored article that lost its disclaimer, gained markup or a claim, or names an unknown product', () => {
     expect(checkArticle({ ...stored, body: stored.body.replace(legalDisclaimer, 'General information only.') })).toEqual(['missing_disclaimer']);

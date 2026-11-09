@@ -16,6 +16,7 @@ import { salesHandlers } from './sales/index.mjs';
 import { socialDeclared, socialTeam } from './social/index.mjs';
 import { creativeDeclared, creativeTeam } from './creative/index.mjs';
 import { creativeExecutors } from './creative/executor.mjs';
+import { scorecardDeclared, scorecardHandlers } from './scorecard/index.mjs';
 
 const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 
@@ -53,7 +54,7 @@ export function agentTeam({
   const marketing = features?.has?.(marketingFeature) === true;
   const creativeOn = creativeDeclared(features);
   const store = givenStore ?? sqlAgentStore(pool, { fenced: features?.has?.('platform.agents.hardening.v1') === true, growth: features?.has?.('platform.agents.customer-growth.v1') === true,
-    social: socialDeclared(features), marketing, creative: creativeOn });
+    social: socialDeclared(features), marketing, scorecard: scorecardDeclared(features), creative: creativeOn });
   // What the team markets: the owner's switches on the AI team page, read when each marketing task starts (marketing.mjs). Until the
   // database declares them, CareMetric Intel only. A caller (a test) may pass its own list or reader.
   const marketedSource = marketed ?? (marketing && typeof store.marketedProducts === 'function' ? () => store.marketedProducts() : [...defaultMarketed]);
@@ -83,7 +84,8 @@ export function agentTeam({
   const registry = { ...growthHandlers({growth,model:runtime,notifier,features,marketed:marketedSource}),
     ...salesHandlers({ store, notifier, model: runtime, growth, features, customerTextToAi, bookingUrl, publicOrigin, guides, marketed: marketedSource, log }),
     ...socialWork.handlers({ store, notifier, model: runtime, customerTextToAi, publicOrigin, marketed: marketedSource, log, creative: creativeLink }),
-    ...creativeWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, publicOrigin, marketed: marketedSource, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, bookingUrl, leadSecrets, lifecycle: customerEmail, marketed: marketedSource, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
+    ...creativeWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, publicOrigin, marketed: marketedSource, log }),
+    ...scorecardHandlers({ store, notifier, publicOrigin, features, growth, ads: socialWork.ads, fetchImpl, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, bookingUrl, leadSecrets, lifecycle: customerEmail, marketed: marketedSource, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   const scheduler = agentScheduler({ store, handlers: registry, actions, enabled, log, now });
   const admin = agentAdmin({
     pool, actions, kick: () => scheduler.tick(), waiting: scheduler.runWaiting,

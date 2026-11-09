@@ -10,7 +10,7 @@ import { externalEmailRequestKey } from "./externalEmailDraft";
 import {
   actionLabel, approvalTitle, autonomyHelp, autonomyLabels, cadenceLabel, centsLabel, errorLabel, externalEmailFailure, externalEmailRecipient, failedActionLabel, outcomeLabel, statusLabel, stepHelpText, targetLabel, taskLabel, tierLabels,
 } from "./teamProtocol";
-import type { ActivityKind, ActivityPage, AuditPage, AutonomyStep, ExternalEmailDraft, ExternalEmailProposal, MarketingProduct, MenuOffer, OfferCoupon, TeamAgent, TeamApproval, TeamOverview, TeamServices } from "./teamProtocol";
+import type { ActivityKind, ActivityPage, AuditPage, AutonomyStep, ExternalEmailDraft, ExternalEmailProposal, MarketingProduct, MenuOffer, OfferCoupon, ScorecardSettings, TeamAgent, TeamApproval, TeamOverview, TeamServices } from "./teamProtocol";
 import "./admin.css";
 
 type Notice = { ok: boolean; text: string } | null;
@@ -250,6 +250,27 @@ function MarketingPanel({ products, busy, onMarketing }: { products: MarketingPr
           aria-label={`${product.marketed ? "Stop marketing" : "Start marketing"} ${product.label}`} onClick={() => onMarketing(product, !product.marketed)}>{product.marketed ? "Stop marketing" : "Start marketing"}</button>
       </span>
     </li>)}</ul>
+  </section>;
+}
+
+/**
+ * Whether the five weekly reports still email the owner beside the Chief of Staff's Monday scorecard. Off by default: the scorecard
+ * carries their figures. Run now on any of them still emails that report.
+ */
+function ReportsPanel({ settings, busy, onReports }: { settings: ScorecardSettings; busy: string; onReports: (send: boolean) => void }) {
+  const on = settings.individualReports;
+  return <section className="panel team-reports" aria-labelledby="team-reports-title">
+    <div className="admin-section-title"><div><h2 id="team-reports-title">Weekly reports</h2>
+      <p>The Chief of Staff's Monday scorecard comes at 07:50 Eastern: six numbers per product, what changed and at most three decisions. While the Chief of Staff is working, the accounts, growth, SEO, pipeline and social reports are folded into it. Run now on any of them still emails that report.</p></div></div>
+    <ul className="team-service-list"><li key={settings.changedAt}>
+      <span className="team-service-name">Send the individual weekly reports</span>
+      <Pill good={!on}>{on ? "Sent as well" : "In the scorecard only"}</Pill>
+      <span className="muted">{on ? "You get the five weekly reports by email as well as the scorecard." : "You get the scorecard only."}</span>
+      <span className="button-row">
+        <button type="button" className={`button button-small ${on ? "button-secondary" : "button-primary"}`} disabled={Boolean(busy)}
+          onClick={() => onReports(!on)}>{on ? "Stop sending them" : "Send them as well"}</button>
+      </span>
+    </li></ul>
   </section>;
 }
 
@@ -518,6 +539,12 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
   const onMarketing = (product: MarketingProduct, marketed: boolean) => void change(`marketing:${product.product}`,
     () => client.setMarketing({ product: product.product, marketed, expectedChangedAt: product.changedAt }),
     marketed ? `The team markets ${product.label} from its next run.` : `The team stops marketing ${product.label} from its next run.`);
+  const onReports = (send: boolean) => {
+    const settings = shown?.data.reports;
+    if (!settings) return;
+    void change("reports", () => client.setReports({ send, expectedChangedAt: settings.changedAt }),
+      send ? "The five weekly reports are emailed again from their next run, beside the Monday scorecard." : "The five weekly reports are folded into the Monday scorecard from their next run.");
+  };
   const onRunWaiting = () => {
     let started = 0;
     let sending = 0;
@@ -568,6 +595,7 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
       <p className="admin-read-time">Loaded {timeLabel(shown.receivedAt)}.</p>
       <ServicesPanel services={shown.data.services} awaitingSession={shown.data.team.awaitingSessionCount} waitingActions={shown.data.waitingActions} busy={busy} onRunWaiting={onRunWaiting} />
       {shown.data.marketing && shown.data.marketing.length > 0 && <MarketingPanel products={shown.data.marketing} busy={busy} onMarketing={onMarketing} />}
+      {shown.data.reports && <ReportsPanel settings={shown.data.reports} busy={busy} onReports={onReports} />}
       {shown.data.autonomy && shown.data.autonomy.length > 0 && <AutonomyPanel steps={shown.data.autonomy} busy={busy} onStep={onStep} />}
       <EmailComposer client={client} ready={shown.data.services.externalEmail === true && shown.data.services.email} busy={busy} change={change} terminalDecisions={terminalEmailDecisions} />
       {shown.data.offers && <OffersPanel menu={shown.data.offers} busy={busy} onOffer={onOffer} onAdd={onAddOffer} />}

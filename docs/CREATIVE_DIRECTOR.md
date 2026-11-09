@@ -9,7 +9,7 @@ does posts, publishes or spends: the Social Media Manager publishes, and only wh
 
 | Piece | Where |
 | --- | --- |
-| Data model, server and owner operations | `supabase/migrations/20261109120000_creative_director.sql`, gate `20261109120100_creative_director_contract.sql` (feature `platform.agents.creative.v1`) |
+| Data model, server and owner operations | `supabase/migrations/20261109130000_creative_director.sql`, gate `20261109130100_creative_director_contract.sql` (feature `platform.agents.creative.v1`) |
 | Code | `server/agents/creative/` |
 | Owner screen | **Creative** (`/admin/creative`), also linked from **AI team** |
 | Tests | `npm test -- server/agents/creative src/admin/Creative.test.tsx`; `node server/agents-creative-integration.mjs` with `HUB_TEST_DATABASE_URL` on a local Supabase |
@@ -216,7 +216,7 @@ served publicly, and only under its token.
 
 ## Switching it on
 
-1. Apply `20261109120000_creative_director.sql`, then its gate `20261109120100_creative_director_contract.sql` (it needs the AI team control
+1. Apply `20261109130000_creative_director.sql`, then its gate `20261109130100_creative_director_contract.sql` (it needs the AI team control
    plane, hardening, autonomy steps, the Social Media Manager, the marketing switches and the lead desk). Restart the Hub so it reads
    `platform.agents.creative.v1`.
 2. Set on the Hub service: `HUB_CREATIVE_ENABLED=true` (with `HUB_AGENTS_ENABLED=true` and `ANTHROPIC_API_KEY`). Optional:

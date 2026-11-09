@@ -7,6 +7,8 @@
  * links only to the product's own pages, none in an Instagram caption or in ad copy; at most five hashtags (eight on Instagram) and
  * three emoji; the product's own prices only; no promise of a refund, a credit, an extension or special pricing; no claim about a
  * person's personal attributes in an ad (Meta's policy); no mention of AI; for a reply, nothing repeated from the person's message.
+ * A product link may carry well-formed campaign tags (links.mjs): it is checked as the page it points to, and its length is the
+ * page's own, so a tagged post and the same post untagged pass or fail together.
  */
 import { echoCandidates, quotesCustomer, wordsOf } from '../concierge/draft.mjs';
 import { screenIdentifiers } from '../concierge/screen.mjs';
@@ -14,6 +16,7 @@ import { factSheetText, factsRevision } from '../content/facts.mjs';
 import { allowedNumbers, normalizeTerms, textProblems } from '../content/validate.mjs';
 import { productAmounts } from '../../growth/draft.mjs';
 import { linkablePages, playbookFor, playbookText } from '../../growth/playbook.mjs';
+import { linkTags, tagLinks, untagLinks } from '../links.mjs';
 
 export const planPromptVersion = 'social-plan.3';
 export const adPromptVersion = 'social-ads.3';
@@ -134,19 +137,6 @@ const personalAttribute = /\b(?:are you|do you (?:have|suffer)|you(?:'re| are)) 
 const aiMention = /\b(?:as an ai|language model|artificial intelligence|ai assistant|automated (?:reply|response|post)|chatbot|i am an? (?:ai|assistant|bot|model))\b|\bsystem prompt\b|\b(?:my|these|the) instructions\b/i;
 const surfaces = new Set(Object.keys(limits));
 
-/**
- * A link without its campaign tracking: an approved Creative Director asset's landing address carries utm_source, utm_medium,
- * utm_campaign and utm_content (the asset's id), and is still the product's own page. Any other query, or a tracking value that is not a
- * plain token, leaves the link as it is (and so not allowed).
- */
-export function withoutTracking(link) {
-  let url;
-  try { url = new URL(link); } catch { return link; }
-  const keys = [...url.searchParams.keys()];
-  if (!keys.length || keys.some(key => !/^utm_(source|medium|campaign|content|term)$/.test(key)) || [...url.searchParams.values()].some(value => !/^[A-Za-z0-9._-]{1,80}$/.test(value))) return link;
-  return `${url.origin}${url.pathname}${url.hash}`;
-}
-
 /** The product's own pages a post or reply may link to; with no product, both software products' pages. */
 export const socialLinks = product => (product ? linkablePages(product) : socialProducts.flatMap(key => linkablePages(key))).map(page => ({ id: page.id, label: page.label, url: page.url }));
 
@@ -161,16 +151,18 @@ export function checkSocialText(value, { surface, product = null, theirText = ''
   if (terms.ambiguous) return { ok: false, reason: 'vocabulary' };
   const text = terms.text;
   if (!text) return { ok: false, reason: 'empty' };
-  if (text.length > limits[surface]) return { ok: false, reason: 'too_long' };
-  if (markup.test(text)) return { ok: false, reason: 'markup' };
-  const links = (text.match(linkPattern) ?? []).map(url => url.replace(trailing, ''));
+  // Checked as written with every well-formed tagged product link read as its page; the text that passes keeps its tags.
+  const plain = untagLinks(text);
+  if (plain.length > limits[surface]) return { ok: false, reason: 'too_long' };
+  if (markup.test(plain)) return { ok: false, reason: 'markup' };
+  const links = (plain.match(linkPattern) ?? []).map(url => url.replace(trailing, ''));
   if (links.length && (surface === 'instagram' || surface.startsWith('ad_'))) return { ok: false, reason: 'link' };
   const allowed = new Set(socialLinks(product).map(link => link.url));
-  if (links.length > 1 || links.some(url => !allowed.has(withoutTracking(url)))) return { ok: false, reason: 'link' };
-  const tags = [...text.matchAll(hashtag)];
+  if (links.length > 1 || links.some(url => !allowed.has(url))) return { ok: false, reason: 'link' };
+  const tags = [...plain.matchAll(hashtag)];
   if (tags.length > (surface === 'instagram' ? 8 : 5) || (surface.startsWith('ad_') && tags.length) || (['comment', 'message'].includes(surface) && tags.length)) return { ok: false, reason: 'hashtags' };
-  if ((text.match(emoji) ?? []).length > 3) return { ok: false, reason: 'emoji' };
-  const words = text.replace(linkPattern, ' ');
+  if ((plain.match(emoji) ?? []).length > 3) return { ok: false, reason: 'emoji' };
+  const words = plain.replace(linkPattern, ' ');
   if (screenIdentifiers(words).flagged) return { ok: false, reason: 'identifier' };
   const book = playbookFor(product);
   const problems = textProblems(words, { product: book?.factsKey ?? null, numbers: sheet().numbers });
@@ -189,6 +181,11 @@ export function checkSocialText(value, { surface, product = null, theirText = ''
   }
   return { ok: true, text };
 }
+
+/** `text` with its product links tagged for `platform` (a post, a reply or an ad; `paid` for an ad). */
+export const tagSocialText = (text, { platform, product, content, paid = false }) => tagLinks(text, linkTags.social(platform, product, content, { paid }));
+/** A product link tagged for a post or an ad on `platform`; any other address is returned as it is. */
+export const tagSocialLink = (url, options) => (url ? tagSocialText(url, options) : url);
 
 /** A post's full text: the body, then its hashtags on their own line. Hashtags that are not plain words are dropped. */
 export function withHashtags(text, hashtags = []) {
