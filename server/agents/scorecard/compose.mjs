@@ -45,9 +45,24 @@ export function payingAt(subscription, time) {
 }
 
 /**
+ * When a subscription first became paying (the end of its trial, or its creation without one), or null if it never paid: one that is
+ * trialing, unpaid, paused or incomplete, or was canceled before its trial ended.
+ */
+export function payingSince(subscription) {
+  if (!['active', 'past_due', 'canceled'].includes(subscription?.status) || subscription.pause_behavior) return null;
+  const created = instant(subscription.created);
+  if (created === null) return null;
+  const start = Math.max(created, instant(subscription.trial_end) ?? created);
+  if (subscription.status !== 'canceled') return start;
+  const ended = instant(subscription.ended_at) ?? instant(subscription.canceled_at);
+  return ended !== null && ended > start ? start : null;
+}
+
+/**
  * Per product: MRR now (exactly the Billing screen's figure: monthlyTotals over the product's subscriptions) and a week earlier (the same
- * maths over the subscriptions that were paying then, at today's prices and discounts), and the customers who became paying in the week
- * to `until` and in the week before. `snapshot` is the Account Manager's billing snapshot; null or `{ unavailable: true }` gives null.
+ * maths over the subscriptions that were paying then, at today's prices and discounts), and the customers who first became paying in the
+ * week to `until` and in the week before: one who converts and cancels in the same week counts, and one who comes back after a gap does
+ * not count again. `snapshot` is the Account Manager's billing snapshot; null or `{ unavailable: true }` gives null.
  */
 export function billingFigures(snapshot, { now, until }) {
   if (!snapshot || snapshot.unavailable === true) return null;
@@ -56,8 +71,10 @@ export function billingFigures(snapshot, { now, until }) {
   const weekEarlier = now.getTime() - 7 * day;
   const end = until.getTime();
   const becamePaying = (subscriptions, from, to) => accounts.filter(account => {
-    const own = (account.subscriptions ?? []).filter(item => subscriptions.includes(item));
-    return own.some(item => payingAt(item, to)) && !own.some(item => payingAt(item, from));
+    const starts = (account.subscriptions ?? []).filter(item => subscriptions.includes(item)).map(payingSince).filter(start => start !== null);
+    if (!starts.length) return false;
+    const first = Math.min(...starts);
+    return first >= from && first < to;
   }).length;
   return {
     mode: snapshot.mode ?? null,
@@ -149,7 +166,8 @@ export function composeScorecard({ week, facts, billing = null, search = null, a
       countyReports: pair('countyReports'), trialStarts: pair('trialStarts'), activated: pair('activated'),
       ...(billing ? { newPaying: [count(billing.products[key]?.newPaying), count(billing.products[key]?.previousNewPaying)] } : {}),
       delivered: pair('delivered'), replies: pair('replies'), bounces: pair('bounces'), complaints: pair('complaints'),
-      ...(searchOn ? { clicks: [count(search.products[key]?.clicks), count(search.products[key]?.previous)] } : {}),
+      // Clicks only from a property that was read: a product with none configured has no row, and one whose properties all failed says so.
+      ...(searchOn && search.products[key]?.properties > 0 ? { clicks: [count(search.products[key].clicks), count(search.products[key].previous)] } : {}),
       ...(visitors?.products?.[key] ? { visitors: [count(visitors.products[key].visitors), count(visitors.products[key].previous)] } : {}),
     }];
   }));
@@ -178,7 +196,8 @@ export function composeScorecard({ week, facts, billing = null, search = null, a
       ['MRR', money ? `${dollars(money.mrrCents)} (a week earlier ${dollars(money.previousMrrCents)})` : 'Billing could not be read'],
       ['Outbound email', `${f.delivered[0]} delivered, ${replies(f.replies[0])}, ${plural(f.bounces[0], 'bounce')}, ${plural(f.complaints[0], 'complaint')} `
         + `(last week ${f.delivered[1]} delivered, ${f.replies[1]} replies, ${f.bounces[1]} bounces, ${f.complaints[1]} complaints)`],
-      ...(f.clicks ? [['Organic search clicks', `${f.clicks[0]} (the 7 days before ${f.clicks[1]})`]] : []),
+      ...(f.clicks ? [['Organic search clicks', `${f.clicks[0]} (the 7 days before ${f.clicks[1]})${search.products[key].failed ? `; ${search.products[key].failed} ${search.products[key].failed === 1 ? 'property' : 'properties'} could not be read` : ''}`]]
+        : searchOn && search.products[key]?.failed > 0 ? [['Organic search clicks', 'Search Console could not be read this week']] : []),
     ];
     return [{ type: 'paragraph', text: label }, { type: 'details', rows }];
   });

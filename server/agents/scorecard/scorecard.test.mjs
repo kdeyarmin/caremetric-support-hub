@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { account, item, subscription } from '../accounts/fixtures.mjs';
-import { billingFigures, composeScorecard, payingAt, rankNeeds, searchFigures } from './compose.mjs';
+import { billingFigures, composeScorecard, payingAt, payingSince, rankNeeds, searchFigures } from './compose.mjs';
 import { scorecardFeature, scorecardHandlers } from './index.mjs';
 
 const origin = 'https://hub.example.test';
@@ -119,7 +119,16 @@ describe('the Monday scorecard task', () => {
     expect(buttons).toEqual([`${origin}/admin/team`, `${origin}/admin/growth`]);
     // The ad spend is counted in cost per trial: $24 of AI and $100 of ads over 3 trials.
     expect(JSON.stringify(blocks)).toContain('$41.33 ($124.00 over 3 trials)');
-    expect(adsOverview).toHaveBeenCalledWith({ signal: undefined, now: monday });
+    // On Monday one read serves both: the spend of the reported week (as of its end) and the ads losing money now.
+    expect(adsOverview.mock.calls).toEqual([[{ signal: undefined, now: new Date('2026-11-02T05:00:00Z') }]]);
+  });
+
+  it('reads ad spend for the reported week even when it runs later in the week, and judges the ads on the last seven days', async () => {
+    const adsOverview = vi.fn(async () => ({ adsets: [], ads: [], current: [{ adId: 'a', spendCents: 500 }], previous: [] }));
+    const { run } = fixture({ ads: { settings: {}, sources: () => [{ name: 'Meta', client: { adsOverview } }] } });
+    const thursday = new Date('2026-11-05T15:00:00Z');
+    await run({ sourceKind: 'owner', id: 'owner-task', requestKey: 'owner:x' }, thursday);
+    expect(adsOverview.mock.calls.map(([input]) => input.now)).toEqual([new Date('2026-11-02T05:00:00Z'), thursday]);
   });
 
   it('adds organic search clicks per product when Search Console is connected, and says so when it is not', async () => {
@@ -137,6 +146,24 @@ describe('the Monday scorecard task', () => {
     expect(without.result.products.carebase.clicks).toBeUndefined();
     expect(without.result.sources.search).toBe('not_configured');
     expect(JSON.stringify(missing.notifier.send.mock.calls[0][0].blocks)).toContain('Search Console is not connected');
+  });
+
+  it('never shows a Search Console property it could not read as zero clicks', async () => {
+    const reader = fakeReader([
+      { property: 'sc-domain:caremetricintel.com', ok: false, code: 'not_permitted', status: 403 },
+      { property: 'https://cmcarebase.com/', ok: true, current: { clicks: 7 }, previous: { clicks: 9 } },
+      { property: 'https://home.cmcarebase.com/', ok: false, code: 'rate_limited', status: 429 },
+    ]);
+    const { run, notifier } = fixture({ searchConsole: reader });
+    const outcome = await run();
+    expect(outcome.result.products['caremetric-intel'].clicks).toBeUndefined();
+    expect(outcome.result.products.carebase.clicks).toEqual([7, 9]);
+    const words = JSON.stringify(notifier.send.mock.calls[0][0].blocks);
+    expect(words).toContain('Organic search clicks","Search Console could not be read this week');
+    expect(words).toContain('Organic search clicks","7 (the 7 days before 9); 1 property could not be read');
+    // A product with no property configured has no clicks row at all.
+    const none = fixture({ searchConsole: fakeReader([{ property: 'https://cmcarebase.com/', ok: true, current: { clicks: 1 }, previous: { clicks: 1 } }]) });
+    expect((await none.run()).result.products['caremetric-intel'].clicks).toBeUndefined();
   });
 
   it('still sends when an optional source fails, and names what is missing', async () => {
@@ -205,6 +232,20 @@ describe('the scorecard\'s figures', () => {
     expect(payingAt(subscription({ status: 'active', pause_behavior: 'void', created: '2026-10-01T00:00:00Z' }), time)).toBe(false);
     expect(payingAt(subscription({ status: 'canceled', created: '2026-10-01T00:00:00Z', ended_at: '2026-11-04T00:00:00Z' }), time)).toBe(true);
     expect(payingAt(subscription({ status: 'canceled', created: '2026-10-01T00:00:00Z', ended_at: '2026-10-20T00:00:00Z' }), time)).toBe(false);
+  });
+
+  it('counts a customer once, when they first start paying: a quick cancel counts, a return after a gap does not', () => {
+    expect(payingSince(subscription({ created: '2026-10-01T00:00:00Z', trial_end: '2026-10-15T00:00:00Z' }))).toBe(Date.parse('2026-10-15T00:00:00Z'));
+    expect(payingSince(subscription({ status: 'canceled', created: '2026-10-01T00:00:00Z', trial_end: '2026-10-15T00:00:00Z', ended_at: '2026-10-10T00:00:00Z' }))).toBeNull();
+    expect(payingSince(subscription({ status: 'trialing', created: '2026-10-01T00:00:00Z' }))).toBeNull();
+    const until = new Date('2026-11-02T05:00:00Z');
+    const quick = account({ slug: 'quick', subscriptions: [subscription({ app: 'carebase', status: 'canceled', created: at(-10), trial_end: at(-5), ended_at: at(-2) })] });
+    const back = account({ slug: 'back', subscriptions: [
+      subscription({ app: 'carebase', status: 'canceled', created: at(-200), ended_at: at(-100) }), subscription({ app: 'carebase', created: at(-3) }),
+    ] });
+    const figures = billingFigures({ accounts: [quick, back], coupons: [] }, { now: monday, until });
+    expect(figures.products.carebase.newPaying).toBe(1);
+    expect(figures.products.carebase.previousNewPaying).toBe(0);
   });
 
   it('gives MRR exactly as the Billing screen does, and last week\'s from the subscriptions paying then', () => {

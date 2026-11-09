@@ -64,17 +64,24 @@ export function scorecardHandlers({
     }
   };
 
-  async function readAds(moment, signal) {
+  /**
+   * Ad spend for the reported week and the week before: the ad accounts' two seven-day windows end the day before `now`, so they are
+   * read as of the week's end (Monday's midnight). The ads losing money are judged on the last seven days, so a run later in the week
+   * (a catch-up, or Run now) reads the accounts a second time as of now.
+   */
+  async function readAds({ moment, until }, signal) {
     const sources = ads?.sources?.() ?? [];
     if (!sources.length) return null;
+    const sameDay = moment.getTime() - until.getTime() < 86_400_000;
     let spendCents = 0;
     let previousSpendCents = 0;
     let failing = 0;
     for (const source of sources) {
-      const overview = await source.client.adsOverview({ signal, now: moment });
-      spendCents += (overview.current ?? []).reduce((sum, row) => sum + (Number(row.spendCents) || 0), 0);
-      previousSpendCents += (overview.previous ?? []).reduce((sum, row) => sum + (Number(row.spendCents) || 0), 0);
-      failing += evaluateAds({ ...overview, now: moment, settings: ads.settings ?? {} }).recommendations.filter(item => item.kind === 'pause').length;
+      const week = await source.client.adsOverview({ signal, now: until });
+      spendCents += (week.current ?? []).reduce((sum, row) => sum + (Number(row.spendCents) || 0), 0);
+      previousSpendCents += (week.previous ?? []).reduce((sum, row) => sum + (Number(row.spendCents) || 0), 0);
+      const recent = sameDay ? week : await source.client.adsOverview({ signal, now: moment });
+      failing += evaluateAds({ ...recent, now: moment, settings: ads.settings ?? {} }).recommendations.filter(item => item.kind === 'pause').length;
     }
     return { spendCents, previousSpendCents, failing };
   }
@@ -114,7 +121,7 @@ export function scorecardHandlers({
       optional('brief', () => store.briefFacts(), signal),
       optional('billing', () => readAccountsSnapshot(store), signal),
       growth?.store?.snapshot ? optional('pipeline', () => readPipeline(growth, signal), signal) : null,
-      ads?.sources?.().length ? optional('ads', () => readAds(moment, signal), signal).then(value => value ?? { unavailable: true }) : null,
+      ads?.sources?.().length ? optional('ads', () => readAds({ moment, until }, signal), signal).then(value => value ?? { unavailable: true }) : null,
       optional('search_console', () => readSearch(moment, signal), signal),
       optional('websites', () => siteProblems(signal), signal),
       visitors ? optional('visitors', () => visitors({ since, until, signal }), signal) : null,

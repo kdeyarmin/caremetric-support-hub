@@ -33,16 +33,19 @@ before the week the scorecard is due in, against the week before that.
 3. **Activated trials**: organizations whose first `first_value` product event fell in the week. A repeat event is not a new activation.
 4. **New paying customers and MRR**. MRR is the Billing screen's figure, from the same functions (`src/billing/billingMath.ts`).
    The figure a week earlier is the same calculation over the subscriptions that were paying then, read from each subscription's
-   own dates (created, trial end, ended) at today's prices and discounts. A new paying customer is an account that has a paying
-   subscription for the product at the end of the week and had none at its start.
+   own dates (created, trial end, ended) at today's prices and discounts. A new paying customer is an account whose first paying
+   subscription for the product started paying (its trial ended, or it began without one) in the week: one that converts and cancels
+   in the same week counts, and one that comes back after a gap is not counted again.
 5. **Outbound email**: delivered, replies, bounces and complaints for the team's growth emails, by product, from the provider's
    delivery events and the reply events. Internal organizations are left out.
 6. **Cost per trial**, across both products: the AI spend recorded on agent runs in the week, plus the ad spend when an ad account
-   is connected (the same Meta and LinkedIn figures the social report reads), divided by the trial starts.
+   is connected (the same Meta and LinkedIn figures the social report reads, for the same Monday-to-Sunday week, also on a run later in
+   the week), divided by the trial starts.
 
 With Search Console connected (`HUB_SEARCH_CONSOLE_CREDENTIALS` and `HUB_SEARCH_CONSOLE_SITES`, see the SEO Analyst), **organic
 search clicks** per product are added: the last seven days with final data against the seven before. A property's host decides its
-product; other sites (Healthcare Advisors, the help center) are left out.
+product; other sites (Healthcare Advisors, the help center) are left out. A product with no property has no clicks row, and one whose
+properties could not be read says so instead of showing zero.
 
 **What changed** lists every count that moved from the week before, totalled over both products.
 
