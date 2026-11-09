@@ -100,9 +100,9 @@ none of them posts, sends, or updates anything.
   normal `update_support_case` path.
 
 Customer auto-resolution (portal cases only) runs as an in-server sweep when
-`HUB_AI_AUTOMATION_ENABLED=true`: up to two automated attempts authored by the
+**AI answers on new support cases** switched on (Settings → Customer support): up to two automated attempts authored by the
 CareMetric AI Assistant identity, a follow-up nudge after
-`HUB_AI_FOLLOW_UP_DELAY_HOURS` (default 24), then permanent escalation to staff.
+**Follow up after** (Settings → Customer support, default 24 hours), then permanent escalation to staff.
 The customer's explicit answer goes through the gateway RPC
 `hub.record_ai_resolution_response(p_case_id, p_fixed, p_request_key)` (idempotent,
 customer-side only); free-text replies are classified by the sweep as a fallback.
@@ -153,7 +153,7 @@ panel at `/admin/go-live-readiness` (backend feature `support.go-live-readiness.
   contract features they register, read through the gateway as `anon`),
   Anthropic key presence on this service (a boolean only — the key's value,
   length, and prefix are never returned or logged), the
-  `HUB_AI_AUTOMATION_ENABLED === "true"` toggle state, and a live DNS lookup
+  the **AI answers on new support cases** setting, and a live DNS lookup
   for `help.caremetric.ai` including what it resolves to. SMS session
   required; the caller must be the platform administrator
   (`get_support_actor_context` role `platform_admin`), everyone else gets 403.
@@ -176,7 +176,7 @@ Website chat (same-origin; the visitor's token is the `__Host-caremetric_chat` c
 
 - `GET /api/chat/availability` — `{ chat: boolean }`.
 - `POST /api/chat/start` — `{ name, email, product?, message, noPhi: true }` →
-  `{ reference }` and the chat cookie. 503 unless `HUB_CHAT_ENABLED=true`.
+  `{ reference }` and the chat cookie. 503 unless **Website chat** is switched on in Settings.
 - `GET /api/chat/thread` — the visitor's messages and staff replies; never notes.
 - `POST /api/chat/message` — `{ message }`.
 - `POST /api/chat/end` — `{}`; clears the cookie.

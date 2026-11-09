@@ -1,4 +1,5 @@
 import { HttpError, digest, transaction, withSession } from './sms-auth.mjs';
+import { live } from './live.mjs';
 import { renderEmail } from './email-layout.mjs';
 
 /* Bulk email from the platform administrator to the users of each application,
@@ -63,10 +64,12 @@ export function bulkEmailHtml({ subject, body, applications, unsubscribeUrl, pos
  * Account Manager's customer emails use the same sender under their own SendGrid category.
  */
 export function sendgridBulkMail({ apiKey, from = 'support@caremetric.ai', fromName = 'CareMetric', replyTo = from, category = 'hub-bulk-email', fetchImpl = fetch }) {
-  const configured = typeof apiKey === 'string' && apiKey.startsWith('SG.') && emailAddress.test(from) && emailAddress.test(replyTo) && /^[a-z0-9-]{1,40}$/.test(category);
+  // The sender, its display name and Reply-To are Hub settings (Settings → Email); each may be a function, read on each send.
+  const sender = () => ({ from: String(live(from) ?? ''), fromName: String(live(fromName) ?? ''), replyTo: String(live(replyTo) ?? '') });
   return {
-    configured,
+    get configured() { const now = sender(); return typeof apiKey === 'string' && apiKey.startsWith('SG.') && emailAddress.test(now.from) && emailAddress.test(now.replyTo) && /^[a-z0-9-]{1,40}$/.test(category); },
     async send({ to, subject, text, html, unsubscribeUrl, messageId }) {
+      const { from, fromName, replyTo } = sender();
       const personalization = { to: [{ email: to }], ...(unsubscribeUrl ? { headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' } } : {}) };
       let response;
       try {
@@ -95,6 +98,8 @@ function page(title, message, form) {
 }
 
 export function bulkEmail({ pool, delegations, mail, publicOrigin, postalAddress = '' }) {
+  // The footer's postal address is a Hub setting (Settings → Email); it may be a function, read on each message.
+  const postal = () => String(live(postalAddress) ?? '').trim();
   const admin = (sessionToken, sql, values = []) => withSession(pool, sessionToken, async db => (await db.query(sql, values)).rows[0].result).catch(error => { throw reviewed(error); });
   const server = (sql, values) => transaction(pool, async db => (await db.query(sql, values)).rows[0].result).catch(error => { throw reviewed(error); });
   const only = (input, keys) => { if (!input || Object.keys(input).some(key => !keys.includes(key))) throw new HttpError(400, 'Unsupported request.'); };
@@ -106,7 +111,7 @@ export function bulkEmail({ pool, delegations, mail, publicOrigin, postalAddress
 
   async function deliver(item) {
     const url = unsubscribeUrl(item.token);
-    const message = { subject: item.subject, body: item.body, applications: item.applications, unsubscribeUrl: url, postalAddress };
+    const message = { subject: item.subject, body: item.body, applications: item.applications, unsubscribeUrl: url, postalAddress: postal() };
     const outcome = await mail.send({ to: item.to, subject: item.subject, text: composeBulkEmail(message), html: bulkEmailHtml(message), unsubscribeUrl: url });
     await server('select private.finish_email_delivery($1,$2,$3) as result', [item.id, outcome.delivery, outcome.id]);
   }
@@ -145,7 +150,7 @@ export function bulkEmail({ pool, delegations, mail, publicOrigin, postalAddress
       const to = typeof input.to === 'string' ? input.to.trim() : '';
       if (!emailAddress.test(to) || to.length > 320) throw new HttpError(400, 'Enter the email address for the test.');
       const message = await admin(sessionToken, 'select hub.authorize_email_test($1) as result', [id(input.id)]);
-      const test = { subject: `[Test] ${message.subject}`, body: message.body, applications: message.applications, unsubscribeUrl: null, postalAddress };
+      const test = { subject: `[Test] ${message.subject}`, body: message.body, applications: message.applications, unsubscribeUrl: null, postalAddress: postal() };
       const outcome = await mail.send({ to, subject: test.subject, text: composeBulkEmail(test), html: bulkEmailHtml(test), unsubscribeUrl: null });
       return { delivery: outcome.delivery };
     },

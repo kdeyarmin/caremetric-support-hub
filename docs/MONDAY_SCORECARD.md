@@ -42,7 +42,7 @@ before the week the scorecard is due in, against the week before that.
    is connected (the same Meta and LinkedIn figures the social report reads, for the same Monday-to-Sunday week, also on a run later in
    the week), divided by the trial starts.
 
-With Search Console connected (`HUB_SEARCH_CONSOLE_CREDENTIALS` and `HUB_SEARCH_CONSOLE_SITES`, see the SEO Analyst), **organic
+With Search Console connected (`HUB_SEARCH_CONSOLE_CREDENTIALS` in Railway and the properties in Settings → Search, see the SEO Analyst), **organic
 search clicks** per product are added: the last seven days with final data against the seven before. A property's host decides its
 product; other sites (Healthcare Advisors, the help center) are left out. A product with no property has no clicks row, and one whose
 properties could not be read says so instead of showing zero.

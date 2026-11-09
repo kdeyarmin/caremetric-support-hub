@@ -340,3 +340,33 @@
 .growth-workspace table { width: 100%; text-align: left; border-collapse: collapse; }
 .growth-workspace th, .growth-workspace td { padding: .7rem; border-bottom: 1px solid #dce4ec; }
 .growth-workspace summary { cursor: pointer; padding: .7rem 0; }
+
+/* Settings: switches and values the owner changes instead of Railway variables. */
+.settings .page-heading h1 { display: flex; align-items: center; gap: 10px; }
+.settings .panel { margin-top: 18px; }
+.settings-group > .admin-section-title { margin: 0; padding: 0 0 4px; }
+.settings .page-heading p a { color: var(--brand); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.settings-readonly { margin: 0 0 4px; }
+.settings-list { list-style: none; margin: 0; padding: 0; }
+.settings-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 380px); gap: 10px 24px; align-items: start; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.settings-row:last-child { border-bottom: 0; }
+.settings-text { display: grid; gap: 4px; min-width: 0; }
+.settings-label { font-weight: 700; font-size: var(--text-md); color: var(--ink); }
+.settings-text .muted { font-size: var(--text-sm); line-height: 1.5; }
+.settings-source { color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
+.settings-field { display: grid; gap: 8px; }
+.settings-field-switch { justify-items: end; }
+.settings-money { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.settings-switch { display: inline-flex; align-items: center; gap: 10px; padding: 4px; border: 0; border-radius: 999px; background: none; cursor: pointer; font: inherit; font-weight: 700; color: var(--muted); }
+.settings-switch:focus-visible { outline: 3px solid rgba(38,68,145,.35); outline-offset: 2px; }
+.settings-switch:disabled { cursor: not-allowed; opacity: .55; }
+.settings-switch-track { position: relative; width: 44px; height: 24px; border-radius: 999px; background: #cbd5e1; transition: background .16s; }
+.settings-switch-knob { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: white; box-shadow: 0 1px 3px rgba(15,23,42,.25); transition: transform .16s; }
+.settings-switch.is-on { color: var(--brand); }
+.settings-switch.is-on .settings-switch-track { background: var(--brand); }
+.settings-switch.is-on .settings-switch-knob { transform: translateX(20px); }
+@media (max-width: 760px) {
+  .settings .page-heading { align-items: flex-start; flex-direction: column; gap: 15px; }
+  .settings-row { grid-template-columns: 1fr; }
+  .settings-field-switch { justify-items: start; }
+}

@@ -10,7 +10,7 @@
  * - sales: for a prospect (a website lead or a conversation filed as a sale): thanks, the information they need will come
  *   in this conversation. CareMetric sells without demos or meetings (owner decision
  *   2026-11-08), so it promises no personal follow-up and names no day. When the owner's booking page is configured
- *   (HUB_BOOKING_URL, https only) it also offers "pick a time that suits you" with that link: leave it unset to offer none.
+ *   (the booking page in Settings → AI team, https only) it also offers "pick a time that suits you" with that link: leave it unset to offer none.
  */
 export const smsLimit = 320;
 

@@ -32,6 +32,9 @@ import { sites as defaultSites } from '../seo/sites.mjs';
 import { readAccountsSnapshot } from '../tasks/accounts.mjs';
 import { dueMoment, mustHaveReached, recordRun } from '../tasks/shared.mjs';
 import { billingFigures, composeScorecard, composeVersion, searchFigures } from './compose.mjs';
+import { live, rebuilt } from '../../live.mjs';
+// The Settings page keeps the properties as a list; the reader takes them as one comma-separated text, as the old variable held them.
+const consoleSites = value => (Array.isArray(value) ? value.join(',') : value);
 
 export const scorecardFeature = 'platform.agents.scorecard.v1';
 export const scorecardDeclared = features => (features instanceof Set ? features.has(scorecardFeature) : Array.isArray(features) && features.includes(scorecardFeature));
@@ -47,12 +50,14 @@ const shift = (date, days) => { const [year, month, day] = date.split('-').map(N
  * there is none today, so the email says "Not connected".
  */
 export function scorecardHandlers({
-  store, notifier, publicOrigin = null, features = null, growth = null, ads = null, searchConsole = undefined, env = process.env, fetchImpl = fetch,
+  store, notifier, publicOrigin = null, features = null, growth = null, ads = null, searchConsole = undefined, searchConsoleSites = undefined, env = process.env, fetchImpl = fetch,
   sites = defaultSites, audit = auditSite, visitors = null, log = line => console.warn(line),
 }) {
   if (!scorecardDeclared(features) || typeof store?.scorecardFacts !== 'function') return {};
   const reader = searchConsole === undefined
-    ? searchConsoleReader({ credentials: env.HUB_SEARCH_CONSOLE_CREDENTIALS, sites: env.HUB_SEARCH_CONSOLE_SITES, fetchImpl, log })
+    // The properties are a Hub setting (`searchConsoleSites`, Settings → Search) read on each run; the key stays in Railway.
+    ? rebuilt(() => ({ credentials: env.HUB_SEARCH_CONSOLE_CREDENTIALS, sites: consoleSites(searchConsoleSites === undefined ? env.HUB_SEARCH_CONSOLE_SITES : live(searchConsoleSites)) }),
+      input => searchConsoleReader({ ...input, fetchImpl, log }))
     : searchConsole;
 
   // One optional source: its value, or null after a logged, named failure. The task's own stop is never swallowed.

@@ -13,7 +13,7 @@ import { seoHandlers } from './seo.mjs';
 
 /**
  * The handlers every Hub server ships with. They are always registered; nothing runs unless
- * HUB_AGENTS_ENABLED is true and the owner has resumed the agent that owns the work.
+ * "Run the AI team" is on in Settings and the owner has resumed the agent that owns the work.
  * `services` says which owner channels exist (the brief mentions a missing one), and
  * `communications` is the inbox service the import handlers copy other applications' messages into, and
  * `features` is the set of features the database declares (the Concierge and the Growth Manager register only when their own is there),
@@ -26,13 +26,13 @@ import { seoHandlers } from './seo.mjs';
  */
 export function builtInHandlers({ store, notifier, model = null }, {
   publicOrigin, fetchImpl = fetch, log, services = {}, communications = null, features = null, guides = null, customerTextToAi = false, bookingUrl = null, leadSecrets = {}, lifecycle = {},
-  marketed = null,
+  marketed = null, searchConsoleSites = undefined,
 } = {}) {
   const targets = probeTargets({ publicOrigin });
   return {
     ...probeHandlers({ store, notifier, targets, alertTargets: formTargets, fetchImpl, log }),
     ...briefHandlers({ store, notifier, publicOrigin, services, features, labels: Object.fromEntries([...targets, ...formTargets].map(target => [target.key, target.label])), log }),
-    ...seoHandlers({ store, notifier, model, publicOrigin, fetchImpl, log }),
+    ...seoHandlers({ store, notifier, model, publicOrigin, fetchImpl, searchConsoleSites, log }),
     ...accountsHandlers({ store, notifier, publicOrigin, features, log }),
     ...lifecycleHandlers({ store, features, lifecycle, log }),
     ...offerHandlers({ store, features, log }),

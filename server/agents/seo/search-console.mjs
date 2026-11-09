@@ -1,6 +1,6 @@
 /**
  * Google Search Console, read-only, for the SEO Analyst's weekly report. It is optional: the Hub reads it only when the service
- * has HUB_SEARCH_CONSOLE_CREDENTIALS (a Google service account's JSON key) and HUB_SEARCH_CONSOLE_SITES (the properties to read).
+ * has HUB_SEARCH_CONSOLE_CREDENTIALS (a Google service account's JSON key) and the properties to read (Settings → Search; the old HUB_SEARCH_CONSOLE_SITES variable until it is copied in).
  * Without them the report runs from the crawl alone and says how to connect it.
  *
  * Signing in is the service-account flow, done here with node:crypto and no Google library: a JWT signed with the account's
@@ -50,7 +50,7 @@ export function readCredentials(raw) {
 }
 
 /**
- * The properties in HUB_SEARCH_CONSOLE_SITES, separated by commas or spaces, written as Search Console names them: a domain
+ * The Search Console properties (Settings → Search), separated by commas or spaces, written as Search Console names them: a domain
  * property (sc-domain:cmcarebase.com) or an address prefix (https://www.caremetricintel.com/). Anything else is counted and left
  * out. At most ten are read.
  *

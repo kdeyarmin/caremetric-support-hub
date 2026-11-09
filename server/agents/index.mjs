@@ -15,6 +15,7 @@ import { modelRuntime } from './runtime/index.mjs';
 import { salesHandlers } from './sales/index.mjs';
 import { socialDeclared, socialTeam } from './social/index.mjs';
 import { scorecardDeclared, scorecardHandlers } from './scorecard/index.mjs';
+import { live } from '../live.mjs';
 
 const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 
@@ -23,13 +24,13 @@ const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
  * functions of the shared services ({ store, notifier, actions }) that return them, so each
  * agent's code can raise owner alerts and propose actions without a circular wiring.
  * The handlers every server ships with (see tasks/) are always registered; `handlers` adds to
- * or replaces them. Nothing runs unless `enabled` is exactly true (HUB_AGENTS_ENABLED); every
+ * or replaces them. Nothing runs unless `enabled` is exactly true (Settings → AI team → "Run the AI team"); every
  * agent also starts paused in the database until the owner resumes it.
  * `model` is the shared model runtime (runtime/): built from `anthropicApiKey` unless one is given,
  * and handed to function-style `handlers` beside the store and the notifier. `record` writes the
  * usage ledger. The Concierge's triage calls the model only when
  * `customerTextToAi` (the owner's switch) is true, a key is set and `guides` (the guide library) is given.
- * `bookingUrl` (HUB_BOOKING_URL) is the owner's booking page, which the Concierge's sales acknowledgment may offer, and `leadSecrets`
+ * `bookingUrl` (Settings → AI team → "Booking page") is the owner's booking page, which the Concierge's sales acknowledgment may offer, and `leadSecrets`
  * are the products' lead secrets (HUB_LEAD_SECRET_*), which the Platform Engineer's lead form checks sign with.
  * `lifecycle` is how the Account Manager sends customer emails: `{ mail, postalAddress, bookingUrl }` (a SendGrid sender with
  * one-click unsubscribe headers, the footer's postal address and the owner's optional booking link); the unsubscribe link uses
@@ -42,7 +43,7 @@ export function agentTeam({
   pool, growth: givenGrowth = null, growthMail = null, postalAddress = '', store: givenStore = null, handlers = {}, executors = {}, sms, email, ownerEmail, publicOrigin,
   fetchImpl = fetch, enabled = false, log = line => console.warn(line), now = () => new Date(), communications = null, features = null,
   anthropicApiKey = null, record = null, model = null, guides = null, customerTextToAi = false, bookingUrl = null, leadSecrets = {}, lifecycle = null, offerBilling = null,
-  social = null, meta = null, marketed = null,
+  social = null, meta = null, marketed = null, searchConsoleSites = undefined,
 }) {
   // Fenced operations (the attempt a task was claimed under, the execution an action started) exist once the database declares the hardening feature.
   const marketing = features?.has?.(marketingFeature) === true;
@@ -57,7 +58,8 @@ export function agentTeam({
   const shared = { store, notifier, model: runtime };
   // The Social Media Manager (platform.agents.social.v1): its Meta client is built once, from `social` (socialConfig in social/index.mjs).
   const socialWork = socialTeam({ social, features, fetchImpl, meta });
-  const customerEmail = { ...(lifecycle ?? {}), publicOrigin };
+  // Kept as getters, not copied: the postal address and booking link are Hub settings the Account Manager reads on each run.
+  const customerEmail = Object.defineProperties({}, { ...Object.getOwnPropertyDescriptors(lifecycle ?? {}), publicOrigin: { value: publicOrigin, enumerable: true } });
   const actions = actionExecutor({ store, executors: {
     ...recordOnlyExecutors, ...growthExecutors({growth,mail:growthMail,publicOrigin,postalAddress}), ...conciergeExecutors({ communications, store, notifier, features, log }), ...lifecycleExecutors({ store, features, lifecycle: customerEmail, log }),
     ...offerExecutors({ store, features, billing: offerBilling, notifier, log }),
@@ -68,15 +70,15 @@ export function agentTeam({
   const registry = { ...growthHandlers({growth,model:runtime,notifier,features,marketed:marketedSource}),
     ...salesHandlers({ store, notifier, model: runtime, growth, features, customerTextToAi, bookingUrl, publicOrigin, guides, marketed: marketedSource, log }),
     ...socialWork.handlers({ store, notifier, model: runtime, customerTextToAi, publicOrigin, marketed: marketedSource, log }),
-    ...scorecardHandlers({ store, notifier, publicOrigin, features, growth, ads: socialWork.ads, fetchImpl, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, bookingUrl, leadSecrets, lifecycle: customerEmail, marketed: marketedSource, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
+    ...scorecardHandlers({ store, notifier, publicOrigin, features, growth, ads: socialWork.ads, fetchImpl, searchConsoleSites, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, bookingUrl, leadSecrets, lifecycle: customerEmail, marketed: marketedSource, searchConsoleSites, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   const scheduler = agentScheduler({ store, handlers: registry, actions, enabled, log, now });
   const admin = agentAdmin({
     pool, actions, kick: () => scheduler.tick(), waiting: scheduler.runWaiting,
     externalEmailReady: externalEmailRecovery({ store, features }),
     services: () => ({
       enabled: scheduler.active(), handlers: scheduler.kinds(),
-      sms: Boolean(sms?.configured), email: Boolean(email?.configured), ownerEmail: emailAddress.test(ownerEmail ?? ''), ai: Boolean(runtime.configured),
-      customerTextToAi: draftingFor({ model: runtime, guides, customerTextToAi }) !== null,
+      sms: Boolean(sms?.configured), email: Boolean(email?.configured), ownerEmail: emailAddress.test(live(ownerEmail) ?? ''), ai: Boolean(runtime.configured),
+      customerTextToAi: draftingFor({ model: runtime, guides, customerTextToAi: live(customerTextToAi) }) !== null,
       externalEmail: externalEmailAvailable({ features, email }),
     }),
   });

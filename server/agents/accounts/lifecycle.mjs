@@ -15,7 +15,7 @@
  * Each is proposed at most once per account and product (its period key, account:<template>:<tenant>:<product>). The emails say
  * nothing about AI, quote no price (the trial check-in states the Founders Sale's percentage and term only), promise no time or outcome, never mention a phone call or voicemail, and use the company's
  * vocabulary for CareBase (an Assisted Living Facility, ALF, and a surveyor; never the regulation's own name for the facility type or
- * an auditor). The owner's booking link appears only when HUB_BOOKING_URL is an https address.
+ * an auditor). The owner's booking link appears only when the booking page (Settings → AI team) is an https address.
  *
  * What the owner approves is the subject and the message ("the wording"). The action keeps the facts that rebuild it and a hash of
  * it, never the address; the email that is sent is rebuilt from those facts and is refused if its wording no longer matches the hash.

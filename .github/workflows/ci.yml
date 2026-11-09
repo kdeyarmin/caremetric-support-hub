@@ -190,6 +190,9 @@ jobs:
           node server/agents-scorecard-integration.mjs
           # Repeat with fresh fixtures to prove complete teardown.
           node server/agents-scorecard-integration.mjs
+          node server/settings-integration.mjs
+          # Repeat with fresh fixtures to prove complete teardown.
+          node server/settings-integration.mjs
       - name: Export, lose and restore disposable Hub data
         env:
           HUB_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres

@@ -139,7 +139,7 @@ export function searchInsights(read, { owners = [], limits = {} } = {}) {
   }
 
   // Overlapping properties (a domain property and an address prefix inside it) report the same rows. Each row is listed once, with the
-  // figures of the first property in HUB_SEARCH_CONSOLE_SITES that reported it (never a sum of the two), before a list is cut to five.
+  // figures of the first property listed in Settings → Search that reported it (never a sum of the two), before a list is cut to five.
   return {
     window: read?.window ?? null,
     sites, failures, competing,

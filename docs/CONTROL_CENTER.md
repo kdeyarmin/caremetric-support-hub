@@ -60,28 +60,26 @@ The ledger starts empty; calls made before the migration were only logged.
 
 ## Integration setup
 
-The Hub's integrations are configured with variables on the Hub service
-(Railway → the Hub service → Variables). The control center lists, for each
-integration, the exact variable names, what each one does, whether it is set,
-and a link to the setup steps:
+The Hub's integrations need their secrets on the Hub service (Railway → the Hub
+service → Variables). Everything that is not a secret (switches, addresses,
+account ids, limits) is on the [Settings](SETTINGS.md) page instead. The control
+center lists, for each integration, the exact secret names, what each one does,
+whether it is set, and a link to the setup steps:
 
 | Integration | Variables |
 | --- | --- |
-| AI assistance (Anthropic) | `ANTHROPIC_API_KEY`, `HUB_AI_AUTOMATION_ENABLED`, `HUB_AI_DRAFT_TIER`, `HUB_AI_FOLLOW_UP_DELAY_HOURS` |
-| Text messages (Twilio) | `HUB_TWILIO_AUTH_TOKEN`, `HUB_TWILIO_ACCOUNT_SID`, `HUB_TWILIO_MESSAGING_SERVICE_SID`, `HUB_TWILIO_FROM_NUMBER` |
-| Email (SendGrid) | `HUB_SENDGRID_INBOUND_PUBLIC_KEY`, `HUB_SENDGRID_API_KEY`, `HUB_SUPPORT_FROM_EMAIL` |
-| Website chat | `HUB_CHAT_ENABLED` |
+| AI assistance (Anthropic) | `ANTHROPIC_API_KEY` |
+| Text messages (Twilio) | `HUB_TWILIO_AUTH_TOKEN`, `HUB_TWILIO_ACCOUNT_SID` |
+| Email (SendGrid) | `HUB_SENDGRID_INBOUND_PUBLIC_KEY`, `HUB_SENDGRID_API_KEY` |
 | Webhook origin | `HUB_PUBLIC_ORIGIN` |
 | SMS sign-in (Telnyx) | `HUB_TELNYX_API_KEY`, `HUB_TELNYX_VERIFY_PROFILE_ID` |
 | Website leads ([LEAD_INTAKE.md](LEAD_INTAKE.md)) | `HUB_LEAD_SECRET_CAREBASE`, `HUB_LEAD_SECRET_INTEL`, `HUB_LEAD_SECRET_ADVISORS` |
 | CareBase course distribution observer | `CAREBASE_DISTRIBUTION_OBSERVER_TOKEN` |
 
-A flag such as `HUB_CHAT_ENABLED` satisfies its integration only when it is exactly
-`true`, the same test the Hub service applies; a present but false flag shows its
-value and leaves the integration at **Needs setup**. A secret is reported as **set** or **missing** only. The server returns a boolean
+A secret is reported as **set** or **missing** only. The server returns a boolean
 for it, and the browser client's schema refuses any value sent for a secret, so
-no part of a secret can reach the browser through this panel. Non-secret
-settings (a flag, an address, a tier, an identifier) are shown so they can be
+no part of a secret can reach the browser through this panel. The two non-secret
+values left here (the webhook origin and the Telnyx profile id) are shown so they can be
 confirmed. The panel reports; it never writes. To add or change a secret, set
 the variable on the Hub service and let it redeploy, then refresh the page.
 

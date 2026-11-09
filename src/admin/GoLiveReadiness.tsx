@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { RefreshCw } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Loading, ReadFailure } from "./AdminReads";
 import { readinessClient } from "./readinessClient";
 import type { ReadinessClient } from "./readinessClient";
@@ -35,10 +36,10 @@ function AnthropicKeyRow({ report }: { report: GoLiveReadinessReport }) {
 function AutomationRow({ report }: { report: GoLiveReadinessReport }) {
   const enabled = report.aiAutomation.enabled;
   return <section className="panel" aria-label="AI automation">
-    <div className="admin-section-title"><div><h2>AI automation</h2><p>The customer auto-resolution loop stays off until it is deliberately enabled on the Hub service.</p></div><Status done={enabled} /></div>
+    <div className="admin-section-title"><div><h2>AI automation</h2><p>The customer auto-resolution loop stays off until it is deliberately switched on in Settings.</p></div><Status done={enabled} /></div>
     {enabled
-      ? <p className="admin-explanation">Automation is enabled: HUB_AI_AUTOMATION_ENABLED is set to true on the Hub service.</p>
-      : <p className="admin-explanation">Automation is off. It turns on only when HUB_AI_AUTOMATION_ENABLED is set to exactly true on the Hub service — keep it off until the migrations and the Anthropic key above are in place, because the loop needs both.</p>}
+      ? <p className="admin-explanation">Automation is on: "AI answers on new support cases" is switched on in <Link to="/admin/settings">Settings</Link>.</p>
+      : <p className="admin-explanation">Automation is off. Switch on "AI answers on new support cases" in <Link to="/admin/settings">Settings</Link> once the migrations and the Anthropic key above are in place, because the loop needs both.</p>}
   </section>;
 }
 

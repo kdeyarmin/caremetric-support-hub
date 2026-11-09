@@ -1,3 +1,4 @@
+import { live } from './live.mjs';
 import { HttpError } from './sms-auth.mjs';
 import { distributionSession } from './distribution-session.mjs';
 import { callNativeAdmin } from './admin-transport.mjs';
@@ -5,6 +6,8 @@ import { parsePortfolioEnvelope } from '../supabase/functions/_shared/portfolioP
 import { distributionDomain,distributionOperationSchema,distributionContextSchema,distributionPreviewSchema,projectDistributionContext } from '../src/learning/distributionProtocol.ts';
 
 export function learningDistribution({pool,issue,observer,legacyOptInAllowed=false,fetchImpl=fetch}) {
+  // The legacy opt-in switch (Settings → Course distribution) may be a function, read on each request.
+  const legacyAllowed=()=>live(legacyOptInAllowed)===true;
   return async(sessionToken,input,requestSignal)=>{
     let op;try{op=distributionOperationSchema.parse(input);}catch{throw new HttpError(400,'Invalid course distribution request.','invalid_request');}
     const signal=AbortSignal.any([...(requestSignal?[requestSignal]:[]),AbortSignal.timeout(28000)]);
@@ -47,7 +50,7 @@ export function learningDistribution({pool,issue,observer,legacyOptInAllowed=fal
           await authority();native=null;
         }
         return await local(async db=>distributionContextSchema.parse({...((await db.query('select private.get_course_distribution_context($1) as value',[op.courseId])).rows[0].value),
-          native,observerConfigured:observer?.configured===true,legacyOptInAllowed}));
+          native,observerConfigured:observer?.configured===true,legacyOptInAllowed:legacyAllowed()}));
       }
       if(op.operation==='resume'){
         await intent(op.requestId);await authority();return await intent(op.requestId);
@@ -55,14 +58,14 @@ export function learningDistribution({pool,issue,observer,legacyOptInAllowed=fal
       if(op.operation==='preview'){
         const observed=await observe(op.plan.courseId);ensureSource(observed,op.plan);
         return await local(async db=>distributionPreviewSchema.parse((await db.query('select private.preview_course_distribution($1,$2::jsonb,$3,$4,$5) as value',
-          [op.requestId,JSON.stringify(op.plan),observed.native.source.payload,observed.nonce,legacyOptInAllowed])).rows[0].value));
+          [op.requestId,JSON.stringify(op.plan),observed.native.source.payload,observed.nonce,legacyAllowed()])).rows[0].value));
       }
       const saved=await intent(op.requestId);
       if(saved.previewDigest!==op.expectedDigest)throw new HttpError(409,'The reviewed distribution differs.','conflict');
       if(saved.result){
         await authority();
         return await local(async db=>distributionPreviewSchema.parse((await db.query('select private.commit_course_distribution($1,$2,null,$3) as value',
-          [op.requestId,op.expectedDigest,legacyOptInAllowed])).rows[0].value));
+          [op.requestId,op.expectedDigest,legacyAllowed()])).rows[0].value));
       }
       const observed=await observe(saved.plan.courseId);
       if(!saved.result){
@@ -79,7 +82,7 @@ export function learningDistribution({pool,issue,observer,legacyOptInAllowed=fal
           throw new HttpError(409,'The machine observation and reviewed source differ.','conflict');
       }
       return await local(async db=>distributionPreviewSchema.parse((await db.query('select private.commit_course_distribution($1,$2,$3,$4) as value',
-        [op.requestId,op.expectedDigest,observed.nonce,legacyOptInAllowed])).rows[0].value));
+        [op.requestId,op.expectedDigest,observed.nonce,legacyAllowed()])).rows[0].value));
     }catch(error){
       if(error instanceof HttpError)throw error;
       const code=({42501:'forbidden',28000:'unauthenticated',40001:'conflict',22023:'invalid_request','22P02':'invalid_request'})[error.code]??'upstream';

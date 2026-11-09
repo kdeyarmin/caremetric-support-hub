@@ -32,6 +32,7 @@ import { categorize } from './rules.mjs';
 import { screenIdentifiers } from './screen.mjs';
 import { conciergeSettings } from './settings.mjs';
 import { replyBody } from './templates.mjs';
+import { live } from '../../live.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const dailyEmailCap = 20;
@@ -75,9 +76,10 @@ function skipReason(snapshot, payload, settings) {
 /**
  * `drafting` is `{ model, guides }` when customer text may go to the model (the owner's explicit switch, a model key
  * and the guide library), and null otherwise, which keeps the handler exactly as it is without a model.
- * `bookingUrl` is the owner's booking page (HUB_BOOKING_URL): the sales acknowledgment offers it, and nothing else does.
+ * `bookingUrl` is the owner's booking page (Settings → AI team): the sales acknowledgment offers it, and nothing else does.
  */
-export function triageHandler({ store, notifier, drafting = null, bookingUrl = null, answers = false, sales = false, log = line => console.warn(line) }) {
+export function triageHandler({ store, notifier, drafting: draftingOption = null, bookingUrl = null, answers = false, sales = false, log = line => console.warn(line) }) {
+  // `drafting` and `bookingUrl` may be functions (the owner's Hub settings), read once per message.
   // Whether this alert has been tried before in a channel: its key already has a row there. A refused try counts toward the caps like any
   // other, so a retry has to resume the alert under its own key and channels instead of being judged by the caps again, which would turn it
   // into an email-only alert or a rollup because of itself.
@@ -126,7 +128,7 @@ export function triageHandler({ store, notifier, drafting = null, bookingUrl = n
    * no_answer, owner_only, phi, refused, budget, unavailable, no_guides or no_text. A transient failure early on is thrown so the
    * scheduler retries it; any other failure ends in `unavailable`, and the fixed acknowledgment is offered instead.
    */
-  async function askModel({ task, snapshot, inbound, route, signal }) {
+  async function askModel({ task, snapshot, inbound, route, signal, drafting }) {
     const prior=drafting.followups?(snapshot.messages??[]).filter(m=>m.id!==inbound.id).slice(-2):[];
     if(prior.some(m=>m.body.length>=readChars))return {state:'unavailable',reason:'thread_truncated'};
     if(prior.some(m=>screenIdentifiers(m.body).flagged))return {state:'phi',phi:true};
@@ -180,7 +182,7 @@ export function triageHandler({ store, notifier, drafting = null, bookingUrl = n
     if (task.agent?.autonomy === 'observe') return { reply: 'observe_only', template };
     const route = replyRoute(snapshot);
     if (!route) return { reply: 'no_route', template };
-    const body = draft ? draft.body : replyBody(template, route, { bookingUrl });
+    const body = draft ? draft.body : replyBody(template, route, { bookingUrl: live(bookingUrl) });
     try {
       // A drafted answer that cites the guides, for a message with no identifier, going back by email or chat, is an answer: it can go
       // out without the owner's session (approved by them, or automatically once they hand answers over). Everything else is a reply.
@@ -208,6 +210,7 @@ export function triageHandler({ store, notifier, drafting = null, bookingUrl = n
   }
 
   async function communication(task, { now = () => new Date(), signal } = {}) {
+    const drafting = live(draftingOption);
     const payload = task.payload ?? {};
     if (!uuid.test(payload.communicationId ?? '') || !uuid.test(payload.messageId ?? '')) throw permanent('invalid_payload');
     const settings = conciergeSettings(task.agent?.config);
@@ -267,7 +270,7 @@ export function triageHandler({ store, notifier, drafting = null, bookingUrl = n
       && (replyFor({ category: ruleCategory, phi: false, productSlug: snapshot.productSlug, inquiryType: snapshot.inquiryType, sourceSystem: snapshot.sourceSystem ?? null }) === 'standard'
         || (drafting.followups && matched.category==='general' && ['carebase','caremetric-intel'].includes(snapshot.productSlug) && snapshot.inquiryType==='sales'));
     if (eligible) {
-      asked = await askModel({ task, snapshot, inbound, route, signal });
+      asked = await askModel({ task, snapshot, inbound, route, signal, drafting });
       // The scheduler has stopped waiting for this task: nothing more is sent or proposed from here.
       if (signal?.aborted) throw Object.assign(new Error('The task was stopped.'), { code: 'task_timeout', transient: true });
       if (asked.category) category = asked.category;

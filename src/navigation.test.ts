@@ -28,7 +28,7 @@ describe('sidebar navigation', () => {
 
   it('adds the communications inbox for support staff but no administration', () => {
     expect(paths(staff)).toContain('/communications');
-    for (const path of ['/admin', '/admin/apps', '/admin/leads', '/phone', '/phone-numbers', '/library', '/billing']) expect(paths(staff)).not.toContain(path);
+    for (const path of ['/admin', '/admin/apps', '/admin/leads', '/admin/settings', '/phone', '/phone-numbers', '/library', '/billing']) expect(paths(staff)).not.toContain(path);
   });
 
   it('shows administrators the control center first, the administration workspaces, and course authoring', () => {
@@ -47,6 +47,7 @@ describe('current page', () => {
     ['/admin', 'Home', 'Control center'],
     ['/admin/apps', 'Administration', 'Applications'],
     ['/admin/leads', 'Administration', 'Leads'],
+    ['/admin/settings', 'Administration', 'Settings'],
     ['/admin/billing/customers/tenant-1', 'Administration', 'Billing'],
     ['/phone', 'Support', 'Phone messages'],
     ['/phone-numbers', 'Administration', 'Phone numbers'],
