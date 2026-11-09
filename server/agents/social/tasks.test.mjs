@@ -46,6 +46,14 @@ describe('the weekly social plan', () => {
     { platform: 'facebook', product: 'carebase', pillar: 'tip', day: 5, text: 'See https://example.org', linkId: 'not-a-page', hashtags: [] },
   ];
 
+  it('tags a product link the model wrote into a post\'s text, replacing any tags it wrote', async () => {
+    const model = modelReturning({ posts: [{ platform: 'facebook', product: 'carebase', pillar: 'offer', day: 2, text: 'Start a 30-day free trial: https://cmcarebase.com/signup?utm_source=x&utm_medium=y&utm_campaign=z', linkId: '', hashtags: [] }] });
+    const h = harness({ model });
+    await h.handlers['social.plan'](task('social.plan'), { now });
+    expect(h.store.proposeAction.mock.calls[0][0].input).toMatchObject({ link: null,
+      message: 'Start a 30-day free trial: https://cmcarebase.com/signup?utm_source=facebook&utm_medium=social&utm_campaign=social-carebase&utm_content=post' });
+  });
+
   it('proposes checked Facebook and Instagram posts held for their time slots, and emails LinkedIn posts to paste', async () => {
     const model = modelReturning({ posts });
     const h = harness({ model });

@@ -66,6 +66,7 @@ describe('tagged links in social text', () => {
     for (const url of [
       'https://cmcarebase.com/signup?utm_source=facebook&utm_medium=social&utm_campaign=x&next=https://evil.example',
       'https://cmcarebase.com/signup?utm_source=facebook&utm_medium=social&utm_campaign=evil.example/x',
+      'https://cmcarebase.com/signup?utm_source=facebook&utm_medium=social&utm_campaign=x=person@example.com',
       'https://cmcarebase.com/nope?utm_source=facebook&utm_medium=social&utm_campaign=x',
       'https://evil.example/?utm_source=facebook&utm_medium=social&utm_campaign=x',
       'https://www.caremetricintel.com/?utm_source=facebook&utm_medium=social&utm_campaign=x',

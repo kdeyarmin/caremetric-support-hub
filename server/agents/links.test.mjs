@@ -51,6 +51,8 @@ describe('untaggedUrl', () => {
       'https://cmcarebase.com/signup?utm_source=s&utm_source=t&utm_medium=m&utm_campaign=c',
       'https://cmcarebase.com/signup?utm_source=s&utm_medium=m&utm_campaign=c&utm_term=t',
       'https://cmcarebase.com/signup?utm_source=s&utm_medium=m&utm_campaign=evil.example/x',
+      'https://cmcarebase.com/signup?utm_source=s&utm_medium=m&utm_campaign=x=person@example.com',
+      'https://cmcarebase.com/signup?utm_source=s&utm_medium=m&utm_campaign=x=y',
       'https://cmcarebase.com/signup?utm_source=s@evil.example&utm_medium=m&utm_campaign=c',
       'https://cmcarebase.com/signup?utm_source=%2F%2Fevil&utm_medium=m&utm_campaign=c',
       'https://cmcarebase.com/signup?utm_source=&utm_medium=m&utm_campaign=c',

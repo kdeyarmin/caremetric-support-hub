@@ -117,7 +117,8 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       const link = draft.platform === 'instagram' ? null : tagSocialLink(page?.url ?? null, { platform: draft.platform, product: draft.product, content: 'post' });
       // A Facebook or connected LinkedIn link travels beside the text (it renders as a card); LinkedIn copy pasted by hand carries it.
       const pasted = draft.platform === 'linkedin' && !li.configured.page;
-      const text = withHashtags(pasted && link ? `${draft.text.trim()}\n\n${link}` : draft.text, draft.hashtags);
+      // A product link the model wrote into the text gets the same tags as the one beside it.
+      const text = tagSocialText(withHashtags(pasted && link ? `${draft.text.trim()}\n\n${link}` : draft.text, draft.hashtags), { platform: draft.platform, product: draft.product, content: 'post' });
       const checked = checkSocialText(text, { surface: draft.platform, product: draft.product });
       if (!checked.ok) { rejected[checked.reason] = (rejected[checked.reason] ?? 0) + 1; continue; }
       used[draft.platform] += 1;

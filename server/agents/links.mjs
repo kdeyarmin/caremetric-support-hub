@@ -61,7 +61,10 @@ export function untaggedUrl(url) {
   const [, base, query, hash = ''] = match;
   const seen = new Set();
   for (const pair of query.split('&')) {
-    const [name, tag] = pair.split('=');
+    // Exactly one "=": a value is everything after it, so "x=name@example.com" is read whole and fails.
+    const parts = pair.split('=');
+    if (parts.length !== 2) return null;
+    const [name, tag] = parts;
     const key = name.slice('utm_'.length);
     if (!tagKeys.includes(key) || seen.has(key) || !validTagValue(tag)) return null;
     seen.add(key);
