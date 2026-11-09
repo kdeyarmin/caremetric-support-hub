@@ -25,6 +25,9 @@ is built so far.
 > The **Social Media Manager** runs the Facebook Page, Instagram, the LinkedIn Page and the Meta and LinkedIn ad accounts for engagement: a weekly post plan,
 > replies to comments and messages, a daily ad review that pauses, refreshes and (only with your approval) re-budgets ads, and a
 > weekly report. See [Social media](SOCIAL_MEDIA.md).
+> The **Creative Director** turns the marketing plans into finished, on-brand, compliant ad images and short videos, proposes each for
+> your approval (anything that fails a compliance check is blocked and never shown), hands what you approve to the Social Media Manager
+> and learns weekly from results joined by `utm_content`. It is off unless `HUB_CREATIVE_ENABLED=true`. See [Creative Director](CREATIVE_DIRECTOR.md).
 > **Only CareMetric Intel is marketed** while CareBase is in its pilot. You switch products on and off under "Products we market" on
 > the AI team page (see "What the team markets").
 
@@ -42,6 +45,7 @@ to the next run without a restart. They decide it for every agent:
 - **Social Media Manager:** posts, links in replies, new ad copy and budget increases for marketed products only. A comment asking about
   CareBase is left for the owner. A losing CareBase ad may still be paused, which only lowers spend.
 - **Content Marketer:** help-center articles and monthly outreach drafts for marketed products only.
+- **Creative Director:** briefs, drafts and renders creative for marketed products only; an owner's brief for another product is refused.
 - **Sales Executive:** drafts no answer about a product that is not marketed. A first message still gets the fixed acknowledgment, and
   the owner is emailed that the conversation is theirs to decide (for CareBase, whether that organization joins the pilot).
 
@@ -923,6 +927,30 @@ are handed over such a comment is left for the owner.
 Comments and messages reach the model only with `HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true`, and no other person's words are stored. Setup,
 the ad rules, the checks and the Meta and LinkedIn permissions are in [Social media](SOCIAL_MEDIA.md).
 
+## The Creative Director
+
+Turns marketing plans (the Social Media Manager's weekly plan, the Marketing Manager's approved content briefs and the owner's own briefs on
+the **Creative** screen, `/admin/creative`) into finished ad creative: images for Meta, LinkedIn, Google display and YouTube rendered with
+satori and resvg (no browser), and 6, 15, 30 and 45 to 60 second videos in 1:1, 4:5 and 9:16, drawn frame by frame and stitched with
+ffmpeg-static (or made by HeyGen when `HUB_CREATIVE_VIDEO_PROVIDER=heygen` and `HUB_HEYGEN_API_KEY` are set). It starts **paused, in
+Propose**, with a $3.00 daily budget on the quality tier (concepts and final copy) and writes variants on the draft tier
+(`20261109120000_creative_director.sql`, gate `20261109120100_creative_director_contract.sql`, feature `platform.agents.creative.v1`).
+Its work registers only when that feature is declared **and** `HUB_CREATIVE_ENABLED` is exactly `true`.
+
+- `creative.plan` (08:30, and whenever the weekly social plan is written), `creative.request` (per brief), `creative.render` (every 10
+  minutes, at most `HUB_CREATIVE_DAILY_RENDER_CAP` a day, default 40), `creative.refresh` (09:30 once a week) and `creative.report` (09:45
+  once a week).
+- Every asset passes the code's compliance checks (no PHI or named patients, Meta's personal-attributes rule, no unsubstantiated claims
+  unless in the fact source, no implied CMS or government endorsement, offers and prices matching billing, exact brand and product names,
+  the brand kit's banned phrases and disclaimers, WCAG AA contrast, captions on video, a text-heavy warning, the platform's own limits). A
+  blocked asset is never shown to the owner.
+- Three action kinds: `creative.asset` (passed every check), `creative.asset_review` (passed with warnings: never automatic) and
+  `creative.retire`. Approving hands the asset to the Social Media Manager, whose posts and new ads use approved creative before anything
+  else; a rejection note becomes a revision brief. Two autonomy steps, both off: **Creative approvals** and **Retiring tired creative**.
+- The morning brief carries a Creative line (counts and the strongest learning).
+
+Formats, rules, rendering, learning and setup: [Creative Director](CREATIVE_DIRECTOR.md).
+
 ## The Content Marketer
 
 Writes the help center's public articles, one a week, for the owner to approve, and once a month drafts outreach for the
@@ -1324,6 +1352,14 @@ Apply the migrations in order with the usual procedure:
    and the three autonomy steps (off), and declare `platform.agents.social.v1` (it needs the control plane, the hardening, autonomy
    steps and customer growth). Restart the Hub after it. Nothing reaches Meta until `HUB_META_ACCESS_TOKEN` and `HUB_META_PAGE_ID` are set
    and the owner resumes the agent.
+
+19. `20261109120000_creative_director.sql`, then its gate `20261109120100_creative_director_contract.sql`, which create the brand kits
+   (blank), briefs, assets, files and learnings, seed the Creative Director (paused, Propose) and its four schedules, add the three
+   `creative.*` action kinds and the `creative_asset` target with their ownership check (an asset with a warning can never be
+   automatically approved), the trigger that turns a rejection note into a revision brief, the server and owner operations, and the two
+   autonomy steps (off), and declare `platform.agents.creative.v1` (it needs the control plane, the hardening, autonomy steps, the Social
+   Media Manager, the marketing switches and the lead desk). Restart the Hub after it. Nothing runs until `HUB_CREATIVE_ENABLED=true` and the
+   owner resumes the agent.
 
 The Hub build does not require any of these features, so a Hub whose database lacks them still starts and
 serves everything else. The AI team is opt-in twice over: nothing runs unless `HUB_AGENTS_ENABLED`
