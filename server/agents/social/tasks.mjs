@@ -50,7 +50,8 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
   // LinkedIn is optional: without its token and Page id, LinkedIn posts are emailed to the owner to paste, as before.
   const li = linkedin ?? { configured: { page: false, ads: false } };
   const clientFor = platform => (platform === 'linkedin' ? li : meta);
-  const metaPosts = meta.configured.pages || meta.configured.instagram;
+  // Read on each run: the Page and Instagram ids are Hub settings, so a page connected in Settings is used from the next run.
+  const metaPosts = () => meta.configured.pages || meta.configured.instagram;
   // The owner's switch (Settings → AI team), read each time it matters, so turning it off applies at once.
   const draftingOn = () => live(customerTextToAi) === true && model?.configured === true;
   const open = async () => new Set(await store.socialOpenTargets());
@@ -88,8 +89,8 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     if (!asked && await store.notificationCount({ prefix: key, channel: 'email', since: new Date(0) }) > 0) return { result: { skipped: 'already_planned', week } };
     const counts = { facebook: meta.configured.pages ? weekly.facebook : 0, instagram: meta.configured.instagram && images().length ? weekly.instagram : 0, linkedin: weekly.linkedin };
     let posts = [];
-    let performance = metaPosts || li.configured.page ? 'read' : 'not_connected';
-    for (const [on, client] of [[metaPosts, meta], [li.configured.page, li]]) {
+    let performance = metaPosts() || li.configured.page ? 'read' : 'not_connected';
+    for (const [on, client] of [[metaPosts(), meta], [li.configured.page, li]]) {
       if (!on) continue;
       try { posts = posts.concat(await client.recentPosts({ signal })); }
       catch (error) { if (signal?.aborted || error?.transient) throw error; performance = error?.code ?? 'social_error'; }
@@ -156,12 +157,12 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
 
   // ---- The inbox ----------------------------------------------------------------------------------------------------------------------
   async function inbox(task, { now = () => new Date(), signal } = {}) {
-    if (!metaPosts && !li.configured.page) return { result: { skipped: 'meta_not_configured' } };
+    if (!metaPosts() && !li.configured.page) return { result: { skipped: 'meta_not_configured' } };
     if (task.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only' } };
     let items = [];
     const refused = [];
     let reached = 0;
-    for (const [on, client] of [[metaPosts, meta], [li.configured.page, li]]) {
+    for (const [on, client] of [[metaPosts(), meta], [li.configured.page, li]]) {
       if (!on) continue;
       try { items = items.concat(await client.recentInbox({ signal, now: now() })); reached += 1; }
       catch (error) {
@@ -365,7 +366,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
   // ---- The weekly report --------------------------------------------------------------------------------------------------------------
   async function report(task, { now = () => new Date(), signal } = {}) {
     const sources = adSources();
-    if (!metaPosts && !li.configured.page && !sources.length) return { result: { skipped: 'meta_not_configured' } };
+    if (!metaPosts() && !li.configured.page && !sources.length) return { result: { skipped: 'meta_not_configured' } };
     const moment = now();
     const week = weekStart(dueMoment(task) ?? moment);
     const asked = task.sourceKind === 'owner';
@@ -373,7 +374,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     if (await heldForScorecard({ store, log }, task)) return heldResult({ week });
     const notes = [];
     let posts = [];
-    for (const [on, client, name] of [[metaPosts, meta, 'Meta'], [li.configured.page, li, 'LinkedIn']]) {
+    for (const [on, client, name] of [[metaPosts(), meta, 'Meta'], [li.configured.page, li, 'LinkedIn']]) {
       if (!on) continue;
       try { posts = posts.concat(await client.recentPosts({ signal })); }
       catch (error) { if (signal?.aborted || error?.transient) throw error; notes.push(`${name} posts could not be read (${String(error?.code ?? 'social_error').replaceAll('_', ' ')}).`); }

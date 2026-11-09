@@ -109,6 +109,32 @@ describe('settings in the database', () => {
     expect(log.warn).toHaveBeenCalledWith('HUB_BULK_EMAIL_FROM is set but no longer used. Remove it from the service.');
   });
 
+  it('keeps the Railway values until they have been copied in, retrying the copy before the database values replace them', async () => {
+    const state = { values: {} };
+    let failures = 1;
+    const call = vi.fn(async (operation, args = []) => {
+      if (operation === 'private.hub_settings_import') {
+        if (failures-- > 0) throw new Error('down');
+        return Object.entries(args[0]).map(([key, item]) => { state.values[key] = item.value; return key; });
+      }
+      return { ...state.values };
+    });
+    const settings = hubSettings({ features: declared, env: { HUB_CHAT_ENABLED: 'true', HUB_AGENTS_ENABLED: 'true' }, call, log: quiet, refreshMs: 60_000 });
+    await settings.start();
+    settings.stop();
+    expect(settings.get('support.chat')).toBe(true);
+    expect(call.mock.calls.map(([operation]) => operation)).toEqual(['private.hub_settings_import']);
+    // The next refresh (the timer's, or a save's) copies first, so chat and the AI team stay on.
+    await settings.refresh();
+    expect(call.mock.calls.map(([operation]) => operation)).toEqual(['private.hub_settings_import', 'private.hub_settings_import', 'private.hub_settings_values']);
+    expect(settings.get('support.chat')).toBe(true);
+    expect(settings.get('agents.enabled')).toBe(true);
+    // Once copied, a refresh only reads.
+    await settings.refresh();
+    expect(call.mock.calls.at(-1)[0]).toBe('private.hub_settings_values');
+    expect(call.mock.calls.filter(([operation]) => operation === 'private.hub_settings_import')).toHaveLength(2);
+  });
+
   it('uses the default for a stored value it cannot use, and the variables while the database cannot be read', async () => {
     const broken = hubSettings({ features: declared, env: { HUB_CHAT_ENABLED: 'true' }, call: async () => { throw new Error('down'); }, log: quiet });
     await broken.start();

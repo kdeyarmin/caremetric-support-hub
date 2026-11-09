@@ -176,8 +176,29 @@ export function hubSettings({
     return value === undefined ? entry.default : value;
   }
 
+  // Copies the Railway values into settings nobody has set, once per process. It must succeed before the database's values replace
+  // the variables: otherwise a copy that failed would let the still-empty settings turn everything back to its default.
+  let copiedIn = false;
+  async function copyIn() {
+    if (copiedIn) return;
+    const copies = {};
+    const unusable = [];
+    for (const entry of settingsCatalog) {
+      const value = settingFromEnv(entry, env);
+      if (value !== undefined) copies[entry.key] = { value, from: entry.env };
+      else if (present(env?.[entry.env])) unusable.push(entry);
+    }
+    const copied = Object.keys(copies).length ? await call('private.hub_settings_import', [copies]) : [];
+    copiedIn = true;
+    for (const entry of unusable) log.warn?.(`${entry.env} has a value the Hub cannot use, so it was not copied into "${entry.label}". Set it on the Settings page.`);
+    if (Array.isArray(copied) && copied.length) log.info?.(`Hub settings: copied ${copied.length} Railway variable(s) into Settings: ${copied.map(key => byKey.get(key)?.env).join(', ')}.`);
+    const leftover = settingsCatalog.map(entry => entry.env).filter(name => present(env?.[name]));
+    if (leftover.length) log.info?.(`Hub settings: these Railway variables are no longer read and can be deleted: ${leftover.join(', ')}. Change them on the Settings page.`);
+  }
+
   async function refresh() {
     if (!declared) return false;
+    await copyIn();
     const values = await call('private.hub_settings_values');
     stored = values && typeof values === 'object' && !Array.isArray(values) ? values : {};
     return true;
@@ -191,17 +212,8 @@ export function hubSettings({
       return;
     }
     try {
-      const copies = {};
-      for (const entry of settingsCatalog) {
-        const value = settingFromEnv(entry, env);
-        if (value !== undefined) copies[entry.key] = { value, from: entry.env };
-        else if (present(env?.[entry.env])) log.warn?.(`${entry.env} has a value the Hub cannot use, so it was not copied into "${entry.label}". Set it on the Settings page.`);
-      }
-      const copied = Object.keys(copies).length ? await call('private.hub_settings_import', [copies]) : [];
-      if (Array.isArray(copied) && copied.length) log.info?.(`Hub settings: copied ${copied.length} Railway variable(s) into Settings: ${copied.map(key => byKey.get(key)?.env).join(', ')}.`);
+      // Every refresh copies the Railway values in first until that has worked, so a failure here is retried by the timer.
       await refresh();
-      const leftover = settingsCatalog.map(entry => entry.env).filter(name => present(env?.[name]));
-      if (leftover.length) log.info?.(`Hub settings: these Railway variables are no longer read and can be deleted: ${leftover.join(', ')}. Change them on the Settings page.`);
     } catch {
       log.warn?.('Hub settings could not be read; the Railway variables apply until they can. It will retry.');
     }
