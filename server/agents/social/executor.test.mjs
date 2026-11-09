@@ -42,6 +42,24 @@ describe('carrying out social actions', () => {
     await expect(run('social.post', { platform: 'instagram', product: 'carebase', message, scheduledFor: '2026-11-10T15:00:00Z' }).promise).rejects.toMatchObject({ code: 'image_missing' });
   });
 
+  it('publishes a post whose link is a product page with campaign tags, and refuses a link to anything else', async () => {
+    const tagged = 'https://cmcarebase.com/pa-training-requirements?utm_source=facebook&utm_medium=social&utm_campaign=social-carebase&utm_content=post';
+    const post = { platform: 'facebook', product: 'carebase', message, link: tagged, scheduledFor: '2026-11-10T15:30:00.000Z' };
+    const { meta, promise } = run('social.post', post);
+    expect(await promise).toMatchObject({ published: true });
+    expect(meta.publishPost).toHaveBeenCalledWith(expect.objectContaining({ link: tagged }));
+    for (const link of [
+      'https://evil.example/',
+      'https://cmcarebase.com/somewhere-else',
+      `${tagged}&next=https://evil.example`,
+      'https://www.caremetricintel.com/?utm_source=facebook&utm_medium=social&utm_campaign=social-intel',
+    ]) {
+      const refused = run('social.post', { ...post, link });
+      await expect(refused.promise, link).rejects.toMatchObject({ code: 'invalid_post' });
+      expect(refused.meta.publishPost).not.toHaveBeenCalled();
+    }
+  });
+
   it('replies only to what is still unanswered, and to a message only inside its reply window', async () => {
     const reply = { platform: 'messenger', kind: 'message', id: 'm_1', parentId: 't_1', message: 'Thanks for asking. You can start a 30-day free trial: https://cmcarebase.com/signup', product: 'carebase' };
     const { meta, promise } = run('social.reply', reply);

@@ -149,7 +149,7 @@ export const salesPlaybook = deepFreeze({
       'A 14-day free trial with no credit card.',
     ],
     nextStep: { label: 'Start a CareMetric Intel free trial', url: pageUrl('intel-home') },
-    pages: ['intel-home', 'intel-pricing', 'intel-resources', 'intel-targeted-marketing', 'intel-territory-analysis', 'intel-referral-measurement', 'intel-manager-playbook'],
+    pages: ['intel-home', 'intel-how-it-works', 'intel-county-report', 'intel-pricing', 'intel-resources', 'intel-targeted-marketing', 'intel-territory-analysis', 'intel-referral-measurement', 'intel-manager-playbook'],
     qualifyingQuestions: [
       'Which counties or service areas does your team cover today?',
       'How many marketers or liaisons do you have, and how do they track visits and follow-ups?',

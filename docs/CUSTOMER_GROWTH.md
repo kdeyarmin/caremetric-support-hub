@@ -108,9 +108,15 @@ claim still comes from the fact sheet (`server/agents/content/facts.mjs`, the co
   competitor, testimonial, call or demo as a step, "prove" about CareBase), may state only its own product's prices, may link only to
   its product's pages or the booking page, and has its vocabulary fixed (ALF, surveyor). A draft that fails is dropped. The template
   path used without a model, and every send rule, are unchanged.
+- **Campaign tags**: the product pages in every growth message, model-written or template, carry utm_source `caremetric`,
+  utm_medium `email` and utm_campaign `growth-<product>-touch<n>` for outreach or `account-<product>-<moment>` for a customer play
+  (`server/agents/links.mjs`; the booking link is never tagged). The tags are added after the checks and the tagged message is checked
+  again; the link check reads a tagged page as that page only when the tags are well formed, so a tag can never carry another host
+  or path. The sent email makes the tagged addresses links like the plain ones.
 - **Evaluation**: `growth.1` remains the key the database's send claim requires for a recent passing evaluation; it now names the
   guardrail suite, not the prompt (each run records the prompt version). The suite adds cases for an unlisted price, a guarantee, a
-  named competitor, product-page links, the other product's page, daily discovery rotation and directory filtering.
+  named competitor, product-page links, the other product's page, a tagged product-page link (accepted and given its own tags),
+  a tagged link to another host and a tag carrying another address (both rejected), daily discovery rotation and directory filtering.
 - The **Sales Executive** (see [AI team](AI_TEAM.md#the-sales-executive)) answers prospects' replies and inquiries from the same
   playbook and sends a weekly pipeline review.
 

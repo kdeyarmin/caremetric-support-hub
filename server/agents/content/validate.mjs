@@ -22,6 +22,7 @@ import {
   allowedAmounts, allowedHost, allowedPercents, articleUrl, factSheetText, factsRevision, legalDisclaimer, officialSources, productBySlug, productPage,
   productPages, products,
 } from './facts.mjs';
+import { linkTags, tagLinks, untaggedUrl } from '../links.mjs';
 
 export const limits = Object.freeze({
   title: [20, 90], slug: [10, 80], description: [70, 160], summary: [80, 320], outlineItems: [3, 8], outlineItem: [3, 100],
@@ -216,7 +217,8 @@ export function markupProblems(markdown) {
   if (/!\[[^\]]*\]\(/.test(text) || /^\s*\|.*\|\s*$/m.test(text)) reasons.add('unsupported_markup');
   for (const address of urlsIn(text)) {
     if (!allowedUrl(address)) reasons.add('link_not_allowed');
-    else if (!curatedUrls.has(address)) reasons.add('link_unlisted');
+    // A product page with well-formed campaign tags (links.mjs) is that page; any other query or a malformed tag is unlisted.
+    else if (!curatedUrls.has(address) && !curatedUrls.has(untaggedUrl(address))) reasons.add('link_unlisted');
   }
   return [...reasons];
 }
@@ -227,14 +229,18 @@ const clean = value => String(value ?? '').replace(/\r\n?/g, '\n').replace(/[ \t
 const oneLine = value => clean(value).replace(/\s+/g, ' ');
 const within = (value, [min, max]) => value.length >= min && value.length <= max;
 
-/** The Markdown that is published: the summary, the body, the questions, the sources, the links and, for a regulation, the fixed disclaimer. */
+/**
+ * The Markdown that is published: the summary, the body, the questions, the sources, the links and, for a regulation, the fixed
+ * disclaimer. Every product page in it carries campaign tags (help_center / article / content-<product>, links.mjs); the official
+ * sources it cites and help-center addresses are left exactly as they are.
+ */
 export function assembleArticle({ summary, body, faq, citations, links }, topic) {
   const parts = [`**In short:** ${summary}`, body];
   if (faq.length) parts.push('## Frequently asked questions', ...faq.flatMap(item => [`### ${item.question}`, item.answer]));
   if (citations.length) parts.push('## Sources', citations.map(url => `- [${curatedUrls.get(url)}](${url})`).join('\n'));
   if (links.length) parts.push('## Learn more', links.map(id => { const page = productPage(id); return `- [${page.label}](${page.url})`; }).join('\n'));
   if (topic.kind === 'regulation') parts.push(`*${legalDisclaimer}*`);
-  return parts.join('\n\n');
+  return tagLinks(parts.join('\n\n'), linkTags.article(topic.product));
 }
 
 /** What the owner reads and approves: where the article will live, then the whole article exactly as it will be published. */

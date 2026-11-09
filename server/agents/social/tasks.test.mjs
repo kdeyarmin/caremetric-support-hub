@@ -56,12 +56,12 @@ describe('the weekly social plan', () => {
     expect(h.store.proposeAction).toHaveBeenCalledTimes(2);
     const [facebook, instagram] = h.store.proposeAction.mock.calls.map(call => call[0]);
     expect(facebook).toMatchObject({ kind: 'social.post', targetKind: 'social_post', targetId: 'facebook:2026-11-09:1',
-      input: { platform: 'facebook', product: 'carebase', link: 'https://cmcarebase.com/pa-training-requirements', scheduledFor: '2026-11-10T15:30:00.000Z', imageUrl: null } });
+      input: { platform: 'facebook', product: 'carebase', link: 'https://cmcarebase.com/pa-training-requirements?utm_source=facebook&utm_medium=social&utm_campaign=social-carebase&utm_content=post', scheduledFor: '2026-11-10T15:30:00.000Z', imageUrl: null } });
     expect(facebook.input.message).toMatch(/#PersonalCareHome$/);
     expect(instagram).toMatchObject({ targetId: 'instagram:2026-11-09:1', input: { platform: 'instagram', link: null, imageUrl: 'https://cdn.example.com/brand-1.jpg', scheduledFor: '2026-11-11T17:15:00.000Z' } });
     expect(h.store.socialSchedule.mock.calls).toEqual([['a1', null], ['a2', null]]);
     expect(h.sent[0]).toMatchObject({ subject: 'Social plan: 2 posts to approve', dedupeKey: 'social:plan:2026-11-09' });
-    expect(JSON.stringify(h.sent[0].blocks)).toContain('CareMetric Intel keeps outreach, follow-up and recorded referrals in one place.\\n\\nhttps://www.caremetricintel.com/\\n\\n#HomeHealth');
+    expect(JSON.stringify(h.sent[0].blocks)).toContain('CareMetric Intel keeps outreach, follow-up and recorded referrals in one place.\\n\\nhttps://www.caremetricintel.com/?utm_source=linkedin&utm_medium=social&utm_campaign=social-intel&utm_content=post\\n\\n#HomeHealth');
     expect(outcome).toMatchObject({ status: 'awaiting_approval', result: { proposed: 2, linkedin: 1, rejected: { compliance_assurance: 1, link: 1 } } });
   });
 
@@ -89,7 +89,7 @@ describe('the weekly social plan', () => {
     expect(JSON.parse(model.run.mock.calls[0][1].user).bestRecent.map(post => post.platform)).toEqual(['facebook', 'linkedin']);
     const proposed = h.store.proposeAction.mock.calls.map(call => call[0]);
     expect(proposed.map(call => call.targetId)).toEqual(['facebook:2026-11-09:1', 'instagram:2026-11-09:1', 'linkedin:2026-11-09:1']);
-    expect(proposed[2]).toMatchObject({ kind: 'social.post', input: { platform: 'linkedin', product: 'caremetric-intel', link: 'https://www.caremetricintel.com/', linkLabel: expect.any(String),
+    expect(proposed[2]).toMatchObject({ kind: 'social.post', input: { platform: 'linkedin', product: 'caremetric-intel', link: 'https://www.caremetricintel.com/?utm_source=linkedin&utm_medium=social&utm_campaign=social-intel&utm_content=post', linkLabel: expect.any(String),
       scheduledFor: '2026-11-10T13:45:00.000Z', imageUrl: 'https://cdn.example.com/brand-1.jpg' } });
     expect(proposed[2].preview).toContain('Image: https://cdn.example.com/brand-1.jpg');
     expect(proposed[2].input.message).not.toContain('https://');
@@ -172,6 +172,8 @@ describe('comments and messages', () => {
     expect(model.run.mock.calls[0][1].user).toContain(`How much is CareBase? ${canary}`);
     expect(h.store.proposeAction).toHaveBeenCalledWith(expect.objectContaining({ kind: 'social.reply', targetKind: 'social_item', targetId: 'facebook:1_10',
       input: expect.objectContaining({ platform: 'facebook', kind: 'comment', id: '1_10', intent: 'pricing', product: 'carebase' }) }));
+    // The reply's product link carries the Social Media Manager's tags for the platform it answers on.
+    expect(h.store.proposeAction.mock.calls[0][0].input.message).toMatch(/free trial: https:\/\/cmcarebase\.com\/signup\?utm_source=facebook&utm_medium=social&utm_campaign=social-carebase&utm_content=reply$/);
     expect(outcome).toMatchObject({ status: 'awaiting_approval', result: { reply: 'drafted', intent: 'pricing' } });
     expect(JSON.stringify([h.store.proposeAction.mock.calls, h.sent, outcome])).not.toContain(canary);
   });
@@ -231,7 +233,7 @@ describe('the daily ad review', () => {
     expect(calls[0]).toMatchObject({ kind: 'social.ad_pause', targetKind: 'social_ad', targetId: '51', input: { adId: '51', adsetId: '40' } });
     expect(calls[0].preview).toMatch(/^Pause the Meta ad "Generic" in the ad set "PA operators": it spent \$35\.00 in 7 days with no result\.$/);
     expect(calls[1]).toMatchObject({ kind: 'social.ad_create', targetKind: 'social_adset', targetId: '40:2026-11-09:1',
-      input: { adsetId: '40', imageHash: 'img1', link: 'https://cmcarebase.com/signup', callToAction: 'SIGN_UP', product: 'carebase', basedOn: '50' } });
+      input: { adsetId: '40', imageHash: 'img1', link: 'https://cmcarebase.com/signup?utm_source=facebook&utm_medium=paid_social&utm_campaign=social-carebase&utm_content=ad', callToAction: 'SIGN_UP', product: 'carebase', basedOn: '50' } });
     expect(outcome.result).toMatchObject({ pause: 1, create: 1, rejected: 1, budget: 0 });
     expect(h.sent[0]).toMatchObject({ subject: 'Ad review: 2 changes to approve', dedupeKey: 'social:ads:2026-11-09' });
   });

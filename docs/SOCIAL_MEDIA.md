@@ -63,7 +63,8 @@ It also passes these social rules:
 
 - a length per surface;
 - no markup;
-- links only to that product's own pages, none in an Instagram caption or in ad text;
+- links only to that product's own pages, none in an Instagram caption or in ad text; a page with well-formed campaign tags counts as
+  that page, and a tag carrying anything else fails (see "Campaign tags on product links" in [AI_TEAM.md](AI_TEAM.md));
 - at most five hashtags (eight on Instagram) and three emoji;
 - only that product's prices;
 - no promise of a refund, extension or special pricing;
@@ -162,3 +163,12 @@ LinkedIn decides who may use its Page and advertising APIs. Approval is a review
 
 None of this was run against a live Meta or LinkedIn account. Connect a Page first and watch the first week in Propose before handing
 anything over.
+
+## Campaign tags
+
+Every product link the Social Media Manager places carries campaign tags (`server/agents/links.mjs`), so the weekly growth report can
+count the leads it brings: a post's link and a link in a reply get utm_source `facebook`, `instagram` or `linkedin` (a Messenger reply
+counts as `facebook`), utm_medium `social`, utm_campaign `social-<product>` and utm_content `post` or `reply`; a new ad's link gets
+utm_medium `paid_social` and utm_content `ad`, with utm_source `facebook` for a Meta ad (it may also run on Instagram) or `linkedin`.
+A new ad based on an ad whose link already carries tags keeps that page and gets these tags instead. Before it publishes a post the
+executor checks its link again: only a product page, as written or with well-formed tags.
