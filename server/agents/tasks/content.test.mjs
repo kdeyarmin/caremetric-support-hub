@@ -83,7 +83,7 @@ describe('the weekly help article', () => {
     expect(proposal.input).toMatchObject({ slug: fireDrillDraft.slug, product: 'carebase', topic: 'pa-fire-drill-requirements', kind: 'regulation', promptVersion });
     expect(proposal.preview).toContain(fireDrillDraft.body);
     expect(proposal.preview.endsWith(proposal.input.body)).toBe(true);
-    expect(outcome).toEqual({ status: 'awaiting_approval', result: { outcome: 'proposed', topic: 'pa-fire-drill-requirements', slug: fireDrillDraft.slug, actionId: 'a1', rewrites: 0 } });
+    expect(outcome).toEqual({ status: 'awaiting_approval', result: { outcome: 'proposed', topic: 'pa-fire-drill-requirements', slug: fireDrillDraft.slug, url: `https://help.caremetric.ai/help/articles/${fireDrillDraft.slug}`, actionId: 'a1', rewrites: 0 } });
     expect(store.finishRun).toHaveBeenCalledWith('run-1', 'completed', expect.objectContaining({ inputTokens: 5200, outputTokens: 2400 }),
       'Drafted the pa-fire-drill-requirements article: it passed the checks.', null);
     // The result, the run and the log carry keys and counts, never the article.
@@ -162,6 +162,17 @@ describe('the weekly help article', () => {
     const outcome = await handlers['content.weekly'](task(), { now: () => tuesday });
     expect(requests[0].messages[0].content).toContain('Product: CareMetric Intel');
     expect(outcome.result).toMatchObject({ outcome: 'proposed', topic: 'home-health-referral-marketing', slug: referralDraft.slug });
+  });
+
+  it('notes the Intel address an Intel article will live at, in its result and in the preview the owner approves', async () => {
+    const { handlers, store } = fixture({ answer: () => completion(referralDraft), marketed: ['caremetric-intel'] });
+    const outcome = await handlers['content.weekly'](task(), { now: () => tuesday });
+    expect(outcome.result).toMatchObject({ outcome: 'proposed', slug: referralDraft.slug, url: `https://www.caremetricintel.com/resources/${referralDraft.slug}` });
+    const [proposal] = store.proposeAction.mock.calls.at(-1);
+    expect(proposal.preview.split('\n').slice(0, 2)).toEqual([
+      `Publish on CareMetric Intel's website: https://www.caremetricintel.com/resources/${referralDraft.slug}`,
+      `Also readable in the help center (its canonical link points to the address above): https://help.caremetric.ai/help/articles/${referralDraft.slug}`,
+    ]);
   });
 });
 

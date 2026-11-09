@@ -11,8 +11,13 @@ import { escapeHtml, renderMarkdownHtml } from '../src/lib/markdown.ts';
  *   the app's own index.html, so the app's script and styles load and take over at the same address. An address with no public
  *   article answers 404 (marked noindex) with the same page shell, so the app can still show a signed-in customer an article for
  *   customers.
- * - `/sitemap.xml`: the help center's public pages and every public article.
+ * - `/sitemap.xml`: the help center's public pages and every public article the help center is the home of.
  * - `/robots.txt`: everything may be crawled except the API and the administration pages, and where the sitemap is.
+ *
+ * An article whose product's own website serves it (`elsewhere`: CareMetric Intel's articles live at
+ * https://www.caremetricintel.com/resources/<content key>, server/agents/content/facts.mjs) is still served here, but its canonical
+ * link, Open Graph address and structured data name that address, and it is left out of the sitemap, so search engines credit
+ * the product's site. Which product an article belongs to comes from the products list (`loadProducts`), read with the articles.
  *
  * The articles are the ones an anonymous visitor's app reads (`load`, the hub.list_published_content RPC without a session), so a
  * crawler is shown exactly what a visitor sees. They are cached for `ttlMs` (five minutes) and refreshed by one request at a time;
@@ -42,8 +47,12 @@ const clip = (value, limit) => {
   return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), limit - 40)).trimEnd()}…`;
 };
 
-/** The public, published articles in `rows` (the list_published_content rows), one per content key, in the list's order. */
-export function publicArticles(rows) {
+/**
+ * The public, published articles in `rows` (the list_published_content rows), one per content key, in the list's order. `home`
+ * is the address on the product's own website when every product the article is published for is one product and
+ * `elsewhere(productSlug, key)` names one for it (`slugs` maps product ids to slugs); otherwise null, and the help center is its home.
+ */
+export function publicArticles(rows, { slugs = new Map(), elsewhere = null } = {}) {
   const seen = new Set();
   const articles = [];
   for (const row of Array.isArray(rows) ? rows : []) {
@@ -51,10 +60,14 @@ export function publicArticles(rows) {
     if (typeof row.content_key !== 'string' || !keyPattern.test(row.content_key) || seen.has(row.content_key)) continue;
     if (typeof row.title !== 'string' || !row.title.trim()) continue;
     seen.add(row.content_key);
+    const productIds = Array.isArray(row.product_ids) ? row.product_ids : [];
+    const productSlugs = [...new Set(productIds.map(id => slugs.get(id) ?? null))];
+    const away = elsewhere && productSlugs.length === 1 && productSlugs[0] ? elsewhere(productSlugs[0], row.content_key) : null;
     articles.push({
       key: row.content_key, title: row.title.trim(), summary: typeof row.summary === 'string' ? row.summary.trim() : '',
       body: typeof row.body_markdown === 'string' ? row.body_markdown : '', products: Array.isArray(row.product_ids) ? row.product_ids : [],
       locale: typeof row.locale === 'string' && /^[a-z]{2}(?:-[A-Z]{2})?$/.test(row.locale) ? row.locale : 'en-US',
+      home: typeof away === 'string' && /^https:\/\/[^\s"'<>]+$/.test(away) ? away : null,
     });
   }
   return articles;
@@ -80,7 +93,7 @@ export function pageHtml(template, { title, description = null, canonical = null
 
 const shell = main => `<div class="public-help-shell"><header class="public-help-header"><a class="brand-lockup brand-lockup-large" href="/help"><span><strong>CareMetric</strong><small>Help center</small></span></a><nav class="public-help-nav" aria-label="Public support navigation"><a href="/help">Help center</a><a href="/learn">Learning library</a></nav></header><main class="public-help-wrap">${main}</main></div>`;
 
-export function helpCenter({ load, origin = 'https://help.caremetric.ai', dist = resolve('dist'), ttlMs = 5 * 60_000, retryMs = 60_000, now = () => Date.now(), log = line => console.warn(line) }) {
+export function helpCenter({ load, loadProducts = null, elsewhere = null, origin = 'https://help.caremetric.ai', dist = resolve('dist'), ttlMs = 5 * 60_000, retryMs = 60_000, now = () => Date.now(), log = line => console.warn(line) }) {
   const base = String(origin).replace(/\/+$/, '');
   let cache = null;
   let loading = null;
@@ -100,8 +113,10 @@ export function helpCenter({ load, origin = 'https://help.caremetric.ai', dist =
       throw unavailable();
     }
     // One read at a time; it logs a failure once, however many requests were waiting on it.
-    loading ??= Promise.resolve().then(load).then(rows => {
-      cache = { at: now(), list: publicArticles(rows) };
+    // The products are read with the articles: a list whose products are unknown could point a canonical link at the wrong site.
+    loading ??= Promise.all([Promise.resolve().then(load), loadProducts ? Promise.resolve().then(loadProducts) : []]).then(([rows, products]) => {
+      const slugs = new Map((Array.isArray(products) ? products : []).filter(item => typeof item?.id === 'string' && typeof item?.slug === 'string').map(item => [item.id, item.slug]));
+      cache = { at: now(), list: publicArticles(rows, { slugs, elsewhere }) };
       failedAt = null;
       pages = new Map();
       return cache.list;
@@ -133,7 +148,8 @@ export function helpCenter({ load, origin = 'https://help.caremetric.ai', dist =
   }
 
   function articleHtml(article, list, template) {
-    const url = `${base}/help/articles/${article.key}`;
+    // The address search engines should credit: the product's own website when it serves the article, else this page.
+    const url = article.home ?? `${base}/help/articles/${article.key}`;
     const description = clip(article.summary || article.title, 300);
     const more = list.filter(other => other.key !== article.key)
       .sort((a, b) => Number(b.products.some(id => article.products.includes(id))) - Number(a.products.some(id => article.products.includes(id))))
@@ -178,7 +194,8 @@ export function helpCenter({ load, origin = 'https://help.caremetric.ai', dist =
         send(req, res, 503, 'text/plain; charset=utf-8', 'The sitemap is temporarily unavailable.', 'no-store', { 'Retry-After': '120' });
         return true;
       }
-      const addresses = [`${base}/help`, `${base}/learn`, ...list.map(article => `${base}/help/articles/${article.key}`)];
+      // An article whose home is another site is listed in that site's sitemap, not here.
+      const addresses = [`${base}/help`, `${base}/learn`, ...list.filter(article => !article.home).map(article => `${base}/help/articles/${article.key}`)];
       send(req, res, 200, 'application/xml; charset=utf-8',
         `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${addresses.map(address => `  <url><loc>${xml(address)}</loc></url>`).join('\n')}\n</urlset>\n`,
         'public, max-age=3600');

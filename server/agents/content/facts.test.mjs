@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import * as facts from './facts.mjs';
 import {
   allowedAmounts, allowedHost, allowedPercents, articleUrl, citationHosts, claims, factSheetText, intelFactsFromCatalog, intelReviewedFacts, legalDisclaimer,
-  officialSources, productPages, products, resetAppCatalogFacts, useAppCatalogFacts,
+  officialSources, productPages, products, resetAppCatalogFacts, useAppCatalogFacts, articleHomeUrl, intelArticleOrigin, intelArticleUrl, servedElsewhere,
 } from './facts.mjs';
 import { allowedNumbers, textProblems } from './validate.mjs';
 import { parseAppCatalog } from '../../app-catalog-sync.mjs';
@@ -94,6 +94,13 @@ describe('the fact sheet', () => {
     expect(claims.mayNot.join(' ')).toMatch(/ensures compliance/);
     expect(legalDisclaimer).toMatch(/not legal advice/);
     expect(articleUrl('pa-fire-drills')).toBe('https://help.caremetric.ai/help/articles/pa-fire-drills');
+    // Intel's website serves Intel's articles, so their canonical address is there; every other product's stays in the help center.
+    expect(intelArticleOrigin).toBe(new URL(products.intel.site).origin);
+    expect(intelArticleUrl('home-health-referrals')).toBe('https://www.caremetricintel.com/resources/home-health-referrals');
+    expect(productPages.find(page => page.id === 'intel-resources').url).toBe(`${intelArticleOrigin}/resources/`);
+    expect([servedElsewhere('caremetric-intel'), servedElsewhere('carebase'), servedElsewhere('advisors'), servedElsewhere('toString')]).toEqual([true, false, false, false]);
+    expect(articleHomeUrl('caremetric-intel', 'a-guide')).toBe('https://www.caremetricintel.com/resources/a-guide');
+    expect(articleHomeUrl('carebase', 'a-guide')).toBe('https://help.caremetric.ai/help/articles/a-guide');
     expect(factSheetText()).toBe(text);
   });
 });

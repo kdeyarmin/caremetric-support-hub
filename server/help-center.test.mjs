@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { appServer, securityHeaders } from './http.mjs';
 import { helpCenter, pageHtml, publicArticles, scriptJson } from './help-center.mjs';
+import { articleHomeUrl, servedElsewhere } from './agents/content/facts.mjs';
 
 const index = `<!doctype html>
 <html lang="en">
@@ -227,5 +228,66 @@ describe('reading the articles', () => {
     expect(html).toContain("<title>$&amp; $1 $&#39; title</title>");
     expect(html).toContain('content="$` description"');
     expect(html).toContain("<div id=\"root\"><p>$& and $'</p></div>");
+  });
+});
+
+describe('articles whose home is the product\'s own website', () => {
+  const intelId = '22222222-2222-4222-8222-222222222222';
+  const carebaseId = '33333333-3333-4333-8333-333333333333';
+  const products = [{ id: intelId, slug: 'caremetric-intel' }, { id: carebaseId, slug: 'carebase' }];
+  const intelRows = [
+    row({ id: 'i1', content_key: 'home-health-referral-marketing', title: 'Home health referral marketing', summary: 'Plan referral outreach.', product_ids: [intelId] }),
+    row({ id: 'i2', content_key: 'shared-guide', title: 'A shared guide', summary: 'For two products.', product_ids: [intelId, carebaseId] }),
+    row({ id: 'i3', content_key: 'carebase-guide', title: 'A CareBase guide', summary: 'For CareBase.', product_ids: [carebaseId] }),
+  ];
+  let intelServer, intelBase;
+  beforeAll(async () => {
+    const help = helpCenter({ load: async () => intelRows, loadProducts: async () => products, elsewhere: (product, key) => (servedElsewhere(product) ? articleHomeUrl(product, key) : null), dist, log: () => {} });
+    intelServer = appServer({ auth: {}, gateway: {}, delegations: {}, origins: [], helpCenter: help, dist });
+    intelServer.listen(0, '127.0.0.1'); await once(intelServer, 'listening');
+    intelBase = `http://127.0.0.1:${intelServer.address().port}`;
+  });
+  afterAll(async () => { await new Promise(resolve => intelServer.close(resolve)); });
+
+  it('keeps an Intel article readable here, with its canonical link, sharing address and structured data on Intel\'s website', async () => {
+    const response = await fetch(`${intelBase}/help/articles/home-health-referral-marketing`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain('<link rel="canonical" href="https://www.caremetricintel.com/resources/home-health-referral-marketing" />');
+    expect(html).toContain('<meta property="og:url" content="https://www.caremetricintel.com/resources/home-health-referral-marketing" />');
+    const jsonLd = JSON.parse(/<script type="application\/ld\+json">([^<]*)<\/script>/.exec(html)[1]);
+    expect(jsonLd).toMatchObject({ url: 'https://www.caremetricintel.com/resources/home-health-referral-marketing', mainEntityOfPage: { '@id': 'https://www.caremetricintel.com/resources/home-health-referral-marketing' } });
+    expect(html).toContain('<h1>Home health referral marketing</h1>');
+    expect(html).not.toContain('href="https://help.caremetric.ai/help/articles/home-health-referral-marketing"');
+  });
+
+  it('keeps the help center the home of every other article, an article shared with another product included', async () => {
+    for (const key of ['shared-guide', 'carebase-guide']) {
+      const html = await (await fetch(`${intelBase}/help/articles/${key}`)).text();
+      expect(html, key).toContain(`<link rel="canonical" href="https://help.caremetric.ai/help/articles/${key}" />`);
+    }
+  });
+
+  it('leaves Intel\'s articles out of the sitemap', async () => {
+    const xml = await (await fetch(`${intelBase}/sitemap.xml`)).text();
+    expect([...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(match => match[1])).toEqual([
+      'https://help.caremetric.ai/help', 'https://help.caremetric.ai/learn',
+      'https://help.caremetric.ai/help/articles/shared-guide', 'https://help.caremetric.ai/help/articles/carebase-guide',
+    ]);
+  });
+
+  it('reads the products with the articles, and keeps the last list when either read fails', async () => {
+    const reads = vi.fn(async () => intelRows);
+    const productReads = vi.fn(async () => products);
+    let at = 0;
+    const elsewhere = (product, key) => (servedElsewhere(product) ? articleHomeUrl(product, key) : null);
+    const help = helpCenter({ load: reads, loadProducts: productReads, elsewhere, now: () => at, log: () => {} });
+    expect((await help.articles()).map(article => article.home)).toEqual(['https://www.caremetricintel.com/resources/home-health-referral-marketing', null, null]);
+    at = 300_000; productReads.mockRejectedValueOnce(new Error('down'));
+    expect((await help.articles())[0].home).toBe('https://www.caremetricintel.com/resources/home-health-referral-marketing');
+    expect([reads.mock.calls.length, productReads.mock.calls.length]).toEqual([2, 2]);
+    // Without a products list nothing is sent elsewhere; an address that is not https is never used.
+    expect(publicArticles(intelRows, { elsewhere }).every(article => article.home === null)).toBe(true);
+    expect(publicArticles(intelRows, { slugs: new Map([[intelId, 'caremetric-intel']]), elsewhere: () => 'javascript:alert(1)' })[0].home).toBeNull();
   });
 });

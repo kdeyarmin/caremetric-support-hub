@@ -32,6 +32,13 @@ describe('publishing an approved article', () => {
     expect(store.contentPublish).toHaveBeenCalledWith('a1', 1);
   });
 
+  it('answers with the Intel address for an Intel article, and its help-center copy', async () => {
+    const intel = { ...article, product: 'caremetric-intel', kind: 'marketing', body: article.body.replace(/\n\n\*[^*]+\*$/, '').replaceAll('CareBase', 'Intel') };
+    const { publish } = fixture();
+    expect(await publish(execution({ input: intel }))).toEqual({ outcome: 'published', slug: article.slug,
+      url: `https://www.caremetricintel.com/resources/${article.slug}`, helpUrl: `https://help.caremetric.ai/help/articles/${article.slug}` });
+  });
+
   it('treats an address that already holds this agent\'s article as done, with nothing new written', async () => {
     const { publish } = fixture({ outcome: 'already_published', slug: article.slug, itemId: 'i1' });
     expect(await publish(execution({ execution: undefined }))).toEqual({ outcome: 'already_published', slug: article.slug, url: `https://help.caremetric.ai/help/articles/${article.slug}` });

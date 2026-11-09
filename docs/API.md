@@ -263,16 +263,73 @@ headers and Content Security Policy. The articles are the ones `hub.list_publish
 session (public, published articles), read at most once every five minutes.
 
 - `GET /help/articles/<content key>` — a public article as HTML inside the app's own `index.html`: its title,
-  description, canonical address (`https://help.caremetric.ai/help/articles/<content key>`), Open Graph and
+  description, canonical address (`https://help.caremetric.ai/help/articles/<content key>`, or, for an article
+  published for CareMetric Intel alone, `https://www.caremetricintel.com/resources/<content key>`, where Intel's
+  website serves it from the public article feed below, once that feed is declared; the Open Graph address and
+  JSON-LD follow it), Open Graph and
   Twitter tags, an Article in JSON-LD, and the body rendered from Markdown by `src/lib/markdown.ts` (every piece of
   the source is escaped; only https and same-site links are kept). The app's script then takes over at the same
   address. `Cache-Control: public, max-age=300`. An address with no public article answers 404 with the app shell
   and `noindex`; the form with a trailing slash answers 301 to the one without; 503 with `Retry-After` when the
   list cannot be read and none is cached. A read that failed is tried again at most once a minute; meanwhile every
   request gets the last list read (or the 503).
-- `GET /sitemap.xml` — `/help`, `/learn` and every public article, at `https://help.caremetric.ai`
-  (`public, max-age=3600`).
+- `GET /sitemap.xml` — `/help`, `/learn` and every public article whose canonical address is in the help center,
+  at `https://help.caremetric.ai` (`public, max-age=3600`). Once the public article feed is declared, CareMetric Intel's articles are left
+  out: they belong in Intel's sitemap. Which product an article belongs to comes from `hub.products`, read with the articles.
 - `GET /robots.txt` — everything except `/api/` and `/admin`, and the sitemap's address (`public, max-age=86400`).
+
+## Public article feed (server)
+
+Implemented in `server/public-articles.mjs`, for a product's own website: Intel's website reads it to serve the
+Content Marketer's CareMetric Intel articles at `https://www.caremetricintel.com/resources/<content key>`, their
+canonical address. Answered only when the database declares `content.public-articles.v1`
+(`supabase/migrations/20261109120000_public_articles.sql` and its contract); before that the addresses answer 404.
+No session or cookie is read or set, GET and HEAD only, and every response keeps the Hub's security headers. It sends
+no CORS headers: read it server to server.
+
+- `GET /api/public/articles?product=<product slug>` — `{ "product": "caremetric-intel", "articles": [Article, …] }`,
+  newest publication first.
+- `GET /api/public/articles/<content key>?product=<product slug>` — `{ "product": …, "article": Article }`, or 404
+  (`public, max-age=60`) when the product has no such public article.
+
+`product` is required, exactly once, and is one of `carebase`, `caremetric-intel` or `advisors` (anything else is 400,
+an unknown slug 404); no other query parameter is accepted (400). An `Article`:
+
+```json
+{
+  "key": "home-health-referral-marketing",
+  "title": "…", "description": "…", "locale": "en-US", "revision": 1,
+  "publishedAt": "2026-11-10T12:00:00.000Z", "updatedAt": "2026-11-10T12:00:00.000Z",
+  "markdown": "**In short:** …\n\n## …",
+  "summary": "…", "body": "## …",
+  "questions": [{ "question": "…?", "answer": "…" }],
+  "citations": [{ "label": "CMS provider data: home health services", "url": "https://data.cms.gov/…" }],
+  "internalLinks": [{ "label": "CareMetric Intel", "url": "https://www.caremetricintel.com/" }],
+  "disclaimer": null
+}
+```
+
+`markdown` is the article exactly as the help center shows it. The other fields are its parts as the Content Marketer
+assembles it: the "In short" summary, the body's own sections, the questions and answers, the sources, the "Learn more"
+links and, for a regulation article, the closing "not legal advice" line. Markdown of any other shape is left whole in
+`body` with empty lists, so nothing is dropped. Render Markdown as untrusted text (escape it; keep only https links), as
+`src/lib/markdown.ts` does. `description` is the meta description, `revision` the published revision's number,
+`publishedAt` when the current publication went live and `updatedAt` the later of that and the revision's approval.
+
+**What is returned.** Only what an anonymous help-center visitor can already read, for one product: articles that are
+published and public, published for every visitor (audience `all`), whose approved revision is live (published, not
+expired) under a product that is not retired and is open to support, and whose every such publication is for that
+product (an article shared with another product stays the help center's).
+
+**What is never returned.** Drafts and revisions waiting for review, customer and staff articles, other audiences, future
+or expired publications, retired articles, courses and other kinds, and no internal field: no ids, authors, approvers,
+owner team, revision variables (topic, agent, approving action), source hashes or anything about the publishing action.
+The read, `private.public_articles(text)`, is a security definer executable by the Hub server alone.
+
+**Caching.** As the help center caches its reads: each product's list is read at most once every five minutes, by one
+request at a time; while the database cannot answer the last list is served, a failed read is tried again at most once
+a minute, and with no list at all the answer is 503. Responses carry `Cache-Control: public, max-age=300`, so an article
+published, changed or retired appears on the product's website within about ten minutes.
 
 ## Healthcare Advisors administration reads
 

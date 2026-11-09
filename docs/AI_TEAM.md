@@ -927,7 +927,9 @@ the ad rules, the checks and the Meta and LinkedIn permissions are in [Social me
 
 Writes the help center's public articles, one a week, for the owner to approve, and once a month drafts outreach for the
 owner to send personally. CareMetric has no blog or articles written for search; these articles are what search engines and AI
-assistants can now find at `https://help.caremetric.ai/help/articles/<address>`. Every claim comes from the fact sheet,
+assistants can now find at `https://help.caremetric.ai/help/articles/<address>`. Articles about CareMetric Intel live on Intel's
+own website, at `https://www.caremetricintel.com/resources/<address>`, which reads them from the Hub's public article feed (see
+"Intel's articles on Intel's website" below), so they build search credit for the site that sells Intel. Every claim comes from the fact sheet,
 [GTM_FACTS.md](GTM_FACTS.md) (machine copy `server/agents/content/facts.mjs`), and nothing is published without the owner's
 approval. No customer text ever reaches the model: the only thing the inbox contributes is a count of conversations.
 
@@ -962,7 +964,7 @@ not legal advice. A draft that fails proposes nothing; the task's result and the
 (`compliance_assurance, unlisted_number`), never the draft.
 
 **What the owner approves.** A `content.publish` action ("Publish a help article") whose preview is the whole article: the
-address it will live at, the product, the title and the description, then the Markdown exactly as it will be published (the
+address it will live at (for an Intel article, its address on Intel's website, then its help-center copy), the product, the title and the description, then the Markdown exactly as it will be published (the
 summary, the body, the questions and answers, the sources, the links and, for a regulation, the disclaimer). It must fit the
 6,000 characters an action's preview holds, so articles are compact (about 300 to 600 words of body).
 
@@ -971,17 +973,33 @@ article once more, then `private.agent_content_publish` publishes the action's o
 it: a content item whose key is the address, owned by the topic's product and the "CareMetric Marketing" team and created by the
 CareMetric AI Assistant profile; revision 1, approved by the owner at the moment they decided; a publication to the product for
 every visitor (`public`, audience `all`); and an audit event `content.published`. The article then appears in the help center,
-at its own address as HTML (see "Public articles for crawlers" below) and in the sitemap. Publishing is idempotent by address:
+at its own address as HTML (see "Public articles for crawlers" below) and in the sitemap; an Intel article also appears on
+Intel's website and is left out of the Hub's sitemap. Publishing is idempotent by address:
 an execution started again finds the article and writes nothing new (`already_published`). An article is published only with
 the owner's approval: one approved on its own (an agent on Act with the kind listed) is refused (`approval_required`). The
 other outcomes the Team screen explains: `slug_taken` (another article already uses the address), `product_unavailable`,
 `invalid_article` (the stored article fails a rule that changed since) and `publish_failed`.
 
+**Intel's articles on Intel's website.** An article published for CareMetric Intel alone is served by Intel's website at
+`https://www.caremetricintel.com/resources/<address>` (the origin is `intelArticleOrigin`, next to `productPages` in
+`server/agents/content/facts.mjs`). Intel reads it from the Hub's public article feed, `GET /api/public/articles?product=caremetric-intel`
+and `GET /api/public/articles/<address>?product=caremetric-intel` (`server/public-articles.mjs`; shape, caching and what is never
+returned in [API.md](API.md), "Public article feed"): published, public articles for every visitor, with their title,
+description, Markdown and its parts (summary, body, questions and answers, sources, links), revision and times, never a draft or
+an internal field. The help center keeps showing the article at its own address, but its canonical link, Open Graph address
+and structured data name Intel's address, and it is left out of the Hub's sitemap. The preview the owner approves, the task's
+result (`url`) and the publication's result (`url`, with the help-center copy in `helpUrl`) all name Intel's address. The feed,
+the canonical link and the sitemap change all start together, once the database declares `content.public-articles.v1` (apply
+`20261109120000_public_articles.sql` and `20261109120100_public_articles_contract.sql`, then restart the Hub); until then the
+help center stays every article's home. Apply them when Intel's website is ready to serve `/resources/<address>` from the
+feed, so a canonical link never points at an address that does not answer.
+
 **Public articles for crawlers.** The help center is a single-page app, so the Hub server answers `/help/articles/<content key>`
 itself (`server/help-center.mjs`) for every public, published article, the Content Marketer's and the ones already there: real
 HTML with the title, description, canonical address, Open Graph tags, an Article in JSON-LD and the body rendered from Markdown
 by `src/lib/markdown.ts`, which escapes everything and keeps only https and same-site links, inside the app's own page so the
-app takes over. It also serves `/sitemap.xml` (the help center, the learning library and every public article) and
+app takes over. Its canonical address is the help center's, except for an Intel article (above). It also serves
+`/sitemap.xml` (the help center, the learning library and every public article whose canonical address is the help center's) and
 `/robots.txt`. The articles are the ones an anonymous visitor's app reads, cached for five minutes; the security headers and
 Content Security Policy are unchanged. The help center's list links each public article to its address.
 

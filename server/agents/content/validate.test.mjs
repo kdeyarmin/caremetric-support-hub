@@ -49,6 +49,13 @@ describe('an article that passes', () => {
     const result = check({}, referral);
     expect(result.ok).toBe(true);
     expect(result.article).toMatchObject({ product: 'caremetric-intel', kind: 'marketing' });
+    // An Intel article lives on Intel's website; the preview names that address first, then the help-center copy.
+    expect(result.preview.split('\n').slice(0, 3)).toEqual([
+      `Publish on CareMetric Intel's website: https://www.caremetricintel.com/resources/${result.article.slug}`,
+      `Also readable in the help center (its canonical link points to the address above): https://help.caremetric.ai/help/articles/${result.article.slug}`,
+      'Product: CareMetric Intel',
+    ]);
+    expect(result.preview.length).toBeLessThanOrEqual(limits.preview);
     expect(result.article.body).not.toContain('not legal advice');
     expect(check(withSentence('Recorded referrals are the proof that matters.', referral), referral).ok).toBe(true);
   });
