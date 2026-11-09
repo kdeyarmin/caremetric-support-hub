@@ -145,7 +145,7 @@ export const salesPlaybook = deepFreeze({
     valuePoints: [
       'Targeted marketing, marketing analysis and territory analysis from public healthcare and demographic data.',
       'A marketing CRM that keeps outreach, follow-up and the referrals the organization records in one place.',
-      'Plans from Starter (3 marketer seats and 1 manager seat) to Pro, with annual billing saving about 17%.',
+      'Plans from Starter (3 marketer seats + 1 manager) to Pro, with annual billing saving about 17%.',
       'A 14-day free trial with no credit card.',
     ],
     nextStep: { label: 'Start a CareMetric Intel free trial', url: pageUrl('intel-home') },

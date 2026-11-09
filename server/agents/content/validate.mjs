@@ -19,7 +19,7 @@
 import { screenIdentifiers } from '../concierge/screen.mjs';
 import { phoneNumber } from '../concierge/redact.mjs';
 import {
-  allowedAmounts, allowedHost, allowedPercents, articleUrl, factSheetText, legalDisclaimer, officialSources, productBySlug, productPage,
+  allowedAmounts, allowedHost, allowedPercents, articleUrl, factSheetText, factsRevision, legalDisclaimer, officialSources, productBySlug, productPage,
   productPages, products,
 } from './facts.mjs';
 
@@ -115,12 +115,20 @@ const amountPattern = /\$\s?((?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?)/g;
 const percentPattern = /((?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?)\s?(?:%|percent\b)/gi;
 const amountsIn = value => [...String(value ?? '').matchAll(amountPattern)].map(match => numberOf(match[1]));
 const percentsIn = value => [...String(value ?? '').matchAll(percentPattern)].map(match => numberOf(match[1]));
-const knownAmounts = new Set(allowedAmounts.map(numberOf));
-const knownPercents = new Set(allowedPercents.map(numberOf));
-const sheetNumbers = numbersIn(factSheetText());
+let sheetCache = { revision: -1 };
+/** What the checks derive from the fact sheet, derived again when the facts change (Intel's catalog, useAppCatalogFacts). */
+const sheet = () => {
+  if (sheetCache.revision === factsRevision) return sheetCache;
+  const text = factSheetText();
+  sheetCache = {
+    revision: factsRevision, amounts: new Set(allowedAmounts.map(numberOf)), percents: new Set(allowedPercents.map(numberOf)),
+    numbers: numbersIn(text), words: new Set(text.match(/[A-Z][a-z]+|[A-Z]/g)),
+  };
+  return sheetCache;
+};
 
 /** The numbers-with-units a text may state: the fact sheet's and those in the given facts. */
-export const allowedNumbers = (facts = []) => new Set([...sheetNumbers, ...facts.flatMap(numbersIn)]);
+export const allowedNumbers = (facts = []) => new Set([...sheet().numbers, ...facts.flatMap(numbersIn)]);
 
 // ---- Claims -------------------------------------------------------------------------------------------------------------------------
 
@@ -158,7 +166,6 @@ const honorificName = /\b(?:Mr|Mrs|Ms|Miss|Mx|Dr)\.?\s+[A-Z][a-z]+(?:\s+[A-Z]\.?
 const namedPerson = /\b(?:resident|patient|client|employee|aide|caregiver)\s+(?:named|called)\s+[A-Z]/;
 const emailPattern = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const companyEmail = /^(?:hello|support)@caremetric\.ai$/i;
-const sheetWords = new Set(factSheetText().match(/[A-Z][a-z]+|[A-Z]/g));
 
 /**
  * Problems in text that would be published or sent. `product` is the product key it is about (carebase, intel, advisors);
@@ -167,15 +174,15 @@ const sheetWords = new Set(factSheetText().match(/[A-Z][a-z]+|[A-Z]/g));
 export function textProblems(value, { product = null, numbers = null } = {}) {
   const text = String(value ?? '');
   const reasons = new Set();
-  if (amountsIn(text).some(amount => !knownAmounts.has(amount))) reasons.add('unlisted_price');
-  if (percentsIn(text).some(percent => !knownPercents.has(percent))) reasons.add('unlisted_number');
+  if (amountsIn(text).some(amount => !sheet().amounts.has(amount))) reasons.add('unlisted_price');
+  if (percentsIn(text).some(percent => !sheet().percents.has(percent))) reasons.add('unlisted_number');
   if (numbers && numbersIn(text).some(pair => !numbers.has(pair))) reasons.add('unlisted_number');
   for (const [code, pattern] of claimRules) if (pattern.test(text)) reasons.add(code);
   if (competitorPattern.test(text)) reasons.add('competitor_named');
   if ((product === 'carebase' || /\bcarebase\b/i.test(text)) && proveWords.test(text)) reasons.add('prove_word');
   if (forbiddenTerms.test(text)) reasons.add('vocabulary');
   if (screenIdentifiers(text).flagged || namedPerson.test(text)) reasons.add('personal_information');
-  if ([...text.matchAll(honorificName)].some(match => match[0].split(/[\s.]+/).slice(1).filter(Boolean).some(word => !sheetWords.has(word)))) reasons.add('personal_information');
+  if ([...text.matchAll(honorificName)].some(match => match[0].split(/[\s.]+/).slice(1).filter(Boolean).some(word => !sheet().words.has(word)))) reasons.add('personal_information');
   if ((text.match(emailPattern) ?? []).some(address => !companyEmail.test(address)) || new RegExp(phoneNumber.source).test(text)) reasons.add('contact_detail');
   return [...reasons];
 }
