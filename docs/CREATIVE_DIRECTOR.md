@@ -47,23 +47,35 @@ A brief names the product, a goal, an audience (organizations and roles, never a
 platforms, images and/or videos with their lengths, an optional angle and an optional offer code. The model is given the brief, the
 product's own pages (by id), the brand kit's voice, banned phrases and required disclaimers, the owner's screenshots (by id and label), the
 product's learnings and its recent headlines (not to repeat), and, for a revision, the asset it replaces and the owner's note. Its system
-prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.4` and `creative-variants.4`) carry the fact sheet and the sales
+prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.5` and `creative-variants.5`) carry the fact sheet and the sales
 playbook (the Sales Executive's fact source) and are cached. The answers are closed JSON schemas.
 
-**What Intel does, feature by feature** (`server/agents/content/features.mjs`, data in `intel-features.json`). The prompts carry Intel's
-published catalog, read from https://www.caremetricintel.com/features and its home page: every feature (97 in 11 areas: the healthcare
-marketing CRM, daily field work, expenses, mileage and Stark-limit tracking, referral and admission tracking with EMR report imports,
-prospecting, market and territory research, competitor intelligence, manager tools, email campaigns, reports, and administration) with the
-plan or role it needs; why each part matters (the site's nine "why it matters" pillars); the data behind it (providers, facilities,
-territories, utilization and quality, and the organization's own results), each with what is included, its source (NPPES, CMS files and
-Care Compare, the Census Bureau's American Community Survey, state licensing files), the decision it helps make and its limit; each care
-setting; the manager view; the product questions and answers; and the site's own caveats. The model is told to sell one feature per asset
-by the decision it helps make or the work it saves, to vary features across variants, to respect plan labels, and never to imply that
-public data confirms referrals or that the expense tools make anyone compliant. Planned Intel briefs each lead with a different pillar
-(the one the plan post is about, else the next in turn). The catalog's numbers are allowed in copy ("up to 2,000 accounts", "45 days
-without a visit"); it vouches for no claim, and its percentages are not allowed. Refresh it with `npm run refresh:intel-features` when
-Intel's pages change (`npm run refresh:intel-features -- --check` says whether they have); the EMR vendors Intel names for its CSV imports
-are written generically, because the team names no other product.
+**What each product does** (`server/agents/content/features.mjs`, data in `intel-features.json` and `carebase-features.json`). Each brief's
+model calls carry its product's published catalog as a second cached block after the prompt:
+
+- **CareMetric Intel**, from https://www.caremetricintel.com/features and its home page: every feature (97 in 11 areas: the healthcare
+  marketing CRM, daily field work, expenses, mileage and Stark-limit tracking, referral and admission tracking with EMR report imports,
+  prospecting, market and territory research, competitor intelligence, manager tools, email campaigns, reports, and administration) with
+  the plan or role it needs; why each part matters (the site's nine pillars); the data behind it (providers, facilities, territories,
+  utilization and quality, and the organization's own results), each with what is included, its source (NPPES, CMS files and Care
+  Compare, the Census Bureau's American Community Survey, state licensing files), the decision it helps make and its limit; each care
+  setting; the manager view; the questions and answers; and the site's own caveats.
+- **CareMetric CareBase**, from https://cmcarebase.com/features, its home page and /faq: every capability (60 in 6 modules: training and
+  compliance, courses and live training, resident care and clinical records, survey, safety and facility, credentials and workforce, and
+  access and portals); why it matters and the tools that set it apart; the newest tools (Survey Day Mode, the compliance copilot, clinical
+  records); a resident's record from inquiry to move-out; what each role sees and does; before and with CareBase; each chapter's
+  requirements; the questions and answers; and the site's own caveats (the readiness score is not a prediction of survey results; it
+  guarantees no compliance).
+
+The model is told to sell one feature per asset by the decision it helps make or the work it saves, to vary features across variants, to
+respect plan and module labels, and never to imply that public data confirms referrals, that a tool makes anyone compliant or survey-ready,
+or that a readiness score predicts a survey. Planned briefs each lead with a different pillar (the one the plan post is about, else the
+next in turn). A catalog's numbers are allowed in copy about its own product only ("up to 2,000 accounts" for Intel, "16 hours of annual
+training" for CareBase); a catalog vouches for no claim, and its percentages are not allowed. The Content Marketer, the Sales Executive and
+the Social Media Manager use the same catalogs (docs/AI_TEAM.md, "What each product does"). Refresh them with `npm run refresh:features`
+when a product's pages change (`npm run refresh:features -- --check` says whether they have). Other products' names are written
+generically, and the CareBase FAQ's demo and sales-call sentences are left out, because the team offers neither; each catalog lists its
+edits.
 
 **Audiences come from the fact sheet's "who it is for"**, so creative never narrows a product to part of its market. CareMetric Intel is
 for home health agencies, hospice agencies, hospitals, nursing homes and personal care homes; CareBase for Pennsylvania personal care homes

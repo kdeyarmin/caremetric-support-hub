@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { salesReplyHandler } from './reply.mjs';
+import { catalogBlocks } from '../content/features.mjs';
 
 // Fake data only: example.test addresses, "Pat Example", 555-01xx numbers.
 const ids = { communication: '11111111-1111-4111-8111-111111111111', message: '22222222-2222-4222-8222-222222222222', earlier: '33333333-3333-4333-8333-333333333333' };
@@ -59,9 +60,12 @@ describe('the Sales Executive answering a prospect', () => {
     const harness = fixture({ model });
     const outcome = await harness.run();
     const request = model.run.mock.calls[0][1];
-    expect(request.promptVersion).toBe('sales.2');
+    expect(request.promptVersion).toBe('sales.3');
     expect(request.user).toContain(`How much is CareBase? ${canary}`);
     expect(request.system[0].text).not.toContain(canary);
+    // The prompt, then the product's own published catalog, each cached (content/features.mjs).
+    expect(request.system.slice(1)).toEqual(catalogBlocks(['carebase']));
+    expect(request.system).toHaveLength(2);
     expect(harness.store.proposeAction).toHaveBeenCalledWith(expect.objectContaining({
       taskId: 't1', kind: 'communication.reply', targetKind: 'communication', targetId: 'CM-2048',
       input: expect.objectContaining({ communicationId: ids.communication, basedOnMessageId: ids.message, route: 'email', template: 'drafted', intent: 'pricing', product: 'carebase',

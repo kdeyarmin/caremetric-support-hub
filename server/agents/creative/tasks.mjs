@@ -23,7 +23,7 @@ import { weekStart, easternDate } from '../accounts/week.mjs';
 import { marketedNow, markets } from '../marketing.mjs';
 import { delivered } from '../notify.mjs';
 import { dueMoment, permanent, plural, recordRun } from '../tasks/shared.mjs';
-import { focusFor } from '../content/features.mjs';
+import { catalogBlocks, focusFor } from '../content/features.mjs';
 import { badgeText, checkCopy, checkPlatform, checkText, checkVideo, checkVisual, verdictOf } from './compliance.mjs';
 import {
   audienceFor, namedSegment, segmentFor,
@@ -126,7 +126,7 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     let turn = Math.floor(Date.parse(week) / (7 * day));
     // The segments plan items name are taken first, so a brief that takes its turn does not repeat one.
     const used = new Set(chosen.map(([, items]) => namedSegment(items[0].product, textOf(items))).filter(Boolean));
-    // Each Intel brief also leads with one part of what Intel does (the site's "why it matters" pillars): the one its plan text is about,
+    // Each brief also leads with one part of what its product does (the site's "why it matters" pillars): the one its plan text is about,
     // else the next in turn, so the week's briefs show different features rather than territory analysis every time.
     const focused = new Set();
     let focusTurn = turn;
@@ -178,13 +178,15 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     const screenshots = Array.isArray(kit.screenshots) ? kit.screenshots : [];
     const user = briefUserMessage(context, { screenshots });
     const moment = now();
-    const concept = await runModel(task, { promptVersion: conceptPromptVersion, tier: 'quality', system: [{ text: conceptSystem, cache: true }], user, schema: conceptSchema,
+    // The product's own catalog follows the prompt as its own cached block.
+    const system = [{ text: conceptSystem, cache: true }, ...catalogBlocks([brief.product])];
+    const concept = await runModel(task, { promptVersion: conceptPromptVersion, tier: 'quality', system, user, schema: conceptSchema,
       maxTokens: 4000, effort: effort(task), describe: output => `Wrote a ${output.hero.hook} concept (${output.hero.layout} layout) for a ${productNames[brief.product]} brief.` }, signal);
     if (concept.outcome === 'budget_exhausted') { await store.creativeBriefFinish(briefId, 'open', null); return { status: 'queued', retryAt: nextBudgetDay(task, moment), result: { deferred: 'budget', briefId } }; }
     if (concept.outcome !== 'completed') { await store.creativeBriefFinish(briefId, 'open', null); return { result: { skipped: concept.code ?? concept.outcome, briefId } }; }
     if (signal?.aborted) throw aborted();
     const hero = { ...normalizeVariant(concept.output.hero, { screenshots, offer }), concept: String(concept.output.concept.bigIdea ?? '').slice(0, 500) };
-    const more = await runModel(task, { promptVersion: variantsPromptVersion, tier: 'draft', system: [{ text: variantsSystem, cache: true }], schema: variantsSchema, maxTokens: 5000, effort: effort(task),
+    const more = await runModel(task, { promptVersion: variantsPromptVersion, tier: 'draft', system: [{ text: variantsSystem, cache: true }, ...catalogBlocks([brief.product])], schema: variantsSchema, maxTokens: 5000, effort: effort(task),
       user: JSON.stringify({ ...JSON.parse(user), concept: concept.output.concept, hero: concept.output.hero, variantsWanted: 4 }),
       describe: output => `Wrote ${plural(output.variants.length, 'variant')} of the concept.` }, signal);
     if (more.outcome === 'budget_exhausted') { await store.creativeBriefFinish(briefId, 'open', null); return { status: 'queued', retryAt: nextBudgetDay(task, moment), result: { deferred: 'budget', briefId } }; }

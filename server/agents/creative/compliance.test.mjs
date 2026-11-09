@@ -54,6 +54,8 @@ describe('copy compliance', () => {
   it('fact_sheet: allows the numbers Intel\'s published features state, and still no other', () => {
     expect(intel({ primaryText: 'CareMetric Intel imports up to 2,000 accounts and flags accounts that go 45 days without a visit.' })).toEqual([]);
     expect(rulesOf(intel({ primaryText: 'CareMetric Intel flags accounts that go 40 days without a visit.' }))).toContain('block:fact_sheet');
+    // A number from another product's catalog is not this product's: CareBase's 12 hours of training is no Intel claim.
+    expect(rulesOf(intel({ primaryText: 'Teams save 12 hours a week with CareMetric Intel.' }))).toContain('block:fact_sheet');
     // Intel's FAQ says no savings are "guaranteed": that negation never lets a guarantee through.
     expect(rulesOf(intel({ headline: 'Guaranteed referrals' }))).toContain('block:unsubstantiated_claim');
   });

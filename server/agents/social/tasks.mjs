@@ -20,6 +20,7 @@
 import { weekStart, easternDate, easternMidnight } from '../accounts/week.mjs';
 import { delivered } from '../notify.mjs';
 import { redact } from '../concierge/redact.mjs';
+import { catalogBlocks } from '../content/features.mjs';
 import { screenIdentifiers } from '../concierge/screen.mjs';
 import { dueMoment, heldForScorecard, heldResult, permanent, plural, recordRun, when } from '../tasks/shared.mjs';
 import { playbookFor } from '../../growth/playbook.mjs';
@@ -122,7 +123,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       weakestRecent: ranked.length > 3 ? ranked.slice(-2).map(post => ({ platform: post.platform, engagement: post.engagement, text: post.text.slice(0, 160) })) : [],
       recentOpenings: posts.slice(0, 12).map(post => firstLine(post.text)),
     });
-    const result = await runModel(task, { promptVersion: planPromptVersion, system: [{ text: planSystem, cache: true }], user, schema: planSchema, maxTokens: 6000, effort: effort(task),
+    const result = await runModel(task, { promptVersion: planPromptVersion, system: [{ text: planSystem, cache: true }, ...catalogBlocks(offered)], user, schema: planSchema, maxTokens: 6000, effort: effort(task),
       describe: output => `Planned ${plural(output.posts.length, 'social post')} for the week of ${week}.` }, signal);
     if (result.outcome !== 'completed') return { result: { skipped: result.outcome, week, ...(result.code ? { code: result.code } : {}) } };
 
@@ -267,7 +268,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     const text = redact(read.text, { limit: 2000 }).text;
     const history = (read.history ?? []).map(message => ({ direction: message.direction, text: redact(message.text, { limit: 600 }).text }));
     const result = await runModel(task, {
-      promptVersion: replyPromptVersion, system: [{ text: replySystem, cache: true }], schema: replySchema, maxTokens: 2000, effort: effort(task),
+      promptVersion: replyPromptVersion, system: [{ text: replySystem, cache: true }, ...catalogBlocks(offered)], schema: replySchema, maxTokens: 2000, effort: effort(task),
       user: replyUserMessage({ platform: labels[item.platform], kind: item.kind, words: item.kind === 'message' ? 100 : 50, links: offered.flatMap(product => socialLinks(product)), text, history }),
       describe: output => `Read a ${where}: ${output.intent}${output.needsOwner ? ', needs the owner' : ''}${output.hide ? ', hide' : ''}.`,
     }, signal);
@@ -375,7 +376,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       platform: source.name, product: productNames[product], adSet: adset?.name ?? '', objective: adset?.objective ?? null, why: rec.reason,
       best: { copy: base.copy, results: thisWeek.get(base.id) ?? null }, others: peers.map(ad => ({ copy: ad.copy, active: ad.active, results: thisWeek.get(ad.id) ?? null })),
     });
-    const result = await runModel(task, { promptVersion: adPromptVersion, system: [{ text: adSystem, cache: true }], user, schema: adSchema, maxTokens: 3000, effort: effort(task),
+    const result = await runModel(task, { promptVersion: adPromptVersion, system: [{ text: adSystem, cache: true }, ...catalogBlocks([product])], user, schema: adSchema, maxTokens: 3000, effort: effort(task),
       describe: output => `Wrote ${plural(output.variants.length, 'ad variant')} for a ${source.name} ad set.` }, signal);
     if (result.outcome !== 'completed') { counts.skipped += 1; return 0; }
     let made = 0;

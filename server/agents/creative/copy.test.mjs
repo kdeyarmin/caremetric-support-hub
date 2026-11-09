@@ -16,11 +16,10 @@ describe('creative copy', () => {
       expect(system).toContain('Never tell anyone to enter or use a code');
       expect(system).toContain('CMS, Medicare, Medicaid');
       expect(system).toContain('brandTheme');
-      // Every published Intel feature, why it matters and the data behind it, with what not to imply.
-      expect(system).toContain('CareMetric Intel features and data');
-      expect(system).toContain('Stark annual limit tracking');
-      expect(system).toContain('The decision it helps make');
-      expect(system).toContain('Quote none of the catalog\'s percentages');
+      // The product's catalog follows as its own block (features.test.mjs); the prompt says how to use it and what not to imply.
+      expect(system).toContain('The product\'s own catalog follows these instructions');
+      expect(system).toContain('Quote none of its percentages');
+      expect(system).toContain('a readiness score as a prediction of survey results');
     }
   });
 

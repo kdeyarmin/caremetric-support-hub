@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { slotFor, socialHandlers } from './tasks.mjs';
 import { socialConfig, socialTeam } from './index.mjs';
+import { catalogBlocks } from '../content/features.mjs';
 
 const canary = 'CANARY-9d41e7';
 const now = () => new Date('2026-11-09T13:15:00Z'); // Monday 08:15 Eastern
@@ -59,7 +60,10 @@ describe('the weekly social plan', () => {
     const h = harness({ model });
     const outcome = await h.handlers['social.plan'](task('social.plan'), { now });
     const request = model.run.mock.calls[0][1];
-    expect(request.promptVersion).toBe('social-plan.3');
+    expect(request.promptVersion).toBe('social-plan.4');
+    // Each marketed product's published catalog follows the prompt (content/features.mjs).
+    expect(request.system.slice(1)).toEqual(catalogBlocks(JSON.parse(request.user).products));
+    expect(request.system.length).toBeGreaterThan(1);
     expect(JSON.parse(request.user)).toMatchObject({ weekStarting: '2026-11-09', postsToWrite: { facebook: 3, instagram: 2, linkedin: 3 }, bestRecent: [{ platform: 'facebook', engagement: 28 }] });
     expect(h.store.proposeAction).toHaveBeenCalledTimes(2);
     const [facebook, instagram] = h.store.proposeAction.mock.calls.map(call => call[0]);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { segments } from '../creative/copy.mjs';
-import { careSettingText, featuresText, focusFor, productFeatures } from './features.mjs';
+import { careSettingText, catalogBlocks, featuresText, focusFor, productFeatures } from './features.mjs';
 import { products } from './facts.mjs';
 import { textProblems } from './validate.mjs';
 
@@ -41,7 +41,8 @@ describe('CareMetric Intel\'s published feature catalog', () => {
     // The prompt carries the features, the data and its sources, and the site's own caveats.
     for (const phrase of ['Stark annual limit tracking', 'Competitor rankings', 'EMR report imports', 'County intelligence', 'NPPES', 'Care Compare', 'American Community Survey',
       'not a promise of referrals', 'The 14-day free trial includes everything Pro does, in one county.']) expect(text).toContain(phrase);
-    expect(featuresText('carebase')).toBe('');
+    expect(featuresText('intel')).toBe(text);
+    expect(featuresText('advisors')).toBe('');
   });
 
   it('leads a planned brief with the part of Intel its text is about, else the next in turn, never twice in one plan', () => {
@@ -52,6 +53,46 @@ describe('CareMetric Intel\'s published feature catalog', () => {
     expect([0, 1, 2].map(turn => focusFor('caremetric-intel', 'A tip for the week', turn).title)).toEqual(titles.slice(0, 3));
     expect(focusFor('caremetric-intel', 'A tip for the week', 0, new Set([titles[0]])).title).toBe(titles[1]);
     expect(focusFor('caremetric-intel', 'Log the lunch against the Stark limit', 0, new Set(['Spend with compliance in view'])).title).toBe(titles[0]);
-    expect(focusFor('carebase', 'anything', 0)).toBeNull();
+    expect(focusFor('advisors', 'anything', 0)).toBeNull();
+  });
+});
+
+const carebase = productFeatures.carebase;
+
+describe('CareMetric CareBase\'s published capabilities', () => {
+  it('holds every capability by module, why it matters, the newest tools, the lifecycle, the roles and the chapters', () => {
+    const total = carebase.modules.reduce((sum, module) => sum + module.capabilities.length, 0);
+    expect(total).toBe(carebase.publishedCount);
+    expect(carebase.modules.every(module => module.capabilities.length === module.count)).toBe(true);
+    expect(carebase.modules.map(module => module.name)).toEqual(expect.arrayContaining(['Training & compliance core', 'Resident care, clinical & operations', 'Survey, safety & facility', 'Credentials & workforce']));
+    expect(carebase.pillars.map(pillar => pillar.title)).toEqual(expect.arrayContaining(['Prepare for your next survey', 'Spend less on required education', 'Spend less time chasing records', 'Medication authorization roster']));
+    expect(carebase.newest.map(item => item.name)).toEqual(expect.arrayContaining(['Survey Day Mode']));
+    expect(carebase.lifecycle.length).toBeGreaterThanOrEqual(5);
+    expect(carebase.roles.map(item => item.role)).toEqual(expect.arrayContaining(['Facility manager', 'Trainer', 'Employee', 'Surveyor']));
+    expect(carebase.chapters.map(item => item.chapter)).toEqual(['55 Pa. Code Chapter 2600', '55 Pa. Code Chapter 2800']);
+    expect(carebase.faq.length).toBeGreaterThanOrEqual(20);
+    expect(carebase.faq.some(item => /how much does it cost/i.test(item.question))).toBe(false);
+  });
+
+  it('offers no demo or sales call, names no other product, keeps the vocabulary and the site\'s own caveats', () => {
+    const text = featuresText('carebase');
+    expect(text).not.toMatch(/\bdemo\b|sales call/i);
+    const problems = textProblems(text, { product: 'carebase' });
+    for (const code of ['competitor_named', 'vocabulary', 'call_offer']) expect(problems).not.toContain(code);
+    for (const phrase of ['Survey Day Mode', 'Medication authorization roster', 'not a prediction of survey results', 'What each role sees and does', '55 Pa. Code Chapter 2800']) expect(text).toContain(phrase);
+    expect(carebase.edits.length).toBeGreaterThan(0);
+  });
+
+  it('leads a CareBase brief with what its text is about, else the next in turn', () => {
+    expect(focusFor('carebase', 'Annual in-service hours for your staff', 0).title).toBe('Spend less on required education');
+    expect(focusFor('carebase', 'Who can give insulin today?', 0).title).toBe('Medication authorization roster');
+    const titles = carebase.pillars.map(pillar => pillar.title);
+    expect([0, 1].map(turn => focusFor('carebase', 'A tip for the week', turn).title)).toEqual(titles.slice(0, 2));
+  });
+
+  it('gives each request only the catalogs of the products it is about, each once and cached', () => {
+    expect(catalogBlocks(['carebase'])).toEqual([{ text: featuresText('carebase'), cache: true }]);
+    expect(catalogBlocks(['intel', 'caremetric-intel', 'carebase', 'advisors']).map(block => block.text)).toEqual([featuresText('caremetric-intel'), featuresText('carebase')]);
+    expect(catalogBlocks([])).toEqual([]);
   });
 });

@@ -25,6 +25,10 @@ CareMetric Stripe account. Current regular prices were also checked against that
 | CareMetric Healthcare Advisors | `kdeyarmin/advisors@fe46d1d` | `site-content.mjs` (services, founder, routes) |
 | Support Hub | this repository | `server/email-layout.mjs` (support address and line) |
 
+What each product **does**, feature by feature, is read from the products' own published pages rather than kept here:
+`server/agents/content/features.mjs` (Intel's /features and home page; CareBase's /features, home page and /faq), refreshed with
+`npm run refresh:features` (docs/AI_TEAM.md, "What each product does"). Prices and offers stay on this page.
+
 **Stale source, do not use:** CareBase's `docs/marketing/MARKETING_SITE_REDESIGN_HANDOFF.md` (and `designs/README.md`) still say
 CareBase is a flat $499 per organization. That package is retired from sale (`BILLING_MODEL.md`). The live site and code say
 **CareBase Core is $199 per facility per month**, and that is what this page uses.

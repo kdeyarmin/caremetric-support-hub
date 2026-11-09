@@ -286,7 +286,7 @@ export function checkArticle(article) {
  * Turns the model's answer for `topic` into the article to propose, or says why it cannot be offered.
  * Returns { ok: true, article, preview, rewrites } or { ok: false, reasons, rewrites }. `article` is exactly the action's input.
  */
-export function checkDraft(output, { topic, promptVersion = null }) {
+export function checkDraft(output, { topic, promptVersion = null, features = '' }) {
   const reasons = new Set();
   let rewrites = 0;
   let ambiguous = false;
@@ -323,7 +323,8 @@ export function checkDraft(output, { topic, promptVersion = null }) {
   }
 
   const product = productSlugs[topic.product];
-  const numbers = allowedNumbers([topic.title, topic.angle, ...topic.facts]);
+  // The topic's own facts, and the numbers the product's published catalog states (content/features.mjs).
+  const numbers = allowedNumbers([topic.title, topic.angle, ...topic.facts, features]);
   for (const reason of markupProblems(body)) reasons.add(reason);
   for (const reason of textProblems([title, description, summary, body, ...faq.flatMap(item => [item.question, item.answer])].join('\n'), { product: topic.product, numbers })) reasons.add(reason);
   if (reasons.size > 0) return { ok: false, reasons: [...reasons].sort(), rewrites };

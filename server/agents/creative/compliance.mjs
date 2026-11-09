@@ -31,7 +31,7 @@
  * copy past where the feed cuts it off warns.
  */
 import { screenIdentifiers } from '../concierge/screen.mjs';
-import { featuresText } from '../content/features.mjs';
+import { catalogNumbers } from '../content/features.mjs';
 import { factSheetText, factsRevision } from '../content/facts.mjs';
 import { allowedNumbers, normalizeTerms, textProblems } from '../content/validate.mjs';
 import { productAmounts } from '../../growth/draft.mjs';
@@ -56,10 +56,12 @@ let sourceCache = { revision: -1 };
  */
 const factSource = () => {
   if (sourceCache.revision !== factsRevision) {
-    sourceCache = { revision: factsRevision, text: `${factSheetText()}\n${playbookText()}`.toLowerCase(), numbers: allowedNumbers([featuresText('caremetric-intel')]) };
+    sourceCache = { revision: factsRevision, text: `${factSheetText()}\n${playbookText()}`.toLowerCase() };
   }
   return sourceCache;
 };
+// The numbers a creative about `product` may state: the fact sheet's, and its own product's catalog's (never another product's).
+const numbersFor = product => catalogNumbers(product);
 
 // ---- Patterns --------------------------------------------------------------------------------------------------------------------------
 
@@ -201,7 +203,7 @@ export function checkCopy({ product, platform, copy = {}, offerCode = null, bran
   // every other fact-sheet rule, which the claims above do not already cover
   if (terms.ambiguous) findings.push(block('fact_sheet', 'It names an auditor of a kind the vocabulary cannot rewrite.'));
   const handled = new Set(['guarantee', 'compliance_assurance', 'certification_claim']);
-  for (const code of textProblems(text, { product: book?.factsKey ?? null, numbers: source.numbers })) {
+  for (const code of textProblems(text, { product: book?.factsKey ?? null, numbers: numbersFor(product) })) {
     if (handled.has(code)) continue;
     if (code === 'personal_information') { if (!findings.some(item => item.rule === 'phi')) findings.push(block('phi', 'It appears to carry personal information.')); continue; }
     findings.push(block('fact_sheet', `It ${factSheetCodes[code] ?? code.replaceAll('_', ' ')}.`));

@@ -19,6 +19,7 @@ import { echoCandidates, quotesCustomer, wordsOf } from '../concierge/draft.mjs'
 import { screenIdentifiers } from '../concierge/screen.mjs';
 import { smsLimit, wrapReply } from '../concierge/templates.mjs';
 import { factSheetText, factsRevision, helpCenterOrigin } from '../content/facts.mjs';
+import { catalogNumbers, featuresTexts } from '../content/features.mjs';
 import { allowedNumbers, normalizeTerms, textProblems } from '../content/validate.mjs';
 import { productAmounts } from '../../growth/draft.mjs';
 import { linkablePages, offersMeeting, playbookFor, playbookText } from '../../growth/playbook.mjs';
@@ -29,10 +30,10 @@ export const emailReplyLimit = 1500;
 export const wordLimits = Object.freeze({ email: 170, chat: 120, sms: 45 });
 
 let sheetCache = { revision: -1 };
-/** The numbers and words of the fact sheet and playbook, read again when the facts change (Intel's catalog). */
+/** The numbers and words of the fact sheet, the playbook and the product catalogs, read again when the facts change (Intel's catalog). */
 const sheet = () => {
   if (sheetCache.revision !== factsRevision) {
-    sheetCache = { revision: factsRevision, numbers: allowedNumbers([]), vocabulary: new Set(wordsOf(`${factSheetText()}\n${playbookText()}`)) };
+    sheetCache = { revision: factsRevision, numbers: allowedNumbers([]), vocabulary: new Set(wordsOf(`${factSheetText()}\n${playbookText()}\n${featuresTexts().join('\n')}`)) };
   }
   return sheetCache;
 };
@@ -78,7 +79,7 @@ export function checkSalesReply({ reply, product, route, guides = [], text = '' 
   if (links.some(url => !allowed.has(url))) return { ok: false, reason: 'link' };
   const words = normalized.replace(linkPattern, ' ');
   if (screenIdentifiers(words).flagged) return { ok: false, reason: 'identifier' };
-  const problems = textProblems(words, { product: book.factsKey, numbers: sheet().numbers });
+  const problems = textProblems(words, { product: book.factsKey, numbers: book.factsKey ? catalogNumbers(book.factsKey) : sheet().numbers });
   if (problems.length) return { ok: false, reason: problems[0] };
   const own = productAmounts(book.factsKey);
   if ((words.match(/\$\s?(?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?/g) ?? []).some(amount => !own.has(Number(amount.replace(/[$,\s]/g, ''))))) return { ok: false, reason: 'other_product_price' };

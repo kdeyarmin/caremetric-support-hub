@@ -8,9 +8,10 @@
  * article and decides whether it may be offered to the owner at all. Changing this prompt means changing `promptVersion`.
  */
 import { factSheetText, legalDisclaimer, officialSources, productPage, productPageIds } from './facts.mjs';
+import { catalogGuidance } from './features.mjs';
 import { limits } from './validate.mjs';
 
-export const promptVersion = 'content.2';
+export const promptVersion = 'content.3';
 
 const range = ([min, max]) => `${min} to ${max}`;
 
@@ -44,6 +45,8 @@ Answer with one JSON object and nothing else. Its fields:
 Vocabulary: "Assisted Living Facility" or "ALF", never "Assisted Living Residence" or "ALR". The Department of Human Services' inspectors are "surveyors" and their visit is a survey or an inspection, never an "auditor" or an "audit". In anything about CareBase, never use the words "prove", "proof" or "evidence".
 
 The disclaimer added to regulation articles reads: "${legalDisclaimer}"
+
+${catalogGuidance}
 
 ${factSheetText()}`;
 

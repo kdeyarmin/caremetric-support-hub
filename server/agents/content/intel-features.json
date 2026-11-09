@@ -2,8 +2,8 @@
   "reviewed": "2026-11-09",
   "product": "caremetric-intel",
   "sources": {
-    "features": "https://www.caremetricintel.com/features",
-    "home": "https://www.caremetricintel.com/"
+    "home": "https://www.caremetricintel.com/",
+    "features": "https://www.caremetricintel.com/features"
   },
   "contentSha256": "c5cdd6b9ecddd061",
   "edits": [

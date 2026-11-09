@@ -21,6 +21,7 @@ import { contentDeclared } from '../content/executor.mjs';
 import { articleHomeUrl, products } from '../content/facts.mjs';
 import { marketedNow, markets } from '../marketing.mjs';
 import { buildUserMessage, promptVersion, responseSchema, systemPrompt } from '../content/prompt.mjs';
+import { catalogBlocks, featuresText } from '../content/features.mjs';
 import { checkOutreach, composeOutreachEmail, outreachProducts, outreachPromptVersion, outreachSchema, outreachSystemPrompt, outreachUserMessage } from '../content/outreach.mjs';
 import { chooseTopic, topics as backlog } from '../content/topics.mjs';
 import { checkDraft } from '../content/validate.mjs';
@@ -73,11 +74,11 @@ export function contentHandlers({ store, notifier, model = null, features = null
 
     let verdict = null;
     const ran = await model.run(task, {
-      promptVersion, system: [{ text: systemPrompt, cache: true }], user: buildUserMessage(topic, { productName: products[topic.product].name }),
+      promptVersion, system: [{ text: systemPrompt, cache: true }, ...catalogBlocks([topic.product])], user: buildUserMessage(topic, { productName: products[topic.product].name }),
       schema: responseSchema, maxTokens: 8000, effort: effortOf(task),
       // The run's summary names the topic and the checks, never the draft.
       describe: output => {
-        verdict = checkDraft(output, { topic, promptVersion });
+        verdict = checkDraft(output, { topic, promptVersion, features: featuresText(topic.product) });
         return verdict.ok
           ? `Drafted the ${topic.key} article: it passed the checks${verdict.rewrites ? ` (${plural(verdict.rewrites, 'term')} rewritten)` : ''}.`
           : `Drafted the ${topic.key} article: not proposed (${verdict.reasons.join(', ')}).`;
@@ -86,7 +87,7 @@ export function contentHandlers({ store, notifier, model = null, features = null
     if (ran.outcome === 'budget_exhausted') return { status: 'queued', retryAt: nextBudgetDay(task, moment), result: { deferred: 'budget', topic: topic.key } };
     if (ran.outcome === 'refused') return { result: { outcome: 'refused', topic: topic.key } };
 
-    const checked = verdict ?? checkDraft(ran.output, { topic, promptVersion });
+    const checked = verdict ?? checkDraft(ran.output, { topic, promptVersion, features: featuresText(topic.product) });
     if (!checked.ok) return { result: { outcome: 'rejected', topic: topic.key, reasons: checked.reasons } };
     if (signal?.aborted) throw aborted();
     // The model may have chosen a different address than the topic suggested: it must still be free.
@@ -120,7 +121,7 @@ export function contentHandlers({ store, notifier, model = null, features = null
     let summary = null;
     const label = monthLabel.format(due);
     const ran = await model.run(task, {
-      promptVersion: outreachPromptVersion, system: [{ text: outreachSystemPrompt, cache: true }], user: outreachUserMessage(label, marketedList),
+      promptVersion: outreachPromptVersion, system: [{ text: outreachSystemPrompt, cache: true }, ...catalogBlocks(marketedList)], user: outreachUserMessage(label, marketedList),
       schema: outreachSchema, maxTokens: 6000, effort: effortOf(task),
       describe: output => {
         summary = checkOutreach(output, { marketed: marketedList });

@@ -1135,6 +1135,32 @@ its revision variables and its audit row; the owner's own approvals are unchange
 (`server/agents/content/facts.mjs`, `docs/GTM_FACTS.md`) is what keeps automatic articles accurate: confirm it before the
 articles step switches.
 
+## What each product does
+
+The fact sheet keeps prices, offers and who each product is for. What each product **does**, and why it matters, comes from the products'
+own published pages, kept in `server/agents/content/features.mjs` (`intel-features.json`, `carebase-features.json`):
+
+- **CareMetric Intel**: all 97 features on https://www.caremetricintel.com/features, by area, with the plan or role each needs; why each
+  part matters; the data behind it (providers, facilities, territories, utilization and quality, and the organization's own results), each
+  with its sources, the decision it helps make and its limit; each care setting; the manager view; the questions and answers; the caveats.
+- **CareMetric CareBase**: all 60 capabilities on https://cmcarebase.com/features, by module; why it matters and the tools that set it
+  apart; the newest tools; a resident's record from inquiry to move-out; what each role sees and does; before and with CareBase; each
+  chapter's requirements; the questions and answers from /faq; the caveats.
+
+Every request about a product carries that product's catalog as its own cached block after the prompt: the Creative Director's concept
+and variants, the Content Marketer's articles and monthly outreach, the Sales Executive's answers, and the Social Media Manager's weekly
+plan, ad copy and replies (a request about both products carries both). Each prompt says how to use it: name the feature that answers the
+reader and why it matters, stay inside what the catalog says (plan and module labels), never present public data as confirmed referrals,
+a tool as making anyone compliant or survey-ready, or a readiness score as a prediction, never promise savings, and quote none of its
+percentages. Each agent's checks allow the numbers a catalog states for text about its own product only; a catalog vouches for no claim.
+Prompt versions: `content.3`, `outreach.4`, `sales.3`, `social-plan.4`, `social-ads.4`, `social-reply.3`, `creative-concept.5`,
+`creative-variants.5`.
+
+`npm run refresh:features` rebuilds both catalogs from the live pages and `npm run refresh:features -- --check` says whether they have
+changed. Other products' names are written generically (the EMR vendors Intel names for its CSV imports), and the CareBase FAQ's sentences
+about demos and sales calls are left out, because the team offers neither; each catalog lists its edits. Prices are never taken from the
+pages: they stay the fact sheet's.
+
 ## Campaign tags on product links
 
 Every link to one of the company's product pages that an agent puts in front of a person carries utm_source, utm_medium and

@@ -10,7 +10,7 @@
  * (offers.mjs); the voice, banned phrases and disclaimers from the brand kit; and the learnings from past results. Every word is then
  * checked in code (compliance.mjs) before anything is rendered.
  */
-import { careSettingText, featuresText } from '../content/features.mjs';
+import { careSettingText, catalogGuidance } from '../content/features.mjs';
 import { factSheetText } from '../content/facts.mjs';
 import { linkablePages, playbookFor, playbookText } from '../../growth/playbook.mjs';
 import { layouts, productNames } from './layouts.mjs';
@@ -18,8 +18,8 @@ import { offerFor } from './offers.mjs';
 import { placementsFor, videoLengths, videoPlacement } from './specs.mjs';
 import { themeFor } from './themes.mjs';
 
-export const conceptPromptVersion = 'creative-concept.4';
-export const variantsPromptVersion = 'creative-variants.4';
+export const conceptPromptVersion = 'creative-concept.5';
+export const variantsPromptVersion = 'creative-variants.5';
 export const hooks = Object.freeze(['problem', 'proof', 'offer', 'curiosity', 'demo']);
 const labels = ['A', 'B', 'C', 'D', 'E'];
 
@@ -80,8 +80,8 @@ const craft = `How good ad creative works here:
 - Layouts: headline (a strong line and a supporting line), stat (one number from the fact sheet, its label and its source), screenshot (a product screenshot in a window frame; only with a screenshot id from the request), quote (a short line attributed to CareMetric or the product), offer (the offer card; only when the request names an offer), checklist (three to five short capabilities), split (landscape placements: headline on a color block, support beside it).
 - Lengths: headline up to 40 characters for Meta and Google (Google allows 30 at most), 70 for LinkedIn and YouTube; primary text 90 to 125 characters for Meta, up to 150 for LinkedIn, 90 for Google; description up to 30 characters. A video's beats are three to eight short lines of up to 60 characters, read on screen in order; the last one leads to the call to action.
 - Write for the brand voice in the request, and in the product's brand theme (brandTheme): every asset is drawn in that theme's own colors, type and logo, so the words should suit it. CareMetric Intel's theme is Emberline, and its tagline "Set your marketing on FIRE!" may be used exactly as written; CareBase's theme is calm and plain, with no tagline.
-- Sell what the product does, one thing per asset, and why it matters to this audience. CareMetric Intel does a lot: the "CareMetric Intel features and data" section lists every published feature by area, why each part matters, the data behind it (what is included, its source, the decision it helps make and its limit), each care setting and the manager view. Pick one feature or one kind of data and show the decision it helps make or the work it saves, in those terms; when the brief names a feature focus, lead with it. Across a brief's variants, show different features rather than the same one reworded. Plain specifics beat broad claims: "track each physician against the Stark annual limit", "import referrals from your EMR's reports as CSV", "get an alert when a competitor's star rating or owner changes".
-- Stay inside what the catalog says. A feature with a plan or role label is not on every plan: say so or choose another (the free trial includes everything Pro does, in one county). Public data is a research signal, not a referral; results come from what the team records or imports; never promise savings, more referrals or compliance (the expense tools support a compliance program and are not legal advice). Quote none of the catalog's percentages: the checks only allow the fact sheet's.
+- Sell what the product does, one thing per asset, and why it matters to this audience. The product's own catalog follows these instructions: for CareMetric Intel every published feature by area, why each part matters, the data behind it (what is included, its source, the decision it helps make and its limit), each care setting and the manager view; for CareMetric CareBase every capability by module, why it matters, the tools that set it apart, a resident's record from inquiry to move-out, what each role sees and does, and each chapter's requirements. Pick one feature or capability (or one kind of data) and show the decision it helps make or the work it saves, in those terms; when the brief names a feature focus, lead with it. Across a brief's variants, show different features rather than the same one reworded. Plain specifics beat broad claims: "track each physician against the Stark annual limit", "import referrals from your EMR's reports as CSV", "open Survey Day Mode when the surveyor walks in", "a binder PDF built from your live records".
+- Stay inside what the catalog says. ${catalogGuidance} For Intel, the free trial includes everything Pro does, in one county; results come from what the team records or imports; the expense tools support a compliance program and are not legal advice.
 - Learn from the learnings: lean toward what won, away from what lost, and never repeat a recent headline.`;
 
 export const conceptSystem = `You are the Creative Director at CareMetric, a small company that makes software for healthcare and senior-care organizations. You turn a marketing brief into one ad concept and its final copy. CareMetric's owner approves every asset before it runs; code checks every word either way.
@@ -98,8 +98,6 @@ Answer with one JSON object and nothing else: concept (bigIdea, angle, visualDir
 
 ${factSheetText()}
 
-${featuresText('caremetric-intel')}
-
 ${playbookText()}`;
 
 export const variantsSystem = `You are a copywriter on CareMetric's creative team. You write more variants of an approved ad concept, each on a different hook, so the team can test them against each other. CareMetric's owner approves every asset before it runs; code checks every word either way.
@@ -111,8 +109,6 @@ ${rules}
 Answer with one JSON object and nothing else: variants, each with hook (different from the hero's and from each other's), layout, headline, primaryText, description, cta, altText and overlay (the same fields as the hero's).
 
 ${factSheetText()}
-
-${featuresText('caremetric-intel')}
 
 ${playbookText()}`;
 
