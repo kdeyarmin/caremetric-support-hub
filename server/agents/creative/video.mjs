@@ -19,9 +19,10 @@ import { access, mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { brandMark, cta, dataUri, drawingContext, h, imageSize, img, padded, productDomains, reportOf, text } from './layouts.mjs';
+import { band, colorsIn, cta, dataUri, drawingContext, h, header, imageSize, img, padded, reportOf, text } from './layouts.mjs';
 import { renderElement } from './render.mjs';
 import { videoLengths } from './specs.mjs';
+import { withThemeFiles } from './themes.mjs';
 
 export const musicDirectory = fileURLToPath(new URL('./music/', import.meta.url));
 const fps = 24;
@@ -81,9 +82,13 @@ export function captionsVtt(timeline) {
 
 const ease = t => 1 - (1 - Math.min(Math.max(t, 0), 1)) ** 3;
 
-/** One picture of the video at `t` seconds, as an element tree, with the drawing context that recorded its text runs. */
+/**
+ * One picture of the video at `t` seconds, as an element tree, drawn in the product's brand theme with the drawing context that records its
+ * text runs and colors. The end card is the theme's: Emberline's dark canvas with the fire band, the Intel mark, its tagline and the white
+ * pill; CareBase's white with its logo lockup over the blue rule and the blue button.
+ */
 export function drawFrame({ ctx, timeline, t, content, captions }) {
-  const { frame, colors } = ctx;
+  const { frame, colors, brand, theme } = ctx;
   const scene = timeline.scenes.find(item => t >= item.start && t < item.end) ?? timeline.scenes[timeline.scenes.length - 1];
   const local = t - scene.start;
   const length = scene.end - scene.start;
@@ -92,11 +97,13 @@ export function drawFrame({ ctx, timeline, t, content, captions }) {
   let body;
   if (scene.kind === 'end') {
     const grow = 0.92 + 0.08 * ease(local / 0.5);
-    return h('div', { width: frame.width, height: frame.height, backgroundColor: colors.primary, fontFamily: ctx.body, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-      h('div', { flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: Math.round(frame.u * 5), transform: `scale(${grow.toFixed(3)})` },
-        brandMark(ctx, { onColor: colors.onPrimary, size: Math.round(frame.u * 9) }),
-        cta(ctx, scene.text, { inverse: true, align: 'center' }),
-        text(ctx, { role: 'domain', value: productDomains[ctx.product] ?? 'caremetric.ai', size: Math.round(frame.u * 3.4), color: colors.onPrimary, background: colors.primary, width: frame.inner, maxLines: 1 })));
+    return h('div', { width: frame.width, height: frame.height, position: 'relative', backgroundColor: colors.background, fontFamily: ctx.body, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+      band(ctx),
+      h('div', { flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: Math.round(frame.u * 4.5), transform: `scale(${grow.toFixed(3)})` },
+        header(ctx, { size: Math.round(frame.u * 10), width: Math.round(frame.inner * 0.6) }),
+        theme.tagline ? text(ctx, { role: 'tagline', value: theme.tagline, size: Math.round(frame.u * 5.5), bold: true, color: 'text', background: colors.background, width: frame.inner, maxLines: 2, style: { textAlign: 'center' } }) : null,
+        cta(ctx, scene.text, { align: 'center' }),
+        text(ctx, { role: 'domain', value: theme.site, size: Math.round(frame.u * 3.4), color: 'muted', background: colors.background, width: frame.inner, maxLines: 1 })));
   }
   const size = Math.round(frame.u * (scene.kind === 'hook' ? 8.5 : 7));
   if (scene.kind === 'screenshot' && ctx.files.screenshots) {
@@ -104,19 +111,22 @@ export function drawFrame({ ctx, timeline, t, content, captions }) {
     ctx.images.push({ kind: 'screenshot', attested: shot.attested === true });
     const dims = imageSize(shot.bytes) ?? { width: 16, height: 10, type: 'image/png' };
     const boxW = frame.inner;
-    const boxH = Math.round((frame.height - frame.top - safeBottom - bandHeight) * 0.62);
+    const boxH = Math.round((frame.height - frame.top - safeBottom - bandHeight) * 0.55);
     const zoom = 1 + 0.12 * ease(local / length);
     const scale = Math.max(boxW / dims.width, boxH / dims.height) * zoom;
     const panX = -Math.round((dims.width * scale - boxW) * ease(local / length) * 0.6);
     body = h('div', { flexDirection: 'column', gap: Math.round(frame.u * 4) },
       text(ctx, { role: 'headline', value: scene.text, size: Math.round(frame.u * 6), bold: true, color: 'text', background: colors.background, width: frame.inner, maxLines: 3 }),
-      h('div', { width: boxW, height: boxH, overflow: 'hidden', borderRadius: Math.round(frame.u * 2), border: `${Math.max(2, Math.round(frame.u * 0.3))}px solid ${colors.secondary}` },
+      h('div', { width: boxW, height: boxH, overflow: 'hidden', borderRadius: Math.round(theme.cardRadius * frame.width * 0.6), border: `${Math.max(2, Math.round(frame.u * 0.3))}px solid ${colors.hairline}`, backgroundColor: colors.panel },
         img(dataUri(shot.bytes, dims.type), { width: Math.round(dims.width * scale), height: Math.round(dims.height * scale), marginLeft: panX })));
   } else if (scene.kind === 'offer' || scene.kind === 'stat') {
+    // The theme's own callout, as on the offer card.
     const rise = ease(local / 0.5);
-    body = h('div', { flexDirection: 'column', gap: Math.round(frame.u * 3), backgroundColor: colors.primary, borderRadius: Math.round(frame.u * 3), padding: Math.round(frame.u * 6), width: frame.inner, boxSizing: 'border-box', opacity: Number(rise.toFixed(3)), transform: `translateY(${Math.round((1 - rise) * frame.u * 4)}px)` },
-      text(ctx, { role: scene.kind, value: scene.text, size: Math.round(frame.u * 8), bold: true, color: colors.onPrimary, background: colors.primary, width: frame.inner - frame.u * 12, maxLines: 3, lineHeight: 1.05 }),
-      scene.kind === 'offer' ? text(ctx, { role: 'fine print', value: 'Applied automatically when paid service starts. Standard pricing after the introductory year.', size: Math.round(frame.u * 3), color: colors.onPrimary, background: colors.primary, width: frame.inner - frame.u * 12, maxLines: 3, lineHeight: 1.3 }) : null);
+    const fill = brand.callout.fill;
+    const inner = frame.inner - Math.round(frame.u * 12);
+    body = h('div', { flexDirection: 'column', gap: Math.round(frame.u * 3), backgroundColor: fill, border: `${Math.max(2, Math.round(frame.u * 0.3))}px solid ${brand.callout.border}`, borderRadius: Math.round(theme.cardRadius * frame.width), padding: Math.round(frame.u * 6), width: frame.inner, boxSizing: 'border-box', opacity: Number(rise.toFixed(3)), transform: `translateY(${Math.round((1 - rise) * frame.u * 4)}px)` },
+      text(ctx, { role: scene.kind, value: scene.text, size: Math.round(frame.u * 8), bold: true, color: brand.callout.accent, background: fill, width: inner, maxLines: 3, lineHeight: 1.05 }),
+      scene.kind === 'offer' ? text(ctx, { role: 'fine print', value: 'Applied automatically when paid service starts. Standard pricing after the introductory year.', size: Math.round(frame.u * 3), color: brand.callout.text, background: fill, width: inner, maxLines: 3, lineHeight: 1.3 }) : null);
   } else {
     // Kinetic text: each word rises and fades in, 0.12 seconds after the one before.
     const words = String(scene.text).split(/\s+/).filter(Boolean);
@@ -129,19 +139,24 @@ export function drawFrame({ ctx, timeline, t, content, captions }) {
       }));
   }
   const mark = Math.round(frame.u * 5.5);
-  return wrap(ctx, [brandMark(ctx, { size: mark }),
-    h('div', { flexDirection: 'column', justifyContent: 'center', width: frame.inner, height: frame.height - frame.top - safeBottom - bandHeight - mark * 2 }, body)], captions ? scene.text : null, bandHeight, safeBottom);
+  return wrap(ctx, [header(ctx, { size: mark }),
+    h('div', { flexDirection: 'column', justifyContent: 'center', width: frame.inner, height: frame.height - frame.top - safeBottom - bandHeight - mark * 2.6 }, body)], captions ? scene.text : null, bandHeight, safeBottom);
 }
 
+/**
+ * A scene over the theme's canvas, with the captions in a band of the theme's own colors: Emberline's dark panel with its light text,
+ * CareBase's dark heading color with white.
+ */
 function wrap(ctx, body, caption, bandHeight, safeBottom) {
-  const { frame, colors } = ctx;
-  const band = '#111827';
+  const { frame, colors, theme, brand } = ctx;
+  const captionFill = theme.mode === 'dark' ? colors.panel : brand.ink;
+  const captionText = theme.mode === 'dark' ? 'text' : brand.paper;
   const children = [h('div', { width: frame.width, height: frame.height, position: 'absolute', left: 0, top: 0 },
-    padded({ width: frame.width, height: frame.height, left: frame.pad, top: frame.top, bottom: safeBottom, background: colors.background }, [...body, h('div', { height: caption ? bandHeight : 1 })]))];
+    padded({ width: frame.width, height: frame.height, left: frame.pad, top: frame.top, bottom: safeBottom }, [...body, h('div', { height: caption ? bandHeight : 1 })]))];
   if (caption) {
     const size = Math.round(frame.u * 3.6);
-    children.push(h('div', { position: 'absolute', left: frame.pad, bottom: safeBottom, width: frame.inner, height: bandHeight, backgroundColor: band, borderRadius: Math.round(frame.u * 1.5), alignItems: 'center', justifyContent: 'center', paddingLeft: frame.pad / 2, paddingRight: frame.pad / 2, boxSizing: 'border-box' },
-      text(ctx, { role: 'caption', value: caption, size, bold: true, color: '#FFFFFF', background: band, width: frame.inner - frame.pad, maxLines: 2, style: { textAlign: 'center', justifyContent: 'center' } })));
+    children.push(h('div', { position: 'absolute', left: frame.pad, bottom: safeBottom, width: frame.inner, height: bandHeight, backgroundColor: captionFill, borderRadius: Math.round(frame.u * 1.5), alignItems: 'center', justifyContent: 'center', paddingLeft: frame.pad / 2, paddingRight: frame.pad / 2, boxSizing: 'border-box' },
+      text(ctx, { role: 'caption', value: caption, size, bold: true, color: captionText, background: captionFill, width: frame.inner - frame.pad, maxLines: 2, style: { textAlign: 'center', justifyContent: 'center' } })));
   }
   return h('div', { width: frame.width, height: frame.height, position: 'relative', backgroundColor: colors.background, fontFamily: ctx.body, overflow: 'hidden' }, children);
 }
@@ -196,19 +211,22 @@ export function mp4Info(bytes) {
 }
 
 /**
- * Renders one video. `files` are the brand files (logo, screenshots). Returns `{ mp4, durationSeconds, captions (WebVTT), cues, burned,
+ * Renders one video in its product's brand theme. `files` are the owner's brand files (logo, screenshots); the theme's logo and band are
+ * added. Returns `{ mp4, durationSeconds, captions (WebVTT), cues, burned,
  * report }`; the report is every text run any frame drew, for the compliance checks. `duration` overrides the length (the smoke test makes
  * a one-second video).
  */
-export async function renderVideo({ id = 'video', width, height, product, content, kit, files = {}, lengthKey = '15s', duration = null, captions = true, music = true, signal = null, musicDir = musicDirectory }) {
+export async function renderVideo({ id = 'video', width, height, product, content, kit, files: given = {}, lengthKey = '15s', duration = null, captions = true, music = true, signal = null, musicDir = musicDirectory }) {
   const binary = await ffmpegPath();
   if (!binary) throw unavailable();
+  const files = await withThemeFiles(product, given);
   const ctx = drawingContext({ width, height, product, kit, files });
-  const timeline = buildTimeline({ content, lengthKey, duration, screenshot: Boolean(files.screenshots && Object.keys(files.screenshots).length) });
+  const timeline = buildTimeline({ content, lengthKey, duration, screenshot: Boolean(given.screenshots && Object.keys(given.screenshots).length) });
   const frames = Math.max(1, Math.round(timeline.duration * fps));
   const track = music ? await pickMusic(id, musicDir) : null;
   const folder = await mkdtemp(join(tmpdir(), 'creative-'));
   const out = join(folder, 'video.mp4');
+  let peakArea = 0;
   try {
     const args = ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'png', '-i', 'pipe:0',
       ...(track ? ['-i', track] : []), '-map', '0:v',
@@ -231,7 +249,11 @@ export async function renderVideo({ id = 'video', width, height, product, conten
         if (!png) {
           // A fresh context per picture keeps the report to what one picture shows; the runs are kept for the checks.
           const local = drawingContext({ width, height, product, kit, files });
-          png = Buffer.from(await renderElement(drawFrame({ ctx: local, timeline, t, content, captions }), { width, height }));
+          const picture = drawFrame({ ctx: local, timeline, t, content, captions });
+          colorsIn(picture, ctx.painted);
+          // Text coverage is a property of one picture: the report keeps the busiest picture's, not the sum over the video.
+          peakArea = Math.max(peakArea, local.texts.reduce((sum, run) => sum + run.area, 0));
+          png = Buffer.from(await renderElement(picture, { width, height }));
           ctx.texts.push(...local.texts.filter(run => !ctx.texts.some(seen => seen.role === run.role && seen.color === run.color && seen.background === run.background && seen.fontSize === run.fontSize)));
           ctx.images.push(...local.images.filter(image => !ctx.images.some(seen => seen.kind === image.kind)));
           for (const field of local.adjusted) ctx.adjusted.add(field);
@@ -249,7 +271,7 @@ export async function renderVideo({ id = 'video', width, height, product, conten
     }
     const mp4 = await readFile(out);
     const info = mp4Info(mp4);
-    const report = reportOf(ctx, 'video');
+    const report = { ...reportOf(ctx, 'video'), textArea: peakArea };
     return { mp4, durationSeconds: info?.durationSeconds ?? frames / fps, width: info?.width ?? width, height: info?.height ?? height, captions: captionsVtt(timeline),
       cues: timeline.scenes.filter(scene => scene.text).length, burned: captions === true, report, music: Boolean(track) };
   } finally {

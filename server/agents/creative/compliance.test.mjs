@@ -90,25 +90,44 @@ describe('copy compliance', () => {
 
 describe('visual and video compliance', () => {
   const run = (over = {}) => ({ role: 'headline', color: '#111827', background: '#FFFFFF', fontSize: 40, bold: true, area: 10_000, ...over });
+  // What a render reports about its colors: those it painted and those the product's brand allows.
+  const brand = { colors: ['#FFFFFF', '#111827'], allowed: ['#FFFFFF', '#111827', '#2563EB'] };
+  const visual = (over = {}) => checkVisual({ ...brand, ...over });
+
+  it('brand_colors: blocks a color outside the brand, and blocks when the renderer reported none', () => {
+    expect(visual()).toEqual([]);
+    expect(visual({ colors: ['#ffffff', '#2563eb'] })).toEqual([]);
+    const off = visual({ colors: ['#FFFFFF', '#FF00FF'] });
+    expect(rulesOf(off)).toEqual(['block:brand_colors']);
+    expect(off[0].message).toContain('#FF00FF');
+    expect(rulesOf(checkVisual({}))).toEqual(['block:brand_colors']);
+    expect(rulesOf(checkVisual({ colors: ['#FFFFFF'] }))).toEqual(['block:brand_colors']);
+  });
 
   it('contrast: blocks text below WCAG AA and passes text above it', () => {
-    expect(checkVisual({ width: 1080, height: 1080, texts: [run()] })).toEqual([]);
-    expect(rulesOf(checkVisual({ width: 1080, height: 1080, texts: [run({ color: '#BBBBBB' })] }))).toEqual(['block:contrast']);
+    expect(visual({ width: 1080, height: 1080, texts: [run()] })).toEqual([]);
+    expect(rulesOf(visual({ width: 1080, height: 1080, texts: [run({ color: '#BBBBBB' })] }))).toEqual(['block:contrast']);
   });
 
   it('text_heavy: warns when text covers more than a fifth of the picture', () => {
-    expect(rulesOf(checkVisual({ width: 1080, height: 1080, texts: [run({ area: 300_000 })] }))).toEqual(['warn:text_heavy']);
-    expect(checkVisual({ width: 1080, height: 1080, texts: [run({ area: 100_000 })] })).toEqual([]);
+    expect(rulesOf(visual({ width: 1080, height: 1080, texts: [run({ area: 300_000 })] }))).toEqual(['warn:text_heavy']);
+    expect(visual({ width: 1080, height: 1080, texts: [run({ area: 100_000 })] })).toEqual([]);
   });
 
-  it('images: only the logo and attested screenshots', () => {
-    expect(checkVisual({ images: [{ kind: 'logo', attested: true }, { kind: 'screenshot', attested: true }] })).toEqual([]);
-    expect(rulesOf(checkVisual({ images: [{ kind: 'screenshot', attested: false }] }))).toEqual(['block:images']);
-    expect(rulesOf(checkVisual({ images: [{ kind: 'photo' }] }))).toEqual(['block:images']);
+  it('text_heavy: a video is measured by its busiest picture, not the sum of every frame', () => {
+    const frames = [run({ area: 150_000 }), run({ area: 150_000 }), run({ area: 150_000 })];
+    expect(visual({ width: 1080, height: 1920, texts: frames, textArea: 150_000 })).toEqual([]);
+    expect(rulesOf(visual({ width: 1080, height: 1920, texts: frames, textArea: 500_000 }))).toEqual(['warn:text_heavy']);
+  });
+
+  it('images: only the logo, the theme\'s brand imagery and attested screenshots', () => {
+    expect(visual({ images: [{ kind: 'logo', attested: true }, { kind: 'brand', attested: true }, { kind: 'screenshot', attested: true }] })).toEqual([]);
+    expect(rulesOf(visual({ images: [{ kind: 'screenshot', attested: false }] }))).toEqual(['block:images']);
+    expect(rulesOf(visual({ images: [{ kind: 'photo' }] }))).toEqual(['block:images']);
   });
 
   it('brand_deviation: warns when a kit color or font had to be replaced', () => {
-    expect(rulesOf(checkVisual({ adjustments: ['textColor'], fonts: { substituted: true } }))).toEqual(['warn:brand_deviation']);
+    expect(rulesOf(visual({ adjustments: ['textColor'], fonts: { substituted: true } }))).toEqual(['warn:brand_deviation']);
   });
 
   it('captions: required on every video', () => {

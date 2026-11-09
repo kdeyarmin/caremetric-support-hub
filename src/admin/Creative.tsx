@@ -11,7 +11,7 @@ import {
   creativePlatforms, creativeProducts, creativeStatuses, fileUrl, healthWords, hookLabels, placementLabel, platformLabels, productLabels, renderErrorLabel, sizeLabel,
   sourceLabels, statusLabels, videoLengthKeys,
 } from "./creativeProtocol";
-import type { BrandKit, CreativeAsset, CreativeBrief, CreativeLearning, CreativePlatform, CreativeProduct, CreativeStatus, CreativeStudio } from "./creativeProtocol";
+import type { BrandKit, CreativeAsset, CreativeBrief, CreativeLearning, CreativePlatform, CreativeProduct, CreativeStatus, CreativeStudio, CreativeTheme } from "./creativeProtocol";
 import "./admin.css";
 import "./creative.css";
 
@@ -152,7 +152,13 @@ function BriefForm({ client, busy, change }: { client: CreativeClient; busy: str
 const colorFields = [["primaryColor", "Primary"], ["secondaryColor", "Secondary"], ["accentColor", "Accent"], ["textColor", "Text"], ["backgroundColor", "Background"]] as const;
 const lines = (value: string) => value.split("\n").map(item => item.trim()).filter(Boolean);
 
-function BrandKitEditor({ kit, client, busy, change }: { kit: BrandKit; client: CreativeClient; busy: string; change: Change }) {
+const fonts = ["Geist", "Inter"] as const;
+
+/**
+ * One product's brand kit. Every field is optional: a blank one uses the product's brand theme (Emberline for CareMetric Intel, CareBase's
+ * own for CareBase), the same colors, type and logo as the product's app and emails, so creative is on brand before anything is set here.
+ */
+function BrandKitEditor({ kit, theme, client, busy, change }: { kit: BrandKit; theme?: CreativeTheme; client: CreativeClient; busy: string; change: Change }) {
   const [draft, setDraft] = useState(() => ({
     ...Object.fromEntries(colorFields.map(([field]) => [field, kit[field] ?? ""])) as Record<typeof colorFields[number][0], string>,
     headingFont: kit.headingFont ?? "", bodyFont: kit.bodyFont ?? "", voiceNotes: kit.voiceNotes, requiredDisclaimers: kit.requiredDisclaimers.join("\n"),
@@ -160,7 +166,8 @@ function BrandKitEditor({ kit, client, busy, change }: { kit: BrandKit; client: 
   }));
   const [attested, setAttested] = useState(false);
   const [label, setLabel] = useState("");
-  const missing = colorFields.filter(([field]) => ["primaryColor", "backgroundColor", "textColor"].includes(field) && !kit[field]).map(([, name]) => name.toLowerCase());
+  const overridden = colorFields.filter(([field]) => kit[field]).length + (kit.headingFont || kit.bodyFont ? 1 : 0);
+  const themeName = theme ? `the ${theme.name} theme` : "the product's brand theme";
   const save = () => change(`kit:${kit.product}`, () => client.setBrandKit({ product: kit.product, expectedVersion: kit.version, kit: {
     ...Object.fromEntries(colorFields.map(([field]) => [field, draft[field]])), headingFont: draft.headingFont, bodyFont: draft.bodyFont, voiceNotes: draft.voiceNotes,
     requiredDisclaimers: lines(draft.requiredDisclaimers), bannedPhrases: lines(draft.bannedPhrases), videoAvatarId: draft.videoAvatarId.trim(), videoVoiceId: draft.videoVoiceId.trim(),
@@ -174,16 +181,21 @@ function BrandKitEditor({ kit, client, busy, change }: { kit: BrandKit; client: 
   };
   return <section className="panel creative-kit" aria-labelledby={`kit-${kit.product}`}>
     <div className="admin-section-title"><div><h2 id={`kit-${kit.product}`}><Palette size={16} aria-hidden="true" /> {productLabels[kit.product]} brand kit</h2>
-      <p>{missing.length ? `Nothing is rendered for this product until it has a ${missing.join(", ")} color.` : `Version ${kit.version}, saved ${timeLabel(kit.updatedAt)}. The brand name is always CareMetric.`}</p></div></div>
+      <p>{overridden ? `Your colors and fonts replace ${themeName}'s; a blank field uses the theme.` : `Drawn in ${themeName}: the colors, type and logo of ${productLabels[kit.product]}'s app and emails. A field you set here replaces the theme's.`} Version {kit.version}, saved {timeLabel(kit.updatedAt)}. The brand name is always CareMetric.</p></div></div>
+    {theme && <div className="creative-theme" aria-label={`${theme.name} theme colors`}>
+      {colorFields.map(([field, name]) => <span key={field} className="creative-swatch"><span style={{ backgroundColor: kit[field] ?? theme.colors[field] }} aria-hidden="true" />{name}</span>)}
+      <span className="muted">{theme.name} · {theme.mode === "dark" ? "dark" : "light"} · {kit.headingFont || theme.font}{theme.tagline ? ` · “${theme.tagline}”` : ""}</span>
+    </div>}
     <form onSubmit={event => { event.preventDefault(); void save(); }}>
       <div className="creative-colors">
         {colorFields.map(([field, name]) => <label key={field} className="team-field">{name}
-          <span className="creative-color"><input type="color" value={draft[field] || "#ffffff"} aria-label={`${name} color picker`} onChange={event => setDraft(value => ({ ...value, [field]: event.target.value.toUpperCase() }))} />
-            <input value={draft[field]} maxLength={7} placeholder="#RRGGBB" onChange={event => setDraft(value => ({ ...value, [field]: event.target.value }))} /></span></label>)}
+          <span className="creative-color"><input type="color" value={(draft[field] || theme?.colors[field] || "#ffffff").toLowerCase()} aria-label={`${name} color picker`} onChange={event => setDraft(value => ({ ...value, [field]: event.target.value.toUpperCase() }))} />
+            <input value={draft[field]} maxLength={7} placeholder={theme ? `Theme ${theme.colors[field]}` : "#RRGGBB"} aria-label={`${name} color`} onChange={event => setDraft(value => ({ ...value, [field]: event.target.value }))} />
+            {draft[field] && <button type="button" className="button button-secondary button-small" onClick={() => setDraft(value => ({ ...value, [field]: "" }))}>Use theme</button>}</span></label>)}
       </div>
       <div className="creative-form-grid">
-        <label className="team-field">Heading font<select value={draft.headingFont} onChange={event => setDraft(value => ({ ...value, headingFont: event.target.value }))}><option value="">Inter (default)</option><option value="Inter">Inter</option></select></label>
-        <label className="team-field">Body font<select value={draft.bodyFont} onChange={event => setDraft(value => ({ ...value, bodyFont: event.target.value }))}><option value="">Inter (default)</option><option value="Inter">Inter</option></select></label>
+        <label className="team-field">Heading font<select value={draft.headingFont} onChange={event => setDraft(value => ({ ...value, headingFont: event.target.value }))}><option value="">{theme ? `${theme.font} (theme)` : "Theme font"}</option>{fonts.map(font => <option key={font} value={font}>{font}</option>)}</select></label>
+        <label className="team-field">Body font<select value={draft.bodyFont} onChange={event => setDraft(value => ({ ...value, bodyFont: event.target.value }))}><option value="">{theme ? `${theme.font} (theme)` : "Theme font"}</option>{fonts.map(font => <option key={font} value={font}>{font}</option>)}</select></label>
         <label className="team-field creative-wide">Voice notes<textarea rows={3} maxLength={2000} value={draft.voiceNotes} onChange={event => setDraft(value => ({ ...value, voiceNotes: event.target.value }))} placeholder="Warm, practical, plain words. Speak to operators, never down to them." /></label>
         <label className="team-field">Required disclaimers (one per line)<textarea rows={3} value={draft.requiredDisclaimers} onChange={event => setDraft(value => ({ ...value, requiredDisclaimers: event.target.value }))} /></label>
         <label className="team-field">Banned phrases (one per line)<textarea rows={3} value={draft.bannedPhrases} onChange={event => setDraft(value => ({ ...value, bannedPhrases: event.target.value }))} /></label>
@@ -195,7 +207,7 @@ function BrandKitEditor({ kit, client, busy, change }: { kit: BrandKit; client: 
     </form>
     <div className="creative-files">
       <div className="creative-file-row">
-        {kit.logoFileId ? <img className="creative-logo" src={fileUrl(kit.logoFileId)} alt={`${productLabels[kit.product]} logo`} /> : <span className="muted">No logo yet: the product name is drawn as a wordmark.</span>}
+        {kit.logoFileId ? <img className="creative-logo" src={fileUrl(kit.logoFileId)} alt={`${productLabels[kit.product]} logo`} /> : <span className="muted">No logo uploaded: the official {productLabels[kit.product]} logo is used.</span>}
         <label className="button button-secondary button-small creative-upload"><Upload size={14} aria-hidden="true" />{kit.logoFileId ? "Replace logo" : "Add logo"}
           <input type="file" accept="image/png,image/jpeg" disabled={Boolean(busy)} onChange={event => void upload("logo")(event.target.files?.[0])} /></label>
       </div>
@@ -304,7 +316,7 @@ export function Creative({ client = creativeClient }: { client?: CreativeClient 
       <BriefForm client={client} busy={busy} change={change} />
       <section className="panel" aria-labelledby="creative-learnings-title"><div className="admin-section-title"><div><h2 id="creative-learnings-title">What the results say</h2><p>From the weekly report: ad results and website leads joined to each asset by utm_content.</p></div></div><Learnings learnings={shown.learnings} /></section>
       <section className="panel" aria-labelledby="creative-briefs-title"><div className="admin-section-title"><div><h2 id="creative-briefs-title">Recent briefs</h2><p>From the weekly social plan, the Marketing Manager, your own briefs, refreshes of winners and your change requests.</p></div></div><Briefs briefs={shown.briefs} /></section>
-      <div className="creative-kits">{shown.brandKits.map(kit => <BrandKitEditor key={`${kit.product}:${kit.version}`} kit={kit} client={client} busy={busy} change={change} />)}</div>
+      <div className="creative-kits">{shown.brandKits.map(kit => <BrandKitEditor key={`${kit.product}:${kit.version}`} kit={kit} theme={shown.themes?.find(theme => theme.product === kit.product)} client={client} busy={busy} change={change} />)}</div>
     </>}
   </div>;
 }

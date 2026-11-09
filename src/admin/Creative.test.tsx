@@ -27,7 +27,13 @@ const kit = (product: BrandKit["product"]): BrandKit => ({
 const studio = (over: Partial<CreativeStudio> = {}): CreativeStudio => studioSchema.parse({
   assets: [asset(), asset({ id: "44444444-4444-4444-8444-444444444444", variantLabel: "B", hookType: "problem", compliance: { verdict: "warn", reasons: [{ rule: "text_heavy", level: "warn", message: "Text covers about 30% of the picture." }] } }),
     asset({ id: "55555555-5555-4555-8555-555555555555", variantLabel: "A-15s", kind: "video", placement: "meta.video_vertical", width: 1080, height: 1920, durationSeconds: 15, lengthKey: "15s", contentType: "video/mp4", status: "approved", actionStatus: "executed" })],
-  total: 3, statusCounts: { proposed: 2, approved: 1 }, blocked: 4, briefs: [], brandKits: [kit("carebase"), kit("caremetric-intel")], learnings: [], ...over,
+  total: 3, statusCounts: { proposed: 2, approved: 1 }, blocked: 4, briefs: [], brandKits: [kit("carebase"), kit("caremetric-intel")], learnings: [],
+  themes: [
+    { product: "caremetric-intel", name: "Emberline", mode: "dark", tagline: "Set your marketing on FIRE!", font: "Geist", source: "intel",
+      colors: { primaryColor: "#FF7A45", secondaryColor: "#101116", accentColor: "#FF7A45", textColor: "#F4F4F6", backgroundColor: "#07080A" } },
+    { product: "carebase", name: "CareBase", mode: "light", tagline: null, font: "Inter", source: "carebase",
+      colors: { primaryColor: "#2563EB", secondaryColor: "#F8FAFC", accentColor: "#2563EB", textColor: "#0F172A", backgroundColor: "#FFFFFF" } },
+  ], ...over,
 });
 const clientOf = (data = studio()): CreativeClient & { [K in keyof CreativeClient]: ReturnType<typeof vi.fn> } => ({
   studio: vi.fn(async () => data), setBrandKit: vi.fn(async () => kit("carebase")), addBrandFile: vi.fn(async () => kit("carebase")), removeBrandFile: vi.fn(async () => kit("carebase")),
@@ -44,7 +50,10 @@ describe("the Creative screen", () => {
     expect(document.querySelector('img[src="/api/admin/creative/file/22222222-2222-4222-8222-222222222222"]')).toBeTruthy();
     expect(document.querySelector('video[src="/api/admin/creative/file/55555555-5555-4555-8555-555555555555"]')).toBeTruthy();
     expect(document.querySelector('a[href="/api/admin/creative/file/22222222-2222-4222-8222-222222222222?download=1"]')).toBeTruthy();
-    expect(screen.getAllByText(/Nothing is rendered for this product until it has a/)).toHaveLength(2);
+    // A blank brand kit is the product's own theme, so nothing waits on it.
+    expect(screen.getByText(/Drawn in the Emberline theme/)).toBeTruthy();
+    expect(screen.getByText(/Drawn in the CareBase theme/)).toBeTruthy();
+    expect(screen.getAllByText(/the official .* logo is used/)).toHaveLength(2);
   });
 
   it("approves through the AI team's decide route, and asks for changes only with a note", async () => {
@@ -90,7 +99,13 @@ describe("the Creative screen", () => {
     render(<Creative client={client} />);
     await screen.findAllByRole("article");
     const kitPanel = screen.getByRole("region", { name: /CareMetric CareBase brand kit/ });
-    fireEvent.change(within(kitPanel).getAllByPlaceholderText("#RRGGBB")[0], { target: { value: "#0B5394" } });
+    expect(within(kitPanel).getByText(/CareBase · light · Inter/)).toBeTruthy();
+    const primary = within(kitPanel).getByRole("textbox", { name: "Primary color" });
+    expect((primary as HTMLInputElement).placeholder).toBe("Theme #2563EB");
+    fireEvent.change(primary, { target: { value: "#0B5394" } });
+    fireEvent.click(within(kitPanel).getByRole("button", { name: "Use theme" }));
+    expect((primary as HTMLInputElement).value).toBe("");
+    fireEvent.change(primary, { target: { value: "#0B5394" } });
     fireEvent.click(within(kitPanel).getByRole("button", { name: "Save brand kit" }));
     await waitFor(() => expect(client.setBrandKit).toHaveBeenCalledWith(expect.objectContaining({ product: "carebase", expectedVersion: 1, kit: expect.objectContaining({ primaryColor: "#0B5394" }) })));
   });

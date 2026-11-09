@@ -10,6 +10,7 @@ import { reviewed } from '../admin.mjs';
 import { availableFonts } from './brand.mjs';
 import { offerCodes } from './offers.mjs';
 import { platforms } from './specs.mjs';
+import { themeSummaries } from './themes.mjs';
 
 export const creativeAdminActions = new Set(['studio', 'brandKit', 'brandFile', 'removeBrandFile', 'brief']);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -58,7 +59,8 @@ export function creativeAdmin({ pool, kick = null, session = (token, work) => wi
         if (!Number.isInteger(input[key]) || input[key] < 0 || input[key] > (key === 'limit' ? 60 : 10000)) throw new HttpError(400, 'Invalid page.');
         filter[key] = input[key];
       }
-      return query(token, 'hub.get_creative_studio', [JSON.stringify(filter)]);
+      // Each product's brand theme comes with the gallery, so the brand kit editor shows what a blank field uses.
+      return { ...(await query(token, 'hub.get_creative_studio', [JSON.stringify(filter)])), themes: themeSummaries() };
     },
 
     /** Edit one brand kit. Only the fields given change; a stale screen is refused. */

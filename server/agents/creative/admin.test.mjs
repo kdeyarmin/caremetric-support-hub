@@ -20,8 +20,10 @@ function harness() {
 describe('the Creative screen\'s operations', () => {
   it('passes a filtered studio read to the owner operation', async () => {
     const { admin, calls } = harness();
-    await admin.studio(token, { product: 'carebase', status: 'proposed', limit: 24 });
+    const studio = await admin.studio(token, { product: 'carebase', status: 'proposed', limit: 24 });
     expect(calls[0].sql).toContain('hub.get_creative_studio');
+    // Each product's brand theme comes with it, for the brand kit editor.
+    expect(studio.themes.map(theme => theme.name).sort()).toEqual(['CareBase', 'Emberline']);
     expect(JSON.parse(calls[0].args[0])).toEqual({ product: 'carebase', status: 'proposed', limit: 24 });
     await expect(admin.studio(token, { status: 'blocked' })).rejects.toMatchObject({ status: 400 });
     await expect(admin.studio(token, { product: 'advisors' })).rejects.toMatchObject({ status: 400 });

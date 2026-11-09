@@ -15,9 +15,10 @@ import { linkablePages, playbookFor, playbookText } from '../../growth/playbook.
 import { layouts, productNames } from './layouts.mjs';
 import { offerFor } from './offers.mjs';
 import { placementsFor, videoLengths, videoPlacement } from './specs.mjs';
+import { themeFor } from './themes.mjs';
 
-export const conceptPromptVersion = 'creative-concept.1';
-export const variantsPromptVersion = 'creative-variants.1';
+export const conceptPromptVersion = 'creative-concept.2';
+export const variantsPromptVersion = 'creative-variants.2';
 export const hooks = Object.freeze(['problem', 'proof', 'offer', 'curiosity', 'demo']);
 const labels = ['A', 'B', 'C', 'D', 'E'];
 
@@ -38,7 +39,8 @@ const craft = `How good ad creative works here:
 - Hooks: "problem" names a likely problem of the organization as a question; "proof" shows one concrete capability or fact from the fact sheet; "offer" leads with the free trial or the Founders Sale exactly as written; "curiosity" opens a loop the landing page closes, without clickbait; "demo" shows what the product does on screen (pair it with the screenshot layout when a screenshot is available).
 - Layouts: headline (a strong line and a supporting line), stat (one number from the fact sheet, its label and its source), screenshot (a product screenshot in a window frame; only with a screenshot id from the request), quote (a short line attributed to CareMetric or the product), offer (the offer card; only when the request names an offer), checklist (three to five short capabilities), split (landscape placements: headline on a color block, support beside it).
 - Lengths: headline up to 40 characters for Meta and Google (Google allows 30 at most), 70 for LinkedIn and YouTube; primary text 90 to 125 characters for Meta, up to 150 for LinkedIn, 90 for Google; description up to 30 characters. A video's beats are three to eight short lines of up to 60 characters, read on screen in order; the last one leads to the call to action.
-- Write for the brand voice in the request. Learn from the learnings: lean toward what won, away from what lost, and never repeat a recent headline.`;
+- Write for the brand voice in the request, and in the product's brand theme (brandTheme): every asset is drawn in that theme's own colors, type and logo, so the words should suit it. CareMetric Intel's theme is Emberline, and its tagline "Set your marketing on FIRE!" may be used exactly as written; CareBase's theme is calm and plain, with no tagline.
+- Learn from the learnings: lean toward what won, away from what lost, and never repeat a recent headline.`;
 
 export const conceptSystem = `You are the Creative Director at CareMetric, a small company that makes software for healthcare and senior-care organizations. You turn a marketing brief into one ad concept and its final copy. CareMetric's owner approves every asset before it runs; code checks every word either way.
 
@@ -98,7 +100,9 @@ export function briefUserMessage(context, { screenshots = [] } = {}) {
   const brief = context.brief;
   const kit = context.brandKit ?? {};
   const offer = brief.offerCode ? offerFor(brief.offerCode) : null;
+  const theme = themeFor(brief.product);
   return JSON.stringify({
+    brandTheme: theme ? { name: theme.name, mode: theme.mode, tagline: theme.tagline } : null,
     product: productNames[brief.product], goal: brief.goal, audience: brief.audience, angle: brief.angle || null, platforms: brief.platforms, formats: brief.formats,
     videoLengths: brief.formats.includes('video') ? brief.videoLengths : [], offer: offer ? { name: offer.name, terms: offer.terms } : null,
     planText: context.planText ?? null,

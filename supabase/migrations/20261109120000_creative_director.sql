@@ -17,8 +17,9 @@
 -- clock without the owner's session and Storage has no session-less path for it; only an approved asset is ever served publicly, under an
 -- unguessable token, so Meta and LinkedIn can fetch the image the owner approved.
 
--- One row per product. The brand name is always "CareMetric". Colors, fonts, logo and voice start BLANK on purpose: the owner fills them
--- in on the Creative screen, and nothing is rendered until the colors are set.
+-- One row per product. The brand name is always "CareMetric". Colors, fonts, logo and voice start BLANK on purpose: a blank field uses the
+-- product's own brand theme (server/agents/creative/themes.mjs: the colors, type and logo of its app and emails), and a field the owner
+-- sets on the Creative screen replaces the theme's.
 create table private.brand_kits (
   product text primary key check (product in ('carebase', 'caremetric-intel')),
   brand_name text not null default 'CareMetric' check (brand_name = 'CareMetric'),
@@ -183,7 +184,7 @@ alter table private.creative_learnings enable row level security;
 revoke all on private.brand_kits, private.creative_briefs, private.creative_assets, private.creative_files, private.creative_learnings
   from public, anon, authenticated, service_role, hub_app_server;
 
--- The two brand kits start BLANK: only the defaults above.
+-- The two brand kits start BLANK (each product's brand theme): only the defaults above.
 insert into private.brand_kits (product) values ('carebase'), ('caremetric-intel') on conflict (product) do nothing;
 
 -- The Creative Director, paused, in Propose, trusted with nothing. Concepts and final copy use the quality tier, variants the draft tier.
@@ -413,15 +414,6 @@ begin
     return jsonb_build_object('id', v_id, 'created', false, 'status', v_status);
   end if;
   return jsonb_build_object('id', v_id, 'created', true, 'status', v_status);
-end;
-$$;
-
--- Both brand kits (no file bytes), so the renderer claims work only for a product whose kit is complete.
-create function private.creative_brand_kits() returns jsonb
-language plpgsql stable security definer set search_path = '' as $$
-begin
-  perform private.require_hub_app_server();
-  return coalesce((select jsonb_agg(private.creative_brand_kit_json(k) order by k.product) from private.brand_kits k), '[]'::jsonb);
 end;
 $$;
 
@@ -861,7 +853,7 @@ begin
 end;
 $$;
 
-revoke all on function private.creative_plan_inputs(integer), private.creative_brand_kits(), private.creative_brief_create(jsonb), private.creative_brief_context(uuid),
+revoke all on function private.creative_plan_inputs(integer), private.creative_brief_create(jsonb), private.creative_brief_context(uuid),
   private.creative_brief_finish(uuid, text, jsonb), private.creative_drafts_save(uuid, uuid, jsonb), private.creative_render_claim(integer, integer, text[]),
   private.creative_render_jobs(integer), private.creative_render_job(uuid, jsonb), private.creative_render_finish(uuid, text, bytea, text, jsonb, jsonb),
   private.creative_ready(integer, text[]), private.creative_asset_proposed(uuid, uuid), private.creative_brand_file(uuid), private.creative_handoff(uuid, integer),
@@ -869,7 +861,7 @@ revoke all on function private.creative_plan_inputs(integer), private.creative_b
   private.creative_live_assets(text[]), private.creative_performance_save(jsonb), private.creative_learnings_save(jsonb), private.creative_leads(timestamptz, timestamptz),
   private.creative_open_targets(), private.creative_brief_facts()
   from public, anon, authenticated, service_role;
-grant execute on function private.creative_plan_inputs(integer), private.creative_brand_kits(), private.creative_brief_create(jsonb), private.creative_brief_context(uuid),
+grant execute on function private.creative_plan_inputs(integer), private.creative_brief_create(jsonb), private.creative_brief_context(uuid),
   private.creative_brief_finish(uuid, text, jsonb), private.creative_drafts_save(uuid, uuid, jsonb), private.creative_render_claim(integer, integer, text[]),
   private.creative_render_jobs(integer), private.creative_render_job(uuid, jsonb), private.creative_render_finish(uuid, text, bytea, text, jsonb, jsonb),
   private.creative_ready(integer, text[]), private.creative_asset_proposed(uuid, uuid), private.creative_brand_file(uuid), private.creative_handoff(uuid, integer),

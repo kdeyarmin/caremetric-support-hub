@@ -34,7 +34,6 @@ export function sqlAgentStore(pool, { fenced = false, growth = false, social = f
       /** Marketing plan output with no creative yet: CareMetric's own words, product, platform and pillar. */
       creativePlanInputs: (days = 7) => call('private.creative_plan_inputs', [days]),
       /** Both brand kits, no file bytes. */
-      creativeBrandKits: () => call('private.creative_brand_kits'),
       /** Records a brief once per request key: `{ id, created, status }`. */
       creativeBriefCreate: brief => call('private.creative_brief_create', [JSON.stringify(brief)]),
       creativeBriefContext: id => call('private.creative_brief_context', [id]),

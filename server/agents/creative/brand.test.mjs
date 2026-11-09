@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FOUNDERS_COUPON } from '../../founders-sale.mjs';
-import { contrastRatio, fontFor, kitMissing, meetsAA, palette, readableOn } from './brand.mjs';
+import { contrastRatio, fontFor, meetsAA, readableOn } from './brand.mjs';
 import { liveOffers, offerFor } from './offers.mjs';
 
 describe('brand helpers', () => {
@@ -16,17 +16,20 @@ describe('brand helpers', () => {
     expect(meetsAA(4.6, { fontSize: 30, canvasWidth: 1080 })).toBe(true);
   });
 
-  it('keeps a kit color that passes and substitutes one that does not', () => {
-    expect(readableOn('#FFFFFF', '#111827')).toEqual({ color: '#111827', adjusted: false });
-    expect(readableOn('#FFFFFF', '#FFEEDD').adjusted).toBe(true);
-    expect(palette({ primaryColor: '#0B5394', backgroundColor: '#FFFFFF', textColor: '#111827' }).onPrimary).toBe('#FFFFFF');
+  it('keeps a color that passes and otherwise uses the theme\'s own darkest or lightest color', () => {
+    const neutrals = { ink: '#07080A', paper: '#F4F4F6' };
+    expect(readableOn('#FFFFFF', '#111827', neutrals)).toEqual({ color: '#111827', adjusted: false });
+    expect(readableOn('#FFFFFF', '#FFEEDD', neutrals)).toEqual({ color: '#07080A', adjusted: true });
+    expect(readableOn('#101116', '#2B2D35', neutrals)).toEqual({ color: '#F4F4F6', adjusted: true });
+    // A role with no color of its own is not an adjustment of the owner's choice.
+    expect(readableOn('#101116', null, neutrals)).toEqual({ color: '#F4F4F6', adjusted: false });
   });
 
-  it('names what a blank kit lacks and falls back to Inter', () => {
-    expect(kitMissing({})).toEqual(['primaryColor', 'backgroundColor', 'textColor']);
-    expect(kitMissing({ primaryColor: '#000000', backgroundColor: '#FFFFFF', textColor: '#111111' })).toEqual([]);
+  it('uses the theme\'s font when the kit names one the Hub does not have', () => {
     expect(fontFor('Comic Sans')).toEqual({ family: 'Inter', substituted: true });
+    expect(fontFor('Comic Sans', 'Geist')).toEqual({ family: 'Geist', substituted: true });
     expect(fontFor('inter')).toEqual({ family: 'Inter', substituted: false });
+    expect(fontFor('', 'Geist')).toEqual({ family: 'Geist', substituted: false });
   });
 });
 

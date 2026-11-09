@@ -5,6 +5,7 @@
  */
 import { loadFonts } from './brand.mjs';
 import { drawStatic } from './layouts.mjs';
+import { withThemeFiles } from './themes.mjs';
 
 let engine = null;
 const unavailable = () => Object.assign(new Error('The renderer could not be loaded.'), { code: 'renderer_unavailable' });
@@ -33,11 +34,11 @@ export async function renderElement(element, { width, height }) {
 }
 
 /**
- * Renders one static asset. Returns `{ png, width, height, report }`: the PNG at exactly `width` x `height` and the layout's report for
- * the compliance checks.
+ * Renders one static asset in its product's brand theme (themes.mjs: the theme's logo and band are added to `files`). Returns
+ * `{ png, width, height, report }`: the PNG at exactly `width` x `height` and the layout's report for the compliance checks.
  */
 export async function renderStatic({ layout, width, height, product, content, kit, files = {} }) {
-  const { element, report } = drawStatic({ layout, width, height, product, content, kit, files });
+  const { element, report } = drawStatic({ layout, width, height, product, content, kit, files: await withThemeFiles(product, files) });
   const png = await renderElement(element, { width, height });
   return { png: Buffer.from(png), width, height, report };
 }

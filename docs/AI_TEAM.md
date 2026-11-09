@@ -25,7 +25,8 @@ is built so far.
 > The **Social Media Manager** runs the Facebook Page, Instagram, the LinkedIn Page and the Meta and LinkedIn ad accounts for engagement: a weekly post plan,
 > replies to comments and messages, a daily ad review that pauses, refreshes and (only with your approval) re-budgets ads, and a
 > weekly report. See [Social media](SOCIAL_MEDIA.md).
-> The **Creative Director** turns the marketing plans into finished, on-brand, compliant ad images and short videos, proposes each for
+> The **Creative Director** turns the marketing plans into finished, compliant ad images and short videos drawn in each product's own
+> brand theme (Intel's Emberline, CareBase's blue and white: the colors, type and logo of its app and emails), proposes each for
 > your approval (anything that fails a compliance check is blocked and never shown), hands what you approve to the Social Media Manager
 > and learns weekly from results joined by `utm_content`. It is off unless `HUB_CREATIVE_ENABLED=true`. See [Creative Director](CREATIVE_DIRECTOR.md).
 > **Only CareMetric Intel is marketed** while CareBase is in its pilot. You switch products on and off under "Products we market" on
@@ -1354,7 +1355,7 @@ Apply the migrations in order with the usual procedure:
    and the owner resumes the agent.
 
 19. `20261109120000_creative_director.sql`, then its gate `20261109120100_creative_director_contract.sql`, which create the brand kits
-   (blank), briefs, assets, files and learnings, seed the Creative Director (paused, Propose) and its four schedules, add the three
+   (blank: each product's brand theme), briefs, assets, files and learnings, seed the Creative Director (paused, Propose) and its four schedules, add the three
    `creative.*` action kinds and the `creative_asset` target with their ownership check (an asset with a warning can never be
    automatically approved), the trigger that turns a rejection note into a revision brief, the server and owner operations, and the two
    autonomy steps (off), and declare `platform.agents.creative.v1` (it needs the control plane, the hardening, autonomy steps, the Social

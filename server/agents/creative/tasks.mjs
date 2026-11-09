@@ -9,9 +9,9 @@
  *   writes the concept and final copy on the quality tier and two to four more variants on the draft tier, checks every word, and stores
  *   the drafts, one per variant and placement.
  * - `creative.render` (every 10 minutes): proposes rendered assets, collects finished HeyGen renders, and renders drafts (static images and
- *   videos), at most HUB_CREATIVE_DAILY_RENDER_CAP a day (default 40) and only for products whose brand kit has its colors. Each finished
- *   asset is checked in full (compliance.mjs, specs.mjs): a blocked one is never shown to the owner; one that passes is proposed for
- *   approval, with its warnings if it has any.
+ *   videos), at most HUB_CREATIVE_DAILY_RENDER_CAP a day (default 40), each in its product's brand theme (themes.mjs) with the owner's brand
+ *   kit on top. Each finished asset is checked in full (compliance.mjs, specs.mjs), its colors against the brand among the rest: a blocked one
+ *   is never shown to the owner; one that passes is proposed for approval, with its warnings if it has any.
  * - `creative.refresh` (09:30, once a week, after the Social Media Manager's report): reads the ad results, joined to assets by
  *   utm_content, proposes retiring tired creative and queues new variants of the winners.
  * - `creative.report` (09:45, once a week): the scorecard by asset (ad results and website leads by utm_content), the learnings it supports
@@ -23,7 +23,6 @@ import { weekStart, easternDate } from '../accounts/week.mjs';
 import { marketedNow, markets } from '../marketing.mjs';
 import { delivered } from '../notify.mjs';
 import { dueMoment, permanent, plural, recordRun } from '../tasks/shared.mjs';
-import { kitMissing } from './brand.mjs';
 import { badgeText, checkCopy, checkPlatform, checkText, checkVideo, checkVisual, verdictOf } from './compliance.mjs';
 import {
   briefUserMessage, chooseVariants, conceptPromptVersion, conceptSchema, conceptSystem, landingFor, normalizeVariant, planPlacements, variantsPromptVersion,
@@ -36,6 +35,7 @@ import { fatigueReason, joinResults, learningsFrom, refreshPlan, scorecard } fro
 import { renderStatic } from './render.mjs';
 import { placements, videoLengths } from './specs.mjs';
 import { captionsVtt, mp4Info, renderVideo } from './video.mjs';
+import { effectiveKit } from './themes.mjs';
 
 export const creativeProducts = Object.freeze(['carebase', 'caremetric-intel']);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -186,12 +186,6 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     const blocked = rows.filter(row => row.compliance.verdict === 'block').length;
     await store.creativeBriefFinish(briefId, 'done', { variants: chosen.length, drafts: rows.length - blocked, blocked });
     if (rows.length > blocked) await store.enqueue(task.agentKey, 'creative.render', `creative:render:${briefId}`, { priority: 4, sourceKind: 'agent', sourceRef: 'creative.request' });
-    const missing = kitMissing(kit);
-    if (missing.length && rows.length > blocked && notifier) {
-      await notifier.send({ severity: 'warning', subject: `Fill in the ${productNames[brief.product]} brand kit`,
-        body: `The Creative Director has drafts for ${productNames[brief.product]} waiting to be rendered, but the brand kit has no ${missing.map(field => field.replace('Color', ' color').toLowerCase()).join(', ')}. Nothing is rendered until it does: open the Creative screen and fill in the brand kit.`,
-        dedupeKey: `creative:brandkit:${brief.product}:${weekStart(moment)}`, agentKey: task.agentKey, taskId: task.id });
-    }
     return { result: { briefId, variants: chosen.length, drafts: rows.length - blocked, blocked, saved: saved.length, provider } };
   }
 
@@ -234,7 +228,7 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
       } else if (useHeygen(kit)) {
         const seconds = videoLengths[asset.lengthKey]?.target ?? 15;
         const job = await heygen.submit({ script: heygenScript(content, seconds), avatarId: kit.videoAvatarId, voiceId: kit.videoVoiceId, width: asset.width, height: asset.height,
-          background: kit.backgroundColor, title: `${productNames[asset.product]} ${asset.variantLabel}` }, { signal });
+          background: effectiveKit(asset.product, kit).colors.background, title: `${productNames[asset.product]} ${asset.variantLabel}` }, { signal });
         await store.creativeRenderJob(asset.id, { provider: 'heygen', videoId: job.videoId, submittedAt: new Date().toISOString() });
         return 'submitted';
       } else {
@@ -304,8 +298,8 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
       signal?.throwIfAborted();
       if (await propose(task, asset, asset.compliance?.verdict ? asset.compliance : verdictOf([]))) counts.proposed += 1;
     }
-    const kits = await store.creativeBrandKits();
-    const ready = offered.filter(product => !kitMissing(kits.find(kit => kit.product === product)).length);
+    // Every product has its theme, so nothing waits for the owner's brand kit: a blank field uses the theme.
+    const ready = offered;
     let renderedToday = 0;
     while (ready.length && Date.now() - started < renderBudgetMs) {
       signal?.throwIfAborted();

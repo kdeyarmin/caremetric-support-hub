@@ -46,9 +46,15 @@ export const learningSchema = z.object({
   product: z.enum(creativeProducts), platform: z.enum(creativePlatforms), kind: z.enum(["hook", "format", "length", "layout", "color"]), value: z.string(),
   verdict: z.enum(["win", "lose", "neutral"]), samples: z.number().int(), score: z.number(), observedAt: instant,
 });
+const themeColor = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
+/** A product's brand theme (server/agents/creative/themes.mjs): what every blank brand kit field uses. The server adds these to the studio read. */
+export const themeSchema = z.object({
+  product: z.enum(creativeProducts), name: z.string(), mode: z.enum(["dark", "light"]), tagline: z.string().nullable(), font: z.string(), source: z.string(),
+  colors: z.object({ primaryColor: themeColor, secondaryColor: themeColor, accentColor: themeColor, textColor: themeColor, backgroundColor: themeColor }),
+});
 export const studioSchema = z.object({
   assets: z.array(assetSchema), total: z.number().int().min(0), statusCounts: z.record(z.string(), z.number().int()), blocked: z.number().int().min(0),
-  briefs: z.array(briefSchema), brandKits: z.array(brandKitSchema), learnings: z.array(learningSchema),
+  briefs: z.array(briefSchema), brandKits: z.array(brandKitSchema), learnings: z.array(learningSchema), themes: z.array(themeSchema).optional(),
 });
 
 export type CreativeAsset = z.infer<typeof assetSchema>;
@@ -56,6 +62,7 @@ export type CreativeBrief = z.infer<typeof briefSchema>;
 export type BrandKit = z.infer<typeof brandKitSchema>;
 export type CreativeLearning = z.infer<typeof learningSchema>;
 export type CreativeStudio = z.infer<typeof studioSchema>;
+export type CreativeTheme = z.infer<typeof themeSchema>;
 export type CreativeProduct = typeof creativeProducts[number];
 export type CreativePlatform = typeof creativePlatforms[number];
 export type CreativeStatus = typeof creativeStatuses[number];

@@ -13,7 +13,7 @@ declare
   check_def text;
   signature text;
   server_ops constant text[] := array[
-    'private.creative_plan_inputs(integer)', 'private.creative_brand_kits()', 'private.creative_brief_create(jsonb)', 'private.creative_brief_context(uuid)',
+    'private.creative_plan_inputs(integer)', 'private.creative_brief_create(jsonb)', 'private.creative_brief_context(uuid)',
     'private.creative_brief_finish(uuid,text,jsonb)', 'private.creative_drafts_save(uuid,uuid,jsonb)', 'private.creative_render_claim(integer,integer,text[])',
     'private.creative_render_jobs(integer)', 'private.creative_render_job(uuid,jsonb)', 'private.creative_render_finish(uuid,text,bytea,text,jsonb,jsonb)',
     'private.creative_ready(integer,text[])', 'private.creative_asset_proposed(uuid,uuid)', 'private.creative_brand_file(uuid)', 'private.creative_handoff(uuid,integer)',

@@ -21,9 +21,10 @@
  * - fact_sheet: every other fact-sheet rule the Content Marketer and Sales Executive follow: unlisted numbers, named competitors,
  *   testimonials, voice AI, a call or demo as a step, "prove" about CareBase, the fixed vocabulary, contact details, mentions of AI (block).
  *
- * Visual rules (`checkVisual`): contrast (WCAG AA for every text run, block); text_heavy (more than a fifth of the picture is text, warn);
- * images (only the owner's logo and screenshots the owner attested carry no patient, resident or personal information, block); brand
- * colors replaced for contrast and fonts the Hub does not bundle (warn). Video rules (`checkVideo`): captions (block when missing).
+ * Visual rules (`checkVisual`): brand_colors (every color the asset paints is one of the product's brand colors: its theme's, from the app's
+ * own code, or the owner's brand kit; block); contrast (WCAG AA for every text run, block); text_heavy (more than a fifth of the picture is
+ * text, warn); images (only the logo, the theme's own brand imagery and screenshots the owner attested carry no patient, resident or
+ * personal information, block); a color from the owner's kit replaced for contrast and fonts the Hub does not bundle (warn). Video rules (`checkVideo`): captions (block when missing).
  * Platform rules come from specs.mjs (`validateAsset`): wrong size or type, too large, wrong length or copy over a platform's limit block;
  * copy past where the feed cuts it off warns.
  */
@@ -38,7 +39,7 @@ import { textLimits, validateAsset } from './specs.mjs';
 
 export const complianceVersion = 'creative-compliance.1';
 export const rules = Object.freeze(['phi', 'personal_attributes', 'unsubstantiated_claim', 'government_endorsement', 'offer_mismatch', 'brand_name',
-  'banned_phrase', 'required_disclaimer', 'fact_sheet', 'contrast', 'text_heavy', 'images', 'brand_deviation', 'captions', 'platform']);
+  'banned_phrase', 'required_disclaimer', 'fact_sheet', 'brand_colors', 'contrast', 'text_heavy', 'images', 'brand_deviation', 'captions', 'platform']);
 
 const block = (rule, message) => ({ rule, level: 'block', message });
 const warn = (rule, message) => ({ rule, level: 'warn', message });
@@ -207,23 +208,29 @@ export function checkCopy({ product, platform, copy = {}, offerCode = null, bran
 export function checkVisual(report = {}) {
   const findings = [];
   const width = Number(report.width) || 1080;
+  if (Array.isArray(report.colors) && Array.isArray(report.allowed)) {
+    const allowed = new Set(report.allowed.map(color => String(color).toUpperCase()));
+    const off = report.colors.map(color => String(color).toUpperCase()).filter(color => !allowed.has(color));
+    if (off.length) findings.push(block('brand_colors', `It uses ${off.slice(0, 3).join(', ')}${off.length > 3 ? ` and ${off.length - 3} more` : ''}, which ${off.length === 1 ? 'is' : 'are'} not among the product's brand colors.`));
+  } else findings.push(block('brand_colors', 'The renderer did not report its colors, so they could not be checked against the brand.'));
   for (const run of Array.isArray(report.texts) ? report.texts : []) {
     const ratio = contrastRatio(run.color, run.background);
     if (!meetsAA(ratio, { fontSize: run.fontSize, bold: run.bold, canvasWidth: width })) {
       findings.push(block('contrast', `The ${run.role ?? 'text'} has a contrast of ${ratio.toFixed(2)}:1, below WCAG AA.`));
     }
   }
-  const area = (Array.isArray(report.texts) ? report.texts : []).reduce((sum, run) => sum + (Number(run.area) || 0), 0);
+  // A video reports its busiest picture's text (`textArea`); a still, the sum of its runs.
+  const area = Number.isFinite(report.textArea) ? report.textArea : (Array.isArray(report.texts) ? report.texts : []).reduce((sum, run) => sum + (Number(run.area) || 0), 0);
   const share = area / (width * (Number(report.height) || width));
   if (share > 0.2) findings.push(warn('text_heavy', `Text covers about ${Math.round(share * 100)}% of the picture; platforms deliver text-heavy images less.`));
   for (const image of Array.isArray(report.images) ? report.images : []) {
-    if (!['logo', 'screenshot'].includes(image.kind)) findings.push(block('images', 'It uses an image that is not the brand kit\'s logo or one of its screenshots.'));
+    if (!['logo', 'brand', 'screenshot'].includes(image.kind)) findings.push(block('images', 'It uses an image that is not a logo, the theme\'s own brand imagery or one of the brand kit\'s screenshots.'));
     else if (image.kind === 'screenshot' && image.attested !== true) findings.push(block('images', 'It uses a screenshot nobody confirmed is free of patient, resident or personal information.'));
   }
   for (const field of Array.isArray(report.adjustments) ? report.adjustments : []) {
-    findings.push(warn('brand_deviation', `The brand kit's ${field === 'textColor' ? 'text' : 'accent'} color did not have enough contrast on the background, so a darker or lighter one was used.`));
+    findings.push(warn('brand_deviation', `The brand kit's ${field === 'textColor' ? 'text' : field === 'primaryColor' ? 'primary' : 'accent'} color did not have enough contrast where it was used, so the theme's own darkest or lightest color was used there.`));
   }
-  if (report.fonts?.substituted) findings.push(warn('brand_deviation', 'The brand kit names a font the Hub does not have, so Inter was used.'));
+  if (report.fonts?.substituted) findings.push(warn('brand_deviation', 'The brand kit names a font the Hub does not have, so the theme\'s own font was used.'));
   return findings;
 }
 

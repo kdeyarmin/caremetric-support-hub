@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { checkVisual } from './compliance.mjs';
 import { drawStatic, imageSize, layouts } from './layouts.mjs';
 import { pngSize, renderStatic } from './render.mjs';
+import { withThemeFiles } from './themes.mjs';
 import { placements } from './specs.mjs';
 import { buildTimeline, captionsVtt, mp4Info, renderVideo } from './video.mjs';
 import { content, kit, syntheticPng } from './fixtures.mjs';
@@ -38,6 +39,48 @@ describe('static rendering', () => {
     const { report } = drawStatic({ layout: 'headline', width: 1080, height: 1080, product: 'carebase', content, kit: { ...kit, textColor: '#EEEEEE' } });
     expect(report.adjustments).toContain('textColor');
     expect(checkVisual(report).filter(item => item.rule === 'contrast')).toEqual([]);
+  });
+
+  it('draws every layout in the product\'s own brand theme when the kit is blank, with no color from outside it', async () => {
+    for (const product of ['caremetric-intel', 'carebase']) {
+      const themed = await withThemeFiles(product, files);
+      for (const [width, height] of [[1080, 1080], [1080, 1920], [1200, 627], [300, 250]]) {
+        for (const layout of layouts) {
+          const { report } = drawStatic({ layout, width, height, product, content, kit: {}, files: themed });
+          const blocks = checkVisual(report).filter(item => item.level === 'block');
+          expect(blocks, `${product} ${layout} ${width}x${height}`).toEqual([]);
+          expect(report.colors.every(color => report.allowed.includes(color))).toBe(true);
+          expect(report.adjustments).toEqual([]);
+        }
+      }
+    }
+  });
+
+  it('Intel is Emberline: the near-black canvas, the ember accent, the white pill, the reverse logo and the fire band', async () => {
+    const { element, report } = drawStatic({ layout: 'offer', width: 1080, height: 1080, product: 'caremetric-intel', content, kit: {}, files: await withThemeFiles('caremetric-intel', {}) });
+    expect(element.props.style.backgroundColor).toBe('#07080A');
+    expect(report.theme).toBe('emberline');
+    expect(report.colors).toEqual(expect.arrayContaining(['#07080A', '#F4F4F6', '#FF7A45']));
+    expect(report.images).toEqual(expect.arrayContaining([{ kind: 'logo', attested: true }, { kind: 'brand', attested: true }]));
+    expect(report.texts.find(run => run.role === 'cta')).toMatchObject({ color: '#07080A', background: '#F4F4F6' });
+  });
+
+  it('CareBase is white with its logo lockup over the blue rule and a blue button', async () => {
+    const { element, report } = drawStatic({ layout: 'headline', width: 1080, height: 1080, product: 'carebase', content, kit: {}, files: await withThemeFiles('carebase', {}) });
+    expect(element.props.style.backgroundColor).toBe('#FFFFFF');
+    expect(report.theme).toBe('carebase');
+    expect(report.colors).toEqual(expect.arrayContaining(['#FFFFFF', '#2563EB', '#0F172A']));
+    expect(report.colors).not.toContain('#FF7A45');
+    expect(report.images).toEqual([{ kind: 'logo', attested: true }]);
+    expect(report.texts.find(run => run.role === 'cta')).toMatchObject({ color: '#FFFFFF', background: '#2563EB' });
+  });
+
+  it('never puts a theme logo on a ground it was not made for', async () => {
+    // Intel's white lockup on a white kit background: the product name is drawn instead.
+    const { report } = drawStatic({ layout: 'headline', width: 1080, height: 1080, product: 'caremetric-intel', content, kit: { backgroundColor: '#FFFFFF' }, files: await withThemeFiles('caremetric-intel', {}) });
+    expect(report.images.some(image => image.kind === 'logo')).toBe(false);
+    expect(report.texts.find(run => run.role === 'brand')).toMatchObject({ background: '#FFFFFF' });
+    expect(checkVisual(report).filter(item => item.level === 'block')).toEqual([]);
   });
 
   it('reads image sizes from PNG headers', () => {

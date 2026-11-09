@@ -27,7 +27,6 @@ function harness({ autonomy = 'propose', model = null, marketed = null, claimed 
     creativeBriefContext: vi.fn(async () => ({ brief, brandKit: fullKit, parent: null, learnings: [], recentHeadlines: [] })),
     creativeBriefFinish: vi.fn(async () => true),
     creativeDraftsSave: vi.fn(async (_, __, rows) => rows.map((row, index) => ({ id: `d${index}`, status: row.compliance.verdict === 'block' ? 'blocked' : 'draft', created: true }))),
-    creativeBrandKits: vi.fn(async () => [fullKit, { ...fullKit, product: 'carebase' }]),
     creativeRenderClaim: vi.fn(async () => ({ claimed: queue.length ? [queue.shift()] : [], renderedToday: 1, cap: 40 })),
     creativeRenderJobs: vi.fn(async () => []), creativeRenderJob: vi.fn(async () => true),
     creativeRenderFinish: vi.fn(async () => ({ changed: true })),
@@ -129,12 +128,16 @@ describe('the work', () => {
     expect(store.creativeMarkLive).not.toHaveBeenCalled();
   }, 60_000);
 
-  it('claims nothing for a product whose brand kit has no colors', async () => {
-    const { store, handlers, task: make } = harness();
-    store.creativeBrandKits.mockResolvedValue([{ ...fullKit, primaryColor: null }, { ...fullKit, product: 'carebase', primaryColor: null }]);
-    expect((await handlers['creative.render'](make('creative.render'), { now })).result.rendered).toBe(0);
-    expect(store.creativeRenderClaim).not.toHaveBeenCalled();
-  });
+  it('renders a product whose brand kit is blank in its own brand theme', async () => {
+    const blank = { product: 'carebase', logoFileId: null, screenshots: [], requiredDisclaimers: [], bannedPhrases: [], captionsDefault: true };
+    const asset = { id: assetId, product: 'carebase', platform: 'meta', placement: 'meta.feed_square', kind: 'static', layout: 'headline', width: 1080, height: 1080,
+      variantLabel: 'A', hookType: 'proof', ...copyOf('proof', 'headline'), headline: 'Training records in one place',
+      primaryText: 'CareMetric CareBase keeps staff training, resident records and survey documentation in one place.', offerCode: null, brandKit: blank, landingUrl: 'https://cmcarebase.com/?utm_content=x' };
+    const { store, handlers, task: make } = harness({ claimed: [asset] });
+    expect((await handlers['creative.render'](make('creative.render'), { now })).result).toMatchObject({ rendered: 1, blocked: 0 });
+    const ready = store.creativeRenderFinish.mock.calls.find(([id, outcome]) => id === assetId && outcome === 'ready');
+    expect(ready[4].reasons.filter(item => item.level === 'block')).toEqual([]);
+  }, 60_000);
 
   it('proposes retiring tired creative (never retires it) and briefs new variants of winners', async () => {
     const tired = '44444444-4444-4444-8444-444444444444';

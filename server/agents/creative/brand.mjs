@@ -1,9 +1,10 @@
 /**
- * The brand kit as the renderer uses it: whether it is complete enough to render, the colors each layout may use (every text color
- * checked against WCAG AA contrast, with the nearer of near-black and white substituted where the kit's own color fails), and the fonts.
+ * Color and type helpers the renderer and the compliance checks share: WCAG contrast, and the bundled fonts.
  *
- * Fonts are bundled (@fontsource/inter), so rendering needs no network. A kit that names a font the Hub does not bundle renders in Inter
- * and the compliance result says so. To offer another font, add its @fontsource package and list its files in `fontFiles`.
+ * Fonts are bundled (@fontsource), so rendering needs no network: Geist, CareMetric Intel's typeface (Emberline), and Inter, the closest
+ * open match for the system UI stack CareBase's app and emails use. A brand kit that names a font the Hub does not bundle renders in the
+ * theme's own font and the compliance result says so. To offer another font, add its @fontsource package and list its files in `fontFiles`.
+ * The brand colors themselves live in themes.mjs.
  */
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -13,6 +14,8 @@ export const defaultFont = 'Inter';
 const fontFiles = Object.freeze({
   Inter: Object.freeze({ 400: '@fontsource/inter/files/inter-latin-400-normal.woff', 600: '@fontsource/inter/files/inter-latin-600-normal.woff',
     700: '@fontsource/inter/files/inter-latin-700-normal.woff', 800: '@fontsource/inter/files/inter-latin-800-normal.woff' }),
+  Geist: Object.freeze({ 400: '@fontsource/geist-sans/files/geist-sans-latin-400-normal.woff', 600: '@fontsource/geist-sans/files/geist-sans-latin-600-normal.woff',
+    700: '@fontsource/geist-sans/files/geist-sans-latin-700-normal.woff', 800: '@fontsource/geist-sans/files/geist-sans-latin-800-normal.woff' }),
 });
 export const availableFonts = Object.freeze(Object.keys(fontFiles));
 
@@ -25,11 +28,11 @@ export async function loadFonts() {
   return fontCache;
 }
 
-/** The font a kit names, if the Hub bundles it, else Inter; `substituted` is true when the kit asked for another. */
-export function fontFor(name) {
+/** The font a kit names, if the Hub bundles it, else `fallback` (the theme's font); `substituted` is true when the kit asked for another. */
+export function fontFor(name, fallback = defaultFont) {
   const wanted = typeof name === 'string' ? name.trim() : '';
   const found = availableFonts.find(font => font.toLowerCase() === wanted.toLowerCase());
-  return { family: found ?? defaultFont, substituted: Boolean(wanted) && !found };
+  return { family: found ?? (availableFonts.includes(fallback) ? fallback : defaultFont), substituted: Boolean(wanted) && !found };
 }
 
 const hex = /^#[0-9A-Fa-f]{6}$/;
@@ -60,36 +63,11 @@ export function meetsAA(ratio, { fontSize, bold = false, canvasWidth = 1080, dis
   return ratio >= (large ? 3 : 4.5);
 }
 
-const ink = '#111827';
-const paper = '#FFFFFF';
-/** The kit's color for text on `background` if it passes AA for normal text, else whichever of near-black and white contrasts more. */
-export function readableOn(background, preferred) {
-  if (isColor(preferred) && contrastRatio(preferred, background) >= 4.5) return { color: preferred, adjusted: false };
-  const best = contrastRatio(ink, background) >= contrastRatio(paper, background) ? ink : paper;
-  return { color: best, adjusted: isColor(preferred) };
-}
-
-/** What a kit still needs before anything can be rendered: the three colors every layout uses. */
-export function kitMissing(kit) {
-  return ['primaryColor', 'backgroundColor', 'textColor'].filter(field => !isColor(kit?.[field]));
-}
-
 /**
- * The colors a layout uses, from the kit. Headline and body text sit on the background; the CTA and the accent band sit on the primary
- * color. `adjustments` names each kit color that was replaced for contrast.
+ * `preferred` for text on `background` if it passes AA for that text, else whichever of the theme's own darkest (`ink`) and lightest
+ * (`paper`) colors contrasts more. `adjusted` says the preferred color was replaced.
  */
-export function palette(kit) {
-  const background = kit.backgroundColor;
-  const primary = kit.primaryColor;
-  const accent = isColor(kit.accentColor) ? kit.accentColor : primary;
-  const secondary = isColor(kit.secondaryColor) ? kit.secondaryColor : accent;
-  const text = readableOn(background, kit.textColor);
-  const onPrimary = readableOn(primary, contrastRatio(paper, primary) >= contrastRatio(ink, primary) ? paper : ink);
-  const accentText = readableOn(background, accent);
-  const onSecondary = readableOn(secondary, paper);
-  return {
-    background, primary, accent, secondary, text: text.color, onPrimary: onPrimary.color, accentText: accentText.color, onSecondary: onSecondary.color,
-    muted: text.color,
-    adjustments: [...(text.adjusted ? ['textColor'] : []), ...(accentText.adjusted ? ['accentColor'] : [])],
-  };
+export function readableOn(background, preferred, { ink, paper, fontSize = 40, bold = false, canvasWidth = 1080 }) {
+  if (isColor(preferred) && meetsAA(contrastRatio(preferred, background), { fontSize, bold, canvasWidth })) return { color: preferred, adjusted: false };
+  return { color: contrastRatio(ink, background) >= contrastRatio(paper, background) ? ink : paper, adjusted: isColor(preferred) };
 }

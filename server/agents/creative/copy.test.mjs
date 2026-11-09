@@ -14,6 +14,7 @@ describe('creative copy', () => {
       expect(system).toContain('CareMetric fact sheet');
       expect(system).toContain('Never tell anyone to enter or use a code');
       expect(system).toContain('CMS, Medicare, Medicaid');
+      expect(system).toContain('brandTheme');
     }
   });
 
@@ -48,6 +49,9 @@ describe('creative copy', () => {
     const message = JSON.parse(briefUserMessage({ brief: { product: 'carebase', goal: 'g', audience: 'a', angle: '', platforms: ['meta'], formats: ['static'], videoLengths: [], offerCode: 'FOUNDERS50' }, brandKit: { voiceNotes: 'Warm' }, learnings: [] }));
     expect(message.offer.name).toBe('Founders Sale');
     expect(message.pages.every(page => page.id.startsWith('carebase-'))).toBe(true);
+    expect(message.brandTheme).toEqual({ name: 'CareBase', mode: 'light', tagline: null });
+    const intel = JSON.parse(briefUserMessage({ brief: { product: 'caremetric-intel', goal: 'g', audience: 'a', angle: '', platforms: ['meta'], formats: ['static'], videoLengths: [], offerCode: null }, brandKit: {}, learnings: [] }));
+    expect(intel.brandTheme).toEqual({ name: 'Emberline', mode: 'dark', tagline: 'Set your marketing on FIRE!' });
   });
 });
 
