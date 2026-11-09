@@ -84,6 +84,9 @@ describe('copy compliance', () => {
     expect(rulesOf(intel({ primaryText: 'Better than WellSky for referral tracking.' }))).toContain('block:fact_sheet');
     expect(rulesOf(intel({ primaryText: 'Our customers say it changed their week.' }))).toContain('block:fact_sheet');
     expect(rulesOf(intel({ cta: 'Book a demo' }))).toContain('block:fact_sheet');
+    // No personal demos, calls or meetings with anyone (growth/playbook.mjs offersMeeting), but declining one passes.
+    expect(rulesOf(intel({ primaryText: 'Happy to hop on a quick call to walk you through it.' }))).toContain('block:fact_sheet');
+    expect(rulesOf(intel({ primaryText: 'You do not need a demo. Start a free trial.' }))).not.toContain('block:fact_sheet');
     expect(rulesOf(carebase({ primaryText: 'CareBase gives you proof for every survey.' }))).toContain('block:fact_sheet');
   });
 });

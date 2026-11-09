@@ -6,7 +6,8 @@
  * the database's answer into a coded outcome:
  *
  * - `published`: a new public article; `already_published`: the slug already holds this agent's article (a retry, or a second
- *   approval for the same slug), so nothing new is written. Either way the result carries the article's address.
+ *   approval for the same slug), so nothing new is written. Either way the result carries the article's address (`url`): for a
+ *   CareMetric Intel article the address on Intel's website, with the help-center copy in `helpUrl`.
  * - Thrown codes the owner sees: `invalid_article` (the stored article fails the rules now), `approval_required` (it was approved
  *   automatically while article publishing is not handed over: before platform.agents.content-autopublish.v1 always, after it whenever
  *   the database finds the Content Marketer is not trusted with publishing right now), `slug_taken` (another article already uses the
@@ -14,7 +15,7 @@
  *
  * Registered only when the database declares platform.agents.content.v1. It needs no owner session and no model.
  */
-import { articleUrl } from './facts.mjs';
+import { articleHomeUrl, articleUrl, servedElsewhere } from './facts.mjs';
 import { checkArticle } from './validate.mjs';
 
 export const contentFeature = 'platform.agents.content.v1';
@@ -40,7 +41,9 @@ export function contentExecutors({ store, features = null, log = line => console
     if (execution.autoApproved === true && !autopublish) throw failure('approval_required');
     const answer = await store.contentPublish(execution.id, Number.isInteger(execution.execution) ? execution.execution : null);
     if (answer?.outcome === 'published' || answer?.outcome === 'already_published') {
-      return { outcome: answer.outcome, slug: answer.slug, url: articleUrl(answer.slug) };
+      // The address the article lives at (Intel's website for an Intel article) and, when that is elsewhere, its help-center copy.
+      const product = execution.input?.product;
+      return { outcome: answer.outcome, slug: answer.slug, url: articleHomeUrl(product, answer.slug), ...(servedElsewhere(product) ? { helpUrl: articleUrl(answer.slug) } : {}) };
     }
     throw failure(refused.has(answer?.outcome) ? answer.outcome : 'publish_failed');
   }

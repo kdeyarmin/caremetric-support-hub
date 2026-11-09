@@ -21,11 +21,11 @@ import { platformBilling } from './billing.mjs';
 import { selfService } from './self-service.mjs';
 import { agentTeam } from './agents/index.mjs';
 import { guideLibrary } from './agents/concierge/knowledge.mjs';
-import { bookingLink } from './agents/concierge/templates.mjs';
 import { leadAdmin, leadFeature, leadIntake, leadSecrets } from './leads.mjs';
 import { leadRetention } from './lead-retention.mjs';
 import { helpCenter } from './help-center.mjs';
-import { helpCenterOrigin } from './agents/content/facts.mjs';
+import { articleHomeUrl, helpCenterOrigin, servedElsewhere } from './agents/content/facts.mjs';
+import { publicArticleFeed, publicArticlesFeature } from './public-articles.mjs';
 import { growthStore } from './growth/store.mjs';
 import { growthService } from './growth/service.mjs';
 import { growthResearch } from './growth/research.mjs';
@@ -79,14 +79,14 @@ const growth=growthService({store:growthStore(pool),research:growthResearch({api
 const growthFrom=growthSender(process.env,{supportFrom,supportReplyTo});
 for(const warning of growthFrom.warnings)console.warn(warning);
 const growthMail=sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:growthFrom.from,fromName:growthFrom.fromName,replyTo:growthFrom.replyTo});
-// The owner's booking page, which the Concierge's sales acknowledgment may offer. A value it cannot use offers no link, and says so once.
-if(process.env.HUB_BOOKING_URL&&!bookingLink(process.env.HUB_BOOKING_URL)) console.warn('HUB_BOOKING_URL is not an https link of at most 200 characters, so the sales acknowledgment offers no booking link.');
+// CareMetric does no demos, calls or meetings with anyone (owner decision 2026-11-09), so no message offers a booking page any more.
+if(process.env.HUB_BOOKING_URL) console.warn('HUB_BOOKING_URL is set but no longer used: no message offers a booking page. Remove it from the service.');
 // The Account Manager's customer emails: from the support address, replies to it, one-click unsubscribe headers, and the postal address in every footer.
 const customerMail=sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:supportFrom,replyTo:supportReplyTo,category:'hub-lifecycle-email'});
 // The AI team: inert unless HUB_AGENTS_ENABLED is exactly "true", and every agent starts paused until the owner resumes it.
 const team=agentTeam({pool,growth,growthMail,postalAddress:process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS,sms:textSender,email:mailSender,ownerEmail:process.env.HUB_OWNER_EMAIL,publicOrigin,enabled:process.env.HUB_AGENTS_ENABLED==='true',communications:messaging,features,anthropicApiKey:process.env.ANTHROPIC_API_KEY,record:sqlAiUsageRecorder(pool).record,guides:guideLibrary({load:()=>api.rpc('list_published_content',{}),loadProducts:()=>api.rows('products')}),customerTextToAi:process.env.HUB_AGENTS_CUSTOMER_TEXT_TO_AI==='true',
-  bookingUrl:process.env.HUB_BOOKING_URL||null,leadSecrets:leadSecrets(process.env),social:socialConfig(process.env),creative:creativeConfig(process.env),
-  lifecycle:{mail:customerMail,postalAddress:(process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS||'').trim(),bookingUrl:process.env.HUB_BOOKING_URL||null},
+  leadSecrets:leadSecrets(process.env),social:socialConfig(process.env),creative:creativeConfig(process.env),
+  lifecycle:{mail:customerMail,postalAddress:(process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS||'').trim()},
   // Offers from the owner's menu: platform billing (created below) makes them, so the call is deferred until an offer is approved.
   offerBilling:{agentOffer:input=>billing.agentOffer(input)}});
 const announcements=bulkEmail({pool,delegations:capabilities,publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin,postalAddress:(process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS||'').trim(),
@@ -140,10 +140,15 @@ const mediaImport=learningMediaImport({pool,hosts:importHosts,enabled:features.h
     download:(sessionToken,path)=>capabilities.media(sessionToken,path,'download')}});
 const setup=integrationSetup({rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
 // Public articles as HTML for crawlers, read exactly as an anonymous visitor's app reads them, at their canonical address.
-const help=helpCenter({load:()=>api.rpc('list_published_content',{}),origin:helpCenterOrigin});
+// A product's public articles as JSON for its own website: answered only when the database declares content.public-articles.v1.
+const publicArticles=features.has(publicArticlesFeature)?publicArticleFeed({load:async product=>(await pool.query({text:'select private.public_articles($1) as articles',values:[product],query_timeout:5000})).rows[0].articles}):null;
+console.info(`Public article feed: ${publicArticles?'answering':'waiting for the content.public-articles.v1 migration'}.`);
+// Once the feed answers, an article whose product's own website serves it (CareMetric Intel's) keeps its page here but names that
+// address as canonical and leaves the sitemap. Before, the help center stays every article's home.
+const help=helpCenter({load:()=>api.rpc('list_published_content',{}),...(publicArticles?{loadProducts:()=>api.rows('products'),elsewhere:(product,key)=>servedElsewhere(product)?articleHomeUrl(product,key):null}:{}),origin:helpCenterOrigin});
 // The Creative screen and the approved-asset addresses Meta and LinkedIn fetch (platform.agents.creative.v1).
 const creativeWeb=features.has('platform.agents.creative.v1')?{admin:creativeAdmin({pool,kick:()=>team.tick()}),publicFile:token=>team.store.creativePublicFile(token)}:null;
-const server=appServer({auth:smsAuth({pool,provider}),password:passwordAuth({pool}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,growth,leads,leadAdmin:leadDesk,mediaImport,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help,creative:creativeWeb});
+const server=appServer({auth:smsAuth({pool,provider}),password:passwordAuth({pool}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,growth,leads,leadAdmin:leadDesk,mediaImport,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help,publicArticles,creative:creativeWeb});
 let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;

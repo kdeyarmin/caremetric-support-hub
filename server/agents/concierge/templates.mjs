@@ -8,9 +8,8 @@
  * - phi: the message appears to carry patient or resident information, which these channels are not set up
  *   for. It does not quote, confirm or deny anything the customer wrote, and makes no claim about what happens to it.
  * - sales: for a prospect (a website lead or a conversation filed as a sale): thanks, the information they need will come
- *   in this conversation. CareMetric sells without demos or meetings (owner decision
- *   2026-11-08), so it promises no personal follow-up and names no day. When the owner's booking page is configured
- *   (HUB_BOOKING_URL, https only) it also offers "pick a time that suits you" with that link: leave it unset to offer none.
+ *   in this conversation. CareMetric sells without demos, calls or meetings (owner decisions 2026-11-08 and 2026-11-09: no
+ *   personal demos with anyone), so it promises no personal follow-up, names no day and offers no time to meet.
  */
 export const smsLimit = 320;
 
@@ -29,39 +28,16 @@ const bodies = {
     short: 'Thanks for reaching out to CareMetric. We have your request and will reply here with what you need.',
   },
 };
-const booking = { long: 'If you would like to set a time now, pick a time that suits you: ', short: 'Or pick a time that suits you: ' };
-const bookingLimit = 200;
-
 export const templateNames = Object.keys(bodies);
-
-/**
- * The owner's booking page as the sales reply may offer it, or null. Only an absolute https address with a host, no user name or
- * password, no spaces or control characters and at most 200 characters counts; anything else means no link at all.
- */
-export function bookingLink(value) {
-  if (typeof value !== 'string' || value.length === 0 || value.length > bookingLimit || /[\s\u0000-\u001f\u007f]/.test(value)) return null;
-  let url;
-  try { url = new URL(value); } catch { return null; }
-  if (url.protocol !== 'https:' || !url.hostname || url.username || url.password) return null;
-  return url.href.length <= bookingLimit ? url.href : null;
-}
 
 /** The greeting and the text, laid out for the route the message will travel: one line for a text message, a paragraph for the rest. */
 export function wrapReply(text, route) {
   return route === 'sms' ? `${greeting} ${text}` : `${greeting}\n\n${text}`;
 }
 
-/**
- * The whole message for a template, ready to send by the route it will travel (sms, email or chat). `bookingUrl` is used by the sales
- * reply alone, and only when `bookingLink` accepts it; a text message leaves it out if it would not fit one message.
- */
-export function replyBody(template, route, { bookingUrl = null } = {}) {
+/** The whole message for a template, ready to send by the route it will travel (sms, email or chat). It carries no link. */
+export function replyBody(template, route) {
   const words = bodies[template];
   if (!words) throw new TypeError('Unknown reply template.');
-  const link = template === 'sales' ? bookingLink(bookingUrl) : null;
-  if (route === 'sms') {
-    const offered = link ? wrapReply(`${words.short} ${booking.short}${link}`, route) : null;
-    return offered && offered.length <= smsLimit ? offered : wrapReply(words.short, route);
-  }
-  return wrapReply(link ? `${words.long}\n\n${booking.long}${link}` : words.long, route);
+  return wrapReply(route === 'sms' ? words.short : words.long, route);
 }

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { LAYOUT_MARKER, escapeHtml } from '../../email-layout.mjs';
 import {
-  bookingLink, dueTemplates, foundersWords, httpsOrigin, lifecycleEmail, lifecycleInput, lifecyclePreview, lifecycleProducts, lifecycleReadiness, lifecycleTemplates,
+  dueTemplates, foundersWords, httpsOrigin, lifecycleEmail, lifecycleInput, lifecyclePreview, lifecycleProducts, lifecycleReadiness, lifecycleTemplates,
   lifecycleWording, parseLifecycleInput, periodKey, planEmails, renderLifecycleEmail, stillApplies, unsubscribeLabel, wordingHash,
 } from './lifecycle.mjs';
 
@@ -21,8 +21,8 @@ const booking = 'https://cal.example.com/caremetric/setup';
 const postal = 'CareMetric, 100 Example Street, Altoona, PA 16601';
 const unsubscribeUrl = `https://hub.example.test/api/email/unsubscribe/${'b'.repeat(64)}`;
 const products = { carebase: 'CareMetric CareBase', 'caremetric-intel': 'CareMetric Intel' };
-const every = () => Object.entries(products).flatMap(([product, productName]) => lifecycleTemplates.flatMap(template =>
-  [null, booking].map(link => ({ template, product, link, input: lifecycleInput(trial({ product, productName }), template, { bookingUrl: link }) }))));
+const every = () => Object.entries(products).flatMap(([product, productName]) => lifecycleTemplates.map(template =>
+  ({ template, product, link: null, input: lifecycleInput(trial({ product, productName }), template) })));
 
 describe('which email an account is due', () => {
   it('welcomes a trial on days 0 to 2, offers setup help on days 3 to 6 only while no usage was reported, and checks in when 3 to 5 days are left', () => {
@@ -191,17 +191,16 @@ describe('the emails', () => {
     }
   });
 
-  it('includes the owner\'s booking link only when one is set, and never in the testimonial request', () => {
-    for (const { input, template, link } of every()) {
-      const words = lifecycleWording(input);
-      expect(words.includes(booking), `${template}/${link}`).toBe(Boolean(link) && template !== 'testimonial_ask');
-      if (link && template !== 'testimonial_ask') expect(words).toMatch(/Pick a time to go through (?:setup|it) together:\nhttps:\/\/cal\.example\.com\/caremetric\/setup/);
+  it('never offers a time to meet, a call or a demo: no booking button, even on an email proposed with one (owner decision 2026-11-09)', () => {
+    for (const { input, template } of every()) {
+      expect(input.bookingUrl, template).toBeNull();
+      expect(lifecycleWording(input), template).not.toMatch(/pick a time|together|meeting|demo|cal\.example/i);
     }
-    expect(bookingLink(' https://cal.example.com/x ')).toBe('https://cal.example.com/x');
-    for (const bad of ['http://cal.example.com/x', 'javascript:alert(1)', 'https://cal.example.com/a b', '', null, undefined, 42, `https://${'a'.repeat(400)}.com`]) {
-      expect(bookingLink(bad), String(bad)).toBeNull();
-      expect(lifecycleInput(trial(), 'welcome', { bookingUrl: bad }).bookingUrl).toBeNull();
-    }
+    // An email proposed before this change keeps its booking link in its facts, but the link is never shown: its wording no
+    // longer matches the approved hash, so the executor refuses it (wording_changed) instead of sending a meeting offer.
+    const old = { ...lifecycleInput(trial(), 'welcome'), bookingUrl: booking };
+    expect(parseLifecycleInput(old)).toEqual(old);
+    expect(lifecycleWording(old)).not.toContain(booking);
   });
 
   it('is short', () => {
@@ -258,11 +257,11 @@ describe('the sent email', () => {
   });
 
   it('keeps a hash of the approved wording, so different words can never go out under the same approval', () => {
-    const input = lifecycleInput(trial(), 'welcome', { bookingUrl: booking });
+    const input = lifecycleInput(trial(), 'welcome');
     expect(input.textHash).toBe(createHash('sha256').update(lifecycleWording(input)).digest('hex'));
     expect(wordingHash(input)).toBe(input.textHash);
     expect(wordingHash({ ...input, tenantName: 'Someone Else' })).not.toBe(input.textHash);
-    expect(wordingHash({ ...input, bookingUrl: null })).not.toBe(input.textHash);
+    expect(wordingHash({ ...input, helpUrl: 'https://cmcarebase.com/app/help/elsewhere' })).not.toBe(input.textHash);
     // The footer is not part of what the owner approves: a new postal address does not change the hash.
     expect(lifecyclePreview(input, { postalAddress: 'Elsewhere' })).not.toBe(lifecyclePreview(input, { postalAddress: postal }));
   });
@@ -270,7 +269,7 @@ describe('the sent email', () => {
 
 describe('the action\'s facts', () => {
   it('are a fixed whitelist with no address, and survive a round trip', () => {
-    const input = lifecycleInput(trial({ hasEmail: true }), 'trial_checkin', { bookingUrl: booking });
+    const input = lifecycleInput(trial({ hasEmail: true }), 'trial_checkin');
     expect(Object.keys(input).sort()).toEqual(['bookingUrl', 'helpUrl', 'periodKey', 'product', 'productName', 'template', 'tenant', 'tenantName', 'textHash']);
     expect(JSON.stringify(input)).not.toContain('@');
     expect(parseLifecycleInput(input)).toEqual(input);

@@ -31,7 +31,7 @@ describe('the monthly outreach drafts', () => {
     expect(result.listings).toHaveLength(1);
     expect(result.pitches).toHaveLength(1);
     expect(result.dropped).toBe(5);
-    expect(result.reasons).toEqual(['call_offer', 'link_not_allowed', 'subject_length', 'unknown_target', 'unlisted_price']);
+    expect(result.reasons).toEqual(['call_offer', 'link_not_allowed', 'meeting_offer', 'subject_length', 'unknown_target', 'unlisted_price']);
     expect(JSON.stringify(result.reasons)).not.toMatch(/resident|example\.com/);
   });
 

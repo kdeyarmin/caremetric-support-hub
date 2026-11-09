@@ -32,7 +32,7 @@ import { screenIdentifiers } from '../concierge/screen.mjs';
 import { factSheetText, factsRevision } from '../content/facts.mjs';
 import { allowedNumbers, normalizeTerms, textProblems } from '../content/validate.mjs';
 import { productAmounts } from '../../growth/draft.mjs';
-import { playbookFor, playbookText } from '../../growth/playbook.mjs';
+import { offersMeeting, playbookFor, playbookText } from '../../growth/playbook.mjs';
 import { contrastRatio, meetsAA } from './brand.mjs';
 import { liveOffers, offerFor } from './offers.mjs';
 import { textLimits, validateAsset } from './specs.mjs';
@@ -197,6 +197,10 @@ export function checkCopy({ product, platform, copy = {}, offerCode = null, bran
     if (handled.has(code)) continue;
     if (code === 'personal_information') { if (!findings.some(item => item.rule === 'phi')) findings.push(block('phi', 'It appears to carry personal information.')); continue; }
     findings.push(block('fact_sheet', `It ${factSheetCodes[code] ?? code.replaceAll('_', ' ')}.`));
+  }
+  // CareMetric does no personal demos, calls or meetings: the same check the Social Media Manager runs on every post and ad.
+  if (offersMeeting(text) && !findings.some(item => item.rule === 'fact_sheet' && item.message.includes(factSheetCodes.call_offer))) {
+    findings.push(block('fact_sheet', 'It offers a call, a meeting, a demo or a time to talk; CareMetric does none, so the next step is the free trial or the product\'s own page.'));
   }
   return findings;
 }

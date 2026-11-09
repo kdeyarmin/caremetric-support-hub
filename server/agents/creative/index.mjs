@@ -1,5 +1,5 @@
 /**
- * The Creative Director (supabase/migrations/20261109130000_creative_director.sql): turns marketing plans into finished, on-brand,
+ * The Creative Director (supabase/migrations/20261109200000_creative_director.sql): turns marketing plans into finished, on-brand,
  * compliant ad creative, proposes it for the owner's approval, hands approved assets to the Social Media Manager and learns from how they
  * perform. See docs/CREATIVE_DIRECTOR.md.
  *

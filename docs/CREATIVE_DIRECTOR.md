@@ -9,7 +9,7 @@ does posts, publishes or spends: the Social Media Manager publishes, and only wh
 
 | Piece | Where |
 | --- | --- |
-| Data model, server and owner operations | `supabase/migrations/20261109130000_creative_director.sql`, gate `20261109130100_creative_director_contract.sql` (feature `platform.agents.creative.v1`) |
+| Data model, server and owner operations | `supabase/migrations/20261109200000_creative_director.sql`, gate `20261109200100_creative_director_contract.sql` (feature `platform.agents.creative.v1`) |
 | Code | `server/agents/creative/` |
 | Owner screen | **Creative** (`/admin/creative`), also linked from **AI team** |
 | Tests | `npm test -- server/agents/creative src/admin/Creative.test.tsx`; `node server/agents-creative-integration.mjs` with `HUB_TEST_DATABASE_URL` on a local Supabase |
@@ -134,7 +134,7 @@ be approved automatically (the database refuses one).
 | `offer_mismatch` | Only billing's live offers (`offers.mjs`, read from the Founders Sale coupon: FOUNDERS50, 50% for the first 12 months, CareBase and Intel only), with their own percentage and length; no code to type (the Founders Sale applies itself); no invented deadline or scarcity; only this product's listed prices | block |
 | `brand_name` | "CareMetric" is one word, exactly so; CareBase, CareMetric Intel, Intel exactly | block |
 | `banned_phrase`, `required_disclaimer` | The brand kit's lists | block |
-| `fact_sheet` | Every other fact-sheet rule the Content Marketer and Sales Executive follow: unlisted numbers, competitors, testimonials, voice AI, a call or demo as a step, "prove" about CareBase, the fixed vocabulary, contact details, mentions of AI | block |
+| `fact_sheet` | Every other fact-sheet rule the Content Marketer and Sales Executive follow: unlisted numbers, competitors, testimonials, voice AI, a call or demo as a step, "prove" about CareBase, the fixed vocabulary, contact details, mentions of AI, and any offer of a call, meeting, demo or time to talk (`offersMeeting`, the check the Social Media Manager runs on every post and ad: CareMetric does no personal demos) | block |
 | `brand_colors` | Every color the asset paints (text, fills, borders, in every video frame) is one of the product's brand colors: its theme's or one the owner set in the brand kit. A render that does not report its colors is blocked | block |
 | `contrast` | WCAG AA for every text run (4.5:1, or 3:1 for large text, judged at the size a feed shows it). The layouts keep a color only where it passes and otherwise use the theme's own darkest or lightest color | block |
 | `brand_deviation` | A color the owner set in the kit replaced for contrast, or a font the Hub does not bundle (the theme's font is used) | warn |
@@ -216,7 +216,7 @@ served publicly, and only under its token.
 
 ## Switching it on
 
-1. Apply `20261109130000_creative_director.sql`, then its gate `20261109130100_creative_director_contract.sql` (it needs the AI team control
+1. Apply `20261109200000_creative_director.sql`, then its gate `20261109200100_creative_director_contract.sql` (it needs the AI team control
    plane, hardening, autonomy steps, the Social Media Manager, the marketing switches and the lead desk). Restart the Hub so it reads
    `platform.agents.creative.v1`.
 2. Set on the Hub service: `HUB_CREATIVE_ENABLED=true` (with `HUB_AGENTS_ENABLED=true` and `ANTHROPIC_API_KEY`). Optional:
