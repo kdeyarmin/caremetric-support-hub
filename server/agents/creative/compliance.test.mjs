@@ -124,9 +124,24 @@ describe('visual and video compliance', () => {
   });
 
   it('images: only the logo, the theme\'s brand imagery and attested screenshots', () => {
-    expect(visual({ images: [{ kind: 'logo', attested: true }, { kind: 'brand', attested: true }, { kind: 'screenshot', attested: true }] })).toEqual([]);
+    expect(visual({ images: [{ kind: 'logo', attested: true, fits: true }, { kind: 'brand', attested: true }, { kind: 'screenshot', attested: true }] })).toEqual([]);
     expect(rulesOf(visual({ images: [{ kind: 'screenshot', attested: false }] }))).toEqual(['block:images']);
     expect(rulesOf(visual({ images: [{ kind: 'photo' }] }))).toEqual(['block:images']);
+  });
+
+  it('logo_ground: blocks a logo placed where it does not sit cleanly, such as its own white box on a dark background', () => {
+    const blocked = visual({ images: [{ kind: 'logo', attested: true, ground: '#FFFFFF', on: '#07080A', fits: false }] });
+    expect(rulesOf(blocked)).toEqual(['block:logo_ground']);
+    expect(blocked[0].message).toContain('solid #FFFFFF background');
+    // A renderer that does not say the logo fits is not taken at its word.
+    expect(rulesOf(visual({ images: [{ kind: 'logo', attested: true }] }))).toEqual(['block:logo_ground']);
+    expect(visual({ images: [{ kind: 'logo', attested: true, ground: 'transparent', on: '#07080A', fits: true }] })).toEqual([]);
+  });
+
+  it('brand_deviation: says when the owner\'s logo was left out for this background', () => {
+    const warned = visual({ logoMisfit: 'it has a solid #FFFFFF background of its own' });
+    expect(rulesOf(warned)).toEqual(['warn:brand_deviation']);
+    expect(warned[0].message).toContain('transparent background');
   });
 
   it('brand_deviation: warns when a kit color or font had to be replaced', () => {

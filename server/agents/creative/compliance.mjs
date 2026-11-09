@@ -24,7 +24,9 @@
  * Visual rules (`checkVisual`): brand_colors (every color the asset paints is one of the product's brand colors: its theme's, from the app's
  * own code, or the owner's brand kit; block); contrast (WCAG AA for every text run, block); text_heavy (more than a fifth of the picture is
  * text, warn); images (only the logo, the theme's own brand imagery and screenshots the owner attested carry no patient, resident or
- * personal information, block); a color from the owner's kit replaced for contrast and fonts the Hub does not bundle (warn). Video rules (`checkVideo`): captions (block when missing).
+ * personal information, block); logo_ground (a logo placed where it does not sit cleanly, such as its own white box on a colored or dark
+ * background: block); a color from the owner's kit replaced for contrast, an uploaded logo that could not be used on a background, and fonts
+ * the Hub does not bundle (brand_deviation, warn). Video rules (`checkVideo`): captions (block when missing).
  * Platform rules come from specs.mjs (`validateAsset`): wrong size or type, too large, wrong length or copy over a platform's limit block;
  * copy past where the feed cuts it off warns.
  */
@@ -39,7 +41,7 @@ import { textLimits, validateAsset } from './specs.mjs';
 
 export const complianceVersion = 'creative-compliance.1';
 export const rules = Object.freeze(['phi', 'personal_attributes', 'unsubstantiated_claim', 'government_endorsement', 'offer_mismatch', 'brand_name',
-  'banned_phrase', 'required_disclaimer', 'fact_sheet', 'brand_colors', 'contrast', 'text_heavy', 'images', 'brand_deviation', 'captions', 'platform']);
+  'banned_phrase', 'required_disclaimer', 'fact_sheet', 'brand_colors', 'logo_ground', 'contrast', 'text_heavy', 'images', 'brand_deviation', 'captions', 'platform']);
 
 const block = (rule, message) => ({ rule, level: 'block', message });
 const warn = (rule, message) => ({ rule, level: 'warn', message });
@@ -230,6 +232,11 @@ export function checkVisual(report = {}) {
   for (const image of Array.isArray(report.images) ? report.images : []) {
     if (!['logo', 'brand', 'screenshot'].includes(image.kind)) findings.push(block('images', 'It uses an image that is not a logo, the theme\'s own brand imagery or one of the brand kit\'s screenshots.'));
     else if (image.kind === 'screenshot' && image.attested !== true) findings.push(block('images', 'It uses a screenshot nobody confirmed is free of patient, resident or personal information.'));
+    // A logo goes only where it sits cleanly: never its own white box on a colored or dark background (logo.mjs).
+    else if (image.kind === 'logo' && image.fits !== true) findings.push(block('logo_ground', `The logo was placed on ${image.on ?? 'a background'} where it does not sit cleanly${image.ground && image.ground !== 'transparent' ? ` (it has a solid ${image.ground} background of its own)` : ''}.`));
+  }
+  if (typeof report.logoMisfit === 'string' && report.logoMisfit) {
+    findings.push(warn('brand_deviation', `The brand kit's logo was not used here because ${report.logoMisfit}; the official logo or the product name was used instead. A PNG with a transparent background works on every layout.`));
   }
   for (const field of Array.isArray(report.adjustments) ? report.adjustments : []) {
     findings.push(warn('brand_deviation', `The brand kit's ${field === 'textColor' ? 'text' : field === 'primaryColor' ? 'primary' : 'accent'} color did not have enough contrast where it was used, so the theme's own darkest or lightest color was used there.`));

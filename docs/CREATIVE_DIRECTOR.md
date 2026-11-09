@@ -91,16 +91,25 @@ constants the Hub's emails use (`server/email-layout.mjs`), so an ad, a video an
 | Brand color | Ember `#FF7A45` (kickers, rules, accents) | Blue `#2563EB` (kickers, rule, button) |
 | Text | `#F4F4F6` headings, `#B9BCC6` body, `#8D919C` muted | `#0F172A` headings, `#334155` body, `#64748B` muted |
 | Type | Geist | Inter |
-| Logo | The reverse CareMetric Intel lockup (on dark only) | The CareBase lockup over a 3px brand-blue rule (on white only) |
+| Logo | The reverse CareMetric Intel lockup, white on transparent | The CareBase lockup on transparent (the site's header copy) over a 3px brand-blue rule |
 | Button | White pill, near-black text | Blue, white text, 8px corners |
 | Offer card | Emberline's callout (`#2A1913` / `#743B28` / `#FFD0B3`) | CareBase's callout (`#EFF6FF` / `#BFDBFE` / `#1E3A8A`) |
 | Extras | The fire band along the bottom; the tagline "Set your marketing on FIRE!" on the video end card | None |
 
 The logos and the fire band are bundled in `server/agents/creative/brand-assets/` (copied from each product's site; its README says how to
 refresh them). The brand kit on the Creative screen overrides the theme field by field; a blank field uses the theme, so creative is on
-brand before the owner sets anything. A theme logo is never put on a ground it was not made for (the product name is drawn instead), and
-an uploaded logo replaces it. Where a color would fail contrast, the replacement is the theme's own darkest or lightest color, never one
-from outside the brand. The copy prompts carry the theme too (`brandTheme`), so the words suit the look.
+brand before the owner sets anything. Where a color would fail contrast, the replacement is the theme's own darkest or lightest color,
+never one from outside the brand; a button, rule or bar that would vanish into the background (a kit's brand-color canvas) takes the
+theme's own light or dark color the same way. The copy prompts carry the theme too (`brandTheme`), so the words suit the look.
+
+**Logos** (`server/agents/creative/logo.mjs`). A logo is only ever placed on a background it sits on cleanly, so creative never shows a
+logo's own white box on a colored or dark background. Each logo is measured once: a **cut-out** logo (transparent background) goes where
+at least 85% of its drawn pixels reach 3:1 against the background; a logo with a **solid** background of its own (every JPEG, and a PNG
+saved on white) goes only on a background of that same color; a logo whose edges are a picture goes nowhere. The order is the owner's
+uploaded logo, then the product's official logo, then the product name beside a bar of the brand color. When the owner's logo had to give
+way, the asset carries a `brand_deviation` warning saying why, and a render that places a logo anywhere else is blocked (`logo_ground`).
+Intel's white lockup sits on its dark canvas (or brand blue); CareBase's on white and its light panels. Stacked layouts also size their
+words to the height they have, and nothing on a page is squeezed to make room, so a crowded offer never pushes the logo out.
 
 **Videos** (`HUB_CREATIVE_VIDEO_PROVIDER`):
 
@@ -137,7 +146,8 @@ be approved automatically (the database refuses one).
 | `fact_sheet` | Every other fact-sheet rule the Content Marketer and Sales Executive follow: unlisted numbers, competitors, testimonials, voice AI, a call or demo as a step, "prove" about CareBase, the fixed vocabulary, contact details, mentions of AI, and any offer of a call, meeting, demo or time to talk (`offersMeeting`, the check the Social Media Manager runs on every post and ad: CareMetric does no personal demos) | block |
 | `brand_colors` | Every color the asset paints (text, fills, borders, in every video frame) is one of the product's brand colors: its theme's or one the owner set in the brand kit. A render that does not report its colors is blocked | block |
 | `contrast` | WCAG AA for every text run (4.5:1, or 3:1 for large text, judged at the size a feed shows it). The layouts keep a color only where it passes and otherwise use the theme's own darkest or lightest color | block |
-| `brand_deviation` | A color the owner set in the kit replaced for contrast, or a font the Hub does not bundle (the theme's font is used) | warn |
+| `logo_ground` | Every logo is placed where it sits cleanly (see Logos above): never a logo's own white box on a colored or dark background, and never a logo the renderer did not say fits | block |
+| `brand_deviation` | A color the owner set in the kit replaced for contrast, the owner's logo left out on a background it does not fit (and why), or a font the Hub does not bundle (the theme's font is used) | warn |
 | `images` | Only the logo (the owner's or the theme's), the theme's own brand imagery (Intel's fire band) and screenshots the owner attested carry no patient, resident or personal information | block |
 | `captions` | Every video has burned-in captions | block |
 | `text_heavy` | Text covers more than a fifth of the picture (for a video, its busiest frame) | warn |
@@ -188,7 +198,8 @@ Light theme, one column on a phone. Status counts (and how many were blocked), f
 image and video previews, compliance badges, approve / reject / request changes with a note, download, variants side by side; a **New
 brief** form; the learnings; recent briefs; and a **brand kit editor** per product: the theme's colors as swatches, colors (#RRGGBB, each
 blank field showing the theme color it uses, with **Use theme** to go back to it), fonts (Geist or Inter; blank uses the theme's), voice notes, required
-disclaimers, banned phrases, HeyGen avatar and voice ids, burned-in captions, the logo (PNG or JPEG, up to 1 MB) and product screenshots
+disclaimers, banned phrases, HeyGen avatar and voice ids, burned-in captions, the logo (PNG or JPEG, up to 1 MB; the screen asks for a PNG
+with a transparent background, which fits every layout) and product screenshots
 (up to 5 MB each, 12 per product, each with the owner's attestation that it shows no patient, resident or personal information). Every
 change needs a current command session, is audited (`creative.brand_kit`, `creative.brand_file`, `creative.brief`), and is refused from a
 stale screen.

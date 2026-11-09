@@ -83,3 +83,4 @@
   .creative-gallery { grid-template-columns: minmax(0, 1fr); }
   .creative-brief-form form, .creative-kit form, .creative-files, .creative-learnings, .creative-briefs { padding-left: 14px; padding-right: 14px; }
 }
+.creative-hint { margin: 6px 0 0; font-size: 13px; }

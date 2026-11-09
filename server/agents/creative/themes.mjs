@@ -16,6 +16,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { CAREBASE_SITE, emailThemes, INTEL_SITE, INTEL_TAGLINE } from '../../email-layout.mjs';
 import { contrastRatio, isColor, luminance } from './brand.mjs';
+import { analyzeLogo } from './logo.mjs';
 
 const assetPath = name => fileURLToPath(new URL(`./brand-assets/${name}`, import.meta.url));
 const deepFreeze = value => { if (value && typeof value === 'object') for (const child of Object.values(value)) deepFreeze(child); return Object.freeze(value); };
@@ -34,8 +35,8 @@ export const brandThemes = deepFreeze({
     callout: { fill: intel.callouts.info.fill, border: intel.callouts.info.border, accent: intel.callouts.info.accent, text: intel.callouts.info.text },
     button: { fill: 'text', text: 'background', pill: true },
     font: 'Geist', tagline: INTEL_TAGLINE, cardRadius: 22 / 600,
-    // The reverse lockup (the mark over "CareMetric Intel"), white on transparent: for a dark canvas only.
-    logo: { file: assetPath('caremetric-intel-logo-reverse.png'), width: 228, height: 190, needs: 'dark', source: `${INTEL_SITE}/brand/caremetric-logo-reverse.png` },
+    // The reverse lockup (the mark over "CareMetric Intel"), white on transparent.
+    logo: { file: assetPath('caremetric-intel-logo-reverse.png'), width: 228, height: 190, source: `${INTEL_SITE}/brand/caremetric-logo-reverse.png` },
     band: { file: assetPath('emberline-fire.png'), width: 1200, height: 200, source: `${INTEL_SITE}/brand/emberline-fire.png` },
     rule: null,
   },
@@ -47,8 +48,8 @@ export const brandThemes = deepFreeze({
     callout: { fill: carebase.callouts.info.fill, border: carebase.callouts.info.border, accent: carebase.callouts.info.accent, text: carebase.callouts.info.text },
     button: { fill: 'primary', text: 'onPrimary', pill: false },
     font: 'Inter', tagline: null, cardRadius: 12 / 600,
-    // The full-color lockup on an opaque white ground: for a white canvas only.
-    logo: { file: assetPath('carebase-lockup.png'), width: 480, height: 121, needs: 'white', source: `${CAREBASE_SITE}/brand/email-lockup-carebase.png` },
+    // The full-color lockup on a transparent background, as the CareBase site's header shows it (not the email's copy, which is on white).
+    logo: { file: assetPath('carebase-lockup.png'), width: 882, height: 222, source: `${CAREBASE_SITE}/brand/carebase-lockup.png` },
     band: null,
     // The app's header: the logo lockup over a 3px brand-blue rule (at the email's 600px width).
     rule: { role: 'primary', share: 3 / 600 },
@@ -92,15 +93,21 @@ export async function themeAsset(file) {
 }
 
 /**
- * The theme's own files for a render: its logo (unless the owner uploaded one, which the caller passes as `files.logo`) and its band, as
- * `{ themeLogo, band }` beside the files given. A file that cannot be read is left out (the product name is drawn instead of the logo).
+ * The files a render draws with: the owner's logo (`files.logo`, if they uploaded one), the theme's official logo (`themeLogo`) and its
+ * band, beside the files given. Each logo carries `info`, what its background and colors are (logo.mjs), so a layout only places it where
+ * it sits cleanly. A file that cannot be read or measured is left without `info` and is never placed (the product name is drawn instead).
  */
 export async function withThemeFiles(product, files = {}) {
   const theme = themeFor(product);
   if (!theme) return files;
   const out = { ...files };
-  try { if (!files.themeLogo) out.themeLogo = { bytes: await themeAsset(theme.logo.file), type: 'image/png', needs: theme.logo.needs }; } catch { /* the wordmark is drawn */ }
+  try { if (!files.themeLogo) out.themeLogo = { bytes: await themeAsset(theme.logo.file), type: 'image/png' }; } catch { /* the wordmark is drawn */ }
   try { if (theme.band && !files.band) out.band = { bytes: await themeAsset(theme.band.file), type: 'image/png' }; } catch { /* no band */ }
+  for (const key of ['logo', 'themeLogo']) {
+    const logo = out[key];
+    if (!logo?.bytes || logo.info) continue;
+    try { out[key] = { ...logo, info: await analyzeLogo(logo.bytes, logo.type ?? 'image/png') }; } catch { /* left unmeasured, so never placed */ }
+  }
   return out;
 }
 

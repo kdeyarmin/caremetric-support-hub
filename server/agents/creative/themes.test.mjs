@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { emailThemes } from '../../email-layout.mjs';
 import { imageSize } from './layouts.mjs';
+import { logoFits } from './logo.mjs';
 import { brandThemes, effectiveKit, themeAsset, themeColors, themeFor, themeSummaries, withThemeFiles } from './themes.mjs';
 
 describe('brand themes', () => {
@@ -63,12 +64,15 @@ describe('brand themes', () => {
 
   it('adds the theme\'s logo and band to a render\'s files, and keeps the owner\'s own logo', async () => {
     const intel = await withThemeFiles('caremetric-intel', {});
-    expect(intel.themeLogo).toMatchObject({ type: 'image/png', needs: 'dark' });
+    // Each logo comes measured, so a layout only places it where it sits cleanly (logo.mjs).
+    expect(intel.themeLogo).toMatchObject({ type: 'image/png', info: { ground: 'transparent' } });
     expect(imageSize(intel.band.bytes)).toMatchObject({ width: 1200, height: 200 });
     const carebase = await withThemeFiles('carebase', { logo: { bytes: Buffer.from('x'), type: 'image/png' } });
-    expect(carebase.themeLogo).toMatchObject({ needs: 'white' });
+    expect(carebase.themeLogo).toMatchObject({ info: { ground: 'transparent' } });
     expect(carebase.band).toBeUndefined();
     expect(carebase.logo.bytes.toString()).toBe('x');
+    // A logo that cannot be read is never placed.
+    expect(logoFits(carebase.logo.info, '#FFFFFF')).toBe(false);
     expect(await withThemeFiles('hub', { a: 1 })).toEqual({ a: 1 });
   });
 

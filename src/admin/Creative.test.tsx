@@ -54,6 +54,7 @@ describe("the Creative screen", () => {
     expect(screen.getByText(/Drawn in the Emberline theme/)).toBeTruthy();
     expect(screen.getByText(/Drawn in the CareBase theme/)).toBeTruthy();
     expect(screen.getAllByText(/the official .* logo is used/)).toHaveLength(2);
+    expect(screen.getAllByText(/Use a PNG with a transparent background/)).toHaveLength(2);
   });
 
   it("approves through the AI team's decide route, and asks for changes only with a note", async () => {

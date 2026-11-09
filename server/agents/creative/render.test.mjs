@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { checkVisual } from './compliance.mjs';
-import { drawStatic, imageSize, layouts } from './layouts.mjs';
-import { pngSize, renderStatic } from './render.mjs';
+import { drawStatic, frameOf, imageSize, layouts } from './layouts.mjs';
+import { pngSize, renderEngine, renderStatic } from './render.mjs';
 import { withThemeFiles } from './themes.mjs';
 import { placements } from './specs.mjs';
 import { buildTimeline, captionsVtt, mp4Info, renderVideo } from './video.mjs';
-import { content, kit, syntheticPng } from './fixtures.mjs';
+import { content, kit, syntheticPng, whiteBoxJpeg } from './fixtures.mjs';
 
 const files = { screenshots: { s1: { bytes: syntheticPng(), type: 'image/png', attested: true } } };
 
@@ -61,7 +61,7 @@ describe('static rendering', () => {
     expect(element.props.style.backgroundColor).toBe('#07080A');
     expect(report.theme).toBe('emberline');
     expect(report.colors).toEqual(expect.arrayContaining(['#07080A', '#F4F4F6', '#FF7A45']));
-    expect(report.images).toEqual(expect.arrayContaining([{ kind: 'logo', attested: true }, { kind: 'brand', attested: true }]));
+    expect(report.images).toEqual(expect.arrayContaining([{ kind: 'logo', attested: true, ground: 'transparent', on: '#07080A', fits: true }, { kind: 'brand', attested: true }]));
     expect(report.texts.find(run => run.role === 'cta')).toMatchObject({ color: '#07080A', background: '#F4F4F6' });
   });
 
@@ -71,7 +71,7 @@ describe('static rendering', () => {
     expect(report.theme).toBe('carebase');
     expect(report.colors).toEqual(expect.arrayContaining(['#FFFFFF', '#2563EB', '#0F172A']));
     expect(report.colors).not.toContain('#FF7A45');
-    expect(report.images).toEqual([{ kind: 'logo', attested: true }]);
+    expect(report.images).toEqual([{ kind: 'logo', attested: true, ground: 'transparent', on: '#FFFFFF', fits: true }]);
     expect(report.texts.find(run => run.role === 'cta')).toMatchObject({ color: '#FFFFFF', background: '#2563EB' });
   });
 
@@ -82,6 +82,45 @@ describe('static rendering', () => {
     expect(report.texts.find(run => run.role === 'brand')).toMatchObject({ background: '#FFFFFF' });
     expect(checkVisual(report).filter(item => item.level === 'block')).toEqual([]);
   });
+
+  it('never puts an uploaded logo\'s own white box on a dark or colored background', async () => {
+    const upload = { logo: { bytes: whiteBoxJpeg(), type: 'image/jpeg' } };
+    // On Intel's near-black canvas the official logo is used, and the owner is told why.
+    const intel = drawStatic({ layout: 'headline', width: 1080, height: 1080, product: 'caremetric-intel', content, kit: {}, files: await withThemeFiles('caremetric-intel', upload) });
+    expect(intel.report.images.filter(image => image.kind === 'logo')).toEqual([{ kind: 'logo', attested: true, ground: 'transparent', on: '#07080A', fits: true }]);
+    expect(checkVisual(intel.report).find(item => item.rule === 'brand_deviation')?.message).toContain('solid #FFFFFF background');
+    // On CareBase's white canvas it is the owner's own logo.
+    const carebase = drawStatic({ layout: 'headline', width: 1080, height: 1080, product: 'carebase', content, kit: {}, files: await withThemeFiles('carebase', upload) });
+    expect(carebase.report.images.filter(image => image.kind === 'logo')).toEqual([{ kind: 'logo', attested: true, ground: '#FFFFFF', on: '#FFFFFF', fits: true }]);
+    expect(carebase.report.logoMisfit).toBeUndefined();
+    // On a brand-blue canvas neither fits: the product name, and a button and rule that do not vanish into the blue.
+    const blue = drawStatic({ layout: 'headline', width: 1080, height: 1080, product: 'carebase', content, kit: { backgroundColor: '#2563EB' }, files: await withThemeFiles('carebase', upload) });
+    expect(blue.report.images.some(image => image.kind === 'logo')).toBe(false);
+    expect(blue.report.texts.find(run => run.role === 'cta')).toMatchObject({ background: '#FFFFFF', color: '#2563EB' });
+    expect(checkVisual(blue.report).filter(item => item.level === 'block')).toEqual([]);
+  });
+
+  it('fits a crowded layout to the canvas instead of squeezing out the logo or running past the margin', async () => {
+    const { satori, Resvg, fonts } = await renderEngine();
+    const long = { ...content, headline: 'See which counties send your agency the most referrals and where to spend your week' };
+    for (const product of ['caremetric-intel', 'carebase']) {
+      // Without the fire band, so Intel's bottom margin can be read too.
+      const files = { ...(await withThemeFiles(product, {})), band: null };
+      for (const [width, height] of [[1080, 1080], [1080, 1350], [1200, 1200]]) {
+        const { element, report } = drawStatic({ layout: 'offer', width, height, product, content: long, kit: {}, files });
+        expect(report.images.some(image => image.kind === 'logo'), `${product} ${width}x${height} logo`).toBe(true);
+        const picture = new Resvg(await satori(element, { width, height, fonts }), { fitTo: { mode: 'original' } }).render();
+        const px = picture.pixels;
+        const margin = Math.floor(frameOf(width, height).bottom * 0.7);
+        let drawn = 0;
+        for (let y = height - margin; y < height; y += 1) for (let x = 0; x < width; x += 3) {
+          const i = (y * width + x) * 4;
+          if (Math.max(Math.abs(px[i] - px[0]), Math.abs(px[i + 1] - px[1]), Math.abs(px[i + 2] - px[2])) > 30) drawn += 1;
+        }
+        expect(drawn, `${product} ${width}x${height} bottom margin`).toBe(0);
+      }
+    }
+  }, 60_000);
 
   it('reads image sizes from PNG headers', () => {
     expect(imageSize(syntheticPng(320, 200))).toEqual({ width: 320, height: 200, type: 'image/png' });

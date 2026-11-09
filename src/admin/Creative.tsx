@@ -211,6 +211,7 @@ function BrandKitEditor({ kit, theme, client, busy, change }: { kit: BrandKit; t
         <label className="button button-secondary button-small creative-upload"><Upload size={14} aria-hidden="true" />{kit.logoFileId ? "Replace logo" : "Add logo"}
           <input type="file" accept="image/png,image/jpeg" disabled={Boolean(busy)} onChange={event => void upload("logo")(event.target.files?.[0])} /></label>
       </div>
+      <p className="muted creative-hint">Use a PNG with a transparent background. A logo saved on white or a color (every JPEG is) is only placed on a background of exactly that color; anywhere else the official logo or the product name is used, so a logo&apos;s own box never shows.</p>
       <h3>Product screenshots</h3>
       {kit.screenshots.length ? <ul className="creative-shots">{kit.screenshots.map(shot => <li key={shot.id}>
         <img src={fileUrl(shot.id)} alt={shot.label || "Product screenshot"} loading="lazy" /><span>{shot.label || "Screenshot"} · {sizeLabel(shot.bytes)}</span>

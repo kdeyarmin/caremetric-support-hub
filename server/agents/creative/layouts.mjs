@@ -15,7 +15,8 @@
  * platform's own buttons), landscape (LinkedIn, Google, the YouTube thumbnail) and the small 300 x 250 rectangle, which shows only the brand,
  * the headline and the call to action.
  */
-import { contrastRatio, fontFor, luminance, meetsAA, readableOn } from './brand.mjs';
+import { contrastRatio, fontFor, meetsAA, readableOn } from './brand.mjs';
+import { logoFits, misfit } from './logo.mjs';
 import { effectiveKit } from './themes.mjs';
 
 export const layouts = Object.freeze(['headline', 'stat', 'screenshot', 'quote', 'offer', 'checklist', 'split']);
@@ -103,6 +104,7 @@ export function drawingContext({ width, height, product, kit, files = {} }) {
 export const reportOf = (ctx, layout, element = null) => {
   if (element) colorsIn(element, ctx.painted);
   return { width: ctx.frame.width, height: ctx.frame.height, layout, theme: ctx.theme.key, texts: ctx.texts, images: ctx.images, adjustments: [...ctx.adjusted].sort(),
+    ...(ctx.logoMisfit ? { logoMisfit: ctx.logoMisfit } : {}),
     fonts: { substituted: ctx.substituted }, colors: [...ctx.painted].sort(), allowed: [...ctx.brand.allowed].sort() };
 };
 
@@ -129,7 +131,8 @@ export function drawStatic({ layout, width, height, product, content = {}, kit =
 }
 
 // Which kit field a color role comes from, so a replacement of the owner's own color is reported.
-const kitRole = { text: 'text', body: 'text', muted: 'text', accent: 'accent', primary: 'primary', onPrimary: 'primary' };
+// Only the roles a kit field sets directly: body and muted stay the theme's grays even when the kit sets the text color.
+const kitRole = { text: 'text', accent: 'accent', primary: 'primary' };
 const kitField = { text: 'textColor', accent: 'accentColor', primary: 'primaryColor' };
 /**
  * A text run the report records. `color` is a role of the brand (text, body, muted, accent, onPrimary) or a color of the theme; it is kept
@@ -148,27 +151,49 @@ export function text(ctx, { role, value, size, bold = false, color, background, 
 const radius = (ctx, scale = 1) => Math.round(ctx.theme.cardRadius * ctx.frame.width * scale);
 
 /**
- * The product's mark: the owner's uploaded logo, else the theme's official lockup (Intel's reverse lockup on a dark canvas, CareBase's
- * full-color lockup on white), else the product name beside a bar of the brand color. A theme logo is never put on a background it was not
- * made for: Intel's white lockup needs a dark ground and CareBase's lockup carries its own white one.
+ * The product's mark, on `background` (the canvas unless given): the owner's uploaded logo, else the product's official logo, else the
+ * product name beside a bar of the brand color. A logo is only placed where it sits cleanly (logo.mjs `logoFits`): never a logo's own
+ * white box on a colored or dark background. When the owner's logo had to give way, the report says why (a brand deviation).
  */
-const fits = (logo, on) => !logo?.needs || (logo.needs === 'dark' ? luminance(on) < 0.2 : luminance(on) > 0.92);
+const chosenLogo = (ctx, on) => [ctx.files.logo, ctx.files.themeLogo].find(logo => logo?.bytes && logoFits(logo.info, on) && imageSize(logo.bytes)?.height > 0) ?? null;
+const markBase = (ctx, size) => size ?? Math.round(ctx.frame.u * (ctx.frame.shape === 'landscape' ? 8 : 7.5));
+// A tall mark (Intel's) is drawn a little taller than a wide lockup (CareBase's) so the two read at the same weight.
+const logoHeight = (logo, base) => { const dims = imageSize(logo.bytes); return Math.round(base * (dims.height / dims.width > 0.5 ? 1.35 : 1)); };
+
 export function brandMark(ctx, { size = null, background = null } = {}) {
   const { frame, colors, files, product } = ctx;
   const on = background ?? colors.background;
-  const height = size ?? Math.round(frame.u * (frame.shape === 'landscape' ? 8 : 7.5));
-  const logo = files.logo ?? (files.themeLogo && fits(files.themeLogo, on) ? files.themeLogo : null);
-  const dims = logo ? imageSize(logo.bytes) : null;
-  if (logo && dims && dims.height > 0) {
-    ctx.images.push({ kind: 'logo', attested: true });
-    // A tall mark (Intel's) is drawn a little taller than a wide lockup (CareBase's) so the two read at the same weight.
-    const tall = dims.height / dims.width > 0.5 ? 1.35 : 1;
-    const drawn = Math.round(height * tall);
-    return img(dataUri(logo.bytes, dims.type), { width: Math.round((dims.width / dims.height) * drawn), height: drawn });
+  const height = markBase(ctx, size);
+  const placed = chosenLogo(ctx, on);
+  if (files.logo?.bytes && placed !== files.logo) ctx.logoMisfit = misfit(files.logo.info);
+  if (placed) {
+    const dims = imageSize(placed.bytes);
+    ctx.images.push({ kind: 'logo', attested: true, ground: placed.info.ground, on, fits: true });
+    const drawn = logoHeight(placed, height);
+    return img(dataUri(placed.bytes, dims.type), { width: Math.round((dims.width / dims.height) * drawn), height: drawn });
   }
+  // The bar is the brand color where it shows on this background, else the theme's own darkest or lightest color.
+  const bar = visibleOn(ctx, colors.primary, on);
   return h('div', { alignItems: 'center', gap: Math.round(height * 0.35) },
-    h('div', { width: Math.round(height * 0.32), height, backgroundColor: colors.primary, borderRadius: Math.round(height * 0.12) }),
+    h('div', { width: Math.round(height * 0.32), height, backgroundColor: bar, borderRadius: Math.round(height * 0.12) }),
     text(ctx, { role: 'brand', value: productNames[product] ?? 'CareMetric', size: Math.round(height * 0.62), bold: true, color: 'text', background: on, width: frame.inner, maxLines: 1 }));
+}
+
+/**
+ * `color` for a shape that must be seen (a button, a rule, a bar) on `on`, if it shows there (3:1, the WCAG contrast for graphics), else the
+ * theme's own darkest or lightest color: a blue button never disappears into a blue background.
+ */
+export function visibleOn(ctx, color, on) {
+  if (contrastRatio(color, on) >= 3) return color;
+  return contrastRatio(ctx.brand.ink, on) >= contrastRatio(ctx.brand.paper, on) ? ctx.brand.ink : ctx.brand.paper;
+}
+
+/** How tall `header(ctx, options)` is drawn, for a layout's height budget. */
+export function headerHeight(ctx, { size = null, background = null } = {}) {
+  const base = markBase(ctx, size);
+  const logo = chosenLogo(ctx, background ?? ctx.colors.background);
+  const mark = logo ? logoHeight(logo, base) : base;
+  return mark + (ctx.theme.rule ? Math.round(ctx.frame.u * 2) + Math.max(3, Math.round(ctx.frame.width * ctx.theme.rule.share)) : 0);
 }
 
 /** The header: the mark, and under it the theme's rule (CareBase's brand-blue line). */
@@ -177,7 +202,7 @@ export function header(ctx, options = {}) {
   const mark = brandMark(ctx, options);
   if (!theme.rule) return mark;
   return h('div', { flexDirection: 'column', gap: Math.round(frame.u * 2) }, mark,
-    h('div', { width: options.width ?? frame.inner, height: Math.max(3, Math.round(frame.width * theme.rule.share)), backgroundColor: colors[theme.rule.role] }));
+    h('div', { width: options.width ?? frame.inner, height: Math.max(3, Math.round(frame.width * theme.rule.share)), backgroundColor: visibleOn(ctx, colors[theme.rule.role], options.background ?? colors.background) }));
 }
 
 /** Emberline's fire band along the bottom of the canvas (Intel); nothing for a theme without one. */
@@ -190,13 +215,21 @@ export function band(ctx) {
   return h('div', { position: 'absolute', left: 0, bottom: 0, width: frame.width, height }, img(dataUri(files.band.bytes, dims.type), { width: frame.width, height }));
 }
 
+const ctaSize = frame => Math.round(frame.u * (frame.shape === 'landscape' ? 3.6 : 3.4));
+/** How tall the call to action's button is drawn. */
+export const ctaHeight = ctx => { const size = ctaSize(ctx.frame); return Math.ceil(size * 1.15) + Math.round(size * 0.65) * 2; };
+
 /** The call to action in the theme's button: Intel's white pill, CareBase's blue button. */
-export function cta(ctx, label, { align = 'flex-start' } = {}) {
-  const { frame, brand } = ctx;
-  const size = Math.round(frame.u * (frame.shape === 'landscape' ? 3.6 : 3.4));
+export function cta(ctx, label, { align = 'flex-start', background = null } = {}) {
+  const { frame, brand, colors } = ctx;
+  const size = ctaSize(frame);
   const rounded = brand.button.pill ? size * 2 : Math.max(4, Math.round(frame.width * (8 / 600)));
-  return h('div', { alignSelf: align, backgroundColor: brand.button.fill, borderRadius: rounded, paddingTop: Math.round(size * 0.65), paddingBottom: Math.round(size * 0.65), paddingLeft: size * 1.4, paddingRight: size * 1.4, alignItems: 'center' },
-    text(ctx, { role: 'cta', value: label || 'Learn more', size, bold: true, color: brand.button.text, background: brand.button.fill, width: frame.inner * 0.6, maxLines: 1 }));
+  // A button that would vanish into the background (a kit's brand-color canvas) takes the theme's own light or dark fill, with the brand
+  // color for its words where they read.
+  const fill = visibleOn(ctx, brand.button.fill, background ?? colors.background);
+  const words = fill === brand.button.fill ? brand.button.text : colors.primary;
+  return h('div', { alignSelf: align, backgroundColor: fill, borderRadius: rounded, paddingTop: Math.round(size * 0.65), paddingBottom: Math.round(size * 0.65), paddingLeft: size * 1.4, paddingRight: size * 1.4, alignItems: 'center' },
+    text(ctx, { role: 'cta', value: label || 'Learn more', size, bold: true, color: words, background: fill, width: frame.inner * 0.6, maxLines: 1 }));
 }
 
 function footer(ctx, content) {
@@ -217,11 +250,18 @@ export function padded({ width, height, left, right = left, top = left, bottom =
 export const bandLift = ctx => (ctx.files.band && ctx.frame.shape !== 'tall' && ctx.frame.shape !== 'tiny' ? Math.round(ctx.frame.width * 0.06) : 0);
 
 // The page sits over the canvas (and the band, which is drawn first), so it has no fill of its own.
+// Nothing on a page may be squeezed to make room (a logo squeezed to nothing is how a crowded layout loses its mark): a layout sizes its
+// words to the height it has (see the offer card), and anything left over shows as overflow, which the tests look for.
+const rigid = node => (node && typeof node === 'object' && node.props ? { ...node, props: { ...node.props, style: { ...node.props.style, flexShrink: 0 } } } : node);
 function page(ctx, children) {
   const { frame } = ctx;
   return h('div', { position: 'absolute', left: 0, top: 0, width: frame.width, height: frame.height },
-    padded({ width: frame.width, height: frame.height, left: frame.pad, top: frame.top, bottom: frame.bottom + bandLift(ctx) }, children));
+    padded({ width: frame.width, height: frame.height, left: frame.pad, top: frame.top, bottom: frame.bottom + bandLift(ctx) }, children.map(rigid)));
 }
+/** The height a page's body has between its header and its footer, less a gap above and below. */
+const bodyRoom = (ctx, gap) => ctx.frame.height - ctx.frame.top - ctx.frame.bottom - bandLift(ctx) - headerHeight(ctx) - ctaHeight(ctx) - gap * 2;
+/** How tall `value` is drawn at `size` in `width`, at most `maxLines` lines. */
+const textHeight = (value, { size, width, bold = true, lineHeight = 1.15, maxLines = 6 }) => Math.min(maxLines, linesFor(value, size, width, bold)) * size * lineHeight;
 
 const support = content => {
   const value = String(content.description || content.primaryText || '').trim();
@@ -321,14 +361,28 @@ const bodies = {
     const pad = Math.round(frame.u * 5);
     const inner = cardW - pad * 2;
     const fine = 'Applied automatically when paid service starts. Standard pricing after the introductory year.';
+    const gap = Math.round(frame.u * 2);
+    let headlineSize = fit(content.headline, { width: landscape ? frame.inner * 0.33 : frame.inner, size: Math.round(frame.u * (landscape ? 6 : 6.5)), min: Math.round(frame.u * 3.5), maxLines: landscape ? 4 : 3 });
+    let offerSize = fit(o.offerLine, { width: inner, size: Math.round(frame.u * 9), min: Math.round(frame.u * 5), maxLines: 3 });
+    // Stacked (square, portrait, tall), the headline and the card share the room between the header and the call to action: both
+    // step down together until they fit, so nothing is pushed off the canvas.
+    if (!landscape) {
+      const cardHeight = () => pad * 2 + gap * 3 + Math.round(frame.u * 3) * 1.15 + textHeight(o.offerLine, { size: offerSize, width: inner, lineHeight: 1.05, maxLines: 3 })
+        + Math.round(frame.u * 3.6) * 1.15 + textHeight(fine, { size: Math.round(frame.u * 2.5), width: inner, bold: false, lineHeight: 1.3, maxLines: 3 });
+      const room = bodyRoom(ctx, gap) * 0.96;
+      for (let step = 0; step < 12 && textHeight(content.headline, { size: headlineSize, width: frame.inner, maxLines: 3 }) + Math.round(frame.u * 3) + cardHeight() > room; step += 1) {
+        headlineSize = Math.max(Math.round(frame.u * 3.5), Math.floor(headlineSize * 0.93));
+        offerSize = Math.max(Math.round(frame.u * 5), Math.floor(offerSize * 0.93));
+      }
+    }
     // The theme's own callout: Emberline's ember on dark, CareBase's blue on white.
     const fill = brand.callout.fill;
     const card = h('div', { flexDirection: 'column', gap: Math.round(frame.u * 2), backgroundColor: fill, border: `${Math.max(2, Math.round(frame.u * 0.3))}px solid ${brand.callout.border}`, borderRadius: radius(ctx), padding: pad, width: cardW, boxSizing: 'border-box' },
       text(ctx, { role: 'offer name', value: (o.kicker || 'Founders Sale').toUpperCase(), size: Math.round(frame.u * 3), bold: true, color: brand.callout.text, background: fill, width: inner, maxLines: 1, style: { letterSpacing: 1 } }),
-      text(ctx, { role: 'offer', value: o.offerLine, size: fit(o.offerLine, { width: inner, size: Math.round(frame.u * 9), min: Math.round(frame.u * 5), maxLines: 3 }), bold: true, color: brand.callout.accent, background: fill, width: inner, maxLines: 3, lineHeight: 1.05 }),
+      text(ctx, { role: 'offer', value: o.offerLine, size: offerSize, bold: true, color: brand.callout.accent, background: fill, width: inner, maxLines: 3, lineHeight: 1.05 }),
       text(ctx, { role: 'offer product', value: productNames[product] ?? 'CareMetric', size: Math.round(frame.u * 3.6), bold: true, color: brand.callout.text, background: fill, width: inner, maxLines: 1 }),
       text(ctx, { role: 'fine print', value: fine, size: Math.round(frame.u * 2.5), color: brand.callout.text, background: fill, width: inner, maxLines: 3, lineHeight: 1.3 }));
-    const headline = width => text(ctx, { role: 'headline', value: content.headline, size: fit(content.headline, { width, size: Math.round(frame.u * (landscape ? 6 : 6.5)), min: Math.round(frame.u * 3.5), maxLines: landscape ? 4 : 3 }), bold: true, color: 'text', background: colors.background, width, maxLines: landscape ? 4 : 3 });
+    const headline = width => text(ctx, { role: 'headline', value: content.headline, size: headlineSize, bold: true, color: 'text', background: colors.background, width, maxLines: landscape ? 4 : 3 });
     return page(ctx, [
       header(ctx),
       landscape ? h('div', { justifyContent: 'space-between', alignItems: 'center', width: frame.inner }, card, headline(frame.inner * 0.33))

@@ -255,8 +255,9 @@ export async function renderVideo({ id = 'video', width, height, product, conten
           peakArea = Math.max(peakArea, local.texts.reduce((sum, run) => sum + run.area, 0));
           png = Buffer.from(await renderElement(picture, { width, height }));
           ctx.texts.push(...local.texts.filter(run => !ctx.texts.some(seen => seen.role === run.role && seen.color === run.color && seen.background === run.background && seen.fontSize === run.fontSize)));
-          ctx.images.push(...local.images.filter(image => !ctx.images.some(seen => seen.kind === image.kind)));
+          ctx.images.push(...local.images.filter(image => !ctx.images.some(seen => JSON.stringify(seen) === JSON.stringify(image))));
           for (const field of local.adjusted) ctx.adjusted.add(field);
+          if (local.logoMisfit) ctx.logoMisfit = local.logoMisfit;
           drawn.clear();
           drawn.set(key, png);
         }
