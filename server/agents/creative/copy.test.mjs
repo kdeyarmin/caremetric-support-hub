@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { schemaDefects } from '../runtime/schema.mjs';
-import { briefUserMessage, chooseVariants, conceptSchema, conceptSystem, landingFor, normalizeVariant, planPlacements, variantsSchema, variantsSystem } from './copy.mjs';
+import { products as facts } from '../content/facts.mjs';
+import { audienceFor, briefUserMessage, chooseVariants, conceptSchema, conceptSystem, landingFor, normalizeVariant, planPlacements, segmentFor, segments, variantsSchema, variantsSystem } from './copy.mjs';
 import { heygenClient, heygenScript } from './heygen.mjs';
 
 const variant = (hook, layout = 'headline', over = {}) => ({ hook, layout, headline: `A ${hook} headline`, primaryText: 'Primary text.', description: 'Desc', cta: 'Start free trial', altText: 'Alt',
@@ -16,6 +17,22 @@ describe('creative copy', () => {
       expect(system).toContain('CMS, Medicare, Medicaid');
       expect(system).toContain('brandTheme');
     }
+  });
+
+  it('writes for everyone the fact sheet says Intel is for, not only home health and hospice', () => {
+    // Every segment is the fact sheet's own wording, and the prompt names them all.
+    for (const segment of segments['caremetric-intel']) expect(facts.intel.forWhom.toLowerCase()).toContain(segment);
+    for (const segment of ['hospitals', 'nursing homes', 'personal care homes', 'home health agencies', 'hospice agencies']) expect(conceptSystem).toContain(segment);
+    expect(conceptSystem).toContain('not only home health and hospice');
+    expect(audienceFor('caremetric-intel')).toMatch(/home health agencies, hospice agencies, hospitals, nursing homes and personal care homes$/);
+    expect(audienceFor('caremetric-intel', 'nursing homes')).toMatch(/ at nursing homes$/);
+    expect(audienceFor('caremetric-intel', 'not a segment')).toBe(audienceFor('caremetric-intel'));
+    expect(audienceFor('carebase')).toMatch(/Pennsylvania personal care homes and Assisted Living Facilities$/);
+    // Briefs take turns across the segments; a plan item that names one keeps it; CareBase has one audience.
+    expect([0, 1, 2, 3, 4].map(turn => segmentFor('caremetric-intel', 'Plan your week', turn))).toEqual(segments['caremetric-intel']);
+    expect(segmentFor('caremetric-intel', 'Skilled nursing teams', 0)).toBe('nursing homes');
+    expect(segmentFor('caremetric-intel', 'Plan your week', 0, new Set(['home health agencies']))).toBe('hospice agencies');
+    expect(segmentFor('carebase', 'anything', 3)).toBeNull();
   });
 
   it('keeps a layout only when its content exists, and the offer card only with a live offer', () => {

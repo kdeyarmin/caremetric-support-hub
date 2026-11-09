@@ -47,8 +47,15 @@ A brief names the product, a goal, an audience (organizations and roles, never a
 platforms, images and/or videos with their lengths, an optional angle and an optional offer code. The model is given the brief, the
 product's own pages (by id), the brand kit's voice, banned phrases and required disclaimers, the owner's screenshots (by id and label), the
 product's learnings and its recent headlines (not to repeat), and, for a revision, the asset it replaces and the owner's note. Its system
-prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.1` and `creative-variants.1`) carry the fact sheet and the sales
+prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.3` and `creative-variants.3`) carry the fact sheet and the sales
 playbook (the Sales Executive's fact source) and are cached. The answers are closed JSON schemas.
+
+**Audiences come from the fact sheet's "who it is for"**, so creative never narrows a product to part of its market. CareMetric Intel is
+for home health agencies, hospice agencies, hospitals, nursing homes and personal care homes; CareBase for Pennsylvania personal care homes
+and Assisted Living Facilities. The prompts say so, and tell the model to write for the audience the brief names (an "agency" is home
+health or hospice; a hospital, nursing home or personal care home is not) or, for several, for what they share. Briefs from the marketing
+plans aim each Intel brief at one kind of organization, taking turns across all five from week to week; a plan item that already names
+one (a post about hospital liaisons) keeps it. A refresh of a winner, and the owner's own briefs, name their audience.
 
 Hooks: **problem** (a likely problem of the organization, as a question), **proof** (one concrete capability or fact from the fact sheet;
 never the words "prove", "proof" or "evidence" about CareBase), **offer** (the free trial or the Founders Sale exactly as written),

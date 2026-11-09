@@ -103,6 +103,11 @@ function Comparison({ base, assets, onClose }: { base: CreativeAsset; assets: Cr
   </section>;
 }
 
+// Examples only: an Intel brief may aim at any kind of organization Intel is for, or at several.
+const audienceExamples: Record<CreativeProduct, string> = {
+  "caremetric-intel": "Marketing and business development leaders at hospitals, nursing homes and home health agencies",
+  carebase: "Administrators and training leads at Pennsylvania personal care homes",
+};
 const emptyBrief = (product: CreativeProduct): Omit<NewBrief, "requestKey"> => ({ product, goal: "", audience: "", platforms: ["meta"], formats: ["static"], videoLengths: [], angle: "", offerCode: null });
 
 function BriefForm({ client, busy, change }: { client: CreativeClient; busy: string; change: Change }) {
@@ -129,8 +134,8 @@ function BriefForm({ client, busy, change }: { client: CreativeClient; busy: str
           {creativeProducts.map(product => <option key={product} value={product}>{productLabels[product]}</option>)}</select></label>
         <label className="team-field">Offer<select value={brief.offerCode ?? ""} onChange={event => edit({ offerCode: event.target.value || null })}>
           <option value="">No offer</option><option value="FOUNDERS50">Founders Sale (FOUNDERS50)</option></select></label>
-        <label className="team-field creative-wide">Goal<input required maxLength={500} value={brief.goal} onChange={event => edit({ goal: event.target.value })} placeholder="Drive free-trial starts from agency owners" /></label>
-        <label className="team-field creative-wide">Audience<input required maxLength={500} value={brief.audience} onChange={event => edit({ audience: event.target.value })} placeholder="Owners and marketing leaders of home health agencies in Pennsylvania" /></label>
+        <label className="team-field creative-wide">Goal<input required maxLength={500} value={brief.goal} onChange={event => edit({ goal: event.target.value })} placeholder="Drive free-trial starts from marketing leaders" /></label>
+        <label className="team-field creative-wide">Audience<input required maxLength={500} value={brief.audience} onChange={event => edit({ audience: event.target.value })} placeholder={audienceExamples[brief.product]} /></label>
         <label className="team-field creative-wide">Angle (optional)<textarea rows={2} maxLength={500} value={brief.angle} onChange={event => edit({ angle: event.target.value })} /></label>
       </div>
       <fieldset className="creative-choices"><legend>Platforms</legend>

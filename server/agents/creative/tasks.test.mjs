@@ -11,7 +11,7 @@ const briefId = '11111111-1111-4111-8111-111111111111';
 const assetId = '22222222-2222-4222-8222-222222222222';
 const now = () => new Date('2026-11-09T14:30:00Z'); // Monday 09:30 Eastern
 const task = (kind, over = {}) => ({ id: 't1', agentKey: 'creative_director', kind, attempts: 1, sourceKind: 'schedule', requestKey: 'x', agent: { autonomy: 'propose', config: {} }, payload: {}, ...over });
-const brief = { id: briefId, product: 'caremetric-intel', goal: 'Drive trials', audience: 'Agency owners', offerCode: null, platforms: ['meta'], formats: ['static'], videoLengths: [], angle: '', source: 'owner', status: 'open', revisionNote: '' };
+const brief = { id: briefId, product: 'caremetric-intel', goal: 'Drive trials', audience: 'Marketing leaders at hospitals', offerCode: null, platforms: ['meta'], formats: ['static'], videoLengths: [], angle: '', source: 'owner', status: 'open', revisionNote: '' };
 const fullKit = { product: 'caremetric-intel', ...kit, logoFileId: null, screenshots: [], requiredDisclaimers: [], bannedPhrases: [], captionsDefault: true };
 const copyOf = (hook, layout = 'checklist') => ({ hook, layout, headline: 'Territory plans from public data', primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place.',
   description: 'Free trial', cta: 'Start free trial', altText: 'A checklist on a light background',
@@ -85,6 +85,22 @@ describe('the work', () => {
     const observed = harness({ autonomy: 'observe', model: modelOf() });
     expect((await observed.handlers['creative.plan'](observed.task('creative.plan'), { now })).result.skipped).toBe('observe_only');
     expect(observed.store.creativeBriefCreate).not.toHaveBeenCalled();
+  });
+
+  it('aims Intel briefs at every kind of organization Intel is for, keeping the one a plan item names', async () => {
+    const { store, handlers, task: make } = harness({ model: modelOf() });
+    store.creativePlanInputs.mockResolvedValue([
+      { ref: 'social.post:a1', source: 'social.plan', product: 'caremetric-intel', platform: 'facebook', pillar: 'capability', text: 'See your territory.' },
+      { ref: 'social.post:a2', source: 'social.plan', product: 'caremetric-intel', platform: 'linkedin', pillar: 'tip', text: 'Plan the week by county.' },
+      { ref: 'social.post:a3', source: 'social.plan', product: 'caremetric-intel', platform: 'facebook', pillar: 'resource', text: 'How hospital liaisons plan their visits.' },
+      { ref: 'social.post:a4', source: 'social.plan', product: 'caremetric-intel', platform: 'linkedin', pillar: 'offer', text: 'The Founders Sale.' },
+    ]);
+    await handlers['creative.plan'](make('creative.plan'), { now });
+    const audiences = store.creativeBriefCreate.mock.calls.map(([brief]) => brief.audience);
+    expect(audiences).toHaveLength(4);
+    expect(new Set(audiences).size).toBe(4);
+    expect(audiences.filter(audience => /home health|hospice/.test(audience)).length).toBeLessThanOrEqual(2);
+    expect(store.creativeBriefCreate.mock.calls.find(([brief]) => brief.planRef === 'social.post:a3')[0].audience).toMatch(/ at hospitals$/);
   });
 
   it('drafts a brief: concept on the quality tier, variants on the draft tier, every word checked, a failing variant blocked', async () => {

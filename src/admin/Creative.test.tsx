@@ -90,7 +90,7 @@ describe("the Creative screen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start this brief" }));
     expect(await screen.findByText(/never by a health condition/)).toBeTruthy();
     expect(client.createBrief).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByLabelText("Audience"), { target: { value: "Owners of home health agencies" } });
+    fireEvent.change(screen.getByLabelText("Audience"), { target: { value: "Marketing leaders at hospitals and nursing homes" } });
     fireEvent.click(screen.getByRole("button", { name: "Start this brief" }));
     await waitFor(() => expect(client.createBrief).toHaveBeenCalledWith(expect.objectContaining({ product: "caremetric-intel", goal: "Drive free-trial starts", platforms: ["meta"], formats: ["static"], videoLengths: [] })));
   });

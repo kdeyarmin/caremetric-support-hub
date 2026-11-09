@@ -17,8 +17,8 @@ import { offerFor } from './offers.mjs';
 import { placementsFor, videoLengths, videoPlacement } from './specs.mjs';
 import { themeFor } from './themes.mjs';
 
-export const conceptPromptVersion = 'creative-concept.2';
-export const variantsPromptVersion = 'creative-variants.2';
+export const conceptPromptVersion = 'creative-concept.3';
+export const variantsPromptVersion = 'creative-variants.3';
 export const hooks = Object.freeze(['problem', 'proof', 'offer', 'curiosity', 'demo']);
 const labels = ['A', 'B', 'C', 'D', 'E'];
 
@@ -34,6 +34,45 @@ const rules = `Rules for every word you write:
 - Vocabulary: "Assisted Living Facility" or "ALF", never "Assisted Living Residence" or "ALR"; the state's inspectors are "surveyors", never "auditors"; never "prove", "proof" or "evidence" about CareBase (a "proof" hook shows a concrete capability or fact instead).
 - Plain text only: no markdown, no emoji, no hashtags, no links in the copy.`;
 
+/**
+ * Who each product's ads are for, from the fact sheet's "who it is for" (content/facts.mjs), so creative never narrows a product to part of
+ * its market: CareMetric Intel serves home health and hospice agencies, hospitals, nursing homes and personal care homes. A brief may aim
+ * at one of them (`segments`) or speak to all; copy.test.mjs holds every segment to the fact sheet's wording.
+ */
+export const segments = Object.freeze({
+  'caremetric-intel': Object.freeze(['home health agencies', 'hospice agencies', 'hospitals', 'nursing homes', 'personal care homes']),
+  carebase: Object.freeze(['Pennsylvania personal care homes and Assisted Living Facilities']),
+});
+const roles = {
+  'caremetric-intel': 'Owners, administrators and marketing, business development or community liaison leaders',
+  carebase: 'Owners, administrators and training or compliance leads',
+};
+const listed = items => (items.length > 1 ? `${items.slice(0, -1).join(', ')} and ${items.at(-1)}` : items[0]);
+/** A brief's audience: the product's roles at one segment, or at every kind of organization the product is for. */
+export function audienceFor(product, segment = null) {
+  const list = segments[product] ?? [];
+  return `${roles[product] ?? 'Owners and leaders'} at ${segment && list.includes(segment) ? segment : listed(list)}`;
+}
+// Words that show a plan item is already about one of Intel's segments.
+const segmentWords = [[/\bhome health\b/i, 'home health agencies'], [/\bhospices?\b/i, 'hospice agencies'], [/\bhospitals?\b/i, 'hospitals'],
+  [/\b(nursing homes?|skilled nursing|SNFs?)\b/i, 'nursing homes'], [/\bpersonal care homes?\b/i, 'personal care homes']];
+/**
+ * The Intel segment a planned brief aims at: the one its plan text names, else the next in turn (`turn`, a running count) that this plan
+ * has not used yet (`used`), so the plans reach every kind of organization Intel is for. Products with one audience have no segment.
+ */
+/** The Intel segment `text` already names, if any. */
+export const namedSegment = (product, text = '') => ((segments[product] ?? []).length > 1 ? segmentWords.find(([pattern]) => pattern.test(text))?.[1] ?? null : null);
+export function segmentFor(product, text = '', turn = 0, used = new Set()) {
+  const list = segments[product] ?? [];
+  if (list.length < 2) return null;
+  const named = namedSegment(product, text);
+  if (named) return named;
+  const start = ((turn % list.length) + list.length) % list.length;
+  const order = [...list.slice(start), ...list.slice(0, start)];
+  return order.find(segment => !used.has(segment)) ?? order[0];
+}
+const lowerFirst = value => value.charAt(0).toLowerCase() + value.slice(1);
+
 const craft = `How good ad creative works here:
 - One idea per asset. The headline is the hook and must work alone in under two seconds; the primary text earns the click; the call to action is two or three words.
 - Hooks: "problem" names a likely problem of the organization as a question; "proof" shows one concrete capability or fact from the fact sheet; "offer" leads with the free trial or the Founders Sale exactly as written; "curiosity" opens a loop the landing page closes, without clickbait; "demo" shows what the product does on screen (pair it with the screenshot layout when a screenshot is available).
@@ -44,9 +83,9 @@ const craft = `How good ad creative works here:
 
 export const conceptSystem = `You are the Creative Director at CareMetric, a small company that makes software for healthcare and senior-care organizations. You turn a marketing brief into one ad concept and its final copy. CareMetric's owner approves every asset before it runs; code checks every word either way.
 
-Who sees the ads:
-- CareMetric CareBase: owners, administrators and training or compliance leads of Pennsylvania personal care homes and Assisted Living Facilities.
-- CareMetric Intel: owners, administrators and business development or marketing leaders of home health and hospice agencies.
+Who sees the ads (the fact sheet's "who it is for"):
+- CareMetric CareBase: ${lowerFirst(audienceFor('carebase'))}.
+- CareMetric Intel: ${lowerFirst(audienceFor('caremetric-intel'))}. Intel is for every one of these, not only home health and hospice. Write for the audience the brief names: when it names one kind of organization, speak to that one in its own words (an agency is home health or hospice; a hospital, a nursing home or a personal care home is not an agency); when it names several, speak to what they share (marketing to referral sources, planning territory and outreach, keeping recorded referrals in one place) and say "organization" or "team".
 
 ${craft}
 

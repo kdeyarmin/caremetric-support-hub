@@ -25,6 +25,7 @@ import { delivered } from '../notify.mjs';
 import { dueMoment, permanent, plural, recordRun } from '../tasks/shared.mjs';
 import { badgeText, checkCopy, checkPlatform, checkText, checkVideo, checkVisual, verdictOf } from './compliance.mjs';
 import {
+  audienceFor, namedSegment, segmentFor,
   briefUserMessage, chooseVariants, conceptPromptVersion, conceptSchema, conceptSystem, landingFor, normalizeVariant, planPlacements, variantsPromptVersion,
   variantsSchema, variantsSystem,
 } from './copy.mjs';
@@ -42,10 +43,6 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const day = 86_400_000;
 const modelAttempts = 3;
 const platformNames = { meta: 'Meta', linkedin: 'LinkedIn', google: 'Google display', youtube: 'YouTube' };
-const audiences = {
-  carebase: 'Owners, administrators and training or compliance leads of Pennsylvania personal care homes and Assisted Living Facilities',
-  'caremetric-intel': 'Owners, administrators and business development or marketing leaders of home health and hospice agencies',
-};
 const goals = {
   tip: 'Earn attention with a practical tip and send people to the product page', capability: 'Show one capability and drive free-trial starts',
   engagement: 'Build familiarity with the product among the people it is for', offer: 'Drive paid activations with the Founders Sale',
@@ -120,12 +117,21 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
       groups.set(key, [...(groups.get(key) ?? []), item]);
     }
     let created = 0;
-    for (const [key, items] of [...groups].slice(0, 4)) {
+    // Intel's briefs take turns across the kinds of organization it is for (a plan item that names one keeps it): the turn starts from the
+    // week, so successive weeks begin with a different one.
+    const chosen = [...groups].slice(0, 4);
+    const textOf = items => items.map(item => item.text).join(' ');
+    let turn = Math.floor(Date.parse(week) / (7 * day));
+    // The segments plan items name are taken first, so a brief that takes its turn does not repeat one.
+    const used = new Set(chosen.map(([, items]) => namedSegment(items[0].product, textOf(items))).filter(Boolean));
+    for (const [key, items] of chosen) {
       const first = items[0];
       const pillar = goals[first.pillar] ? first.pillar : 'tip';
       const platforms = [...new Set(items.map(item => socialPlatform[item.platform]).filter(Boolean))];
+      const segment = segmentFor(first.product, textOf(items), turn, used);
+      if (segment) { used.add(segment); turn += 1; }
       const brief = {
-        product: first.product, goal: goals[pillar], audience: audiences[first.product], offerCode: pillar === 'offer' && offerFor('FOUNDERS50')?.products.includes(first.product) ? 'FOUNDERS50' : null,
+        product: first.product, goal: goals[pillar], audience: audienceFor(first.product, segment), offerCode: pillar === 'offer' && offerFor('FOUNDERS50')?.products.includes(first.product) ? 'FOUNDERS50' : null,
         platforms: platforms.length ? platforms : ['meta', 'linkedin'], formats: ['capability', 'offer'].includes(pillar) ? ['static', 'video'] : ['static'], videoLengths: ['15s'],
         angle: `From the ${first.source === 'social.plan' ? `week's ${pillar} posts` : 'approved content brief'}: ${items.map(item => item.text).join(' / ')}`.slice(0, 500),
         source: first.source === 'social.plan' ? 'social.plan' : 'growth.plan', planRef: first.ref, requestKey: `plan:${key}`,
@@ -373,7 +379,7 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     let refreshed = 0;
     for (const row of winners) {
       const asset = assets.find(item => item.id === row.id);
-      const brief = await store.creativeBriefCreate({ product: row.product, goal: 'Make new variants of creative that is winning', audience: audiences[row.product], offerCode: null,
+      const brief = await store.creativeBriefCreate({ product: row.product, goal: 'Make new variants of creative that is winning', audience: audienceFor(row.product), offerCode: null,
         platforms: [row.platform], formats: [row.kind], videoLengths: row.kind === 'video' ? [row.lengthKey ?? '15s'] : [], angle: `Keep what works in "${row.headline.slice(0, 120)}" (${row.hookType} hook, ${row.layout} layout) and try new hooks.`,
         source: 'refresh', planRef: `asset:${row.id}`, requestKey: `refresh:${row.id}:${week}`, parentAssetId: asset?.id ?? row.id,
         revisionNote: `This variant won: ${(row.ctr * 100).toFixed(2)}% click-through rate on ${row.impressions} impressions${row.leads ? ` and ${plural(row.leads, 'lead')}` : ''}. Write new variants that keep its strength.` });

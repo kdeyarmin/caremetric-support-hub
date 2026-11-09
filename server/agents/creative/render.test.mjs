@@ -102,7 +102,7 @@ describe('static rendering', () => {
 
   it('fits a crowded layout to the canvas instead of squeezing out the logo or running past the margin', async () => {
     const { satori, Resvg, fonts } = await renderEngine();
-    const long = { ...content, headline: 'See which counties send your agency the most referrals and where to spend your week' };
+    const long = { ...content, headline: 'See which counties send your organization the most referrals and where to spend your week' };
     for (const product of ['caremetric-intel', 'carebase']) {
       // Without the fire band, so Intel's bottom margin can be read too.
       const files = { ...(await withThemeFiles(product, {})), band: null };
