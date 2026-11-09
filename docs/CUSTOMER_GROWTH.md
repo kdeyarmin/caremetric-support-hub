@@ -123,6 +123,18 @@ conversation. The playbook has a "demo" objection for both products: send the wa
 so every agent says it applies on its own, with no code needed. The Account Manager's trial check-in email states it in its exact
 terms (owner decision 2026-11-08).
 
+**Campaign tags and Intel's walkthrough (`sales-playbook.3`, 2026-11-09).** Every product page in a growth email carries campaign tags
+(`server/agents/links.mjs`; see [Campaign tags](AI_TEAM.md#campaign-tags)): outreach is `utm_source=caremetric`, `utm_medium=email`,
+`utm_campaign=growth-<product>-touch<n>` with the variant (`control` or `concise`) as `utm_content`; an Account Manager email from the
+pipeline is `success-<product>-<moment>`. The template path tags its free-trial link the same way. The writer is still given the plain
+addresses; the code tags every product page in its draft (replacing tags it wrote) before the checks, which accept a product page
+with tags alone added and refuse a tag that would carry another host, path or parameter, and tags on the booking page. The website
+under the sign-off carries the message's own tags (or `growth-<product>` / `success-<product>` for a message without a tagged link).
+Intel's playbook may now link the walkthrough (`https://www.caremetricintel.com/#how-it-works`) and the free county report
+(`https://www.caremetricintel.com/county-report`), and its "demo" objection names both. The guardrail suite adds four cases: a tagged
+product page is allowed, it ends up with the touch's tags, a tagged link to another host is refused, and a tag carrying another
+address is refused.
+
 Changing the playbook's wording changes what the models read: bump `playbookVersion`, run `npm test -- server/growth` and
 `npm run evaluate:growth`, and review the next drafts before widening any autonomy.
 

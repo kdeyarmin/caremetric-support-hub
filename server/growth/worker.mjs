@@ -7,6 +7,7 @@ import { draftMessage } from './draft.mjs';
 import { renderEmail, themeFor } from '../email-layout.mjs';
 import { evaluateGrowth } from './evaluation.mjs';
 import { discoveryQuery, linkablePages, senderFor } from './playbook.mjs';
+import { addressesIn, linkAllowed, productCode, taggedUrl, tagsOf } from '../agents/links.mjs';
 const deferred=()=>Object.assign(new Error('Action is deferred'),{code:'action_deferred'});
 const easternDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'});
 /** The calendar day in America/New_York, matching every other send cap and notice. */
@@ -141,18 +142,25 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
  * A growth message as it is sent, in the theme of the product's app (Intel's Emberline for Intel): a letter (it reads like an email a
  * person typed, so it is not filed as a promotion), opening with
  * "Hello,", the approved words, the product team's sign-off and website, then the company, its postal address and the unsubscribe link.
- * The inbox preview is the message's first sentence. Only the product's own pages become links.
+ * The inbox preview is the message's first sentence. Only the product's own pages become links, with the campaign tags the draft
+ * gave them (../agents/links.mjs). The website under the sign-off carries the message's own tags, or, for a message without a tagged
+ * link, growth-<product> (outreach) or success-<product> (a customer email) by its `purpose`.
  */
-export function growthEmail({product,subject,body,postalAddress,unsubscribeUrl}) {
+export function growthEmail({product,subject,body,postalAddress,unsubscribeUrl,purpose=null}) {
   const sender=senderFor(product);
   const words=String(body??'').trim();
+  const pages=linkablePages(product).map(page=>page.url);
+  const found=addressesIn(words).filter(url=>linkAllowed(url,pages));
+  const tags=found.map(tagsOf).find(Boolean)
+    ??(['marketing','success'].includes(purpose)?{source:'caremetric',medium:'email',campaign:`${purpose==='marketing'?'growth':'success'}-${productCode(product)}`}:null);
+  const site=sender.site?{...sender.site,url:tags?taggedUrl(sender.site.url,tags):sender.site.url}:null;
   const preheader=(words.split(/\n/).find(line=>line.trim()&&!/^https:\/\//.test(line.trim()))??'').match(/^.*?[.?!](?=\s|$)/)?.[0]??'';
   const address=String(postalAddress??'').trim();
   // The company's name once: the postal address often begins with it.
   const footer=[...(/^caremetric\b/i.test(address)?[]:['CareMetric']),...(address?[address]:[]),{label:'Unsubscribe from these emails',url:unsubscribeUrl}];
   return renderEmail({layout:'letter',theme:themeFor(product),title:subject,preheader:preheader.slice(0,150),
-    blocks:[{type:'message',text:`Hello,\n\n${words}`,links:linkablePages(product).map(page=>page.url)}],
-    signature:[sender.team,...(sender.site?[sender.site]:[])],footer});
+    blocks:[{type:'message',text:`Hello,\n\n${words}`,links:[...pages,...found]}],
+    signature:[sender.team,...(site?[site]:[])],footer});
 }
 export function growthExecutors({growth,mail,publicOrigin,postalAddress}) {
   if(!growth)return {};
@@ -168,7 +176,7 @@ export function growthExecutors({growth,mail,publicOrigin,postalAddress}) {
     const token=growth.unsubscribeToken(claimed.workId);
     if(claimed.unsubscribeHash && growth.hash(token)!==claimed.unsubscribeHash){await growth.store.finish(claimed.id,'failed',null);throw Object.assign(new Error('Regenerate the message after signing configuration changed'),{code:'unsubscribe_key_changed'});}
     const link=`${publicOrigin.replace(/\/+$/,'')}/api/growth/unsubscribe/${token}`;
-    const email=growthEmail({product:claimed.product,subject:claimed.subject,body:claimed.body,postalAddress,unsubscribeUrl:link});
+    const email=growthEmail({product:claimed.product,subject:claimed.subject,body:claimed.body,postalAddress,unsubscribeUrl:link,purpose:claimed.purpose});
     let outcome;
     try {outcome=await mail.send({to:claimed.to,subject:claimed.subject,text:email.text,html:email.html,unsubscribeUrl:link,messageId:claimed.id});}
     catch {outcome={delivery:'unknown',id:null};}

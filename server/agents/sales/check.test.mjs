@@ -10,7 +10,29 @@ describe('checking a sales reply', () => {
     const reply = 'CareBase Core is $199 per facility per month, with unlimited residents and staff, so two homes would be $398 a month.';
     expect(ok(reply)).toMatchObject({ ok: false, reason: 'unlisted_price' });
     const good = 'CareBase Core is $199 per facility per month, with unlimited residents and staff. Under the Founders Sale, eligible subscription charges are 50% off for the first 12 months of paid service.\n\nYou can start a 30-day free trial here:\nhttps://cmcarebase.com/signup\n\nHow to assign annual training:\nhttps://help.caremetric.ai/help/articles/assign-annual-training';
-    expect(ok(good)).toEqual({ ok: true, reply: good, body: `Hello,\n\n${good}` });
+    // The product page carries the Sales Executive's campaign tags (agents/links.mjs); the help-center guide never does.
+    const tagged = good.replace('https://cmcarebase.com/signup', 'https://cmcarebase.com/signup?utm_source=caremetric&utm_medium=email&utm_campaign=sales-carebase');
+    expect(ok(good)).toEqual({ ok: true, reply: tagged, body: `Hello,\n\n${tagged}` });
+  });
+
+  it('tags the product pages it allows (replacing tags the model wrote), never a guide, and refuses a tag that carries anything else', () => {
+    expect(ok('Start here:\nhttps://cmcarebase.com/signup?utm_source=google')).toMatchObject({ ok: true, reply: 'Start here:\nhttps://cmcarebase.com/signup?utm_source=caremetric&utm_medium=email&utm_campaign=sales-carebase' });
+    expect(ok('Start here:\nhttps://cmcarebase.com/signup', { route: 'chat' }).reply).toBe('Start here:\nhttps://cmcarebase.com/signup?utm_source=caremetric&utm_medium=chat&utm_campaign=sales-carebase');
+    expect(ok(`Read this guide:\n${guide.url}`).reply).toBe(`Read this guide:\n${guide.url}`);
+    for (const reply of [
+      'Start: https://cmcarebase.com/signup?utm_source=a&next=https://evil.test', 'Start: https://cmcarebase.com/admin?utm_source=caremetric',
+      'Start: https://evil.test/signup?utm_source=caremetric', 'Start: https://cmcarebase.com/signup?utm_source=evil.test', `Read: ${guide.url}?utm_source=caremetric`,
+    ]) expect(ok(reply), reply).toMatchObject({ ok: false, reason: 'link' });
+  });
+
+  it('keeps a text message to one message: tagged when the tags fit, plain links when they do not', () => {
+    const tagged = ok('Start a free trial: https://cmcarebase.com/signup', { route: 'sms' });
+    expect(tagged.body).toBe('Hello, Start a free trial: https://cmcarebase.com/signup?utm_source=caremetric&utm_medium=sms&utm_campaign=sales-carebase');
+    const words = 'CareBase keeps staff training, resident records, daily tasks and survey documentation in one place for Pennsylvania personal care homes and Assisted Living Facilities. Pricing is per facility with unlimited residents and staff. Start here: https://cmcarebase.com/signup?utm_source=google';
+    const long = ok(words, { route: 'sms' });
+    expect(long).toMatchObject({ ok: true, reply: words.replace('?utm_source=google', '') });
+    expect(long.body.length).toBeLessThanOrEqual(320);
+    expect(`Hello, ${words.replace('utm_source=google', 'utm_source=caremetric&utm_medium=sms&utm_campaign=sales-carebase')}`.length).toBeGreaterThan(320);
   });
 
   it('refuses the other product\'s prices and pages, and any other link', () => {

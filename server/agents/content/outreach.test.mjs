@@ -85,6 +85,14 @@ describe("the owner's outreach email", () => {
     expect(rendered.text).toContain(outreachDraft.pitches[0].body);
   });
 
+  it('gives each draft its product\'s website address with campaign tags, for the owner to use', () => {
+    const messages = email.blocks.filter(block => block.type === 'message').map(block => block.text);
+    expect(messages).toContain('Website address for this listing:\nhttps://cmcarebase.com/?utm_source=capterra&utm_medium=referral&utm_campaign=listing-carebase');
+    expect(messages.some(text => text.startsWith('Link to use in this pitch:\nhttps://cmcarebase.com/?utm_source=partner&utm_medium=email&utm_campaign=pitch-carebase&utm_content=provider_association'))).toBe(true);
+    const rendered = renderOwnerEmail({ subject: email.subject, body: email.body, blocks: email.blocks, publicOrigin: 'https://hub.example.test' });
+    expect(rendered.html).toContain('href="https://cmcarebase.com/?utm_source=capterra&amp;utm_medium=referral&amp;utm_campaign=listing-carebase"');
+  });
+
   it('says so when nothing passed', () => {
     const none = composeOutreachEmail({ month: '2026-11', label: 'November 2026', listings: [], pitches: [], dropped: 2, reasons: ['unlisted_price'] });
     expect(none.subject).toBe('Outreach drafts for November 2026: none passed the checks');

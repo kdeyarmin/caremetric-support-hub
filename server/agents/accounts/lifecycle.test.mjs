@@ -123,9 +123,10 @@ describe('the emails', () => {
       '1. Add your facility, whether it is a personal care home or an Assisted Living Facility (ALF).',
       '2. Import your staff roster from a spreadsheet, or add a few people by hand.',
       '3. Choose the training each role needs and assign it.', '',
-      'Open the help center:', 'https://cmcarebase.com/app/help', '',
+      // The help link and the website carry the Account Manager's campaign tags (agents/links.mjs).
+      'Open the help center:', 'https://cmcarebase.com/app/help?utm_source=caremetric&utm_medium=email&utm_campaign=account-carebase-welcome', '',
       'Each step has a short guide. If anything is unclear, reply to this email and we will help you through it.', '',
-      'The CareMetric CareBase team', 'https://cmcarebase.com', '',
+      'The CareMetric CareBase team', 'https://cmcarebase.com/?utm_source=caremetric&utm_medium=email&utm_campaign=account-carebase-welcome', '',
       'You are receiving this email because Maple Grove Senior Living has a CareMetric CareBase account.',
       `${unsubscribeLabel}: a personal link is added when the email is sent`,
       postal,
@@ -143,7 +144,7 @@ describe('the emails', () => {
     });
     const words = template => lifecycleWording(lifecycleInput(trial({ product: 'caremetric-intel', productName: 'CareMetric Intel' }), template));
     expect(words('welcome')).toContain('1. Open Setup from the Dashboard and name your agency.');
-    expect(words('welcome')).toContain('https://www.caremetricintel.com/Help');
+    expect(words('welcome')).toContain('https://www.caremetricintel.com/Help?utm_source=caremetric&utm_medium=email&utm_campaign=account-intel-welcome');
     expect(words('setup_nudge')).toContain('offer a hand with setup');
     expect(words('setup_nudge')).toContain('reply to this email and tell us what you would like to get done first');
     expect(words('trial_checkin')).toContain('This is a personal check-in, not a billing notice.');
@@ -244,7 +245,7 @@ describe('the sent email', () => {
       expect(email.html).toContain(`>${unsubscribeLabel}</a>`);
       expect(email.html).toContain(escapeHtml(postal));
       // The first two emails link to the product's getting-started help as a button; the check-in and the testimonial request do not.
-      expect(email.html.includes(`href="${lifecycleProducts[input.product].helpUrl}"`), input.template).toBe(['welcome', 'setup_nudge'].includes(input.template));
+      expect(email.html.includes(`href="${lifecycleProducts[input.product].helpUrl}?`), input.template).toBe(['welcome', 'setup_nudge'].includes(input.template));
     }
   });
 

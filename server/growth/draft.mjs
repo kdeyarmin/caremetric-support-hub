@@ -4,6 +4,7 @@ import { lifecyclePlay, linkablePages, playbookFor, playbookText, sequencePlan, 
 import { screenIdentifiers } from '../agents/concierge/screen.mjs';
 import { factSheetText, products as factProducts } from '../agents/content/facts.mjs';
 import { allowedNumbers, normalizeTerms, textProblems } from '../agents/content/validate.mjs';
+import { campaignTags, linkAllowed, tagLinks } from '../agents/links.mjs';
 
 /**
  * Growth messages: the Marketing Manager's outreach and the Account Manager's customer-success emails.
@@ -14,6 +15,10 @@ import { allowedNumbers, normalizeTerms, textProblems } from '../agents/content/
  * is then checked by code: its citations must be supplied evidence, its links the product's own pages or the approved booking page,
  * and its words must pass the same fact-sheet and claim rules as the Content Marketer's (no unlisted price or number, no guarantee or
  * compliance assurance, no named competitor, the fixed vocabulary). A draft that fails any check is dropped, never sent.
+ *
+ * Every product page in a draft, the template's and the model's alike, carries campaign tags (../agents/links.mjs, `growthTags`):
+ * outreach is growth-<product>-touch<n> with the variant as its content, a customer email success-<product>-<moment>. The model is
+ * given the plain addresses; the tags are added by code before the checks, which accept a tagged product page and nothing else.
  *
  * `growthPromptVersion` names this prompt in each run. The daily guardrail evaluation keeps the key the database's send claim
  * requires (`growthEvaluationVersion` in evaluation.mjs), which is independent of the prompt's wording.
@@ -64,7 +69,12 @@ export function draftLinks(product, booking) {
   return [...linkablePages(product).map(page=>({label:page.label,url:page.url})), ...(booking?[{label:'Pick a time that suits you',url:booking}]:[])];
 }
 
-/** Why a model draft may not be offered, or null when it passes. Checks the words, the links and the citations. */
+/** The campaign tags of a growth message: outreach by touch and variant, a customer email by its moment. */
+export function growthTags({ product, kind, touch = null, variant = null }) {
+  return kind==='outreach' ? campaignTags.outreach({product,touch,variant}) : campaignTags.success({product,kind});
+}
+
+/** Why a model draft may not be offered, or null when it passes. Checks the words, the links (a product page may carry campaign tags) and the citations. */
 export function draftProblem(answer, { product, booking, sources, outreach }) {
   if (!answer || answer.needsHuman) return 'needs_human';
   if (!answer.subject.trim() || answer.subject.length>150 || /[\r\n]/.test(answer.subject) || /^(?:re|fwd?):/i.test(answer.subject.trim())) return 'subject';
@@ -72,7 +82,7 @@ export function draftProblem(answer, { product, booking, sources, outreach }) {
   if (answer.citations.some(id=>!sources.some(s=>s.id===id)) || (outreach && !answer.citations.length)) return 'citation';
   const allowed=new Set(draftLinks(product, booking).map(link=>link.url));
   const links=(answer.body.match(/https?:\/\/[^\s<>"]+/g)??[]).map(url=>url.replace(trailing,''));
-  if (links.some(url=>!allowed.has(url))) return 'link';
+  if (links.some(url=>!linkAllowed(url,allowed))) return 'link';
   if (/[<>`]|\]\(|\*\*|^#{1,6}\s/m.test(answer.body)) return 'markup';
   const words=`${answer.subject}\n${answer.body}`.replace(/https?:\/\/[^\s<>"]+/g,' ');
   if (screenIdentifiers(words).flagged) return 'identifier';
@@ -102,7 +112,11 @@ export async function draftMessage({ opportunity:o, work, task, model, signal })
     expansion:`You mentioned an additional need. Reply with what you would like to do and we will send the right option.`,
   };
   const variant=o.policy.experiment_enabled && createHash('sha256').update(String(o.organization_id??o.id)).digest()[0]%2 ? 'concise':'control';
-  const trialPage=playbookFor(o.product)?.nextStep?.url??null;
+  const outreach=work.kind==='outreach';
+  const touch=outreach?Math.min(Number(o.touches??0)+1,sequencePlan.length):null;
+  const tags=growthTags({product:o.product,kind:work.kind,touch,variant});
+  const trialUrl=playbookFor(o.product)?.nextStep?.url??null;
+  const trialPage=trialUrl?tagLinks(trialUrl,tags):null;
   const fallback={subject:`${product.name}: ${work.kind==='outreach'?'a useful next step':'your next step'}`,
     body:work.kind==='outreach'?`${approved}\n\nYou can see how ${product.name} works and try it free with your own team:${trialPage?`\n${trialPage}`:' reply and we will send the link.'}\n\nAny question, just reply to this email.`
       :`How is your progress with ${product.name}?\n\n${customerSteps[work.kind]??"Reply with the step you need help with."}`,
@@ -110,8 +124,6 @@ export async function draftMessage({ opportunity:o, work, task, model, signal })
   if(variant==='concise' && work.kind==='outreach')fallback.body=`${approved}\n\nTry it free:${trialPage?` ${trialPage}`:' reply and we will send the link.'}`;
   if (!model?.configured) return fallback;
   const book=playbookFor(o.product);
-  const outreach=work.kind==='outreach';
-  const touch=outreach?Math.min(Number(o.touches??0)+1,sequencePlan.length):null;
   const input={
     kind:work.kind, product:product.name, style:variant==='concise'?'Keep the body under eighty words.':'Keep the body under one hundred twenty words.',
     approvedClaim:approved, bookingUrl:booking||null, links:draftLinks(o.product,booking), nextStep:book?.nextStep??null,
@@ -125,7 +137,7 @@ export async function draftMessage({ opportunity:o, work, task, model, signal })
   if (result.outcome!=='completed' || !result.output) return null;
   const normalized={...result.output,subject:normalizeTerms(result.output.subject),body:normalizeTerms(result.output.body)};
   if (normalized.subject.ambiguous || normalized.body.ambiguous) return null;
-  const answer={...result.output,subject:normalized.subject.text,body:normalized.body.text};
+  const answer={...result.output,subject:normalized.subject.text,body:tagLinks(normalized.body.text,tags)};
   if (draftProblem(answer,{product:o.product,booking,sources,outreach})) return null;
   return {...answer,modelGenerated:true,variant};
 }

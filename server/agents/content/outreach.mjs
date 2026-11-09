@@ -2,11 +2,14 @@
  * The Content Marketer's monthly outreach drafts: listing descriptions for software directories and short partnership pitches
  * that the owner can copy and send personally. The model writes them from the fact sheet; this module checks each one with the
  * same rules as an article (validate.mjs) and builds the one email that carries them, to the owner and nobody else. A draft that
- * fails a check is left out and only the name of the check is recorded.
+ * fails a check is left out and only the name of the check is recorded. Each draft comes with its product's website address carrying
+ * campaign tags (../links.mjs: the directory or "partner" as the source, listing-<product> or pitch-<product>), for the owner to give
+ * the directory or put in the pitch, so a lead from it shows where it came from.
  */
 import { markets } from '../marketing.mjs';
 import { factSheetText, productPages, products } from './facts.mjs';
 import { allowedNumbers, markupProblems, normalizeTerms, textProblems } from './validate.mjs';
+import { campaignTags, taggedUrl } from '../links.mjs';
 
 export const outreachPromptVersion = 'outreach.3';
 export const maxDrafts = 5;
@@ -136,6 +139,11 @@ export function checkOutreach(output, { marketed = null } = {}) {
 }
 
 const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
+const home = product => productPages.find(page => page.id === `${product}-home`)?.url ?? products[product].site;
+/** The product's home page with the listing's campaign tags: the directory as the source. */
+export const listingLink = item => taggedUrl(home(item.product), campaignTags.listing({ directory: item.directory, product: item.product }));
+/** The product's home page with the pitch's campaign tags: "partner" as the source, the audience as the content. */
+export const pitchLink = item => taggedUrl(home(item.product), campaignTags.pitch({ audience: item.audience, product: item.product }));
 
 /**
  * The owner's email. The stored body (shown on the Team screen) holds counts only; the drafts travel in the email's blocks,
@@ -149,15 +157,23 @@ export function composeOutreachEmail({ month, label, listings, pitches, dropped,
     ? `${plural(listings.length, 'directory listing')} and ${plural(pitches.length, 'partnership pitch').replace('pitchs', 'pitches')} are ready for you to send yourself.${left} Nothing was sent to anyone else.`
     : `No draft passed the checks this month (${reasons.map(reason => reason.replaceAll('_', ' ')).join(', ') || 'none were written'}). Nothing was sent to anyone else.`;
   const blocks = [
-    { type: 'callout', tone: 'info', title: 'For you to send.', text: 'These are drafts for you to copy, adjust and send personally. Nothing was sent to a directory, a partner or a customer.' },
-    ...listings.flatMap(item => [
-      { type: 'paragraph', text: `${directories[item.directory]} listing for ${products[item.product].name}` },
-      { type: 'message', text: `Tagline: ${item.tagline}\n\n${item.description}` },
-    ]),
-    ...pitches.flatMap(item => [
-      { type: 'paragraph', text: `Pitch to ${audiences[item.audience].toLowerCase()} about ${products[item.product].name}` },
-      { type: 'message', text: `Subject: ${item.subject}\n\n${item.body}` },
-    ]),
+    { type: 'callout', tone: 'info', title: 'For you to send.', text: 'These are drafts for you to copy, adjust and send personally. Nothing was sent to a directory, a partner or a customer. Each comes with a website address that carries campaign tags: use it as the listing\'s website or the link in the pitch, so a lead from it shows where it came from.' },
+    ...listings.flatMap(item => {
+      const link = listingLink(item);
+      return [
+        { type: 'paragraph', text: `${directories[item.directory]} listing for ${products[item.product].name}` },
+        { type: 'message', text: `Tagline: ${item.tagline}\n\n${item.description}` },
+        { type: 'message', text: `Website address for this listing:\n${link}`, links: [link] },
+      ];
+    }),
+    ...pitches.flatMap(item => {
+      const link = pitchLink(item);
+      return [
+        { type: 'paragraph', text: `Pitch to ${audiences[item.audience].toLowerCase()} about ${products[item.product].name}` },
+        { type: 'message', text: `Subject: ${item.subject}\n\n${item.body}` },
+        { type: 'message', text: `Link to use in this pitch:\n${link}`, links: [link] },
+      ];
+    }),
     ...(dropped ? [{ type: 'paragraph', text: `Left out by the checks: ${plural(dropped, 'draft')} (${reasons.map(reason => reason.replaceAll('_', ' ')).join(', ')}).` }] : []),
     { type: 'paragraph', text: 'Every draft uses only the prices and claims in the CareMetric fact sheet (docs/GTM_FACTS.md). Check them before you send.' },
   ];

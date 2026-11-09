@@ -61,9 +61,9 @@ Content Marketer's fact-sheet rules:
 
 It also passes these social rules:
 
-- a length per surface;
+- a length per surface (counted without campaign tags, which lengthen a link, not the words);
 - no markup;
-- links only to that product's own pages, none in an Instagram caption or in ad text;
+- links only to that product's own pages, plain or with campaign tags and nothing else, none in an Instagram caption or in ad text;
 - at most five hashtags (eight on Instagram) and three emoji;
 - only that product's prices;
 - no promise of a refund, extension or special pricing;
@@ -72,6 +72,14 @@ It also passes these social rules:
 - in a reply, nothing repeated from the person's message.
 
 A draft that fails is dropped. The run records only the check's name.
+
+**Campaign tags.** Every link the Social Media Manager places carries campaign tags, so a lead or a sign-up from it shows where it came
+from (see "Campaign tags" in [AI_TEAM.md](AI_TEAM.md#campaign-tags)): a post's link (the card beside it, or the link in a LinkedIn
+post to paste) is `utm_source` facebook, instagram or linkedin, `utm_medium=social`, `utm_campaign=social-<product>` and the post's
+pillar as `utm_content`; a reply's is `social-<product>-reply` with `comment` or `message`; a new ad's is `utm_source` facebook (Meta,
+which may also show it on Instagram) or linkedin, `utm_medium=paid_social`, `utm_campaign=ads-<product>` and `<date>-<variant>` as
+`utm_content`. A new ad links to the page of the ad it is based on with that ad's old tags dropped, or to the free trial. When a post
+is published the executor checks its link once more: one of the product's own pages, with campaign tags or without.
 
 ## Privacy
 

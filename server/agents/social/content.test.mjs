@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adSystem, checkSocialText, planSystem, replySystem, replyUserMessage, socialLinks, withHashtags } from './content.mjs';
+import { adSystem, checkSocialText, limits, planSystem, replySystem, replyUserMessage, socialLinks, withHashtags } from './content.mjs';
 
 const fb = (text, product = 'carebase') => checkSocialText(text, { surface: 'facebook', product });
 
@@ -28,6 +28,19 @@ describe('checking social text', () => {
     expect(checkSocialText('Link in bio: https://cmcarebase.com/signup', { surface: 'instagram', product: 'carebase' })).toMatchObject({ ok: false, reason: 'link' });
     expect(checkSocialText('https://cmcarebase.com/signup', { surface: 'ad_headline', product: 'carebase' })).toMatchObject({ ok: false });
     expect(checkSocialText('See https://www.caremetricintel.com/#pricing', { surface: 'comment', product: null })).toMatchObject({ ok: true });
+  });
+
+  it('accepts the product\'s own page with campaign tags, counts length without them, and refuses a tag that carries anything else', () => {
+    const tags = 'utm_source=facebook&utm_medium=social&utm_campaign=social-carebase&utm_content=tip';
+    expect(checkSocialText(`Keep training records in one place. https://cmcarebase.com/signup?${tags}`, { surface: 'facebook', product: 'carebase' })).toMatchObject({ ok: true });
+    const comment = `${'Keep staff training in one place. '.repeat(7)}https://cmcarebase.com/signup`;
+    expect(comment.length).toBeLessThanOrEqual(limits.comment);
+    expect(`${comment}?${tags}`.length).toBeGreaterThan(limits.comment);
+    expect(checkSocialText(`${comment}?${tags}`, { surface: 'comment', product: 'carebase' })).toMatchObject({ ok: true });
+    for (const text of [
+      'Start: https://cmcarebase.com/signup?utm_source=a&next=https://evil.test', 'Start: https://evil.test/?utm_source=facebook',
+      `Start: https://www.caremetricintel.com/?${tags}`, 'Start: https://cmcarebase.com/signup?utm_source=Facebook',
+    ]) expect(checkSocialText(text, { surface: 'facebook', product: 'carebase' }), text).toMatchObject({ ok: false, reason: 'link' });
   });
 
   it('keeps lengths, hashtags and emoji in bounds and markup out', () => {

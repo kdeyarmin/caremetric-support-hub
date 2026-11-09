@@ -7,10 +7,11 @@
  * Every value was read from the live code of the product it describes (the source is named beside it). A change to a price
  * or a trial is made in the product first, then here and in docs/GTM_FACTS.md; facts.test.mjs keeps the two copies together.
  * The owner confirmed every fact and claim here on 2026-11-08. The owner requested the Founders Sale on 2026-11-08;
- * its coupon, duration and product scope were verified in the live CareMetric billing account.
+ * its coupon, duration and product scope were verified in the live CareMetric billing account. Intel's county report and
+ * walkthrough pages were added to the pages on 2026-11-09, after both were checked on the live site.
  */
 
-export const factsVersion = '2026-11-08';
+export const factsVersion = '2026-11-09';
 
 /** Where public help articles live. The canonical address of an article is `${helpCenterOrigin}/help/articles/<slug>`. */
 export const helpCenterOrigin = 'https://help.caremetric.ai';
@@ -148,6 +149,9 @@ export const productBySlug = slug => Object.values(products).find(product => pro
 /**
  * The public pages an article may link to, by id. These are routes each product's own code defines (a path such as
  * cmcarebase.com/pricing answers 200 for anything, so only real routes are listed). The model names ids, never addresses.
+ * Intel's walkthrough is the home page's #how-it-works section and its county report is /county-report (its own prerendered
+ * page), both checked on the live site on 2026-11-09. When an agent puts one of these in front of a person it carries campaign
+ * tags (../links.mjs); the addresses here stay untagged.
  */
 export const productPages = deepFreeze([
   { id: 'carebase-home', product: 'carebase', label: 'CareMetric CareBase', url: 'https://cmcarebase.com/' },
@@ -163,6 +167,8 @@ export const productPages = deepFreeze([
   { id: 'carebase-signup', product: 'carebase', label: 'Start a CareBase free trial', url: 'https://cmcarebase.com/signup' },
   { id: 'intel-home', product: 'intel', label: 'CareMetric Intel', url: 'https://www.caremetricintel.com/' },
   { id: 'intel-pricing', product: 'intel', label: 'CareMetric Intel plans and pricing', url: 'https://www.caremetricintel.com/#pricing' },
+  { id: 'intel-walkthrough', product: 'intel', label: 'How CareMetric Intel works', url: 'https://www.caremetricintel.com/#how-it-works' },
+  { id: 'intel-county-report', product: 'intel', label: 'Free county home health report from CareMetric Intel', url: 'https://www.caremetricintel.com/county-report' },
   { id: 'intel-resources', product: 'intel', label: 'CareMetric Intel resource library', url: 'https://www.caremetricintel.com/resources/' },
   { id: 'intel-targeted-marketing', product: 'intel', label: 'A practical framework for targeted healthcare marketing', url: 'https://www.caremetricintel.com/resources/targeted-healthcare-marketing-framework' },
   { id: 'intel-territory-analysis', product: 'intel', label: 'Territory analysis with public healthcare and demographic data', url: 'https://www.caremetricintel.com/resources/public-data-territory-analysis' },

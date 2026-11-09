@@ -52,6 +52,50 @@ Intel starts switched on; CareBase and Healthcare Advisors start off. To market 
 beside it. Every change is audited (`agent.marketing`), and a change made from an out-of-date page is refused. Until the switches'
 migration is applied, the team markets Intel only.
 
+## Campaign tags
+
+Every product link an agent puts in front of a person carries campaign tags (`utm_source`, `utm_medium`, `utm_campaign`,
+`utm_content`), so a lead that arrives through it shows which agent and channel produced it. Intel and CareBase record the tags with
+each lead, the Hub stores them (`private.leads`), and the Growth Manager's weekly report groups leads by source and campaign. One
+module writes and checks them: `server/agents/links.mjs` (`taggedUrl`, `tagLinks`, `linkAllowed`, `campaignTags`).
+
+| Where the link appears | source | medium | campaign | content |
+| --- | --- | --- | --- | --- |
+| Marketing Manager outreach email | `caremetric` | `email` | `growth-<product>-touch<n>` | the variant (`control` or `concise`) |
+| Account Manager email from the growth pipeline | `caremetric` | `email` | `success-<product>-<moment>` (onboarding, trial, renewal...) | |
+| Account Manager customer email (welcome, setup help, trial check-in, testimonial request) | `caremetric` | `email` | `account-<product>-<template>` | |
+| Sales Executive answer | `caremetric` | `email`, `chat` or `sms` | `sales-<product>` | |
+| Social Media Manager post | `facebook`, `instagram` or `linkedin` | `social` | `social-<product>` | the pillar (tip, capability...) |
+| Social Media Manager reply | `facebook`, `instagram` or `linkedin` | `social` | `social-<product>-reply` | `comment` or `message` |
+| Social Media Manager ad | `facebook` (Meta) or `linkedin` | `paid_social` | `ads-<product>` | `<date>-<variant>` |
+| Content Marketer article (its words and "Learn more") | `help-center` | `referral` | `article-<product>` | the article's address |
+| Content Marketer directory listing (the address to give the directory) | the directory (`capterra`, `g2`, `getapp`, `software_advice`) | `referral` | `listing-<product>` | |
+| Content Marketer partnership pitch (the link to use in it) | `partner` | `email` | `pitch-<product>` | the kind of partner |
+
+`<product>` is `carebase`, `intel` or `advisors`. Values are short lowercase words built from fixed words, product codes, touch numbers,
+dates and slugs: never a name, an address or anything about a person.
+
+**What is tagged.** Only an https address on one of the company's product sites, the hosts of `productPages` in
+`server/agents/content/facts.mjs` (cmcarebase.com, www.caremetricintel.com, caremetricadvisors.com), including the website under an
+email's sign-off and the Account Manager's help link. Never a citation, the help center's own links (guides), an unsubscribe link or
+the owner's booking page. The product pages in `facts.mjs` stay untagged; the tags are added where an agent places the link, and a
+model is always given the plain addresses (tags it writes itself are replaced).
+
+**How the checks treat a tagged link.** Every link check (the growth drafts, `server/agents/sales/check.mjs`, `checkSocialText` in
+`server/agents/social/content.mjs`, `server/agents/content/validate.mjs`, the social executor's last look at a post's link and an ad's)
+uses `linkAllowed`: a link passes when it is exactly an allowed address, or when it is an allowed address on a product site with a
+query made of tags alone added before its fragment. The address is compared as written, with nothing normalized, so a tag can never
+carry another host, path, parameter or fragment: anything but those four tags, each once with a short lowercase value, and the link
+fails. A tagged citation, guide or booking page fails too.
+
+**Lengths.** A social post's or reply's length is counted without the tags (they lengthen the link, not the words). A Sales
+Executive text message whose tags would take it past 320 characters goes out with plain links, and an article that only the tags
+would take past its length is published with plain links.
+
+**Not tagged.** The Support Concierge's answers carry no links at all, and its fixed replies only the booking page. The pages agents
+may link to include Intel's walkthrough (`intel-walkthrough`, `https://www.caremetricintel.com/#how-it-works`) and its free county
+report (`intel-county-report`, `https://www.caremetricintel.com/county-report`), both checked on the live site on 2026-11-09.
+
 ## The model
 
 | Piece | Table | What it holds |
@@ -727,7 +771,10 @@ the Intel app's own emails), CareBase's in the CareBase app's email standard (Pe
 blue rule, the app's blue buttons, its footer with support@caremetric.ai). Each has an inbox
 preview line, a headline, "Hello,", numbered first steps
 with a button to the product's help, the Founders Sale terms in a highlighted box in the trial check-in, the consent
-terms in a highlighted box in the testimonial request, and a sign-off from the product's team with its website. Each
+terms in a highlighted box in the testimonial request, and a sign-off from the product's team with its website. The help link and
+the website carry the Account Manager's campaign tags (`account-<product>-<template>`, see [Campaign tags](#campaign-tags)); the
+tags are part of the stored help link and the sign-off takes them from it, so an email proposed before tags existed is still sent
+exactly as it was approved. Each
 has a plain-text part that says the same. They say nothing about AI, quote no price, promise no time or outcome, never
 mention a phone call or voicemail, and use the company's vocabulary for CareBase (Assisted Living Facility, ALF,
 surveyor). The welcome, the setup offer and the check-in add the owner's booking page as a "Pick a time" button
@@ -878,7 +925,8 @@ applied automatically), ask at most one qualifying question, handle objections t
 draft (`server/agents/sales/check.mjs`): only that product's listed prices, no other product's; links only to that product's pages
 or the booking page; no guarantee, compliance assurance, certification, named competitor, testimonial, call or demo as a step, voice
 AI, trial extension, special pricing, refund, time frame, mention of AI, identifier, name from the message or long quotation; the
-fixed vocabulary is rewritten (ALF, surveyor); links may go only to the product's pages and the guides it was given. A draft that passes
+fixed vocabulary is rewritten (ALF, surveyor); links may go only to the product's pages and the guides it was given, and the product's
+pages are then given the Sales Executive's campaign tags (see [Campaign tags](#campaign-tags)). A draft that passes
 and goes back by email or chat is proposed as a `communication.answer` (the session-less path the Concierge's support answers use, with
 the same database checks); by text message it is a `communication.reply`. The owner gets one email per draft (at most 20 a day). The
 **Sales answers** autonomy step (off) hands answers over after a supervised week: they then go out on their own, authored as the
@@ -964,7 +1012,10 @@ not legal advice. A draft that fails proposes nothing; the task's result and the
 **What the owner approves.** A `content.publish` action ("Publish a help article") whose preview is the whole article: the
 address it will live at, the product, the title and the description, then the Markdown exactly as it will be published (the
 summary, the body, the questions and answers, the sources, the links and, for a regulation, the disclaimer). It must fit the
-6,000 characters an action's preview holds, so articles are compact (about 300 to 600 words of body).
+6,000 characters an action's preview holds, so articles are compact (about 300 to 600 words of body). Product pages in the article
+(in its words and under "Learn more") carry the Content Marketer's campaign tags (`article-<product>`, with the article's address
+as the content; see [Campaign tags](#campaign-tags)); the sources it cites never do. An article that only the tags would take past
+6,000 characters is proposed with plain links.
 
 **How approval publishes.** Approving runs the executor at once; it needs no owner session and no model. It checks the stored
 article once more, then `private.agent_content_publish` publishes the action's own stored input, never anything the server hands
@@ -990,7 +1041,9 @@ listing descriptions for software directories (Capterra, G2, GetApp, Software Ad
 partnership pitches (state and regional provider associations, senior-care consultants, pharmacy and therapy partners,
 compliance trainers), from the fact sheet. Each draft gets the same checks as an article (and no markup or links, only the
 company's own domains); one that fails is left out and only the name of the check is kept. The ones that pass go to the owner in
-one email, word for word, to adjust and send personally. Nothing is sent to anyone else. The stored copy of the alert (shown on
+one email, word for word, to adjust and send personally, each with its product's website address carrying campaign tags (a listing:
+the directory as the source, `listing-<product>`; a pitch: `partner`, `pitch-<product>` and the kind of partner), to give the
+directory as the listing's website or to use as the pitch's link. Nothing is sent to anyone else. The stored copy of the alert (shown on
 the Team screen) holds counts only; the drafts travel only in the email.
 
 **When it runs.** `content.weekly` ("Weekly help article") fires every morning at 07:45 Eastern and writes on Tuesdays (read from

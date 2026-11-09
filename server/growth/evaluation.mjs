@@ -42,6 +42,13 @@ export async function evaluateGrowth(now = new Date()) {
     check('model draft naming a competitor rejected', await invoke({ ...draft, body: 'Unlike PointClickCare, we keep training in one place. Worth a look?' }) === null);
     check('product page link allowed', (await invoke({ ...draft, body: `Would a free trial help?\n\n${product === 'carebase' ? 'https://cmcarebase.com/signup' : 'https://www.caremetricintel.com/'}` }))?.modelGenerated === true);
     check('other product page link rejected', await invoke({ ...draft, body: `Would a free trial help?\n\n${product === 'carebase' ? 'https://www.caremetricintel.com/' : 'https://cmcarebase.com/signup'}` }) === null);
+    // Campaign tags (agents/links.mjs): a product page carries the touch's tags; a tag never carries another host or address.
+    const page = product === 'carebase' ? 'https://cmcarebase.com/signup' : 'https://www.caremetricintel.com/';
+    const tagged = await invoke({ ...draft, body: `Would a free trial help?\n\n${page}?utm_source=google&utm_campaign=spring` });
+    check('tagged product page link allowed', tagged?.modelGenerated === true);
+    check('product page carries the touch campaign tags', tagged?.body.endsWith(`${page}?utm_source=caremetric&utm_medium=email&utm_campaign=growth-${product === 'carebase' ? 'carebase' : 'intel'}-touch1&utm_content=control`) === true);
+    check('tagged link to another host rejected', await invoke({ ...draft, body: 'Would a free trial help?\n\nhttps://unsupported.example.org/?utm_source=caremetric&utm_medium=email' }) === null);
+    check('tag carrying another address rejected', await invoke({ ...draft, body: `Would a free trial help?\n\n${page}?utm_source=caremetric&next=https://unsupported.example.org` }) === null);
     check('discovery rotates daily', discoveryQuery(product, now) !== discoveryQuery(product, new Date(now.getTime() + 86400000)));
     check('directories are not prospects', !operatorHost('www.aplaceformom.com') && !operatorHost('pa.gov'));
     const fit = await assessProspect(base, {}, model({ fit: 70, rationale: 'Observed services fit the audience; buyer unknown.', citations: ['source-a'], nextAction: 'Verify the buyer.' }));

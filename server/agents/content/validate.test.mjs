@@ -29,8 +29,41 @@ describe('an article that passes', () => {
     expect(body.startsWith(`**In short:** ${fireDrillDraft.summary}\n\n${fireDrillDraft.body.slice(0, 40)}`)).toBe(true);
     expect(body).toContain('## Frequently asked questions\n\n### How often must a Pennsylvania personal care home hold a fire drill?\n\nAt least once a month');
     expect(body).toContain(`## Sources\n\n- [55 Pa. Code § 2600.132, fire drills](${officialSources['pacode-2600-132'].url})`);
-    expect(body).toContain('## Learn more\n\n- [CareBase features](https://cmcarebase.com/features)\n- [Free survey readiness guide](https://cmcarebase.com/survey-readiness-guide)');
+    // Product pages carry the Content Marketer's campaign tags (agents/links.mjs); the sources above never do.
+    const tags = `utm_source=help-center&utm_medium=referral&utm_campaign=article-carebase&utm_content=${fireDrillDraft.slug}`;
+    expect(body).toContain(`## Learn more\n\n- [CareBase features](https://cmcarebase.com/features?${tags})\n- [Free survey readiness guide](https://cmcarebase.com/survey-readiness-guide?${tags})`);
     expect(body.endsWith(`*${legalDisclaimer}*`)).toBe(true);
+    expect(checkArticle(result.article)).toEqual([]);
+  });
+
+  it('tags the product pages in its words too, never a cited source, and publishes plain links when the tags would not fit', () => {
+    const tags = `utm_source=help-center&utm_medium=referral&utm_campaign=article-carebase&utm_content=${fireDrillDraft.slug}`;
+    const inline = check(withSentence('Read more in [the free survey readiness guide](https://cmcarebase.com/survey-readiness-guide).'));
+    expect(inline.article.body).toContain(`[the free survey readiness guide](https://cmcarebase.com/survey-readiness-guide?${tags})`);
+    const cited = check({ citations: [...fireDrillDraft.citations, 'https://cmcarebase.com/pa-training-requirements'] });
+    expect(cited.article.body).toContain('(https://cmcarebase.com/pa-training-requirements)\n');
+    expect(checkArticle(cited.article)).toEqual([]);
+  });
+
+  it('publishes plain links when the tags alone would take the article past its length', () => {
+    const plainLength = result => result.preview.replace(/\?utm_[^)\s]*/g, '').length;
+    const base = check();
+    const overhead = base.preview.length - plainLength(base);
+    expect(overhead).toBeGreaterThan(100);
+    // Grow the body to its limit and the first answer by the rest, so the plain article ends 50 characters under its length.
+    const sentence = 'Keep each drill record with the others so the history is easy to follow. ';
+    const pad = size => sentence.repeat(Math.ceil(size / sentence.length) + 1).slice(0, size).trim();
+    const extra = limits.preview - plainLength(base) - 50;
+    const toBody = Math.min(extra, limits.body[1] - fireDrillDraft.body.length - 2);
+    const draft = {
+      body: `${fireDrillDraft.body}\n\n${pad(toBody)}`,
+      faq: fireDrillDraft.faq.map((item, index) => (index === 0 ? { ...item, answer: `${item.answer} ${pad(extra - toBody - 3)}` } : item)),
+    };
+    const result = check(draft);
+    expect(result.ok).toBe(true);
+    expect(result.article.body).not.toContain('utm_');
+    expect(result.preview.length).toBeLessThanOrEqual(limits.preview);
+    expect(result.preview.length + overhead).toBeGreaterThan(limits.preview);
     expect(checkArticle(result.article)).toEqual([]);
   });
 
@@ -118,6 +151,11 @@ describe('each check that rejects a draft', () => {
     expect(reasons(withSentence('See [the rule](javascript:alert(1)).'))).toEqual(['link_not_allowed']);
     expect(reasons(withSentence('See https://www.pa.gov/another-page for more.'))).toEqual(['link_unlisted']);
     expect(reasons(withSentence(`See [§ 2600.132](${officialSources['pacode-2600-132'].url}).`))).toEqual([]);
+    // A product page may carry campaign tags and nothing else; a citation never carries them.
+    expect(reasons(withSentence('See [CareBase features](https://cmcarebase.com/features?utm_source=help-center&utm_medium=referral).'))).toEqual([]);
+    expect(reasons(withSentence('See [CareBase features](https://cmcarebase.com/features?utm_source=a&next=https://evil.test).'))).toEqual(['link_unlisted']);
+    expect(reasons(withSentence('See [CareBase](https://cmcarebase.com/admin?utm_source=help-center).'))).toEqual(['link_unlisted']);
+    expect(reasons(withSentence(`See [§ 2600.132](${officialSources['pacode-2600-132'].url}?utm_source=help-center).`))).toEqual(['link_unlisted']);
     expect(reasons(withSentence('A <b>bold</b> claim.'))).toEqual(['html']);
     expect(reasons(withSentence('<script>alert(1)</script>'))).toEqual(['html']);
     expect(reasons(withSentence('![A poster](https://cmcarebase.com/poster.png)'))).toContain('unsupported_markup');

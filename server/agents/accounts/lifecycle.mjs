@@ -21,9 +21,14 @@
  * it, never the address; the email that is sent is rebuilt from those facts and is refused if its wording no longer matches the hash.
  * Every email ends with the same footer: why it was sent, a personal one-click unsubscribe link (made when it is sent) and the
  * company's postal address.
+ *
+ * The help link and the website under the sign-off carry the Account Manager's campaign tags (../links.mjs:
+ * account-<product>-<template>). The tags are part of the stored help link, and the sign-off takes the help link's tags, so an
+ * email proposed before the tags existed is rebuilt exactly as it was approved.
  */
 import { createHash } from 'node:crypto';
 import { renderEmail, themeFor } from '../../email-layout.mjs';
+import { campaignTags, taggedUrl, tagsOf } from '../links.mjs';
 
 export const lifecycleFeature = 'platform.agents.lifecycle.v1';
 export const lifecycleTemplates = Object.freeze(['welcome', 'setup_nudge', 'trial_checkin', 'testimonial_ask']);
@@ -152,7 +157,8 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
   const help = { type: 'button', label: words.helpLabel, url: helpUrl };
   const booking = bookingLink(bookingUrl);
   const together = label => (booking ? [{ type: 'button', label, url: booking }] : []);
-  const signature = signatureFor(productName, words.site);
+  const tags = tagsOf(helpUrl);
+  const signature = signatureFor(productName, tags ? { ...words.site, url: taggedUrl(words.site.url, tags) } : words.site);
   if (template === 'welcome') {
     return {
       subject: `Welcome to ${productName}`,
@@ -253,7 +259,8 @@ export function lifecycleInput(fact, template, { bookingUrl = null } = {}) {
   if (!product || !slug.test(fact.tenant ?? '') || !lifecycleTemplates.includes(template)) throw new TypeError('Unknown customer email.');
   const input = {
     template, tenant: fact.tenant, tenantName: tidy(fact.tenantName, 80) || fact.tenant, product: fact.product,
-    productName: tidy(fact.productName, 60) || fact.product, helpUrl: product.helpUrl, bookingUrl: bookingLink(bookingUrl),
+    productName: tidy(fact.productName, 60) || fact.product, helpUrl: taggedUrl(product.helpUrl, campaignTags.account({ product: fact.product, template })),
+    bookingUrl: bookingLink(bookingUrl),
     periodKey: periodKey({ template, tenant: fact.tenant, product: fact.product }),
   };
   return { ...input, textHash: wordingHash(input) };

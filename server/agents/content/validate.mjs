@@ -15,6 +15,9 @@
  *   number-with-a-unit that neither the fact sheet nor the topic's facts state; a guarantee; a legal or compliance
  *   assurance; a certification; voice or phone AI; a call or demo as a step; a named competitor; "prove" or "proof" about
  *   CareBase; personal or health information, an email address or a phone number; a claim to be an AI.
+ * - Product pages in the article (in its words and under "Learn more") carry the Content Marketer's campaign tags (../links.mjs:
+ *   help-center, referral, article-<product>, the slug as the content); the sources it cites never do. A link check accepts a curated
+ *   product page with tags and nothing else added. If the tags would take the article past its length, it is published untagged.
  */
 import { screenIdentifiers } from '../concierge/screen.mjs';
 import { phoneNumber } from '../concierge/redact.mjs';
@@ -22,6 +25,7 @@ import {
   allowedAmounts, allowedHost, allowedPercents, articleUrl, factSheetText, factsRevision, legalDisclaimer, officialSources, productBySlug, productPage,
   productPages, products,
 } from './facts.mjs';
+import { campaignTags, linkAllowed, tagLinks } from '../links.mjs';
 
 export const limits = Object.freeze({
   title: [20, 90], slug: [10, 80], description: [70, 160], summary: [80, 320], outlineItems: [3, 8], outlineItem: [3, 100],
@@ -190,6 +194,7 @@ export function textProblems(value, { product = null, numbers = null } = {}) {
 // ---- Links and markup ----------------------------------------------------------------------------------------------------------------
 
 const curatedUrls = new Map([...Object.values(officialSources).map(source => [source.url, source.label]), ...productPages.map(page => [page.url, page.label])]);
+const curated = new Set(curatedUrls.keys());
 
 /** An https address on an allowed host, with no credentials or port, as a URL; null otherwise. */
 export function allowedUrl(value) {
@@ -207,7 +212,7 @@ const urlsIn = markdown => {
   ])];
 };
 
-/** Problems with the links and markup in published Markdown: only curated https addresses on allowed hosts, no HTML, images or tables. */
+/** Problems with the links and markup in published Markdown: only curated https addresses on allowed hosts (a product page may carry campaign tags), no HTML, images or tables. */
 export function markupProblems(markdown) {
   const text = String(markdown ?? '');
   const reasons = new Set();
@@ -216,7 +221,7 @@ export function markupProblems(markdown) {
   if (/!\[[^\]]*\]\(/.test(text) || /^\s*\|.*\|\s*$/m.test(text)) reasons.add('unsupported_markup');
   for (const address of urlsIn(text)) {
     if (!allowedUrl(address)) reasons.add('link_not_allowed');
-    else if (!curatedUrls.has(address)) reasons.add('link_unlisted');
+    else if (!linkAllowed(address, curated)) reasons.add('link_unlisted');
   }
   return [...reasons];
 }
@@ -227,12 +232,16 @@ const clean = value => String(value ?? '').replace(/\r\n?/g, '\n').replace(/[ \t
 const oneLine = value => clean(value).replace(/\s+/g, ' ');
 const within = (value, [min, max]) => value.length >= min && value.length <= max;
 
-/** The Markdown that is published: the summary, the body, the questions, the sources, the links and, for a regulation, the fixed disclaimer. */
-export function assembleArticle({ summary, body, faq, citations, links }, topic) {
-  const parts = [`**In short:** ${summary}`, body];
-  if (faq.length) parts.push('## Frequently asked questions', ...faq.flatMap(item => [`### ${item.question}`, item.answer]));
+/**
+ * The Markdown that is published: the summary, the body, the questions, the sources, the links and, for a regulation, the fixed
+ * disclaimer. With `tags`, every product page outside the sources carries them; the sources are left exactly as cited.
+ */
+export function assembleArticle({ summary, body, faq, citations, links }, topic, tags = null) {
+  const tag = text => (tags ? tagLinks(text, tags) : text);
+  const parts = [tag(`**In short:** ${summary}`), tag(body)];
+  if (faq.length) parts.push('## Frequently asked questions', ...faq.flatMap(item => [`### ${item.question}`, tag(item.answer)]));
   if (citations.length) parts.push('## Sources', citations.map(url => `- [${curatedUrls.get(url)}](${url})`).join('\n'));
-  if (links.length) parts.push('## Learn more', links.map(id => { const page = productPage(id); return `- [${page.label}](${page.url})`; }).join('\n'));
+  if (links.length) parts.push('## Learn more', links.map(id => { const page = productPage(id); return `- [${page.label}](${tag(page.url)})`; }).join('\n'));
   if (topic.kind === 'regulation') parts.push(`*${legalDisclaimer}*`);
   return parts.join('\n\n');
 }
@@ -316,12 +325,15 @@ export function checkDraft(output, { topic, promptVersion = null }) {
   for (const reason of textProblems([title, description, summary, body, ...faq.flatMap(item => [item.question, item.answer])].join('\n'), { product: topic.product, numbers })) reasons.add(reason);
   if (reasons.size > 0) return { ok: false, reasons: [...reasons].sort(), rewrites };
 
-  const article = {
+  const parts = { summary, body, faq, citations, links };
+  let article = {
     slug, product, topic: topic.key, kind: topic.kind, title, description,
-    body: assembleArticle({ summary, body, faq, citations, links }, topic),
+    body: assembleArticle(parts, topic, campaignTags.article({ product: topic.product, slug })),
     ...(promptVersion ? { promptVersion } : {}),
   };
-  const preview = previewOf(article);
+  let preview = previewOf(article);
+  // Tags lengthen each product link; an article they would take past its length is published with plain links instead.
+  if (preview.length > limits.preview) { article = { ...article, body: assembleArticle(parts, topic) }; preview = previewOf(article); }
   if (preview.length > limits.preview) return { ok: false, reasons: ['too_long'], rewrites };
   const last = checkArticle(article);
   if (last.length > 0) return { ok: false, reasons: last, rewrites };

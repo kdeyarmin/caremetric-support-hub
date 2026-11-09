@@ -83,6 +83,11 @@ describe('the fact sheet', () => {
     // The CareBase and Intel sites answer 200 for any path, so pricing is linked where it lives, on the home page.
     expect(productPages.find(page => page.id === 'carebase-pricing').url).toBe('https://cmcarebase.com/#pricing');
     expect(productPages.find(page => page.id === 'intel-pricing').url).toBe('https://www.caremetricintel.com/#pricing');
+    // Intel's walkthrough is the home page's #how-it-works section; its county report is a route with its own page (both checked live 2026-11-09).
+    expect(productPages.find(page => page.id === 'intel-walkthrough').url).toBe('https://www.caremetricintel.com/#how-it-works');
+    expect(productPages.find(page => page.id === 'intel-county-report').url).toBe('https://www.caremetricintel.com/county-report');
+    // Addresses as listed: campaign tags are added where an agent places a link (agents/links.mjs), never here.
+    for (const page of productPages) expect(page.url, page.id).not.toMatch(/[?]/);
     for (const label of [...Object.values(officialSources).map(source => source.label), ...productPages.map(page => page.label)]) {
       expect(label, label).not.toMatch(/assisted living residence|\bALR\b|auditor/i);
     }

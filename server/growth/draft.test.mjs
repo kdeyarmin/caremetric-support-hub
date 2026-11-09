@@ -65,3 +65,25 @@ it('never offers a call, a meeting or a demo: templates point to the free trial 
  expect(model.run.mock.calls[0][1].system[0].text).toContain('never offer or suggest a phone call, a sales call, a meeting or a demo');
  expect(model.run.mock.calls[0][1].system[0].text).toContain('Never offer or suggest a demo, a sales call or a meeting.');
 });
+it('tags every product page it writes with growth-<product>-touch<n> and the variant, and a customer email with its moment',async()=>{
+ const tags=touch=>`utm_source=caremetric&utm_medium=email&utm_campaign=growth-carebase-touch${touch}&utm_content=control`;
+ // The template: the free-trial page carries the outreach tags; the booking page never appears.
+ const template=await draftMessage({opportunity:{...opportunity,touches:1},work,task:{}});
+ expect(template.body).toContain(`https://cmcarebase.com/signup?${tags(2)}`);
+ // The model is given the plain addresses; its product pages are tagged (its own tags replaced), the booking page left alone.
+ const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Staff training records',body:'How do you track annual training hours today?\n\nhttps://cmcarebase.com/signup?utm_source=google\n\nOr pick a time: https://example.org/book',citations:['source-1'],needsHuman:false}}))};
+ const draft=await draftMessage({opportunity,work,task:{},model});
+ expect(draft.body).toBe(`How do you track annual training hours today?\n\nhttps://cmcarebase.com/signup?${tags(1)}\n\nOr pick a time: https://example.org/book`);
+ expect(JSON.parse(model.run.mock.calls[0][1].user).links.map(link=>link.url)).toContain('https://cmcarebase.com/signup');
+ model.run.mockResolvedValue({outcome:'completed',output:{subject:'Before your trial ends',body:'What is left to decide?\n\nhttps://cmcarebase.com/faq',citations:[],needsHuman:false}});
+ expect((await draftMessage({opportunity:{...opportunity,stage:'trial'},work:{kind:'trial',action:'x',success:'y'},task:{},model})).body)
+  .toBe('What is left to decide?\n\nhttps://cmcarebase.com/faq?utm_source=caremetric&utm_medium=email&utm_campaign=success-carebase-trial');
+});
+it('refuses a tag that carries another host, path or parameter, and tags on the booking page',async()=>{
+ const run=body=>draftMessage({opportunity,work,task:{},model:{configured:true,run:async()=>({outcome:'completed',output:{subject:'Training',citations:['source-1'],needsHuman:false,body}})}});
+ expect(await run('Try it: https://cmcarebase.com/signup?utm_source=a&next=https://evil.test')).toBeNull();
+ expect(await run('Try it: https://cmcarebase.com/admin?utm_source=caremetric')).toBeNull();
+ expect(await run('Try it: https://evil.test/signup?utm_source=caremetric')).toBeNull();
+ expect(await run('Try it: https://cmcarebase.com/signup?utm_source=evil.test')).toBeNull();
+ expect(await run('Book: https://example.org/book?utm_source=caremetric')).toBeNull();
+});

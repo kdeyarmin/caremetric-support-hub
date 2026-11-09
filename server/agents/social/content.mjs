@@ -3,8 +3,10 @@
  * is offered to the owner. The three system prompts are constants (role, craft, rules, the fact sheet and the sales playbook), so they
  * are cached and can be read here and in the tests. Changing one means changing its version.
  *
- * The checks (`checkSocialText`) are the Content Marketer's claim rules plus the social ones: a length for each surface; no markup;
- * links only to the product's own pages, none in an Instagram caption or in ad copy; at most five hashtags (eight on Instagram) and
+ * The checks (`checkSocialText`) are the Content Marketer's claim rules plus the social ones: a length for each surface (counted with
+ * any campaign tags left out, since they lengthen a link, not the words); no markup;
+ * links only to the product's own pages (plain, or with campaign tags and nothing else: ../links.mjs), none in an Instagram caption
+ * or in ad copy; at most five hashtags (eight on Instagram) and
  * three emoji; the product's own prices only; no promise of a refund, a credit, an extension or special pricing; no claim about a
  * person's personal attributes in an ad (Meta's policy); no mention of AI; for a reply, nothing repeated from the person's message.
  */
@@ -14,6 +16,7 @@ import { factSheetText, factsRevision } from '../content/facts.mjs';
 import { allowedNumbers, normalizeTerms, textProblems } from '../content/validate.mjs';
 import { productAmounts } from '../../growth/draft.mjs';
 import { linkablePages, playbookFor, playbookText } from '../../growth/playbook.mjs';
+import { linkAllowed, tagLinks } from '../links.mjs';
 
 export const planPromptVersion = 'social-plan.3';
 export const adPromptVersion = 'social-ads.3';
@@ -148,12 +151,12 @@ export function checkSocialText(value, { surface, product = null, theirText = ''
   if (terms.ambiguous) return { ok: false, reason: 'vocabulary' };
   const text = terms.text;
   if (!text) return { ok: false, reason: 'empty' };
-  if (text.length > limits[surface]) return { ok: false, reason: 'too_long' };
+  if (tagLinks(text, null).length > limits[surface]) return { ok: false, reason: 'too_long' };
   if (markup.test(text)) return { ok: false, reason: 'markup' };
   const links = (text.match(linkPattern) ?? []).map(url => url.replace(trailing, ''));
   if (links.length && (surface === 'instagram' || surface.startsWith('ad_'))) return { ok: false, reason: 'link' };
   const allowed = new Set(socialLinks(product).map(link => link.url));
-  if (links.length > 1 || links.some(url => !allowed.has(url))) return { ok: false, reason: 'link' };
+  if (links.length > 1 || links.some(url => !linkAllowed(url, allowed))) return { ok: false, reason: 'link' };
   const tags = [...text.matchAll(hashtag)];
   if (tags.length > (surface === 'instagram' ? 8 : 5) || (surface.startsWith('ad_') && tags.length) || (['comment', 'message'].includes(surface) && tags.length)) return { ok: false, reason: 'hashtags' };
   if ((text.match(emoji) ?? []).length > 3) return { ok: false, reason: 'emoji' };

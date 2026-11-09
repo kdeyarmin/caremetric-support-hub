@@ -25,6 +25,8 @@ describe('sales playbook', () => {
       expect(pages.every(page => page.product === book.factsKey)).toBe(true);
     }
     expect(linkablePages('breathe')).toEqual([]);
+    // Intel's walkthrough and free county report (checked on the live site on 2026-11-09) are pages an agent may link.
+    expect(linkablePages('caremetric-intel').map(page => page.url)).toEqual(expect.arrayContaining(['https://www.caremetricintel.com/#how-it-works', 'https://www.caremetricintel.com/county-report']));
   });
 
   it('keeps CareBase discovery inside Pennsylvania and finds a new search every day', () => {
