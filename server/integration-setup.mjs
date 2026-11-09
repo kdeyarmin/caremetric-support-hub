@@ -1,4 +1,5 @@
 import { HttpError } from './sms-auth.mjs';
+import { validGrowthFromEmail, validGrowthFromName } from './growth/sender.mjs';
 
 /**
  * Which integrations the Hub service has configured, read from the service
@@ -35,7 +36,7 @@ export const integrationCatalog = Object.freeze([
     variables: [
       { name: 'HUB_SENDGRID_INBOUND_PUBLIC_KEY', secret: true, required: true, purpose: 'Verifies signed Inbound Parse posts.' },
       { name: 'HUB_SENDGRID_API_KEY', secret: true, required: false, purpose: 'Mail Send key for replies and bulk email.' },
-      { name: 'HUB_SUPPORT_FROM_EMAIL', secret: false, required: false, purpose: 'The one address every Hub email comes from: replies, alerts, cold, customer and bulk email (default support@caremetric.ai).' },
+      { name: 'HUB_SUPPORT_FROM_EMAIL', secret: false, required: false, purpose: 'The address Hub email comes from: replies, alerts, customer and bulk email, and cold email unless Customer growth has its own sender (default support@caremetric.ai).' },
       { name: 'HUB_SUPPORT_REPLY_TO', secret: false, required: false, purpose: 'Reply-To on support replies and customer emails: the address Inbound Parse receives (e.g. support@inbound.caremetric.ai), so answers join the conversation. Default: the sender itself.' },
       { name: 'HUB_BULK_EMAIL_POSTAL_ADDRESS', secret: false, required: false, purpose: 'Mailing address in every bulk email footer; include it for marketing email (CAN-SPAM).' },
     ] },
@@ -68,6 +69,8 @@ export const integrationCatalog = Object.freeze([
       { name: 'HUB_GROWTH_CAREBASE_EVENT_KEY', secret: true, minLength: 32, required: false, purpose: 'CareBase server-only activity signing key, at least 32 characters.' },
       { name: 'HUB_GROWTH_INTEL_EVENT_KEY', secret: true, minLength: 32, required: false, purpose: 'Intel server-only activity signing key, at least 32 characters.' },
       { name: 'HUB_SENDGRID_EVENT_PUBLIC_KEY', secret: true, required: false, purpose: 'Verifies delivery, bounce, complaint and unsubscribe webhooks.' },
+      { name: 'HUB_GROWTH_FROM_EMAIL', secret: false, required: false, valid: validGrowthFromEmail, purpose: 'Sender for cold email and sales follow-ups only, on its own subdomain (e.g. hello@go.caremetric.ai). Authenticate it in SendGrid (SPF, DKIM), publish DMARC and warm it up first. Replies still reach the support inbox. Unset: the support address.' },
+      { name: 'HUB_GROWTH_FROM_NAME', secret: false, required: false, valid: validGrowthFromName, purpose: 'Display name on growth email (default "CareMetric"), at most 64 characters.' },
     ] },
   { id: 'social-media', name: 'Social media (Meta)', purpose: 'The Social Media Manager\'s connection to your Facebook Page, Instagram professional account and Meta ad account: weekly posts, replies to comments and messages, the daily ad review and the weekly report. Every post, reply and ad change waits for your approval until you hand that work over on the AI team screen; budget increases always do.', docs: 'docs/SOCIAL_MEDIA.md',
     variables: [
@@ -123,7 +126,8 @@ export function integrationSetup({ rpc, env = process.env, now = () => new Date(
           return {
             name: variable.name, secret: variable.secret, required: variable.required, purpose: variable.purpose, set,
             // A secret shorter than the service's minimum is treated as missing by the service, so it does not satisfy here either.
-            satisfied: variable.flag ? value === 'true' : variable.minLength ? typeof value === 'string' && value.length >= variable.minLength : set,
+            // A setting the service would ignore (an address that is not one) does not satisfy either.
+            satisfied: variable.flag ? value === 'true' : variable.minLength ? typeof value === 'string' && value.length >= variable.minLength : variable.valid ? set && variable.valid(value) : set,
             // Only a non-secret setting is ever shown; a secret is represented by `set` alone.
             ...(variable.secret ? {} : { value: set ? String(value).trim().slice(0, 200) : null }),
           };

@@ -166,6 +166,9 @@ answers**, **Article publishing** and **Offers**; **Sales follow-ups** and **Col
 auto-approval lists (`auto_send_templates` for the account emails, `auto_approve_kinds` for the others: `communication.answer`
 for support answers, `content.publish` for articles, `offer.apply` for offers, and the trust values `growth.sales_followup` and
 `growth.cold_email`, which the growth operations read, for the Marketing Manager's two steps); only migrations write that list.
+The Marketing Manager's email (both steps, and anything the owner approves) can come from its own sender on a subdomain,
+`HUB_GROWTH_FROM_EMAIL`, with replies still going to the support inbox; every other agent's email stays on the support address
+(see [A separate sender for prospecting](CUSTOMER_GROWTH.md#a-separate-sender-for-prospecting)).
 
 - **Start supervised week** (Team screen, under "Work the team does on its own"): the step is supervised for seven days. Any
   agent it involves that could only observe moves up to Propose, and the step's values come off the agents' lists (one the owner

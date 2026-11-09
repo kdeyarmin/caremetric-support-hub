@@ -110,3 +110,18 @@ describe('integration setup report', () => {
     expect(unset).toMatchObject({ ready: false, complete: false });
   });
 });
+
+describe('the growth sender on the setup panel', () => {
+  it('shows whether a separate growth sender is set, and does not count an address the service would ignore', async () => {
+    const growthVariables = async (extra) => (await harness('platform_admin', { ...env, ...extra }).handle('token')).integrations
+      .find((integration) => integration.id === 'customer-growth').variables.filter((variable) => variable.name.startsWith('HUB_GROWTH_FROM_'));
+    expect((await growthVariables({})).map((variable) => [variable.name, variable.secret, variable.required, variable.set, variable.value]))
+      .toEqual([['HUB_GROWTH_FROM_EMAIL', false, false, false, null], ['HUB_GROWTH_FROM_NAME', false, false, false, null]]);
+    expect(await growthVariables({ HUB_GROWTH_FROM_EMAIL: 'hello@go.caremetric.ai', HUB_GROWTH_FROM_NAME: 'CareMetric Sales' })).toEqual([
+      expect.objectContaining({ name: 'HUB_GROWTH_FROM_EMAIL', set: true, satisfied: true, value: 'hello@go.caremetric.ai' }),
+      expect.objectContaining({ name: 'HUB_GROWTH_FROM_NAME', set: true, satisfied: true, value: 'CareMetric Sales' })]);
+    const invalid = await growthVariables({ HUB_GROWTH_FROM_EMAIL: 'not an address' });
+    expect(invalid[0]).toMatchObject({ set: true, satisfied: false, value: 'not an address' });
+    expect(invalid[0]).not.toHaveProperty('valid');
+  });
+});

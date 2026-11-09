@@ -29,6 +29,7 @@ import { growthStore } from './growth/store.mjs';
 import { growthService } from './growth/service.mjs';
 import { growthResearch } from './growth/research.mjs';
 import { growthContactFinder } from './growth/contacts.mjs';
+import { growthSender } from './growth/sender.mjs';
 import { socialConfig } from './agents/social/index.mjs';
 import { learningMediaImport, mediaImportFeature, mediaImportHosts } from './learning-media-import.mjs';
 
@@ -52,8 +53,9 @@ const automation=aiAutomation({ai,store:sqlAutomationStore(pool),enabled:process
 const publicOrigin=process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin;
 // One text sender and one mail sender, shared by the Communications inbox and the AI team's owner alerts.
 const textSender=twilioMessaging({accountSid:process.env.HUB_TWILIO_ACCOUNT_SID,authToken:process.env.HUB_TWILIO_AUTH_TOKEN,messagingServiceSid:process.env.HUB_TWILIO_MESSAGING_SERVICE_SID,from:process.env.HUB_TWILIO_FROM_NUMBER});
-// One address for every email the Hub sends (docs/UNIFIED_COMMUNICATIONS.md, "One address"): staff replies, the AI team's alerts,
-// cold email, customer emails and bulk email all come from HUB_SUPPORT_FROM_EMAIL (support@caremetric.ai) and carry one Reply-To.
+// One address for the Hub's email (docs/UNIFIED_COMMUNICATIONS.md, "One address"): staff replies, the AI team's alerts,
+// customer emails and bulk email come from HUB_SUPPORT_FROM_EMAIL (support@caremetric.ai) and carry one Reply-To. Growth email
+// (cold email and sales follow-ups) does too unless HUB_GROWTH_FROM_EMAIL gives it its own sender (below).
 // caremetric.ai's mail is received by SendGrid Inbound Parse, so an answer to any of them lands in Communications.
 const supportFrom=process.env.HUB_SUPPORT_FROM_EMAIL?.trim()||'support@caremetric.ai';
 if(process.env.HUB_BULK_EMAIL_FROM?.trim())console.warn('HUB_BULK_EMAIL_FROM is no longer read: every email comes from HUB_SUPPORT_FROM_EMAIL.');
@@ -69,7 +71,11 @@ const messaging=communications({pool,delegations:capabilities,publicOrigin,
   sms:textSender,email:mailSender,
   chatEnabled:process.env.HUB_CHAT_ENABLED==='true'});
 const growth=growthService({store:growthStore(pool),research:growthResearch({apiKey:process.env.HUB_GROWTH_SEARCH_API_KEY}),contacts:growthContactFinder(),features:new Set(contract.features),enabled:process.env.HUB_GROWTH_SEND_ENABLED==='true',signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,publicOrigin,postalAddress:process.env.HUB_BULK_EMAIL_POSTAL_ADDRESS});
-const growthMail=sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:supportFrom,replyTo:supportReplyTo});
+// Cold email and sales follow-ups may come from their own address (HUB_GROWTH_FROM_EMAIL, normally on a subdomain), so prospecting
+// can never hurt the support address's reputation. Replies still go to the support inbox. Unset: the support sender, as before.
+const growthFrom=growthSender(process.env,{supportFrom,supportReplyTo});
+for(const warning of growthFrom.warnings)console.warn(warning);
+const growthMail=sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:growthFrom.from,fromName:growthFrom.fromName,replyTo:growthFrom.replyTo});
 // CareMetric does no demos, calls or meetings with anyone (owner decision 2026-11-09), so no message offers a booking page any more.
 if(process.env.HUB_BOOKING_URL) console.warn('HUB_BOOKING_URL is set but no longer used: no message offers a booking page. Remove it from the service.');
 // The Account Manager's customer emails: from the support address, replies to it, one-click unsubscribe headers, and the postal address in every footer.
