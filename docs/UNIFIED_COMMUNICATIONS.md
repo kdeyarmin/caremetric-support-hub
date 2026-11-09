@@ -151,8 +151,11 @@ accepting messages that may contain PHI.
 
 Every email the Hub sends comes from **support@caremetric.ai** (`HUB_SUPPORT_FROM_EMAIL`) and
 replies to it (or to `HUB_SUPPORT_REPLY_TO` when set): staff replies, the AI team's alerts and
-external emails, cold email, customer lifecycle emails and bulk email. There is no second sender
-setting (`HUB_BULK_EMAIL_FROM` is no longer read). The email footers name the same address, in
+external emails, customer lifecycle emails and bulk email. `HUB_BULK_EMAIL_FROM` is no longer read.
+The one exception is growth email (cold email and sales follow-ups): when `HUB_GROWTH_FROM_EMAIL`
+is set it comes from that address, on its own subdomain, and still replies to the support inbox
+(see [Customer growth](CUSTOMER_GROWTH.md#a-separate-sender-for-prospecting)). Unset, growth
+email comes from the support address too. The email footers name the same address, in
 every theme.
 
 It receives replies: `caremetric.ai`'s MX record is `mx.sendgrid.net`, so every address on the
