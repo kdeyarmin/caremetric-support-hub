@@ -14,6 +14,8 @@ import { contentExecutors } from './content/executor.mjs';
 import { modelRuntime } from './runtime/index.mjs';
 import { salesHandlers } from './sales/index.mjs';
 import { socialDeclared, socialTeam } from './social/index.mjs';
+import { creativeDeclared, creativeTeam } from './creative/index.mjs';
+import { creativeExecutors } from './creative/executor.mjs';
 
 const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 
@@ -36,17 +38,22 @@ const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
  * Growth assessment and drafting use structured business evidence, with exact-message review for model drafts.
  * `offerBilling` makes the Account Manager's offers from the owner's menu (`{ agentOffer }`, platform billing's session-less method); without
  * it an approved offer is refused before Stripe is asked and its place under the cap is given back.
+ * `creative` is the Creative Director's configuration (creativeConfig in creative/index.mjs: HUB_CREATIVE_ENABLED, the daily render cap,
+ * the video provider and the HeyGen key). Its work registers only when the database declares platform.agents.creative.v1 and
+ * HUB_CREATIVE_ENABLED is "true"; its two executors (handing an approved asset over, retiring one) whenever the database declares it, so an
+ * approval the owner gives is always carried out. The Social Media Manager uses approved creative whenever the database has it.
  */
 export function agentTeam({
   pool, growth: givenGrowth = null, growthMail = null, postalAddress = '', store: givenStore = null, handlers = {}, executors = {}, sms, email, ownerEmail, publicOrigin,
   fetchImpl = fetch, enabled = false, log = line => console.warn(line), now = () => new Date(), communications = null, features = null,
   anthropicApiKey = null, record = null, model = null, guides = null, customerTextToAi = false, bookingUrl = null, leadSecrets = {}, lifecycle = null, offerBilling = null,
-  social = null, meta = null, marketed = null,
+  social = null, meta = null, marketed = null, creative = null,
 }) {
   // Fenced operations (the attempt a task was claimed under, the execution an action started) exist once the database declares the hardening feature.
   const marketing = features?.has?.(marketingFeature) === true;
+  const creativeOn = creativeDeclared(features);
   const store = givenStore ?? sqlAgentStore(pool, { fenced: features?.has?.('platform.agents.hardening.v1') === true, growth: features?.has?.('platform.agents.customer-growth.v1') === true,
-    social: socialDeclared(features), marketing });
+    social: socialDeclared(features), marketing, creative: creativeOn });
   // What the team markets: the owner's switches on the AI team page, read when each marketing task starts (marketing.mjs). Until the
   // database declares them, CareMetric Intel only. A caller (a test) may pass its own list or reader.
   const marketedSource = marketed ?? (marketing && typeof store.marketedProducts === 'function' ? () => store.marketedProducts() : [...defaultMarketed]);
@@ -56,17 +63,27 @@ export function agentTeam({
   const shared = { store, notifier, model: runtime };
   // The Social Media Manager (platform.agents.social.v1): its Meta client is built once, from `social` (socialConfig in social/index.mjs).
   const socialWork = socialTeam({ social, features, fetchImpl, meta });
+  // The Creative Director (platform.agents.creative.v1 and HUB_CREATIVE_ENABLED): it reads the Social Media Manager's ad clients for results.
+  const creativeWork = creativeTeam({ creative, features, fetchImpl, record });
+  // Approved creative for the Social Media Manager, and the hook that tells the Creative Director a weekly social plan was written.
+  const creativeLink = creativeOn && typeof store.creativeApproved === 'function' ? {
+    approved: query => store.creativeApproved(query),
+    live: (assetId, ref) => store.creativeMarkLive(assetId, ref),
+    planned: creativeWork.enabled ? week => store.enqueue('creative_director', 'creative.plan', `creative:plan:social:${week}`, { payload: { week }, priority: 5, sourceKind: 'agent', sourceRef: 'social.plan' }) : null,
+  } : null;
   const customerEmail = { ...(lifecycle ?? {}), publicOrigin };
   const actions = actionExecutor({ store, executors: {
     ...recordOnlyExecutors, ...growthExecutors({growth,mail:growthMail,publicOrigin,postalAddress}), ...conciergeExecutors({ communications, store, notifier, features, log }), ...lifecycleExecutors({ store, features, lifecycle: customerEmail, log }),
     ...offerExecutors({ store, features, billing: offerBilling, notifier, log }),
-    ...contentExecutors({ store, features, log }), ...externalEmailExecutors({ store, features, email, log }), ...socialWork.executors({ notifier, log }),
+    ...contentExecutors({ store, features, log }), ...externalEmailExecutors({ store, features, email, log }), ...socialWork.executors({ notifier, log, creative: creativeLink }),
+    ...(creativeOn && typeof store.creativeHandoff === 'function' ? creativeExecutors({ store }) : {}),
     ...(typeof executors === 'function' ? executors(shared) : executors),
   }, log });
   // The handlers every server ships with, then any the caller adds (a caller's handler for the same kind wins).
   const registry = { ...growthHandlers({growth,model:runtime,notifier,features,marketed:marketedSource}),
     ...salesHandlers({ store, notifier, model: runtime, growth, features, customerTextToAi, bookingUrl, publicOrigin, guides, marketed: marketedSource, log }),
-    ...socialWork.handlers({ store, notifier, model: runtime, customerTextToAi, publicOrigin, marketed: marketedSource, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, bookingUrl, leadSecrets, lifecycle: customerEmail, marketed: marketedSource, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
+    ...socialWork.handlers({ store, notifier, model: runtime, customerTextToAi, publicOrigin, marketed: marketedSource, log, creative: creativeLink }),
+    ...creativeWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, publicOrigin, marketed: marketedSource, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, bookingUrl, leadSecrets, lifecycle: customerEmail, marketed: marketedSource, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   const scheduler = agentScheduler({ store, handlers: registry, actions, enabled, log, now });
   const admin = agentAdmin({
     pool, actions, kick: () => scheduler.tick(), waiting: scheduler.runWaiting,
@@ -76,7 +93,8 @@ export function agentTeam({
       sms: Boolean(sms?.configured), email: Boolean(email?.configured), ownerEmail: emailAddress.test(ownerEmail ?? ''), ai: Boolean(runtime.configured),
       customerTextToAi: draftingFor({ model: runtime, guides, customerTextToAi }) !== null,
       externalEmail: externalEmailAvailable({ features, email }),
+      creative: { declared: creativeOn, enabled: creativeWork.enabled, videoProvider: creativeWork.enabled ? (creative?.videoProvider ?? 'internal') : null, dailyRenderCap: creative?.dailyRenderCap ?? 40 },
     }),
   });
-  return { store, notifier, model: runtime, actions, scheduler, admin, tick: scheduler.tick, active: scheduler.active, runWaiting: scheduler.runWaiting };
+  return { store, notifier, model: runtime, actions, scheduler, admin, tick: scheduler.tick, active: scheduler.active, runWaiting: scheduler.runWaiting, creative: creativeWork };
 }

@@ -22,7 +22,12 @@ const failure = code => Object.assign(new Error('The social action was not carri
 const deferred = () => Object.assign(new Error('The post waits for its time slot.'), { code: 'action_deferred' });
 const ctas = new Set(['LEARN_MORE', 'SIGN_UP']);
 
-export function socialExecutors({ meta, linkedin = null, settings = {}, notifier = null, now = () => new Date(), log = line => console.warn(line) }) {
+export function socialExecutors({ meta, linkedin = null, settings = {}, notifier = null, now = () => new Date(), log = line => console.warn(line), creative = null }) {
+  // A post or ad made from approved Creative Director creative marks the asset live; a failure to record that never fails the publish.
+  const markLive = async (input, id) => {
+    if (!creative?.live || !/^[0-9a-f-]{36}$/.test(input?.creativeAssetId ?? '')) return;
+    try { await creative.live(input.creativeAssetId, String(id ?? '')); } catch { log(JSON.stringify({ event: 'hub_social_creative_live_unrecorded' })); }
+  };
   // LinkedIn is optional: without it, a LinkedIn action is refused as not configured.
   const li = linkedin ?? { configured: { page: false, ads: false } };
   const onLinkedIn = input => input?.platform === 'linkedin';
@@ -59,6 +64,7 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
       const published = await careful(execution, () => (onLinkedIn(input)
         ? li.publishPost({ message: input.message, link: input.link ?? null, linkTitle: input.linkLabel ?? null, imageUrl: input.imageUrl ?? null })
         : meta.publishPost({ platform: input.platform, message: input.message, link: input.link ?? null, imageUrl: input.imageUrl ?? null })));
+      await markLive(input, published.id);
       return { published: true, id: published.id };
     },
 
@@ -116,7 +122,8 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
       if (parts.some(part => !part.ok) || !checkSocialText(`Start here: ${input.link}`, { surface: 'facebook', product: input.product ?? null }).ok) throw failure('invalid_ad');
       const created = await careful(execution, () => (onLinkedIn(input) ? li : meta).createAd({ adsetId: input.adsetId, name: String(input.name ?? 'CareMetric ad'), message: input.message, headline: input.headline,
         description: input.description, link: input.link, imageHash: typeof input.imageHash === 'string' ? input.imageHash : null,
-        imageUrl: onLinkedIn(input) && /^https:\/\//.test(input.imageUrl ?? '') ? input.imageUrl : null, callToAction: input.callToAction }));
+        imageUrl: /^https:\/\//.test(input.imageUrl ?? '') ? input.imageUrl : null, callToAction: input.callToAction }));
+      await markLive(input, created.id);
       return { created: true, id: created.id };
     },
 

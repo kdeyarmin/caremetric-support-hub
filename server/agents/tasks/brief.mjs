@@ -61,6 +61,8 @@ function growthSection(growth) {
   };
 }
 
+const creativePlatforms = { meta: 'Meta', linkedin: 'LinkedIn', google: 'Google display', youtube: 'YouTube' };
+const creativeProducts = { carebase: 'CareBase', 'caremetric-intel': 'Intel' };
 /** Turns the facts into { subject, body, blocks, needsYou }. Pure: the same facts always give the same email. */
 export function composeBrief(facts, { now = new Date(), publicOrigin, services = {}, labels = {}, growth = null } = {}) {
   const generated = facts?.generatedAt ?? now;
@@ -95,6 +97,14 @@ export function composeBrief(facts, { now = new Date(), publicOrigin, services =
 
   const watch = [];
   if(customerGrowth)watch.push(`Customer growth: ${count(customerGrowth.prospects)} prospects, ${count(customerGrowth.trials)} trials, ${count(customerGrowth.activated)} activated and ${count(customerGrowth.paid)} paid accounts recorded.`);
+  // The Creative Director (platform.agents.creative.v1): counts and the strongest learning per product, never copy.
+  const creative = facts?.creative;
+  if (creative?.unavailable === true) watch.push('Creative: the figures could not be read this morning.');
+  else if (creative && (count(creative.waiting) || count(creative.inProduction) || count(creative.approvedWeek) || count(creative.blockedWeek) || (creative.learnings ?? []).length)) {
+    const wins = (Array.isArray(creative.learnings) ? creative.learnings : []).slice(0, 2)
+      .map(item => `${String(item.kind ?? '')} "${String(item.value ?? '').slice(0, 40)}" on ${creativePlatforms[item.platform] ?? item.platform} for ${creativeProducts[item.product] ?? item.product}`);
+    watch.push(`Creative: ${count(creative.waiting)} waiting for your approval, ${count(creative.inProduction)} in production, ${count(creative.approvedWeek)} approved and ${count(creative.liveWeek)} published this week, ${count(creative.blockedWeek)} blocked by the checks.${wins.length ? ` Working best: ${wins.join('; ')}.` : ''}`);
+  }
   if (count(billing.trialsEnding)) watch.push(`${plural(count(billing.trialsEnding), 'trial')} end${count(billing.trialsEnding) === 1 ? 's' : ''} within a week.`);
   const paused = agents.filter(agent => agent.status === 'paused').map(agent => agent.name);
   if (paused.length) watch.push(`Paused, so ${paused.length === 1 ? 'it does' : 'they do'} nothing until you resume ${paused.length === 1 ? 'it' : 'them'}: ${paused.join(', ')}.`);

@@ -220,10 +220,11 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
       const data = await get(adsetId, { fields: 'id,daily_budget,effective_status' }, { signal });
       return { id: String(data.id ?? ''), dailyBudget: data.daily_budget ? Number(data.daily_budget) : null, active: data.effective_status === 'ACTIVE' };
     },
-    async createAd({ adsetId, name, message, headline, description, link, imageHash, callToAction }, { signal } = {}) {
+    // An image is the base ad's image hash or, for an approved Creative Director asset, its address (Meta fetches it: link_data.picture).
+    async createAd({ adsetId, name, message, headline, description, link, imageHash, imageUrl = null, callToAction }, { signal } = {}) {
       const creative = await post(`act_${account}/adcreatives`, {
         name: name.slice(0, 100),
-        object_story_spec: { page_id: page, link_data: { link, message, name: headline, description, ...(imageHash ? { image_hash: imageHash } : {}), call_to_action: { type: callToAction, value: { link } } } },
+        object_story_spec: { page_id: page, link_data: { link, message, name: headline, description, ...(imageHash ? { image_hash: imageHash } : imageUrl ? { picture: imageUrl } : {}), call_to_action: { type: callToAction, value: { link } } } },
       }, { signal });
       const ad = await post(`act_${account}/ads`, { name: name.slice(0, 100), adset_id: adsetId, creative: { creative_id: creative.id }, status: 'ACTIVE' }, { signal });
       return { id: String(ad.id ?? ''), creativeId: String(creative.id ?? '') };

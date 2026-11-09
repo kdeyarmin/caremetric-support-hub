@@ -24,7 +24,8 @@ const productSlug = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const couponId = /^[A-Za-z0-9_-]{1,255}$/;
 export const agentAdminActions = new Set(['overview', 'status', 'autonomy', 'budget', 'decide', 'run', 'cancel', 'waiting', 'step', 'email', 'offer', 'addOffer', 'marketing']);
 
-function reviewed(error) {
+/** A database refusal as an HTTP error with its reviewed wording; anything else unchanged. Shared with the Creative screen (creative/admin.mjs). */
+export function reviewed(error) {
   if (error instanceof HttpError) return error;
   // A date the pattern accepts but the calendar does not (2026-02-30) reaches the database, which refuses it. That is the request's
   // fault, and the database's own wording is not shown.

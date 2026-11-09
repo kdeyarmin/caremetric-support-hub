@@ -14,7 +14,7 @@ import { transaction } from '../sms-auth.mjs';
  * work can be handed back. Against a database without those operations the calls keep their old shape
  * and the extras are ignored, so a server can be deployed before the migration is applied.
  */
-export function sqlAgentStore(pool, { fenced = false, growth = false, social = false, marketing = false } = {}) {
+export function sqlAgentStore(pool, { fenced = false, growth = false, social = false, marketing = false, creative = false } = {}) {
   const call = (operation, args = []) => transaction(pool, async client =>
     (await client.query(`select ${operation}(${args.map((_, index) => `$${index + 1}`).join(', ')}) as result`, args)).rows[0].result);
   return {
@@ -28,6 +28,45 @@ export function sqlAgentStore(pool, { fenced = false, growth = false, social = f
       socialOpenTargets: () => call('private.social_open_targets'),
       /** Holds a proposed or approved post until its `scheduledFor`. */
       socialSchedule: (actionId, execution = null) => call('private.social_schedule', [actionId, execution]),
+    } : {}),
+    // The Creative Director (platform.agents.creative.v1). Briefs, assets and files are reached only through these operations.
+    ...(creative ? {
+      /** Marketing plan output with no creative yet: CareMetric's own words, product, platform and pillar. */
+      creativePlanInputs: (days = 7) => call('private.creative_plan_inputs', [days]),
+      /** Both brand kits, no file bytes. */
+      creativeBrandKits: () => call('private.creative_brand_kits'),
+      /** Records a brief once per request key: `{ id, created, status }`. */
+      creativeBriefCreate: brief => call('private.creative_brief_create', [JSON.stringify(brief)]),
+      creativeBriefContext: id => call('private.creative_brief_context', [id]),
+      creativeBriefFinish: (id, status, result = null) => call('private.creative_brief_finish', [id, status, result === null ? null : JSON.stringify(result)]),
+      creativeDraftsSave: (briefId, taskId, assets) => call('private.creative_drafts_save', [briefId, taskId, JSON.stringify(assets)]),
+      /** Claims drafts to render within the day's cap: `{ claimed, renderedToday, cap }`. */
+      creativeRenderClaim: (limit, dailyCap, products) => call('private.creative_render_claim', [limit, dailyCap, products]),
+      creativeRenderJobs: (limit = 5) => call('private.creative_render_jobs', [limit]),
+      creativeRenderJob: (assetId, job) => call('private.creative_render_job', [assetId, JSON.stringify(job)]),
+      creativeRenderFinish: (assetId, outcome, file, contentType, compliance, meta = {}) =>
+        call('private.creative_render_finish', [assetId, outcome, file, contentType, compliance === null ? null : JSON.stringify(compliance), JSON.stringify(meta ?? {})]),
+      creativeReady: (limit, products) => call('private.creative_ready', [limit, products]),
+      creativeAssetProposed: (assetId, actionId) => call('private.creative_asset_proposed', [assetId, actionId]),
+      /** The owner's logo or a screenshot, as bytes. */
+      creativeBrandFile: id => call('private.creative_brand_file', [id]),
+      creativeHandoff: (actionId, execution) => call('private.creative_handoff', [actionId, execution]),
+      creativeRetire: (actionId, execution) => call('private.creative_retire', [actionId, execution]),
+      /** Approved creative the Social Media Manager may use, for a product and platform. */
+      creativeApproved: ({ product, platform, limit = 5 }) => call('private.creative_approved', [product, platform, limit]),
+      creativeMarkLive: (assetId, ref) => call('private.creative_mark_live', [assetId, ref]),
+      /** `{ contentType, bytes }` for an approved or live asset's public token, or null. */
+      creativePublicFile: token => transaction(pool, async client => {
+        const row = (await client.query('select content_type, bytes from private.creative_public_file($1)', [token])).rows[0];
+        return row ? { contentType: row.content_type, bytes: row.bytes } : null;
+      }),
+      creativeLiveAssets: products => call('private.creative_live_assets', [products]),
+      creativePerformanceSave: rows => call('private.creative_performance_save', [JSON.stringify(rows)]),
+      creativeLearningsSave: rows => call('private.creative_learnings_save', [JSON.stringify(rows)]),
+      creativeLeads: (since, until) => call('private.creative_leads', [since, until]),
+      creativeOpenTargets: () => call('private.creative_open_targets'),
+      /** Counts for the morning brief. */
+      creativeBriefFacts: () => call('private.creative_brief_facts'),
     } : {}),
     // The owner's marketing switches (platform.agents.marketing.v1): the product keys switched on right now.
     ...(marketing ? { marketedProducts: () => call('private.marketed_products') } : {}),
@@ -70,7 +109,12 @@ export function sqlAgentStore(pool, { fenced = false, growth = false, social = f
     notifyFinish: (id, delivery, providerMessageId = null) => call('private.agent_notify_finish', [id, delivery, providerMessageId]),
     ownerContact: () => call('private.owner_contact'),
     /** Counts and times for the morning brief: what needs the owner, what the team did yesterday. No names, no text. */
-    briefFacts: async () => { const facts=await call('private.agent_brief_facts');return growth ? {...facts,customerGrowth:await call('private.growth_brief_counts')} : facts; },
+    briefFacts: async () => {
+      const facts = await call('private.agent_brief_facts');
+      const withGrowth = growth ? { ...facts, customerGrowth: await call('private.growth_brief_counts') } : facts;
+      // A failure to read the creative counts never holds back the brief: the section says they could not be read.
+      return creative ? { ...withGrowth, creative: await call('private.creative_brief_facts').catch(() => ({ unavailable: true })) } : withGrowth;
+    },
     /** Conversations whose newest inbound message has settled and nobody has answered or triaged. Ids and counts only. */
     conciergePending: ({ limit = 10, settleSeconds = 90, windowHours = 72, channels = null } = {}) =>
       call('private.agent_concierge_pending', [limit, settleSeconds, windowHours, channels]),

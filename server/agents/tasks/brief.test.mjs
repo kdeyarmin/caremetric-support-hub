@@ -278,3 +278,13 @@ describe('the Growth section', () => {
     expect(brief.body).toContain('- CareBase lead form is down: since Nov 2, 3:05 AM Eastern');
   });
 });
+
+describe('the creative line', () => {
+  it('reports the Creative Director\'s counts and its strongest learning, and nothing when it has none', () => {
+    const facts = quiet({ creative: { waiting: 2, inProduction: 3, approvedWeek: 1, liveWeek: 1, blockedWeek: 4, renderedToday: 5,
+      learnings: [{ product: 'carebase', platform: 'meta', kind: 'hook', value: 'problem', verdict: 'win', samples: 3 }] } });
+    expect(compose(facts).body).toContain('Creative: 2 waiting for your approval, 3 in production, 1 approved and 1 published this week, 4 blocked by the checks. Working best: hook "problem" on Meta for CareBase.');
+    expect(compose(quiet({ creative: { waiting: 0, inProduction: 0, approvedWeek: 0, liveWeek: 0, blockedWeek: 0, learnings: [] } })).body).not.toContain('Creative:');
+    expect(compose(quiet({ creative: { unavailable: true } })).body).toContain('Creative: the figures could not be read this morning.');
+  });
+});

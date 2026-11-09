@@ -134,6 +134,19 @@ const personalAttribute = /\b(?:are you|do you (?:have|suffer)|you(?:'re| are)) 
 const aiMention = /\b(?:as an ai|language model|artificial intelligence|ai assistant|automated (?:reply|response|post)|chatbot|i am an? (?:ai|assistant|bot|model))\b|\bsystem prompt\b|\b(?:my|these|the) instructions\b/i;
 const surfaces = new Set(Object.keys(limits));
 
+/**
+ * A link without its campaign tracking: an approved Creative Director asset's landing address carries utm_source, utm_medium,
+ * utm_campaign and utm_content (the asset's id), and is still the product's own page. Any other query, or a tracking value that is not a
+ * plain token, leaves the link as it is (and so not allowed).
+ */
+export function withoutTracking(link) {
+  let url;
+  try { url = new URL(link); } catch { return link; }
+  const keys = [...url.searchParams.keys()];
+  if (!keys.length || keys.some(key => !/^utm_(source|medium|campaign|content|term)$/.test(key)) || [...url.searchParams.values()].some(value => !/^[A-Za-z0-9._-]{1,80}$/.test(value))) return link;
+  return `${url.origin}${url.pathname}${url.hash}`;
+}
+
 /** The product's own pages a post or reply may link to; with no product, both software products' pages. */
 export const socialLinks = product => (product ? linkablePages(product) : socialProducts.flatMap(key => linkablePages(key))).map(page => ({ id: page.id, label: page.label, url: page.url }));
 
@@ -153,7 +166,7 @@ export function checkSocialText(value, { surface, product = null, theirText = ''
   const links = (text.match(linkPattern) ?? []).map(url => url.replace(trailing, ''));
   if (links.length && (surface === 'instagram' || surface.startsWith('ad_'))) return { ok: false, reason: 'link' };
   const allowed = new Set(socialLinks(product).map(link => link.url));
-  if (links.length > 1 || links.some(url => !allowed.has(url))) return { ok: false, reason: 'link' };
+  if (links.length > 1 || links.some(url => !allowed.has(withoutTracking(url)))) return { ok: false, reason: 'link' };
   const tags = [...text.matchAll(hashtag)];
   if (tags.length > (surface === 'instagram' ? 8 : 5) || (surface.startsWith('ad_') && tags.length) || (['comment', 'message'].includes(surface) && tags.length)) return { ok: false, reason: 'hashtags' };
   if ((text.match(emoji) ?? []).length > 3) return { ok: false, reason: 'emoji' };

@@ -149,3 +149,29 @@ describe('carrying out social actions on LinkedIn', () => {
     expect(notifier.send).toHaveBeenCalledWith(expect.objectContaining({ severity: 'warning', dedupeKey: 'social:unconfirmed:a1' }));
   });
 });
+
+describe('approved creative', () => {
+  const assetId = '22222222-2222-4222-8222-222222222222';
+  const link = `https://www.caremetricintel.com/?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=${assetId}`;
+  const image = `https://help.caremetric.ai/api/creative/a/${'f'.repeat(64)}.png`;
+
+  it('starts a Meta ad with the approved image and tracked link, and marks the asset live', async () => {
+    const meta = metaOf();
+    const creative = { live: vi.fn(async () => true) };
+    const executors = socialExecutors({ meta, settings: {}, now, log: () => {}, creative });
+    const input = { adsetId: '120200000000001', name: 'Ad', message: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.', headline: 'Territory plans',
+      description: 'Free trial', link, imageHash: null, imageUrl: image, callToAction: 'SIGN_UP', product: 'caremetric-intel', creativeAssetId: assetId };
+    expect(await executors['social.ad_create']({ id: 'a1', kind: 'social.ad_create', input, targetId: '', agentKey: 'social_manager' })).toEqual({ created: true, id: '90' });
+    expect(meta.createAd).toHaveBeenCalledWith(expect.objectContaining({ imageUrl: image, link }));
+    expect(creative.live).toHaveBeenCalledWith(assetId, '90');
+  });
+
+  it('never fails a publish because the asset could not be marked live', async () => {
+    const meta = metaOf();
+    const creative = { live: vi.fn(async () => { throw new Error('down'); }) };
+    const executors = socialExecutors({ meta, settings: {}, now, log: () => {}, creative });
+    const input = { platform: 'instagram', product: 'caremetric-intel', message, link: null, imageUrl: image, scheduledFor: now().toISOString(), creativeAssetId: assetId };
+    expect(await executors['social.post']({ id: 'a1', kind: 'social.post', input, agentKey: 'social_manager' })).toEqual({ published: true, id: '1111_99' });
+    expect(creative.live).toHaveBeenCalled();
+  });
+});
