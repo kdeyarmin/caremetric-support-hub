@@ -14,6 +14,7 @@ import {
   Link2,
   MailPlus,
   MessagesSquare,
+  Palette,
   Phone,
   Rocket,
   Settings2,
@@ -45,6 +46,7 @@ export const navSections: readonly NavSection[] = [
     { to: "/admin/go-live-readiness", label: "AI go-live readiness", icon: Rocket, audience: "platformAdmin" },
     { to: "/admin/growth", label: "Customer growth", icon: Bot, audience: "platformAdmin" },
     { to: "/admin/team", label: "AI team", icon: Bot, audience: "platformAdmin" },
+    { to: "/admin/creative", label: "Creative", icon: Palette, audience: "platformAdmin" },
   ] },
   { label: "Support", items: [
     { to: "/cases", label: "Support cases", icon: Inbox },

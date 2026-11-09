@@ -32,7 +32,8 @@ export const teamSchema = z.object({
   loadedAt: instant, dayStart: instant, agents: z.array(agentSchema), approvals: z.array(approvalSchema),
   approvalCount: z.number().int(), awaitingSessionCount: z.number().int(),
 });
-export const servicesSchema = z.object({ enabled: z.boolean(), handlers: z.array(taskKind), sms: z.boolean(), email: z.boolean(), ownerEmail: z.boolean(), ai: z.boolean(), customerTextToAi: z.boolean(), externalEmail: z.boolean().optional() });
+export const servicesSchema = z.object({ enabled: z.boolean(), handlers: z.array(taskKind), sms: z.boolean(), email: z.boolean(), ownerEmail: z.boolean(), ai: z.boolean(), customerTextToAi: z.boolean(), externalEmail: z.boolean().optional(),
+  creative: z.object({ declared: z.boolean(), enabled: z.boolean(), videoProvider: z.enum(["internal", "heygen"]).nullable(), dailyRenderCap: z.number().int().min(0) }).optional() });
 /**
  * One kind of work the owner hands over: off, a supervised week (they approve each item until `automaticAt`), automatic (the agent
  * does it on its own) or held (they keep approving). `ready` says whether its code is on the Hub; a supervised step whose code is
@@ -158,6 +159,8 @@ const stepHelp: Record<string, string> = {
   social_posts: "Facebook and Instagram posts from the weekly plan that pass the fact-sheet checks, each published at its time slot.",
   social_replies: "Replies to comments and private messages on Facebook and Instagram that pass the checks, and hiding spam. Complaints, account questions and anything with personal details always come to you.",
   ad_tuning: "Pausing ads that are losing and starting new ad copy inside each ad set's existing budget. Budget increases always come to you.",
+  creative_assets: "Finished ad creative that passed every compliance check with no warning, handed to the Social Media Manager. Anything with a warning always comes to you, and anything that fails a check is blocked.",
+  creative_retire: "Retiring creative whose results show it is tired (falling click-through rate, seen more than three times per person, rising cost per thousand impressions).",
 };
 export const stepHelpText = (category: string) => stepHelp[category] ?? "";
 
@@ -173,6 +176,8 @@ const taskLabels: Record<string, string> = {
   "sales.reply": "Answer a prospect", "sales.review": "Weekly pipeline review",
   "social.plan": "Weekly social plan", "social.inbox": "Look for new comments and messages", "social.interaction": "Answer a comment or message",
   "social.ads": "Daily ad review", "social.report": "Weekly social report",
+  "creative.plan": "Turn marketing plans into briefs", "creative.request": "Draft a creative brief", "creative.render": "Render and check creative",
+  "creative.refresh": "Weekly creative refresh", "creative.report": "Weekly creative report",
 };
 export const taskLabel = (kind: string) => taskLabels[kind] ?? kind;
 
@@ -202,6 +207,7 @@ const actionLabels: Record<string, string> = {
   "email.external": "Send an email",
   "social.post": "Publish a social post", "social.reply": "Reply on social media", "social.moderate": "Hide a social comment",
   "social.ad_pause": "Pause an ad", "social.ad_create": "Start a new ad", "social.ad_budget": "Change an ad budget",
+  "creative.asset": "Approve ad creative", "creative.asset_review": "Approve ad creative with warnings", "creative.retire": "Retire tired creative",
 };
 export const actionLabel = (kind: string) => actionLabels[kind] ?? kind;
 
@@ -280,6 +286,11 @@ const errorLabels: Record<string, string> = {
   invalid_offer: "The Hub refused this offer as invalid. Nothing was offered.",
   outreach_off: "This email was approved on its own, but that kind of outreach is no longer handed over to the Marketing Manager (you chose Keep approving, paused it or changed its level), so nothing was sent.",
   business_contacted: "This business was already emailed once from a public address found on its website, so nothing more was sent to it.",
+  not_executing: "The hand-over was not started by this approval, so nothing changed. Refresh and check the asset on the Creative screen.",
+  asset_missing: "The creative asset no longer exists, so nothing changed.",
+  asset_changed: "The creative asset changed since it was proposed (it was rejected, expired or retired), so nothing changed.",
+  invalid_creative_action: "The creative action did not name its asset correctly, so nothing changed.",
+  creative_refused: "The database refused the creative hand-over, so nothing changed.",
 };
 /** What a stored error code means for the owner; an unknown code is shown as it is. */
 export const errorLabel = (code: string | null | undefined) => (code ? errorLabels[code] ?? code : "");
