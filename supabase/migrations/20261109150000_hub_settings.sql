@@ -51,7 +51,6 @@ insert into private.hub_settings (key, kind) values
   ('agents.enabled', 'flag'),
   ('agents.customer_text_to_ai', 'flag'),
   ('agents.owner_email', 'text'),
-  ('agents.booking_url', 'text'),
   ('support.ai_automation', 'flag'),
   ('support.ai_draft_tier', 'text'),
   ('support.ai_follow_up_hours', 'number'),

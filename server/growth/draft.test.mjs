@@ -5,7 +5,7 @@ const now=new Date().toISOString();
 const opportunity={id:'o',product:'carebase',version:1,contact_id:'c',goal:'Staff training',policy:{approved_claim:'CareBase supports facility training.',booking_url:'https://example.org/book'},evidence:[{id:'source-1',source_url:'https://example.org',observed_at:now,claim:'A personal-care facility',confidence:'high'}],events:[]};
 const work={kind:'outreach',action:'Offer a conversation',success:'Qualified response'};
 it('never invents a product claim when the policy has none',async()=>{expect(await draftMessage({opportunity:{...opportunity,policy:{}},work,task:{}})).toBeNull();});
-it('a template contains only reviewed product facts and an approved booking URL',async()=>{const draft=await draftMessage({opportunity,work,task:{}});expect(draft).toMatchObject({modelGenerated:false,citations:['source-1']});expect(draft.body).toContain(opportunity.policy.approved_claim);expect(draft.body).not.toMatch(/guarantee|discount/i);});
+it('a template contains only reviewed product facts',async()=>{const draft=await draftMessage({opportunity,work,task:{}});expect(draft).toMatchObject({modelGenerated:false,citations:['source-1']});expect(draft.body).toContain(opportunity.policy.approved_claim);expect(draft.body).not.toMatch(/guarantee|discount/i);});
 it('rejects model citations and links outside its evidence',async()=>{
  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Hello',body:'Visit https://unapproved.example',citations:['source-1'],needsHuman:false}}))};
  expect(await draftMessage({opportunity,work,task:{},model})).toBeNull();
@@ -32,7 +32,10 @@ it('tells the writer which touch it is writing, the playbook angle for it and th
  expect(input.links.map(link=>link.url)).not.toContain('https://www.caremetricintel.com/');
  expect(request.system[0].text).toContain('CareMetric fact sheet');
  expect(request.system[0].text).toContain('sales playbook');
- expect(request.promptVersion).toBe('growth.5');
+ expect(request.promptVersion).toBe('growth.6');
+ // No booking page is ever offered to the writer (no personal demos with anyone, owner decision 2026-11-09).
+ expect(input.bookingUrl).toBeUndefined();
+ expect(input.links.map(link=>link.url)).not.toContain(opportunity.policy.booking_url);
 });
 it('gives a customer-success message the play for its moment instead of a touch',async()=>{
  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Before your trial ends',body:'What is left to decide before your trial ends?',citations:[],needsHuman:false}}))};
@@ -52,7 +55,7 @@ it('refuses drafts that break the fact sheet or claim rules, and fixes the vocab
  expect((await run({body:'Built for every Assisted Living Residence and ready for the auditor.'}))?.body).toBe('Built for every Assisted Living Facility and ready for the surveyor.');
  expect((await run({body:'CareBase Core is $199 per facility per month, with a 30-day free trial.\n\nhttps://cmcarebase.com/signup.'}))?.modelGenerated).toBe(true);
 });
-it('never offers a call, a meeting or a demo: templates point to the free trial and invite a reply (owner decision 2026-11-08)',async()=>{
+it('never offers a call, a meeting or a demo: templates point to the free trial and invite a reply (owner decisions 2026-11-08 and 2026-11-09)',async()=>{
  const outreach=await draftMessage({opportunity,work,task:{}});
  expect(outreach.body).toContain('https://cmcarebase.com/signup');
  expect(outreach.body).not.toContain(opportunity.policy.booking_url);
@@ -62,19 +65,36 @@ it('never offers a call, a meeting or a demo: templates point to the free trial 
  }
  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Training',body:'Would it help?',citations:['source-1'],needsHuman:false}}))};
  await draftMessage({opportunity,work,task:{},model});
- expect(model.run.mock.calls[0][1].system[0].text).toContain('never offer or suggest a phone call, a sales call, a meeting or a demo');
+ expect(model.run.mock.calls[0][1].system[0].text).toContain('never offer or suggest a phone call, a sales call, a meeting, a conversation, a chat or a demo, and never ask for a time to talk. CareMetric does no personal demos with anyone.');
+ expect(model.run.mock.calls[0][1].system[0].text).not.toContain('bookingUrl');
  expect(model.run.mock.calls[0][1].system[0].text).toContain('Never offer or suggest a demo, a sales call or a meeting.');
 });
-it('tags the product links of a passing outreach draft with its touch, and leaves the booking link alone',async()=>{
- const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Staff training records',body:'How do you track annual training hours today?\n\nhttps://cmcarebase.com/signup\n\nhttps://example.org/book',citations:['source-1'],needsHuman:false}}))};
+it('tags the product links of a passing outreach draft with its touch',async()=>{
+ const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Staff training records',body:'How do you track annual training hours today?\n\nhttps://cmcarebase.com/signup',citations:['source-1'],needsHuman:false}}))};
  const draft=await draftMessage({opportunity:{...opportunity,touches:1},work,task:{},model});
- expect(draft.body).toBe('How do you track annual training hours today?\n\nhttps://cmcarebase.com/signup?utm_source=caremetric&utm_medium=email&utm_campaign=growth-carebase-touch2\n\nhttps://example.org/book');
+ expect(draft.body).toBe('How do you track annual training hours today?\n\nhttps://cmcarebase.com/signup?utm_source=caremetric&utm_medium=email&utm_campaign=growth-carebase-touch2');
 });
 it('accepts a draft whose product link already carries well-formed tags, and refuses a tag that leads elsewhere',async()=>{
  const run=body=>draftMessage({opportunity,work,task:{},model:{configured:true,run:async()=>({outcome:'completed',output:{subject:'Staff training records',body,citations:['source-1'],needsHuman:false}})}});
  expect((await run('Try it free:\nhttps://cmcarebase.com/signup?utm_source=x&utm_medium=y&utm_campaign=z'))?.body).toBe('Try it free:\nhttps://cmcarebase.com/signup?utm_source=caremetric&utm_medium=email&utm_campaign=growth-carebase-touch1');
  expect(await run('Try it free:\nhttps://evil.example/?utm_source=x&utm_medium=y&utm_campaign=z')).toBeNull();
  expect(await run('Try it free:\nhttps://cmcarebase.com/signup?utm_source=x&utm_medium=y&utm_campaign=z&next=https://evil.example')).toBeNull();
+});
+it('refuses a tag that carries another host, path or parameter, and any booking page',async()=>{
+ const run=body=>draftMessage({opportunity,work,task:{},model:{configured:true,run:async()=>({outcome:'completed',output:{subject:'Training',citations:['source-1'],needsHuman:false,body}})}});
+ expect(await run('Try it: https://cmcarebase.com/signup?utm_source=a&next=https://evil.test')).toBeNull();
+ expect(await run('Try it: https://cmcarebase.com/admin?utm_source=caremetric')).toBeNull();
+ expect(await run('Try it: https://evil.test/signup?utm_source=caremetric')).toBeNull();
+ expect(await run('Try it: https://cmcarebase.com/signup?utm_source=evil.test')).toBeNull();
+ expect(await run('Book: https://example.org/book?utm_source=caremetric')).toBeNull();
+ expect(await run('Book: https://example.org/book')).toBeNull();
+});
+it('refuses a draft that offers a conversation, a call, a meeting or a demo, and accepts one that declines a demo (owner decision 2026-11-09)',async()=>{
+ const run=body=>draftMessage({opportunity,work,task:{},model:{configured:true,run:async()=>({outcome:'completed',output:{subject:'Training',citations:['source-1'],needsHuman:false,body}})}});
+ for(const body of ['Would a short conversation about training help?','Happy to set up a quick call this week.','Would you be open to a live demo?','Pick a time that suits you to talk.','You can speak with our team any time.'])
+  expect(await run(body),body).toBeNull();
+ expect((await run('CareMetric does not do live demos. The free trial shows every step:\n\nhttps://cmcarebase.com/signup'))?.modelGenerated).toBe(true);
+ expect((await run('Hold a short monthly meeting with your staff to review training. Would a free trial help?'))?.modelGenerated).toBe(true);
 });
 it('tags the template and a customer message with the Account Manager campaign for the moment',async()=>{
  const template=await draftMessage({opportunity,work,task:{}});

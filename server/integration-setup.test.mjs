@@ -39,7 +39,7 @@ describe('integration setup report', () => {
     for (const name of retiredVariables) expect(names).not.toContain(name);
     // A setting reported here as a variable would send the owner to Railway for something they now change on the Settings page.
     const report = JSON.stringify(integrationCatalog);
-    for (const name of ['HUB_CHAT_ENABLED', 'HUB_AGENTS_ENABLED', 'HUB_OWNER_EMAIL', 'HUB_BOOKING_URL', 'HUB_SUPPORT_FROM_EMAIL', 'HUB_META_PAGE_ID']) expect(report).not.toContain(`"${name}"`);
+    for (const name of ['HUB_CHAT_ENABLED', 'HUB_AGENTS_ENABLED', 'HUB_OWNER_EMAIL', 'HUB_SUPPORT_FROM_EMAIL', 'HUB_META_PAGE_ID']) expect(report).not.toContain(`"${name}"`);
   });
 
   it('reports each product\'s lead secret by presence only, none of them required on its own', async () => {
@@ -67,6 +67,12 @@ describe('integration setup report', () => {
     // Still booleans only: neither the value nor its length is reported.
     expect(JSON.stringify(report)).not.toContain(short);
     expect(JSON.stringify(report)).not.toMatch(/"(length|minLength)"/);
+  });
+
+  it('no longer offers a booking page: CareMetric does no personal demos with anyone (owner decision 2026-11-09)', async () => {
+    const report = await harness('platform_admin', { ...env, HUB_BOOKING_URL: 'https://cal.example.test/caremetric/intro' }).handle('token');
+    expect(JSON.stringify(report)).not.toContain('HUB_BOOKING_URL');
+    expect(JSON.stringify(report)).not.toContain('cal.example.test');
   });
 
   it('refuses every role but the platform administrator', async () => {

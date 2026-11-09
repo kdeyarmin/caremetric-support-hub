@@ -110,12 +110,16 @@ describe('the three suggestions', () => {
     expect(codes(factsOf({ leads: leadsOf({ total: 1, bySource: [{ source: 'google', count: 1 }] }) }))).not.toContain('one_source');
   });
 
-  it('asks for campaign tags, follows up trials, and turns report downloads into demos', () => {
+  it('asks for campaign tags, follows up trials, and turns report downloads into trials, never demos', () => {
     expect(codes(factsOf({ leads: leadsOf({ campaigns: [] }) }))).toContain('no_campaigns');
     expect(suggestionsFor(factsOf({ trials: { started: 0, subscriptions: 2, converted: 0 } })).find(item => item.code === 'trials_started').text).toMatch(/^2 trials started\. Check in with each one/);
     expect(suggestionsFor(factsOf({ trials: { started: 1, subscriptions: 0 } })).find(item => item.code === 'trials_started').text).toMatch(/^1 trial started\. Check in with them/);
     const downloads = factsOf({ leads: leadsOf({ total: 3, byKind: kinds({ county_report: 2, newsletter: 1 }) }), trials: { started: 0, subscriptions: 0, converted: 0 } });
-    expect(suggestionsFor(downloads).find(item => item.code === 'reports_only').text).toBe('3 people downloaded a report or joined a list, but nobody asked to talk. Invite them to a short demo.');
+    expect(suggestionsFor(downloads).find(item => item.code === 'reports_only').text).toBe('3 people downloaded a report or joined a list, but nobody wrote in with a question. Send them the free trial and the walkthrough page, and invite their questions by email.');
+    // No personal demos with anyone (owner decision 2026-11-09): no suggestion ever proposes a demo, a call or a meeting.
+    for (const facts of [factsOf(), downloads, factsOf({ leads: leadsOf({ total: 0 }) }), {}]) {
+      for (const item of suggestionsFor(facts)) expect(item.text, item.code).not.toMatch(/demo|\bcall\b|meeting|talk/i);
+    }
   });
 
   it('always gives three, never mentions a call, AI, a price or the words a CareBase customer would not use', () => {

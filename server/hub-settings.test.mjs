@@ -19,9 +19,9 @@ describe('the settings catalog', () => {
   it('holds exactly the keys and kinds the migration creates', () => {
     const rows = [...migration.matchAll(/\('([a-z_]+\.[a-z_]+)', '(flag|text|number|list)'\)/g)].map(match => [match[1], match[2]]);
     expect(settingsCatalog.map(item => [item.key, item.kind]).sort()).toEqual(rows.sort());
-    // The release gate refuses a database without the first release's 33 rows.
-    expect(rows.length).toBeGreaterThanOrEqual(33);
-    expect(contract).toContain('(select count(*) from private.hub_settings) < 33');
+    // The release gate refuses a database without the first release's 32 rows.
+    expect(rows.length).toBeGreaterThanOrEqual(32);
+    expect(contract).toContain('(select count(*) from private.hub_settings) < 32');
   });
 
   it('gives every setting a group, words, its own Railway variable and a default it would accept', () => {
@@ -38,7 +38,7 @@ describe('the settings catalog', () => {
     }
     // No secret ever becomes a setting: settings are shown on screen and copied into the database.
     for (const item of settingsCatalog) expect(item.env, item.key).not.toMatch(/(KEY|TOKEN|SECRET|PASSWORD|CREDENTIALS)$/);
-    expect(retiredVariables).toEqual(['HUB_BULK_EMAIL_FROM']);
+    expect(retiredVariables).toEqual(['HUB_BULK_EMAIL_FROM', 'HUB_BOOKING_URL']);
   });
 });
 
@@ -53,7 +53,6 @@ describe('reading the old Railway variables', () => {
     expect(settingFromEnv(entry('support.ai_follow_up_hours'), { HUB_AI_FOLLOW_UP_DELAY_HOURS: 'soon' })).toBeUndefined();
     expect(settingFromEnv(entry('billing.intel_price_sync'), { HUB_APP_CATALOG_SYNC: 'off' })).toBe(false);
     expect(settingFromEnv(entry('billing.intel_price_sync'), {})).toBeUndefined();
-    expect(settingFromEnv(entry('agents.booking_url'), { HUB_BOOKING_URL: 'http://cal.example.test' })).toBeUndefined();
     expect(settingFromEnv(entry('social.image_urls'), { HUB_SOCIAL_IMAGE_URLS: 'https://a.test/1.png, https://a.test/2.png' })).toEqual(['https://a.test/1.png', 'https://a.test/2.png']);
     expect(settingFromEnv(entry('seo.search_console_sites'), { HUB_SEARCH_CONSOLE_SITES: 'sc-domain:cmcarebase.com https://www.caremetricintel.com/' }))
       .toEqual(['sc-domain:cmcarebase.com', 'https://www.caremetricintel.com/']);
@@ -106,7 +105,8 @@ describe('settings in the database', () => {
     // An unusable variable is not copied, and says so; every variable a setting replaces is listed as deletable.
     expect(settings.get('agents.owner_email')).toBeNull();
     expect(log.warn).toHaveBeenCalledWith(expect.stringMatching(/^HUB_OWNER_EMAIL has a value the Hub cannot use/));
-    expect(log.info).toHaveBeenCalledWith(expect.stringContaining('can be deleted: HUB_OWNER_EMAIL, HUB_CHAT_ENABLED, HUB_AI_DRAFT_TIER, HUB_BULK_EMAIL_FROM'));
+    expect(log.info).toHaveBeenCalledWith(expect.stringContaining('can be deleted: HUB_OWNER_EMAIL, HUB_CHAT_ENABLED, HUB_AI_DRAFT_TIER.'));
+    expect(log.warn).toHaveBeenCalledWith('HUB_BULK_EMAIL_FROM is set but no longer used. Remove it from the service.');
   });
 
   it('uses the default for a stored value it cannot use, and the variables while the database cannot be read', async () => {
@@ -152,7 +152,7 @@ describe('settings in the database', () => {
     expect(queries.at(-2).params[1]).toBe('null');
     expect(settings.get('agents.owner_email')).toBeNull();
     for (const [key, value] of [['agents.owner_email', 'not an address'], ['support.chat', 'true'], ['support.ai_follow_up_hours', 0.5], ['support.ai_draft_tier', 'fast'],
-      ['agents.booking_url', 'http://cal.example.test'], ['social.image_urls', ['http://a.test/1.png']], ['sms.from_number', '2025550100']]) {
+['social.image_urls', ['http://a.test/1.png']], ['sms.from_number', '2025550100']]) {
       await expect(settings.save('token', { key, value, expectedChangedAt: version }), key).rejects.toMatchObject({ status: 400 });
     }
     await expect(settings.save('token', { key: 'support.unknown', value: true, expectedChangedAt: version })).rejects.toMatchObject({ status: 404 });

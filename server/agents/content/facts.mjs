@@ -12,7 +12,10 @@
 
 export const factsVersion = '2026-11-08';
 
-/** Where public help articles live. The canonical address of an article is `${helpCenterOrigin}/help/articles/<slug>`. */
+/**
+ * Where public help articles live. An article's help-center address is `${helpCenterOrigin}/help/articles/<slug>`; that is its
+ * canonical address unless its product's own website serves it (CareMetric Intel's: intelArticleUrl, articleHomeUrl).
+ */
 export const helpCenterOrigin = 'https://help.caremetric.ai';
 export const articleUrl = slug => `${helpCenterOrigin}/help/articles/${slug}`;
 
@@ -179,6 +182,21 @@ export const productPages = deepFreeze([
   { id: 'advisors-acquisition-checklist', product: 'advisors', label: 'Pre-acquisition readiness checklist', url: 'https://caremetricadvisors.com/resources/acquisition-readiness' },
   { id: 'advisors-contact', product: 'advisors', label: 'Request a consultation', url: 'https://caremetricadvisors.com/contact' },
 ]);
+/**
+ * Intel's website serves the help center's CareMetric Intel articles itself, at `${intelArticleOrigin}/resources/<content key>`,
+ * from the Hub's public feed (GET /api/public/articles?product=caremetric-intel, server/public-articles.mjs). That address is an
+ * Intel article's canonical one: the help center still shows the article, points its canonical link there and leaves it out of
+ * its own sitemap, so the search credit goes to the site that sells Intel.
+ */
+export const intelArticleOrigin = 'https://www.caremetricintel.com';
+export const intelArticleUrl = slug => `${intelArticleOrigin}/resources/${slug}`;
+/** The product whose own website serves its articles, by product slug, and the address it serves one at. */
+const articleHomes = Object.freeze({ [products.intel.slug]: intelArticleUrl });
+/** True when the product's articles live on its own website (only CareMetric Intel's do). */
+export const servedElsewhere = productSlug => Object.hasOwn(articleHomes, productSlug);
+/** The canonical address of the product's article: on the product's own website when it serves it, else in the help center. */
+export const articleHomeUrl = (productSlug, slug) => (servedElsewhere(productSlug) ? articleHomes[productSlug](slug) : articleUrl(slug));
+
 export const productPageIds = Object.freeze(productPages.map(page => page.id));
 export const productPage = id => productPages.find(page => page.id === id) ?? null;
 

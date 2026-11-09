@@ -131,7 +131,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     for(const policy of context.policies) {
       signal?.throwIfAborted(); if(!policy.approved_claim.trim()||!markets(marketedList,policy.product))continue;
       const sources=await growth.research.search(policy.product,{topic:policy.product==='carebase'?'staff training reporting questions':'provider referral development questions',signal});
-      const brief=await contentBrief({product:policy.product,claim:policy.approved_claim,bookingUrl:policy.booking_url,sources,task,model,signal});
+      const brief=await contentBrief({product:policy.product,claim:policy.approved_claim,sources,task,model,signal});
       signal?.throwIfAborted(); if(!brief)continue;
       await growth.store.proposeContent(task.id,policy.product,{...brief,campaign:`growth:${policy.product}:${week}`});proposals++;
     }

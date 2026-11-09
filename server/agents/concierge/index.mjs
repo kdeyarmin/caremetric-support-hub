@@ -26,7 +26,7 @@ const declared = features => has(features, conciergeFeature);
 export const draftingFor = ({ model = null, guides = null, customerTextToAi = false } = {}) =>
   (customerTextToAi === true && model?.configured === true && typeof model.run === 'function' && typeof guides?.top === 'function' ? { model, guides } : null);
 
-export function conciergeHandlers({ store, notifier, features = null, log, model = null, guides = null, customerTextToAi = false, bookingUrl = null }) {
+export function conciergeHandlers({ store, notifier, features = null, log, model = null, guides = null, customerTextToAi = false }) {
   if (!declared(features)) return {};
   // The owner's switch (Settings → AI team) is read for each message, so turning it off stops the next draft.
   const drafting=()=>{const allowed=draftingFor({model,guides,customerTextToAi:live(customerTextToAi)});return allowed?{...allowed,followups}:null;};
@@ -34,7 +34,7 @@ export function conciergeHandlers({ store, notifier, features = null, log, model
   return {
     'concierge.sweep': sweepHandler({ store }),
     // A prospect's message goes to the Sales Executive once the database declares it and the owner has resumed it (sales_handoff decides).
-    'concierge.communication': triageHandler({ store, notifier, log, drafting, bookingUrl, answers: has(features, answersFeature),
+    'concierge.communication': triageHandler({ store, notifier, log, drafting, answers: has(features, answersFeature),
       sales: salesDeclared(features) && typeof store.salesHandoff === 'function' }),
   };
 }

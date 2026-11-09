@@ -3,7 +3,8 @@
  * (private.agent_growth_facts, counts and labels only, test leads never among them) always give the same email.
  *
  * The suggestions are rules, not a model: each has a condition on the facts and fixed words, and the first three whose condition
- * holds are sent. The last few always hold, so there are always three.
+ * holds are sent. The last few always hold, so there are always three. None suggests a demo, a call or a meeting: CareMetric does
+ * no personal demos with anyone (owner decision 2026-11-09).
  */
 import { plural } from '../tasks/shared.mjs';
 import { clip, digestKinds, kindList, kindWord, leadKinds, leadProduct, span } from './words.mjs';
@@ -50,7 +51,7 @@ const rules = [
   }],
   ['slow_reply', f => f.replies.replied > 0 && f.replies.medianMinutes !== null && f.replies.medianMinutes > 60,
     f => `Your median first reply took ${span(f.replies.medianMinutes)}. Aim to answer every new lead within the hour.`],
-  ['no_leads', f => f.total === 0, () => 'No leads came in. Send a link to your demo page to five people who might need it, or post one short customer story.'],
+  ['no_leads', f => f.total === 0, () => 'No leads came in. Send a link to your free trial or a free guide to five people who might need it, or post one short, useful tip.'],
   ['no_search', f => f.total > 0 && f.otherSources === 0 && !f.bySource.some(item => fromSearch(item.source)),
     () => 'No lead came from a search engine. Connect Google Search Console to see which searches find your sites and which pages to improve.'],
   ['one_source', f => f.total >= 2 && f.bySource.length === 1 && f.otherSources === 0,
@@ -62,7 +63,7 @@ const rules = [
     : `${trialsStarted(f)} trials started. Check in with each one well before the trial ends, while the first impression is fresh.`)],
   ['reports_only', f => digestKinds.some(kind => f.byKind[kind] > 0) && f.byKind.demo_request + f.byKind.consultation + f.byKind.contact === 0, f => {
     const people = digestKinds.reduce((sum, kind) => sum + f.byKind[kind], 0);
-    return `${people === 1 ? '1 person' : `${people} people`} downloaded a report or joined a list, but nobody asked to talk. Invite them to a short demo.`;
+    return `${people === 1 ? '1 person' : `${people} people`} downloaded a report or joined a list, but nobody wrote in with a question. Send them the free trial and the walkthrough page, and invite their questions by email.`;
   }],
   ['testimonial', () => true, () => 'Ask one happy customer for a two-sentence quote you can put on your pricing page.'],
   ['article', () => true, () => 'Write one short article that answers a question prospects often ask, and link it from your home page.'],

@@ -36,8 +36,8 @@ CareBase is a flat $499 per organization. That package is retired from sale (`BI
 - Founder: **Dr. Kevin C. Deyarmin** (ND, MSW, CHPCA, NCG), founder and principal advisor of CareMetric Healthcare Advisors and
   the founder behind CareBase. Source: Advisors `site-content.mjs` (`brand.founder`), CareBase `About.tsx`.
 - Public addresses: support@caremetric.ai and the central support line (877) 521-2890 (Hub `server/email-layout.mjs`);
-  hello@caremetric.ai for founding partners (CareBase `About.tsx`). The help center is **https://help.caremetric.ai**. AI-written
-  articles carry no email address or phone number; they link to the product pages below.
+  hello@caremetric.ai for founding partners (CareBase `About.tsx`). The help center is **https://help.caremetric.ai**; articles about
+  CareMetric Intel live at **https://www.caremetricintel.com/resources/<address>** (`intelArticleOrigin`). AI-written articles carry no email address or phone number; they link to the product pages below.
 
 ## CareMetric CareBase
 
@@ -188,8 +188,8 @@ and [the verified live configuration](evidence/founders-sale-20261108.json) are 
   pricing lives at `/#pricing` on both. Intel's walkthrough is `/#how-it-works` and its free county report `/county-report`
   (both checked on the live site on 2026-11-09: the home page carries `id="how-it-works"` and links `/county-report`).
 - Campaign tags: every product page an agent puts in front of a person carries utm_source, utm_medium and utm_campaign
-  (`server/agents/links.mjs`; the values are listed in docs/AI_TEAM.md). Citations, help-center links, unsubscribe links and the
-  booking link are never tagged.
+  (`server/agents/links.mjs`; the values are listed in docs/AI_TEAM.md). Citations, help-center links and unsubscribe links are
+  never tagged, and no message carries a booking link.
 - Official sources, by id, in `facts.mjs` (`officialSources`): the Pennsylvania Code chapters and sections the backlog's topics
   cite (55 Pa. Code Chapters 20, 2600 and 2800 on pacodeandbulletin.gov, in the form cmcarebase.com already cites), the DHS
   personal care home reports page on pa.gov, and CMS and Census data pages for Intel's topics. Each address was opened and

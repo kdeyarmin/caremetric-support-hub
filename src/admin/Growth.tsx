@@ -24,9 +24,8 @@ function OpportunityEditor({item,onSave}:{item:GrowthOpportunity;onSave:(op:stri
 }
 function PolicyEditor({policy,onSave}:{policy:GrowthPolicy;onSave:(op:string,data:unknown)=>Promise<void>}) {
  return <details className="panel"><summary>{names[policy.product]} campaign policy · {policy.enabled?'Enabled':'Paused'}</summary>
- <form onSubmit={event=>{event.preventDefault();const f=new FormData(event.currentTarget);void onSave('policy',{product:policy.product,version:policy.version,enabled:f.has('enabled'),autoSend:f.has('autoSend'),experimentEnabled:f.has('experimentEnabled'),dailyLimit:Number(f.get('dailyLimit')),minGapHours:Number(f.get('minGapHours')),maxTouches:Number(f.get('maxTouches')),bookingUrl:value(f,'bookingUrl'),approvedClaim:value(f,'approvedClaim')});}}>
+ <form onSubmit={event=>{event.preventDefault();const f=new FormData(event.currentTarget);void onSave('policy',{product:policy.product,version:policy.version,enabled:f.has('enabled'),autoSend:f.has('autoSend'),experimentEnabled:f.has('experimentEnabled'),dailyLimit:Number(f.get('dailyLimit')),minGapHours:Number(f.get('minGapHours')),maxTouches:Number(f.get('maxTouches')),bookingUrl:'',approvedClaim:value(f,'approvedClaim')});}}>
  <label>Approved product benefit<textarea name="approvedClaim" defaultValue={policy.approved_claim} maxLength={1000}/></label>
- <label>Booking link<input name="bookingUrl" type="url" defaultValue={policy.booking_url}/></label>
  <label>Maximum messages per day<input name="dailyLimit" type="number" min={1} max={100} defaultValue={policy.daily_limit}/></label>
  <label>Minimum hours between contact across products<input name="minGapHours" type="number" min={24} max={720} defaultValue={policy.min_gap_hours}/></label>
  <label>Maximum prospect touches<input name="maxTouches" type="number" min={1} max={3} defaultValue={policy.max_touches}/></label>

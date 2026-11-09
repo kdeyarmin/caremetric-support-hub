@@ -49,10 +49,10 @@ function skipReason(snapshot, payload) {
  * otherwise; `guides` is the published guide library, whose public guides a reply may link to. `answers` is true when the database
  * admits session-less answers (platform.agents.concierge-autosend.v1): a checked, drafted answer going back by email or chat is then a
  * `communication.answer`, which goes out without the owner's session once approved, or on its own once the owner hands "Sales answers"
- * over. `bookingUrl` (the booking page in Settings) is used only by the fixed acknowledgment, as the Concierge's; drafts never offer a meeting.
+ * over. Nothing it proposes offers a demo, a call or a meeting (owner decisions 2026-11-08 and 2026-11-09).
  */
-export function salesReplyHandler({ store, notifier = null, drafting: draftingOption = null, bookingUrl = null, answers = false, marketed = null, log = line => console.warn(line) }) {
-  // `drafting` and `bookingUrl` may be functions (the owner's Hub settings), read once per message.
+export function salesReplyHandler({ store, notifier = null, drafting: draftingOption = null, answers = false, marketed = null, log = line => console.warn(line) }) {
+  // `drafting` may be a function (the owner's switch in Settings), read once per message.
   async function askModel({ task, snapshot, inbound, route, payload, signal, drafting }) {
     const prior = (snapshot.messages ?? []).filter(message => message.id !== inbound.id).slice(-2);
     if (prior.some(message => message.body.length >= readChars)) return { state: 'unavailable', reason: 'thread_truncated' };
@@ -177,7 +177,7 @@ export function salesReplyHandler({ store, notifier = null, drafting: draftingOp
     if (asked.state === 'drafted') { template = 'drafted'; body = asked.draft.body; }
     else if (asked.state === 'phi') { template = 'phi'; body = replyBody('phi', route); }
     else if (first && asked.state === 'support') { template = 'standard'; body = replyBody('standard', route); }
-    else if (first && !['owner_only', 'refused'].includes(asked.state)) { template = 'sales'; body = replyBody('sales', route, { bookingUrl: live(bookingUrl) }); }
+    else if (first && !['owner_only', 'refused'].includes(asked.state)) { template = 'sales'; body = replyBody('sales', route); }
 
     let alert = null;
     if (asked.state === 'not_marketed') alert = await tellOwnerNotMarketed({ task, snapshot, payload });

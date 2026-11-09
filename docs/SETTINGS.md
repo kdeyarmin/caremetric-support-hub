@@ -30,7 +30,6 @@ does nothing. A setting you saved, or cleared back to its default, is never over
 | AI team | Run the AI team | `HUB_AGENTS_ENABLED` |
 | AI team | Let agents send customer messages to the AI | `HUB_AGENTS_CUSTOMER_TEXT_TO_AI` |
 | AI team | Your email for alerts and the morning brief | `HUB_OWNER_EMAIL` |
-| AI team | Booking page | `HUB_BOOKING_URL` |
 | Customer support | Website chat | `HUB_CHAT_ENABLED` |
 | Customer support | AI answers on new support cases | `HUB_AI_AUTOMATION_ENABLED` |
 | Customer support | AI answer quality | `HUB_AI_DRAFT_TIER` |
@@ -61,7 +60,8 @@ does nothing. A setting you saved, or cleared back to its default, is never over
 | Search | Search Console properties (one per line) | `HUB_SEARCH_CONSOLE_SITES` |
 | Course distribution | Allow legacy opt-in distribution | `HUB_LEGACY_DISTRIBUTION_OPT_IN` |
 
-`HUB_BULK_EMAIL_FROM` was already unused; delete it if it is still set.
+`HUB_BULK_EMAIL_FROM` and `HUB_BOOKING_URL` are no longer used at all (CareMetric offers no demos, calls or meetings); the
+Hub warns at start while either is set. Delete them.
 
 ## What stays in Railway
 

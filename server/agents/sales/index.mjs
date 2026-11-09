@@ -19,13 +19,13 @@ export const salesDraftingFor = ({ model = null, customerTextToAi = false } = {}
 
 const answersFeature = 'platform.agents.concierge-autosend.v1';
 
-export function salesHandlers({ store, notifier, model = null, growth = null, features = null, customerTextToAi = false, bookingUrl = null, publicOrigin = null, guides = null, marketed = null, log }) {
+export function salesHandlers({ store, notifier, model = null, growth = null, features = null, customerTextToAi = false, publicOrigin = null, guides = null, marketed = null, log }) {
   if (!salesDeclared(features)) return {};
   // The owner's switch (Settings → AI team) is read for each message.
   const drafting = () => { const allowed = salesDraftingFor({ model, customerTextToAi: live(customerTextToAi) }); return allowed ? { ...allowed, guides } : null; };
   const answers = features instanceof Set ? features.has(answersFeature) : Array.isArray(features) && features.includes(answersFeature);
   return {
-    'sales.reply': salesReplyHandler({ store, notifier, drafting, bookingUrl, answers, marketed, log }),
+    'sales.reply': salesReplyHandler({ store, notifier, drafting, answers, marketed, log }),
     ...(growth?.store?.snapshot ? { 'sales.review': salesReviewHandler({ store, growth, notifier, publicOrigin, log }) } : {}),
   };
 }

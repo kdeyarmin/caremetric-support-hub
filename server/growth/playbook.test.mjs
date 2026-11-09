@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { productPages } from '../agents/content/facts.mjs';
 import { allowedNumbers, textProblems } from '../agents/content/validate.mjs';
 import {
-  discoveryQuery, discoveryQueryCount, lifecyclePlay, linkablePages, operatorHost, playbookText, playbookVersion, salesPlaybook, sequencePlan, touchAngle,
+  discoveryQuery, discoveryQueryCount, lifecyclePlay, linkablePages, offersMeeting, operatorHost, playbookText, playbookVersion, salesPlaybook, sequencePlan, touchAngle,
 } from './playbook.mjs';
 
 const day = 86_400_000;
@@ -68,5 +68,20 @@ describe('sales playbook', () => {
     }
     expect(playbookText('carebase')).not.toContain('CareMetric Intel\n');
     expect(playbookText()).toBe(playbookText());
+  });
+
+  it('knows an offer to talk, meet or demo from a sentence that declines one or is about the reader\'s own meetings (owner decision 2026-11-09)', () => {
+    for (const text of [
+      'Would a short conversation about the workflow be useful?', 'Happy to set up a quick call.', 'Would you be open to a call next week?',
+      'We can schedule a meeting to go over it.', 'Book a 15-minute call with us.', 'You can speak with our team any time.',
+      'Pick a time that suits you: https://cal.example.com', 'Would you like a live demo?', 'Call us to get started.', 'Want a free demo?',
+      'Are you available for a quick chat this week?', 'Thanks for your note.\nGrab a quick call with us here.',
+    ]) expect(offersMeeting(text), text).toBe(true);
+    for (const text of [
+      'Hold a meeting with your staff each month.', 'Schedule a meeting with your team to review drills.', 'Reply to this email with any question.',
+      'CareMetric does not do live demos or sales calls.', 'We don\'t offer a live demo, but the walkthrough shows every step.',
+      'Pick a time each month to review training records.', 'Start a free trial with no credit card.', 'Use the chat on our website.',
+      'Meeting the annual training requirement takes planning.', 'Hold a short meeting with your staff each month to review training.', 'A brief note: the trial covers one county.', 'No call needed: start the free trial.', '', null,
+    ]) expect(offersMeeting(text), String(text)).toBe(false);
   });
 });

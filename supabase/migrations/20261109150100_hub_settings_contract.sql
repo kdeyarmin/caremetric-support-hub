@@ -15,7 +15,7 @@ begin
 
   if to_regclass('private.hub_settings') is null
     or not (select relrowsecurity from pg_class where oid = 'private.hub_settings'::regclass)
-    or (select count(*) from private.hub_settings) < 33
+    or (select count(*) from private.hub_settings) < 32
     or exists (select 1 from unnest(array['anon', 'authenticated', 'service_role', 'hub_app_server']) role_name
                where has_table_privilege(role_name, 'private.hub_settings', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE')) then
     raise exception 'The Hub settings must exist and be closed to every role' using errcode = '55000';

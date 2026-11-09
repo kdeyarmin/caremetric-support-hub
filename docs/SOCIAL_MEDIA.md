@@ -68,6 +68,8 @@ It also passes these social rules:
   that page, and a tag carrying anything else fails (see "Campaign tags on product links" in [AI_TEAM.md](AI_TEAM.md));
 - at most five hashtags (eight on Instagram) and three emoji;
 - only that product's prices;
+- no offer of a demo, a call, a meeting or a conversation (CareMetric does no personal demos with anyone; see "No demos, calls or
+  meetings" in [AI_TEAM.md](AI_TEAM.md#no-demos-calls-or-meetings));
 - no promise of a refund, extension or special pricing;
 - no claim about a person's personal attributes in an ad (Meta's advertising policy);
 - no mention of AI;

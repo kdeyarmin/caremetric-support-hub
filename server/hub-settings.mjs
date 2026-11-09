@@ -1,6 +1,5 @@
 import { HttpError, transaction, withSession } from './sms-auth.mjs';
 import { validGrowthFromEmail, validGrowthFromName } from './growth/sender.mjs';
-import { bookingLink } from './agents/concierge/templates.mjs';
 import { readProperties } from './agents/seo/search-console.mjs';
 
 /**
@@ -64,8 +63,6 @@ export const settingsCatalog = Object.freeze([
     label: 'Let agents send customer messages to the AI', help: 'The Support Concierge, Sales Executive and Social Media Manager may send a message\'s scrubbed text to the model to draft an answer for you to approve. Turn it on only when your Anthropic agreement covers support messages.' },
   { key: 'agents.owner_email', group: 'agents', kind: 'text', input: 'email', default: null, env: 'HUB_OWNER_EMAIL', fromEnv: fromText, valid: isEmail,
     label: 'Your email for alerts and the morning brief', help: 'Where the AI team emails alerts, the morning brief and the Monday scorecard. Urgent items are also texted to your verified number.' },
-  { key: 'agents.booking_url', group: 'agents', kind: 'text', input: 'url', default: null, env: 'HUB_BOOKING_URL', fromEnv: fromText, valid: value => bookingLink(value) !== null,
-    label: 'Booking page', help: 'An https link (for example Calendly or Cal.com), at most 200 characters. Offered in sales acknowledgments and as a "Pick a time" button in customer emails. Leave it empty to offer no link.' },
   { key: 'support.chat', group: 'support', kind: 'flag', input: 'toggle', default: false, env: 'HUB_CHAT_ENABLED', fromEnv: fromFlag,
     label: 'Website chat', help: 'Shows the chat panel on every Help page. Conversations land in Communications.' },
   { key: 'support.ai_automation', group: 'support', kind: 'flag', input: 'toggle', default: false, env: 'HUB_AI_AUTOMATION_ENABLED', fromEnv: fromFlag,
@@ -128,8 +125,9 @@ export const settingsCatalog = Object.freeze([
 ]);
 
 const byKey = new Map(settingsCatalog.map(entry => [entry.key, entry]));
-// Variables no setting replaces because nothing reads them any more; listed with the others that can be deleted.
-export const retiredVariables = Object.freeze(['HUB_BULK_EMAIL_FROM']);
+// Variables nothing reads any more and no setting replaces. HUB_BOOKING_URL: CareMetric offers no demos, calls or meetings (owner
+// decision 2026-11-09), so no message carries a booking page.
+export const retiredVariables = Object.freeze(['HUB_BULK_EMAIL_FROM', 'HUB_BOOKING_URL']);
 const usable = (entry, value) => {
   if (value === null || value === undefined) return false;
   if (entry.kind === 'flag') return typeof value === 'boolean';
@@ -187,6 +185,7 @@ export function hubSettings({
 
   /** Copies the Railway values in (once), reads the settings, and keeps reading them. Never throws: the variables apply until it works. */
   async function start() {
+    for (const name of retiredVariables) if (present(env?.[name])) log.warn?.(`${name} is set but no longer used. Remove it from the service.`);
     if (!declared) {
       log.info?.('Hub settings: the Railway variables apply until supabase/migrations/20261109150000_hub_settings.sql is applied.');
       return;
@@ -201,7 +200,7 @@ export function hubSettings({
       const copied = Object.keys(copies).length ? await call('private.hub_settings_import', [copies]) : [];
       if (Array.isArray(copied) && copied.length) log.info?.(`Hub settings: copied ${copied.length} Railway variable(s) into Settings: ${copied.map(key => byKey.get(key)?.env).join(', ')}.`);
       await refresh();
-      const leftover = [...settingsCatalog.map(entry => entry.env), ...retiredVariables].filter(name => present(env?.[name]));
+      const leftover = settingsCatalog.map(entry => entry.env).filter(name => present(env?.[name]));
       if (leftover.length) log.info?.(`Hub settings: these Railway variables are no longer read and can be deleted: ${leftover.join(', ')}. Change them on the Settings page.`);
     } catch {
       log.warn?.('Hub settings could not be read; the Railway variables apply until they can. It will retry.');

@@ -24,7 +24,8 @@ import { guideLibrary } from './agents/concierge/knowledge.mjs';
 import { leadAdmin, leadFeature, leadIntake, leadSecrets } from './leads.mjs';
 import { leadRetention } from './lead-retention.mjs';
 import { helpCenter } from './help-center.mjs';
-import { helpCenterOrigin } from './agents/content/facts.mjs';
+import { articleHomeUrl, helpCenterOrigin, servedElsewhere } from './agents/content/facts.mjs';
+import { publicArticleFeed, publicArticlesFeature } from './public-articles.mjs';
 import { growthStore } from './growth/store.mjs';
 import { growthService } from './growth/service.mjs';
 import { growthResearch } from './growth/research.mjs';
@@ -85,11 +86,10 @@ const growthMail=sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:
 const customerMail=sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:supportFrom,replyTo:supportReplyTo,category:'hub-lifecycle-email'});
 // The AI team: inert until "Run the AI team" is switched on in Settings, and every agent starts paused until the owner resumes it.
 const team=agentTeam({pool,growth,growthMail,postalAddress,sms:textSender,email:mailSender,ownerEmail:setting('agents.owner_email'),publicOrigin,enabled:setting('agents.enabled'),communications:messaging,features,anthropicApiKey:process.env.ANTHROPIC_API_KEY,record:sqlAiUsageRecorder(pool).record,guides:guideLibrary({load:()=>api.rpc('list_published_content',{}),loadProducts:()=>api.rows('products')}),customerTextToAi:setting('agents.customer_text_to_ai'),
-  // The booking page (Settings → AI team), offered by the Concierge's sales acknowledgment and the Account Manager's emails.
-  bookingUrl:setting('agents.booking_url'),leadSecrets:leadSecrets(process.env),
+  leadSecrets:leadSecrets(process.env),
   // The social media tokens from Railway, with the page ids, ad accounts, images and ad limits from Settings → Social media.
   social:()=>socialConfig(process.env,settings.get),searchConsoleSites:setting('seo.search_console_sites'),
-  lifecycle:{mail:customerMail,get postalAddress(){return postalAddress().trim();},get bookingUrl(){return settings.get('agents.booking_url');}},
+  lifecycle:{mail:customerMail,get postalAddress(){return postalAddress().trim();}},
   // Offers from the owner's menu: platform billing (created below) makes them, so the call is deferred until an offer is approved.
   offerBilling:{agentOffer:input=>billing.agentOffer(input)}});
 const announcements=bulkEmail({pool,delegations:capabilities,publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin,postalAddress,
@@ -143,8 +143,13 @@ const mediaImport=learningMediaImport({pool,hosts:importHosts,enabled:features.h
     download:(sessionToken,path)=>capabilities.media(sessionToken,path,'download')}});
 const setup=integrationSetup({rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
 // Public articles as HTML for crawlers, read exactly as an anonymous visitor's app reads them, at their canonical address.
-const help=helpCenter({load:()=>api.rpc('list_published_content',{}),origin:helpCenterOrigin});
-const server=appServer({auth:smsAuth({pool,provider}),password:passwordAuth({pool}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,settings,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,growth,leads,leadAdmin:leadDesk,mediaImport,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help});
+// A product's public articles as JSON for its own website: answered only when the database declares content.public-articles.v1.
+const publicArticles=features.has(publicArticlesFeature)?publicArticleFeed({load:async product=>(await pool.query({text:'select private.public_articles($1) as articles',values:[product],query_timeout:5000})).rows[0].articles}):null;
+console.info(`Public article feed: ${publicArticles?'answering':'waiting for the content.public-articles.v1 migration'}.`);
+// Once the feed answers, an article whose product's own website serves it (CareMetric Intel's) keeps its page here but names that
+// address as canonical and leaves the sitemap. Before, the help center stays every article's home.
+const help=helpCenter({load:()=>api.rpc('list_published_content',{}),...(publicArticles?{loadProducts:()=>api.rows('products'),elsewhere:(product,key)=>servedElsewhere(product)?articleHomeUrl(product,key):null}:{}),origin:helpCenterOrigin});
+const server=appServer({auth:smsAuth({pool,provider}),password:passwordAuth({pool}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,settings,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,growth,leads,leadAdmin:leadDesk,mediaImport,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help,publicArticles});
 let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;

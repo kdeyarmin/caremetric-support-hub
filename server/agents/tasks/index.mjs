@@ -18,14 +18,13 @@ import { seoHandlers } from './seo.mjs';
  * `communications` is the inbox service the import handlers copy other applications' messages into, and
  * `features` is the set of features the database declares (the Concierge and the Growth Manager register only when their own is there),
  * `model`, `guides` and `customerTextToAi` decide whether the Concierge may send a plain question's scrubbed text to the model,
- * `bookingUrl` is the owner's booking page the Concierge may offer a prospect, and `leadSecrets` the products' lead secrets the form
- * checks sign with (never logged or stored).
- * `lifecycle` is how the Account Manager's customer emails are sent ({ mail, postalAddress, bookingUrl, publicOrigin }), and
+ * `leadSecrets` are the products' lead secrets the form checks sign with (never logged or stored).
+ * `lifecycle` is how the Account Manager's customer emails are sent ({ mail, postalAddress, publicOrigin }), and
  * the Content Marketer's handlers register only when the database declares its feature and `model` has a key, the hourly
  * autonomy check only when the database declares autonomy steps, and the Account Manager's offers only when it declares offers.
  */
 export function builtInHandlers({ store, notifier, model = null }, {
-  publicOrigin, fetchImpl = fetch, log, services = {}, communications = null, features = null, guides = null, customerTextToAi = false, bookingUrl = null, leadSecrets = {}, lifecycle = {},
+  publicOrigin, fetchImpl = fetch, log, services = {}, communications = null, features = null, guides = null, customerTextToAi = false, leadSecrets = {}, lifecycle = {},
   marketed = null, searchConsoleSites = undefined,
 } = {}) {
   const targets = probeTargets({ publicOrigin });
@@ -38,7 +37,7 @@ export function builtInHandlers({ store, notifier, model = null }, {
     ...offerHandlers({ store, features, log }),
     ...growthHandlers({ store, notifier, publicOrigin, features, leadSecrets, fetchImpl, log }),
     ...importHandlers({ communications }),
-    ...conciergeHandlers({ store, notifier, features, log, model, guides, customerTextToAi, bookingUrl }),
+    ...conciergeHandlers({ store, notifier, features, log, model, guides, customerTextToAi }),
     ...contentHandlers({ store, notifier, model, features, marketed, log }),
     ...autonomyHandlers({ store, notifier, publicOrigin, features, log }),
   };
