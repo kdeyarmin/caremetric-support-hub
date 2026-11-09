@@ -13,9 +13,9 @@ is built so far.
 > place, and so is the model runtime they share (see "The model runtime"). The Content Marketer drafts one public
 > help-center article a week for the owner to approve and a month's outreach drafts for the owner to send (see "The
 > Content Marketer"); its model calls carry no customer text. The scheduler is inert
-> unless `HUB_AGENTS_ENABLED` is exactly `true` and every agent is seeded **paused**. Only the Concierge
-> can send customer text to a model, only to draft an answer to a plain question, and only while the owner has set
-> `HUB_AGENTS_CUSTOMER_TEXT_TO_AI` to `true` ("Drafted answers"); otherwise customer message text never
+> until the owner switches on Settings → AI team → "Run the AI team", and every agent is seeded **paused**. Only the Concierge
+> can send customer text to a model, only to draft an answer to a plain question, and only while the owner has switched on
+> Settings → AI team → "Let agents send customer messages to the AI" ("Drafted answers"); otherwise customer message text never
 > leaves the Hub. The SEO Analyst also calls the model, with the company's own public pages only, to suggest
 > titles and descriptions ("The SEO Analyst").
 > The Marketing Manager and shared customer-success workspace add CareBase and Intel prospecting, activation and retention workflows. See [Customer growth](CUSTOMER_GROWTH.md) for their separate controls and activation. Breathe remains deferred.
@@ -100,9 +100,9 @@ answers**, **Article publishing** and **Offers**; **Sales follow-ups** and **Col
 auto-approval lists (`auto_send_templates` for the account emails, `auto_approve_kinds` for the others: `communication.answer`
 for support answers, `content.publish` for articles, `offer.apply` for offers, and the trust values `growth.sales_followup` and
 `growth.cold_email`, which the growth operations read, for the Marketing Manager's two steps); only migrations write that list.
-The Marketing Manager's email (both steps, and anything the owner approves) can come from its own sender on a subdomain,
-`HUB_GROWTH_FROM_EMAIL`, with replies still going to the support inbox; every other agent's email stays on the support address
-(see [A separate sender for prospecting](CUSTOMER_GROWTH.md#a-separate-sender-for-prospecting)).
+The Marketing Manager's email (both steps, and anything the owner approves) can come from its own sender on a subdomain
+("Growth email sender" in Settings → Email), with replies still going to the support inbox; every other agent's email
+stays on the support address (see [A separate sender for prospecting](CUSTOMER_GROWTH.md#a-separate-sender-for-prospecting)).
 
 - **Start supervised week** (Team screen, under "Work the team does on its own"): the step is supervised for seven days. Any
   agent it involves that could only observe moves up to Propose, and the step's values come off the agents' lists (one the owner
@@ -339,10 +339,10 @@ scripts run.
 
 ### Search Console (optional)
 
-When the Hub service has `HUB_SEARCH_CONSOLE_CREDENTIALS` (a Google service account's JSON key, pasted whole;
-a secret) and `HUB_SEARCH_CONSOLE_SITES` (the properties, separated by commas, exactly as Search Console names
-them: `sc-domain:cmcarebase.com`, `https://www.caremetricintel.com/`; an address prefix is kept as written, so
-write it with its final `/` as Search Console shows it), the analyst reads Search Console while it
+When the Hub service has `HUB_SEARCH_CONSOLE_CREDENTIALS` in Railway (a Google service account's JSON key, pasted
+whole; a secret) and Settings → Search → "Search Console properties" lists the properties (one per line, at most 10,
+exactly as Search Console names them: `sc-domain:cmcarebase.com`, `https://www.caremetricintel.com/`; an address
+prefix is kept as written, so write it with its final `/` as Search Console shows it), the analyst reads Search Console while it
 crawls (`server/agents/seo/search-console.mjs`). It signs in as the service account with a JWT it signs itself
 (RS256 with `node:crypto`, no Google library), exchanged at `https://oauth2.googleapis.com/token` for a
 read-only token (`webmasters.readonly`) that is kept in memory until a minute before it expires. Each property
@@ -373,8 +373,9 @@ opportunities, not problems: they do not change the
 count of things to fix. Without Search Console the report says once that it is not connected, and how to
 connect it: in Google Cloud, create a service account and a JSON key for it, and enable the Google Search
 Console API in that project; in Search Console, add the service account's email address as a user on each
-property (Restricted is enough); then set the two variables on the Hub service and redeploy. The integration
-setup panel shows whether they are set.
+property (Restricted is enough); then set `HUB_SEARCH_CONSOLE_CREDENTIALS` on the Hub service in Railway and
+redeploy, and enter the properties under Settings → Search → "Search Console properties". The integration setup
+panel shows whether the key is set.
 
 ### Suggested titles and descriptions (optional)
 
@@ -484,9 +485,9 @@ will review it); when the question carries identifiers, a **notice** saying thes
 for patient or resident information and asking the sender to resend without names, dates of birth, record
 numbers or health details; and, for a prospect's first message (above) that reads as a plain question or a sale,
 the **sales acknowledgment**, in the owner's own voice: "Thank you for reaching out to CareMetric. I have your
-request, and I will follow up with you personally today." When the owner's booking page is set (`HUB_BOOKING_URL`,
-an https address of at most 200 characters, with no user name or password) it adds "If you would like to set a time
-now, pick a time that suits you: <link>"; a text message carries the link only when it still fits one message. That
+request, and I will follow up with you personally today." When the owner's booking page is set ("Booking page" in
+Settings → AI team: an https address of at most 200 characters, with no user name or password) it adds "If you would
+like to set a time now, pick a time that suits you: <link>"; a text message carries the link only when it still fits one message. That
 template is the only place the Concierge ever offers a link, and the only reply that names a day, because the owner
 approves it the day it is sent. None repeats anything the customer wrote, mentions AI, a phone call or voicemail,
 names a price or promises an outcome; a text message gets a shorter version that fits one message. A prospect whose
@@ -521,8 +522,8 @@ need the session) before it limits the list, so replies waiting for the owner ca
 ### Drafted answers
 
 The Concierge can draft an answer from CareMetric's published help articles for the owner to approve, in
-place of the fixed acknowledgment. It is **off** until the owner sets `HUB_AGENTS_CUSTOMER_TEXT_TO_AI` to
-exactly `true` on the Hub service (with `ANTHROPIC_API_KEY` set and the Concierge in **Propose**); the Team
+place of the fixed acknowledgment. It is **off** until the owner switches on Settings → AI team →
+"Let agents send customer messages to the AI" (with `ANTHROPIC_API_KEY` set in Railway and the Concierge in **Propose**); the Team
 screen's "Customer text to AI" row says whether it is on. The owner confirmed on 2026-11-02 that the
 Anthropic agreement covers support messages. The Hub cannot verify that, which is why the switch is a
 separate step and nothing turns it on by merging or deploying.
@@ -762,7 +763,7 @@ terms in a highlighted box in the testimonial request, and a sign-off from the p
 has a plain-text part that says the same. They say nothing about AI, quote no price, promise no time or outcome, never
 mention a phone call or voicemail, and use the company's vocabulary for CareBase (Assisted Living Facility, ALF,
 surveyor). The welcome, the setup offer and the check-in add the owner's booking page as a "Pick a time" button
-when `HUB_BOOKING_URL` is an https address. Only CareBase and Intel have these emails. Stripe's own notices are
+when "Booking page" is set in Settings → AI team. Only CareBase and Intel have these emails. Stripe's own notices are
 never duplicated: the check-in never mentions a card, a price, an invoice or a date.
 
 **Who gets one.** The run reads one server-only operation, `private.agent_lifecycle_snapshot`: per account and
@@ -802,7 +803,8 @@ owner session. Before anything goes out the executor (`server/agents/accounts/ex
 Team screen explains:
 
 - `not_configured`: the Hub cannot send customer email. It needs the SendGrid key, the company's postal address
-  (`HUB_BULK_EMAIL_POSTAL_ADDRESS`, which every footer carries; without it nothing is proposed either) and a bare
+  ("Mailing address in email footers" in Settings → Email, which every footer carries; without it nothing is proposed
+  either) and a bare
   https public origin for the unsubscribe link (`HUB_PUBLIC_ORIGIN`: no credentials, path, query or fragment, so the
   link always reaches the unsubscribe page).
 - `wording_changed`: the email rebuilt from the action's facts no longer matches the hash of the approved wording,
@@ -815,8 +817,8 @@ Team screen explains:
   already went out today, Eastern, across every account), and otherwise records the send and hands over the
   account's one billing address. It is the only operation that ever returns one.
 
-The email goes through the same SendGrid sender as bulk email (category `hub-lifecycle-email`), from
-`HUB_SUPPORT_FROM_EMAIL` (support@caremetric.ai) with replies to the same address, tracking off, and
+The email goes through the same SendGrid sender as bulk email (category `hub-lifecycle-email`), from the
+"Support sender" in Settings → Email (support@caremetric.ai) with replies to its "Reply-To" (else the sender), tracking off, and
 `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` headers. The outcome is sent,
 `delivery_failed` (SendGrid refused it) or `email_unconfirmed` (no answer, so it may have gone). Nothing is retried.
 An execution that is started again (the server stopped mid-send and the sweep handed the action back) finds the
@@ -835,7 +837,8 @@ template names only.
 
 The handler and the action register only when the database declares `platform.agents.lifecycle.v1`, which needs
 the Account Manager, the hardening and bulk email. To switch the emails on: apply the two migrations, restart the
-Hub, set `HUB_BULK_EMAIL_POSTAL_ADDRESS` (and `HUB_BOOKING_URL` if you want the button), resume the Account Manager,
+Hub, fill in "Mailing address in email footers" in Settings → Email (and "Booking page" in Settings → AI team if you
+want the button), resume the Account Manager,
 leave it in **Observe** for a morning and read its run ("Observe only: 3 customer emails would be proposed …"), then
 switch it to **Propose** and press **Run now** on "Customer emails".
 
@@ -900,8 +903,8 @@ on help.caremetric.ai), the free trial and a written answer. Asked for a demo or
 instead.
 
 For a handed-over message it reads the newest message and up to two earlier ones, scrubbed of personal details, and, only while
-`HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true` and a model key is set, asks the model for a reading and a draft. The model is given the
-product, the prospect's stage, whether CareMetric wrote first, a word limit for the channel, the product's own pages it may link to
+"Let agents send customer messages to the AI" is on in Settings → AI team and a model key is set, asks the model for a
+reading and a draft. The model is given the product, the prospect's stage, whether CareMetric wrote first, a word limit for the channel, the product's own pages it may link to
 and the owner's booking page, with the fact sheet (`server/agents/content/facts.mjs`) and the sales playbook
 (`server/growth/playbook.mjs`) in its cached system prompt. Its method: answer what was asked from the fact sheet (exact plan prices
 and the Founders Sale terms when cost comes up), offer one next step (usually the free trial; for a trial, activating a paid plan, with the Founders Sale
@@ -932,7 +935,8 @@ no permitted contact. The stored body carries counts only; organization names tr
 
 **To switch it on:** apply the two migrations, restart the Hub so it reads the feature, then resume the Sales Executive on
 **AI team** in **Propose** and press **Run now** on "Weekly pipeline review". Prospect replies are drafted only with
-`HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true` and `ANTHROPIC_API_KEY`; `HUB_BOOKING_URL` lets drafts offer the owner's booking page.
+"Let agents send customer messages to the AI" switched on in Settings → AI team and `ANTHROPIC_API_KEY` set in Railway; a
+"Booking page" in the same group lets drafts offer it.
 `npm test -- server/agents/sales` runs its unit tests and `node server/agents-sales-integration.mjs` (with `HUB_TEST_DATABASE_URL`
 on a local Supabase) checks the hand-off through the real server role.
 
@@ -952,7 +956,8 @@ Its six action kinds are `social.post`, `social.reply`, `social.moderate`, `soci
 existing budgets). A budget change is never automatic: the database refuses an automatically approved one and so does the executor.
 Nor is deleting a LinkedIn comment (LinkedIn has no "hide"): the executor refuses an automatically approved deletion, and once replies
 are handed over such a comment is left for the owner.
-Comments and messages reach the model only with `HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true`, and no other person's words are stored. Setup,
+Comments and messages reach the model only while "Let agents send customer messages to the AI" is on in Settings → AI team,
+and no other person's words are stored. Setup,
 the ad rules, the checks and the Meta and LinkedIn permissions are in [Social media](SOCIAL_MEDIA.md).
 
 ## The Content Marketer
@@ -1194,8 +1199,11 @@ Owner (current administrator session): `get_agent_team`, `list_agent_activity`,
 
 A handler is `async (task, { signal }) => { status?, result?, errorCode?, retryAt? }`; a status of
 `awaiting_approval` leaves the task waiting for the owner. Logs name the task, the agent, the kind and an
-error code, never an error message. The service environment is `HUB_AGENTS_ENABLED` and `HUB_OWNER_EMAIL`
-(see `.env.example`); the integration setup panel shows whether they are set.
+error code, never an error message. Whether the scheduler runs and where it emails the owner are settings:
+Settings → AI team → "Run the AI team" and "Your email for alerts and the morning brief"; the Team screen shows
+whether both are set. They replaced the `HUB_AGENTS_ENABLED` and `HUB_OWNER_EMAIL` variables, which the Hub copies in
+once on its first start after the settings migration and which can then be deleted. Every other switch and address in
+this document is a setting too; only keys and tokens stay in Railway (see [Settings](SETTINGS.md)).
 
 **Owner alerts** are recorded before they are sent, under a dedupe key, so a retried task never texts or
 emails twice. An urgent item goes by text (to the administrator's verified number, through the Hub's
@@ -1373,7 +1381,8 @@ Apply the migrations in order with the usual procedure:
 12. `20261105120000_concierge_answers.sql`, then its gate `20261105120100_concierge_answers_contract.sql`, which add the
    `communication.answer` action kind with its shape check and the server-only operation that records an answer, and declare
    `platform.agents.concierge-autosend.v1` (it needs the Concierge, the hardening, the communications inbox and autonomy steps).
-   Restart the Hub after it. Answers are drafted only with `HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true` and a model key.
+   Restart the Hub after it. Answers are drafted only with Settings → AI team → "Let agents send customer messages to
+   the AI" switched on and a model key.
 13. `20261105130000_content_autopublish.sql`, then its gate `20261105130100_content_autopublish_contract.sql`, which replace the
    publishing operation so an automatically approved article is published while the Content Marketer is trusted with publishing,
    and declare `platform.agents.content-autopublish.v1` (it needs the Content Marketer, the hardening and autonomy steps). Restart
@@ -1383,7 +1392,8 @@ Apply the migrations in order with the usual procedure:
    `growth.evaluate` schedule, re-check the hand-over when proposing and claiming a growth message, cap cold email at ten a day and
    one business once, stop a product policy from overwriting an agent's list, and declare `platform.agents.growth-autonomy.v1`
    (it needs customer growth, the hardening and autonomy steps). Restart the Hub after it. Nothing is sent until
-   `HUB_GROWTH_SEND_ENABLED=true` and the signing key are set, and the contact finder runs only with `HUB_GROWTH_SEARCH_API_KEY`.
+   Settings → Customer growth → "Send growth email" is on and the signing key is set, and the contact finder runs only with
+   `HUB_GROWTH_SEARCH_API_KEY`.
 15. `20261105140000_agent_offers.sql`, then its gate `20261105140100_agent_offers_contract.sql`, which add the offer menu (one
    14-day trial extension, switched off), the record of offers made, the `offer.apply` action kind with its shape check, the
    server-only operations, the owner's menu operations and the Account Manager's daily `accounts.offers` schedule, and declare
@@ -1401,8 +1411,8 @@ Apply the migrations in order with the usual procedure:
    Manager (paused, Propose) and its four schedules, add the six `social.*` action kinds and four targets with their ownership check
    (a budget change can never be automatically approved), the server-only `private.social_open_targets` and `private.social_schedule`,
    and the three autonomy steps (off), and declare `platform.agents.social.v1` (it needs the control plane, the hardening, autonomy
-   steps and customer growth). Restart the Hub after it. Nothing reaches Meta until `HUB_META_ACCESS_TOKEN` and `HUB_META_PAGE_ID` are set
-   and the owner resumes the agent.
+   steps and customer growth). Restart the Hub after it. Nothing reaches Meta until `HUB_META_ACCESS_TOKEN` is set in Railway, the
+   "Facebook Page id" is filled in under Settings → Social media, and the owner resumes the agent.
 19. `20261109120000_monday_scorecard.sql`, then its gate `20261109120100_monday_scorecard_contract.sql`, which add the owner's
    "Send the individual weekly reports" setting (off), the server-only `private.agent_individual_reports` and
    `private.agent_scorecard_facts`, the owner's `hub.get_scorecard_settings` and `hub.set_individual_reports`, and the Chief of
@@ -1412,13 +1422,13 @@ Apply the migrations in order with the usual procedure:
    individual weekly reports" on under **Weekly reports** to get them as well. See [Monday scorecard](MONDAY_SCORECARD.md).
 
 The Hub build does not require any of these features, so a Hub whose database lacks them still starts and
-serves everything else. The AI team is opt-in twice over: nothing runs unless `HUB_AGENTS_ENABLED`
-is `true`, and every agent is paused until the owner resumes it. Apply the migrations before doing
+serves everything else. The AI team is opt-in twice over: nothing runs unless Settings → AI team →
+"Run the AI team" is on, and every agent is paused until the owner resumes it. Apply the migrations before doing
 either. With the code but not the tables, the AI team page shows a read failure and every task fails.
 
-To switch the Platform Engineer on: apply the migrations, set `HUB_AGENTS_ENABLED=true` and
-`HUB_OWNER_EMAIL`, open **AI team**, resume the Platform Engineer, press **Run now** on its health
-check and read the run it records. To switch the brief on, resume the Chief of Staff and press
+To switch the Platform Engineer on: apply the migrations, switch on "Run the AI team" and enter
+"Your email for alerts and the morning brief" in Settings → AI team, open **AI team**, resume the Platform Engineer,
+press **Run now** on its health check and read the run it records. To switch the brief on, resume the Chief of Staff and press
 **Run now** on its morning brief: the first email arrives within a minute, and the next one at 07:00.
 To switch the SEO report on, resume the SEO Analyst and press **Run now** on its weekly check.
 To switch the weekly account report on, apply the two Account Manager migrations, restart the Hub so it
@@ -1426,8 +1436,8 @@ reads the new feature, resume the Account Manager and press **Run now** on its w
 arrives within a minute and the next on Monday. Check the "Test data" and "Stripe mode" notes against what you
 expect before relying on the figures.
 
-To switch the Growth Manager on: apply the lead desk's migrations and the two Growth Manager migrations, set
-`HUB_BOOKING_URL` on the Hub service if you want prospects offered your booking page (optional; an https link, for example
+To switch the Growth Manager on: apply the lead desk's migrations and the two Growth Manager migrations, fill in
+"Booking page" in Settings → AI team if you want prospects offered your booking page (optional; an https link, for example
 a Calendly or Cal.com page), restart the Hub so it reads the new feature, then resume the Growth Manager on **AI team** and
 press **Run now** on "Weekly growth report": the first email arrives within a minute. New trials then email you within five
 minutes, unanswered lead conversations remind you after an hour and a day (never between 21:00 and 07:00 Eastern), and the

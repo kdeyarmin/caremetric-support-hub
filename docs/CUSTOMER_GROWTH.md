@@ -13,7 +13,7 @@ The Growth workspace at `/admin/growth` adds a Marketing Manager and customer-su
 | Conversion handoff | Scoped, signed and deduplicated product events transfer trial/customer work to the Account Manager without accepting clinical records |
 | Onboarding and retention | First-step onboarding, 48-hour activation check, trial deadlines, adoption recovery with fresh telemetry, support coordination, cancellation recovery, renewal and demonstrated expansion interest |
 | Trustworthy health | Missing/stale/billing-only evidence is separate from adoption; stopped/dropped use requires attention; complete account pagination precedes report ranking |
-| Threaded support | With the existing customer-text-to-AI switch enabled, ordinary follow-up questions use up to two scrubbed prior messages, fresh product guides and individual review; prior identifiers or sensitive categories abstain |
+| Threaded support | With the existing customer-text-to-AI switch (Settings → AI team → "Let agents send customer messages to the AI") enabled, ordinary follow-up questions use up to two scrubbed prior messages, fresh product guides and individual review; prior identifiers or sensitive categories abstain |
 | Better retrieval | Product/audience filtering, revision metadata, relevant sections from full guide bodies, and a bounded stale cache |
 | Search and content | Weekly source-backed product content briefs in the approval queue, campaign identifiers and native signup source attribution; publishing remains in the existing authoring workflow |
 | Stronger operations | Weekly SEO catch-up, overdue work in the Chief of Staff brief, shared database model-budget reservations, unknown-delivery reconciliation and external availability monitoring |
@@ -26,15 +26,15 @@ The existing Billing and weekly account report remain the source of MRR/ARR. The
 ## Apply and configure
 
 1. Apply `20261103150101_customer_growth.sql`, then `20261103150102_customer_growth_contract.sql` through the normal migration process. The second migration verifies private tables, RPC authority and prerequisites before declaring `platform.agents.customer-growth.v1`. Existing agent settings are preserved; the new Marketing Manager starts paused in Propose mode.
-2. Deploy the server and frontend together. The server registers growth handlers only when the database advertises the feature. Use `.env.example` for setting names. No secret is sent to the browser.
-3. Set a stable `HUB_GROWTH_SIGNING_KEY` (at least 32 random characters), distinct CareBase/Intel event keys, a verified SendGrid sender, `HUB_BULK_EMAIL_POSTAL_ADDRESS`, the HTTPS public origin and the existing mail API key. Keep the signing key stable so existing unsubscribe links continue working.
+2. Deploy the server and frontend together. The server registers growth handlers only when the database advertises the feature. Keys and tokens are Railway variables (`.env.example` has their names); every switch and address below is on the Hub's Settings page (see [Settings](SETTINGS.md)). These replaced Railway variables such as `HUB_GROWTH_SEND_ENABLED`, which the Hub copies into Settings once on its first start after the settings migration and which can then be deleted. No secret is sent to the browser.
+3. In Railway, set a stable `HUB_GROWTH_SIGNING_KEY` (at least 32 random characters), distinct CareBase/Intel event keys, the HTTPS public origin and the existing mail API key. In the Hub's Settings → Email, check that "Support sender" is a verified SendGrid sender and fill in "Mailing address in email footers". Keep the signing key stable so existing unsubscribe links continue working.
 4. Choose the products the team markets under **Products we market** on the AI team page. Intel starts switched on and CareBase off
    while it is in its pilot (see "What the team markets" in [AI_TEAM.md](AI_TEAM.md)): discovery, scoring, plans and cold email skip
    every product switched off, from their next run, and customers' onboarding and support are unaffected.
 5. For automatic discovery, configure `HUB_GROWTH_SEARCH_API_KEY` for Brave Search. The adapter requests bounded public search results; snippets are unverified evidence. It does not invent emails. Owner-supplied source evidence works without this provider. Intel's tenant-owned provider lists and campaigns are not imported into CareMetric's sales audience.
 6. Configure the signed SendGrid Event Webhook at `/api/growth/delivery` and set `HUB_SENDGRID_EVENT_PUBLIC_KEY`. Subscribe to delivery, bounce, dropped, spam report and unsubscribe events. Keep the existing signed Inbound Parse route for replies; the growth sender's Reply-To points to the configured support inbox.
 7. In Growth, map existing tenants to their organizations and classify internal accounts. Add the correct buyer/champion, verify its business source and outreach eligibility, record the goal, and qualify the opportunity. Review each product benefit and booking URL in its policy. Policies start disabled.
-8. Resume Marketing Manager and Account Manager in **Propose** mode for the pilot. The scheduler also needs `HUB_AGENTS_ENABLED=true`. Set `HUB_GROWTH_SEND_ENABLED=true` only when the configured channel and reviewed cohort are ready. Approve exact messages in Team; changing policy, contact, or opportunity invalidates stale drafts.
+8. Resume Marketing Manager and Account Manager in **Propose** mode for the pilot. The scheduler also needs Settings → AI team → "Run the AI team" switched on. Switch on Settings → Customer growth → "Send growth email" only when the configured channel and reviewed cohort are ready. Approve exact messages in Team; changing policy, contact, or opportunity invalidates stale drafts.
 9. Review pilot replies, objections, activation and retention separately for each product. Optional template autonomy needs an active agent in Act mode, an enabled product policy with template sending allowed, and a passing `growth.1` behavioral evaluation recorded in the last 30 days. **Model-written messages require individual approval** unless the owner hands sales follow-ups or cold email over (next section). The latest failed evaluation blocks every message nobody approved.
 
 `npm run evaluate:growth` runs synthetic cases. Supplying `HUB_GROWTH_EVAL_DATABASE_URL` explicitly records those results through the restricted `hub_app_server` role. Leave it unset for local/CI evaluation. A behavioral pass proves guardrail behavior; it does not validate a model's persuasion or factual accuracy on unseen prospects. Review real draft quality before increasing volume.
@@ -80,7 +80,8 @@ the owner, model-written or not.
 - **Product policies** no longer overwrite the agents' lists: turning template sending on adds `growth.message`, turning it off
   everywhere removes only that value.
 
-Nothing is sent until `HUB_GROWTH_SEND_ENABLED=true`, a signing key and an enabled product policy are in place, and the finder
+Nothing is sent until "Send growth email" is on in Settings → Customer growth, a signing key is set and an enabled product
+policy is in place, and the finder
 runs only with `HUB_GROWTH_SEARCH_API_KEY`. A counsel check of cold email to businesses' public addresses was recommended to the
 owner before enabling it. `npm run test:growth-autonomy:db` runs the integration checks against a disposable local database.
 
@@ -89,19 +90,21 @@ owner before enabling it. `npm run test:growth-autonomy:db` runs the integration
 Cold email and sales follow-ups (every `growth.message`, whichever step approved it) can come from their own address, so that
 complaints, bounces and spam-folder placement from prospecting are scored against that address's domain and never against
 support@caremetric.ai, which carries support replies, owner alerts, the Account Manager's customer emails and bulk email. Those
-keep coming from `HUB_SUPPORT_FROM_EMAIL` whatever is set here.
+keep coming from the "Support sender" in Settings → Email whatever is set here.
 
-- `HUB_GROWTH_FROM_EMAIL` (optional): the growth sender, on a subdomain of its own, for example `hello@go.caremetric.ai`.
-  Unset (or blank) keeps today's behavior: growth email comes from the support address. A value that is not an email address
-  is ignored with a warning in the service log, and growth email keeps the support address; a growth address on the support
-  address's own domain is used but warns, because it would not keep reputation apart.
-- `HUB_GROWTH_FROM_NAME` (optional): the display name, at most 64 characters with no quotes or angle brackets (default
-  "CareMetric"). An unusable name is ignored with a warning.
-- **Reply-To does not change.** Growth email still replies to the support inbox (`HUB_SUPPORT_REPLY_TO`, else the support
+Both settings are in the Hub's Settings → Email:
+
+- "Growth email sender" (optional): the growth sender, on a subdomain of its own, for example `hello@go.caremetric.ai`.
+  Empty keeps today's behavior: growth email comes from the support address. The Settings page refuses a value that is not an
+  email address; a growth address on the support address's own domain is used but warns in the service log, because it would
+  not keep reputation apart.
+- "Growth email display name" (optional): the display name, at most 64 characters with no quotes or angle brackets (empty:
+  "CareMetric"). The Settings page refuses a name it cannot use.
+- **Reply-To does not change.** Growth email still replies to the support inbox ("Reply-To" in Settings → Email, else the support
   address), so a prospect's answer reaches the signed Inbound Parse route, joins Communications and is handed to the Sales
   Executive as before. The unsubscribe link and headers, the postal address and the delivery webhook's message id are the same.
-- The integration setup panel (Customer growth) shows both settings and their values; an address the service would ignore shows
-  as set but not satisfied.
+
+These replaced the `HUB_GROWTH_FROM_EMAIL` and `HUB_GROWTH_FROM_NAME` variables.
 
 What the owner must do before setting it (in this order; none of it is done by the Hub):
 
@@ -116,8 +119,9 @@ What the owner must do before setting it (in this order; none of it is done by t
 4. **Warm the address up slowly.** A new subdomain has no reputation. Keep the cold email cap at ten a day for the first weeks,
    watch bounces, blocks and spam reports in SendGrid's statistics for the subdomain, and raise volume in small steps only
    while they stay low. Raising the cap is a separate change.
-5. Set `HUB_GROWTH_FROM_EMAIL` (and, if wanted, `HUB_GROWTH_FROM_NAME`) on the Hub service and redeploy, then check the setup
-   panel and send one approved message to an address you own to confirm the From, the Reply-To and the unsubscribe link.
+5. Fill in "Growth email sender" (and, if wanted, "Growth email display name") in the Hub's Settings → Email and save; it
+   applies within a minute, with no redeploy. Then send one approved message to an address you own to confirm the From, the
+   Reply-To and the unsubscribe link.
 
 Nothing in the database changes: no migration is involved.
 
@@ -213,7 +217,7 @@ Growth and native Account Manager email claims share a database lock and check e
 
 Temporarily blocked messages receive a persisted 15-minute retry time; both the queue and direct execution respect it, allowing other agents’ ready actions to proceed.
 
-Pause the agent, disable the product policy, or disable `HUB_GROWTH_SEND_ENABLED` to stop new sends. An already accepted provider request cannot be recalled. The system rechecks the latest contact, policy, opportunity and suppression status immediately before reserving a send; short database mutations serialize independently of model, search and mail calls.
+Pause the agent, disable the product policy, or switch off Settings → Customer growth → "Send growth email" to stop new sends. An already accepted provider request cannot be recalled. The system rechecks the latest contact, policy, opportunity and suppression status immediately before reserving a send; short database mutations serialize independently of model, search and mail calls.
 
 Pipeline and customer-success work run every 15 minutes; discovery searches run daily at 08:00 Eastern. The SEO Analyst can propose a weekly content brief at its 08:30 daily catch-up, when in Propose mode. Review and approve that brief in Team, use it in the existing publishing workflow, and preserve its campaign identifier in landing-page signup events. Publishing and actual search traffic require the native website/analytics integration. Product cohort counts exclude internal organizations. Experiment assignment is stable per organization and enabled explicitly; there is no automatic winner selection from a tiny sample. Use rejection notes, observed objections and loss reasons to revise approved claims and prompts, rerun evaluation, and review the next cohort.
 
