@@ -49,34 +49,55 @@ CareMetric Intel sets its plan prices in one place, `src/lib/planCatalog.ts` in
 `kdeyarmin/intel`, and publishes them at
 `GET https://www.caremetricintel.com/api/billing/catalog` (contract
 `caremetric.app-catalog.v1`: products by entitlement key with their monthly,
-annual and one-time prices, and a version hash). After the start and every 15
-minutes the Hub reads that catalog and keeps Stripe in step
-(`syncAppCatalog` in `server/billing.mjs`, decisions in
-`server/app-catalog-sync.mjs`):
+annual and one-time prices, the trial, the annual saving, whether onboarding
+is free, and a version hash). After the start and every 15 minutes the Hub
+reads that catalog and keeps Stripe in step (`syncAppCatalog` in
+`server/billing.mjs`, decisions in `server/app-catalog-sync.mjs`):
 
-- A plan (`starter`, `growth`, `pro`, matched by the Stripe product's
-  `entitlement` metadata) with no published price for an interval gets one.
+- A plan (`starter`, `growth`, `pro`, matched by the Stripe product's `kind`
+  and `entitlement` metadata) with no published price for an interval gets one.
+- An add-on (`extra_seat`, `extra_branch`, `extra_state`) is sold per unit. The
+  Hub creates its Stripe product when none exists (`kind: addon`, the
+  entitlement key, the catalog's `unit_label`, audited as
+  `billing.catalog.product`), then its monthly and annual prices
+  (`pricing_model: per_unit`). The extra seat costs less on larger plans, so it
+  has one product per plan, named for it ("Extra seat (Growth)") and marked with
+  `hub_for_plan`; sell a customer the seat product of their own plan. Intel
+  counts each add-on's quantity through the entitlements answer
+  (`addon_seats`, `addon_branches`, `addon_states`).
 - A published price at another amount is replaced through the same
   **Change price** command an administrator uses, with **grandfather**:
   everyone already subscribed keeps their price; new subscriptions get the
   new one. Each change is audited as `billing.price.change` and
   `billing.catalog.sync`.
 - A change that would cut a price by more than half or more than double it,
-  a plan with several active published prices for one interval, or a plan with
-  no Stripe product is **held**: nothing changes, the log names it and
-  `billing.catalog.held` is audited for an administrator.
-- Customers' contract prices are never touched. Intel's add-ons and onboarding
-  fees are listed in the catalog but are not sold in Stripe, so they are
-  skipped.
-- Each change commits on its own under a per-price advisory lock, with Stripe
-  request keys derived from the change, so two Hub instances or a retried run
-  never create a second price. An unreadable catalog leaves Stripe as it is.
+  a product with several active published prices for one interval, two active
+  Stripe products for one plan or add-on, or a plan with no Stripe product is
+  **held**: nothing changes, the log names it and `billing.catalog.held` is
+  audited for an administrator. Plans are never created automatically, because
+  an administrator decides their entitlements and offers.
+- Customers' contract prices are never touched. Intel's onboarding is free;
+  should the catalog list a one-time fee again, it is skipped and added to a
+  first invoice by an administrator.
+- Each product and price is created or changed on its own under an advisory
+  lock, with Stripe request keys derived from the change, so two Hub instances
+  or a retried run never create a second one. An unreadable catalog leaves
+  Stripe and the fact sheet as they are.
 - Intel's trial length follows the catalog's `trial_days`.
-- The AI team's fact sheet (`server/agents/content/facts.mjs`, the reviewed
-  copy of `docs/GTM_FACTS.md`) stays reviewed: when it no longer states an
-  Intel plan price, the sync logs it and audits `billing.catalog.facts_stale`.
-- Replacements of Founders Sale prices keep the offer
-  (see `docs/PRICING_RESEARCH_AND_FOUNDERS_SALE.md`).
+- The AI team quotes the catalog: Intel's prices, add-ons, trial and Founders
+  Sale amounts on the fact sheet (`server/agents/content/facts.mjs`,
+  `useAppCatalogFacts`) are written from it, and drafts are checked against
+  those amounts from the same moment. `intelReviewedFacts` and
+  `docs/GTM_FACTS.md` are the reviewed copy, quoted until the Hub has read the
+  catalog. When the catalog states an amount the reviewed copy does not, the
+  sync logs it and audits `billing.catalog.facts_stale`: update both (the test
+  `intelFactsFromCatalog(fixture)` equals `intelReviewedFacts` keeps them
+  together, with `server/fixtures/intel-catalog.json` as the reviewed catalog).
+- Replacements of Founders Sale prices keep the offer for Intel and CareBase
+  (Train included). The Hub re-reads the Founders products' prices
+  (`refreshFounders`) after the start, after every catalog run, every 15
+  minutes and after an administrator changes a price (see
+  `docs/PRICING_RESEARCH_AND_FOUNDERS_SALE.md`).
 
 ## Data mirror
 

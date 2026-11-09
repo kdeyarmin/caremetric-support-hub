@@ -3,9 +3,9 @@ import { HttpError, transaction, withSession } from './sms-auth.mjs';
 import { billingCommandSchema, localBillingActions, entitlementRequestSchema, usageReportSchema, trialRequestSchema, appPortalRequestSchema, appBillingRequestSchema } from '../src/billing/billingProtocol.ts';
 import { stripeClient, StripeError, STRIPE_ACCOUNT_ID, verifyStripeSignature, eventTarget, retrievePaths, normalizers, withAllSubscriptionItems } from './stripe.mjs';
 import { customerBillingService } from './customer-billing.mjs';
-import { FOUNDERS_COUPON, applyFoundersToInvoice, followFoundersReplacements, foundersEligibility, foundersMetadata } from './founders-sale.mjs';
-import { appCatalogSources, deterministicKey, factSheetDrift, parseAppCatalog, planCatalogSync } from './app-catalog-sync.mjs';
-import { products as factProducts } from './agents/content/facts.mjs';
+import { FOUNDERS_COUPON, applyFoundersToInvoice, followFoundersReplacements, foundersEligibility, foundersFollowProducts, foundersMetadata } from './founders-sale.mjs';
+import { FOR_PLAN_KEY, appCatalogSources, deterministicKey, parseAppCatalog, planCatalogSync } from './app-catalog-sync.mjs';
+import { useAppCatalogFacts } from './agents/content/facts.mjs';
 import { facilityEntitlementRequest, facilityEntitlementSnapshot } from '../src/billing/facilityEntitlements.ts';
 import { selfServiceApps } from '../src/self-service/protocol.ts';
 
@@ -224,6 +224,8 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         return outcome.result;
       });
       if (followUp) Object.assign(result, await followUp());
+      // A changed Founders price keeps the offer once its replacement is followed (server/founders-sale.mjs).
+      if (request.action === 'price.change') void refreshFounders().catch(() => log.warn('Founders Sale replacements could not be refreshed after a price change; the next sync will.'));
       return result;
     } catch (error) { throw asHttpError(error); }
   }
@@ -951,14 +953,29 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
   }
 
   /**
+   * Founders Sale prices that later changes replaced keep the offer for the
+   * applications in FOUNDERS_FOLLOW_APPS (server/founders-sale.mjs). Reads every
+   * price, archived ones included, of the Founders products of those
+   * applications and refreshes what is followed; on the start, after each
+   * catalog sync and after an administrator changes a price.
+   */
+  async function refreshFounders() {
+    if (!(await verify())) return null;
+    const prices = [];
+    for (const product of foundersFollowProducts()) prices.push(...await client.list('/v1/prices', { product }, 1000));
+    return followFoundersReplacements(prices);
+  }
+
+  /**
    * Keeps Stripe in step with the prices an application publishes
-   * (server/app-catalog-sync.mjs). Missing plan prices are created and changed
-   * ones replaced through the administrator's own commands, grandfathering
-   * every current subscriber; a change outside the automatic range, or an
-   * ambiguous product, is held and logged for an administrator. Replacements of
-   * Founders Sale prices keep the offer. Each change commits on its own under a
-   * per-price lock, with request keys derived from the change, so two Hub
-   * instances or a retried run never create a second price.
+   * (server/app-catalog-sync.mjs), and the AI team's facts with them. A missing
+   * add-on product is created; missing plan and add-on prices are created and
+   * changed ones replaced through the administrator's own commands,
+   * grandfathering every current subscriber; a change outside the automatic
+   * range, or an ambiguous product, is held and logged for an administrator.
+   * Replacements of Founders Sale prices keep the offer. Each change commits on
+   * its own under a per-price lock, with request keys derived from the change,
+   * so two Hub instances or a retried run never create a second product or price.
    */
   async function syncAppCatalog(app = 'caremetric-intel', { url = appCatalogSources[app], fetchCatalog = fetchImpl } = {}) {
     if (!url) throw new Error(`${app} publishes no catalog.`);
@@ -974,6 +991,8 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
       return { ok: false, app, reason: 'catalog_unreadable' };
     }
     if (catalog.trial_days) catalogTrialDays.set(app, catalog.trial_days);
+    // The AI team quotes the application's published prices from here on; the reviewed copy is the fallback.
+    const stale = useAppCatalogFacts(app, catalog);
     const readStripe = async () => {
       const products = (await live.list('/v1/products', {}, 1000)).filter(product => normalizers.product(product).app === app);
       const prices = [];
@@ -981,10 +1000,35 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
       return { products, prices };
     };
     let { products, prices } = await readStripe();
-    followFoundersReplacements(prices);
-    const plan = planCatalogSync(catalog, products, prices);
+    let plan = planCatalogSync(catalog, products, prices);
     const applied = [];
     const failed = [];
+    for (const create of plan.productCreates) {
+      try {
+        const id = await transaction(pool, async db => {
+          const lockKey = `billing_catalog_sync:${app}:product:${create.entitlement_key}:${create.plan ?? ''}`;
+          if (!(await one(db, 'select pg_try_advisory_xact_lock(hashtextextended($1,0)) as ok', [lockKey])).ok) return null;
+          const product = await live.post('/v1/products', {
+            name: create.name, ...(create.description ? { description: create.description } : {}), ...(create.unit_label ? { unit_label: create.unit_label } : {}),
+            metadata: { app, kind: create.kind, entitlement: create.entitlement_key, hub_managed: 'true', hub_source: 'app_catalog', ...(create.plan ? { [FOR_PLAN_KEY]: create.plan } : {}) },
+          }, { idempotencyKey: `hub-catalog-product-${deterministicKey(app, create.entitlement_key, create.plan ?? '')}` });
+          await mirror(db, 'product', product, new Date(now()), { live });
+          await audit(db, null, 'billing.catalog.product', null, await appId(db, app), {
+            source: 'app_catalog', version: catalog.version, entitlement: create.entitlement_key, ...(create.plan ? { plan: create.plan } : {}), product: product.id,
+          });
+          return product.id;
+        });
+        if (id) applied.push({ ...create, action: 'product.create', id });
+      } catch (error) {
+        failed.push(create);
+        log.warn(`${app} ${create.entitlement_key}${create.plan ? ` (${create.plan})` : ''} product could not be created (${error?.message ?? 'error'}).`);
+      }
+    }
+    if (applied.length) {
+      // The new products need their prices: plan again against what Stripe now holds.
+      ({ products, prices } = await readStripe());
+      plan = { ...planCatalogSync(catalog, products, prices), productCreates: plan.productCreates };
+    }
     const byId = new Map(prices.map(price => [price.id, price]));
     for (const step of [...plan.changes.map(change => ({ ...change, action: 'price.change' })), ...plan.creates.map(create => ({ ...create, action: 'price.create' }))]) {
       try {
@@ -1000,12 +1044,12 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
             request = billingCommandSchema.parse({ action: 'price.change', price: step.price, unit_amount: step.unit_amount, migrate: 'grandfather', expected_version: mirrored.version, request_key });
           } else {
             await mirror(db, 'product', products.find(product => product.id === step.product), new Date(now()), { live });
-            request = billingCommandSchema.parse({ action: 'price.create', product: step.product, pricing_model: 'flat', type: 'recurring', interval: step.interval,
-              unit_amount: step.unit_amount, nickname: '', tenant_id: null, request_key });
+            request = billingCommandSchema.parse({ action: 'price.create', product: step.product, pricing_model: step.kind === 'addon' ? 'per_unit' : 'flat',
+              type: 'recurring', interval: step.interval, unit_amount: step.unit_amount, nickname: '', tenant_id: null, request_key });
           }
           const outcome = await run(db, live, null, request);
           await audit(db, null, 'billing.catalog.sync', null, await appId(db, app), {
-            source: 'app_catalog', version: catalog.version, entitlement: step.entitlement_key, interval: step.interval,
+            source: 'app_catalog', version: catalog.version, entitlement: step.entitlement_key, interval: step.interval, ...(step.plan ? { plan: step.plan } : {}),
             ...(step.price ? { price_from: step.price } : {}), price_to: outcome.result.id, unit_amount_to: step.unit_amount,
           });
           return outcome.result.id;
@@ -1013,27 +1057,22 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         if (id) applied.push({ ...step, id });
       } catch (error) {
         failed.push(step);
-        log.warn(`${app} ${step.entitlement_key} ${step.interval} price could not be brought to ${step.unit_amount} cents (${error?.message ?? 'error'}).`);
+        log.warn(`${app} ${step.entitlement_key}${step.plan ? ` (${step.plan})` : ''} ${step.interval} price could not be brought to ${step.unit_amount} cents (${error?.message ?? 'error'}).`);
       }
     }
-    if (applied.length) {
-      ({ prices } = await readStripe());
-      followFoundersReplacements(prices);
-    }
-    for (const held of plan.held) log.warn(`${app} ${held.entitlement_key}${held.interval ? ` ${held.interval}` : ''} price held for an administrator: ${held.reason}.`);
+    await refreshFounders().catch(() => log.warn('Founders Sale replacements could not be refreshed; they will be on the next run.'));
+    for (const held of plan.held) log.warn(`${app} ${held.entitlement_key}${held.plan ? ` (${held.plan})` : ''}${held.interval ? ` ${held.interval}` : ''} price held for an administrator: ${held.reason}.`);
     for (const missing of plan.missing) log.warn(`${app} sells ${missing.entitlement_key}, but ${missing.reason}.`);
     if (plan.held.length || plan.missing.length) {
       await transaction(pool, async db => audit(db, null, 'billing.catalog.held', null, await appId(db, app), {
         source: 'app_catalog', version: catalog.version, held: String(plan.held.length), missing: String(plan.missing.length),
       })).catch(() => {});
     }
-    // The agents' fact sheet is a reviewed copy (docs/GTM_FACTS.md); a price it doesn't state is flagged for that review.
-    const sheet = Object.values(factProducts).find(product => product.slug === app);
-    const stale = sheet ? factSheetDrift(catalog, sheet.pricing) : [];
+    // The AI team already quotes the catalog; docs/GTM_FACTS.md, its reviewed copy, is flagged for an update.
     if (stale.length) {
-      log.warn(`The ${app} fact sheet the AI team quotes does not state ${stale.map(entry => `${entry.entitlement_key} ${entry.interval} ${entry.amount}`).join(', ')}; update docs/GTM_FACTS.md and server/agents/content/facts.mjs.`);
+      log.warn(`docs/GTM_FACTS.md and the reviewed ${app} facts in server/agents/content/facts.mjs do not state ${stale.join(', ')}; the AI team quotes the catalog meanwhile.`);
       await transaction(pool, async db => audit(db, null, 'billing.catalog.facts_stale', null, await appId(db, app), {
-        source: 'app_catalog', version: catalog.version, prices: String(stale.length),
+        source: 'app_catalog', version: catalog.version, amounts: String(stale.length),
       })).catch(() => {});
     }
     return { ok: failed.length === 0, app, version: catalog.version, applied: applied.length, failed: failed.length,
@@ -1041,7 +1080,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
   }
 
   return {
-    start: verify, reconcile, reconcileUsage, syncAppCatalog,
+    start: verify, reconcile, reconcileUsage, syncAppCatalog, refreshFounders,
     reconcileCustomerCheckouts: async () => {
       const result = await customerSelfService.reconcileCheckouts();
       if (result.failed || result.unbound) log.warn(`Customer Checkout reconciliation: ${result.failed} failed and ${result.unbound} unbound pending purchases.`);

@@ -93,13 +93,17 @@ const billing=platformBilling({pool,secretKey:process.env.STRIPE_SECRET_KEY,auth
 // them and keeps Stripe in step, grandfathering current subscribers (server/app-catalog-sync.mjs). HUB_APP_CATALOG_SYNC=off
 // stops it; INTEL_CATALOG_URL reads another Intel (staging) instead of www.caremetricintel.com.
 let catalogSyncRunning=false;
+// Each tick also refreshes which replaced Founders Sale prices keep the offer (Intel and CareBase), sync or not.
 const syncCatalogs=async()=>{
-  if(process.env.HUB_APP_CATALOG_SYNC==='off'||catalogSyncRunning)return;
+  if(catalogSyncRunning)return;
   catalogSyncRunning=true;
   try{
-    const result=await billing.syncAppCatalog('caremetric-intel',process.env.INTEL_CATALOG_URL?{url:process.env.INTEL_CATALOG_URL}:{});
-    if(result?.applied) console.info(`Intel prices: ${result.applied} Stripe price(s) brought in step with catalog ${result.version}.`);
-  }catch{console.warn('The Intel price catalog could not be synced; it will retry.');}
+    const result=process.env.HUB_APP_CATALOG_SYNC==='off'?null
+      :await billing.syncAppCatalog('caremetric-intel',process.env.INTEL_CATALOG_URL?{url:process.env.INTEL_CATALOG_URL}:{});
+    if(result?.applied) console.info(`Intel prices: ${result.applied} Stripe product(s) and price(s) brought in step with catalog ${result.version}.`);
+    // A sync that read the catalog has refreshed them already.
+    if(!result?.version) await billing.refreshFounders();
+  }catch{console.warn('The Intel price catalog or Founders Sale prices could not be synced; it will retry.');}
   finally{catalogSyncRunning=false;}
 };
 void billing.start().then(ready => ready && billing.reconcile()).then(()=>syncCatalogs()).catch(() => {});

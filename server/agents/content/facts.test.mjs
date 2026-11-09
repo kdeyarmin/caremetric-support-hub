@@ -1,8 +1,12 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import * as facts from './facts.mjs';
 import {
-  allowedAmounts, allowedHost, allowedPercents, articleUrl, citationHosts, claims, factSheetText, legalDisclaimer, officialSources, productPages, products,
+  allowedAmounts, allowedHost, allowedPercents, articleUrl, citationHosts, claims, factSheetText, intelFactsFromCatalog, intelReviewedFacts, legalDisclaimer,
+  officialSources, productPages, products, resetAppCatalogFacts, useAppCatalogFacts,
 } from './facts.mjs';
+import { allowedNumbers, textProblems } from './validate.mjs';
+import { parseAppCatalog } from '../../app-catalog-sync.mjs';
 
 const doc = readFileSync(new URL('../../../docs/GTM_FACTS.md', import.meta.url), 'utf8');
 
@@ -33,7 +37,7 @@ describe('the fact sheet', () => {
     expect(doc).not.toMatch(/owner to confirm/i);
     expect(doc).toContain('Founders Sale was requested by the owner on 2026-11-08');
     for (const product of Object.values(products)) expect(product.source).toMatch(/^kdeyarmin\/[A-Za-z]+@[0-9a-f]{7} /);
-    for (const file of ['marketingPricing.ts', 'About.tsx', 'planLimits.ts', 'marketing-copy.md', 'competitive-marketing-review.md', 'site-content.mjs']) expect(doc, file).toContain(file);
+    for (const file of ['marketingPricing.ts', 'About.tsx', 'planCatalog.ts', 'marketing-copy.md', 'competitive-marketing-review.md', 'site-content.mjs']) expect(doc, file).toContain(file);
   });
 
   it('preserves legacy founding terms without offering them to new applicants', () => {
@@ -91,5 +95,49 @@ describe('the fact sheet', () => {
     expect(legalDisclaimer).toMatch(/not legal advice/);
     expect(articleUrl('pa-fire-drills')).toBe('https://help.caremetric.ai/help/articles/pa-fire-drills');
     expect(factSheetText()).toBe(text);
+  });
+});
+
+describe("Intel's facts from its published catalog", () => {
+  const fixture = JSON.parse(readFileSync(new URL('../../fixtures/intel-catalog.json', import.meta.url), 'utf8'));
+  const catalog = (edit = body => body) => parseAppCatalog(edit(structuredClone(fixture)), 'caremetric-intel');
+  const repriced = catalog(body => {
+    body.version = 'abcdef0123456789';
+    body.products.find(product => product.entitlement_key === 'growth').prices.find(price => price.interval === 'month').unit_amount = 94900;
+    return body;
+  });
+  afterEach(() => resetAppCatalogFacts());
+
+  it('writes exactly the reviewed lines from the catalog they were reviewed against', () => {
+    expect(intelFactsFromCatalog(catalog())).toEqual(intelReviewedFacts);
+    expect(useAppCatalogFacts('caremetric-intel', catalog())).toEqual([]);
+    expect(products.intel.pricing).toEqual(intelReviewedFacts.pricing);
+    expect(factSheetText()).toContain(`Intel catalog ${fixture.version}`);
+  });
+
+  it('quotes a new catalog price at once, checks drafts against it and flags the reviewed copy', () => {
+    const before = facts.factsRevision;
+    expect(useAppCatalogFacts('caremetric-intel', repriced)).toEqual(['$949']);
+    expect(facts.factsRevision).toBe(before + 1);
+    expect(products.intel.pricing[1]).toMatch(/^Growth: \$949 per month, or \$749 per month billed annually/);
+    expect(facts.allowedAmounts).toContain('$949');
+    expect(facts.allowedAmounts).not.toContain('$899');
+    expect(factSheetText()).toContain('Intel catalog abcdef0123456789');
+    expect(textProblems('Intel Growth is $949 per month.')).toEqual([]);
+    expect(textProblems('Intel Growth is $899 per month.')).toContain('unlisted_price');
+    expect(allowedNumbers([]).size).toBeGreaterThan(0);
+    // The same catalog read again changes nothing.
+    useAppCatalogFacts('caremetric-intel', repriced);
+    expect(facts.factsRevision).toBe(before + 1);
+  });
+
+  it('goes back to the reviewed copy, and ignores catalogs of applications whose facts are reviewed by hand', () => {
+    useAppCatalogFacts('caremetric-intel', repriced);
+    resetAppCatalogFacts();
+    expect(products.intel.pricing).toEqual(intelReviewedFacts.pricing);
+    expect(facts.allowedAmounts).toEqual(allowedAmounts);
+    expect(textProblems('Intel Growth is $949 per month.')).toContain('unlisted_price');
+    expect(useAppCatalogFacts('carebase', repriced)).toEqual([]);
+    expect(products.intel.pricing).toEqual(intelReviewedFacts.pricing);
   });
 });

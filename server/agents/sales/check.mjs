@@ -14,7 +14,7 @@
 import { echoCandidates, quotesCustomer, wordsOf } from '../concierge/draft.mjs';
 import { screenIdentifiers } from '../concierge/screen.mjs';
 import { smsLimit, wrapReply } from '../concierge/templates.mjs';
-import { factSheetText, helpCenterOrigin } from '../content/facts.mjs';
+import { factSheetText, factsRevision, helpCenterOrigin } from '../content/facts.mjs';
 import { allowedNumbers, normalizeTerms, textProblems } from '../content/validate.mjs';
 import { productAmounts } from '../../growth/draft.mjs';
 import { linkablePages, playbookFor, playbookText } from '../../growth/playbook.mjs';
@@ -23,8 +23,14 @@ export const emailReplyLimit = 1500;
 /** The word limit the model is given for each route. */
 export const wordLimits = Object.freeze({ email: 170, chat: 120, sms: 45 });
 
-const numbers = allowedNumbers([]);
-const vocabulary = new Set(wordsOf(`${factSheetText()}\n${playbookText()}`));
+let sheetCache = { revision: -1 };
+/** The numbers and words of the fact sheet and playbook, read again when the facts change (Intel's catalog). */
+const sheet = () => {
+  if (sheetCache.revision !== factsRevision) {
+    sheetCache = { revision: factsRevision, numbers: allowedNumbers([]), vocabulary: new Set(wordsOf(`${factSheetText()}\n${playbookText()}`)) };
+  }
+  return sheetCache;
+};
 const markup = /[<>`]|\]\(|\*\*|__|^#{1,6}\s|^\s*[-*•]\s/m;
 const linkPattern = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
 const trailing = /[.,;:!?)\]]+$/;
@@ -67,14 +73,14 @@ export function checkSalesReply({ reply, product, route, guides = [], text = '' 
   if (links.some(url => !allowed.has(url))) return { ok: false, reason: 'link' };
   const words = normalized.replace(linkPattern, ' ');
   if (screenIdentifiers(words).flagged) return { ok: false, reason: 'identifier' };
-  const problems = textProblems(words, { product: book.factsKey, numbers });
+  const problems = textProblems(words, { product: book.factsKey, numbers: sheet().numbers });
   if (problems.length) return { ok: false, reason: problems[0] };
   const own = productAmounts(book.factsKey);
   if ((words.match(/\$\s?(?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?/g) ?? []).some(amount => !own.has(Number(amount.replace(/[$,\s]/g, ''))))) return { ok: false, reason: 'other_product_price' };
   if (promise.test(words)) return { ok: false, reason: 'promise' };
   if (aiMention.test(words)) return { ok: false, reason: 'ai_mention' };
   const lowered = words.toLowerCase();
-  if (echoCandidates(text, vocabulary).some(word => new RegExp(String.raw`\b${word.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\b`).test(lowered))) return { ok: false, reason: 'name_echo' };
+  if (echoCandidates(text, sheet().vocabulary).some(word => new RegExp(String.raw`\b${word.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\b`).test(lowered))) return { ok: false, reason: 'name_echo' };
   if (quotesCustomer(words, text)) return { ok: false, reason: 'quotes_customer' };
   return { ok: true, reply: normalized, body };
 }

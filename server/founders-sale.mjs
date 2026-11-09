@@ -13,8 +13,18 @@ const invoiceSubscription = invoice => normalizers.invoice(invoice).subscription
 const followed = new Map();
 export const foundersPrice = price => foundersCatalog[ref(price)] ?? followed.get(ref(price));
 
-/** Applications whose published prices the Hub changes from the application's own catalog (server/app-catalog-sync.mjs). */
-export const FOUNDERS_FOLLOW_APPS = Object.freeze(['caremetric-intel']);
+/**
+ * Applications whose Founders prices keep the offer when a price change replaces
+ * them: Intel, whose prices the Hub changes from Intel's own catalog
+ * (server/app-catalog-sync.mjs), and CareBase (Train included), whose prices an
+ * administrator changes in the Hub.
+ */
+export const FOUNDERS_FOLLOW_APPS = Object.freeze(['caremetric-intel', 'carebase']);
+
+/** The Stripe products whose prices followFoundersReplacements needs: the Founders products of FOUNDERS_FOLLOW_APPS. */
+export function foundersFollowProducts(apps = FOUNDERS_FOLLOW_APPS) {
+  return [...new Set(Object.values(foundersCatalog).filter(entry => apps.includes(entry.app)).map(entry => entry.product))].sort();
+}
 
 /**
  * A price change creates a new Stripe price and archives the old one, stamping
