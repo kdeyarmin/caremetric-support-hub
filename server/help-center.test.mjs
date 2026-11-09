@@ -289,5 +289,9 @@ describe('articles whose home is the product\'s own website', () => {
     // Without a products list nothing is sent elsewhere; an address that is not https is never used.
     expect(publicArticles(intelRows, { elsewhere }).every(article => article.home === null)).toBe(true);
     expect(publicArticles(intelRows, { slugs: new Map([[intelId, 'caremetric-intel']]), elsewhere: () => 'javascript:alert(1)' })[0].home).toBeNull();
+    // An item with a different live revision for each product comes back as one row per revision: its products are all of them,
+    // whichever row comes first, so it stays the help center's.
+    const split = [row({ id: 'r1', content_key: 'split-revisions', product_ids: [intelId] }), row({ id: 'r2', content_key: 'split-revisions', title: 'Other revision', product_ids: [carebaseId] })];
+    expect(publicArticles(split, { slugs: new Map(products.map(item => [item.id, item.slug])), elsewhere }).map(article => [article.key, article.home])).toEqual([['split-revisions', null]]);
   });
 });

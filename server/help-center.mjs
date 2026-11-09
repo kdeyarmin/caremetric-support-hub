@@ -49,19 +49,27 @@ const clip = (value, limit) => {
 
 /**
  * The public, published articles in `rows` (the list_published_content rows), one per content key, in the list's order. `home`
- * is the address on the product's own website when every product the article is published for is one product and
+ * is the address on the product's own website when every product the article is published for, across all its rows, is one product and
  * `elsewhere(productSlug, key)` names one for it (`slugs` maps product ids to slugs); otherwise null, and the help center is its home.
  */
 export function publicArticles(rows, { slugs = new Map(), elsewhere = null } = {}) {
   const seen = new Set();
   const articles = [];
-  for (const row of Array.isArray(rows) ? rows : []) {
+  const list = Array.isArray(rows) ? rows : [];
+  // An item can come back as several rows (one per live revision); its products are those of every row for its key.
+  const productsByKey = new Map();
+  for (const row of list) {
+    if (row?.kind !== 'article' || row.status !== 'published' || row.access_level !== 'public' || typeof row.content_key !== 'string') continue;
+    const ids = productsByKey.get(row.content_key) ?? new Set();
+    for (const id of Array.isArray(row.product_ids) ? row.product_ids : []) ids.add(id);
+    productsByKey.set(row.content_key, ids);
+  }
+  for (const row of list) {
     if (row?.kind !== 'article' || row.status !== 'published' || row.access_level !== 'public') continue;
     if (typeof row.content_key !== 'string' || !keyPattern.test(row.content_key) || seen.has(row.content_key)) continue;
     if (typeof row.title !== 'string' || !row.title.trim()) continue;
     seen.add(row.content_key);
-    const productIds = Array.isArray(row.product_ids) ? row.product_ids : [];
-    const productSlugs = [...new Set(productIds.map(id => slugs.get(id) ?? null))];
+    const productSlugs = [...new Set([...productsByKey.get(row.content_key)].map(id => slugs.get(id) ?? null))];
     const away = elsewhere && productSlugs.length === 1 && productSlugs[0] ? elsewhere(productSlugs[0], row.content_key) : null;
     articles.push({
       key: row.content_key, title: row.title.trim(), summary: typeof row.summary === 'string' ? row.summary.trim() : '',

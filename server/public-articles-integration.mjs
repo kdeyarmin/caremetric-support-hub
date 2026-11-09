@@ -53,14 +53,18 @@ try {
   await article('course', { products: [intel], kind: 'course' });
   await article('shared', { products: [intel, carebase] });
   await article('carebase', { products: [carebase] });
+  // Ownership does not decide visibility (as in private.can_access_content_publication): an Intel-owned article also published to
+  // CareBase is shared, and a CareBase-owned article published to Intel alone is Intel's.
+  await article('owned-shared', { products: [intel, carebase], owner: intel });
+  await article('owned-elsewhere', { products: [intel], owner: carebase });
   // A newer revision waiting for review is never shown: the publication still points at revision 1.
   await admin.query(`insert into hub.content_revisions (item_id, revision_no, locale, title, summary, body_markdown, review_state)
     values ($1, 2, 'en-US', 'An unreviewed draft title', 'Draft.', 'Draft body.', 'draft')`, [shown.item]);
 
   const ours = list => list.filter(item => item.key.startsWith(`feed-${run}-`));
   const intelList = ours(await read('caremetric-intel'));
-  assert.deepEqual(intelList.map(item => item.key), [key('intel')], 'only the public, live article that is Intel\'s alone');
-  const [only] = intelList;
+  assert.deepEqual(intelList.map(item => item.key).sort(), [key('intel'), key('owned-elsewhere')].sort(), 'only the public, live articles that are Intel\'s alone');
+  const only = intelList.find(item => item.key === key('intel'));
   assert.deepEqual(Object.keys(only).sort(), ['description', 'key', 'locale', 'markdown', 'publishedAt', 'revision', 'title', 'updatedAt']);
   assert.equal(only.title, 'Feed article intel');
   assert.equal(only.description, 'A description a visitor reads.');
@@ -78,7 +82,7 @@ try {
 
   // A retired article leaves the feed.
   await admin.query("update hub.content_items set status = 'retired', retired_at = now() where id = $1", [shown.item]);
-  assert.deepEqual(ours(await read('caremetric-intel')), []);
+  assert.deepEqual(ours(await read('caremetric-intel')).map(item => item.key), [key('owned-elsewhere')]);
   await admin.query("update hub.content_items set status = 'published', retired_at = null where id = $1", [shown.item]);
 
   // Malformed products are refused; an unknown one is simply empty.
@@ -98,7 +102,7 @@ try {
 
   // The feed module over the real read.
   const feed = publicArticleFeed({ load: read, log: () => {} });
-  const served = (await feed.articles('caremetric-intel')).filter(item => item.key.startsWith(`feed-${run}-`));
+  const served = (await feed.articles('caremetric-intel')).filter(item => item.key === key('intel'));
   assert.deepEqual(served.map(item => [item.key, item.summary, item.body]), [[key('intel'), 'A summary.', 'The body.']]);
   console.log('Public article feed integration passed.');
 } finally {

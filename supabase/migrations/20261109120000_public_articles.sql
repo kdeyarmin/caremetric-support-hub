@@ -6,7 +6,8 @@
 -- The read returns exactly what an anonymous visitor of the help center can already read, for one product: an article (kind
 -- article) that is published, public and published for every visitor (audience "all"), whose current approved revision is live
 -- (published, not expired) under a product that is not retired and is open to support, the same conditions under which
--- hub.list_published_content shows it to an anonymous visitor. An article counts as the product's only when every such publication
+-- hub.list_published_content shows it to an anonymous visitor (private.can_access_content_publication, which does not tie a
+-- publication to the item's owner product). An article counts as the product's only when every such publication
 -- of it is for that product, so an article shared with another product stays the help center's. Drafts, revisions waiting for
 -- review, customer or staff articles, and anything retired or expired are never returned.
 --
@@ -35,7 +36,6 @@ begin
         and revision.review_state = 'approved'
         and product.status <> 'retired'
         and product.support_enabled
-        and (item.owner_product_id is null or item.owner_product_id = publication.product_id)
         and (revision.product_overlay_id is null or revision.product_overlay_id = publication.product_id)
         and publication.published_at <= now()
         and (publication.expires_at is null or publication.expires_at > now())
