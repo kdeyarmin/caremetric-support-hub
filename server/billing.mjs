@@ -3,7 +3,9 @@ import { HttpError, transaction, withSession } from './sms-auth.mjs';
 import { billingCommandSchema, localBillingActions, entitlementRequestSchema, usageReportSchema, trialRequestSchema, appPortalRequestSchema, appBillingRequestSchema } from '../src/billing/billingProtocol.ts';
 import { stripeClient, StripeError, STRIPE_ACCOUNT_ID, verifyStripeSignature, eventTarget, retrievePaths, normalizers, withAllSubscriptionItems } from './stripe.mjs';
 import { customerBillingService } from './customer-billing.mjs';
-import { FOUNDERS_COUPON, applyFoundersToInvoice, foundersEligibility, foundersMetadata } from './founders-sale.mjs';
+import { FOUNDERS_COUPON, applyFoundersToInvoice, followFoundersReplacements, foundersEligibility, foundersMetadata } from './founders-sale.mjs';
+import { appCatalogSources, deterministicKey, factSheetDrift, parseAppCatalog, planCatalogSync } from './app-catalog-sync.mjs';
+import { products as factProducts } from './agents/content/facts.mjs';
 import { facilityEntitlementRequest, facilityEntitlementSnapshot } from '../src/billing/facilityEntitlements.ts';
 import { selfServiceApps } from '../src/self-service/protocol.ts';
 
@@ -68,6 +70,8 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
   const client = stripeClient({ secretKey, fetchImpl, ...(apiBase ? { apiBase } : {}) });
   let state = client ? 'pending' : 'unconfigured';
   let verifying = null;
+  // Trial lengths an application's own catalog states (syncAppCatalog); trialDays is the fallback.
+  const catalogTrialDays = new Map();
 
   // A key is used only after GET /v1/account proves it belongs to the CareMetric account.
   async function verify() {
@@ -804,7 +808,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         }
         const subscription = await live.post('/v1/subscriptions', {
           customer, items: [{ price: prepared.price.price, quantity: 1 }],
-          trial_period_days: prepared.price.trial_days ?? trialDays[prepared.app.slug] ?? 14,
+          trial_period_days: prepared.price.trial_days ?? catalogTrialDays.get(prepared.app.slug) ?? trialDays[prepared.app.slug] ?? 14,
           trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
           payment_settings: { save_default_payment_method: 'on_subscription' },
           metadata: { app: prepared.app.slug, hub_tenant_id: prepared.tenant, hub_source: 'app_trial' }, expand: ['discounts'],
@@ -946,8 +950,98 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     return { synced, failed };
   }
 
+  /**
+   * Keeps Stripe in step with the prices an application publishes
+   * (server/app-catalog-sync.mjs). Missing plan prices are created and changed
+   * ones replaced through the administrator's own commands, grandfathering
+   * every current subscriber; a change outside the automatic range, or an
+   * ambiguous product, is held and logged for an administrator. Replacements of
+   * Founders Sale prices keep the offer. Each change commits on its own under a
+   * per-price lock, with request keys derived from the change, so two Hub
+   * instances or a retried run never create a second price.
+   */
+  async function syncAppCatalog(app = 'caremetric-intel', { url = appCatalogSources[app], fetchCatalog = fetchImpl } = {}) {
+    if (!url) throw new Error(`${app} publishes no catalog.`);
+    if (!(await verify())) return null;
+    const live = client;
+    let catalog;
+    try {
+      const response = await fetchCatalog(url, { headers: { accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(15_000) });
+      if (!response.ok) throw new Error(`the catalog answered ${response.status}`);
+      catalog = parseAppCatalog(await response.json(), app);
+    } catch (error) {
+      log.warn(`The ${app} price catalog could not be read (${error?.message ?? 'unreadable'}); Stripe was left as it is.`);
+      return { ok: false, app, reason: 'catalog_unreadable' };
+    }
+    if (catalog.trial_days) catalogTrialDays.set(app, catalog.trial_days);
+    const readStripe = async () => {
+      const products = (await live.list('/v1/products', {}, 1000)).filter(product => normalizers.product(product).app === app);
+      const prices = [];
+      for (const product of products) prices.push(...await live.list('/v1/prices', { product: product.id }, 1000));
+      return { products, prices };
+    };
+    let { products, prices } = await readStripe();
+    followFoundersReplacements(prices);
+    const plan = planCatalogSync(catalog, products, prices);
+    const applied = [];
+    const failed = [];
+    const byId = new Map(prices.map(price => [price.id, price]));
+    for (const step of [...plan.changes.map(change => ({ ...change, action: 'price.change' })), ...plan.creates.map(create => ({ ...create, action: 'price.create' }))]) {
+      try {
+        const id = await transaction(pool, async db => {
+          const lockKey = `billing_catalog_sync:${app}:${step.product}:${step.interval}`;
+          if (!(await one(db, 'select pg_try_advisory_xact_lock(hashtextextended($1,0)) as ok', [lockKey])).ok) return null;
+          const request_key = deterministicKey(app, step.action, step.price ?? step.product, step.interval, String(step.unit_amount));
+          let request;
+          if (step.action === 'price.change') {
+            // The mirror may trail Stripe; bring this price in before locking it.
+            await mirror(db, 'price', byId.get(step.price), new Date(now()), { live });
+            const mirrored = await lookup(db, 'price', step.price);
+            request = billingCommandSchema.parse({ action: 'price.change', price: step.price, unit_amount: step.unit_amount, migrate: 'grandfather', expected_version: mirrored.version, request_key });
+          } else {
+            await mirror(db, 'product', products.find(product => product.id === step.product), new Date(now()), { live });
+            request = billingCommandSchema.parse({ action: 'price.create', product: step.product, pricing_model: 'flat', type: 'recurring', interval: step.interval,
+              unit_amount: step.unit_amount, nickname: '', tenant_id: null, request_key });
+          }
+          const outcome = await run(db, live, null, request);
+          await audit(db, null, 'billing.catalog.sync', null, await appId(db, app), {
+            source: 'app_catalog', version: catalog.version, entitlement: step.entitlement_key, interval: step.interval,
+            ...(step.price ? { price_from: step.price } : {}), price_to: outcome.result.id, unit_amount_to: step.unit_amount,
+          });
+          return outcome.result.id;
+        });
+        if (id) applied.push({ ...step, id });
+      } catch (error) {
+        failed.push(step);
+        log.warn(`${app} ${step.entitlement_key} ${step.interval} price could not be brought to ${step.unit_amount} cents (${error?.message ?? 'error'}).`);
+      }
+    }
+    if (applied.length) {
+      ({ prices } = await readStripe());
+      followFoundersReplacements(prices);
+    }
+    for (const held of plan.held) log.warn(`${app} ${held.entitlement_key}${held.interval ? ` ${held.interval}` : ''} price held for an administrator: ${held.reason}.`);
+    for (const missing of plan.missing) log.warn(`${app} sells ${missing.entitlement_key}, but ${missing.reason}.`);
+    if (plan.held.length || plan.missing.length) {
+      await transaction(pool, async db => audit(db, null, 'billing.catalog.held', null, await appId(db, app), {
+        source: 'app_catalog', version: catalog.version, held: String(plan.held.length), missing: String(plan.missing.length),
+      })).catch(() => {});
+    }
+    // The agents' fact sheet is a reviewed copy (docs/GTM_FACTS.md); a price it doesn't state is flagged for that review.
+    const sheet = Object.values(factProducts).find(product => product.slug === app);
+    const stale = sheet ? factSheetDrift(catalog, sheet.pricing) : [];
+    if (stale.length) {
+      log.warn(`The ${app} fact sheet the AI team quotes does not state ${stale.map(entry => `${entry.entitlement_key} ${entry.interval} ${entry.amount}`).join(', ')}; update docs/GTM_FACTS.md and server/agents/content/facts.mjs.`);
+      await transaction(pool, async db => audit(db, null, 'billing.catalog.facts_stale', null, await appId(db, app), {
+        source: 'app_catalog', version: catalog.version, prices: String(stale.length),
+      })).catch(() => {});
+    }
+    return { ok: failed.length === 0, app, version: catalog.version, applied: applied.length, failed: failed.length,
+      unchanged: plan.unchanged, held: plan.held, missing: plan.missing, skipped: plan.skipped, facts_stale: stale };
+  }
+
   return {
-    start: verify, reconcile, reconcileUsage,
+    start: verify, reconcile, reconcileUsage, syncAppCatalog,
     reconcileCustomerCheckouts: async () => {
       const result = await customerSelfService.reconcileCheckouts();
       if (result.failed || result.unbound) log.warn(`Customer Checkout reconciliation: ${result.failed} failed and ${result.unbound} unbound pending purchases.`);

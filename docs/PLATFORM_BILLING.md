@@ -33,6 +33,8 @@ platform billing and stay in those applications.
 | `STRIPE_PORTAL_CONFIGURATION_ID` | no | `bpc_…` Customer Portal configuration for Hub customers; Stripe's default configuration otherwise. |
 | `HUB_PUBLIC_ORIGIN` | no | Return address of the customer portal (`https://help.caremetric.ai`). |
 | `HUB_CUSTOMER_PURCHASING_ENABLED` | no | Defaults off. Enables reviewed customer purchase confirmations only after the sandbox and native entitlement rollout gates pass. Existing checkout status and cancellation remain reachable when new purchasing is off. |
+| `HUB_APP_CATALOG_SYNC` | no | `off` stops the Intel price sync (below). On by default. |
+| `INTEL_CATALOG_URL` | no | Reads Intel's price catalog from another Intel (staging) instead of `https://www.caremetricintel.com/api/billing/catalog`. |
 
 Webhook endpoint: `POST https://<hub>/api/webhooks/stripe`, API version
 `2026-02-25.clover`, events: customer, subscription, discount, product, price,
@@ -40,6 +42,41 @@ coupon, promotion code, invoice and Checkout Session events (`webhookEvents` in
 `server/stripe.mjs` lists them exactly).
 Include `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
 `checkout.session.async_payment_failed` and `checkout.session.expired`.
+
+## Prices an application sets itself (Intel)
+
+CareMetric Intel sets its plan prices in one place, `src/lib/planCatalog.ts` in
+`kdeyarmin/intel`, and publishes them at
+`GET https://www.caremetricintel.com/api/billing/catalog` (contract
+`caremetric.app-catalog.v1`: products by entitlement key with their monthly,
+annual and one-time prices, and a version hash). After the start and every 15
+minutes the Hub reads that catalog and keeps Stripe in step
+(`syncAppCatalog` in `server/billing.mjs`, decisions in
+`server/app-catalog-sync.mjs`):
+
+- A plan (`starter`, `growth`, `pro`, matched by the Stripe product's
+  `entitlement` metadata) with no published price for an interval gets one.
+- A published price at another amount is replaced through the same
+  **Change price** command an administrator uses, with **grandfather**:
+  everyone already subscribed keeps their price; new subscriptions get the
+  new one. Each change is audited as `billing.price.change` and
+  `billing.catalog.sync`.
+- A change that would cut a price by more than half or more than double it,
+  a plan with several active published prices for one interval, or a plan with
+  no Stripe product is **held**: nothing changes, the log names it and
+  `billing.catalog.held` is audited for an administrator.
+- Customers' contract prices are never touched. Intel's add-ons and onboarding
+  fees are listed in the catalog but are not sold in Stripe, so they are
+  skipped.
+- Each change commits on its own under a per-price advisory lock, with Stripe
+  request keys derived from the change, so two Hub instances or a retried run
+  never create a second price. An unreadable catalog leaves Stripe as it is.
+- Intel's trial length follows the catalog's `trial_days`.
+- The AI team's fact sheet (`server/agents/content/facts.mjs`, the reviewed
+  copy of `docs/GTM_FACTS.md`) stays reviewed: when it no longer states an
+  Intel plan price, the sync logs it and audits `billing.catalog.facts_stale`.
+- Replacements of Founders Sale prices keep the offer
+  (see `docs/PRICING_RESEARCH_AND_FOUNDERS_SALE.md`).
 
 ## Data mirror
 

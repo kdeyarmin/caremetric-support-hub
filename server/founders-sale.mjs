@@ -9,7 +9,47 @@ const discounts = object => object.discounts ?? (object.discount ? [object.disco
 const couponOf = discount => ref(discount.source?.coupon ?? discount.coupon);
 const isFounders = discount => couponOf(discount) === FOUNDERS_COUPON;
 const invoiceSubscription = invoice => normalizers.invoice(invoice).subscription;
-export const foundersPrice = price => foundersCatalog[ref(price)];
+// Replacements of verified prices that keep the offer (followFoundersReplacements).
+const followed = new Map();
+export const foundersPrice = price => foundersCatalog[ref(price)] ?? followed.get(ref(price));
+
+/** Applications whose published prices the Hub changes from the application's own catalog (server/app-catalog-sync.mjs). */
+export const FOUNDERS_FOLLOW_APPS = Object.freeze(['caremetric-intel']);
+
+/**
+ * A price change creates a new Stripe price and archives the old one, stamping
+ * the new price's `hub_replaces` with the old id. For the applications in
+ * FOUNDERS_FOLLOW_APPS, a price that replaces a verified Founders price (directly
+ * or through earlier replacements), on the same product and not a customer's
+ * contract price, keeps the offer at its own amount: a new Starter price is
+ * still Starter. Everything else stays as founders-catalog.mjs lists it, and the
+ * coupon's product scope is unchanged because the products are the same.
+ * `prices` are Stripe price objects (active and archived) of those products;
+ * the result replaces what was followed before. Returns the count followed.
+ */
+export function followFoundersReplacements(prices, apps = FOUNDERS_FOLLOW_APPS) {
+  const byId = new Map(prices.map(price => [price.id, price]));
+  const origin = (price, seen = new Set()) => {
+    const known = foundersCatalog[price.id];
+    if (known) return known;
+    const prior = price.metadata?.hub_replaces;
+    if (typeof prior !== 'string' || seen.has(price.id)) return null;
+    seen.add(price.id);
+    const before = foundersCatalog[prior] ? { id: prior, product: foundersCatalog[prior].product } : byId.get(prior);
+    if (!before || ref(before.product) !== ref(price.product)) return null;
+    return foundersCatalog[prior] ?? origin(before, seen);
+  };
+  const next = new Map();
+  for (const price of prices) {
+    if (foundersCatalog[price.id] || price.metadata?.hub_tenant_id || !Number.isInteger(price.unit_amount)) continue;
+    const base = origin(price);
+    if (!base || !apps.includes(base.app) || base.product !== ref(price.product)) continue;
+    next.set(price.id, { app: base.app, product: base.product, kind: base.kind, amount: price.unit_amount });
+  }
+  followed.clear();
+  for (const [id, entry] of next) followed.set(id, entry);
+  return next.size;
+}
 export const foundersMetadata = { hub_founders_sale: FOUNDERS_OFFER, hub_founders_origin: 'paid' };
 
 export function foundersAmounts(lines) {
