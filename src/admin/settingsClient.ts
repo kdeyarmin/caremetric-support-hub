@@ -21,8 +21,8 @@ const setting = z.object({
   effective: settingValue,
   /** Where the value comes from: saved here, copied in once from a Railway variable, the default, or (before the migration) Railway. */
   source: z.enum(["hub", "copied", "default", "railway"]),
-  /** The Railway variable this setting replaces, and whether it is still set there (it is no longer read once copied). */
-  variable: z.string().regex(/^[A-Z][A-Z0-9_]{2,80}$/),
+  /** The Railway variable this setting replaces (none for a setting that never was one), and whether it is still set there (it is no longer read once copied). */
+  variable: z.string().regex(/^[A-Z][A-Z0-9_]{2,80}$/).nullable(),
   variableSet: z.boolean(),
   changedAt: z.string().nullable(),
 }).strict();

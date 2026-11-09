@@ -25,6 +25,10 @@ is built so far.
 > The **Social Media Manager** runs the Facebook Page, Instagram, the LinkedIn Page and the Meta and LinkedIn ad accounts for engagement: a weekly post plan,
 > replies to comments and messages, a daily ad review that pauses, refreshes and (only with your approval) re-budgets ads, and a
 > weekly report. See [Social media](SOCIAL_MEDIA.md).
+> The **Creative Director** turns the marketing plans into finished, compliant ad images and short videos drawn in each product's own
+> brand theme (Intel's Emberline, CareBase's blue and white: the colors, type and logo of its app and emails), proposes each for
+> your approval (anything that fails a compliance check is blocked and never shown), hands what you approve to the Social Media Manager
+> and learns weekly from results joined by `utm_content`. It is off until **Settings → Creative → Turn on the Creative Director** is on. See [Creative Director](CREATIVE_DIRECTOR.md).
 > The **Monday scorecard** from the Chief of Staff replaces the five weekly report emails with one: six numbers per product beside
 > last week's, what changed, and at most three decisions (see "The Monday scorecard" and [Monday scorecard](MONDAY_SCORECARD.md)).
 > **Only CareMetric Intel is marketed** while CareBase is in its pilot. You switch products on and off under "Products we market" on
@@ -44,6 +48,7 @@ to the next run without a restart. They decide it for every agent:
 - **Social Media Manager:** posts, links in replies, new ad copy and budget increases for marketed products only. A comment asking about
   CareBase is left for the owner. A losing CareBase ad may still be paused, which only lowers spend.
 - **Content Marketer:** help-center articles and monthly outreach drafts for marketed products only.
+- **Creative Director:** briefs, drafts and renders creative for marketed products only; an owner's brief for another product is refused.
 - **Sales Executive:** drafts no answer about a product that is not marketed. A first message still gets the fixed acknowledgment, and
   the owner is emailed that the conversation is theirs to decide (for CareBase, whether that organization joins the pilot).
 
@@ -982,6 +987,31 @@ Comments and messages reach the model only while "Let agents send customer messa
 and no other person's words are stored. Setup,
 the ad rules, the checks and the Meta and LinkedIn permissions are in [Social media](SOCIAL_MEDIA.md).
 
+## The Creative Director
+
+Turns marketing plans (the Social Media Manager's weekly plan, the Marketing Manager's approved content briefs and the owner's own briefs on
+the **Creative** screen, `/admin/creative`) into finished ad creative: images for Meta, LinkedIn, Google display and YouTube rendered with
+satori and resvg (no browser), and 6, 15, 30 and 45 to 60 second videos in 1:1, 4:5 and 9:16, drawn frame by frame and stitched with
+ffmpeg-static (or made by HeyGen when Settings → Creative → "How videos are made" says HeyGen and `HUB_HEYGEN_API_KEY` is set). It starts **paused, in
+Propose**, with a $3.00 daily budget on the quality tier (concepts and final copy) and writes variants on the draft tier
+(`20261109200000_creative_director.sql`, gate `20261109200100_creative_director_contract.sql`, feature `platform.agents.creative.v1`).
+Its work registers when that feature is declared and runs while **Settings → Creative → Turn on the Creative Director** is on (read on each
+run, so a change applies within a minute).
+
+- `creative.plan` (08:30, and whenever the weekly social plan is written), `creative.request` (per brief), `creative.render` (every 10
+  minutes, at most Settings → Creative → "Most renders a day", default 40), `creative.refresh` (09:30 once a week) and `creative.report` (09:45
+  once a week).
+- Every asset passes the code's compliance checks (no PHI or named patients, Meta's personal-attributes rule, no unsubstantiated claims
+  unless in the fact source, no implied CMS or government endorsement, offers and prices matching billing, exact brand and product names,
+  the brand kit's banned phrases and disclaimers, WCAG AA contrast, captions on video, a text-heavy warning, the platform's own limits). A
+  blocked asset is never shown to the owner.
+- Three action kinds: `creative.asset` (passed every check), `creative.asset_review` (passed with warnings: never automatic) and
+  `creative.retire`. Approving hands the asset to the Social Media Manager, whose posts and new ads use approved creative before anything
+  else; a rejection note becomes a revision brief. Two autonomy steps, both off: **Creative approvals** and **Retiring tired creative**.
+- The morning brief carries a Creative line (counts and the strongest learning).
+
+Formats, rules, rendering, learning and setup: [Creative Director](CREATIVE_DIRECTOR.md).
+
 ## The Content Marketer
 
 Writes the help center's public articles, one a week, for the owner to approve, and once a month drafts outreach for the
@@ -1104,6 +1134,32 @@ content rules first. An article published this way records the AI assistant as i
 its revision variables and its audit row; the owner's own approvals are unchanged. The fact sheet the checks read
 (`server/agents/content/facts.mjs`, `docs/GTM_FACTS.md`) is what keeps automatic articles accurate: confirm it before the
 articles step switches.
+
+## What each product does
+
+The fact sheet keeps prices, offers and who each product is for. What each product **does**, and why it matters, comes from the products'
+own published pages, kept in `server/agents/content/features.mjs` (`intel-features.json`, `carebase-features.json`):
+
+- **CareMetric Intel**: all 97 features on https://www.caremetricintel.com/features, by area, with the plan or role each needs; why each
+  part matters; the data behind it (providers, facilities, territories, utilization and quality, and the organization's own results), each
+  with its sources, the decision it helps make and its limit; each care setting; the manager view; the questions and answers; the caveats.
+- **CareMetric CareBase**: all 60 capabilities on https://cmcarebase.com/features, by module; why it matters and the tools that set it
+  apart; the newest tools; a resident's record from inquiry to move-out; what each role sees and does; before and with CareBase; each
+  chapter's requirements; the questions and answers from /faq; the caveats.
+
+Every request about a product carries that product's catalog as its own cached block after the prompt: the Creative Director's concept
+and variants, the Content Marketer's articles and monthly outreach, the Sales Executive's answers, and the Social Media Manager's weekly
+plan, ad copy and replies (a request about both products carries both). Each prompt says how to use it: name the feature that answers the
+reader and why it matters, stay inside what the catalog says (plan and module labels), never present public data as confirmed referrals,
+a tool as making anyone compliant or survey-ready, or a readiness score as a prediction, never promise savings, and quote none of its
+percentages. Each agent's checks allow the numbers a catalog states for text about its own product only; a catalog vouches for no claim.
+Prompt versions: `content.3`, `outreach.4`, `sales.3`, `social-plan.4`, `social-ads.4`, `social-reply.3`, `creative-concept.5`,
+`creative-variants.5`.
+
+`npm run refresh:features` rebuilds both catalogs from the live pages and `npm run refresh:features -- --check` says whether they have
+changed. Other products' names are written generically (the EMR vendors Intel names for its CSV imports), and the CareBase FAQ's sentences
+about demos and sales calls are left out, because the team offers neither; each catalog lists its edits. Prices are never taken from the
+pages: they stay the fact sheet's.
 
 ## Campaign tags on product links
 
@@ -1461,6 +1517,14 @@ Apply the migrations in order with the usual procedure:
    plane, the hardening, the brief, the Account Manager, the Growth Manager and customer growth). Restart the Hub after it. While the
    Chief of Staff is resumed, the five weekly reports' scheduled emails then stop and the scorecard carries them; switch "Send the
    individual weekly reports" on under **Weekly reports** to get them as well. See [Monday scorecard](MONDAY_SCORECARD.md).
+
+20. `20261109200000_creative_director.sql`, then its gate `20261109200100_creative_director_contract.sql`, which create the brand kits
+   (blank: each product's brand theme), briefs, assets, files and learnings, seed the Creative Director (paused, Propose) and its four schedules, add the three
+   `creative.*` action kinds and the `creative_asset` target with their ownership check (an asset with a warning can never be
+   automatically approved), the trigger that turns a rejection note into a revision brief, the server and owner operations, and the two
+   autonomy steps (off), and declare `platform.agents.creative.v1` (it needs the control plane, the hardening, autonomy steps, the Social
+   Media Manager, the marketing switches and the lead desk). Restart the Hub after it. It also adds the three Settings → Creative settings. Nothing runs until **Turn on the Creative Director** is on
+   and the owner resumes the agent.
 
 The Hub build does not require any of these features, so a Hub whose database lacks them still starts and
 serves everything else. The AI team is opt-in twice over: nothing runs unless Settings → AI team →

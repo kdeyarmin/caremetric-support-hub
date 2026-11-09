@@ -115,7 +115,7 @@ try {
 
   // The owner sees the seeded agents, paused.
   let view = await team();
-  assert.deepEqual(view.agents.map(agent => agent.key), ['account_manager', 'chief_of_staff', 'content_marketer', 'growth_manager', 'marketing_manager', 'platform_engineer', 'sales_executive', 'seo_analyst', 'social_manager', 'support_concierge']);
+  assert.deepEqual(view.agents.map(agent => agent.key), ['account_manager', 'chief_of_staff', 'content_marketer', 'creative_director', 'growth_manager', 'marketing_manager', 'platform_engineer', 'sales_executive', 'seo_analyst', 'social_manager', 'support_concierge']);
   assert.ok(view.agents.every(agent => agent.status === 'paused'));
   assert.deepEqual([view.approvalCount, view.awaitingSessionCount], [0, 0]);
   assert.deepEqual((await api.rpc('get_agent_team', {}, ownerToken)).agents.map(agent => agent.key), view.agents.map(agent => agent.key), 'the gateway serves the team view');
@@ -135,7 +135,7 @@ try {
   assert.deepEqual(statusAudit.metadata, { agent: 'platform_engineer', status: 'active' });
   await assert.rejects(ownerCall('hub.set_agent_status', ['platform_engineer', 'paused', activated.updatedAt], staleToken), refused('28000', /Current administrator session required/),
     'a session older than eight hours can read but not change');
-  assert.equal((await ownerCall('hub.get_agent_team', [], staleToken)).agents.length, 10);
+  assert.equal((await ownerCall('hub.get_agent_team', [], staleToken)).agents.length, 11);
   const budgeted = await ownerCall('hub.set_agent_budget', ['platform_engineer', 75, activated.updatedAt]);
   assert.equal(budgeted.dailyBudgetCents, 75);
   await assert.rejects(ownerCall('hub.set_agent_budget', ['platform_engineer', -1, budgeted.updatedAt]), refused('22023'));
@@ -542,7 +542,9 @@ try {
     const proposed = (await rows('select * from private.agent_actions where task_id = $1', [draft]))[0];
     assert.deepEqual([proposed.status, (await task(draft)).status], ['proposed', 'awaiting_approval']);
     const overview = overviewSchema.parse(await team2.admin.overview(ownerToken, {}));
-    assert.deepEqual(overview.services, { enabled: true, handlers: ['brief.daily', 'concierge.communication', 'probe.incident', 'probe.recovery', 'probe.sweep', 'seo.weekly'], sms: true, email: true, ownerEmail: true, ai: false, customerTextToAi: false, externalEmail: false });
+    assert.deepEqual(overview.services, { enabled: true, handlers: ['brief.daily', 'concierge.communication', 'probe.incident', 'probe.recovery', 'probe.sweep', 'seo.weekly'], sms: true, email: true, ownerEmail: true, ai: false, customerTextToAi: false, externalEmail: false,
+      // The Creative Director's status is always reported; this database does not declare it.
+      creative: { declared: false, enabled: false, videoProvider: null, dailyRenderCap: 40 } });
     assert.equal(overview.team.approvals[0].id, proposed.id);
     const decision = decisionSchema.parse(await team2.admin.decide(ownerToken, { actionId: proposed.id, decision: 'approve', note: 'Send it' }));
     assert.deepEqual(decision, { id: proposed.id, kind: 'communication.reply', status: 'executed', decided: true });

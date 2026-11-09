@@ -14,14 +14,15 @@
 import { echoCandidates, quotesCustomer, wordsOf } from '../concierge/draft.mjs';
 import { screenIdentifiers } from '../concierge/screen.mjs';
 import { factSheetText, factsRevision } from '../content/facts.mjs';
+import { catalogGuidance, catalogNumbers, featuresTexts } from '../content/features.mjs';
 import { allowedNumbers, normalizeTerms, textProblems } from '../content/validate.mjs';
 import { productAmounts } from '../../growth/draft.mjs';
 import { linkablePages, offersMeeting, playbookFor, playbookText } from '../../growth/playbook.mjs';
 import { linkTags, tagLinks, untagLinks } from '../links.mjs';
 
-export const planPromptVersion = 'social-plan.3';
-export const adPromptVersion = 'social-ads.3';
-export const replyPromptVersion = 'social-reply.2';
+export const planPromptVersion = 'social-plan.4';
+export const adPromptVersion = 'social-ads.4';
+export const replyPromptVersion = 'social-reply.3';
 
 export const platforms = ['facebook', 'instagram', 'linkedin'];
 export const socialProducts = ['carebase', 'caremetric-intel'];
@@ -56,6 +57,8 @@ ${rules}
 
 Answer with one JSON object and nothing else: posts, each with platform, product, pillar, day (1 is Monday, 7 is Sunday), text (without hashtags), linkId (an id from the list, or an empty string) and hashtags.
 
+${catalogGuidance}
+
 ${factSheetText()}
 
 ${playbookText()}`;
@@ -71,6 +74,8 @@ Lengths: message (the primary text) 60 to 400 characters, headline up to 40, des
 ${rules}
 
 Answer with one JSON object and nothing else: variants, each with angle, message, headline, description and callToAction.
+
+${catalogGuidance}
 
 ${factSheetText()}
 
@@ -97,6 +102,8 @@ ${rules}
 
 Answer with one JSON object and nothing else: intent (question, pricing, interested, praise, complaint, support, spam or other), possiblePhi, needsOwner, hide, product (carebase, caremetric-intel or unknown) and reply.
 
+${catalogGuidance}
+
 ${factSheetText()}
 
 ${playbookText()}`;
@@ -121,10 +128,10 @@ export const replySchema = {
 };
 
 let sheetCache = { revision: -1 };
-/** The numbers and words of the fact sheet and playbook, read again when the facts change (Intel's catalog). */
+/** The numbers and words of the fact sheet, the playbook and the product catalogs, read again when the facts change (Intel's catalog). */
 const sheet = () => {
   if (sheetCache.revision !== factsRevision) {
-    sheetCache = { revision: factsRevision, numbers: allowedNumbers([]), vocabulary: new Set(wordsOf(`${factSheetText()}\n${playbookText()}`)) };
+    sheetCache = { revision: factsRevision, numbers: allowedNumbers([]), vocabulary: new Set(wordsOf(`${factSheetText()}\n${playbookText()}\n${featuresTexts().join('\n')}`)) };
   }
   return sheetCache;
 };
@@ -166,7 +173,7 @@ export function checkSocialText(value, { surface, product = null, theirText = ''
   const words = plain.replace(linkPattern, ' ');
   if (screenIdentifiers(words).flagged) return { ok: false, reason: 'identifier' };
   const book = playbookFor(product);
-  const problems = textProblems(words, { product: book?.factsKey ?? null, numbers: sheet().numbers });
+  const problems = textProblems(words, { product: book?.factsKey ?? null, numbers: book?.factsKey ? catalogNumbers(book?.factsKey) : sheet().numbers });
   if (problems.length) return { ok: false, reason: problems[0] };
   if (book) {
     const own = productAmounts(book.factsKey);

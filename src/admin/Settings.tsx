@@ -25,7 +25,8 @@ function valueWords(setting: HubSetting, value: SettingValue): string {
 }
 
 function sourceWords(setting: HubSetting, editable: boolean): string {
-  if (!editable) return setting.source === "railway" ? `Read from the Railway variable ${setting.variable}.` : `Not set in Railway: the default (${valueWords(setting, setting.default)}).`;
+  if (!editable) return setting.source === "railway" ? `Read from the Railway variable ${setting.variable}.`
+    : setting.variable ? `Not set in Railway: the default (${valueWords(setting, setting.default)}).` : `The default (${valueWords(setting, setting.default)}) until the settings migration is applied.`;
   const where = setting.source === "hub" ? "Saved here."
     : setting.source === "copied" ? `Copied in from the Railway variable ${setting.variable}.`
       : `Not set: the default applies (${valueWords(setting, setting.default)}).`;

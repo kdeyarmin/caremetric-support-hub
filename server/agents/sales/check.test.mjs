@@ -46,6 +46,10 @@ describe('checking a sales reply', () => {
     expect(ok('Read more at https://example.org/guide')).toMatchObject({ ok: false, reason: 'link' });
     expect(ok('Read more at www.cmcarebase.com')).toMatchObject({ ok: false, reason: 'link' });
     expect(checkSalesReply({ reply: 'Starter is $349 per month.', product: 'caremetric-intel', route: 'email' })).toMatchObject({ ok: true });
+    // A number from the product's own published catalog, for that product only (content/features.mjs).
+    const catalogLine = 'CareMetric Intel flags accounts that go 45 days without a visit.';
+    expect(checkSalesReply({ reply: catalogLine, product: 'caremetric-intel', route: 'email' })).toMatchObject({ ok: true });
+    expect(checkSalesReply({ reply: catalogLine, product: 'carebase', route: 'email' })).toMatchObject({ ok: false, reason: 'unlisted_number' });
   });
 
   it('refuses an offer to talk, meet or demo, and lets it decline a demo kindly (no personal demos with anyone, 2026-11-09)', () => {
@@ -92,7 +96,9 @@ describe('checking a sales reply', () => {
 
 describe('the Sales Executive prompt', () => {
   it('is a constant that carries the fact sheet and the playbook and nothing per request', () => {
-    expect(salesPromptVersion).toBe('sales.2');
+    expect(salesPromptVersion).toBe('sales.3');
+    // How to use the product catalog that follows as its own block (content/features.mjs).
+    expect(systemPrompt).toContain('when a product\'s own published catalog follows these instructions');
     expect(systemPrompt).toContain('never offer or suggest a demo, a call or a meeting');
     expect(systemPrompt).toContain('CareMetric fact sheet');
     expect(systemPrompt).toContain('sales playbook');

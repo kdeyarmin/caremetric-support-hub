@@ -22,6 +22,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/package.json /app/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
+# The Creative Director stitches video frames with ffmpeg-static, whose binary its install script downloads (the build stage ran it;
+# this stage installs without scripts), so the binary is copied across.
+COPY --from=build /app/node_modules/ffmpeg-static/ffmpeg ./node_modules/ffmpeg-static/ffmpeg
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/server ./server
 COPY --from=build /app/src/domain.ts /app/src/hubScope.ts ./src/

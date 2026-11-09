@@ -7,10 +7,11 @@
 import { markets } from '../marketing.mjs';
 import { factSheetText, productPage, productPages, products } from './facts.mjs';
 import { linkTags, taggedUrl, untaggedUrl, untagLinks } from '../links.mjs';
-import { allowedNumbers, markupProblems, normalizeTerms, textProblems } from './validate.mjs';
+import { catalogGuidance, catalogNumbers } from './features.mjs';
+import { markupProblems, normalizeTerms, textProblems } from './validate.mjs';
 import { offersMeeting } from '../../growth/playbook.mjs';
 
-export const outreachPromptVersion = 'outreach.3';
+export const outreachPromptVersion = 'outreach.4';
 export const maxDrafts = 5;
 
 export const directories = Object.freeze({ capterra: 'Capterra', g2: 'G2', getapp: 'GetApp', software_advice: 'Software Advice' });
@@ -45,6 +46,8 @@ Rules:
 - Vocabulary: "Assisted Living Facility" or "ALF", never "Assisted Living Residence" or "ALR"; the state's inspectors are "surveyors", never "auditors". In anything about CareBase, never use the words "prove", "proof" or "evidence".
 
 Answer with one JSON object and nothing else: listings (up to ${maxDrafts}) and pitches (up to ${maxDrafts}), each for one product.
+
+${catalogGuidance}
 
 ${factSheetText()}`;
 
@@ -81,14 +84,13 @@ export function outreachUserMessage(month, marketed = null) {
 
 const clean = value => String(value ?? '').replace(/\r\n?/g, '\n').replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
 const within = (value, [min, max]) => value.length >= min && value.length <= max;
-const numbers = allowedNumbers([]);
 // Bare domains of the company's own sites may be named; any other address, and any link syntax, is refused.
 const ownDomains = new Set(['caremetric.ai', 'help.caremetric.ai', ...productPages.map(page => new URL(page.url).hostname.replace(/^www\./, ''))]);
 const addressPattern = /\b(?:https?:\/\/|www\.)\S+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|ai|org|net|io|gov|us)\b/gi;
 
 function draftProblems(texts, product) {
   const joined = texts.join('\n');
-  const reasons = new Set([...markupProblems(joined).filter(reason => !reason.startsWith('link_')), ...textProblems(joined, { product, numbers })]);
+  const reasons = new Set([...markupProblems(joined).filter(reason => !reason.startsWith('link_')), ...textProblems(joined, { product, numbers: catalogNumbers(product) })]);
   // Read with campaign-tagged product links as their pages, so a tag's "utm_" is not taken for markup.
   if (/[*_`#[\]<>]/.test(untagLinks(joined))) reasons.add('markup');
   // The software is sold without demos, calls or meetings with anyone (owner decision 2026-11-09). Advisors is consulting, whose

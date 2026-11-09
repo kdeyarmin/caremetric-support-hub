@@ -10,6 +10,7 @@ import { parsePackageUploadHeader } from './learning-packages.mjs';
 import { chatCookie } from './communications.mjs';
 import { bulkEmailActions } from './bulk-email.mjs';
 import { agentAdminActions } from './agents/admin.mjs';
+import { creativeAdminActions } from './agents/creative/admin.mjs';
 
 export const securityHeaders = {
   'X-Content-Type-Options':'nosniff','X-Frame-Options':'SAMEORIGIN',
@@ -34,6 +35,25 @@ async function rawBody(req,limit) {
 export function sameOrigin(req,origins) {
   return origins.includes(req.headers.origin) && (!req.headers['sec-fetch-site'] || req.headers['sec-fetch-site']==='same-origin');
 }
+/**
+ * A file from memory, with one byte range when asked (a video player seeks with ranges). `disposition` is inline or attachment.
+ */
+function sendBytes(req,res,{contentType,bytes,fileName=null,disposition='inline',cache='private, no-store'}) {
+  const data=Buffer.isBuffer(bytes)?bytes:Buffer.from(bytes);
+  res.setHeader('Content-Type',contentType); res.setHeader('Accept-Ranges','bytes'); res.setHeader('Cache-Control',cache);
+  if(fileName) res.setHeader('Content-Disposition',`${disposition}; filename="${String(fileName).replace(/[^A-Za-z0-9._-]/g,'')}"`);
+  const range=/^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range??''));
+  let start=0, end=data.length-1;
+  if(range && (range[1]||range[2])) {
+    start=range[1]?Number(range[1]):Math.max(0,data.length-Number(range[2]));
+    end=range[1]&&range[2]?Math.min(Number(range[2]),data.length-1):data.length-1;
+    if(!(start<=end && start<data.length)) { res.statusCode=416; res.setHeader('Content-Range',`bytes */${data.length}`); return res.end(); }
+    res.statusCode=206; res.setHeader('Content-Range',`bytes ${start}-${end}/${data.length}`);
+  } else res.statusCode=200;
+  res.setHeader('Content-Length',String(end-start+1));
+  if(req.method==='HEAD') return res.end();
+  return res.end(data.subarray(start,end+1));
+}
 const mime={'.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.webp':'image/webp','.woff2':'font/woff2','.html':'text/html'};
 const aiCaseActions=new Set(['summary','draft-reply','triage-suggestion']);
 const staffCommunicationActions=new Set(['list','get','update','note','reply','sync']);
@@ -54,7 +74,7 @@ export const privateHubMessage='This Hub is private. Only its owner can sign in.
  * treated as signed out, a sign-in that fails it is revoked at once, and the routes that create
  * sign-ins for anyone else (invitation claims and application self-service) are closed.
  */
-export function appServer({auth,password,gateway,delegations,publications,aiCases,readiness,integrationSetup,settings=null,communications,bulkEmail,billing,selfService,agents,growth,leads,leadAdmin,mediaImport=null,health,owner,origins,helpCenter=null,publicArticles=null,dist=resolve('dist')}) {
+export function appServer({auth,password,gateway,delegations,publications,aiCases,readiness,integrationSetup,settings=null,communications,bulkEmail,billing,selfService,agents,growth,leads,leadAdmin,mediaImport=null,health,owner,origins,helpCenter=null,publicArticles=null,creative=null,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -181,6 +201,16 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           if(req.method==='POST') { let size=0; for await (const chunk of req) { size+=chunk.length; if(size>4096) throw new HttpError(413,'Request is too large.'); } }
           const html=await bulkEmail.unsubscribePage(unsubscribe[1],req.method==='POST');
           res.statusCode=200; res.setHeader('Content-Type','text/html; charset=utf-8'); return res.end(html);
+        }
+        // An approved Creative Director asset, for Meta and LinkedIn to fetch: the unguessable token in the path is the only authority,
+        // and it answers only while the asset is approved or live (a retired or rejected asset is gone).
+        const creativePublic=/^\/api\/creative\/a\/([0-9a-f]{64})\.(png|mp4)$/.exec(path);
+        if(creativePublic) {
+          if(!['GET','HEAD'].includes(req.method)) throw new HttpError(405,'Method not allowed.');
+          if(url.search || !creative?.publicFile) throw new HttpError(404,'Unavailable.');
+          const file=await creative.publicFile(creativePublic[1]);
+          if(!file || file.contentType!==(creativePublic[2]==='png'?'image/png':'video/mp4')) throw new HttpError(404,'Unavailable.');
+          return sendBytes(req,res,{contentType:file.contentType,bytes:file.bytes,cache:'public, max-age=300'});
         }
         if (!['GET','POST','HEAD'].includes(req.method)) throw new HttpError(405,'Method not allowed.');
         if(req.method==='POST' && !sameOrigin(req,origins)) throw new HttpError(403,'Open this action in CareMetric.');
@@ -355,6 +385,22 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           const action=path.slice('/api/admin/team/'.length);
           if(!agentAdminActions.has(action) || req.method!=='POST') throw new HttpError(404,'AI team resource unavailable.');
           return json(await agents[action](session,await jsonBody(req,action==='email'?32768:8192)));
+        }
+        // The Creative screen. Reads and changes are POSTs that the hub.* operations authorize; a file is a GET the same session reads.
+        if(path.startsWith('/api/admin/creative/')) {
+          if(!creative?.admin) throw new HttpError(503,'The Creative Director is not configured.');
+          const fileRoute=/^\/api\/admin\/creative\/file\/([0-9a-f-]{36})$/.exec(path);
+          if(fileRoute) {
+            if(!['GET','HEAD'].includes(req.method)) throw new HttpError(405,'Method not allowed.');
+            const download=url.searchParams.get('download');
+            if([...url.searchParams.keys()].some(key=>key!=='download') || (download!==null && download!=='1')) throw new HttpError(400,'Creative query parameters are not supported.');
+            const file=await creative.admin.file(session,fileRoute[1]);
+            return sendBytes(req,res,{...file,disposition:download==='1'?'attachment':'inline'});
+          }
+          if(url.search) throw new HttpError(400,'Creative query parameters are not supported.');
+          const action=path.slice('/api/admin/creative/'.length);
+          if(!creativeAdminActions.has(action) || req.method!=='POST') throw new HttpError(404,'Creative resource unavailable.');
+          return json(await creative.admin[action](session,await jsonBody(req,action==='brandFile'?7_500_000:32768)));
         }
         // The owner's lead status change; the Leads screen reads through the RPC allowlist (list_leads).
         if(path.startsWith('/api/admin/leads/')) {

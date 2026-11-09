@@ -67,6 +67,16 @@ describe('one model run', () => {
     for (const forbidden of ['temperature', 'top_p', 'top_k', 'thinking', 'tool_choice', 'tools', 'stop_sequences']) expect(body).not.toHaveProperty(forbidden);
   });
 
+  it('takes the model from a tier the request names for one call, and refuses a tier it does not know before calling', async () => {
+    const f = fixture({ taskOver: { agent: { modelTier: 'quality' } }, steps: [ok(message({ model: aiModels.draft }))] });
+    await f.run(request({ tier: 'draft' }));
+    expect(f.seen[0].body.model).toBe(aiModels.draft);
+    expect(f.seen[0].body).not.toHaveProperty('tier');
+    const g = fixture();
+    expect(await rejection(g.run(request({ tier: 'premium' })))).toMatchObject({ code: 'request_rejected' });
+    expect(g.seen).toHaveLength(0);
+  });
+
   it('puts the cache breakpoint only on the blocks marked for it and takes the model from the agent\'s tier', async () => {
     const f = fixture({ taskOver: { agent: { modelTier: 'fast' } }, steps: [ok(message({ model: aiModels.fast }))] });
     await f.run(request({ system: [{ text: 'Static rules', cache: true }, { text: 'Per-product notes' }], effort: 'low', maxTokens: 1200 }));

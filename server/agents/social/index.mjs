@@ -6,6 +6,10 @@
  * `social` is the Hub's configuration (server/main.mjs): the tokens from Railway, and the ids, the Instagram image list and the ad
  * settings from the Hub's Settings page. The daily budget cap is "Most any ad may spend per day"; with none set no budget is ever
  * raised. Comments and messages reach the model only while the owner's switch for customer text (Settings → AI team) is on.
+ *
+ * `creative` links it to the Creative Director (creative/index.mjs) when the database has it: `approved({ product, platform })` lists
+ * creative the owner approved, which posts and new ads use before anything else; `live(assetId, ref)` records that one was published;
+ * `planned(week)` tells the Creative Director a weekly plan was written. Without it, everything works as before.
  */
 import { socialExecutors } from './executor.mjs';
 import { linkedinClient } from './linkedin.mjs';
@@ -60,7 +64,7 @@ export function socialTeam({ social = null, features = null, fetchImpl = fetch, 
       settings,
       sources: () => [{ name: 'Meta', client: meta, on: meta.configured?.ads }, { name: 'LinkedIn', client: linkedin, on: linkedin.configured?.ads }].filter(source => source.on === true),
     },
-    handlers: ({ store, notifier, model, customerTextToAi, publicOrigin, marketed = null, log }) => socialHandlers({ store, notifier, model, meta, linkedin, settings, imageUrls, customerTextToAi, publicOrigin, marketed, log }),
-    executors: ({ notifier, log }) => socialExecutors({ meta, linkedin, settings, notifier, log }),
+    handlers: ({ store, notifier, model, customerTextToAi, publicOrigin, marketed = null, log, creative = null }) => socialHandlers({ store, notifier, model, meta, linkedin, settings, imageUrls, customerTextToAi, publicOrigin, marketed, log, creative }),
+    executors: ({ notifier, log, creative = null }) => socialExecutors({ meta, linkedin, settings, notifier, log, creative }),
   };
 }

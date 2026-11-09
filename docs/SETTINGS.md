@@ -58,6 +58,9 @@ does nothing. A setting you saved, or cleared back to its default, is never over
 | Social media | Target cost per lead or sign-up (dollars) | `HUB_SOCIAL_TARGET_COST_PER_RESULT_CENTS` |
 | Social media | Most any ad may spend per day (dollars) | `HUB_SOCIAL_AD_MAX_DAILY_BUDGET_CENTS` |
 | Search | Search Console properties (one per line) | `HUB_SEARCH_CONSOLE_SITES` |
+| Creative | Turn on the Creative Director | none: a setting from the start |
+| Creative | Most renders a day | none: a setting from the start |
+| Creative | How videos are made | none: a setting from the start |
 | Course distribution | Allow legacy opt-in distribution | `HUB_LEGACY_DISTRIBUTION_OPT_IN` |
 
 `HUB_BULK_EMAIL_FROM` and `HUB_BOOKING_URL` are no longer used at all (CareMetric offers no demos, calls or meetings); the
@@ -78,6 +81,7 @@ Secrets, which are never shown on screen or stored in the database:
 - `HUB_LINKEDIN_ACCESS_TOKEN`, `HUB_LINKEDIN_REFRESH_TOKEN`, `HUB_LINKEDIN_CLIENT_SECRET`,
   `HUB_LINKEDIN_ADS_ACCESS_TOKEN`, `HUB_LINKEDIN_ADS_REFRESH_TOKEN`, `HUB_LINKEDIN_ADS_CLIENT_SECRET`
 - `HUB_SEARCH_CONSOLE_CREDENTIALS`
+- `HUB_HEYGEN_API_KEY` (only for HeyGen presenter videos, Settings → Creative)
 - `CAREBASE_DISTRIBUTION_OBSERVER_TOKEN`
 
 The service's wiring, which has to be right before the Hub can start or sign you in:
@@ -95,6 +99,7 @@ The service's wiring, which has to be right before the Hub can start or sign you
 Do not add a Railway variable for anything that is not a secret. Add a setting:
 
 1. A row in a new migration: `insert into private.hub_settings (key, kind) values ('<group>.<name>', '<flag|text|number|list>')`.
+   A setting that never was a Railway variable has `env: null` in the catalog (the Creative Director's are).
 2. An entry in `settingsCatalog` in `server/hub-settings.mjs`: its group, label, help text, input, default and the test
    a value must pass. `server/hub-settings.test.mjs` keeps the catalog and the migrations' rows equal.
 3. Pass `settings.reader('<key>')` (or `() => settings.get('<key>')`) from `server/main.mjs` to the service, and read it

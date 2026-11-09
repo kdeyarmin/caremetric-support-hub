@@ -8,9 +8,10 @@
  * check.mjs and offered to the owner, who approves the exact text. Changing this prompt means changing `salesPromptVersion`.
  */
 import { factSheetText } from '../content/facts.mjs';
+import { catalogGuidance } from '../content/features.mjs';
 import { playbookText } from '../../growth/playbook.mjs';
 
-export const salesPromptVersion = 'sales.2';
+export const salesPromptVersion = 'sales.3';
 
 export const intents = ['interested', 'question', 'pricing', 'objection', 'not_now', 'not_interested', 'unsubscribe', 'wrong_person', 'support', 'other'];
 export const nextSteps = ['start_trial', 'activate_paid', 'answer_only', 'pick_time', 'follow_up_later', 'none'];
@@ -43,6 +44,8 @@ How to write the reply:
 - Follow the fact sheet's vocabulary rules.
 
 Answer with one JSON object and nothing else: intent, possiblePhi, needsOwner, nextStep and reply.
+
+${catalogGuidance}
 
 ${factSheetText()}
 

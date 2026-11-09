@@ -16,6 +16,7 @@
  * It keeps no message text: the task result, the run summary and the owner's email carry kinds, the product and the reference only.
  */
 import { replyRoute } from '../concierge/policy.mjs';
+import { catalogBlocks } from '../content/features.mjs';
 import { redact } from '../concierge/redact.mjs';
 import { screenIdentifiers } from '../concierge/screen.mjs';
 import { replyBody } from '../concierge/templates.mjs';
@@ -68,7 +69,7 @@ export function salesReplyHandler({ store, notifier = null, drafting: draftingOp
     let result;
     try {
       result = await drafting.model.run(task, {
-        promptVersion: salesPromptVersion, system: [{ text: systemPrompt, cache: true }], schema: responseSchema, effort, maxTokens: 3000,
+        promptVersion: salesPromptVersion, system: [{ text: systemPrompt, cache: true }, ...catalogBlocks([payload.product])], schema: responseSchema, effort, maxTokens: 3000,
         user: buildUserMessage({
           product: products[payload.product], channel: snapshot.channel, stage: payload.opportunity?.stage ?? null, contacted: payload.opportunity?.contacted === true,
           firstMessage: (snapshot.outboundCount ?? 0) === 0, words: wordLimits[route], links, guides, text, history,

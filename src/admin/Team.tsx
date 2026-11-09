@@ -40,6 +40,10 @@ function ServicesPanel({ services, awaitingSession, waitingActions, busy, onRunW
     { name: "Email delivery", good: services.email, state: services.email ? "Ready" : "Not set up", detail: services.email ? "Through SendGrid." : "Set HUB_SENDGRID_API_KEY so the team can email you." },
     { name: "Text alerts", good: services.sms, state: services.sms ? "Ready" : "Not set up", detail: services.sms ? "Urgent items are texted to your verified number." : "Urgent items fall back to email until Twilio is configured." },
     { name: "AI model", good: services.ai, state: services.ai ? "Ready" : "Not set up", detail: services.ai ? "Anthropic is connected. An agent uses it only where its own setting says so." : "Set ANTHROPIC_API_KEY on the Hub service. Agents that need a model wait until then." },
+    ...(services.creative?.declared ? [{ name: "Creative Director", good: services.creative.enabled, state: services.creative.enabled ? "On" : "Off",
+      detail: services.creative.enabled
+        ? `Renders up to ${services.creative.dailyRenderCap} assets a day; videos by ${services.creative.videoProvider === "heygen" ? "HeyGen" : "the Hub itself"}. Review them on the Creative screen.`
+        : "Switch on \"Turn on the Creative Director\" in Settings → Creative to let it work. Creative you already approved is still handed over." }] : []),
     { name: "Customer text to AI", good: services.customerTextToAi, state: services.customerTextToAi ? "On" : "Off",
       detail: services.customerTextToAi ? "The Concierge sends a plain question's scrubbed text to the model to draft an answer for you to approve. Billing, outages, sales and anything with personal identifiers never go." : "Customer messages stay in the Hub. Switch on \"Let agents send customer messages to the AI\" in Settings, with the AI model ready, to let the Concierge draft answers from your published guides." },
   ];
@@ -489,6 +493,11 @@ function ActivityPanel({ client, agents, refresh }: { client: TeamClient; agents
 }
 
 /** The AI team: who is on it, what is switched on, what waits for approval, and what has happened. */
+/** The Creative Director's own screen: its gallery, briefs and brand kits. Its proposals are also listed here under Waiting for you. */
+function CreativeLink() {
+  return useInRouterContext() ? <Link className="button button-secondary" to="/admin/creative">Creative</Link> : <a className="button button-secondary" href="/admin/creative">Creative</a>;
+}
+
 export function Team({ client = teamClient }: { client?: TeamClient }) {
   const [refresh, setRefresh] = useState(0);
   const [busy, setBusy] = useState("");
@@ -576,7 +585,8 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
   return <div className="team">
     <div className="page-heading"><div><span className="eyebrow">CareMetric Admin</span><h1><Bot size={22} aria-hidden="true" /> AI team</h1>
       <p>Your AI agents: what they can use, what waits for your approval, and what they have done. Every agent starts paused.</p></div>
-      <button type="button" className="button button-secondary" onClick={reload} disabled={state.status === "loading"}><RefreshCw size={16} aria-hidden="true" /> Refresh</button></div>
+      <div className="button-row"><CreativeLink />
+        <button type="button" className="button button-secondary" onClick={reload} disabled={state.status === "loading"}><RefreshCw size={16} aria-hidden="true" /> Refresh</button></div></div>
     {notice && <p role={notice.ok ? "status" : "alert"} className={notice.ok ? "admin-explanation" : "form-message form-error"}>{notice.text}</p>}
     {!shown && state.status === "loading" && <Loading label="Loading the AI team" app="AI team" />}
     {state.status === "error" && !shown && <ReadFailure error={state.error} retry={reload} />}

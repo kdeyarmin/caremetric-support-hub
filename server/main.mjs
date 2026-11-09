@@ -32,6 +32,8 @@ import { growthResearch } from './growth/research.mjs';
 import { growthContactFinder } from './growth/contacts.mjs';
 import { growthSender } from './growth/sender.mjs';
 import { socialConfig } from './agents/social/index.mjs';
+import { creativeConfig } from './agents/creative/index.mjs';
+import { creativeAdmin } from './agents/creative/admin.mjs';
 import { learningMediaImport, mediaImportFeature, mediaImportHosts } from './learning-media-import.mjs';
 import { hubSettings } from './hub-settings.mjs';
 
@@ -88,7 +90,9 @@ const customerMail=sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,fro
 const team=agentTeam({pool,growth,growthMail,postalAddress,sms:textSender,email:mailSender,ownerEmail:setting('agents.owner_email'),publicOrigin,enabled:setting('agents.enabled'),communications:messaging,features,anthropicApiKey:process.env.ANTHROPIC_API_KEY,record:sqlAiUsageRecorder(pool).record,guides:guideLibrary({load:()=>api.rpc('list_published_content',{}),loadProducts:()=>api.rows('products')}),customerTextToAi:setting('agents.customer_text_to_ai'),
   leadSecrets:leadSecrets(process.env),
   // The social media tokens from Railway, with the page ids, ad accounts, images and ad limits from Settings → Social media.
-  social:()=>socialConfig(process.env,settings.get),searchConsoleSites:setting('seo.search_console_sites'),
+  social:()=>socialConfig(process.env,settings.get),
+  // The Creative Director: Settings → Creative, with HeyGen's key from Railway.
+  creative:()=>creativeConfig(process.env,settings.get),searchConsoleSites:setting('seo.search_console_sites'),
   lifecycle:{mail:customerMail,get postalAddress(){return postalAddress().trim();}},
   // Offers from the owner's menu: platform billing (created below) makes them, so the call is deferred until an offer is approved.
   offerBilling:{agentOffer:input=>billing.agentOffer(input)}});
@@ -149,7 +153,9 @@ console.info(`Public article feed: ${publicArticles?'answering':'waiting for the
 // Once the feed answers, an article whose product's own website serves it (CareMetric Intel's) keeps its page here but names that
 // address as canonical and leaves the sitemap. Before, the help center stays every article's home.
 const help=helpCenter({load:()=>api.rpc('list_published_content',{}),...(publicArticles?{loadProducts:()=>api.rows('products'),elsewhere:(product,key)=>servedElsewhere(product)?articleHomeUrl(product,key):null}:{}),origin:helpCenterOrigin});
-const server=appServer({auth:smsAuth({pool,provider}),password:passwordAuth({pool}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,settings,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,growth,leads,leadAdmin:leadDesk,mediaImport,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help,publicArticles});
+// The Creative screen and the approved-asset addresses Meta and LinkedIn fetch (platform.agents.creative.v1).
+const creativeWeb=features.has('platform.agents.creative.v1')?{admin:creativeAdmin({pool,kick:()=>team.tick()}),publicFile:token=>team.store.creativePublicFile(token)}:null;
+const server=appServer({auth:smsAuth({pool,provider}),password:passwordAuth({pool}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,settings,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,growth,leads,leadAdmin:leadDesk,mediaImport,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help,publicArticles,creative:creativeWeb});
 let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;

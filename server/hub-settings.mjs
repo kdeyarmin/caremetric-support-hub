@@ -48,13 +48,15 @@ export const settingGroups = Object.freeze([
   { id: 'growth', label: 'Customer growth', description: 'Sending reviewed prospecting and follow-up email.' },
   { id: 'billing', label: 'Billing', description: 'What customers can buy themselves and how prices stay in step with Intel.' },
   { id: 'social', label: 'Social media', description: 'The Facebook Page, Instagram account, LinkedIn Page and ad accounts the Social Media Manager works on, and its ad limits. The access tokens stay in Railway.' },
+  { id: 'creative', label: 'Creative', description: 'The Creative Director: whether it works, how many images and videos it starts a day, and how videos are made. HeyGen\'s key stays in Railway.' },
   { id: 'seo', label: 'Search', description: 'The Search Console properties the SEO Analyst and the Monday scorecard read. The service account key stays in Railway.' },
   { id: 'learning', label: 'Course distribution', description: 'How shared courses reach CareBase.' },
 ]);
 
 /**
  * Every setting. `kind` is the database's (flag, text, number, list); `input` is how the Settings page shows it. `env` is the
- * Railway variable the setting replaces. `valid` is the test a value must pass to be saved and to be used.
+ * Railway variable the setting replaces, or null for a setting that never was one (everything new is a setting from the start).
+ * `valid` is the test a value must pass to be saved and to be used.
  */
 export const settingsCatalog = Object.freeze([
   { key: 'agents.enabled', group: 'agents', kind: 'flag', input: 'toggle', default: false, env: 'HUB_AGENTS_ENABLED', fromEnv: fromFlag,
@@ -120,6 +122,13 @@ export const settingsCatalog = Object.freeze([
     label: 'Target cost per lead or sign-up', help: 'The daily ad review judges ads against it. Empty: ads are judged against each other only.' },
   { key: 'social.max_daily_budget_cents', group: 'social', kind: 'number', input: 'cents', default: null, min: 1, max: 10_000_000, env: 'HUB_SOCIAL_AD_MAX_DAILY_BUDGET_CENTS', fromEnv: fromNumber, valid: wholeNumber(1, 10_000_000),
     label: 'Most any ad may spend per day', help: 'The Social Media Manager may propose a budget increase only up to this, and only you can approve one. Empty: no increase is ever proposed.' },
+  { key: 'creative.enabled', group: 'creative', kind: 'flag', input: 'toggle', default: false, env: null,
+    label: 'Turn on the Creative Director', help: 'Lets the Creative Director turn the marketing plans into ad images and videos for your approval. It also needs "Run the AI team" on and the agent resumed on the AI team page. Off: creative you already approved is still handed over.' },
+  { key: 'creative.daily_render_cap', group: 'creative', kind: 'number', input: 'number', default: 40, min: 0, max: 1000, unit: 'renders', env: null, valid: wholeNumber(0, 1000),
+    label: 'Most renders a day', help: 'Images and videos started per Eastern day, across every server (0 to 1,000). 0 renders nothing.' },
+  { key: 'creative.video_provider', group: 'creative', kind: 'text', input: 'choice', default: 'internal', env: null,
+    choices: [{ value: 'internal', label: 'Made by the Hub' }, { value: 'heygen', label: 'HeyGen presenter videos' }], valid: value => value === 'internal' || value === 'heygen',
+    label: 'How videos are made', help: 'HeyGen presenter videos need HUB_HEYGEN_API_KEY in Railway and an avatar and voice in the product\'s brand kit; without them, videos are made by the Hub.' },
   { key: 'seo.search_console_sites', group: 'seo', kind: 'list', input: 'lines', default: [], env: 'HUB_SEARCH_CONSOLE_SITES', fromEnv: fromSites, valid: listOf(searchConsoleSite, 10),
     label: 'Search Console properties', help: 'One per line, exactly as Search Console names them: sc-domain:cmcarebase.com for a domain property, https://www.caremetricintel.com/ (with its final /) for an address prefix. At most 10.' },
 ]);
@@ -137,6 +146,7 @@ const present = value => typeof value === 'string' && value.trim().length > 0;
 
 /** The value a Railway variable gave, the way the server read it before settings, or undefined when it gives none the server can use. */
 export function settingFromEnv(entry, env) {
+  if (!entry.env) return undefined;
   const raw = env?.[entry.env];
   if (!present(raw)) return undefined;
   const value = entry.fromEnv(raw);
@@ -186,13 +196,13 @@ export function hubSettings({
     for (const entry of settingsCatalog) {
       const value = settingFromEnv(entry, env);
       if (value !== undefined) copies[entry.key] = { value, from: entry.env };
-      else if (present(env?.[entry.env])) unusable.push(entry);
+      else if (entry.env && present(env?.[entry.env])) unusable.push(entry);
     }
     const copied = Object.keys(copies).length ? await call('private.hub_settings_import', [copies]) : [];
     copiedIn = true;
     for (const entry of unusable) log.warn?.(`${entry.env} has a value the Hub cannot use, so it was not copied into "${entry.label}". Set it on the Settings page.`);
     if (Array.isArray(copied) && copied.length) log.info?.(`Hub settings: copied ${copied.length} Railway variable(s) into Settings: ${copied.map(key => byKey.get(key)?.env).join(', ')}.`);
-    const leftover = settingsCatalog.map(entry => entry.env).filter(name => present(env?.[name]));
+    const leftover = settingsCatalog.map(entry => entry.env).filter(name => name && present(env?.[name]));
     if (leftover.length) log.info?.(`Hub settings: these Railway variables are no longer read and can be deleted: ${leftover.join(', ')}. Change them on the Settings page.`);
   }
 
@@ -248,7 +258,7 @@ export function hubSettings({
             ...(entry.choices ? { choices: entry.choices } : {}), ...(entry.min !== undefined ? { min: entry.min, max: entry.max } : {}), ...(entry.unit ? { unit: entry.unit } : {}),
             value, effective: value ?? entry.default,
             source: value === null ? 'default' : editable ? (row?.importedFrom ? 'copied' : 'hub') : 'railway',
-            variable: entry.env, variableSet: present(env?.[entry.env]),
+            variable: entry.env ?? null, variableSet: Boolean(entry.env) && present(env?.[entry.env]),
             changedAt: row?.changedAt ?? null,
           };
         }),

@@ -36,6 +36,13 @@ describe('checking social text', () => {
       expect(checkSocialText(text, { surface, product: 'carebase' }), text).toMatchObject({ ok: false, reason: 'meeting_offer' });
     }
     expect(checkSocialText('Hold a short meeting with your staff each month to review training.', { surface: 'facebook', product: 'carebase' })).toMatchObject({ ok: true });
+    // A number the product's own published catalog states is allowed for that product only (content/features.mjs).
+    const intelNumber = 'CareMetric Intel flags accounts that go 45 days without a visit.';
+    expect(checkSocialText(intelNumber, { surface: 'facebook', product: 'caremetric-intel' })).toMatchObject({ ok: true });
+    expect(checkSocialText(intelNumber, { surface: 'facebook', product: 'carebase' })).toMatchObject({ ok: false, reason: 'unlisted_number' });
+    const carebaseNumber = 'CareBase tracks 16 hours of annual training for each direct care worker in an assisted living facility.';
+    expect(checkSocialText(carebaseNumber, { surface: 'facebook', product: 'carebase' })).toMatchObject({ ok: true });
+    expect(checkSocialText(carebaseNumber, { surface: 'facebook', product: 'caremetric-intel' })).toMatchObject({ ok: false, reason: 'unlisted_number' });
   });
 
   it('keeps lengths, hashtags and emoji in bounds and markup out', () => {

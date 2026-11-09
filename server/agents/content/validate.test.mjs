@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { legalDisclaimer, officialSources } from './facts.mjs';
+import { featuresText } from './features.mjs';
 import { fireDrillDraft, referralDraft } from './fixtures.mjs';
 import { topics } from './topics.mjs';
 import { allowedNumbers, allowedUrl, checkArticle, checkDraft, limits, markupProblems, normalizeTerms, numbersIn, previewOf, textProblems } from './validate.mjs';
@@ -140,6 +141,10 @@ describe('each check that rejects a draft', () => {
     expect(reasons(withSentence('Teams cut survey preparation by 40%.'))).toEqual(['unlisted_number']);
     expect(reasons(withSentence('Teams save 10 hours a week.'))).toEqual(['unlisted_number']);
     expect(reasons(withSentence('Keep drill records for 3 years.'))).toEqual(['unlisted_number']);
+    // The numbers the product's own published catalog states count for an article about that product (tasks/content.mjs passes it).
+    const intelArticle = { ...referralDraft, body: `${referralDraft.body}\n\nCareMetric Intel lists accounts that go 45 days without a visit.` };
+    expect(checkDraft(intelArticle, { topic: referral, promptVersion: 'content.3' }).reasons).toContain('unlisted_number');
+    expect(checkDraft(intelArticle, { topic: referral, promptVersion: 'content.3', features: featuresText(referral.product) }).reasons ?? []).not.toContain('unlisted_number');
     expect(reasons(withSentence('Keep drill records for three years.'))).toEqual(['unlisted_number']);
     // Decimals are part of the number: a listed $199 does not allow $199.99, and the topic's 6 months does not allow 6.5.
     expect(reasons(withSentence('CareBase Core is $199.99 per facility per month.'))).toEqual(['unlisted_price']);

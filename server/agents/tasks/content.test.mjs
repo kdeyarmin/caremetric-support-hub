@@ -4,6 +4,7 @@ import { contentFeature } from '../content/executor.mjs';
 import { products } from '../content/facts.mjs';
 import { completion, fireDrillDraft, outreachDraft, referralDraft } from '../content/fixtures.mjs';
 import { promptVersion, systemPrompt } from '../content/prompt.mjs';
+import { featuresText } from '../content/features.mjs';
 import { topics } from '../content/topics.mjs';
 import { contentHandlers, easternDate, onOrAfterFirstWednesday } from './content.mjs';
 
@@ -72,7 +73,9 @@ describe('the weekly help article', () => {
     const outcome = await handlers['content.weekly'](task(), { now: () => tuesday });
     expect(store.contentState).toHaveBeenNthCalledWith(1, topics.map(topic => topic.slug));
     expect(requests).toHaveLength(1);
-    expect(requests[0]).toMatchObject({ model: 'claude-sonnet-5-5', max_tokens: 8000, system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }] });
+    // The prompt, then the product's own published catalog (content/features.mjs), each cached.
+    expect(requests[0]).toMatchObject({ model: 'claude-sonnet-5-5', max_tokens: 8000, system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: featuresText('carebase'), cache_control: { type: 'ephemeral' } }] });
     expect(requests[0].output_config.effort).toBe('medium');
     expect(requests[0].messages[0].content).toContain('Working title: Fire drill requirements');
     expect(requests[0].messages[0].content).toContain('An unannounced fire drill is held at least once a month (§ 2600.132(a), § 2800.132(a)).');

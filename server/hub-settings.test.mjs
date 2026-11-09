@@ -26,18 +26,19 @@ describe('the settings catalog', () => {
 
   it('gives every setting a group, words, its own Railway variable and a default it would accept', () => {
     const groups = new Set(settingGroups.map(group => group.id));
-    const variables = settingsCatalog.map(item => item.env);
+    // A setting replaces at most one Railway variable, each its own; a setting added after the move to settings replaces none.
+    const variables = settingsCatalog.map(item => item.env).filter(Boolean);
     expect(new Set(variables).size).toBe(variables.length);
     for (const item of settingsCatalog) {
       expect(groups.has(item.group), item.key).toBe(true);
       expect(item.label.length, item.key).toBeLessThanOrEqual(80);
       expect(item.help.length, item.key).toBeLessThanOrEqual(400);
-      expect(item.env, item.key).toMatch(/^[A-Z][A-Z0-9_]{2,80}$/);
+      if (item.env !== null) expect(item.env, item.key).toMatch(/^[A-Z][A-Z0-9_]{2,80}$/);
       if (item.kind === 'flag') expect(typeof item.default, item.key).toBe('boolean');
       else if (item.default !== null && !(Array.isArray(item.default) && item.default.length === 0)) expect(item.valid(item.default), item.key).toBe(true);
     }
     // No secret ever becomes a setting: settings are shown on screen and copied into the database.
-    for (const item of settingsCatalog) expect(item.env, item.key).not.toMatch(/(KEY|TOKEN|SECRET|PASSWORD|CREDENTIALS)$/);
+    for (const item of settingsCatalog) if (item.env) expect(item.env, item.key).not.toMatch(/(KEY|TOKEN|SECRET|PASSWORD|CREDENTIALS)$/);
     expect(retiredVariables).toEqual(['HUB_BULK_EMAIL_FROM', 'HUB_BOOKING_URL']);
   });
 });

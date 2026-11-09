@@ -1,0 +1,793 @@
+{
+  "reviewed": "2026-11-09",
+  "product": "caremetric-intel",
+  "sources": {
+    "home": "https://www.caremetricintel.com/",
+    "features": "https://www.caremetricintel.com/features"
+  },
+  "contentSha256": "c5cdd6b9ecddd061",
+  "edits": [
+    "EMR vendors named on the page are written generically: \"Saved layouts cover common home health and hospice EMR reports.\"",
+    "EMR vendors named on the page are written generically: \"Saved layouts support common home health and hospice EMR reports. These are file-based imports, not live EMR connections.\"",
+    "EMR vendors named on the page are written generically: \"Scheduled EMR report delivery\"",
+    "EMR vendors named on the page are written generically: \"Some EMR reports can be delivered\""
+  ],
+  "overview": "A healthcare marketing CRM, market intelligence, territory analysis, and referral tracking in one workspace. Research the right accounts, organize your outreach, visits, and expenses, and review recorded results—so your team can spend less time on unfocused marketing.",
+  "legend": "A feature with no label is on every plan and open to everyone in your organization. Labels name the role or plan a feature needs. The 14-day free trial includes everything Pro does, in one county.",
+  "publishedCount": 97,
+  "pillars": [
+    {
+      "title": "Understand the market",
+      "why": "Analyze your market and territory before committing time and budget. Compare locations by demographics, provider supply, and available utilization measures. Research the hospitals, practices, facilities, and ownership groups around the areas you serve.",
+      "area": "Marketing & territory analysis"
+    },
+    {
+      "title": "Build a more focused referral list",
+      "why": "Research physicians and facilities by location, specialty, and service focus. Review profiles, practice locations, affiliations, and available public-data signals to build a list with a clear reason behind each target.",
+      "area": "Provider discovery & lead prioritization"
+    },
+    {
+      "title": "Keep every relationship moving",
+      "why": "Keep every account in a CRM built for healthcare marketing: stages from target to preferred source, contacts by role from discharge planner to director of nursing, notes, visits, and follow-ups. Assign ownership, keep a shared history, and see which accounts need the team’s attention.",
+      "area": "Healthcare marketing CRM"
+    },
+    {
+      "title": "Give every visit a purpose",
+      "why": "Prepare account briefs and call sheets, plan calls, visits, and routes, and log each visit from a phone. Log expenses against the account they were for, attach the receipt, and turn check-ins into mileage, so less routine work has to be reconstructed later.",
+      "area": "Call planning, field activity & expenses"
+    },
+    {
+      "title": "Connect effort to outcomes",
+      "why": "Keep track of recorded referrals, admissions, conversion, and lost reasons alongside visits and outreach. Review source, team, and branch activity to decide where follow-up or a different approach is needed.",
+      "area": "Referral reporting & management insight"
+    },
+    {
+      "title": "Bring clearer answers to the meeting",
+      "why": "Use market, account, and decision briefs, prepared reports, and Ask the book’s supported questions to prepare for decisions. Import referral and admission facts from CSV reports to bring your organization’s results into the same workspace.",
+      "area": "Briefs, reports & CSV imports"
+    },
+    {
+      "title": "Spend with compliance in view",
+      "why": "Value shared meals per person, follow each physician’s running total against the Stark annual limit, and flag meal caps, frequency, missing receipts, and duplicates. Managers approve, record reimbursement, and export register, compliance, and payroll reports.",
+      "area": "Expenses, mileage & reimbursement"
+    },
+    {
+      "title": "Know the competition",
+      "why": "Rank the home health agencies and hospices in your territory by Medicare share, watch the ones that matter, and get alerts when a star rating, owner, or service area changes or a new provider opens nearby.",
+      "area": "Competitor intelligence"
+    },
+    {
+      "title": "Reach contacts at scale",
+      "why": "Send email campaigns to a lead list or the contacts on your book, with your sender details and automatic unsubscribe handling. Track deliveries, opens, clicks, responses, and bounces.",
+      "area": "Email campaigns · Growth & Pro"
+    }
+  ],
+  "areas": [
+    {
+      "key": "crm",
+      "name": "Healthcare marketing CRM",
+      "intro": "The marketing book: the accounts you keep month to month, the people you know there, and everything your team has logged on them.",
+      "features": [
+        {
+          "name": "Marketing book of accounts",
+          "does": "Keep hospitals, nursing homes, personal care and assisted living homes, physician practices, agencies and other referral sources in one book. Each account holds its type, city, phone, website, NPI, CCN, tags and owner.",
+          "access": null
+        },
+        {
+          "name": "Lines of business",
+          "does": "Work home health and hospice separately. One building can sit on both lines, with its own stage and history on each.",
+          "access": "Starter: one line"
+        },
+        {
+          "name": "Relationship stages",
+          "does": "Move accounts through Target, Relationship, Active source, Preferred, At risk and Lost. The date of the last change is kept, and At risk or Lost asks why: competitor, service issue, staff turnover, moved or other.",
+          "access": null
+        },
+        {
+          "name": "Contacts by healthcare role",
+          "does": "Record the administrator, director of nursing, business office, social services, admissions, discharge planner, case manager, physician liaison, physician, intake, MDS coordinator and executive director. Mark someone as left to keep their history and stop email to them.",
+          "access": null
+        },
+        {
+          "name": "Account page and full history",
+          "does": "Notes, the next visit or call, referrals, expenses and campaigns on one page. Search the account’s whole activity history by note, employee or date. Print a one-page account sheet without notes.",
+          "access": null
+        },
+        {
+          "name": "Market position on every account",
+          "does": "An account with a CCN or NPI shows its lead score, county and state share and rank, Medicare beneficiaries, star ratings, staffing, cost-report figures and discharge mix beside your own relationship history.",
+          "access": null
+        },
+        {
+          "name": "Month end view",
+          "does": "Sales calls, referrals, admissions, calls per referral and a six-month trend. See which accounts are referring more or less, which you called with no referral, and which belong on next month’s schedule.",
+          "access": null
+        },
+        {
+          "name": "Search, filters and saved views",
+          "does": "Search by name, city, tag, NPI or CCN. Filter by type, stage and data-quality flags, save a view as your default, share it by link, and change the stage of many accounts at once.",
+          "access": null
+        },
+        {
+          "name": "Spreadsheet import and export",
+          "does": "Import up to 2,000 accounts and contacts from a CSV with column mapping and a preview, from a template if you want one. Matches fill blanks instead of creating copies. Export the book or the rows you tick.",
+          "access": null
+        },
+        {
+          "name": "Book hygiene",
+          "does": "Possible duplicates are listed for a one-step merge. Chips flag accounts with no phone, no contact, no email, an invalid email or no call in 90 days, and engagement reads Healthy, Warm, Cold or No activity.",
+          "access": null
+        },
+        {
+          "name": "Going quiet",
+          "does": "Accounts whose referrals dropped, or that have gone 45 days without a visit, are listed with the reason and marked on the book and in the Monday digest.",
+          "access": null
+        },
+        {
+          "name": "Compare accounts side by side",
+          "does": "Compare two to four accounts on stage, contacts, visits, referrals and admissions, star ratings, Medicare share and recent activity. Save the comparison, print it or download a PDF.",
+          "access": null
+        },
+        {
+          "name": "Claim, release and hand off",
+          "does": "Claim accounts for your own book. When someone leaves or changes territory, move their whole book to a teammate in one step. Visits and referrals already logged stay credited to the person who logged them.",
+          "access": "Hand-off: owners & branch managers"
+        },
+        {
+          "name": "Parent organizations",
+          "does": "Group locations that belong to the same organization, from a shared parent name, practice name or people, or name the parent yourself.",
+          "access": null
+        }
+      ]
+    },
+    {
+      "key": "field-work",
+      "name": "Daily field work",
+      "intro": "The day on the road: what to do today, where to go, and a fast way to record each visit from a phone.",
+      "features": [
+        {
+          "name": "Today",
+          "does": "Your workspace when you sign in: tasks with due dates and priorities (overdue ones stay marked), progress on this month’s goals, and up to ten accounts to visit this week, each with one reason.",
+          "access": null
+        },
+        {
+          "name": "Tasks and assignments",
+          "does": "Create tasks for yourself, linked to an account or not. A manager can assign a task to a named teammate.",
+          "access": null
+        },
+        {
+          "name": "Schedule and call plan",
+          "does": "Plan visits and calls by day on a weekly agenda. Reschedule or remove a pending activity, or complete it with an outcome so the plan note is kept and the visit is not logged twice.",
+          "access": null
+        },
+        {
+          "name": "Suggested route",
+          "does": "Builds a day from follow-ups that are due, sources whose referrals fell, and key accounts with no visit in 45 days, then orders the stops as a route on a map. Order this week’s scheduled visits by drive time too.",
+          "access": null
+        },
+        {
+          "name": "Visit log built for a phone",
+          "does": "Check in with the phone’s location, type or dictate the note, and start from an in-service, lunch or discharge-planner drop-in template. A next step with a date schedules the follow-up. A draft survives a refresh and a save can be retried without duplicates.",
+          "access": null
+        },
+        {
+          "name": "Pre-visit card",
+          "does": "Before you walk in: the last visit and notes, referrals for 90 days against the 90 before, the oldest open referral, open tasks, the people on the account and what you left last time, with up to four talking points chosen from those figures. On a plan with AI briefs, an AI summary of your last notes.",
+          "access": null
+        },
+        {
+          "name": "Spoken visit debrief",
+          "does": "Say or type what happened after a visit and the AI proposes the visit note, the next step and its date. Nothing is saved until you check the form and save the visit. Possible patient details are taken out before the AI reads anything. Each debrief, notes summary or paid voice note uses one of your organization’s daily AI requests (500 a day on Growth, 2,000 on Pro), and the Visit log shows how many are left.",
+          "access": "Growth & Pro"
+        },
+        {
+          "name": "Business card scan",
+          "does": "Photograph a business card on an account and the phone reads the name, role, phone and email for you to check before the contact is saved. On Growth and Pro a paid reader takes over when the phone finds no name, using one AI request.",
+          "access": null
+        },
+        {
+          "name": "County call sheets",
+          "does": "A working list for a county: hospitals, home health agencies, hospices, nursing homes, clinicians, DME suppliers, licensed homes and dialysis facilities. Mark each Call, Visit or Account and it lands on the marketing book. Print the schedule or the chart of accounts.",
+          "access": null
+        },
+        {
+          "name": "Follow-up emails",
+          "does": "Send one email to a contact and book a dated visit in one step. Members schedule the visit and an owner sends the email; every email carries an unsubscribe link and your postal address.",
+          "access": null
+        },
+        {
+          "name": "Calendar sync",
+          "does": "Download your scheduled visits and calls, subscribe with a private calendar link, or sync them to Outlook or Google Calendar. Notes are never copied to the calendar.",
+          "access": "Outlook and Google sync: where configured"
+        },
+        {
+          "name": "Weekly book digest",
+          "does": "A Monday email for each marketer: last week’s visits, the coming week’s follow-ups, referral changes on their accounts, accounts going quiet, overdue tasks, new or moved physicians and sources falling off pace.",
+          "access": null
+        },
+        {
+          "name": "On your phone’s home screen",
+          "does": "Add CareMetric Intel to a phone’s home screen and it opens like an app.",
+          "access": null
+        }
+      ]
+    },
+    {
+      "key": "expenses",
+      "name": "Expenses, mileage and reimbursement",
+      "intro": "Expense reports built for healthcare marketing: spend is logged against the referral source it was for, valued per person, checked against the Stark limit and your policy, approved, and paid.",
+      "features": [
+        {
+          "name": "Expenses logged by account",
+          "does": "Record the account, date, amount, business purpose and payment method (corporate card, personal card, out-of-pocket cash, company check). Categories cover meals, gifts, entertainment, education and in-services, promotional items, mileage, per diem and events. Cash and gift cards are deliberately not offered.",
+          "access": null
+        },
+        {
+          "name": "Receipt capture",
+          "does": "Take a photo or upload an image or PDF and it attaches when you save. Where receipt reading is configured, the amount, date, vendor and a suggested category and account are read from it for you to check.",
+          "access": null
+        },
+        {
+          "name": "Per-person value for shared meals",
+          "does": "List everyone who partook and the expense is split among them, the valuation rule CMS sets for shared benefits (42 CFR 403.904(g)(1)). Each person’s value builds up across the year.",
+          "access": null
+        },
+        {
+          "name": "Stark annual limit tracking",
+          "does": "Each physician’s running total is measured against the Stark nonmonetary-compensation limit for the year (42 CFR 411.357(k)), with a warning as it gets close. The limit itself blocks approval unless a manager overrides it with a logged comment.",
+          "access": null
+        },
+        {
+          "name": "Non-physician policy totals",
+          "does": "Spend on discharge planners, case managers and other referral sources builds up against an internal policy alert you set. It is an alert, not a legal safe harbor: the Anti-Kickback Statute names no dollar threshold.",
+          "access": null
+        },
+        {
+          "name": "Policy checks and flags",
+          "does": "Per-meal caps by meal (breakfast, in-service lunch, out-of-office lunch, dinner), a per-diem cap, meals per person per month and per 12 months, large single benefits, entertainment, missing receipts, documentation gaps and possible duplicates are all flagged.",
+          "access": null
+        },
+        {
+          "name": "Approval workflow",
+          "does": "Save a draft, then submit. Clean, fully documented expenses under your approval threshold approve themselves; flagged ones wait in a manager’s queue to be approved or denied with a note. A denied expense can be corrected and resubmitted.",
+          "access": "Approving: owners & branch managers"
+        },
+        {
+          "name": "Reimbursement tracking",
+          "does": "Approved and paid are separate facts. A manager records the paid date, method (payroll, direct deposit, check) and batch, one expense or a whole batch at a time. Marketers cannot mark their own expenses reimbursed.",
+          "access": "Owners & branch managers"
+        },
+        {
+          "name": "Budgets and compliance settings",
+          "does": "Set a monthly budget per marketer, the approval and receipt-required thresholds, meal and per-diem caps, frequency limits, the warning percentage, the mileage rate and the non-physician policy total.",
+          "access": "Owners & branch managers"
+        },
+        {
+          "name": "Who you’ve spent on",
+          "does": "Every marketer sees each person they have spent on this year, their running value against the limit, and their meal counts. The same totals appear on each account’s page.",
+          "access": null
+        },
+        {
+          "name": "Expense reports and exports",
+          "does": "An itemized register, totals by marketer and by account, a compliance report and a payroll / AP export, for any date range, marketer, category or status. Download CSV or PDF.",
+          "access": "Owners & branch managers"
+        },
+        {
+          "name": "Scheduled expense reports",
+          "does": "Email any expense report daily, weekly or monthly to the managers you choose. Send a test, pause or edit a schedule at any time.",
+          "access": "Owners & branch managers"
+        },
+        {
+          "name": "Mileage log",
+          "does": "Adds the straight-line miles between each day’s visit check-ins and prices them at your organization’s mileage rate. Turn a day into a mileage expense draft in one step, then submit it like any other expense. Download the log as CSV.",
+          "access": null
+        }
+      ]
+    },
+    {
+      "key": "referrals",
+      "name": "Referral and admission tracking",
+      "intro": "Your organization’s own results: the referrals each source sends, what became of them, and which relationships are slipping.",
+      "features": [
+        {
+          "name": "Log referrals and outcomes",
+          "does": "Record a referral on the account it came from, with the service, payer and a note. Mark it admitted or not admitted, with the reason, when you know.",
+          "access": null
+        },
+        {
+          "name": "Response time",
+          "does": "Each referral keeps the time it came in, when it was first answered and when it was decided. Results reports median hours to first answer and to decision, the share answered within an hour, after-hours arrivals and the slowest sources.",
+          "access": null
+        },
+        {
+          "name": "EMR report imports",
+          "does": "Import referrals and admissions from CSV reports with column mapping and a preview. Saved layouts cover common home health and hospice EMR reports. Upload a file, pick one up from an SFTP drop folder, or forward it to an email-in address. Patient-identifying columns are dropped and never stored.",
+          "access": "Owners"
+        },
+        {
+          "name": "Scheduled EMR report delivery",
+          "does": "Some EMR reports can be delivered on a schedule your agency controls, with a delivery health page that shows the interval, observed dates and source totals. A file with rejected rows is held instead of imported.",
+          "access": "Owners"
+        },
+        {
+          "name": "Referral funnel",
+          "does": "Referrals received, admitted and not admitted, and why, by account and by marketer.",
+          "access": null
+        },
+        {
+          "name": "Referral drop-off alerts",
+          "does": "Flags a top source when its last 30 days fall at least 30% below its average month from the 90 days before. An owner can set the drop anywhere from 10% to 90%.",
+          "access": null
+        },
+        {
+          "name": "Outcomes packet",
+          "does": "A one-page quarterly PDF for a hospital or facility: the referrals they sent, how many were admitted and how fast they were answered, your agency’s public star rating, readmissions and quality scores, and the availability you confirmed. Hospitals in CMS’s TEAM model are flagged, with a list of TEAM hospitals to target. No patient names, notes or clinical detail.",
+          "access": null
+        },
+        {
+          "name": "Lost reasons",
+          "does": "Totals the reasons behind every lost and at-risk account, shows how many have no reason recorded, and lists the accounts.",
+          "access": null
+        },
+        {
+          "name": "Admissions forecast",
+          "does": "Estimates how many open referrals will be admitted, from your last 180 days, as a range that stays wide when the history is short.",
+          "access": "Pro"
+        },
+        {
+          "name": "Availability",
+          "does": "A dated confirmation of what your agency can take: accepting, limited or closed to new referrals, confirmed openings, earliest start, counties, disciplines, payers, languages and weekend coverage. Expired confirmations read as unconfirmed.",
+          "access": "Confirming: owners & branch managers"
+        }
+      ]
+    },
+    {
+      "key": "prospecting",
+      "name": "Prospecting and targeting",
+      "intro": "Find the physicians, practices and facilities worth a relationship, with a reason behind each name on the list.",
+      "features": [
+        {
+          "name": "Provider and facility directory",
+          "does": "Search providers, organizations, practice locations and facilities by name, NPI, specialty and place. Profiles show locations, taxonomies, affiliations and available Medicare activity.",
+          "access": null
+        },
+        {
+          "name": "Target Builder",
+          "does": "Filter providers by state, city, ZIP, specialty, score range, Medicare patient volume, Medicare participation and behavioral-health or geriatric focus, then save the matches as a list.",
+          "access": null
+        },
+        {
+          "name": "Saved lead lists",
+          "does": "Work a list with a status for each provider (New, Contacted, Qualified, Not a fit), add to it from any provider page or search, and export it.",
+          "access": null
+        },
+        {
+          "name": "Referral-source rankings",
+          "does": "Rank a county’s clinicians by a referral index built on public Medicare data, including the patients they certified for home health, and add the top names to a list in one step.",
+          "access": null
+        },
+        {
+          "name": "New physicians",
+          "does": "Physicians newly listed in your area in the last 45 days, and people already on your book whose practice address or facility changed.",
+          "access": null
+        },
+        {
+          "name": "Referral discovery",
+          "does": "Compare public volume with the referrals you have logged to find under-worked hospitals and physicians, see hospice planning estimates, and spot counties with high need and little local supply.",
+          "access": null
+        },
+        {
+          "name": "Physician share",
+          "does": "Your admissions from each physician divided by the home health certifications or hospice care-plan oversight Medicare published for them, banded as mostly yours, split, rarely yours or none yet. A labeled estimate from public counts.",
+          "access": null
+        },
+        {
+          "name": "Opportunity scores",
+          "does": "Providers in the scored states carry a lead score from CareMetric’s scoring rules, and the provider’s page shows what went into it. A provider without one reads Unscored; a score is never invented.",
+          "access": null
+        }
+      ]
+    },
+    {
+      "key": "market",
+      "name": "Market and territory research",
+      "intro": "The people, providers and Medicare activity in the places you serve, within your plan’s territory.",
+      "features": [
+        {
+          "name": "Territory map",
+          "does": "Providers on a map of a state in your territory, highest lead scores first. Filter by specialty group, entity type, score range and patient volume, color by score, or switch on a heat map. A county-density tab ranks counties by practice locations.",
+          "access": null
+        },
+        {
+          "name": "County intelligence",
+          "does": "A county’s older-adult population, income and adults living alone; the hospitals its residents use and where their post-discharge spending goes; the post-acute providers located there; and its top referral sources.",
+          "access": null
+        },
+        {
+          "name": "Market data and market share",
+          "does": "Each county’s Medicare enrollment and Medicare Advantage share, home health, hospice and skilled nursing use and supply, spending and readmissions, and each agency’s share of the Medicare beneficiaries served by providers located in the county.",
+          "access": null
+        },
+        {
+          "name": "Facility directory",
+          "does": "Hospitals, home health agencies, hospices, nursing homes, inpatient rehab, long-term care hospitals, DME suppliers, community health centers, dialysis facilities, and state-licensed personal care and assisted living homes where loaded.",
+          "access": null
+        },
+        {
+          "name": "Facility profiles",
+          "does": "Ownership, cost-report revenue and expenses, beds and visits, star ratings and quality measures, service areas and rank in the county and state. Print a branded profile.",
+          "access": null
+        },
+        {
+          "name": "Public quality scores",
+          "does": "A hospice's Hospice Care Index and its Service and Spending Variation Index from CMS's FY2027 hospice rule, a home health agency's value-based purchasing score and payment adjustment, and whether a hospital is in CMS's TEAM model, on each facility page.",
+          "access": null
+        },
+        {
+          "name": "Utilization and CMS data",
+          "does": "Medicare payments and service volume by specialty, and any clinician’s Medicare service lines by NPI.",
+          "access": null
+        },
+        {
+          "name": "Market briefs",
+          "does": "Ready-made briefs for expansion (where to grow), acquisition (the largest operators in a state), hospital relationships and referral development.",
+          "access": null
+        },
+        {
+          "name": "Data freshness",
+          "does": "Every market view shows which release it uses and when it was loaded, so you can judge the figures before using them.",
+          "access": null
+        }
+      ]
+    },
+    {
+      "key": "competitors",
+      "name": "Competitor intelligence",
+      "intro": "Who you compete with for referrals, how they are moving, and what to say about it.",
+      "features": [
+        {
+          "name": "Competitor rankings",
+          "does": "Home health agencies and hospices in your territory ranked by Medicare share, with each one’s star rating and change. Download the rankings as CSV.",
+          "access": null
+        },
+        {
+          "name": "Watchlist and alerts",
+          "does": "Follow the competitors that matter and get alerts when a star rating, owner or service area changes, a change of ownership is filed, or a new provider opens nearby.",
+          "access": null
+        },
+        {
+          "name": "Compare and trends",
+          "does": "Put competitors side by side on market rank, Medicare patients, share and its change, star rating, locations and ZIP codes served, and follow their share over time.",
+          "access": null
+        },
+        {
+          "name": "County roll-up",
+          "does": "Every county in a state with its market leader, number of agencies and biggest mover, as CSV or a leadership-brief PDF.",
+          "access": null
+        },
+        {
+          "name": "Scheduled leadership brief",
+          "does": "Email the county roll-up as a PDF to your managers daily, weekly or monthly.",
+          "access": "Owners & branch managers"
+        },
+        {
+          "name": "What to say",
+          "does": "On a home health agency or hospice, a card lines your agency up with the three largest in the county on star rating, patient survey and Medicare patient totals, in plain sentences.",
+          "access": null
+        }
+      ]
+    },
+    {
+      "key": "managers",
+      "name": "Manager and team tools",
+      "intro": "Set expectations, see where the effort goes, and coach the people doing the work.",
+      "features": [
+        {
+          "name": "Goals and leaderboard",
+          "does": "Monthly visit and referral targets for each marketer, a leaderboard, Met / On pace / Behind for the open month and a six-month trend. Everyone sees their own progress on Today.",
+          "access": "Setting targets: Growth & Pro"
+        },
+        {
+          "name": "Team review",
+          "does": "One marketer’s week in one place: visits and calls with their notes, saved routes, open tasks and assigned accounts.",
+          "access": "Owners & branch managers"
+        },
+        {
+          "name": "Activity report and weekly email",
+          "does": "Visits, calls, tasks done and overdue, referrals and admissions by person and source, new and lost sources, stage changes and accounts not visited. Download a spreadsheet or PDF, or turn on a weekly email.",
+          "access": "Weekly email: owners & branch managers"
+        },
+        {
+          "name": "Coaching",
+          "does": "Ride-along notes, comments on a visit and 1-on-1s for one marketer.",
+          "access": "Owners & branch managers"
+        },
+        {
+          "name": "Branches",
+          "does": "Add branches and assign each person as a marketer or manager. People then see their branches’ accounts, and reports follow the same rule.",
+          "access": "Owners · Growth: 3, Pro: 10"
+        },
+        {
+          "name": "Book balance",
+          "does": "Proposes a split of accounts across the marketers you choose by referral potential and drive time. Nothing moves until a manager applies it.",
+          "access": "Pro · owners & branch managers"
+        },
+        {
+          "name": "Account briefs and Ask the book",
+          "does": "A short factual brief on any account (stage, visits, calls and referral outcomes over 90 days, with notes left out), and answers to supported questions about your book, such as the top ten sources last quarter.",
+          "access": null
+        },
+        {
+          "name": "Decision briefs",
+          "does": "Prioritized accounts to prepare for, manager exceptions such as overdue tasks and falling referrals, and changes on the accounts you watch. Download a branded PDF or CSV, or have it emailed.",
+          "access": null
+        },
+        {
+          "name": "Materials library",
+          "does": "Brochures, physician one-pagers, service-line flyers and video links in one searchable place. New versions replace old ones, marketers note what they left on a visit, and managers see who opened each file.",
+          "access": "Adding materials: owners & branch managers"
+        }
+      ]
+    },
+    {
+      "key": "campaigns",
+      "name": "Email campaigns",
+      "intro": "Reach the contacts on a lead list or your book, with sending rules that protect your reputation.",
+      "features": [
+        {
+          "name": "Campaigns to lists and contacts",
+          "does": "Email a lead list, the contacts on one line of your book, or both. People marked as left are skipped.",
+          "access": "Owners · Growth & Pro"
+        },
+        {
+          "name": "Delivery tracking",
+          "does": "Track deliveries, opens, clicks, responses and bounces for each campaign, and link campaigns to the accounts they touched.",
+          "access": "Owners · Growth & Pro"
+        },
+        {
+          "name": "Sender and unsubscribe",
+          "does": "Set the name recipients see, where replies go and your postal address. Every email carries an unsubscribe link that is honored automatically.",
+          "access": "Owners · Growth & Pro"
+        },
+        {
+          "name": "Queue contacts from an account",
+          "does": "Any marketer can add a contact to a draft campaign from the account page; an owner prepares and sends it.",
+          "access": "Growth & Pro"
+        }
+      ]
+    },
+    {
+      "key": "reports",
+      "name": "Reports and analytics",
+      "intro": "Your book turned into reports that managers, owners and marketers can each trust for their own scope.",
+      "features": [
+        {
+          "name": "Results reports",
+          "does": "Performance scorecard, field activity, tasks and follow-up, mileage, referrals and admissions, top referral sources, why referrals were not admitted, payer mix, source pipeline, account coverage and goal attainment.",
+          "access": null
+        },
+        {
+          "name": "Filter and group",
+          "does": "Choose dates, then filter and group by person, location, line of business, account type, county, payer, source type, month or week. Members see their own work; managers see their branches; owners see the company.",
+          "access": null
+        },
+        {
+          "name": "PDF, Excel and CSV",
+          "does": "Every report downloads with the same figures as the screen and the source of the data printed on it.",
+          "access": null
+        },
+        {
+          "name": "Custom report builder",
+          "does": "Save charts and email them on a schedule to up to 25 people in your organization.",
+          "access": null
+        }
+      ]
+    },
+    {
+      "key": "admin",
+      "name": "Administration, security and data",
+      "intro": "Control who can see what, keep a record of it, and know where every figure comes from.",
+      "features": [
+        {
+          "name": "Organization, people and roles",
+          "does": "Invite people up to your plan’s seats, make someone an owner or a member, disable accounts, send password reset links and sign someone out everywhere.",
+          "access": "Owners"
+        },
+        {
+          "name": "Text-message sign-in codes",
+          "does": "Owners and branch managers can add a six-digit code, sent by text, to their own sign-in.",
+          "access": null
+        },
+        {
+          "name": "Security audit",
+          "does": "Sign-ins, account changes, exports and other recorded actions for your organization, with filters.",
+          "access": "Owners"
+        },
+        {
+          "name": "Billing and territory",
+          "does": "Choose your plan, counties or states and add-ons (extra seats, branches and states) from Billing.",
+          "access": "Owners"
+        },
+        {
+          "name": "Guided setup and help",
+          "does": "A guided setup for a new organization, an in-app help guide, and illustrated user guides for marketers and administrators as PDFs.",
+          "access": null
+        },
+        {
+          "name": "Public data, clearly sourced",
+          "does": "Provider, facility and market figures come from CMS, NPPES, the U.S. Census Bureau and state licensing files, with each dataset’s release shown. Public research uses no patient-level data.",
+          "access": null
+        },
+        {
+          "name": "Patient privacy by design",
+          "does": "Patient-identifying columns are dropped from referral imports, briefs and scorecards leave notes out, and exports carry no patient names.",
+          "access": null
+        }
+      ]
+    }
+  ],
+  "data": [
+    {
+      "family": "Providers",
+      "headline": "Know who is practicing in your market.",
+      "includes": [
+        "Provider and organization names, NPI identifiers, and specialties",
+        "Practice locations, taxonomy, and available affiliations",
+        "Eligible ordering/referring providers and available public Medicare activity"
+      ],
+      "source": "NPPES, NUCC taxonomy, and relevant CMS public files",
+      "question": "Who should we research before the next call or visit?",
+      "decision": "Build a target list based on location, service focus, and available market evidence instead of starting each search from scratch.",
+      "limit": "A provider’s presence or activity is a research signal, not a promise of referrals."
+    },
+    {
+      "family": "Facilities",
+      "headline": "See the care organizations around you.",
+      "includes": [
+        "Hospitals, home health agencies, hospices, and nursing homes",
+        "Available ownership, quality, capacity, and facility details",
+        "State-licensed personal care homes and assisted living residences where loaded"
+      ],
+      "source": "CMS facility files, Care Compare, and available state licensing files",
+      "question": "Which facilities, potential partners, and competitors should we understand?",
+      "decision": "Prepare for relationship-building with a clearer view of the organizations already serving the territory.",
+      "limit": "Licensed-home coverage and available detail vary by state and source."
+    },
+    {
+      "family": "Territories",
+      "headline": "Understand the people and places in your service area.",
+      "includes": [
+        "County and ZIP-area geography",
+        "Older-adult population measures, including ages 65+ and 85+",
+        "Income and older adults living alone, where available"
+      ],
+      "source": "U.S. Census Bureau geography and American Community Survey estimates",
+      "question": "Which locations deserve more research and marketing attention?",
+      "decision": "Compare local population context with care supply and current account coverage before directing the team’s time and resources.",
+      "limit": "Demographic estimates provide planning context; they do not identify individual prospects or establish demand."
+    },
+    {
+      "family": "Utilization & quality",
+      "headline": "Put public Medicare activity in context.",
+      "includes": [
+        "Available county-level care utilization and provider supply",
+        "Hospital service-area and post-discharge spending context",
+        "Available quality, readmission, and facility performance measures"
+      ],
+      "source": "Relevant CMS public use files and Care Compare releases",
+      "question": "What does the available evidence suggest we should investigate next?",
+      "decision": "Use the source’s reporting period and market context to ask better questions about service areas, competition, and potential relationships.",
+      "limit": "Post-discharge spending is a proxy for care use, not a count of transfers."
+    },
+    {
+      "family": "Your results",
+      "headline": "Keep your organization’s work and results together.",
+      "includes": [
+        "Accounts, contacts, ownership, calls, visits, and follow-ups",
+        "Expenses, receipts, approvals, reimbursements, and mileage",
+        "Recorded or CSV-imported referrals and admissions",
+        "Source trends, conversion, lost reasons, and team activity"
+      ],
+      "source": "The information your organization records or imports",
+      "question": "Where should we follow up, coach the team, or change the plan?",
+      "decision": "Reduce the time spent reconstructing account history and bring recorded results into the conversation about marketing priorities.",
+      "limit": "Results reflect your records. CSV imports are file-based, not live EMR connections; patient-identifying columns are dropped."
+    }
+  ],
+  "settings": [
+    {
+      "name": "Home health agencies",
+      "text": "Research physicians, hospitals, and community providers in your service area. Use local market context and available Medicare activity signals to prioritize potential referral relationships and plan follow-up."
+    },
+    {
+      "name": "Hospice agencies",
+      "text": "Explore physicians, hospitals, and care organizations around your market. Build a focused relationship plan and track the referral and admission facts your team records."
+    },
+    {
+      "name": "Hospitals",
+      "text": "Support your marketing plan with territory demographics, local provider research, and available hospital and post-acute utilization context. Identify physician practices and community organizations for focused relationship development."
+    },
+    {
+      "name": "Nursing homes",
+      "text": "Analyze local hospital activity, provider presence, nursing-home supply, and available utilization measures. Focus your team’s outreach on relevant accounts and keep relationship history and recorded referrals together."
+    },
+    {
+      "name": "Personal care homes",
+      "text": "Analyze your territory using available licensed-home information, bed supply, and older-adult demographics. Research local care organizations, focus relationship-building, and keep account history and follow-up organized."
+    }
+  ],
+  "managers": [
+    {
+      "name": "Focus the work before the week starts",
+      "text": "Use market research, account coverage, and relationship history to set priorities. Make it clear who is working each account and what the next call, visit, or follow-up should accomplish."
+    },
+    {
+      "name": "See how the team is spending its effort",
+      "text": "Review completed visits, goals, overdue follow-ups, expenses awaiting approval, and account activity by marketer and branch. Find gaps in follow-through and give people the support or direction they need."
+    },
+    {
+      "name": "Keep referrals part of the review",
+      "text": "Bring recorded referrals, admissions, conversion, and lost reasons into team discussions. Review which sources are changing and use the details to guide the next marketing decision."
+    }
+  ],
+  "faq": [
+    {
+      "question": "Who is CareMetric Intel for?",
+      "answer": "CareMetric Intel is for home health agencies, hospice agencies, hospitals, nursing homes, and personal care homes that want to make their marketing more targeted. Owners, managers, marketers, and business development teams can use it for marketing analysis, territory analysis, and outreach planning. Referral tracking brings the facts your organization records into the workspace. Available research and included CRM workflows vary by plan."
+    },
+    {
+      "question": "Is CareMetric Intel a CRM?",
+      "answer": "Yes. Alongside market, territory, and competitor research, CareMetric Intel is a CRM built for healthcare and senior-care marketers. It keeps a marketing book of accounts with stages, contacts by healthcare role, visits, calls, notes, tasks and follow-ups, referrals and admissions, expenses and mileage, and the reports managers use to review the team. The All features page lists every feature and the plan that includes it."
+    },
+    {
+      "question": "How does this help save time and money?",
+      "answer": "CareMetric Intel helps your team research accounts, focus its target lists, prepare calls and visits, and keep follow-ups and referral records together. That gives managers a practical way to reduce repeated research, unfocused outreach, and missed next steps. The time and cost benefit depends on your team’s use of the tools; no specific savings or referral increase is guaranteed."
+    },
+    {
+      "question": "How does referral tracking work?",
+      "answer": "Your team can record referrals and admissions against accounts or import supported referral facts from CSV reports. Review source trends, conversion, and lost reasons alongside the outreach your team logs. Public market patterns and opportunity scores remain research signals and are not treated as confirmed referrals."
+    },
+    {
+      "question": "Can marketers track expenses and mileage?",
+      "answer": "Yes. Marketers log each expense against the account it was for, start from a receipt photo, and list who attended so a shared meal is valued per person. Each physician’s running total is tracked against the Stark nonmonetary-compensation limit, and per-meal caps, meal frequency, missing receipts, and possible duplicates are flagged. Managers approve or deny, record reimbursement, and export register, compliance, and payroll reports. Mileage adds the straight-line distance between a day’s visit check-ins at your organization’s rate. These tools support your compliance program; they are not legal advice."
+    },
+    {
+      "question": "What can we explore during the free trial?",
+      "answer": "The 14-day trial covers one county and includes three marketer seats and one manager seat. Create your organization account, select the county in Billing, and explore the available research, planning, and reporting tools. A labeled sample book gives you examples to work through. No credit card is required to start."
+    },
+    {
+      "question": "Can we keep an eye on competitors?",
+      "answer": "Yes. Competitors ranks the home health agencies and hospices in your territory by Medicare share, lets you watch the ones that matter, and alerts you when a star rating, owner, or service area changes or a new provider opens nearby. Compare competitors side by side, follow trends, and email a county roll-up to your managers. The figures come from public CMS files and describe the periods those files cover."
+    },
+    {
+      "question": "Does public-data analysis show confirmed referrals?",
+      "answer": "Public provider activity and opportunity scores provide research context. They do not establish a confirmed referral relationship. Your organization’s referral and admission reporting uses the facts your team records or imports into its marketing book."
+    },
+    {
+      "question": "How current is the market information?",
+      "answer": "Each source has its own reporting period and publishing schedule. CareMetric Intel shows dataset vintages and import dates in the app so you can assess the information before using it. Coverage and available detail vary by dataset, geography, and care setting."
+    },
+    {
+      "question": "Can we import results from our EMR reports?",
+      "answer": "Owners can import referral and admission facts from CSV files, review the column mapping, and check a preview before saving. Saved layouts support common home health and hospice EMR reports. These are file-based imports, not live EMR connections."
+    },
+    {
+      "question": "Can we use the platform across branches?",
+      "answer": "Yes. Growth includes up to three branches, and Pro includes up to ten. Assign people to branches, organize account ownership, and review reports within their access scope. Plan limits and purchased add-ons determine the territory and team size your organization can use."
+    },
+    {
+      "question": "Does CareMetric Intel use patient-level data?",
+      "answer": "The public research tools use provider, facility, and aggregated market information. Patient-identifying columns are dropped during referral-file imports. Keep patient names, diagnoses, and other patient information out of free-text notes and support requests. The Data sources & use page explains the information and its permitted use."
+    },
+    {
+      "question": "What do the AI features help with?",
+      "answer": "Where receipt reading is configured, a receipt photo is read into an expense draft for you to check. Ask the book answers supported questions about your marketing book with fixed reports, such as your top sources last quarter. Availability depends on your plan, your role, and the services configured for your organization. Review generated text and figures before using them in outreach or business decisions."
+    }
+  ],
+  "caveats": [
+    "Feature availability and usage limits vary by plan. Opportunity scores support research and outreach planning. AI-assisted features depend on supported reports and configured services. Expense compliance tools support your compliance program; they are not legal advice.",
+    "Available research and analysis vary by care setting, geography, source coverage, and plan. Compare territory, team size, and included CRM workflows in the plan details below.",
+    "Coverage depends on the dataset, geography, reporting period, and your plan. Not every field is available in every market. Medicare measures describe the populations and periods included in the source; public patterns do not confirm individual referrals.",
+    "Feature availability, territory and usage limits vary by plan. Research coverage varies by dataset, geography and care setting. Public-data signals support research and planning; they do not confirm referrals. Your organization’s results come from what your team records or imports. Patient-identifying columns are dropped from referral imports, and notes should never name a patient."
+  ]
+}

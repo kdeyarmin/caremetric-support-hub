@@ -33,6 +33,8 @@ import { schemaDefects, schemaProblems } from './schema.mjs';
 
 const versionPattern = /^[a-z0-9.-]{1,20}$/;
 const efforts = new Set(['low', 'medium', 'high']);
+// A request may name a tier for one call (the Creative Director writes concepts on quality and variants on draft); otherwise the agent's own.
+const tiers = new Set(['fast', 'draft', 'quality']);
 const reasonPattern = /^[a-z_]{1,40}$/;
 const maxTokensCeiling = 8000;
 const configurationAlerts = {
@@ -69,7 +71,7 @@ const count = value => (Number.isFinite(value) && value >= 0 ? Math.round(value)
 /** What the request asks for, or a permanent error when the caller got it wrong. Nothing is sent before this passes. */
 function checkRequest(request) {
   const reject = () => { throw aiError('request_rejected'); };
-  const { promptVersion, system, user, schema, maxTokens = 3000, effort = 'medium' } = request ?? {};
+  const { promptVersion, system, user, schema, maxTokens = 3000, effort = 'medium', tier = null } = request ?? {};
   if (typeof promptVersion !== 'string' || !versionPattern.test(promptVersion)) reject();
   if (!Array.isArray(system) || system.length === 0 || system.length > 4) reject();
   if (system.some(block => typeof block?.text !== 'string' || block.text.length === 0)) reject();
@@ -77,7 +79,8 @@ function checkRequest(request) {
   if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > maxTokensCeiling) reject();
   if (!efforts.has(effort)) reject();
   if (schemaDefects(schema).length > 0) reject();
-  return { ...request, maxTokens, effort };
+  if (tier !== null && !tiers.has(tier)) reject();
+  return { ...request, maxTokens, effort, tier };
 }
 
 const usageOf = message => {
@@ -207,14 +210,15 @@ export function modelRunner({
    * Rejects with a coded error (see errors.mjs) for everything else; a transient code is retried
    * by the scheduler with a backoff, any other after three attempts.
    *
-   * request: { promptVersion, system: [{ text, cache? }], user, schema, maxTokens?, effort?, validate?, describe? }
+   * request: { promptVersion, system: [{ text, cache? }], user, schema, maxTokens?, effort?, tier?, validate?, describe? }
+   * `tier` (fast, draft or quality) picks the model for this call instead of the agent's own tier; the budget is the agent's either way.
    * `validate(output)` returns nothing when the answer is acceptable, or a short lowercase reason
    * when it is not. `describe(output)` returns the run's summary: counts and enums, never text.
    */
   async function run(task, request, { signal } = {}) {
     const agentKey = task.agentKey;
     const spec = checkRequest(request);
-    const model = models[task.agent?.modelTier];
+    const model = models[spec.tier ?? task.agent?.modelTier];
     if (!model || !prices[model]) throw aiError('unknown_model');
     if (!client.configured) throw aiError('ai_not_configured');
     // The scheduler has already given up on this task: start nothing, book nothing.

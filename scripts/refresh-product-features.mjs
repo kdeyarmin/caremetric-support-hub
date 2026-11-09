@@ -1,0 +1,243 @@
+#!/usr/bin/env node
+/**
+ * Rebuilds the product feature catalogs the AI team writes from (server/agents/content/features.mjs), from each product's own public
+ * pages:
+ * - CareMetric Intel (intel-features.json): https://www.caremetricintel.com/features (every feature, its area and the plan or role it
+ *   needs) and the home page (why each area matters, the data behind it with its sources and limits, the care settings, the manager view,
+ *   and the questions and answers).
+ * - CareMetric CareBase (carebase-features.json): https://cmcarebase.com/features (every capability by module, the newest tools, the
+ *   resident lifecycle and what each role sees and does), the home page (why it matters, the tools that set it apart, before and after,
+ *   and each chapter's requirements) and /faq (the questions and answers).
+ *
+ *   npm run refresh:features                                    # fetch every page
+ *   node scripts/refresh-product-features.mjs --from <folder>     # from saved copies: intel-home.html, intel-features.html,
+ *                                                               # carebase-home.html, carebase-features.html, carebase-faq.html
+ *   npm run refresh:features -- --check                         # fail if a committed catalog differs from the live pages
+ *
+ * The AI team names no other product, so the EMR vendors Intel names for its CSV imports are written generically (each catalog lists
+ * its `edits`), and any other product's name stops the refresh. Prices are left to the fact sheet. Review the diff before committing.
+ */
+import { createHash } from 'node:crypto';
+import { readFile, writeFile } from 'node:fs/promises';
+
+const args = process.argv.slice(2);
+const option = name => (args.includes(name) ? args[args.indexOf(name) + 1] : null);
+
+async function page(site, path, saved) {
+  if (saved) return readFile(saved, 'utf8');
+  const response = await fetch(`${site}${path}`, { headers: { accept: 'text/html' } });
+  if (!response.ok) throw new Error(`${site}${path} answered ${response.status}`);
+  return response.text();
+}
+
+const entities = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', rsquo: '’', lsquo: '‘', ldquo: '“', rdquo: '”', mdash: '—', ndash: '–', middot: '·' };
+const decode = text => text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, code) => (code[0] === '#'
+  ? String.fromCodePoint(code[1] === 'x' || code[1] === 'X' ? parseInt(code.slice(2), 16) : Number(code.slice(1))) : entities[code] ?? whole));
+const clean = fragment => decode(String(fragment ?? '').replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<br\s*\/?>/g, ' ').replace(/<[^>]+>/g, ''))
+  .replace(/\s+/g, ' ').trim();
+const pageText = html => clean(html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, ''));
+const first = (pattern, text) => pattern.exec(text)?.[1] ?? null;
+
+// Wording the AI team may not repeat, rewritten: other products' names (content/validate.mjs), so Intel's EMR import layouts are described
+// without the vendors' names; and demos and sales calls, which CareMetric does not offer (growth/playbook.mjs offersMeeting).
+const vendorEdit = replacement => `EMR vendors named on the page are written generically: "${replacement}"`;
+const generic = [
+  [/Saved layouts cover HCHB, WellSky, Axxess and MatrixCare\./g, 'Saved layouts cover common home health and hospice EMR reports.', vendorEdit],
+  [/Saved layouts support common reports from Homecare Homebase, WellSky, Axxess, and MatrixCare\. These are file-based imports; the listed layouts do not imply a live connection to those vendors\./g,
+    'Saved layouts support common home health and hospice EMR reports. These are file-based imports, not live EMR connections.', vendorEdit],
+  [/Scheduled MatrixCare delivery/g, 'Scheduled EMR report delivery', vendorEdit],
+  [/MatrixCare reports can be delivered/g, 'Some EMR reports can be delivered', vendorEdit],
+  [/ ?You can also explore demo options with fictional facility data before setting up your own organization\./g, '', () => 'A sentence offering demo options is left out: CareMetric offers no demos.'],
+  [/without a sales call/g, 'on your own', () => '"Without a sales call" is written "on your own": the team never mentions sales calls.'],
+];
+// The products the team never names (content/validate.mjs keeps the same list).
+const vendors = /\b(HCHB|Homecare Homebase|WellSky|Axxess|MatrixCare|Trella|Definitive Healthcare|Marketware|Aline|WelcomeHome|PointClickCare|Yardi|Eldermark|ALIS|Relias|Caremerge|August Systems|Experience Care|eMARLink|Netsmart)\b/;
+let edits = new Set();
+function sanitize(value) {
+  if (typeof value === 'string') {
+    let out = value;
+    for (const [pattern, replacement, why] of generic) {
+      pattern.lastIndex = 0;
+      if (pattern.test(out)) { edits.add(why(replacement)); out = out.replace(pattern, replacement); }
+    }
+    if (vendors.test(out)) throw new Error(`Another product is named and has no generic wording yet: "${out.slice(0, 160)}". Add a rule to \`generic\`.`);
+    return out;
+  }
+  if (Array.isArray(value)) return value.map(sanitize);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitize(item)]));
+  return value;
+}
+
+export function extractIntel(home, features) {
+  const areas = [...features.matchAll(/<section id="([a-z-]+)" class="cm-features-area"[\s\S]*?<\/section>/g)].map(([section, key]) => ({
+    key,
+    name: clean(first(/<h2[^>]*>([\s\S]*?)<\/h2>/, section)),
+    intro: clean(first(/<\/h2>\s*<p>([\s\S]*?)<\/p>/, section)),
+    features: [...section.matchAll(/<li>([\s\S]*?)<\/li>/g)].map(([, item]) => item).filter(item => /<h3>/.test(item)).map(item => {
+      const paragraphs = [...item.matchAll(/<p( class="cm-features-access")?>([\s\S]*?)<\/p>/g)];
+      return {
+        name: clean(first(/<h3>([\s\S]*?)<\/h3>/, item)),
+        does: paragraphs.filter(([, access]) => !access).map(([, , text]) => clean(text)).join(' '),
+        access: paragraphs.filter(([, access]) => access).map(([, , text]) => clean(text)).join(' ') || null,
+      };
+    }),
+  }));
+  const pillars = [...home.matchAll(/<article class="cm-capability-card">([\s\S]*?)<\/article>/g)].map(([, card]) => card)
+    .filter(card => /cm-feature-number/.test(card) && /cm-feature-tag/.test(card))
+    .map(card => ({ title: clean(first(/<h3>([\s\S]*?)<\/h3>/, card)), why: clean(first(/<\/h3>\s*<p>([\s\S]*?)<\/p>/, card)), area: clean(first(/<span class="cm-feature-tag">([\s\S]*?)<\/span>/, card)) }));
+  let cards = home.slice(home.indexOf('cm-care-settings-grid'));
+  cards = cards.slice(0, cards.indexOf('</div></div>'));
+  const settingCards = [...cards.matchAll(/<h3>([\s\S]*?)<\/h3>\s*<p>([\s\S]*?)<\/p>/g)].map(([, name, text]) => ({ name: clean(name), text: clean(text) }));
+  const tabs = Object.fromEntries([...home.matchAll(/id="(_R_[^"]+-tab-\d+)"[^>]*>(?:<svg[\s\S]*?<\/svg>)?\s*<span>([\s\S]*?)<\/span>/g)].map(([, tab, label]) => [tab, clean(label)]));
+  const data = [...home.matchAll(/role="tabpanel" aria-labelledby="([^"]+)"[^>]*class="cm-data-panel"[^>]*>([\s\S]*?<p class="cm-data-limit">[\s\S]*?<\/p>)/g)].map(([, tab, panel]) => ({
+    family: tabs[tab] ?? null,
+    headline: clean(first(/<h3>([\s\S]*?)<\/h3>/, panel)),
+    includes: [...panel.matchAll(/<li>([\s\S]*?)<\/li>/g)].map(([, item]) => clean(item)),
+    source: clean(first(/<strong>Source<\/strong>\s*<p>([\s\S]*?)<\/p>/, panel)),
+    question: clean(first(/<h4>([\s\S]*?)<\/h4>/, panel)),
+    decision: clean(first(/<\/h4>\s*<p>([\s\S]*?)<\/p>/, panel)),
+    limit: clean(first(/<p class="cm-data-limit">([\s\S]*?)<\/p>/, panel)),
+  }));
+  const faq = [];
+  for (const [, block] of home.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)) {
+    let found;
+    try { found = JSON.parse(block); } catch { continue; }
+    for (const node of found?.['@graph'] ?? [found]) {
+      if (node?.['@type'] === 'FAQPage') for (const item of node.mainEntity ?? []) faq.push({ question: item.name, answer: item.acceptedAnswer?.text ?? '' });
+    }
+  }
+  const caveats = [];
+  for (const html of [home, features]) {
+    for (const [, fragment] of html.matchAll(/<p[^>]*>((?:Feature availability|Coverage depends|Available research and analysis)[\s\S]*?)<\/p>/g)) {
+      const text = clean(fragment);
+      if (!caveats.includes(text)) caveats.push(text);
+    }
+  }
+  const count = /<p>(\d+)(?:<!-- -->)?\s*features in/.exec(features);
+  return sanitize({
+    overview: clean(first(/<p class="cm-hero-description">([\s\S]*?)<\/p>/, home)),
+    legend: clean(first(/<p class="cm-features-legend">([\s\S]*?)<\/p>/, features)),
+    publishedCount: count ? Number(count[1]) : null,
+    pillars, areas, data,
+    settings: settingCards.slice(0, 5), managers: settingCards.slice(5),
+    // Purchasing and the end of the trial are the fact sheet's (prices come from Intel's catalog); the rest are product answers.
+    faq: faq.filter(item => !/^(How do we purchase|What happens when the trial ends)/.test(item.question)),
+    caveats,
+  });
+}
+
+/** The page without what the extractors never read: drawings, attributes and comments. */
+const plain = html => html.replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<!--[\s\S]*?-->/g, '').replace(/<([a-z][a-z0-9]*)\s[^>]*?(\/?)>/gi, '<$1$2>');
+
+function faqOf(html, skip = /^$/) {
+  const faq = [];
+  for (const [, block] of html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/g)) {
+    let found;
+    try { found = JSON.parse(block); } catch { continue; }
+    for (const node of found?.['@graph'] ?? (Array.isArray(found) ? found : [found])) {
+      if (node?.['@type'] === 'FAQPage') for (const item of node.mainEntity ?? []) if (!skip.test(item.name)) faq.push({ question: item.name, answer: item.acceptedAnswer?.text ?? '' });
+    }
+  }
+  return faq;
+}
+
+export function extractCarebase({ home, features, faq }) {
+  const f = plain(features);
+  const h = plain(home);
+  const modules = [...f.matchAll(/(\d+) capabilities<\/span><\/div><h3>([^<]+)<\/h3><ul>([\s\S]*?)<\/ul>/g)].map(([, count, name, list]) => ({
+    name: clean(name), capabilities: [...list.matchAll(/<li><span><\/span><span>([\s\S]*?)<\/span><\/li>/g)].map(([, item]) => clean(item)), count: Number(count),
+  }));
+  const newest = [...f.matchAll(/>New<\/span><span>([^<]+)<\/span><\/div><h3>([\s\S]*?)<\/h3><p>([\s\S]*?)<\/p>/g)].map(([, name, headline, text]) => ({ name: clean(name), headline: clean(headline), does: clean(text) }));
+  const lifecycle = [...f.matchAll(/<li><div><span>\d\d<\/span><div><h3>([\s\S]*?)<\/h3><p>([\s\S]*?)<\/p>/g)].map(([, step, text]) => ({ step: clean(step), text: clean(text) }));
+  const roles = [...f.matchAll(/<span>\d\d<\/span><h3>([\s\S]*?)<\/h3><\/div><p><span>Sees<\/span>([\s\S]*?)<\/p><p><span>Does<\/span>([\s\S]*?)<\/p>/g)]
+    .map(([, role, sees, does]) => ({ role: clean(role), sees: clean(sees), does: clean(does) }));
+  const pillars = [...h.matchAll(/<span>0\d<\/span><span>([^<]+)<\/span><\/div><h3>([\s\S]*?)<\/h3><p>([\s\S]*?)<\/p>/g)].map(([, area, title, why]) => ({ title: clean(title), why: clean(why), area: clean(area) }));
+  // The tools that set it apart: each a heading, what it does, and a closing line; between "What sets it apart" and the free guide.
+  const apartFrom = h.indexOf('What sets it apart');
+  const apart = apartFrom < 0 ? [] : [...h.slice(apartFrom, h.indexOf('A free resource', apartFrom)).matchAll(/<h3>([\s\S]*?)<\/h3>((?:<p>[\s\S]*?<\/p>)+)/g)].map(([, title, paragraphs]) => {
+    const parts = [...paragraphs.matchAll(/<p>([\s\S]*?)<\/p>/g)].map(([, text]) => clean(text)).filter(Boolean);
+    return { title: clean(title), why: parts.slice(0, -1).join(' ') || parts[0], area: parts.length > 1 ? parts.at(-1) : 'What sets it apart' };
+  });
+  const beforeAfter = [...h.matchAll(/<span><span>Before: <\/span>([\s\S]*?)<\/span><span><span>With CareBase: <\/span>([\s\S]*?)<\/span>/g)].map(([, before, after]) => ({ before: clean(before), after: clean(after) }));
+  const chapters = [...h.matchAll(/<span>(55 Pa\. Code Chapter \d+)<\/span><h3>([\s\S]*?)<\/h3><p>([\s\S]*?)<\/p><p>([\s\S]*?)<\/p><ul>([\s\S]*?)<\/ul>/g)].map(([, chapter, title, text, record, list]) => ({
+    chapter: clean(chapter), title: clean(title), text: `${clean(text)} ${clean(record)}`.trim(), highlights: [...list.matchAll(/<li>([\s\S]*?)<\/li>/g)].map(([, item]) => clean(item)),
+  }));
+  const total = /(\d+)\+? capabilities/.exec(clean(f))?.[1];
+  const intro = /The full capability index[\s\S]*?<p>([\s\S]*?)<\/p>/.exec(f)?.[1];
+  const modulesNote = /Choose the modules you need\.[\s\S]*?<p>([\s\S]*?)<\/p>/.exec(f)?.[1];
+  const caveats = [
+    ...apart.flatMap(item => (/not a prediction/.test(item.why) ? [item.why.split('. ').find(sentence => /not a prediction/.test(sentence))] : [])),
+    ...faqOf(faq).filter(item => /^Does it guarantee|^What does it not replace/.test(item.question)).map(item => item.answer),
+  ].filter(Boolean);
+  return sanitize({
+    overview: clean(/<\/h1>[\s\S]*?<p>([\s\S]*?)<\/p>/.exec(h)?.[1]),
+    summary: clean(/In plain English[\s\S]*?<\/h2>(?:<\/div>)?<p>([\s\S]*?)<\/p>/.exec(h)?.[1]),
+    intro: clean(intro), legend: clean(modulesNote),
+    publishedCount: total ? Number(total) : null,
+    pillars: [...pillars, ...apart], modules, newest, lifecycle, roles, beforeAfter, chapters,
+    // Prices are the fact sheet's (read from billing); the rest are product answers.
+    faq: faqOf(faq, /^How much does it cost/),
+    caveats: [...new Set(caveats)],
+  });
+}
+
+const products = {
+  'caremetric-intel': {
+    file: 'intel-features.json', site: 'https://www.caremetricintel.com',
+    pages: { home: ['/', 'intel-home.html'], features: ['/features', 'intel-features.html'] },
+    extract: ({ home, features }) => extractIntel(home, features),
+    check: body => {
+      const total = body.areas.reduce((sum, area) => sum + area.features.length, 0);
+      if (body.areas.length < 5 || total < 50 || body.data.length !== 5 || body.pillars.length < 5 || body.settings.length !== 5) {
+        throw new Error(`Intel's pages changed shape (areas ${body.areas.length}, features ${total}, data ${body.data.length}, pillars ${body.pillars.length}, settings ${body.settings.length}); update the extractor.`);
+      }
+      if (body.publishedCount && body.publishedCount !== total) throw new Error(`Intel's features page says ${body.publishedCount} features but ${total} were read.`);
+      return `${body.areas.length} areas, ${total} features, ${body.data.length} data families and ${body.faq.length} answers`;
+    },
+  },
+  carebase: {
+    file: 'carebase-features.json', site: 'https://cmcarebase.com',
+    pages: { home: ['/', 'carebase-home.html'], features: ['/features', 'carebase-features.html'], faq: ['/faq', 'carebase-faq.html'] },
+    extract: pages => extractCarebase(pages),
+    check: body => {
+      const total = body.modules.reduce((sum, module) => sum + module.capabilities.length, 0);
+      if (!body.overview || !body.summary || body.modules.length < 4 || total < 40 || body.modules.some(module => module.capabilities.length !== module.count) || body.pillars.length < 3
+        || body.roles.length < 4 || body.lifecycle.length < 4 || body.faq.length < 10) {
+        throw new Error(`CareBase's pages changed shape (modules ${body.modules.length}, capabilities ${total}, pillars ${body.pillars.length}, roles ${body.roles.length}, lifecycle ${body.lifecycle.length}, answers ${body.faq.length}); update the extractor.`);
+      }
+      return `${body.modules.length} modules, ${total} capabilities, ${body.pillars.length} reasons and ${body.faq.length} answers`;
+    },
+  },
+};
+
+async function main() {
+  const from = option('--from');
+  let stale = false;
+  for (const [product, spec] of Object.entries(products)) {
+    const pages = Object.fromEntries(await Promise.all(Object.entries(spec.pages).map(async ([name, [path, saved]]) => [name, await page(spec.site, path, from ? `${from}/${saved}` : null)])));
+    edits = new Set();
+    const body = spec.extract(pages);
+    const summary = spec.check(body);
+    const catalog = {
+      product,
+      sources: Object.fromEntries(Object.entries(spec.pages).map(([name, [path]]) => [name, `${spec.site}${path}`])),
+      contentSha256: createHash('sha256').update(Object.values(pages).map(pageText).join('\n')).digest('hex').slice(0, 16),
+      edits: [...edits].sort(),
+      ...body,
+    };
+    const target = new URL(`../server/agents/content/${spec.file}`, import.meta.url);
+    const current = await readFile(target, 'utf8').then(JSON.parse).catch(() => null);
+    const comparable = value => JSON.stringify({ ...value, reviewed: undefined });
+    if (args.includes('--check')) {
+      if (!current || comparable(current) !== comparable(catalog)) { console.error(`${product}: the published features changed; run npm run refresh:features and review the diff.`); stale = true; }
+      else console.log(`${product}: current (${summary}).`);
+      continue;
+    }
+    const reviewed = current && comparable(current) === comparable(catalog) ? current.reviewed : new Date().toISOString().slice(0, 10);
+    await writeFile(target, `${JSON.stringify({ reviewed, ...catalog }, null, 2)}\n`);
+    console.log(`${product}: wrote ${summary}.`);
+  }
+  if (stale) process.exit(1);
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) await main();

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { slotFor, socialHandlers } from './tasks.mjs';
 import { socialConfig, socialTeam } from './index.mjs';
+import { catalogBlocks } from '../content/features.mjs';
 
 const canary = 'CANARY-9d41e7';
 const now = () => new Date('2026-11-09T13:15:00Z'); // Monday 08:15 Eastern
@@ -23,7 +24,7 @@ const linkedinOf = (over = {}) => ({
   adsOverview: vi.fn(async () => ({ adsets: [], ads: [], current: [], previous: [] })),
   ...over,
 });
-const harness = ({ meta = metaOf(), linkedin = null, model = null, customerTextToAi = false, settings = {}, imageUrls = ['https://cdn.example.com/brand-1.jpg'], openTargets = [], marketed = null } = {}) => {
+const harness = ({ meta = metaOf(), linkedin = null, model = null, customerTextToAi = false, settings = {}, imageUrls = ['https://cdn.example.com/brand-1.jpg'], openTargets = [], marketed = null, creative = null } = {}) => {
   const sent = [];
   let next = 0;
   const store = {
@@ -32,7 +33,7 @@ const harness = ({ meta = metaOf(), linkedin = null, model = null, customerTextT
     startRun: vi.fn(async () => 'r'), finishRun: vi.fn(async () => undefined),
   };
   const notifier = { send: vi.fn(async input => { sent.push(input); return [{ channel: 'email', delivery: 'sent' }]; }) };
-  const handlers = socialHandlers({ store, notifier, model, meta, linkedin, settings, imageUrls, customerTextToAi, publicOrigin: 'https://help.caremetric.ai', marketed, log: () => {} });
+  const handlers = socialHandlers({ store, notifier, model, meta, linkedin, settings, imageUrls, customerTextToAi, publicOrigin: 'https://help.caremetric.ai', marketed, log: () => {}, creative });
   return { store, notifier, sent, meta, linkedin, handlers };
 };
 const modelReturning = output => ({ configured: true, run: vi.fn(async () => ({ outcome: 'completed', output })) });
@@ -59,7 +60,10 @@ describe('the weekly social plan', () => {
     const h = harness({ model });
     const outcome = await h.handlers['social.plan'](task('social.plan'), { now });
     const request = model.run.mock.calls[0][1];
-    expect(request.promptVersion).toBe('social-plan.3');
+    expect(request.promptVersion).toBe('social-plan.4');
+    // Each marketed product's published catalog follows the prompt (content/features.mjs).
+    expect(request.system.slice(1)).toEqual(catalogBlocks(JSON.parse(request.user).products));
+    expect(request.system.length).toBeGreaterThan(1);
     expect(JSON.parse(request.user)).toMatchObject({ weekStarting: '2026-11-09', postsToWrite: { facebook: 3, instagram: 2, linkedin: 3 }, bestRecent: [{ platform: 'facebook', engagement: 28 }] });
     expect(h.store.proposeAction).toHaveBeenCalledTimes(2);
     const [facebook, instagram] = h.store.proposeAction.mock.calls.map(call => call[0]);
@@ -358,5 +362,47 @@ describe('registration', () => {
     const withLinkedIn = socialConfig({ HUB_LINKEDIN_ACCESS_TOKEN: 'AQX-linkedin-member-token-0123456789', HUB_LINKEDIN_ORGANIZATION_ID: '5550001', HUB_LINKEDIN_AD_ACCOUNT_ID: '5080001' });
     expect(withLinkedIn.linkedin).toMatchObject({ organizationId: '5550001', adAccountId: '5080001', version: '202609' });
     expect(socialTeam({ social: withLinkedIn, features: ['platform.agents.social.v1'] }).linkedin.configured).toEqual({ page: true, ads: true });
+  });
+});
+
+describe('approved creative from the Creative Director', () => {
+  const token = 'f'.repeat(64);
+  const approvedAsset = (over = {}) => ({ id: '22222222-2222-4222-8222-222222222222', token, product: 'caremetric-intel', platform: 'meta', placement: 'meta.feed_square', kind: 'static',
+    headline: 'Territory plans from public data', primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.',
+    description: 'Free trial', cta: 'Start free trial', landingUrl: 'https://www.caremetricintel.com/?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=22222222-2222-4222-8222-222222222222', ...over });
+  const planModel = () => modelReturning({ posts: [{ platform: 'instagram', product: 'caremetric-intel', pillar: 'tip', day: 2, text: 'Which county sends your agency the most referrals? Map it before you plan the week.', linkId: '', hashtags: ['homehealth'] }] });
+
+  it('uses an approved image for an Instagram post, marks the post with the asset, and tells the Creative Director the plan was written', async () => {
+    const creative = { approved: vi.fn(async ({ platform }) => (platform === 'meta' ? [approvedAsset()] : [])), planned: vi.fn(async () => 'task') };
+    const { store, handlers } = harness({ model: planModel(), imageUrls: [], creative });
+    await handlers['social.plan'](task('social.plan'), { now });
+    const post = store.proposeAction.mock.calls.map(([input]) => input).find(input => input.input.platform === 'instagram');
+    expect(post.input.imageUrl).toBe(`https://help.caremetric.ai/api/creative/a/${token}.png`);
+    expect(post.input.creativeAssetId).toBe(approvedAsset().id);
+    expect(creative.planned).toHaveBeenCalledWith('2026-11-09');
+  });
+
+  it('plans exactly as before without the Creative Director', async () => {
+    const { store, handlers } = harness({ model: planModel() });
+    await handlers['social.plan'](task('social.plan'), { now });
+    const post = store.proposeAction.mock.calls.map(([input]) => input).find(input => input.input.platform === 'instagram');
+    expect(post.input.imageUrl).toBe('https://cdn.example.com/brand-1.jpg');
+    expect(post.input).not.toHaveProperty('creativeAssetId');
+  });
+
+  it('starts a new ad from approved creative before writing new copy', async () => {
+    const adset = { id: '120200000000001', name: 'Intel prospecting', effective_status: 'ACTIVE' };
+    const meta = metaOf({ adsOverview: vi.fn(async () => ({
+      adsets: [{ id: adset.id, name: adset.name, active: true, dailyBudget: 2000 }],
+      ads: [{ id: '1', name: 'Only ad', adsetId: adset.id, active: true, createdAt: '2026-10-01T00:00:00Z', imageHash: null, copy: { message: 'm', headline: 'h', description: 'd', link: 'https://www.caremetricintel.com/' } }],
+      current: [], previous: [],
+    })) });
+    const model = modelReturning({ variants: [] });
+    const creative = { approved: vi.fn(async ({ platform }) => (platform === 'meta' ? [approvedAsset()] : [])) };
+    const { store, handlers } = harness({ meta, model, creative });
+    await handlers['social.ads'](task('social.ads'), { now });
+    const created = store.proposeAction.mock.calls.map(([input]) => input).find(input => input.kind === 'social.ad_create');
+    expect(created.input).toMatchObject({ creativeAssetId: approvedAsset().id, imageUrl: `https://help.caremetric.ai/api/creative/a/${token}.png`, link: approvedAsset().landingUrl, callToAction: 'SIGN_UP' });
+    expect(model.run).not.toHaveBeenCalled();
   });
 });

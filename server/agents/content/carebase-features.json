@@ -1,0 +1,384 @@
+{
+  "reviewed": "2026-11-09",
+  "product": "carebase",
+  "sources": {
+    "home": "https://cmcarebase.com/",
+    "features": "https://cmcarebase.com/features",
+    "faq": "https://cmcarebase.com/faq"
+  },
+  "contentSha256": "7bd40ded60bff4d4",
+  "edits": [
+    "\"Without a sales call\" is written \"on your own\": the team never mentions sales calls.",
+    "A sentence offering demo options is left out: CareMetric offers no demos."
+  ],
+  "overview": "Manage staff training, resident records, and daily tasks in one place. See what needs attention and keep documentation organized for your next survey.",
+  "summary": "CareBase brings training records, credentials, clearances, resident assessments, incidents, and inspections together. Assign follow-up tasks, monitor deadlines, and export the documentation your surveyor requests.",
+  "intro": "Explore tools for staff training, resident records, scheduling, facility operations, and survey preparation. Start with CareBase Core and add the modules your team needs.",
+  "legend": "These capabilities are available across CareBase Core and its add-ons. Your subscription determines which modules you can use. CareMetric Train offers training, live classes, and staff training-compliance tools as a separate plan.",
+  "publishedCount": 60,
+  "pillars": [
+    {
+      "title": "Prepare for your next survey",
+      "why": "Track requirements and due dates under Chapters 2600 and 2800, keep supporting records together, and export a binder for survey review. Missing records stay visible so your team can follow up.",
+      "area": "Survey readiness"
+    },
+    {
+      "title": "Spend less on required education",
+      "why": "Your course library is built and kept current for you by the CareMetric team, including AI-assisted courses based on your own policies. Live-class attendance, quizzes, and certificates are included. Compare these features with the training tools you pay for today.",
+      "area": "Education spend"
+    },
+    {
+      "title": "Spend less time chasing records",
+      "why": "Reminders, assigned tasks, and overdue alerts help staff keep work moving. Managers can see who is responsible and which records still need attention.",
+      "area": "Your time"
+    },
+    {
+      "title": "Courses prepared by our team and reviewed before publication",
+      "why": "The CareMetric team uses your regulations, policies, or reference documents to draft courses with AI assistance. Drafts can include lesson text, video scripts, and graded quizzes; a reviewer checks the content and source references. Optional presenter videos can accompany the lessons. A named reviewer must approve the course before publication, and regenerating a section requires a new review.",
+      "area": "Reviewed by a real person, every time"
+    },
+    {
+      "title": "A readiness score organized by regulatory topic",
+      "why": "Review each facility’s tracked requirements by regulatory topic. The score uses default planning weights to help prioritize gaps; it is not a prediction of survey results. Training, credentials, background checks, inspections, incidents, and policy acknowledgments contribute to the score. Topics with the lowest completion rates appear first.",
+      "area": "See which tracked requirements need attention"
+    },
+    {
+      "title": "Medication authorization roster",
+      "why": "The question a surveyor asks on-site: who is authorized to administer medications right now? Review medication-administration qualifications, annual practicums, and insulin authorization together, with any missing or expired requirements highlighted.",
+      "area": "Authorization status based on recorded qualifications"
+    },
+    {
+      "title": "Simple live-class attendance",
+      "why": "Trainers select employees for their class and mark attendance directly on the roster. Staff do not need a phone or an app. Print a meeting notice and attendance sheet, then upload the signed sheet to the class record and confirm the training hours.",
+      "area": "Attendance reviewed before training records are created"
+    }
+  ],
+  "modules": [
+    {
+      "name": "Training & compliance core",
+      "capabilities": [
+        "Today — daily priorities and due tasks",
+        "Compliance tracking & automatic alerts",
+        "Maintained course catalog with graded quizzes",
+        "Competency checklists & templates",
+        "Role-based training plans",
+        "Custom requirement catalog",
+        "Interactive compliance matrix + CSV export",
+        "Compliance reporting center",
+        "Audit-ready document storage",
+        "Offline-capable employee training player"
+      ],
+      "count": 10
+    },
+    {
+      "name": "AI, copilot & live training",
+      "capabilities": [
+        "AI curriculum generation from your documents, run by our team",
+        "AI avatar video lessons",
+        "Individual AI lesson sections revised for review",
+        "Compliance copilot with records and regulatory references",
+        "Plan-of-correction & mock-survey drafts for human review",
+        "Live class scheduling & digital sign-in",
+        "Employee rosters & trainer-recorded attendance",
+        "Printable meeting notices and attendance sheets"
+      ],
+      "count": 8
+    },
+    {
+      "name": "Resident care, clinical & operations",
+      "capabilities": [
+        "Digital RASP/ASP assessment prep",
+        "Automatic reassessment & support-plan triggers",
+        "Native clinical charting (vitals, notes, care plans)",
+        "FHIR sync for medications, allergies & diagnoses",
+        "Facility-wide resident compliance dashboard",
+        "Admissions, census & room readiness",
+        "Resident agreements & e-signature workflows",
+        "Resident services & daily work",
+        "Change-of-condition follow-up",
+        "Dietary & food-safety operations",
+        "Services calendar & transportation",
+        "Resident financial subledger",
+        "Medication event integration; native eMAR for enrolled facilities"
+      ],
+      "count": 13
+    },
+    {
+      "name": "Credentials & workforce",
+      "capabilities": [
+        "Credentials & clearances (Act 34 / 73 / 33, licenses, TB, I-9)",
+        "OAPSA provisional-employment countdown",
+        "Administrator qualification & CE tracking",
+        "Medication authorization roster",
+        "Policy attestation campaigns (ESIGN/UETA documentation)",
+        "Shift scheduling & auto-fill",
+        "Cross-facility float staff",
+        "Time-off requests & coverage awareness"
+      ],
+      "count": 8
+    },
+    {
+      "name": "Survey, safety & facility",
+      "capabilities": [
+        "One-click compliance binder PDF",
+        "Citation-weighted readiness score",
+        "Survey Day Mode workspace",
+        "Incident & complaint tracking with reporting deadlines",
+        "Confidential incident pathways & public safety reporting",
+        "Violations & plan-of-correction workflow",
+        "Fire drills & life-safety records",
+        "Library of 60+ document templates",
+        "Emergency operations",
+        "Maintenance & work orders",
+        "QAPI & quality projects",
+        "Work queue with owners, deadlines & follow-up",
+        "Documentation rooms & regulatory crosswalk"
+      ],
+      "count": 13
+    },
+    {
+      "name": "Access, portals & onboarding",
+      "capabilities": [
+        "Role-based access",
+        "Guest portals (move-in, agreements, designated person, documentation)",
+        "Public certificate verification links",
+        "Bulk CSV employee import",
+        "Email, SMS & in-app alerts with escalation",
+        "User invitations by email",
+        "Online organization signup",
+        "Installable mobile app for employees"
+      ],
+      "count": 8
+    }
+  ],
+  "newest": [
+    {
+      "name": "Survey Day Mode",
+      "headline": "A single workspace for the entrance conference",
+      "does": "Open Survey Day Mode to review your entrance-conference checklist, latest binder, on-shift staff roster, and prepared documentation rooms in one place. Training and clearance flags help staff respond to questions. The audit log records who starts and closes each session."
+    },
+    {
+      "name": "Compliance Copilot",
+      "headline": "Answers based on your facility’s records",
+      "does": "Ask about upcoming deadlines, missing medical evaluations, or training gaps. The copilot uses facility records and regulatory references to explain its answers. Proposed actions require human review and approval before they are carried out."
+    },
+    {
+      "name": "Clinical records & integrations",
+      "headline": "Chart care and import clinical records",
+      "does": "Record vitals, progress notes, assessments, and care plans in CareBase. Connect compatible clinical systems through FHIR to import medications, allergies, and diagnoses. Imported medication events are read-only. Native eMAR requires facility enrollment, clinical approval before use, and a documented switch to CareBase as the official medication administration record."
+    }
+  ],
+  "lifecycle": [
+    {
+      "step": "Inquiry & admission",
+      "text": "Track inquiries, preadmission requirements, room readiness, and resident agreements. Prepare the resident record before move-in."
+    },
+    {
+      "step": "Initial assessment & support plan",
+      "text": "Track initial assessment and support-plan deadlines for the facility type and admission circumstances. Keep orientation documentation with the resident record."
+    },
+    {
+      "step": "Every day",
+      "text": "Assign services and record completion, refusal, or follow-up. Keep dietary checks, appointments, transportation, notes, and imported medication events together."
+    },
+    {
+      "step": "When something changes",
+      "text": "Record a fall, hospital return, or other change, then track provider notifications, reassessment, support-plan review, and follow-up."
+    },
+    {
+      "step": "Every year",
+      "text": "Annual reassessment is scheduled automatically — and completing it triggers the support-plan update Chapter 2600 and 2800 require."
+    },
+    {
+      "step": "Move-out",
+      "text": "Discharge documentation, financial closeout, and a retained clinical and operational record that still answers a surveyor's question months later."
+    }
+  ],
+  "roles": [
+    {
+      "role": "Owner / executive (org admin)",
+      "sees": "summaries, trends, and unresolved issues across the organization’s facilities.",
+      "does": "compares facilities and reviews priorities for leadership and survey preparation."
+    },
+    {
+      "role": "Org admin",
+      "sees": "compliance across the whole organization, including resident assessments and clinical records.",
+      "does": "configures rules, requirements, and access once for every facility."
+    },
+    {
+      "role": "Facility manager",
+      "sees": "assigned sites only — overdue staff, open work, shift coverage, Survey Day Mode.",
+      "does": "resolves gaps, approves work, validates outside training records."
+    },
+    {
+      "role": "Trainer",
+      "sees": "class rosters, retraining queues, and the course catalog we maintain for you.",
+      "does": "runs classes, records attendance, assigns courses from the catalog, and manages practicum documentation."
+    },
+    {
+      "role": "Employee",
+      "sees": "their own assignments, schedule, and certificates — never coworker data.",
+      "does": "completes training, signs policies, and uploads records from their phone."
+    },
+    {
+      "role": "Surveyor",
+      "sees": "read-only documentation scoped to exactly what was requested.",
+      "does": "reviews the record without the ability to change anything."
+    }
+  ],
+  "beforeAfter": [
+    {
+      "before": "Sign-in sheets added up once a year",
+      "after": "Hours logged as the training happens"
+    },
+    {
+      "before": "A late night building the binder before each survey",
+      "after": "A binder PDF built from your live records"
+    },
+    {
+      "before": "Expired credentials found by the surveyor",
+      "after": "Reminders for upcoming and overdue renewals"
+    },
+    {
+      "before": "Nine spreadsheets only one person understands",
+      "after": "Shared records with access by role"
+    }
+  ],
+  "chapters": [
+    {
+      "chapter": "55 Pa. Code Chapter 2600",
+      "title": "I run a personal care home",
+      "text": "Your surveyor expects 12 hours of training a year per direct care worker (§2600.65, up to 6 on the job), current RASP assessments and support plans, medication practicums, Act 34 clearances, and fire drill logs — each documented and current. Completed training needs supporting records. CareBase keeps recorded hours, attendance, and certificates together for review.",
+      "highlights": [
+        "12-hour annual training requirement",
+        "+6 hrs for secured dementia units",
+        "Ch. 2600 mapped for you"
+      ]
+    },
+    {
+      "chapter": "55 Pa. Code Chapter 2800",
+      "title": "I run an assisted living facility",
+      "text": "Track 16 annual hours per direct care worker (§2800.65), separate dementia training (§2800.69), any additional special-care-unit training, and resident assessments and support plans (ASP). Each requirement has its own timing and documentation rules. Dementia training under §2800.69 does not count toward the 16-hour annual minimum. CareBase tracks those hours separately.",
+      "highlights": [
+        "16-hour annual training requirement",
+        "Dementia hrs tracked separately",
+        "Ch. 2800 mapped for you"
+      ]
+    }
+  ],
+  "faq": [
+    {
+      "question": "What is CareMetric CareBase?",
+      "answer": "CareBase is software for staff training, resident records, daily operations, and survey preparation. It is designed primarily for Pennsylvania personal care homes and assisted living facilities. Teams share records in one system, with access based on each person’s role and assigned facilities."
+    },
+    {
+      "question": "What can it replace?",
+      "answer": "Depending on your current tools, CareBase can replace separate training spreadsheets, attendance trackers, credential calendars, survey binders, basic staff schedules, incident logs, policy acknowledgment tools, and resident charge and payment ledgers. Compare the features with your existing workflows before retiring a tool."
+    },
+    {
+      "question": "What does it not replace?",
+      "answer": "CareBase works alongside your electronic health record system, payroll, timeclock, HR system, accounting ledger, claims system, and emergency-call system. Compatible clinical systems can connect through FHIR, a healthcare data exchange standard. Keep using your existing medication administration record unless your facility completes enrollment, clinical approval, and a documented switch to CareBase’s native eMAR. Any required accredited or external training still needs to come from an eligible provider."
+    },
+    {
+      "question": "Where do the savings come from?",
+      "answer": "Potential savings come from less duplicate entry, fewer manual reminders, quicker report preparation, and software you can stop paying for. Use the savings worksheet to estimate the value of time saved and software costs removed, using your own assumptions. It does not include savings from avoiding citations or other risks."
+    },
+    {
+      "question": "Which regulations does it help with?",
+      "answer": "CareBase supports tracking under 55 Pa. Code Chapters 2600 (PCH) and 2800 (ALF), including staff training, resident assessments, support plans, administrator qualifications, medication practicums, fire drills, and incidents. Training workflows also support Chapter 6400 homes and federal aide requirements. Your team remains responsible for checking applicable rules and completing required official forms."
+    },
+    {
+      "question": "Does it guarantee compliance or a deficiency-free survey?",
+      "answer": "No. CareBase helps your team track requirements, deadlines, responsibilities, and supporting records. Compliance and survey outcomes depend on accurate setup, qualified staff, completed work, and management follow-up."
+    },
+    {
+      "question": "How many annual training hours does my provider type need?",
+      "answer": "Annual minimums depend on the facility type, role, and duties. PCH direct care workers generally need 12 hours; ALF direct care workers need 16. Chapter 6400 requires 24 hours for direct service workers, their supervisors, and program specialists, and 12 for specified other roles. Nurse aides, home health aides, and hospice aides generally need 12 hours. Additional dementia, specialty-unit, and practical training requirements may apply. See the guide for details and sources."
+    },
+    {
+      "question": "Does it track resident-level compliance, not just staff?",
+      "answer": "Yes. For PCH and ALF facilities, CareBase tracks screening, assessments, reassessments, and support-plan updates. Deadlines differ by facility type and admission circumstances: for example, the PCH initial assessment is due within 15 days after admission, while the ALF assessment is generally due within the 30 days before admission. Specified ALF exceptions allow up to 15 days after admission. The required signed DHS form must still be retained."
+    },
+    {
+      "question": "How does it track yearly in-service hours?",
+      "answer": "Administrators confirm employee duties and applicable requirements, then assign courses and deadlines. Completed courses, finalized class attendance, and approved outside training provide records for review. Pending or rejected outside training does not receive credit. Annual totals follow the applicable training period and eligibility rules."
+    },
+    {
+      "question": "Do you support in-person, instructor-led training?",
+      "answer": "Yes. Trainers schedule classes, select employees for the roster, and mark who attended. They can print and upload a signed attendance sheet, confirm the training hours, and complete the class to create training records. Employees do not need to scan a code."
+    },
+    {
+      "question": "Who reviews AI-generated training content?",
+      "answer": "A named human reviewer must approve AI-generated courses before publication. The CareMetric team drafts content from source documents, and the reviewer checks accuracy, completeness, and references. Regenerating a section requires a new review."
+    },
+    {
+      "question": "What is the compliance copilot?",
+      "answer": "The compliance copilot helps answer questions about facility records and regulatory requirements, with references you can review. It can also draft proposed follow-up work. A person must review and approve an action before it is carried out; an answer or draft does not itself resolve a compliance gap."
+    },
+    {
+      "question": "How are incidents, violations, and plans of correction handled?",
+      "answer": "Incident workflows track reporting tasks and deadlines for the relevant authorities and support report preparation. Staff must make and document the required reports. Access restrictions protect sensitive incidents. Violations and plans of correction have their own due dates and review steps so managers can track corrective work through verification."
+    },
+    {
+      "question": "Can it schedule staff shifts too?",
+      "answer": "Yes. Set up units and shift types, record typical staff patterns, generate a draft schedule, and review it before publishing. Staff see published shifts in My Schedule. Cross-facility scheduling includes checks for overlapping assignments."
+    },
+    {
+      "question": "Do you track background-check requirements?",
+      "answer": "Yes. CareBase tracks Act 34, 73, and 33 clearances, Older Adults Protective Services Act (OAPSA) provisional-employment deadlines, and documented suitability decisions. Federal exclusion-list checks, including OIG LEIE and SAM.gov, must be completed outside CareBase."
+    },
+    {
+      "question": "Does CareBase keep a resident clinical record?",
+      "answer": "Yes. Staff can record vitals, progress notes, assessments, and care plans. Configured FHIR connections can import medications, allergies, and diagnoses from compatible systems. Imported medication events are read-only. Using CareBase’s native eMAR requires facility enrollment, clinical approval before use, and a documented switch to CareBase as the official medication administration record."
+    },
+    {
+      "question": "Can one organization manage multiple facilities?",
+      "answer": "Yes. Organization administrators can review all facilities in their organization; facility managers are limited to their assigned sites. Reports follow the same access rules. Portfolio plans offer additional rollout support and reporting for larger operators."
+    },
+    {
+      "question": "Can a state surveyor get read-only access?",
+      "answer": "Yes. Share a time-limited documentation room with only the records the surveyor requests. Surveyors never get a CareBase sign-in or edit access. Review the scope before sharing."
+    },
+    {
+      "question": "Do employees need to install anything?",
+      "answer": "No installation is required to use CareBase in a supported browser. Employees can also add the training player to a phone’s home screen. Eligible downloaded training can be completed offline and synchronized when the device reconnects."
+    },
+    {
+      "question": "Can staff get text or email reminders?",
+      "answer": "Yes. Configured reminders can notify staff about upcoming and overdue requirements by email and, when enabled, text message. Administrators can review unresolved alerts, weekly digests, and delivery status."
+    },
+    {
+      "question": "Are there guest portals for families and admissions?",
+      "answer": "Yes. Time-limited links support move-in packages, resident-agreement signing, designated-person access, and documentation review. Guests can access the records shared with them without a full user account."
+    },
+    {
+      "question": "What happens during an actual survey?",
+      "answer": "A manager can open Survey Day Mode to bring together the entrance-conference checklist, latest binder, on-shift staff roster, and prepared documentation rooms. Staff use those records to respond to requests and record what has been provided. Any cited violations can then be entered into the plan-of-correction workflow."
+    },
+    {
+      "question": "What if my administrator quits?",
+      "answer": "Your organization retains its requirements, records, deadlines, and history. An authorized administrator can update access and assign responsibilities so the next administrator can continue the work. Keep organization contacts and account permissions current during the transition."
+    },
+    {
+      "question": "Can I cancel and keep my records?",
+      "answer": "Yes. Your organization owns its records and can export them during the wind-down period after cancellation. Review the retention and export terms before closing the account."
+    },
+    {
+      "question": "Is CareBase easy for staff to use?",
+      "answer": "Staff have focused screens for their assignments, schedule, and records. For classes, the trainer records attendance on the roster, or staff can use a shared kiosk with a name and PIN. Training is available in a browser. Use the trial to check whether these workflows work well for your team."
+    },
+    {
+      "question": "Can a new organization start immediately?",
+      "answer": "You can begin signup online on your own. Enter your organization details, verify your email, and set a password, then import staff and configure requirements during the free trial."
+    },
+    {
+      "question": "Can we bring over our existing roster?",
+      "answer": "Yes. Upload a CSV staff roster, review the import preview, and resolve any flagged entries before applying it. You can also add employees individually."
+    }
+  ],
+  "caveats": [
+    "The score uses default planning weights to help prioritize gaps; it is not a prediction of survey results",
+    "CareBase works alongside your electronic health record system, payroll, timeclock, HR system, accounting ledger, claims system, and emergency-call system. Compatible clinical systems can connect through FHIR, a healthcare data exchange standard. Keep using your existing medication administration record unless your facility completes enrollment, clinical approval, and a documented switch to CareBase’s native eMAR. Any required accredited or external training still needs to come from an eligible provider.",
+    "No. CareBase helps your team track requirements, deadlines, responsibilities, and supporting records. Compliance and survey outcomes depend on accurate setup, qualified staff, completed work, and management follow-up."
+  ]
+}
