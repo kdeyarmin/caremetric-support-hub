@@ -22,7 +22,7 @@ import { growthSettings, quietUntil } from '../growth/settings.mjs';
 import { conversationKinds, followupAlert, kindWord, trialAlert } from '../growth/words.mjs';
 import { formTargets as defaultFormTargets } from '../targets.mjs';
 import { shortFailure } from './probe.mjs';
-import { dueMoment, mustHaveReached, plural, recordRun } from './shared.mjs';
+import { dueMoment, heldForScorecard, heldResult, mustHaveReached, plural, recordRun } from './shared.mjs';
 
 export const growthFeature = 'platform.agents.growth.v1';
 const declared = features => (features instanceof Set ? features.has(growthFeature) : Array.isArray(features) && features.includes(growthFeature));
@@ -226,6 +226,8 @@ export function growthHandlers({
     const asked = task.sourceKind === 'owner';
     const due = asked ? moment : dueMoment(task) ?? moment;
     if (!asked && weekday.format(due) !== 'Mon') return { result: { skipped: 'not_monday' } };
+    // The Monday scorecard carries this report while the owner's "Send the individual weekly reports" is off.
+    if (await heldForScorecard({ store, log }, task)) return heldResult({ week: weekStart(due) });
     const today = easternDate(due);
     const [year, month, day] = today.split('-').map(Number);
     const since = easternMidnight(new Date(Date.UTC(year, month - 1, day - 7)).toISOString().slice(0, 10));

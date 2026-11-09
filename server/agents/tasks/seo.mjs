@@ -29,7 +29,7 @@ import { searchConsoleReader } from '../seo/search-console.mjs';
 import { sites as defaultSites } from '../seo/sites.mjs';
 import { weekStart } from '../accounts/week.mjs';
 import { delivered } from '../notify.mjs';
-import { plural, recordRun } from './shared.mjs';
+import { heldForScorecard, heldResult, plural, recordRun } from './shared.mjs';
 
 const dayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
 const dayLabel = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' });
@@ -371,6 +371,8 @@ export function seoHandlers({
     const started = clock();
     const date = dayKey.format(moment);
     const dedupeKey = task.sourceKind === 'owner' ? `seo:${date}:${task.id}` : `seo:${week}`;
+    // The Monday scorecard carries this report (it crawls the sites itself) while the owner's "Send the individual weekly reports" is off.
+    if (await heldForScorecard({ store, log }, task)) return heldResult({ week });
     if (task.sourceKind === 'schedule' && store.notificationStatus && ['sent','unknown','pending','suppressed'].includes(await store.notificationStatus(dedupeKey))) return { result: { skipped: 'already_attempted', week } };
 
     // The sites are different hosts, so they are checked side by side: each has its own deadline, well inside the task's.

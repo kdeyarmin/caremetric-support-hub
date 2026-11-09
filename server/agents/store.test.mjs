@@ -9,6 +9,20 @@ const harness = (result = null) => {
 const when = new Date('2026-11-02T13:00:00Z');
 
 describe('agent store', () => {
+  it('reads the Monday scorecard\'s setting and figures only when the database declares the scorecard', async () => {
+    expect(harness().store.individualReports).toBeUndefined();
+    expect(harness().store.scorecardFacts).toBeUndefined();
+    const calls = [];
+    const pool = { connect: async () => ({ query: async (sql, args) => { if (/^select/.test(sql)) { calls.push([sql, args]); return { rows: [{ result: false }] }; } return { rows: [] }; }, release() {} }) };
+    const store = sqlAgentStore(pool, { scorecard: true });
+    expect(await store.individualReports()).toBe(false);
+    await store.scorecardFacts({ since: when, until: when });
+    expect(calls).toEqual([
+      ['select private.agent_individual_reports() as result', []],
+      ['select private.agent_scorecard_facts($1, $2) as result', [when, when]],
+    ]);
+  });
+
   it('carries the external email claim and settlement execution fences to their private operations', async () => {
     const { store, calls } = harness();
     await store.externalEmailBeginSend({ actionId: 'a1', execution: 3, claim: false });

@@ -21,7 +21,7 @@ import { weekStart, easternDate, easternMidnight } from '../accounts/week.mjs';
 import { delivered } from '../notify.mjs';
 import { redact } from '../concierge/redact.mjs';
 import { screenIdentifiers } from '../concierge/screen.mjs';
-import { dueMoment, permanent, plural, recordRun, when } from '../tasks/shared.mjs';
+import { dueMoment, heldForScorecard, heldResult, permanent, plural, recordRun, when } from '../tasks/shared.mjs';
 import { playbookFor } from '../../growth/playbook.mjs';
 import {
   adPromptVersion, adSchema, adSystem, checkSocialText, planPromptVersion, planSchema, planSystem, replyPromptVersion, replySchema, replySystem,
@@ -360,6 +360,8 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     const moment = now();
     const week = weekStart(dueMoment(task) ?? moment);
     const asked = task.sourceKind === 'owner';
+    // The Monday scorecard carries this report (ad spend and failing ads) while the owner's "Send the individual weekly reports" is off.
+    if (await heldForScorecard({ store, log }, task)) return heldResult({ week });
     const notes = [];
     let posts = [];
     for (const [on, client, name] of [[metaPosts, meta, 'Meta'], [li.configured.page, li, 'LinkedIn']]) {
