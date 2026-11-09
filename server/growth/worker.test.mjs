@@ -187,3 +187,12 @@ it('sends a growth message as a letter: Hello, the approved words, the product t
  // A CareBase page in an Intel message is never made a link.
  expect(growthEmail({product:'caremetric-intel',subject:'S',body:'See https://cmcarebase.com/signup',postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'}).html).not.toContain('href="https://cmcarebase.com/signup"');
 });
+it('links a product page with well-formed campaign tags in a growth email, and never a tag that leads elsewhere',()=>{
+ const tagged='https://www.caremetricintel.com/county-report?utm_source=caremetric&utm_medium=email&utm_campaign=growth-intel-touch1';
+ const html=growthEmail({product:'caremetric-intel',subject:'S',body:`See your county:\n${tagged}`,postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'}).html;
+ expect(html).toContain(`href="${tagged.replaceAll('&','&amp;')}"`);
+ const smuggled=`${tagged}&next=https://evil.example`;
+ const refused=growthEmail({product:'caremetric-intel',subject:'S',body:`See:\n${smuggled}`,postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'}).html;
+ expect(refused).not.toContain('evil.example"');
+ expect(refused).not.toMatch(/href="[^"]*evil\.example/);
+});

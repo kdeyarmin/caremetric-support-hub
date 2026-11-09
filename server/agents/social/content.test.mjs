@@ -52,6 +52,28 @@ describe('checking social text', () => {
   });
 });
 
+describe('tagged links in social text', () => {
+  const tagged = 'https://cmcarebase.com/signup?utm_source=facebook&utm_medium=social&utm_campaign=social-carebase&utm_content=post';
+  it('accepts a well-formed tagged product link, keeps its tags, and measures length without them', () => {
+    expect(fb(`Start a 30-day free trial: ${tagged}`)).toEqual({ ok: true, text: `Start a 30-day free trial: ${tagged}` });
+    const words = 'Questions about the trial? Send us a message any time. '.repeat(4).trim();
+    expect(words.length + ' https://cmcarebase.com/signup'.length).toBeLessThanOrEqual(300);
+    expect(checkSocialText(`${words} ${tagged}`, { surface: 'comment', product: 'carebase' })).toMatchObject({ ok: true });
+    expect(checkSocialText(`See ${tagged}`, { surface: 'ad_message', product: 'carebase' })).toMatchObject({ ok: false, reason: 'link' });
+  });
+
+  it('refuses a tag that carries another host, path or parameter', () => {
+    for (const url of [
+      'https://cmcarebase.com/signup?utm_source=facebook&utm_medium=social&utm_campaign=x&next=https://evil.example',
+      'https://cmcarebase.com/signup?utm_source=facebook&utm_medium=social&utm_campaign=evil.example/x',
+      'https://cmcarebase.com/signup?utm_source=facebook&utm_medium=social&utm_campaign=x=person@example.com',
+      'https://cmcarebase.com/nope?utm_source=facebook&utm_medium=social&utm_campaign=x',
+      'https://evil.example/?utm_source=facebook&utm_medium=social&utm_campaign=x',
+      'https://www.caremetricintel.com/?utm_source=facebook&utm_medium=social&utm_campaign=x',
+    ]) expect(fb(`Start here: ${url}`), url).toMatchObject({ ok: false, reason: 'link' });
+  });
+});
+
 describe('the Social Media Manager prompts', () => {
   it('are constants carrying the rules, the fact sheet and the playbook', () => {
     for (const prompt of [planSystem, adSystem, replySystem]) {

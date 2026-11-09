@@ -62,7 +62,7 @@ export function bulkEmailHtml({ subject, body, applications, unsubscribeUrl, pos
  * SendGrid Mail Send for bulk email: one recipient per request, text then HTML, one-click unsubscribe headers, no tracking. The
  * Account Manager's customer emails use the same sender under their own SendGrid category.
  */
-export function sendgridBulkMail({ apiKey, from = 'support@caremetric.ai', replyTo = from, category = 'hub-bulk-email', fetchImpl = fetch }) {
+export function sendgridBulkMail({ apiKey, from = 'support@caremetric.ai', fromName = 'CareMetric', replyTo = from, category = 'hub-bulk-email', fetchImpl = fetch }) {
   const configured = typeof apiKey === 'string' && apiKey.startsWith('SG.') && emailAddress.test(from) && emailAddress.test(replyTo) && /^[a-z0-9-]{1,40}$/.test(category);
   return {
     configured,
@@ -73,7 +73,7 @@ export function sendgridBulkMail({ apiKey, from = 'support@caremetric.ai', reply
         response = await fetchImpl('https://api.sendgrid.com/v3/mail/send', {
           method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(15000),
           body: JSON.stringify({
-            personalizations: [personalization], ...(messageId ? { custom_args: { growth_message_id: messageId } } : {}), from: { email: from, name: 'CareMetric' }, reply_to: { email: replyTo }, subject,
+            personalizations: [personalization], ...(messageId ? { custom_args: { growth_message_id: messageId } } : {}), from: { email: from, name: fromName }, reply_to: { email: replyTo }, subject,
             content: [{ type: 'text/plain', value: text }, ...(html ? [{ type: 'text/html', value: html }] : [])], categories: [category],
             tracking_settings: { click_tracking: { enable: false }, open_tracking: { enable: false }, subscription_tracking: { enable: false } },
           }),

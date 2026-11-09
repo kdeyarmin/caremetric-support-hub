@@ -6,6 +6,7 @@ import { fireDrillDraft, referralDraft } from './agents/content/fixtures.mjs';
 import { topics } from './agents/content/topics.mjs';
 import { checkDraft } from './agents/content/validate.mjs';
 import { legalDisclaimer, officialSources } from './agents/content/facts.mjs';
+import { untaggedUrl } from './agents/links.mjs';
 
 const topic = key => topics.find(item => item.key === key);
 const referral = checkDraft(referralDraft, { topic: topic('home-health-referral-marketing') }).article;
@@ -23,10 +24,12 @@ describe('an article\'s parts', () => {
     expect(parts.body).toBe(referralDraft.body);
     expect(parts.questions).toEqual(referralDraft.faq);
     expect(parts.citations.map(link => link.url)).toEqual(referralDraft.citations);
-    expect(parts.internalLinks).toEqual([
+    // The links exactly as published: product pages carry the Content Marketer's campaign tags.
+    expect(parts.internalLinks.map(link => ({ label: link.label, url: untaggedUrl(link.url) }))).toEqual([
       { label: 'CareMetric Intel', url: 'https://www.caremetricintel.com/' },
       { label: 'A practical framework for targeted healthcare marketing', url: 'https://www.caremetricintel.com/resources/targeted-healthcare-marketing-framework' },
     ]);
+    expect(parts.internalLinks.every(link => new URL(link.url).searchParams.has('utm_campaign'))).toBe(true);
     expect(parts.disclaimer).toBeNull();
   });
 
