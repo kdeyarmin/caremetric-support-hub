@@ -101,6 +101,10 @@ describe('the work', () => {
     expect(new Set(audiences).size).toBe(4);
     expect(audiences.filter(audience => /home health|hospice/.test(audience)).length).toBeLessThanOrEqual(2);
     expect(store.creativeBriefCreate.mock.calls.find(([brief]) => brief.planRef === 'social.post:a3')[0].audience).toMatch(/ at hospitals$/);
+    // Each brief also leads with a different part of what Intel does.
+    const focuses = store.creativeBriefCreate.mock.calls.map(([brief]) => /^Feature focus: ([^(]+) \(/.exec(brief.angle)?.[1]);
+    expect(focuses.every(Boolean)).toBe(true);
+    expect(new Set(focuses).size).toBe(4);
   });
 
   it('drafts a brief: concept on the quality tier, variants on the draft tier, every word checked, a failing variant blocked', async () => {

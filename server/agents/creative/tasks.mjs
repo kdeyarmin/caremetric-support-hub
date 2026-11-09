@@ -23,6 +23,7 @@ import { weekStart, easternDate } from '../accounts/week.mjs';
 import { marketedNow, markets } from '../marketing.mjs';
 import { delivered } from '../notify.mjs';
 import { dueMoment, permanent, plural, recordRun } from '../tasks/shared.mjs';
+import { focusFor } from '../content/features.mjs';
 import { badgeText, checkCopy, checkPlatform, checkText, checkVideo, checkVisual, verdictOf } from './compliance.mjs';
 import {
   audienceFor, namedSegment, segmentFor,
@@ -124,16 +125,22 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     let turn = Math.floor(Date.parse(week) / (7 * day));
     // The segments plan items name are taken first, so a brief that takes its turn does not repeat one.
     const used = new Set(chosen.map(([, items]) => namedSegment(items[0].product, textOf(items))).filter(Boolean));
+    // Each Intel brief also leads with one part of what Intel does (the site's "why it matters" pillars): the one its plan text is about,
+    // else the next in turn, so the week's briefs show different features rather than territory analysis every time.
+    const focused = new Set();
+    let focusTurn = turn;
     for (const [key, items] of chosen) {
       const first = items[0];
       const pillar = goals[first.pillar] ? first.pillar : 'tip';
       const platforms = [...new Set(items.map(item => socialPlatform[item.platform]).filter(Boolean))];
       const segment = segmentFor(first.product, textOf(items), turn, used);
       if (segment) { used.add(segment); turn += 1; }
+      const focus = focusFor(first.product, textOf(items), focusTurn, focused);
+      if (focus) { focused.add(focus.title); focusTurn += 1; }
       const brief = {
         product: first.product, goal: goals[pillar], audience: audienceFor(first.product, segment), offerCode: pillar === 'offer' && offerFor('FOUNDERS50')?.products.includes(first.product) ? 'FOUNDERS50' : null,
         platforms: platforms.length ? platforms : ['meta', 'linkedin'], formats: ['capability', 'offer'].includes(pillar) ? ['static', 'video'] : ['static'], videoLengths: ['15s'],
-        angle: `From the ${first.source === 'social.plan' ? `week's ${pillar} posts` : 'approved content brief'}: ${items.map(item => item.text).join(' / ')}`.slice(0, 500),
+        angle: `${focus ? `Feature focus: ${focus.title} (${focus.area}). ` : ''}From the ${first.source === 'social.plan' ? `week's ${pillar} posts` : 'approved content brief'}: ${items.map(item => item.text).join(' / ')}`.slice(0, 500),
         source: first.source === 'social.plan' ? 'social.plan' : 'growth.plan', planRef: first.ref, requestKey: `plan:${key}`,
       };
       const saved = await store.creativeBriefCreate(brief);

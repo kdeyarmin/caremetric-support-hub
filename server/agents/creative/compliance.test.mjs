@@ -41,6 +41,23 @@ describe('copy compliance', () => {
     expect(rulesOf(intel({ headline: 'Double your referrals this quarter' }))).toContain('block:unsubstantiated_claim');
   });
 
+  it('unsubstantiated_claim: never promises compliance, however the Stark feature is described', () => {
+    for (const primaryText of ['Stay Stark compliant automatically with CareMetric Intel.', 'Keep every meal Stark-compliant.', 'Never exceed the Stark limit again.',
+      'Avoid Stark violations before they happen.', 'Compliant automatically, every time.']) {
+      expect(rulesOf(intel({ primaryText })), primaryText).toContain('block:unsubstantiated_claim');
+    }
+    // The feature itself, in the site's terms, passes: it tracks; it does not promise.
+    expect(intel({ primaryText: 'CareMetric Intel tracks each physician against the Stark annual limit and flags meal caps and missing receipts.' })).toEqual([]);
+    expect(intel({ primaryText: 'Expense tools that support your compliance program, with CareMetric Intel.' })).toEqual([]);
+  });
+
+  it('fact_sheet: allows the numbers Intel\'s published features state, and still no other', () => {
+    expect(intel({ primaryText: 'CareMetric Intel imports up to 2,000 accounts and flags accounts that go 45 days without a visit.' })).toEqual([]);
+    expect(rulesOf(intel({ primaryText: 'CareMetric Intel flags accounts that go 40 days without a visit.' }))).toContain('block:fact_sheet');
+    // Intel's FAQ says no savings are "guaranteed": that negation never lets a guarantee through.
+    expect(rulesOf(intel({ headline: 'Guaranteed referrals' }))).toContain('block:unsubstantiated_claim');
+  });
+
   it('unsubstantiated_claim: allows a claim the fact source states word for word', () => {
     // "Free onboarding." and "Unlimited residents and staff" are on the fact sheet; neither is a guarantee, but the exemption is the same.
     expect(rulesOf(carebase({ primaryText: 'Unlimited residents and staff; nobody is counted per person.' }))).not.toContain('block:unsubstantiated_claim');

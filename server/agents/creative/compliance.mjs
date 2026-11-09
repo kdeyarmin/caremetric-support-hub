@@ -31,6 +31,7 @@
  * copy past where the feed cuts it off warns.
  */
 import { screenIdentifiers } from '../concierge/screen.mjs';
+import { featuresText } from '../content/features.mjs';
 import { factSheetText, factsRevision } from '../content/facts.mjs';
 import { allowedNumbers, normalizeTerms, textProblems } from '../content/validate.mjs';
 import { productAmounts } from '../../growth/draft.mjs';
@@ -47,10 +48,15 @@ const block = (rule, message) => ({ rule, level: 'block', message });
 const warn = (rule, message) => ({ rule, level: 'warn', message });
 
 let sourceCache = { revision: -1 };
-/** The Sales Executive's fact source, lowercased, and the numbers it states: read again when the facts change (Intel's catalog). */
+/**
+ * The Sales Executive's fact source, lowercased, and the numbers a creative may state: read again when the facts change (Intel's catalog).
+ * A claim (a guarantee, a superlative, a compliance assurance) is allowed only when the fact sheet or the playbook says it. Intel's
+ * published feature catalog (content/features.mjs) adds its numbers ("up to 2,000 accounts", "45 days without a visit") but vouches for
+ * no claim: its own wording includes negations ("no savings ... is guaranteed", "not legal advice") that must not let the claim through.
+ */
 const factSource = () => {
   if (sourceCache.revision !== factsRevision) {
-    sourceCache = { revision: factsRevision, text: `${factSheetText()}\n${playbookText()}`.toLowerCase(), numbers: allowedNumbers([]) };
+    sourceCache = { revision: factsRevision, text: `${factSheetText()}\n${playbookText()}`.toLowerCase(), numbers: allowedNumbers([featuresText('caremetric-intel')]) };
   }
   return sourceCache;
 };
@@ -69,7 +75,7 @@ const personalAttributes = new RegExp([
 ].join('|'), 'i');
 const claimPatterns = [
   ['guarantee', /\bguarantee[sd]?\b|\bguaranteeing\b|\bwarrant(?:y|ies|ed)\b|\brisk[- ]free\b|\bmoney[- ]back\b|\bno risk\b/gi],
-  ['compliance_assurance', /\b100\s?%\s+(?:compliant|compliance|accurate|success|ready|survey[- ]ready)\b|\b(?:fully|always|automatically|totally|completely)\s+compliant\b|\bensur(?:e|es|ed|ing)\s+(?:\w+\s+){0,2}compliance\b|\b(?:keeps?|make[s]?|stay[s]?)\s+(?:you\s+|your\s+(?:\w+\s+){0,2})?compliant\b|\bcompliance\s+(?:is\s+)?(?:guaranteed|assured|automatic)\b|\bpass(?:es|ed|ing)?\s+(?:\w+\s+){0,3}(?:inspections?|surveys?|audits?)\b|\b(?:survey|inspection|audit|citation|deficiency)[- ](?:proof|free)\b|\b(?:zero|no more)\s+(?:citations|deficiencies|violations|fines)\b/gi],
+  ['compliance_assurance', /\b100\s?%\s+(?:compliant|compliance|accurate|success|ready|survey[- ]ready)\b|\b(?:fully|always|automatically|totally|completely)\s+compliant\b|\bensur(?:e|es|ed|ing)\s+(?:\w+\s+){0,2}compliance\b|\b(?:keeps?|make[s]?|stay[s]?)\s+(?:you\s+|your\s+(?:\w+\s+){0,2})?compliant\b|\bcompliance\s+(?:is\s+)?(?:guaranteed|assured|automatic)\b|\bpass(?:es|ed|ing)?\s+(?:\w+\s+){0,3}(?:inspections?|surveys?|audits?)\b|\b(?:survey|inspection|audit|citation|deficiency)[- ](?:proof|free)\b|\b(?:zero|no more)\s+(?:citations|deficiencies|violations|fines)\b|\b(?:keep|keeps|keeping|stay|stays|staying|remain|remains|remaining)\s+(?:\w+[\s-]+){0,3}compliant\b|\bcompliant\s+(?:automatically|always|every time|guaranteed)\b|\b(?:stark|anti-?kickback)[- ](?:compliant|safe|proof)\b|\bnever\s+(?:exceed|break|violate|go over|cross)\s+(?:\w+\s+){0,2}(?:stark|anti-?kickback|limits?)\b|\b(?:avoid|avoids|prevent|prevents|eliminate|eliminates|stop|stops)\s+(?:\w+[\s-]+){0,2}(?:stark|anti-?kickback|compliance|regulatory)\s+(?:violations?|risks?|issues?|problems?|penalties|fines)\b/gi],
   ['certification', /\b(?:hipaa|soc\s?2|hitrust|iso\s?27001)[- ]?(?:certified|certification|compliant|accredited)\b|\b(?:certified|accredited)\s+(?:by|under)\b/gi],
   ['superlative', /#\s?1\b|\bnumber[- ]one\b|\bthe (?:best|leading|top[- ]rated|most trusted|only)\b|\bindustry[- ]leading\b|\bworld[- ]class\b|\bunmatched\b|\bunbeatable\b/gi],
   ['outcome', /\b(?:double|triple|10x|2x|3x)\s+(?:your\s+)?(?:referrals|revenue|census|admissions|leads|sales)\b|\b(?:more|guaranteed)\s+(?:referrals|revenue|admissions)\s+(?:in|within)\b|\bincrease (?:your )?(?:referrals|revenue|census) by\b/gi],

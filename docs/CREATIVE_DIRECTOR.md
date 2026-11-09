@@ -47,8 +47,23 @@ A brief names the product, a goal, an audience (organizations and roles, never a
 platforms, images and/or videos with their lengths, an optional angle and an optional offer code. The model is given the brief, the
 product's own pages (by id), the brand kit's voice, banned phrases and required disclaimers, the owner's screenshots (by id and label), the
 product's learnings and its recent headlines (not to repeat), and, for a revision, the asset it replaces and the owner's note. Its system
-prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.3` and `creative-variants.3`) carry the fact sheet and the sales
+prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.4` and `creative-variants.4`) carry the fact sheet and the sales
 playbook (the Sales Executive's fact source) and are cached. The answers are closed JSON schemas.
+
+**What Intel does, feature by feature** (`server/agents/content/features.mjs`, data in `intel-features.json`). The prompts carry Intel's
+published catalog, read from https://www.caremetricintel.com/features and its home page: every feature (97 in 11 areas: the healthcare
+marketing CRM, daily field work, expenses, mileage and Stark-limit tracking, referral and admission tracking with EMR report imports,
+prospecting, market and territory research, competitor intelligence, manager tools, email campaigns, reports, and administration) with the
+plan or role it needs; why each part matters (the site's nine "why it matters" pillars); the data behind it (providers, facilities,
+territories, utilization and quality, and the organization's own results), each with what is included, its source (NPPES, CMS files and
+Care Compare, the Census Bureau's American Community Survey, state licensing files), the decision it helps make and its limit; each care
+setting; the manager view; the product questions and answers; and the site's own caveats. The model is told to sell one feature per asset
+by the decision it helps make or the work it saves, to vary features across variants, to respect plan labels, and never to imply that
+public data confirms referrals or that the expense tools make anyone compliant. Planned Intel briefs each lead with a different pillar
+(the one the plan post is about, else the next in turn). The catalog's numbers are allowed in copy ("up to 2,000 accounts", "45 days
+without a visit"); it vouches for no claim, and its percentages are not allowed. Refresh it with `npm run refresh:intel-features` when
+Intel's pages change (`npm run refresh:intel-features -- --check` says whether they have); the EMR vendors Intel names for its CSV imports
+are written generically, because the team names no other product.
 
 **Audiences come from the fact sheet's "who it is for"**, so creative never narrows a product to part of its market. CareMetric Intel is
 for home health agencies, hospice agencies, hospitals, nursing homes and personal care homes; CareBase for Pennsylvania personal care homes
@@ -145,7 +160,7 @@ be approved automatically (the database refuses one).
 | --- | --- | --- |
 | `phi` | No identifier (record, member or Medicare number, date of birth), no named patient, resident or person, nothing about a person's health or care | block |
 | `personal_attributes` | No assertion or implication of the reader's health, finances, age or other personal attributes (Meta's personal-attributes policy) | block on Meta, warn elsewhere |
-| `unsubstantiated_claim` | No guarantee, compliance assurance ("100% compliant", "ensures compliance", "pass your survey"), certification, superlative (#1, best, leading, only) or outcome promise, unless the exact claim is in the Sales Executive's fact source (fact sheet and sales playbook) | block |
+| `unsubstantiated_claim` | No guarantee, compliance assurance ("100% compliant", "ensures compliance", "pass your survey"), certification, superlative (#1, best, leading, only) or outcome promise, unless the exact claim is in the Sales Executive's fact source (fact sheet and sales playbook) ; also any promise of compliance however phrased ("stay Stark-compliant", "never exceed the Stark limit", "avoid violations") | block |
 | `government_endorsement` | Nothing that says or implies CMS, Medicare, Medicaid, a state or another government body approves, endorses, certifies or partners with CareMetric. Public data is fine | block |
 | `offer_mismatch` | Only billing's live offers (`offers.mjs`, read from the Founders Sale coupon: FOUNDERS50, 50% for the first 12 months, CareBase and Intel only), with their own percentage and length; no code to type (the Founders Sale applies itself); no invented deadline or scarcity; only this product's listed prices | block |
 | `brand_name` | "CareMetric" is one word, exactly so; CareBase, CareMetric Intel, Intel exactly | block |

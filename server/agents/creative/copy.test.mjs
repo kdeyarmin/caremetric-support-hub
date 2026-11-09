@@ -16,6 +16,11 @@ describe('creative copy', () => {
       expect(system).toContain('Never tell anyone to enter or use a code');
       expect(system).toContain('CMS, Medicare, Medicaid');
       expect(system).toContain('brandTheme');
+      // Every published Intel feature, why it matters and the data behind it, with what not to imply.
+      expect(system).toContain('CareMetric Intel features and data');
+      expect(system).toContain('Stark annual limit tracking');
+      expect(system).toContain('The decision it helps make');
+      expect(system).toContain('Quote none of the catalog\'s percentages');
     }
   });
 
@@ -69,6 +74,10 @@ describe('creative copy', () => {
     expect(message.brandTheme).toEqual({ name: 'CareBase', mode: 'light', tagline: null });
     const intel = JSON.parse(briefUserMessage({ brief: { product: 'caremetric-intel', goal: 'g', audience: 'a', angle: '', platforms: ['meta'], formats: ['static'], videoLengths: [], offerCode: null }, brandKit: {}, learnings: [] }));
     expect(intel.brandTheme).toEqual({ name: 'Emberline', mode: 'dark', tagline: 'Set your marketing on FIRE!' });
+    // A brief aimed at one kind of organization gets the site's own paragraph for it; one aimed at all of them, none.
+    expect(intel.careSetting).toBeNull();
+    const hospitals = JSON.parse(briefUserMessage({ brief: { product: 'caremetric-intel', goal: 'g', audience: audienceFor('caremetric-intel', 'hospitals'), angle: '', platforms: ['meta'], formats: ['static'], videoLengths: [], offerCode: null }, brandKit: {}, learnings: [] }));
+    expect(hospitals.careSetting).toContain('hospital and post-acute utilization');
   });
 });
 
