@@ -63,7 +63,8 @@ export async function lookupGoLiveHostname(hostname, timeoutMs = 5000) {
  * logged, or measured), and the help hostname is resolved live.
  * The evaluation reports only; it changes nothing.
  */
-export function goLiveReadiness({ pool, rpc, env = process.env, lookup = lookupGoLiveHostname, now = () => new Date() }) {
+// `automationEnabled` reads the Hub setting (server/hub-settings.mjs); without it, the Railway variable as before.
+export function goLiveReadiness({ pool, rpc, env = process.env, automationEnabled = () => env.HUB_AI_AUTOMATION_ENABLED === 'true', lookup = lookupGoLiveHostname, now = () => new Date() }) {
   async function handle(sessionToken) {
     const context = await rpc('get_support_actor_context', {}, sessionToken);
     if (context?.role !== 'platform_admin') {
@@ -97,7 +98,7 @@ export function goLiveReadiness({ pool, rpc, env = process.env, lookup = lookupG
         ],
       },
       anthropicKey: { present: typeof key === 'string' && key.trim().length > 0 },
-      aiAutomation: { enabled: env.HUB_AI_AUTOMATION_ENABLED === 'true' },
+      aiAutomation: { enabled: automationEnabled() === true },
       helpDomain: { hostname: goLiveHostname, resolves: targets.length > 0, targets },
     };
   }

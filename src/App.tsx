@@ -104,6 +104,7 @@ const PortfolioRollup = lazy(() => import("./admin/PortfolioRollup").then(module
 const GoLiveReadiness = lazy(() => import("./admin/GoLiveReadiness").then(module => ({ default: module.GoLiveReadiness })));
 const Team = lazy(() => import("./admin/Team").then(module => ({ default: module.Team })));
 const Creative = lazy(() => import("./admin/Creative").then(module => ({ default: module.Creative })));
+const Settings = lazy(() => import("./admin/Settings").then(module => ({ default: module.Settings })));
 const Leads = lazy(() => import("./admin/Leads").then(module => ({ default: module.Leads })));
 const BulkEmail = lazy(() => import("./admin/BulkEmail").then(module => ({ default: module.BulkEmail })));
 const BillingWorkspace = lazy(() => import("./billing/BillingWorkspace").then(module => ({ default: module.BillingWorkspace })));
@@ -402,6 +403,7 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
             <Route path="/admin/growth" element={data.actor.role === "platform_admin" ? <Growth key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/team" element={data.actor.role === "platform_admin" ? <Team key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/creative" element={data.actor.role === "platform_admin" ? <Creative key={data.actor.id} /> : <Navigate to="/overview" replace />} />
+            <Route path="/admin/settings" element={data.actor.role === "platform_admin" ? <Settings key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/admin/leads" element={data.actor.role === "platform_admin" ? <Leads key={data.actor.id} /> : <Navigate to="/overview" replace />} />
             <Route path="/communications" element={staff ? <CommunicationsRoute data={data} communications={demoCommunications} /> : <Navigate to="/overview" replace />} />
             <Route path="/overview" element={<OverviewPage data={data} />} />

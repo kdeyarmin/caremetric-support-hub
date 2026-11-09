@@ -1,5 +1,5 @@
 -- Additive deployment gate for the Creative Director. Declaring the feature changes no behavior by itself (the agent is seeded paused,
--- its two autonomy steps start off, and the Hub registers its work only when HUB_CREATIVE_ENABLED is also true): it states that the five
+-- its two autonomy steps start off, and its work runs only while Settings → Creative → "Turn on the Creative Director" is on): it states that the five
 -- tables are closed to every role; that the agent and its four schedules exist; that its three action kinds and its target are checked
 -- kinds owned by the Creative Director alone, and an asset with a compliance warning can never be automatically approved; that a decision
 -- on a proposed asset updates it (the trigger); that every server operation is a security definer with a pinned empty search path,

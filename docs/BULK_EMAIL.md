@@ -38,7 +38,7 @@ handed to SendGrid; messages already in flight finish.
 
 ## What every message contains
 
-Messages come from `CareMetric <HUB_SUPPORT_FROM_EMAIL>` (support@caremetric.ai), the one
+Messages come from `CareMetric <support sender>` (Settings → Email; support@caremetric.ai), the one
 address every Hub email comes from, with replies to the support address. Each one has two parts that say the same thing: plain text,
 and HTML in the shared CareMetric email layout (`server/email-layout.mjs`, the
 personal style also used for support replies). The HTML shows the
@@ -50,7 +50,7 @@ Hub adds:
 --
 You are receiving this email because you have an account in <applications>.
 Unsubscribe from CareMetric announcements: <personal link>
-<HUB_BULK_EMAIL_POSTAL_ADDRESS, when set>
+<the mailing address from Settings → Email, when set>
 ```
 
 `<applications>` names the applications that recipient has an account in, listed
@@ -79,7 +79,7 @@ both kinds. `private.email_unsubscribe` answers either kind of link and still
 refuses every session user but the Hub server.
 
 Do not include patient information. For marketing (rather than service)
-announcements, set `HUB_BULK_EMAIL_POSTAL_ADDRESS` so every message includes a
+announcements, enter the mailing address in Settings → Email so every message includes a
 mailing address, as CAN-SPAM requires. The Account Manager's customer emails are
 neither proposed nor sent without it.
 
@@ -108,9 +108,11 @@ only by the Hub server role.
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `HUB_SENDGRID_API_KEY` | Yes | Mail Send key, shared with support replies. Without it, sending and tests are refused. |
-| `HUB_SUPPORT_FROM_EMAIL` | No | The one sender for every Hub email, bulk email included (default `support@caremetric.ai`). Must be on a domain authenticated in SendGrid. `HUB_BULK_EMAIL_FROM` is no longer read. |
-| `HUB_BULK_EMAIL_POSTAL_ADDRESS` | No | Mailing address shown in every footer. Required for the Account Manager's customer emails. |
 | `HUB_PUBLIC_ORIGIN` | No | Origin used in unsubscribe links (the existing webhook origin setting). |
+
+In [Settings](SETTINGS.md) → Email: the **Support sender**, the one sender for every Hub email, bulk email included
+(default `support@caremetric.ai`, which must be on a domain authenticated in SendGrid), and the **Mailing address in
+email footers**, required for the Account Manager's customer emails.
 
 The integration setup panel in the control center lists these under Email
 (SendGrid).

@@ -170,7 +170,7 @@ not evidence that the current authenticated backend has been deployed.
    decide whether texts to (877) 521-2890 are answered by Breathe or the Hub
    (its Twilio webhook currently points at Breathe), configure SendGrid Inbound
    Parse with signed webhooks, set a retention period, and set
-   `HUB_CHAT_ENABLED=true` only when chat should go live.
+   switch on **Website chat** in Settings only when chat should go live.
 8. Deploy the Advisors bridge and set `HUB_ADMIN_USER_IDS` on the Advisors
    service, as described in [ADVISORS_ADMIN_CONNECTION.md](ADVISORS_ADMIN_CONNECTION.md).
 9. Enable Supabase Auth leaked-password protection before inviting external

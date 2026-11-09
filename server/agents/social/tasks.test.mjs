@@ -124,6 +124,14 @@ describe('comments and messages', () => {
     expect(h.sent[0].subject).toBe('2 new social comments and messages');
   });
 
+  it('reads whether Meta is connected on each run, so a Page connected in Settings is used without a restart', async () => {
+    const meta = metaOf({ configured: { pages: false, instagram: false, ads: false }, recentInbox: vi.fn(async () => [item]) });
+    const h = harness({ meta });
+    expect((await h.handlers['social.inbox'](task('social.inbox'), { now })).result).toEqual({ skipped: 'meta_not_configured' });
+    meta.configured = { pages: true, instagram: false, ads: false };
+    expect((await h.handlers['social.inbox'](task('social.inbox'), { now })).result).toEqual({ seen: 1, enqueued: 1, comments: 1, messages: 0 });
+  });
+
   it('warns the owner once a day when Meta refuses the token', async () => {
     const meta = metaOf({ recentInbox: vi.fn(async () => { throw Object.assign(new Error('x'), { code: 'meta_token_invalid' }); }) });
     const h = harness({ meta });

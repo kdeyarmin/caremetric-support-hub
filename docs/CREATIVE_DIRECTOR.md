@@ -35,7 +35,7 @@ CareBase is off while it is in its pilot.
 | --- | --- | --- |
 | `creative.plan` | 08:30 every morning, and as soon as the Social Media Manager writes its weekly plan | Reads marketing plan output that has no creative yet (this week's proposed or published social posts, the Marketing Manager's approved content briefs), opens one brief per product and pillar, and queues a `creative.request` for each |
 | `creative.request` | Per brief: the plan's, the owner's **New brief**, a winner's refresh, a rejection note's revision | Writes the concept and the final copy on the **quality** tier (Opus), then two to four more variants on the **draft** tier (Sonnet), each on a different hook, so a brief yields three to five variants; checks every word; stores one draft per variant and placement |
-| `creative.render` | Every 10 minutes | Proposes rendered assets, collects finished HeyGen renders, renders drafts (at most `HUB_CREATIVE_DAILY_RENDER_CAP` a day, default 40, across every server), checks each finished asset in full and proposes it, or blocks it |
+| `creative.render` | Every 10 minutes | Proposes rendered assets, collects finished HeyGen renders, renders drafts (at most Settings → Creative → "Most renders a day", default 40, across every server), checks each finished asset in full and proposes it, or blocks it |
 | `creative.refresh` | 09:30, once a week (Monday, after the Social Media Manager's report) | Reads the ad results, joined to assets by `utm_content`, proposes retiring tired creative and briefs new variants of the winners |
 | `creative.report` | 09:45, once a week | Emails the owner a scorecard per asset (ad results and website leads by `utm_content`) and saves the learnings it supports |
 
@@ -133,7 +133,7 @@ way, the asset carries a `brand_deviation` warning saying why, and a render that
 Intel's white lockup sits on its dark canvas (or brand blue); CareBase's on white and its light panels. Stacked layouts also size their
 words to the height they have, and nothing on a page is squeezed to make room, so a crowded offer never pushes the logo out.
 
-**Videos** (`HUB_CREATIVE_VIDEO_PROVIDER`):
+**Videos** (Settings → Creative → "How videos are made"):
 
 - `internal` (default): each frame is drawn the same way and ffmpeg-static stitches them into an H.264 MP4 at 24 frames a second. A video is
   the hook (kinetic text: each word rises in), the beats in turn, a product screenshot with a slow pan and zoom (when the owner has one and
@@ -252,14 +252,16 @@ served publicly, and only under its token.
 1. Apply `20261109200000_creative_director.sql`, then its gate `20261109200100_creative_director_contract.sql` (it needs the AI team control
    plane, hardening, autonomy steps, the Social Media Manager, the marketing switches and the lead desk). Restart the Hub so it reads
    `platform.agents.creative.v1`.
-2. Set on the Hub service: `HUB_CREATIVE_ENABLED=true` (with `HUB_AGENTS_ENABLED=true` and `ANTHROPIC_API_KEY`). Optional:
-   `HUB_CREATIVE_DAILY_RENDER_CAP` (default 40), `HUB_CREATIVE_VIDEO_PROVIDER=heygen` with `HUB_HEYGEN_API_KEY`.
+2. In **Settings → Creative**, switch on **Turn on the Creative Director** (with **Settings → AI team → Run the AI team** on and
+   `ANTHROPIC_API_KEY` set). Optional, in the same group: **Most renders a day** (default 40) and **How videos are made** (HeyGen presenter
+   videos also need `HUB_HEYGEN_API_KEY`, a secret, in Railway). A change applies within a minute, with nothing to redeploy.
 3. Optionally open **Creative** and add to each marketed product's brand kit: voice notes, banned phrases, required disclaimers and
    attested product screenshots. The colors, type and logo already come from each product's brand theme; set one only to change it.
 4. On **AI team**, resume the Creative Director (it stays in **Propose**), then either press **Run now** on "Turn marketing plans into
    briefs" or start a **New brief** on the Creative screen. Finished assets appear within about ten minutes.
 
-To stop it: pause the Creative Director, or unset `HUB_CREATIVE_ENABLED` (approvals already given are still carried out). To take an
+To stop it: pause the Creative Director, or switch off **Settings → Creative → Turn on the Creative Director** (approvals already given are
+still carried out). To take an
 approved asset out of use at once, run `update private.creative_assets set status = 'retired', public_token = null, retired_at = now()
 where id = '<id>';` (the weekly refresh also proposes retiring tired creative).
 

@@ -19,6 +19,7 @@ import {
   Rocket,
   Settings2,
   ShieldCheck,
+  SlidersHorizontal,
   UserRound,
   Voicemail,
   UserPlus,
@@ -47,6 +48,7 @@ export const navSections: readonly NavSection[] = [
     { to: "/admin/growth", label: "Customer growth", icon: Bot, audience: "platformAdmin" },
     { to: "/admin/team", label: "AI team", icon: Bot, audience: "platformAdmin" },
     { to: "/admin/creative", label: "Creative", icon: Palette, audience: "platformAdmin" },
+    { to: "/admin/settings", label: "Settings", icon: SlidersHorizontal, audience: "platformAdmin" },
   ] },
   { label: "Support", items: [
     { to: "/cases", label: "Support cases", icon: Inbox },

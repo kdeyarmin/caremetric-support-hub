@@ -405,10 +405,10 @@ describe("AI team screen", () => {
   it("says plainly when nothing is switched on, instead of looking broken", async () => {
     render(<Team client={fakeClient(overview({ approvals: [], approvalCount: 0, awaitingSessionCount: 2 }, { enabled: false, handlers: [], sms: false, email: false, ownerEmail: false, ai: false, customerTextToAi: false }))} />);
     const services = await screen.findByRole("region", { name: "What the team can use" });
-    expect(within(services).getByText(/Set HUB_AGENTS_ENABLED to true/)).toBeTruthy();
+    expect(within(services).getByText(/Switch on "Run the AI team" in Settings/)).toBeTruthy();
     expect(within(services).getByText(/Set ANTHROPIC_API_KEY on the Hub service/)).toBeTruthy();
     expect(within(services).getByText(/Nothing here is broken/)).toBeTruthy();
-    expect(within(services).getByText(/Set HUB_OWNER_EMAIL/)).toBeTruthy();
+    expect(within(services).getByText(/Add your email in Settings/)).toBeTruthy();
     expect(within(services).getByText(/fall back to email/)).toBeTruthy();
     expect(within(services).getByText(/2 tasks are waiting for you to be signed in/)).toBeTruthy();
     expect(screen.getByText("Nothing is waiting for your approval.")).toBeTruthy();
@@ -428,7 +428,7 @@ describe("AI team screen", () => {
     const off = render(<Team client={fakeClient(overview())} />);
     let row = (await within(await screen.findByRole("region", { name: "What the team can use" })).findByText("Customer text to AI")).closest("li") as HTMLElement;
     expect(within(row).getByText("Off")).toBeTruthy();
-    expect(within(row).getByText(/Customer messages stay in the Hub\. Set HUB_AGENTS_CUSTOMER_TEXT_TO_AI to true/)).toBeTruthy();
+    expect(within(row).getByText(/Customer messages stay in the Hub\. Switch on "Let agents send customer messages to the AI" in Settings/)).toBeTruthy();
     off.unmount();
     render(<Team client={fakeClient(overview({}, { customerTextToAi: true }))} />);
     row = (await within(await screen.findByRole("region", { name: "What the team can use" })).findByText("Customer text to AI")).closest("li") as HTMLElement;

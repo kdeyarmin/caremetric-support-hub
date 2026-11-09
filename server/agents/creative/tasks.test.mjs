@@ -45,32 +45,42 @@ const modelOf = () => ({ configured: true, run: vi.fn(async (_, request) => requ
   ? { outcome: 'completed', output: { concept: { bigIdea: 'See the territory', angle: 'territory', visualDirection: 'checklist', landingPageId: 'intel-pricing' }, hero: copyOf('proof') } }
   : { outcome: 'completed', output: { variants: [copyOf('problem', 'headline'), copyOf('curiosity', 'headline'), { ...copyOf('offer', 'headline'), headline: 'Guaranteed referrals for your agency' }] } }) });
 
+// Settings → Creative, as hub-settings `get` answers (the defaults unless given).
+const settingsOf = (values = {}) => key => ({ 'creative.enabled': false, 'creative.daily_render_cap': 40, 'creative.video_provider': 'internal', ...values })[key];
+
 describe('registration', () => {
-  it('registers nothing unless the database declares the feature and HUB_CREATIVE_ENABLED is exactly true', () => {
+  it('registers when the database declares the feature, and works only while Settings → Creative turns it on', async () => {
     const features = new Set([creativeFeature]);
-    expect(creativeTeam({ creative: creativeConfig({ HUB_CREATIVE_ENABLED: 'true' }), features: new Set() }).enabled).toBe(false);
-    expect(creativeTeam({ creative: creativeConfig({ HUB_CREATIVE_ENABLED: 'yes' }), features }).enabled).toBe(false);
-    expect(creativeTeam({ creative: creativeConfig({}), features }).enabled).toBe(false);
-    const team = creativeTeam({ creative: creativeConfig({ HUB_CREATIVE_ENABLED: 'true' }), features });
-    expect(Object.keys(team.handlers({ store: {}, notifier: {}, model: null })).sort()).toEqual(kinds);
+    expect(creativeTeam({ creative: creativeConfig({}, settingsOf({ 'creative.enabled': true })), features: new Set() }).enabled()).toBe(false);
+    expect(Object.keys(creativeTeam({ creative: creativeConfig({}, settingsOf({ 'creative.enabled': true })), features: new Set() }).handlers({}))).toEqual([]);
+    // Read on each use: switching it in Settings applies without a restart.
+    let on = false;
+    const team = creativeTeam({ creative: () => creativeConfig({}, settingsOf({ 'creative.enabled': on })), features });
+    const handlers = team.handlers({ store: {}, notifier: {}, model: null });
+    expect(Object.keys(handlers).sort()).toEqual(kinds);
+    expect(team.enabled()).toBe(false);
+    expect(await handlers['creative.render'](task('creative.render'), { now })).toEqual({ result: { skipped: 'creative_off' } });
+    on = true;
+    expect(team.enabled()).toBe(true);
   });
 
-  it('reads its settings with safe defaults', () => {
+  it('reads Settings → Creative with safe defaults, and HeyGen only with its key', () => {
     expect(creativeConfig({})).toEqual({ enabled: false, dailyRenderCap: 40, videoProvider: 'internal', heygenKey: '' });
-    expect(creativeConfig({ HUB_CREATIVE_DAILY_RENDER_CAP: '12', HUB_CREATIVE_VIDEO_PROVIDER: 'heygen' }).videoProvider).toBe('internal');
-    expect(creativeConfig({ HUB_CREATIVE_DAILY_RENDER_CAP: '12', HUB_CREATIVE_VIDEO_PROVIDER: 'HeyGen', HUB_HEYGEN_API_KEY: 'k'.repeat(20) })).toMatchObject({ dailyRenderCap: 12, videoProvider: 'heygen' });
-    expect(creativeConfig({ HUB_CREATIVE_DAILY_RENDER_CAP: '-1' }).dailyRenderCap).toBe(40);
-    expect(creativeConfig({ HUB_CREATIVE_DAILY_RENDER_CAP: '0' }).dailyRenderCap).toBe(0);
+    expect(creativeConfig({}, settingsOf({ 'creative.daily_render_cap': 12, 'creative.video_provider': 'heygen' })).videoProvider).toBe('internal');
+    expect(creativeConfig({ HUB_HEYGEN_API_KEY: 'k'.repeat(20) }, settingsOf({ 'creative.daily_render_cap': 12, 'creative.video_provider': 'heygen' }))).toMatchObject({ dailyRenderCap: 12, videoProvider: 'heygen' });
+    expect(creativeConfig({}, settingsOf({ 'creative.daily_render_cap': -1 })).dailyRenderCap).toBe(40);
+    expect(creativeConfig({}, settingsOf({ 'creative.daily_render_cap': 0 })).dailyRenderCap).toBe(0);
+    // The old variables are not read.
+    expect(creativeConfig({ HUB_CREATIVE_ENABLED: 'true' }).enabled).toBe(false);
   });
 
-  it('wires into the AI team only with both switches, and its executors whenever the database has it', () => {
+  it('wires into the AI team when the database has it, with its executors, and its status follows the setting', () => {
     const store = { creativeHandoff: vi.fn(), creativeRetire: vi.fn(), creativeApproved: vi.fn(), creativeMarkLive: vi.fn(), enqueue: vi.fn() };
     const base = { store, enabled: false, features: new Set([creativeFeature]), sms: null, email: null, ownerEmail: '', publicOrigin: 'https://help.caremetric.ai' };
-    const off = agentTeam({ ...base, creative: creativeConfig({}) });
-    expect(off.scheduler.kinds().filter(kind => kind.startsWith('creative.'))).toEqual([]);
-    const on = agentTeam({ ...base, creative: creativeConfig({ HUB_CREATIVE_ENABLED: 'true' }) });
-    expect(on.scheduler.kinds().filter(kind => kind.startsWith('creative.'))).toEqual(kinds);
-    const without = agentTeam({ ...base, features: new Set(), creative: creativeConfig({ HUB_CREATIVE_ENABLED: 'true' }) });
+    let enabled = false;
+    const team = agentTeam({ ...base, creative: () => creativeConfig({}, settingsOf({ 'creative.enabled': enabled })) });
+    expect(team.scheduler.kinds().filter(kind => kind.startsWith('creative.'))).toEqual(kinds);
+    const without = agentTeam({ ...base, features: new Set(), creative: creativeConfig({}, settingsOf({ 'creative.enabled': true })) });
     expect(without.scheduler.kinds().filter(kind => kind.startsWith('creative.'))).toEqual([]);
   });
 });

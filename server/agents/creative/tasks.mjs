@@ -9,7 +9,7 @@
  *   writes the concept and final copy on the quality tier and two to four more variants on the draft tier, checks every word, and stores
  *   the drafts, one per variant and placement.
  * - `creative.render` (every 10 minutes): proposes rendered assets, collects finished HeyGen renders, and renders drafts (static images and
- *   videos), at most HUB_CREATIVE_DAILY_RENDER_CAP a day (default 40), each in its product's brand theme (themes.mjs) with the owner's brand
+ *   videos), at most Settings → Creative → "Most renders a day" (default 40), each in its product's brand theme (themes.mjs) with the owner's brand
  *   kit on top. Each finished asset is checked in full (compliance.mjs, specs.mjs), its colors against the brand among the rest: a blocked one
  *   is never shown to the owner; one that passes is proposed for approval, with its warnings if it has any.
  * - `creative.refresh` (09:30, once a week, after the Social Media Manager's report): reads the ad results, joined to assets by
@@ -65,7 +65,8 @@ const aborted = () => Object.assign(new Error('The agent task is no longer runni
  */
 export function creativeHandlers({ store, notifier, model = null, meta = null, linkedin = null, heygen = null, settings = {}, publicOrigin = null, marketed = null,
   renderBudgetMs = 150_000, log = line => console.warn(line) }) {
-  const cap = Number.isInteger(settings.dailyRenderCap) && settings.dailyRenderCap >= 0 ? settings.dailyRenderCap : 40;
+  // Read on each run: the cap and the video provider are Hub settings (Settings → Creative) that change without a restart.
+  const capNow = () => (Number.isInteger(settings.dailyRenderCap) && settings.dailyRenderCap >= 0 ? settings.dailyRenderCap : 40);
   const offeredNow = async () => { const list = await marketedNow(marketed); return creativeProducts.filter(product => markets(list, product)); };
   const effort = task => (['low', 'medium', 'high'].includes(task.agent?.config?.effort) ? task.agent.config.effort : 'medium');
   const origin = /^https:\/\//i.test(publicOrigin ?? '') ? publicOrigin.replace(/\/+$/, '') : null;
@@ -305,6 +306,7 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     const started = Date.now();
     const offered = await offeredNow();
     const counts = { rendered: 0, proposed: 0, blocked: 0, failed: 0, submitted: 0 };
+    const cap = capNow();
     await collectJobs(task, counts, signal);
     // Rendered before, not yet proposed (the agent was observing, or proposing failed).
     for (const asset of await store.creativeReady(10, offered)) {

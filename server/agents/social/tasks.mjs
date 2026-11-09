@@ -30,6 +30,7 @@ import {
 import { evaluateAds, rankPosts, rulesVersion } from './rules.mjs';
 import { marketedNow, markets } from '../marketing.mjs';
 import { untaggedUrl } from '../links.mjs';
+import { live } from '../../live.mjs';
 
 const day = 86_400_000;
 const labels = { facebook: 'Facebook', instagram: 'Instagram', messenger: 'Messenger', linkedin: 'LinkedIn' };
@@ -41,14 +42,18 @@ const money = cents => `$${(cents / 100).toFixed(2)}`;
 const firstLine = text => String(text ?? '').split('\n')[0].slice(0, 90);
 const productOf = url => { try { const host = new URL(url).hostname.replace(/^www\./, ''); return host === 'cmcarebase.com' ? 'carebase' : host === 'caremetricintel.com' ? 'caremetric-intel' : null; } catch { return null; } };
 
-export function socialHandlers({ store, notifier, model = null, meta, linkedin = null, settings = {}, imageUrls = [], customerTextToAi = false, publicOrigin = null, marketed = null, log = line => console.warn(line), creative = null }) {
+export function socialHandlers({ store, notifier, model = null, meta, linkedin = null, settings = {}, imageUrls: imageUrlsOption = [], customerTextToAi = false, publicOrigin = null, marketed = null, log = line => console.warn(line), creative = null }) {
+  // The approved brand images (Settings → Social media) may be a function, read each time they are used.
+  const images = () => live(imageUrlsOption) ?? [];
   // Only the products the team markets (marketing.mjs, read when each task starts) get posts, reply links, new ads and budget increases.
   const offeredNow = async () => { const list = await marketedNow(marketed); return socialProducts.filter(product => markets(list, product)); };
   // LinkedIn is optional: without its token and Page id, LinkedIn posts are emailed to the owner to paste, as before.
   const li = linkedin ?? { configured: { page: false, ads: false } };
   const clientFor = platform => (platform === 'linkedin' ? li : meta);
-  const metaPosts = meta.configured.pages || meta.configured.instagram;
-  const drafting = customerTextToAi === true && model?.configured === true;
+  // Read on each run: the Page and Instagram ids are Hub settings, so a page connected in Settings is used from the next run.
+  const metaPosts = () => meta.configured.pages || meta.configured.instagram;
+  // The owner's switch (Settings → AI team), read each time it matters, so turning it off applies at once.
+  const draftingOn = () => live(customerTextToAi) === true && model?.configured === true;
   const open = async () => new Set(await store.socialOpenTargets());
   const effort = task => (['low', 'medium', 'high'].includes(task.agent?.config?.effort) ? task.agent.config.effort : 'medium');
   // Approved Creative Director images, served from the Hub under each asset's public token (only while it is approved or live), so Meta and
@@ -97,14 +102,14 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     const asked = task.sourceKind === 'owner';
     const key = `social:plan:${week}`;
     if (!asked && await store.notificationCount({ prefix: key, channel: 'email', since: new Date(0) }) > 0) return { result: { skipped: 'already_planned', week } };
-    // Approved creative, per product and platform, used once each in this plan before the configured image list.
+    // Approved creative, per product and platform, used once each in this plan before the approved brand images.
     const creativeImages = {};
     for (const product of offered) for (const platform of ['meta', 'linkedin']) creativeImages[`${product}:${platform}`] = await approvedImages(product, platform);
     const anyMetaCreative = offered.some(product => creativeImages[`${product}:meta`].length);
-    const counts = { facebook: meta.configured.pages ? weekly.facebook : 0, instagram: meta.configured.instagram && (imageUrls.length || anyMetaCreative) ? weekly.instagram : 0, linkedin: weekly.linkedin };
+    const counts = { facebook: meta.configured.pages ? weekly.facebook : 0, instagram: meta.configured.instagram && (images().length || anyMetaCreative) ? weekly.instagram : 0, linkedin: weekly.linkedin };
     let posts = [];
-    let performance = metaPosts || li.configured.page ? 'read' : 'not_connected';
-    for (const [on, client] of [[metaPosts, meta], [li.configured.page, li]]) {
+    let performance = metaPosts() || li.configured.page ? 'read' : 'not_connected';
+    for (const [on, client] of [[metaPosts(), meta], [li.configured.page, li]]) {
       if (!on) continue;
       try { posts = posts.concat(await client.recentPosts({ signal })); }
       catch (error) { if (signal?.aborted || error?.transient) throw error; performance = error?.code ?? 'social_error'; }
@@ -146,11 +151,12 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       const targetId = `${draft.platform}:${week}:${used[draft.platform]}`;
       if (targets.has(`social.post:${targetId}`)) continue;
       // Instagram needs an image; a LinkedIn post shows one beside its link (LinkedIn builds no preview for an API post). Approved creative
-      // comes first; then the configured image list.
+      // comes first; then the approved brand images (Settings → Social media).
       const pictured = ['instagram', 'linkedin'].includes(draft.platform);
       const approvedAsset = pictured ? creativeImages[`${draft.product}:${draft.platform === 'instagram' ? 'meta' : 'linkedin'}`]?.[0] ?? null : null;
-      if (draft.platform === 'instagram' && !approvedAsset && !imageUrls.length) continue;
-      const imageUrl = approvedAsset?.url ?? (pictured && imageUrls.length ? imageUrls[(Number(week.replaceAll('-', '')) + used[draft.platform]) % imageUrls.length] : null);
+      const brandImages = images();
+      if (draft.platform === 'instagram' && !approvedAsset && !brandImages.length) continue;
+      const imageUrl = approvedAsset?.url ?? (pictured && brandImages.length ? brandImages[(Number(week.replaceAll('-', '')) + used[draft.platform]) % brandImages.length] : null);
       const proposal = await propose(task, {
         kind: 'social.post', targetKind: 'social_post', targetId,
         preview: `${labels[draft.platform]} post about ${productNames[draft.product]} (${draft.pillar}), to publish ${when(scheduledFor)}:\n\n${checked.text}${link ? `\n\nLink: ${link}` : ''}${imageUrl ? `\n\nImage: ${approvedAsset ? `approved creative ${approvedAsset.id} (${imageUrl})` : imageUrl}` : ''}`,
@@ -180,12 +186,12 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
 
   // ---- The inbox ----------------------------------------------------------------------------------------------------------------------
   async function inbox(task, { now = () => new Date(), signal } = {}) {
-    if (!metaPosts && !li.configured.page) return { result: { skipped: 'meta_not_configured' } };
+    if (!metaPosts() && !li.configured.page) return { result: { skipped: 'meta_not_configured' } };
     if (task.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only' } };
     let items = [];
     const refused = [];
     let reached = 0;
-    for (const [on, client] of [[metaPosts, meta], [li.configured.page, li]]) {
+    for (const [on, client] of [[metaPosts(), meta], [li.configured.page, li]]) {
       if (!on) continue;
       try { items = items.concat(await client.recentInbox({ signal, now: now() })); reached += 1; }
       catch (error) {
@@ -207,7 +213,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     if (total && notifier) {
       await notifier.send({
         severity: 'info', subject: `${total} new social ${total === 1 ? 'comment or message' : 'comments and messages'}`,
-        body: `${plural(fresh.comment, 'comment')} and ${plural(fresh.message, 'private message')} arrived on Facebook, Instagram or LinkedIn.\n\n${drafting ? 'Drafted replies wait for you in the AI team; anything that needs you personally is left for you.' : 'Answer them on the platforms. Turning on customer text to AI lets the team draft replies for you to approve.'}`,
+        body: `${plural(fresh.comment, 'comment')} and ${plural(fresh.message, 'private message')} arrived on Facebook, Instagram or LinkedIn.\n\n${draftingOn() ? 'Drafted replies wait for you in the AI team; anything that needs you personally is left for you.' : 'Answer them on the platforms. Turning on customer text to AI lets the team draft replies for you to approve.'}`,
         dedupeKey: `social:inbox:${task.id}`, agentKey: task.agentKey, taskId: task.id,
       });
     }
@@ -255,7 +261,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       return { status: proposal ? 'awaiting_approval' : 'done', result: { outcome: proposal ? 'proposed' : 'observe_only', reply: removal.operation, reason: 'personal_information', platform: item.platform, kind: item.kind } };
     };
     if (flagged) return personal();
-    if (!drafting) return { result: { outcome: 'left_for_owner', reason: 'customer_text_to_ai_off', platform: item.platform, kind: item.kind } };
+    if (!draftingOn()) return { result: { outcome: 'left_for_owner', reason: 'customer_text_to_ai_off', platform: item.platform, kind: item.kind } };
 
     const offered = await offeredNow();
     const text = redact(read.text, { limit: 2000 }).text;
@@ -380,7 +386,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       const callToAction = variant.callToAction === 'SIGN_UP' ? 'SIGN_UP' : 'LEARN_MORE';
       const name = `${adset?.name ?? 'Ad set'} · ${String(variant.angle ?? 'variant').slice(0, 30)} · ${today}`;
       const linkedinAd = source.platform === 'linkedin';
-      const brandImage = linkedinAd && !base.imageHash && imageUrls.length ? imageUrls[index % imageUrls.length] : null;
+      const brandImage = linkedinAd && !base.imageHash && images().length ? images()[index % images().length] : null;
       const imageLine = base.imageHash ? `Image: the same as "${base.name}"` : brandImage ? `Image: ${brandImage}` : 'Image: none';
       const proposal = await propose(task, { kind: 'social.ad_create', targetKind: 'social_adset', targetId: `${source.key(rec.adsetId)}:${today}:${index + 1}`,
         preview: `New ${source.name} ad for "${adset?.name ?? rec.adsetId}" (${rec.reason}). It runs inside the ${linkedinAd ? 'campaign' : 'ad set'}'s existing budget.\n\n${linkedinAd ? 'Post text' : 'Primary text'}: ${message}\nHeadline: ${headline}\nDescription: ${description}\n${linkedinAd ? '' : `Button: ${callToAction === 'SIGN_UP' ? 'Sign up' : 'Learn more'}\n`}Link: ${link}\n${imageLine}`,
@@ -414,7 +420,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
   // ---- The weekly report --------------------------------------------------------------------------------------------------------------
   async function report(task, { now = () => new Date(), signal } = {}) {
     const sources = adSources();
-    if (!metaPosts && !li.configured.page && !sources.length) return { result: { skipped: 'meta_not_configured' } };
+    if (!metaPosts() && !li.configured.page && !sources.length) return { result: { skipped: 'meta_not_configured' } };
     const moment = now();
     const week = weekStart(dueMoment(task) ?? moment);
     const asked = task.sourceKind === 'owner';
@@ -422,7 +428,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     if (await heldForScorecard({ store, log }, task)) return heldResult({ week });
     const notes = [];
     let posts = [];
-    for (const [on, client, name] of [[metaPosts, meta, 'Meta'], [li.configured.page, li, 'LinkedIn']]) {
+    for (const [on, client, name] of [[metaPosts(), meta, 'Meta'], [li.configured.page, li, 'LinkedIn']]) {
       if (!on) continue;
       try { posts = posts.concat(await client.recentPosts({ signal })); }
       catch (error) { if (signal?.aborted || error?.transient) throw error; notes.push(`${name} posts could not be read (${String(error?.code ?? 'social_error').replaceAll('_', ' ')}).`); }

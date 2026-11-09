@@ -85,7 +85,7 @@ The schema feature does not assert that native code, the observer token or app
 consumers have been deployed. Native capability `learning.distribution.context`
 is accepted only for CareBase and the existing native authoring flags govern it.
 
-`HUB_LEGACY_DISTRIBUTION_OPT_IN` defaults off. The existing 80 imported courses keep
+**Allow legacy opt-in distribution** (Settings → Course distribution) defaults off. The existing 80 imported courses keep
 their previous behavior until individually reviewed and explicitly distributed;
 the migration does not enroll them in the freshness policy. Enable legacy opt-in
 only after native/Hub observer deployment, authenticated initial reconciliation

@@ -1,6 +1,6 @@
 /**
- * The HeyGen adapter: a presenter video read from the asset's own copy. It is used only when HUB_CREATIVE_VIDEO_PROVIDER is "heygen" and
- * HUB_HEYGEN_API_KEY is set, and only for a product whose brand kit names a HeyGen avatar and voice; otherwise the internal renderer
+ * The HeyGen adapter: a presenter video read from the asset's own copy. It is used only when Settings → Creative → "How videos are made"
+ * says HeyGen and HUB_HEYGEN_API_KEY (a secret, in Railway) is set, and only for a product whose brand kit names a HeyGen avatar and voice; otherwise the internal renderer
  * makes every video. HeyGen renders in the background: `submit` starts a render and returns its id, the render task checks `status` on
  * its next runs, and `download` fetches the finished file from HeyGen's own asset hosts only.
  *

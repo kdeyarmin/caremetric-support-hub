@@ -179,11 +179,11 @@ describe('the customer email run', () => {
 
   it('proposes nothing while the Hub cannot send customer email, and says what is missing', async () => {
     for (const [lifecycle, missing, words] of [
-      [{ ...ready, postalAddress: '' }, ['postal_address'], 'no postal address (HUB_BULK_EMAIL_POSTAL_ADDRESS)'],
+      [{ ...ready, postalAddress: '' }, ['postal_address'], 'no postal address (Settings → Email)'],
       [{ ...ready, mail: { configured: false, send: vi.fn() } }, ['mail'], 'no SendGrid sender'],
       [{ ...ready, publicOrigin: 'http://hub.example.test' }, ['public_origin'], 'no bare https public origin (HUB_PUBLIC_ORIGIN)'],
       [{ ...ready, publicOrigin: 'https://hub.example.test#mail' }, ['public_origin'], 'no bare https public origin (HUB_PUBLIC_ORIGIN)'],
-      [{}, ['mail', 'postal_address', 'public_origin'], 'no SendGrid sender, no postal address (HUB_BULK_EMAIL_POSTAL_ADDRESS), no bare https public origin (HUB_PUBLIC_ORIGIN)'],
+      [{}, ['mail', 'postal_address', 'public_origin'], 'no SendGrid sender, no postal address (Settings → Email), no bare https public origin (HUB_PUBLIC_ORIGIN)'],
     ]) {
       const { run, store } = fixture({ lifecycle });
       const outcome = await run();

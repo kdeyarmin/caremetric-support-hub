@@ -37,13 +37,13 @@ describe('the growth sender', () => {
     for (const email of ['not an address', 'hello@', '<hello@go.caremetric.ai>', 'a"b@go.caremetric.ai', `${'x'.repeat(250)}@go.caremetric.ai`]) {
       const sender = growthSender({ HUB_GROWTH_FROM_EMAIL: email }, support);
       expect(sender, email).toMatchObject({ from: 'support@caremetric.ai', separate: false });
-      expect(sender.warnings, email).toEqual([expect.stringMatching(/^HUB_GROWTH_FROM_EMAIL is not an email address/)]);
+      expect(sender.warnings, email).toEqual([expect.stringMatching(/^The growth email sender \(Settings → Email\) is not an email address/)]);
       expect(validGrowthFromEmail(email), email).toBe(false);
     }
     for (const name of ['x'.repeat(65), 'Sales "Team"', 'Sales <team>', 'Sales\r\nBcc: x']) {
       const sender = growthSender({ HUB_GROWTH_FROM_EMAIL: 'hello@go.caremetric.ai', HUB_GROWTH_FROM_NAME: name }, support);
       expect(sender.fromName, name).toBe('CareMetric');
-      expect(sender.warnings, name).toEqual([expect.stringMatching(/^HUB_GROWTH_FROM_NAME is not a usable display name/)]);
+      expect(sender.warnings, name).toEqual([expect.stringMatching(/^The growth email display name \(Settings → Email\) is not usable/)]);
       expect(validGrowthFromName(name), name).toBe(false);
     }
     expect(validGrowthFromName('CareMetric Sales')).toBe(true);

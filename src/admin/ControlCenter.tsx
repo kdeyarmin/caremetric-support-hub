@@ -137,7 +137,7 @@ function AiUsagePanel({ state, period, onPeriod, retry }: { state: AdminReadStat
 
 function IntegrationSetupPanel({ state, retry }: { state: AdminReadState<IntegrationSetupReport | null>; retry: () => void }) {
   return <section className="panel control-panel" aria-label="Integration setup">
-    <div className="panel-heading"><div><h2>Integration setup</h2><p>What each integration needs on the Hub service and whether it is set. A secret shows only as set or missing; its value never leaves the service.</p></div></div>
+    <div className="panel-heading"><div><h2>Integration setup</h2><p>The secrets each integration needs in Railway and whether they are set. A secret shows only as set or missing; its value never leaves the service. Switches, addresses and account ids are in <Link to="/admin/settings">Settings</Link>.</p></div></div>
     {state.status === "loading" && <Loading label="Checking integration settings" app="the Hub service" />}
     {state.status === "error" && <ReadFailure error={state.error} retry={retry} />}
     {state.status === "ready" && state.data === null && <p className="control-panel-note">{previewNote}</p>}
@@ -228,7 +228,7 @@ export function ControlCenter({ data, portfolio = portfolioClient, billing = bil
             ? <li><Users size={16} aria-hidden="true" /><div><strong>Customer intake</strong><span className="control-detail">{previewNote}</span></div></li>
             : <li><Users size={16} aria-hidden="true" /><div><strong>Customer intake</strong><span className="control-detail">{intakeDetail}</span></div><Link className="control-count" to="/integration">Review access</Link></li>)}
         </ul>
-        <div className="control-panel-footer"><Link className="text-link" to="/admin/billing">Billing: subscriptions, catalog and discounts</Link><Link className="text-link" to="/admin/go-live-readiness">AI go-live readiness</Link><Link className="text-link" to="/integration">Connections and customer onboarding</Link><Link className="text-link" to="/admin/portfolio">Portfolio rollup and coverage matrix</Link><Link className="text-link" to="/security">Account security</Link></div>
+        <div className="control-panel-footer"><Link className="text-link" to="/admin/settings">Settings: switches, addresses and ids</Link><Link className="text-link" to="/admin/billing">Billing: subscriptions, catalog and discounts</Link><Link className="text-link" to="/admin/go-live-readiness">AI go-live readiness</Link><Link className="text-link" to="/integration">Connections and customer onboarding</Link><Link className="text-link" to="/admin/portfolio">Portfolio rollup and coverage matrix</Link><Link className="text-link" to="/security">Account security</Link></div>
       </section>
 
       <AiUsagePanel state={usage} period={period} onPeriod={setPeriod} retry={retry} />

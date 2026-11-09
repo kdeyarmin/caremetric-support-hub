@@ -213,7 +213,7 @@ describe('the Search Console part of the report', () => {
     const report = composeSeoReport([result('a', 'Alpha')], { now, publicOrigin: origin, search: { state: 'not_configured' } });
     expect(report.body.match(/Search Console is not connected/g)).toHaveLength(1);
     expect(texts(report).match(/Search Console is not connected/g)).toHaveLength(1);
-    for (const step of ['create a service account', 'enable the Google Search Console API', 'add the service account\'s email address as a user on each property', 'HUB_SEARCH_CONSOLE_CREDENTIALS', 'HUB_SEARCH_CONSOLE_SITES']) {
+    for (const step of ['create a service account', 'enable the Google Search Console API', 'add the service account\'s email address as a user on each property', 'HUB_SEARCH_CONSOLE_CREDENTIALS', 'Settings, under Search']) {
       expect(report.body).toContain(step);
     }
     // It changes nothing else: a clean week is still the all-clear.
@@ -251,10 +251,10 @@ describe('the Search Console part of the report', () => {
       { property: 'https://www.caremetricintel.com/', ok: false, code: 'not_permitted', status: 403 }, { property: 'sc-domain:caremetricadvisors.com', ok: false, code: 'api_unavailable', status: 503 }] });
     const report = composeSeoReport([result('a', 'Alpha')], { now, search: connected(plain, { invalidProperties: 1 }) });
     expect(texts(report)).toContain('No quick wins stood out in Search Console this week.');
-    expect(texts(report)).toContain(`https://www.caremetricintel.com/ | Could not be read: the service account (${account}) cannot read this property. Add it in Search Console under Settings, Users and permissions. Write it in HUB_SEARCH_CONSOLE_SITES exactly as Search Console shows it: an address prefix ends with /.`);
+    expect(texts(report)).toContain(`https://www.caremetricintel.com/ | Could not be read: the service account (${account}) cannot read this property. Add it in Search Console under Settings, Users and permissions. Write it in Settings, under Search, exactly as Search Console shows it: an address prefix ends with /.`);
     expect(report.body).toContain('sc-domain:caremetricadvisors.com could not be read: Google did not answer in time, or its answer could not be read.');
-    expect(report.body).toContain('1 entry in HUB_SEARCH_CONSOLE_SITES was not understood and skipped.');
-    expect(composeSeoReport([result('a', 'Alpha')], { now, search: connected(plain, { invalidProperties: 2 }) }).body).toContain('2 entries in HUB_SEARCH_CONSOLE_SITES were not understood and skipped.');
+    expect(report.body).toContain('1 entry in the Search Console properties was not understood and skipped.');
+    expect(composeSeoReport([result('a', 'Alpha')], { now, search: connected(plain, { invalidProperties: 2 }) }).body).toContain('2 entries in the Search Console properties were not understood and skipped.');
     const none = composeSeoReport([result('a', 'Alpha')], { now, search: connected({ window: null, properties: [{ property: 'sc-domain:x.test', ok: false, code: 'token_refused', status: 400 }] }) });
     expect(none.body).toContain('Search Console, the last 28 days, against the 28 days before.\nsc-domain:x.test could not be read: Google refused the service account\'s key.');
     expect(texts(none)).not.toContain('No quick wins');

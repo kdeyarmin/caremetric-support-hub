@@ -34,7 +34,7 @@ create table private.brand_kits (
   voice_notes text not null default '' check (char_length(voice_notes) <= 2000),
   required_disclaimers text[] not null default '{}' check (cardinality(required_disclaimers) <= 10),
   banned_phrases text[] not null default '{}' check (cardinality(banned_phrases) <= 100),
-  -- The presenter and voice a HeyGen video uses (HUB_CREATIVE_VIDEO_PROVIDER=heygen); without them the internal renderer is used.
+  -- The presenter and voice a HeyGen video uses (Settings → Creative: HeyGen); without them the internal renderer is used.
   video_avatar_id text check (video_avatar_id ~ '^[A-Za-z0-9_-]{1,100}$'),
   video_voice_id text check (video_voice_id ~ '^[A-Za-z0-9_-]{1,100}$'),
   captions_default boolean not null default true,
@@ -1089,3 +1089,11 @@ revoke all on function hub.get_creative_studio(jsonb), hub.get_creative_file(uui
 grant execute on function hub.get_creative_studio(jsonb), hub.get_creative_file(uuid), hub.set_brand_kit(text, jsonb, integer),
   hub.add_brand_file(text, text, text, bytea, text, boolean), hub.remove_brand_file(uuid), hub.create_creative_brief(jsonb, uuid)
   to authenticated;
+
+-- Settings → Creative (server/hub-settings.mjs): the switch, the daily render cap and how videos are made. They were never Railway
+-- variables; HeyGen's key, a secret, is the one variable (HUB_HEYGEN_API_KEY).
+insert into private.hub_settings (key, kind) values
+  ('creative.enabled', 'flag'),
+  ('creative.daily_render_cap', 'number'),
+  ('creative.video_provider', 'text')
+on conflict (key) do nothing;

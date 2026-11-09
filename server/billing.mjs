@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { live } from './live.mjs';
 import { HttpError, transaction, withSession } from './sms-auth.mjs';
 import { billingCommandSchema, localBillingActions, entitlementRequestSchema, usageReportSchema, trialRequestSchema, appPortalRequestSchema, appBillingRequestSchema } from '../src/billing/billingProtocol.ts';
 import { stripeClient, StripeError, STRIPE_ACCOUNT_ID, verifyStripeSignature, eventTarget, retrievePaths, normalizers, withAllSubscriptionItems } from './stripe.mjs';
@@ -67,6 +68,8 @@ function asHttpError(error) {
 
 export function platformBilling({ pool, secretKey, webhookSecrets = [], accountId = STRIPE_ACCOUNT_ID, portalConfiguration,
   publicOrigin, fetchImpl = fetch, apiBase, now = () => Date.now(), log = console, authorizeCustomerBilling, customerPurchasingEnabled = false }) {
+  // The customer portal configuration (Settings → Billing); `portalConfiguration` may be a function, read on each use.
+  const portal = () => { const value = live(portalConfiguration); return typeof value === 'string' && /^bpc_[A-Za-z0-9]+$/.test(value) ? value : undefined; };
   const client = stripeClient({ secretKey, fetchImpl, ...(apiBase ? { apiBase } : {}) });
   let state = client ? 'pending' : 'unconfigured';
   let verifying = null;
@@ -533,7 +536,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         if (!context.stripe_customer_id) throw new HttpError(400, "Save the customer's billing contact first.");
         const session = await live.post('/v1/billing_portal/sessions', {
           customer: context.stripe_customer_id, return_url: `${publicOrigin}/admin/billing/customers/${request.tenant_id}`,
-          ...(portalConfiguration ? { configuration: portalConfiguration } : {}),
+          ...(portal() ? { configuration: portal() } : {}),
         });
         await audit(db, actor, 'billing.portal.admin', request.tenant_id, null, { customer: context.stripe_customer_id });
         return done({ url: session.url });
@@ -615,7 +618,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         const authority = (await one(db, 'select hub.authorize_tenant_billing($1) as a', [input.tenant_id])).a;
         await db.query('reset role');
         const session = await live.post('/v1/billing_portal/sessions', {
-          customer: authority.stripe_customer_id, return_url: `${publicOrigin}/billing`, ...(portalConfiguration ? { configuration: portalConfiguration } : {}),
+          customer: authority.stripe_customer_id, return_url: `${publicOrigin}/billing`, ...(portal() ? { configuration: portal() } : {}),
         });
         await audit(db, authority.user_id, 'billing.portal.open', input.tenant_id, null, { customer: authority.stripe_customer_id });
         return { url: session.url };
@@ -656,7 +659,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         const app = await authenticateApp(db, authorization);
         const { tenant, customer } = (await one(db, 'select private.app_billing_portal_customer($1,$2) as c', [app.product_id, parsed.data.account])).c;
         const session = await live.post('/v1/billing_portal/sessions', {
-          customer, return_url: parsed.data.return_url, ...(portalConfiguration ? { configuration: portalConfiguration } : {}),
+          customer, return_url: parsed.data.return_url, ...(portal() ? { configuration: portal() } : {}),
         });
         await audit(db, null, 'billing.portal.app', tenant, app.product_id, { customer });
         return { url: session.url };
@@ -1087,7 +1090,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
       return result;
     },
     status: () => ({ configured: !!client, state, mode: client?.mode ?? null, account: state === 'ready' ? accountId : null,
-      webhook: webhookSecrets.length > 0, portal_configuration: !!portalConfiguration }),
+      webhook: webhookSecrets.length > 0, portal_configuration: !!portal() }),
     webhook, command, customerPortal, appPortal, appPlanChanges, entitlements, facilityEntitlements, usage, trial, agentOffer,
     customer: async (session, input) => { try { return await customerSelfService.handle(session, input); } catch (error) { throw asHttpError(error); } },
   };

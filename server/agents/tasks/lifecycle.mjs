@@ -25,7 +25,7 @@ export { lifecycleFeature };
 // The facts are read a page at a time, newest first, and at most this many pages a run: 2,000 trials and new paying accounts.
 export const pageSize = 200;
 export const pageLimit = 10;
-const missingWords = { mail: 'no SendGrid sender', postal_address: 'no postal address (HUB_BULK_EMAIL_POSTAL_ADDRESS)', public_origin: 'no bare https public origin (HUB_PUBLIC_ORIGIN)' };
+const missingWords = { mail: 'no SendGrid sender', postal_address: 'no postal address (Settings → Email)', public_origin: 'no bare https public origin (HUB_PUBLIC_ORIGIN)' };
 
 const declared = features => (features instanceof Set ? features.has(lifecycleFeature) : Array.isArray(features) && features.includes(lifecycleFeature));
 const counted = list => Object.fromEntries(lifecycleTemplates.map(template => [template, list.filter(entry => entry.template === template).length]));

@@ -83,7 +83,7 @@ Everything is checked against the same fact-sheet rules. See [Social media](SOCI
 1. **Merge, then apply the two migrations** (`20261108180000_sales_executive.sql`, `20261108180100_sales_executive_contract.sql`) through the
    normal migration process and let Railway redeploy. Nothing changes until step 2.
 2. **Resume the Sales Executive** on AI team, in Propose, and press Run now on "Weekly pipeline review".
-3. **Let prospect text reach the model** to get drafted answers: `HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true` with `ANTHROPIC_API_KEY` (the same
+3. **Let prospect text reach the model** to get drafted answers: switch on **Let agents send customer messages to the AI** (Settings → AI team) with `ANTHROPIC_API_KEY` (the same
    switch the Concierge's drafted answers use). Without it, prospects still get the acknowledgment.
 4. **Keep discovery fed:** `HUB_GROWTH_SEARCH_API_KEY` must be set for the rotating search; review each product policy's approved claim and
    booking URL in Growth.
