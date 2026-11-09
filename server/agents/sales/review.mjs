@@ -10,7 +10,7 @@
  */
 import { delivered } from '../notify.mjs';
 import { weekStart } from '../accounts/week.mjs';
-import { plural, recordRun } from '../tasks/shared.mjs';
+import { heldForScorecard, heldResult, plural, recordRun } from '../tasks/shared.mjs';
 
 export const reviewVersion = 'sales-review.1';
 const day = 86_400_000;
@@ -90,22 +90,30 @@ export function composeReview({ items, now = new Date(), publicOrigin = null }) 
   };
 }
 
+/** Every page of the growth pipeline (private.growth_snapshot) as one list. The scorecard reads it the same way. */
+export async function readPipeline(growth, signal = null) {
+  const items = [];
+  let offset = 0;
+  let total = 1;
+  while (offset < total) {
+    signal?.throwIfAborted();
+    const page = await growth.store.snapshot(offset);
+    total = page.total;
+    if (!page.items.length) break;
+    items.push(...page.items);
+    offset += page.items.length;
+  }
+  return items;
+}
+
 export function salesReviewHandler({ store, growth, notifier, publicOrigin, log = line => console.warn(line) }) {
   return async function review(task, { now = () => new Date(), signal } = {}) {
     const moment = now();
     const week = weekStart(moment);
     const asked = task.sourceKind === 'owner';
-    const items = [];
-    let offset = 0;
-    let total = 1;
-    while (offset < total) {
-      signal?.throwIfAborted();
-      const page = await growth.store.snapshot(offset);
-      total = page.total;
-      if (!page.items.length) break;
-      items.push(...page.items);
-      offset += page.items.length;
-    }
+    // The Monday scorecard carries this review while the owner's "Send the individual weekly reports" is off.
+    if (await heldForScorecard({ store, log }, task)) return heldResult({ week });
+    const items = await readPipeline(growth, signal);
     const report = composeReview({ items, now: moment, publicOrigin });
     const results = await notifier.send({
       severity: 'info', subject: report.subject, body: report.body, blocks: report.blocks,

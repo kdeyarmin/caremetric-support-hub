@@ -282,5 +282,31 @@ export function searchConsoleReader({
     return { window, properties: await Promise.all(properties.map(property => readProperty(property, window, signal))) };
   }
 
-  return { state, configured: state === 'ready', properties, invalidProperties: invalid, account: credentials.state === 'ready' ? credentials.clientEmail : null, read };
+  /**
+   * Clicks and impressions only, for the Chief of Staff's Monday scorecard: the last `days` days with final data against the `days` days
+   * before, per property. Two requests a property; a property that cannot be read is `{ property, ok: false, code, status }`.
+   */
+  async function totals({ signal, now = new Date(), days = 7 } = {}) {
+    if (state !== 'ready') throw searchConsoleError(state);
+    const window = windows(now, { lagDays: config.lagDays, days });
+    const total = rows => ({ clicks: rows[0]?.clicks ?? 0, impressions: rows[0]?.impressions ?? 0 });
+    return {
+      window,
+      properties: await Promise.all(properties.map(async property => {
+        const ask = period => query(property, { startDate: window[period].startDate, endDate: window[period].endDate, type: 'web', dataState: 'final' }, signal);
+        try {
+          const [current, previous] = await Promise.all([ask('current'), ask('previous')]);
+          return { property, ok: true, current: total(current), previous: total(previous) };
+        } catch (error) {
+          if (signal?.aborted) throw searchConsoleError('aborted');
+          const code = typeof error?.code === 'string' && /^[a-z_]{1,40}$/.test(error.code) ? error.code : 'search_console_error';
+          const status = Number.isInteger(error?.status) ? error.status : null;
+          log(JSON.stringify({ event: 'hub_seo_search_console_failed', property, code, status }));
+          return { property, ok: false, code, status };
+        }
+      })),
+    };
+  }
+
+  return { state, configured: state === 'ready', properties, invalidProperties: invalid, account: credentials.state === 'ready' ? credentials.clientEmail : null, read, totals };
 }

@@ -35,12 +35,17 @@ export function socialConfig(env = {}) {
 }
 
 export function socialTeam({ social = null, features = null, fetchImpl = fetch, meta: givenMeta = null, linkedin: givenLinkedin = null }) {
-  if (!socialDeclared(features)) return { handlers: () => ({}), executors: () => ({}), meta: null, linkedin: null };
+  if (!socialDeclared(features)) return { handlers: () => ({}), executors: () => ({}), meta: null, linkedin: null, ads: null };
   const config = social ?? socialConfig({});
   const meta = givenMeta ?? metaClient({ ...config.meta, fetchImpl });
   const linkedin = givenLinkedin ?? linkedinClient({ ...(config.linkedin ?? {}), fetchImpl });
   return {
     meta, linkedin,
+    // The connected ad accounts and the ad rules' settings, for the Chief of Staff's Monday scorecard (ad spend and ads losing money).
+    ads: {
+      settings: config.settings,
+      sources: () => [{ name: 'Meta', client: meta, on: meta.configured?.ads }, { name: 'LinkedIn', client: linkedin, on: linkedin.configured?.ads }].filter(source => source.on === true),
+    },
     handlers: ({ store, notifier, model, customerTextToAi, publicOrigin, marketed = null, log }) => socialHandlers({ store, notifier, model, meta, linkedin, settings: config.settings, imageUrls: config.imageUrls, customerTextToAi, publicOrigin, marketed, log }),
     executors: ({ notifier, log }) => socialExecutors({ meta, linkedin, settings: config.settings, notifier, log }),
   };
