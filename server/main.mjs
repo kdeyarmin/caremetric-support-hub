@@ -89,7 +89,25 @@ const billing=platformBilling({pool,secretKey:process.env.STRIPE_SECRET_KEY,auth
   webhookSecrets:(process.env.STRIPE_WEBHOOK_SECRET||'').split(',').map(value=>value.trim()).filter(Boolean),
   portalConfiguration:/^bpc_[A-Za-z0-9]+$/.test(process.env.STRIPE_PORTAL_CONFIGURATION_ID||'')?process.env.STRIPE_PORTAL_CONFIGURATION_ID:undefined,
   publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin});
-void billing.start().then(ready => ready && billing.reconcile()).catch(() => {});
+// Intel sets its own plan prices (src/lib/planCatalog.ts in kdeyarmin/intel). After the start and every 15 minutes the Hub reads
+// them and keeps Stripe in step, grandfathering current subscribers (server/app-catalog-sync.mjs). HUB_APP_CATALOG_SYNC=off
+// stops it; INTEL_CATALOG_URL reads another Intel (staging) instead of www.caremetricintel.com.
+let catalogSyncRunning=false;
+// Each tick also refreshes which replaced Founders Sale prices keep the offer (Intel and CareBase), sync or not.
+const syncCatalogs=async()=>{
+  if(catalogSyncRunning)return;
+  catalogSyncRunning=true;
+  try{
+    const result=process.env.HUB_APP_CATALOG_SYNC==='off'?null
+      :await billing.syncAppCatalog('caremetric-intel',process.env.INTEL_CATALOG_URL?{url:process.env.INTEL_CATALOG_URL}:{});
+    if(result?.applied) console.info(`Intel prices: ${result.applied} Stripe product(s) and price(s) brought in step with catalog ${result.version}.`);
+    // A sync that read the catalog has refreshed them already.
+    if(!result?.version) await billing.refreshFounders();
+  }catch{console.warn('The Intel price catalog or Founders Sale prices could not be synced; it will retry.');}
+  finally{catalogSyncRunning=false;}
+};
+void billing.start().then(ready => ready && billing.reconcile()).then(()=>syncCatalogs()).catch(() => {});
+const catalogTimer=setInterval(()=>void syncCatalogs(),15*60*1000);catalogTimer.unref();
 let billingSweepRunning=false;
 const billingTimer=setInterval(()=>{
   if(billingSweepRunning)return;
@@ -138,4 +156,4 @@ const deliverEmail=async()=>{try{await announcements.tick();}catch{console.warn(
 const emailTimer=setInterval(()=>void deliverEmail(),60*1000);emailTimer.unref();void deliverEmail();
 server.requestTimeout=130000; server.headersTimeout=15000;
 server.listen(Number(process.env.PORT || 8080),'0.0.0.0');
-for(const signal of ['SIGTERM','SIGINT']) process.on(signal,() => { clearInterval(billingTimer); clearInterval(cleanupTimer); clearInterval(courseTimer); clearInterval(aiTimer); clearInterval(agentTimer); clearInterval(emailTimer); server.close(() => { void pool.end(); }); });
+for(const signal of ['SIGTERM','SIGINT']) process.on(signal,() => { clearInterval(billingTimer); clearInterval(catalogTimer); clearInterval(cleanupTimer); clearInterval(courseTimer); clearInterval(aiTimer); clearInterval(agentTimer); clearInterval(emailTimer); server.close(() => { void pool.end(); }); });

@@ -21,7 +21,7 @@ CareMetric Stripe account. Current regular prices were also checked against that
 | Product | Repository and commit | Files |
 | --- | --- | --- |
 | CareMetric CareBase | `kdeyarmin/PennTrain@b9da4e1` | `artifacts/caremetric-carebase/src/components/marketing/marketingPricing.ts` (prices, trial), `src/pages/marketing/About.tsx` (founding partners), `src/components/marketing/marketingMeta.ts` (public routes), `src/pages/marketing/PaTrainingRequirements.tsx` and `PaDhsCitations.tsx` (official source links), `src/pages/Landing.copy.test.ts` (copy rules), `CLAUDE.md` (vocabulary, text-only AI) |
-| CareMetric Intel | `kdeyarmin/intel@4a19909` | `server/lib/planLimits.ts` (plans and prices), `server/lib/orgs.ts` (`TRIAL_DAYS = 14`), `docs/marketing-copy.md` (public copy), `docs/competitive-marketing-review.md` (claims we avoid), `src/App.jsx` (public routes) |
+| CareMetric Intel | `kdeyarmin/intel@f50b3eb` | `src/lib/planCatalog.ts` (plans, prices, add-ons and `TRIAL_DAYS`, published at `/api/billing/catalog`, which the Hub reads), `docs/marketing-copy.md` (public copy), `docs/competitive-marketing-review.md` (claims we avoid), `src/App.jsx` (public routes) |
 | CareMetric Healthcare Advisors | `kdeyarmin/advisors@fe46d1d` | `site-content.mjs` (services, founder, routes) |
 | Support Hub | this repository | `server/email-layout.mjs` (support address and line) |
 
@@ -85,19 +85,23 @@ Founders Sale below for new offers. Do not advertise lifetime pricing as part of
 - **What it does:** targeted marketing, marketing analysis and territory analysis from public healthcare and demographic data,
   plus a marketing CRM that keeps outreach, follow-up and the referrals the organization records in one place. Its AI features
   (briefs, supported reporting questions, drafted outreach) are text.
-- **Trial:** a **14-day** free trial with no credit card, covering one county with 3 marketer seats and 1 manager seat
-  (`TRIAL_DAYS = 14`, the `trial` plan). It does not turn into a paid subscription by itself.
+- **Trial:** a **14-day** free trial with no credit card, covering 3 marketer seats + 1 manager, 1 branch, home health and
+  hospice, 1 county (`TRIAL_DAYS = 14`, the `trial` plan). It does not turn into a paid subscription by itself.
 
-Plans (`planLimits.ts`, `docs/marketing-copy.md`). Annual billing saves about 17%.
+Plans (Intel's `src/lib/planCatalog.ts`). Annual billing saves about 17%. **Onboarding is free on every plan.**
+Intel publishes these figures at `https://www.caremetricintel.com/api/billing/catalog`; once the Hub has read it, the AI team
+quotes the catalog (`useAppCatalogFacts` in `server/agents/content/facts.mjs`) and this table is the reviewed copy. When the
+catalog moves on, the Hub logs and audits `billing.catalog.facts_stale` until this page and `intelReviewedFacts` are updated.
 
 | Plan | Monthly billing | Annual billing | Includes |
 | --- | --- | --- | --- |
-| Starter | $349 per month | $290 per month ($3,480 per year) | 3 marketer seats and 1 manager seat, 1 branch, one home health or hospice CRM line, up to 10 counties, extra seats $59 per month, no onboarding fee |
-| Growth | $899 per month | $749 per month ($8,988 per year) | 10 seats, up to 3 branches, both CRM lines, 1 full state, campaigns and manager tools, EMR CSV imports and AI briefs, extra seats $49 per month, onboarding $500 (waived with annual billing) |
-| Pro | $1,999 per month | $1,665 per month ($19,980 per year) | 25 seats, up to 10 branches, up to 3 states, forecasting and territory tools, white-label reports, extra seats $39 per month, onboarding $1,500 |
+| Starter | $349 per month | $290 per month ($3,480 per year) | One office. 3 marketer seats + 1 manager, 1 branch, home health or hospice, up to 10 counties. Extra seats $59 per month ($590 per year on annual billing). Free onboarding. |
+| Growth | $899 per month | $749 per month ($8,988 per year) | The usual agency plan, with campaigns, manager tools and AI field help. 10 seats included, up to 3 branches, home health and hospice, 1 full state. Extra seats $49 per month ($490 per year on annual billing). Free onboarding. |
+| Pro | $1,999 per month | $1,665 per month ($19,980 per year) | For several territories, with forecasting, territory tools and white-label reports. 25 seats included, up to 10 branches, home health and hospice, up to 3 states. Extra seats $39 per month ($390 per year on annual billing). Free onboarding. |
 | Enterprise | custom | annual only, from about $3,500 per month | larger footprints by agreement |
 
-Extra branches are $99 per month each and extra states $199 per month each.
+Extra branches are $99 per month each ($990 per year on annual billing) and extra states $199 per month each
+($1,990 per year on annual billing).
 
 ## Founders Sale — CareBase, Train and Intel
 
@@ -115,8 +119,8 @@ and [the verified live configuration](evidence/founders-sale-20261108.json) are 
   Growth and Pro. Small Home and single-facility eligibility and all capacity limits still apply.
 - Core example: **$99.50 per facility per month**, or **$995 for the first annual payment**, then the regular rate.
   Intel Starter example: **$174.50 per organization per month**, or **$1,740 for the first annual payment**, then the regular rate.
-- Setup fees, Intel extra seats/branches/states, taxes, legacy plans and custom contracts are excluded. Growth's existing
-  annual onboarding waiver remains. Other promotional discounts cannot be combined. One introductory year per organization
+- Setup fees, Intel extra seats/branches/states, taxes, legacy plans and custom contracts are excluded. Intel onboarding
+  is free on every plan. Other promotional discounts cannot be combined. One introductory year per organization
   and product; cancellation/restart does not reset it. No enrollment deadline or redemption cap has been set.
 - Checkout, paid subscription creation and eligible trial conversions apply the underlying coupon automatically after
   server-side eligibility checks. Quotes show the saving before payment; existing agreements are preserved.
@@ -195,7 +199,8 @@ and [the verified live configuration](evidence/founders-sale-20261108.json) are 
 Confirmed by the owner on 2026-11-08 from the review copy of this sheet.
 
 - [x] CareBase prices, add-ons, Complete, Compliance Suite, Small Home and Train prices, and the 30-day trial.
-- [x] Intel plans, annual prices, seats, onboarding fees, add-ons, the Enterprise floor and the 14-day trial.
+- [x] Intel plans, annual prices, seats, free onboarding, monthly and annual add-on prices, the Enterprise floor and the
+  14-day trial (read from Intel's catalog; reviewed 2026-11-09).
 - [x] The one-year Founders Sale was requested by the owner and configured in live billing; use the complete terms above.
 - [x] Legacy founding-partner agreements: confirm individual terms before referring to them; do not offer lifetime pricing to new prospects.
 - [x] Advisors has no published prices, and the consultation form is the first step.

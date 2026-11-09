@@ -24,6 +24,78 @@ const deepFreeze = value => {
 // Redeemed through assisted billing activation, not an automatic checkout promotion. Keep the complete terms together.
 const foundersSaleTerms = 'Founders Sale: 50% off eligible subscription charges for the first 12 months of paid service on new paid product subscriptions, including existing free-trial users. The discount is applied automatically to eligible subscriptions after the trial, when paid service starts. No code or activation request is needed. Monthly billing receives 50% off the regular monthly rate; annual billing receives 50% off the published annual price paid upfront. Standard pricing resumes after the introductory year. Setup fees, Intel extra seats/branches/states, taxes, legacy plans and custom contracts are excluded. Other promotional discounts cannot be combined. One introductory year per organization and product; plan eligibility and capacity limits still apply. No enrollment deadline or cap has been set. Source: live Stripe offer verified 2026-11-08; docs/PRICING_RESEARCH_AND_FOUNDERS_SALE.md.';
 
+const usd = cents => `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
+const listNames = names => (names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] ?? '');
+
+/**
+ * Intel's pricing and offer lines, written from the catalog Intel publishes
+ * (parsed by server/app-catalog-sync.mjs) in the sheet's own wording. The
+ * reviewed lines below are exactly what this writes from Intel's catalog when
+ * they were reviewed (facts.test.mjs holds them together).
+ */
+export function intelFactsFromCatalog(catalog) {
+  const product = key => catalog.products.find(item => item.entitlement_key === key);
+  const amount = (item, interval, plan) => item?.prices.find(price => price.interval === interval && (plan ? price.plan === plan : !price.plan))?.unit_amount;
+  const perYear = (month, year, suffix = 'on annual billing') => (year ? ` (${usd(year)} per year ${suffix})` : '');
+  const plans = catalog.products.filter(item => item.kind === 'plan' && item.self_serve && amount(item, 'month'));
+  const seats = product('extra_seat');
+  const pricing = plans.map(item => {
+    const month = amount(item, 'month');
+    const year = amount(item, 'year');
+    const seat = amount(seats, 'month', item.entitlement_key);
+    return [
+      `${item.name}: ${usd(month)} per month${year ? `, or ${usd(Math.round(year / 12))} per month billed annually (${usd(year)} per year)` : ''}.`,
+      item.description,
+      seat ? `Extra seats ${usd(seat)} per month${perYear(seat, amount(seats, 'year', item.entitlement_key))}.` : '',
+      catalog.free_onboarding ? 'Free onboarding.' : '',
+    ].filter(Boolean).join(' ');
+  });
+  const quoted = catalog.products.find(item => item.kind === 'plan' && !item.self_serve && item.from_unit_amount);
+  if (quoted) pricing.push(`${quoted.name}: a custom annual agreement starting at about ${usd(quoted.from_unit_amount)} per month.`);
+  const branch = product('extra_branch');
+  const state = product('extra_state');
+  const extras = [
+    branch && amount(branch, 'month') ? `Extra branches are ${usd(amount(branch, 'month'))} per month each${perYear(0, amount(branch, 'year'))}` : '',
+    state && amount(state, 'month') ? `extra states ${usd(amount(state, 'month'))} per month each${perYear(0, amount(state, 'year'))}` : '',
+  ].filter(Boolean);
+  const saving = catalog.annual_saving_percent ? ` Annual billing saves about ${catalog.annual_saving_percent}%.` : '';
+  if (extras.length) pricing.push(`${extras.join(' and ')}.${saving}`);
+  const first = plans[0];
+  const offers = [
+    `A ${catalog.trial_days}-day free trial with no credit card${catalog.trial_includes ? `, covering ${catalog.trial_includes}` : ''}, then request paid plan activation from CareMetric.`,
+    foundersSaleTerms,
+    `Eligible Intel products: ${listNames(plans.map(item => item.name))}. Intel ${first.name} is ${usd(Math.round(amount(first, 'month') / 2))} per organization per month during the introductory year`
+      + `${amount(first, 'year') ? `, or ${usd(Math.round(amount(first, 'year') / 2))} for the first annual payment` : ''}, then the regular rate.${catalog.free_onboarding ? ' Onboarding is free on every plan.' : ''}`,
+  ];
+  return { trialDays: catalog.trial_days, pricing, offers };
+}
+
+/**
+ * The reviewed copy of Intel's facts (docs/GTM_FACTS.md), quoted until the Hub
+ * reads Intel's catalog (server/billing.mjs, syncAppCatalog), and the yardstick
+ * for flagging docs/GTM_FACTS.md when the catalog moves on.
+ */
+export const intelReviewedFacts = deepFreeze({
+  trialDays: 14,
+  pricing: [
+    'Starter: $349 per month, or $290 per month billed annually ($3,480 per year). One office. 3 marketer seats + 1 manager, 1 branch, home health or hospice, up to 10 counties. Extra seats $59 per month ($590 per year on annual billing). Free onboarding.',
+    'Growth: $899 per month, or $749 per month billed annually ($8,988 per year). The usual agency plan, with campaigns, manager tools and AI field help. 10 seats included, up to 3 branches, home health and hospice, 1 full state. Extra seats $49 per month ($490 per year on annual billing). Free onboarding.',
+    'Pro: $1,999 per month, or $1,665 per month billed annually ($19,980 per year). For several territories, with forecasting, territory tools and white-label reports. 25 seats included, up to 10 branches, home health and hospice, up to 3 states. Extra seats $39 per month ($390 per year on annual billing). Free onboarding.',
+    'Enterprise: a custom annual agreement starting at about $3,500 per month.',
+    'Extra branches are $99 per month each ($990 per year on annual billing) and extra states $199 per month each ($1,990 per year on annual billing). Annual billing saves about 17%.',
+  ],
+  offers: [
+    'A 14-day free trial with no credit card, covering 3 marketer seats + 1 manager, 1 branch, home health and hospice, 1 county, then request paid plan activation from CareMetric.',
+    foundersSaleTerms,
+    'Eligible Intel products: Starter, Growth and Pro. Intel Starter is $174.50 per organization per month during the introductory year, or $1,740 for the first annual payment, then the regular rate. Onboarding is free on every plan.',
+  ],
+});
+
+// Intel's facts as last read from its catalog; null until the first read.
+let intelLive = null;
+let intelLiveVersion = null;
+const intelFacts = () => intelLive ?? intelReviewedFacts;
+
 /** The three things CareMetric sells. `slug` is the Hub's product slug, which is where an article about the product is published. */
 export const products = deepFreeze({
   carebase: {
@@ -49,22 +121,13 @@ export const products = deepFreeze({
   },
   intel: {
     slug: 'caremetric-intel', name: 'CareMetric Intel', site: 'https://www.caremetricintel.com',
-    source: 'kdeyarmin/intel@4a19909 server/lib/planLimits.ts, server/lib/orgs.ts, docs/marketing-copy.md, docs/competitive-marketing-review.md',
+    source: 'kdeyarmin/intel@f50b3eb src/lib/planCatalog.ts, read live from https://www.caremetricintel.com/api/billing/catalog (reviewed copy: intelReviewedFacts)',
     forWhom: 'Home health agencies, hospice agencies, hospitals, nursing homes and personal care homes that want more targeted marketing.',
     does: 'Targeted marketing, marketing analysis and territory analysis from public healthcare and demographic data, plus a marketing CRM that keeps outreach, follow-up and the referrals the organization records in one place.',
-    trialDays: 14,
-    pricing: [
-      'Starter: $349 per month, or $290 per month billed annually ($3,480 per year). 3 marketer seats and 1 manager seat, 1 branch, one home health or hospice CRM line, up to 10 counties, extra seats $59 per month, no onboarding fee.',
-      'Growth: $899 per month, or $749 per month billed annually ($8,988 per year). 10 seats, up to 3 branches, both CRM lines, 1 full state, campaigns and manager tools, EMR CSV imports and AI briefs, extra seats $49 per month, onboarding $500 (waived with annual billing).',
-      'Pro: $1,999 per month, or $1,665 per month billed annually ($19,980 per year). 25 seats, up to 10 branches, up to 3 states, forecasting and territory tools, white-label reports, extra seats $39 per month, onboarding $1,500.',
-      'Enterprise: a custom annual agreement starting at about $3,500 per month.',
-      'Extra branches are $99 per month each and extra states $199 per month each. Annual billing saves about 17%.',
-    ],
-    offers: [
-      'A 14-day free trial with no credit card, covering one county with 3 marketer seats and 1 manager seat, then request paid plan activation from CareMetric.',
-      foundersSaleTerms,
-      'Eligible Intel products: Starter, Growth and Pro. Intel Starter is $174.50 per organization per month during the introductory year, or $1,740 for the first annual payment, then the regular rate. Existing onboarding fees and the Growth annual onboarding waiver remain unchanged.',
-    ],
+    // Prices, the trial and Intel's offers come from Intel's own catalog once the Hub has read it.
+    get trialDays() { return intelFacts().trialDays; },
+    get pricing() { return intelFacts().pricing; },
+    get offers() { return intelFacts().offers; },
   },
   advisors: {
     slug: 'advisors', name: 'CareMetric Healthcare Advisors', site: 'https://caremetricadvisors.com',
@@ -205,17 +268,57 @@ export const vocabulary = deepFreeze({
   ],
 });
 
-/** Every dollar amount on the sheet, decimals included, as "$1,990"; an article may state these and no other (compared as numbers). */
-export const allowedAmounts = Object.freeze([...new Set(Object.values(products).flatMap(product => [...product.pricing, ...product.offers])
-  .flatMap(line => line.match(/\$\d{1,3}(?:,\d{3})*(?:\.\d+)?(?!\d)/g) ?? []))].sort());
+const sheetLines = () => Object.values(products).flatMap(product => [...product.pricing, ...product.offers]);
+const amountsIn = lines => [...new Set(lines.flatMap(line => line.match(/\$\d{1,3}(?:,\d{3})*(?:\.\d+)?(?!\d)/g) ?? []))].sort();
+const percentsIn = lines => [...new Set(lines.flatMap(line => line.match(/\d+(?:\.\d+)?%/g) ?? []))].sort();
 
-/** Every percentage on the sheet. */
-export const allowedPercents = Object.freeze([...new Set(Object.values(products).flatMap(product => [...product.pricing, ...product.offers])
-  .flatMap(line => (line.match(/\d+(?:\.\d+)?%/g) ?? [])))].sort());
+/**
+ * Every dollar amount on the sheet, decimals included, as "$1,990"; an article may state these and no other (compared as numbers).
+ * A live binding: it follows Intel's catalog once the Hub has read it (useAppCatalogFacts).
+ */
+export let allowedAmounts = Object.freeze(amountsIn(sheetLines()));
+
+/** Every percentage on the sheet (a live binding, like allowedAmounts). */
+export let allowedPercents = Object.freeze(percentsIn(sheetLines()));
+
+/** Counts the changes of the facts, so a checker that derives something from the sheet knows to derive it again. */
+export let factsRevision = 0;
+
+const refreshAllowed = () => {
+  allowedAmounts = Object.freeze(amountsIn(sheetLines()));
+  allowedPercents = Object.freeze(percentsIn(sheetLines()));
+  factsRevision++;
+};
+
+/**
+ * The facts an application publishes with its prices (server/app-catalog-sync.mjs) become what the AI team
+ * quotes and what drafts are checked against. Only Intel publishes them. Returns the amounts the reviewed copy
+ * (docs/GTM_FACTS.md) does not state yet, which the sync flags for that document's update.
+ */
+export function useAppCatalogFacts(app, catalog) {
+  if (app !== products.intel.slug) return [];
+  const facts = intelFactsFromCatalog(catalog);
+  if (!facts.pricing.length || !facts.trialDays) return [];
+  if (intelLiveVersion !== catalog.version || JSON.stringify(facts) !== JSON.stringify(intelLive)) {
+    intelLive = deepFreeze(facts);
+    intelLiveVersion = catalog.version;
+    refreshAllowed();
+  }
+  const reviewed = new Set(amountsIn([...intelReviewedFacts.pricing, ...intelReviewedFacts.offers]));
+  return amountsIn([...facts.pricing, ...facts.offers]).filter(amount => !reviewed.has(amount));
+}
+
+/** Back to the reviewed copy (tests). */
+export function resetAppCatalogFacts() {
+  intelLive = null;
+  intelLiveVersion = null;
+  refreshAllowed();
+}
 
 /** The fact sheet as the model reads it. A constant: it is cached with the system prompt and never carries anything per request. */
 export function factSheetText() {
-  const lines = [`CareMetric fact sheet (version ${factsVersion}). These are the only facts about CareMetric you may state.`];
+  const version = intelLiveVersion ? `${factsVersion}, Intel catalog ${intelLiveVersion}` : factsVersion;
+  const lines = [`CareMetric fact sheet (version ${version}). These are the only facts about CareMetric you may state.`];
   for (const product of Object.values(products)) {
     lines.push('', `${product.name} (${product.site})`, `Who it is for: ${product.forWhom}`, `What it does: ${product.does}`);
     if (product.trialDays) lines.push(`Free trial: ${product.trialDays} days.`);
