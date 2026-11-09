@@ -284,18 +284,12 @@ describe('a website lead', () => {
     expect(everywhere(harness, outcome)).not.toContain(canary);
   });
 
-  it('offers the owner\'s booking page in the acknowledgment when one is set, and never a link otherwise', async () => {
+  it('never offers a booking page or a time to meet, even to a prospect who asks for a demo (no personal demos with anyone)', async () => {
     const harness = fixture({ snapshot: lead('We would like a demo.'), bookingUrl: booking });
     await harness.run();
     const [{ preview, input }] = harness.store.proposeAction.mock.calls[0];
-    expect(preview).toBe(`${thanks}\n\nIf you would like to set a time now, pick a time that suits you: ${booking}`);
-    expect(input.body).toBe(preview);
-    for (const bookingUrl of ['http://cal.example.test/me', 'not a link', '']) {
-      const plain = fixture({ snapshot: lead('We would like a demo.'), bookingUrl });
-      await plain.run();
-      expect(plain.store.proposeAction.mock.calls[0][0].preview, bookingUrl).toBe(thanks);
-    }
-    // An ordinary plain question never gets the link.
+    expect(preview).toBe(thanks);
+    expect(input.body).toBe(thanks);
     const ordinary = fixture({ bookingUrl: booking });
     await ordinary.run();
     expect(ordinary.store.proposeAction.mock.calls[0][0].preview).not.toContain('cal.example.test');

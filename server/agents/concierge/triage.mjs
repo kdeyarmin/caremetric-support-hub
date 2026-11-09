@@ -9,7 +9,7 @@
  * For a plain question it also proposes a fixed reply for the owner to approve (see templates.mjs): an
  * acknowledgment, or a notice asking the sender to resend without the identifiers it carried. A prospect's
  * first message (a website lead, or a conversation filed as a sales or Advisors inquiry) is a sales inquiry, a
- * warning, and gets the sales acknowledgment instead (with the owner's booking link when one is set). Everything
+ * warning, and gets the sales acknowledgment instead (which offers no time to meet: CareMetric does no demos or meetings). Everything
  * else is the owner's to answer, and so is a follow-up in a thread the team already joined.
  *
  * When customer text to the model is switched on (see `drafting`), one more step may follow for a plain, first
@@ -75,9 +75,8 @@ function skipReason(snapshot, payload, settings) {
 /**
  * `drafting` is `{ model, guides }` when customer text may go to the model (the owner's explicit switch, a model key
  * and the guide library), and null otherwise, which keeps the handler exactly as it is without a model.
- * `bookingUrl` is the owner's booking page (HUB_BOOKING_URL): the sales acknowledgment offers it, and nothing else does.
  */
-export function triageHandler({ store, notifier, drafting = null, bookingUrl = null, answers = false, sales = false, log = line => console.warn(line) }) {
+export function triageHandler({ store, notifier, drafting = null, answers = false, sales = false, log = line => console.warn(line) }) {
   // Whether this alert has been tried before in a channel: its key already has a row there. A refused try counts toward the caps like any
   // other, so a retry has to resume the alert under its own key and channels instead of being judged by the caps again, which would turn it
   // into an email-only alert or a rollup because of itself.
@@ -180,7 +179,7 @@ export function triageHandler({ store, notifier, drafting = null, bookingUrl = n
     if (task.agent?.autonomy === 'observe') return { reply: 'observe_only', template };
     const route = replyRoute(snapshot);
     if (!route) return { reply: 'no_route', template };
-    const body = draft ? draft.body : replyBody(template, route, { bookingUrl });
+    const body = draft ? draft.body : replyBody(template, route);
     try {
       // A drafted answer that cites the guides, for a message with no identifier, going back by email or chat, is an answer: it can go
       // out without the owner's session (approved by them, or automatically once they hand answers over). Everything else is a reply.

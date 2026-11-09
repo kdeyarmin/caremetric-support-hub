@@ -17,7 +17,7 @@ export async function evaluateGrowth(now = new Date()) {
     const results = [];
     const check = (name, passed) => results.push({ name, passed: Boolean(passed) });
     const evidence = [{ id: 'source-a', source_url: 'https://example.org/about', claim: 'The organization operates care services.', confidence: 'high', observed_at: at }];
-    const base = { id: 'synthetic', version: 1, product, stage: 'qualified', contact_id: 'synthetic-contact', owner_agent: 'marketing_manager', next_at: ago(1), created_at: ago(10), evidence, policy: { max_touches: 3, approved_claim: 'Discuss the product workflow with our team.', booking_url: '' }, events: [] };
+    const base = { id: 'synthetic', version: 1, product, stage: 'qualified', contact_id: 'synthetic-contact', owner_agent: 'marketing_manager', next_at: ago(1), created_at: ago(10), evidence, policy: { max_touches: 3, approved_claim: 'See how the product workflow fits your team with a free trial.', booking_url: '' }, events: [] };
     check('initial outreach', planOpportunity(base, now).some(w => w.kind === 'outreach'));
     check('reply stops sequence', !planOpportunity({ ...base, events: [{ kind: 'reply', occurred_at: at }] }, now).some(w => w.kind === 'outreach'));
     check('touch cap', !planOpportunity({ ...base, touches: 3 }, now).some(w => w.kind === 'outreach'));
@@ -28,8 +28,8 @@ export async function evaluateGrowth(now = new Date()) {
     check('missing telemetry is unknown', planOpportunity(customer, now).some(w => w.kind === 'telemetry') && !planOpportunity(customer, now).some(w => w.kind === 'adoption'));
     check('fresh feed and stalled use triggers recovery', planOpportunity({ ...customer, events: [{ kind: 'heartbeat', occurred_at: at }, { kind: 'active', occurred_at: ago(8) }] }, now).some(w => w.kind === 'adoption'));
     check('cancellation routes to recovery', planOpportunity({ ...customer, events: [{ kind: 'cancel_requested', occurred_at: at }] }, now).some(w => w.kind === 'recovery'));
-    const work = { kind: 'outreach', action: 'Offer a useful conversation.', success: 'A qualified reply.' };
-    const draft = { subject: 'A useful next step', body: 'Would a short conversation about the workflow be useful?', citations: ['source-a'], needsHuman: false };
+    const work = { kind: 'outreach', action: 'Offer one useful next step.', success: 'A qualified reply.' };
+    const draft = { subject: 'A useful next step', body: 'Would a free trial with your own team be useful?', citations: ['source-a'], needsHuman: false };
     const model = output => ({ configured: true, run: async () => ({ outcome: 'completed', output }) });
     const invoke = output => draftMessage({ opportunity: base, work, task: {}, model: model(output) });
     check('cited output requires review', (await invoke(draft))?.modelGenerated === true);
@@ -37,7 +37,12 @@ export async function evaluateGrowth(now = new Date()) {
     check('unapproved link rejected', await invoke({ ...draft, body: 'Visit https://unsupported.example.org' }) === null);
     check('unsupported commitment abstains', await invoke({ ...draft, needsHuman: true }) === null);
     check('missing approved claim abstains', await draftMessage({ opportunity: { ...base, policy: {} }, work, task: {} }) === null);
-    check('model draft with an unlisted price rejected', await invoke({ ...draft, body: 'Plans start at $27 a month. Would a short conversation help?' }) === null);
+    check('model draft with an unlisted price rejected', await invoke({ ...draft, body: 'Plans start at $27 a month. Would a free trial help?' }) === null);
+    // No personal demos with anyone (owner decision 2026-11-09): an offer to talk, meet or demo is refused; declining one is not an offer.
+    check('model draft offering a conversation rejected', await invoke({ ...draft, body: 'Would a short conversation about the workflow be useful?' }) === null);
+    check('model draft offering a demo or call rejected', await invoke({ ...draft, body: 'Happy to set up a quick call or a live demo for your team.' }) === null);
+    check('model draft asking for a time to meet rejected', await invoke({ ...draft, body: 'Pick a time that suits you to talk it through.' }) === null);
+    check('declining a demo is not an offer', (await invoke({ ...draft, body: 'CareMetric does not do live demos. The free trial shows every step with your own team.' }))?.modelGenerated === true);
     check('model draft with a guarantee rejected', await invoke({ ...draft, body: 'We guarantee you will pass your next inspection.' }) === null);
     check('model draft naming a competitor rejected', await invoke({ ...draft, body: 'Unlike PointClickCare, we keep training in one place. Worth a look?' }) === null);
     check('product page link allowed', (await invoke({ ...draft, body: `Would a free trial help?\n\n${product === 'carebase' ? 'https://cmcarebase.com/signup' : 'https://www.caremetricintel.com/'}` }))?.modelGenerated === true);

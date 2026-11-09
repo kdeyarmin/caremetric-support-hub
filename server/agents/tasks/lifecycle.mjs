@@ -97,7 +97,7 @@ export function lifecycleHandlers({ store, features = null, lifecycle = {}, log 
     for (const { fact, template } of chosen) {
       // The scheduler has stopped waiting for this run: nothing more is proposed.
       if (signal?.aborted) throw stopped();
-      const input = lifecycleInput(fact, template, { bookingUrl: lifecycle.bookingUrl ?? null });
+      const input = lifecycleInput(fact, template);
       let proposal;
       try {
         proposal = await store.proposeAction({

@@ -28,10 +28,9 @@ const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
  * and handed to function-style `handlers` beside the store and the notifier. `record` writes the
  * usage ledger. The Concierge's triage calls the model only when
  * `customerTextToAi` (the owner's switch) is true, a key is set and `guides` (the guide library) is given.
- * `bookingUrl` (HUB_BOOKING_URL) is the owner's booking page, which the Concierge's sales acknowledgment may offer, and `leadSecrets`
- * are the products' lead secrets (HUB_LEAD_SECRET_*), which the Platform Engineer's lead form checks sign with.
- * `lifecycle` is how the Account Manager sends customer emails: `{ mail, postalAddress, bookingUrl }` (a SendGrid sender with
- * one-click unsubscribe headers, the footer's postal address and the owner's optional booking link); the unsubscribe link uses
+ * `leadSecrets` are the products' lead secrets (HUB_LEAD_SECRET_*), which the Platform Engineer's lead form checks sign with.
+ * `lifecycle` is how the Account Manager sends customer emails: `{ mail, postalAddress }` (a SendGrid sender with
+ * one-click unsubscribe headers and the footer's postal address); the unsubscribe link uses
  * `publicOrigin`. Without them nothing is proposed or sent, and the daily run says what is missing.
  * Growth assessment and drafting use structured business evidence, with exact-message review for model drafts.
  * `offerBilling` makes the Account Manager's offers from the owner's menu (`{ agentOffer }`, platform billing's session-less method); without
@@ -40,7 +39,7 @@ const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 export function agentTeam({
   pool, growth: givenGrowth = null, growthMail = null, postalAddress = '', store: givenStore = null, handlers = {}, executors = {}, sms, email, ownerEmail, publicOrigin,
   fetchImpl = fetch, enabled = false, log = line => console.warn(line), now = () => new Date(), communications = null, features = null,
-  anthropicApiKey = null, record = null, model = null, guides = null, customerTextToAi = false, bookingUrl = null, leadSecrets = {}, lifecycle = null, offerBilling = null,
+  anthropicApiKey = null, record = null, model = null, guides = null, customerTextToAi = false, leadSecrets = {}, lifecycle = null, offerBilling = null,
   social = null, meta = null, marketed = null,
 }) {
   // Fenced operations (the attempt a task was claimed under, the execution an action started) exist once the database declares the hardening feature.
@@ -65,8 +64,8 @@ export function agentTeam({
   }, log });
   // The handlers every server ships with, then any the caller adds (a caller's handler for the same kind wins).
   const registry = { ...growthHandlers({growth,model:runtime,notifier,features,marketed:marketedSource}),
-    ...salesHandlers({ store, notifier, model: runtime, growth, features, customerTextToAi, bookingUrl, publicOrigin, guides, marketed: marketedSource, log }),
-    ...socialWork.handlers({ store, notifier, model: runtime, customerTextToAi, publicOrigin, marketed: marketedSource, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, bookingUrl, leadSecrets, lifecycle: customerEmail, marketed: marketedSource, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
+    ...salesHandlers({ store, notifier, model: runtime, growth, features, customerTextToAi, publicOrigin, guides, marketed: marketedSource, log }),
+    ...socialWork.handlers({ store, notifier, model: runtime, customerTextToAi, publicOrigin, marketed: marketedSource, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, leadSecrets, lifecycle: customerEmail, marketed: marketedSource, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   const scheduler = agentScheduler({ store, handlers: registry, actions, enabled, log, now });
   const admin = agentAdmin({
     pool, actions, kick: () => scheduler.tick(), waiting: scheduler.runWaiting,

@@ -43,6 +43,12 @@ describe('checking a sales reply', () => {
     expect(checkSalesReply({ reply: 'Starter is $349 per month.', product: 'caremetric-intel', route: 'email' })).toMatchObject({ ok: true });
   });
 
+  it('refuses an offer to talk, meet or demo, and lets it decline a demo kindly (no personal demos with anyone, 2026-11-09)', () => {
+    for (const reply of ['Happy to set up a quick call to walk you through it.', 'Would a short conversation help?', 'Would you be open to a live demo next week?',
+      'You can speak with our team any time.', 'Pick a time that suits you to talk.']) expect(ok(reply), reply).toMatchObject({ ok: false, reason: 'meeting_offer' });
+    expect(ok('CareMetric does not do live demos, but the free trial shows every step with your own staff:\nhttps://cmcarebase.com/signup')).toMatchObject({ ok: true });
+  });
+
   it('refuses claims, promises, competitors, calls and AI talk', () => {
     expect(ok('CareBase ensures compliance with every DHS rule.')).toMatchObject({ ok: false, reason: 'compliance_assurance' });
     expect(ok('We guarantee your homes will be ready.')).toMatchObject({ ok: false });

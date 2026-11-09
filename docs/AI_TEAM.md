@@ -77,24 +77,48 @@ dates and slugs: never a name, an address or anything about a person.
 
 **What is tagged.** Only an https address on one of the company's product sites, the hosts of `productPages` in
 `server/agents/content/facts.mjs` (cmcarebase.com, www.caremetricintel.com, caremetricadvisors.com), including the website under an
-email's sign-off and the Account Manager's help link. Never a citation, the help center's own links (guides), an unsubscribe link or
-the owner's booking page. The product pages in `facts.mjs` stay untagged; the tags are added where an agent places the link, and a
-model is always given the plain addresses (tags it writes itself are replaced).
+email's sign-off and the Account Manager's help link. Never a citation, the help center's own links (guides) or an unsubscribe
+link. No message carries a booking page at all (see [No demos, calls or meetings](#no-demos-calls-or-meetings)). The
+product pages in `facts.mjs` stay untagged; the tags are added where an agent places the link, and a model is always given the
+plain addresses (tags it writes itself are replaced).
 
 **How the checks treat a tagged link.** Every link check (the growth drafts, `server/agents/sales/check.mjs`, `checkSocialText` in
 `server/agents/social/content.mjs`, `server/agents/content/validate.mjs`, the social executor's last look at a post's link and an ad's)
 uses `linkAllowed`: a link passes when it is exactly an allowed address, or when it is an allowed address on a product site with a
 query made of tags alone added before its fragment. The address is compared as written, with nothing normalized, so a tag can never
 carry another host, path, parameter or fragment: anything but those four tags, each once with a short lowercase value, and the link
-fails. A tagged citation, guide or booking page fails too.
+fails. A tagged citation or guide fails too.
 
 **Lengths.** A social post's or reply's length is counted without the tags (they lengthen the link, not the words). A Sales
 Executive text message whose tags would take it past 320 characters goes out with plain links, and an article that only the tags
 would take past its length is published with plain links.
 
-**Not tagged.** The Support Concierge's answers carry no links at all, and its fixed replies only the booking page. The pages agents
+**Not tagged.** The Support Concierge's answers and its fixed replies carry no links at all. The pages agents
 may link to include Intel's walkthrough (`intel-walkthrough`, `https://www.caremetricintel.com/#how-it-works`) and its free county
 report (`intel-county-report`, `https://www.caremetricintel.com/county-report`), both checked on the live site on 2026-11-09.
+
+## No demos, calls or meetings
+
+CareMetric does no personal demos with anyone (owner decisions 2026-11-08 and 2026-11-09). Prospects and customers decide from the
+walkthrough pages, the help guides, the free trial and written answers by email, and no agent offers a demo, a call, a meeting, a
+conversation or a time to talk:
+
+- **No booking page.** `HUB_BOOKING_URL` is no longer read (the Hub logs once at start if it is still set; remove it from the
+  service), the integration setup panel no longer lists it, and the Growth screen no longer has a "Booking link" field (saving a
+  product's policy clears the one stored). The Support Concierge's and the Sales Executive's fixed reply, the Account Manager's customer
+  emails, outreach drafts and content briefs carry none.
+- **A code check.** `offersMeeting` (`server/growth/playbook.mjs`) reads a message sentence by sentence and refuses one that offers a
+  short or personal call, chat, meeting or demo, setting one up, being open to one, speaking or meeting with us, or picking a time to
+  talk. A sentence that says no ("CareMetric does not do live demos") is not an offer, and neither is one about the reader's own
+  meetings ("hold a short meeting with your staff"). Outreach and customer-success drafts, Sales Executive answers, social posts,
+  replies and ads, and the monthly CareBase and Intel pitches are refused as `meeting_offer`. The Support Concierge's drafts already
+  refuse any mention of a call, a meeting or a demo; articles keep their `call_offer` rule.
+- **The reports.** The Growth Manager's weekly suggestions point to the free trial, the walkthrough and questions by email, never a
+  demo, and the Sales Executive's pipeline review has no "meetings" row.
+- **The guardrail suite** (`npm run evaluate:growth`) refuses a draft that offers a conversation, a demo or call, or a time to meet,
+  and accepts one that declines a demo.
+
+Healthcare Advisors is consulting, not software: its next step stays its consultation request form.
 
 ## The model
 
@@ -496,12 +520,9 @@ a summary that names the reference, the channel and the category).
 will review it); when the question carries identifiers, a **notice** saying these channels are not set up
 for patient or resident information and asking the sender to resend without names, dates of birth, record
 numbers or health details; and, for a prospect's first message (above) that reads as a plain question or a sale,
-the **sales acknowledgment**, in the owner's own voice: "Thank you for reaching out to CareMetric. I have your
-request, and I will follow up with you personally today." When the owner's booking page is set (`HUB_BOOKING_URL`,
-an https address of at most 200 characters, with no user name or password) it adds "If you would like to set a time
-now, pick a time that suits you: <link>"; a text message carries the link only when it still fits one message. That
-template is the only place the Concierge ever offers a link, and the only reply that names a day, because the owner
-approves it the day it is sent. None repeats anything the customer wrote, mentions AI, a phone call or voicemail,
+the **sales acknowledgment**: "Thank you for reaching out to CareMetric. We have your request and will reply here with
+the information you need." It offers no time to meet and no link (see [No demos, calls or meetings](#no-demos-calls-or-meetings)).
+No fixed reply carries a link or names a day. None repeats anything the customer wrote, mentions AI, a phone call or voicemail,
 names a price or promises an outcome; a text message gets a shorter version that fits one message. A prospect whose
 message carries identifiers gets only the notice. The owner answers everything else personally: an outage, a security
 or legal matter, billing, a cancellation, a sale in an ordinary conversation, anything else from Healthcare Advisors,
@@ -732,7 +753,8 @@ Hub whose database lacks the migration still starts and its schedules stay due.
   lead conversations unanswered now, the top five landing pages and campaigns, and three suggestions. The suggestions are rules
   with fixed words (`server/agents/growth/report.mjs`), first match first: leads still unanswered; a median first reply over an
   hour; no leads at all; no lead from a search engine (connect Search Console); every lead from one source; no campaign tags;
-  trials to check in with; report downloads but no demo requests; then three that always apply (a customer quote, an article,
+  trials to check in with; report downloads but nobody writing in (send them the free trial and the walkthrough, and invite
+  questions by email); then three that always apply (a customer quote, an article,
   a referral). Test leads are never counted. It is information by email, with a button to Leads.
 - **The morning brief** gains a **Growth** section when the feature is declared (`private.agent_growth_facts` for yesterday):
   new leads by kind, trials started, and the lead conversations unanswered now with the oldest wait. A lead waiting for a first
@@ -777,8 +799,8 @@ tags are part of the stored help link and the sign-off takes them from it, so an
 exactly as it was approved. Each
 has a plain-text part that says the same. They say nothing about AI, quote no price, promise no time or outcome, never
 mention a phone call or voicemail, and use the company's vocabulary for CareBase (Assisted Living Facility, ALF,
-surveyor). The welcome, the setup offer and the check-in add the owner's booking page as a "Pick a time" button
-when `HUB_BOOKING_URL` is an https address. Only CareBase and Intel have these emails. Stripe's own notices are
+surveyor). None offers a time to meet: help comes by reply and through the product's help (see
+[No demos, calls or meetings](#no-demos-calls-or-meetings)). Only CareBase and Intel have these emails. Stripe's own notices are
 never duplicated: the check-in never mentions a card, a price, an invoice or a date.
 
 **Who gets one.** The run reads one server-only operation, `private.agent_lifecycle_snapshot`: per account and
@@ -800,8 +822,9 @@ address, one that unsubscribed, one whose subscription is being cancelled, or a 
 slug). Its preview is the exact email: the subject line, the message and the footer (why it was sent, the
 unsubscribe line and the postal address; the personal unsubscribe link itself is made when it is sent). The card
 reads "Email to <account>: <subject>" and its button says "Approve and send". The action keeps only the facts that
-rebuild the email (template, account slug and name, product, help and booking links, the period key and a SHA-256
-hash of the wording), never an address; the database refuses an action with any other field.
+rebuild the email (template, account slug and name, product, the help link, a booking link that is always null now, the
+period key and a SHA-256 hash of the wording), never an address; the database refuses an action with any other field. An
+email proposed with the old "Pick a time" button is refused when it would be sent (`wording_changed`), so the button never goes out.
 
 **Autonomy.** In **Observe** the run proposes nothing and records how many of each template it would have
 proposed. In **Propose** every email waits for the owner. On **Act** an email is approved on its own only when its
@@ -851,7 +874,7 @@ template names only.
 
 The handler and the action register only when the database declares `platform.agents.lifecycle.v1`, which needs
 the Account Manager, the hardening and bulk email. To switch the emails on: apply the two migrations, restart the
-Hub, set `HUB_BULK_EMAIL_POSTAL_ADDRESS` (and `HUB_BOOKING_URL` if you want the button), resume the Account Manager,
+Hub, set `HUB_BULK_EMAIL_POSTAL_ADDRESS`, resume the Account Manager,
 leave it in **Observe** for a morning and read its run ("Observe only: 3 customer emails would be proposed …"), then
 switch it to **Propose** and press **Run now** on "Customer emails".
 
@@ -917,13 +940,14 @@ instead.
 
 For a handed-over message it reads the newest message and up to two earlier ones, scrubbed of personal details, and, only while
 `HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true` and a model key is set, asks the model for a reading and a draft. The model is given the
-product, the prospect's stage, whether CareMetric wrote first, a word limit for the channel, the product's own pages it may link to
-and the owner's booking page, with the fact sheet (`server/agents/content/facts.mjs`) and the sales playbook
+product, the prospect's stage, whether CareMetric wrote first, a word limit for the channel and the product's own pages it may link
+to, with the fact sheet (`server/agents/content/facts.mjs`) and the sales playbook
 (`server/growth/playbook.mjs`) in its cached system prompt. Its method: answer what was asked from the fact sheet (exact plan prices
 and the Founders Sale terms when cost comes up), offer one next step (usually the free trial; for a trial, activating a paid plan, with the Founders Sale
 applied automatically), ask at most one qualifying question, handle objections the playbook's way, and never pressure. The code then checks the
-draft (`server/agents/sales/check.mjs`): only that product's listed prices, no other product's; links only to that product's pages
-or the booking page; no guarantee, compliance assurance, certification, named competitor, testimonial, call or demo as a step, voice
+draft (`server/agents/sales/check.mjs`): only that product's listed prices, no other product's; links only to that product's pages;
+no offer of a demo, a call, a meeting or a conversation (declining one is fine); no guarantee, compliance assurance, certification,
+named competitor, testimonial, call or demo as a step, voice
 AI, trial extension, special pricing, refund, time frame, mention of AI, identifier, name from the message or long quotation; the
 fixed vocabulary is rewritten (ALF, surveyor); links may go only to the product's pages and the guides it was given, and the product's
 pages are then given the Sales Executive's campaign tags (see [Campaign tags](#campaign-tags)). A draft that passes
@@ -941,14 +965,14 @@ Nothing the prospect wrote is kept in the task, the run or the owner's email.
 
 **Weekly pipeline review** (task `sales.review`, "Weekly pipeline review", daily at 07:45 Eastern, sent once a week). It reads every
 page of the growth pipeline, leaves out internal organizations and emails the owner, per product, how many prospects, conversations,
-trials and customers there are, what moved this week (replies, meetings, trials started, new paying customers), and which deals
+trials and customers there are, what moved this week (replies, trials started, new paying customers), and which deals
 need the owner now: a trial that ended with no decision or ends within a week without first value, a prospect who said yes in the
 last two weeks but has no trial, an overdue next step or a conversation with no movement for two weeks, and a qualified prospect with
 no permitted contact. The stored body carries counts only; organization names travel in the email's blocks. It uses no model.
 
 **To switch it on:** apply the two migrations, restart the Hub so it reads the feature, then resume the Sales Executive on
 **AI team** in **Propose** and press **Run now** on "Weekly pipeline review". Prospect replies are drafted only with
-`HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true` and `ANTHROPIC_API_KEY`; `HUB_BOOKING_URL` lets drafts offer the owner's booking page.
+`HUB_AGENTS_CUSTOMER_TEXT_TO_AI=true` and `ANTHROPIC_API_KEY`.
 `npm test -- server/agents/sales` runs its unit tests and `node server/agents-sales-integration.mjs` (with `HUB_TEST_DATABASE_URL`
 on a local Supabase) checks the hand-off through the real server role.
 
@@ -1393,9 +1417,8 @@ reads the new feature, resume the Account Manager and press **Run now** on its w
 arrives within a minute and the next on Monday. Check the "Test data" and "Stripe mode" notes against what you
 expect before relying on the figures.
 
-To switch the Growth Manager on: apply the lead desk's migrations and the two Growth Manager migrations, set
-`HUB_BOOKING_URL` on the Hub service if you want prospects offered your booking page (optional; an https link, for example
-a Calendly or Cal.com page), restart the Hub so it reads the new feature, then resume the Growth Manager on **AI team** and
+To switch the Growth Manager on: apply the lead desk's migrations and the two Growth Manager migrations, restart the Hub so
+it reads the new feature, then resume the Growth Manager on **AI team** and
 press **Run now** on "Weekly growth report": the first email arrives within a minute. New trials then email you within five
 minutes, unanswered lead conversations remind you after an hour and a day (never between 21:00 and 07:00 Eastern), and the
 morning brief carries a Growth section. The Concierge's sales acknowledgment needs the Concierge resumed in **Propose**.

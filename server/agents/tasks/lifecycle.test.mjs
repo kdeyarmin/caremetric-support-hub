@@ -12,7 +12,7 @@ const fact = (tenant, over = {}) => ({
   created: ago(1), firstPaidAt: null, cancelling: false, hasEmail: true, suppressed: false, hasUsage: false, openUrgentCases: 0, emails: emails(), ...over,
 });
 const postal = 'CareMetric, 100 Example Street, Altoona, PA 16601';
-const ready = { mail: { configured: true, send: vi.fn() }, postalAddress: postal, publicOrigin: 'https://hub.example.test', bookingUrl: 'https://cal.example.com/owner' };
+const ready = { mail: { configured: true, send: vi.fn() }, postalAddress: postal, publicOrigin: 'https://hub.example.test' };
 const task = (over = {}) => ({ id: 't1', agentKey: 'account_manager', kind: 'accounts.lifecycle', sourceKind: 'schedule', attempts: 1, agent: { autonomy: 'propose', config: {} }, ...over });
 
 const fixture = ({ accounts = [fact('alpha')], lifecycle = ready, features = new Set([lifecycleFeature]), propose = null, snapshot = {} } = {}) => {
@@ -45,7 +45,7 @@ describe('the customer email run', () => {
     expect(store.lifecycleSnapshot.mock.calls).toEqual([[{ limit: 200, offset: 0 }]]);
     expect(store.proposeAction).toHaveBeenCalledTimes(2);
     const [first, second] = store.proposeAction.mock.calls.map(call => call[0]);
-    const expected = lifecycleInput(fact('alpha'), 'welcome', { bookingUrl: ready.bookingUrl });
+    const expected = lifecycleInput(fact('alpha'), 'welcome');
     expect(first).toEqual({ taskId: 't1', kind: 'email.send', targetKind: 'billing_account', targetId: 'alpha', input: expected, preview: lifecyclePreview(expected, { postalAddress: postal }) });
     expect(first.preview.startsWith('Subject: Welcome to CareMetric CareBase\n\nWelcome to CareMetric CareBase\n\nHello,')).toBe(true);
     expect(parseLifecycleInput(first.input)).toEqual(first.input);

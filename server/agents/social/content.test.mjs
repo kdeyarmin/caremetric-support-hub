@@ -43,6 +43,14 @@ describe('checking social text', () => {
     ]) expect(checkSocialText(text, { surface: 'facebook', product: 'carebase' }), text).toMatchObject({ ok: false, reason: 'link' });
   });
 
+  it('refuses an offer to talk, meet or demo in a post, a reply or an ad (no personal demos with anyone, 2026-11-09)', () => {
+    for (const [text, surface] of [['Want to see it? Set up a quick call with us.', 'facebook'], ['Happy to show you in a short demo.', 'comment'],
+      ['Send us a message to book a quick call.', 'message'], ['Ready for a free demo? Message us today.', 'ad_message']]) {
+      expect(checkSocialText(text, { surface, product: 'carebase' }), text).toMatchObject({ ok: false, reason: 'meeting_offer' });
+    }
+    expect(checkSocialText('Hold a short meeting with your staff each month to review training.', { surface: 'facebook', product: 'carebase' })).toMatchObject({ ok: true });
+  });
+
   it('keeps lengths, hashtags and emoji in bounds and markup out', () => {
     expect(checkSocialText('A'.repeat(41), { surface: 'ad_headline', product: 'carebase' })).toMatchObject({ ok: false, reason: 'too_long' });
     expect(fb('Six tags #a1 #b1 #c1 #d1 #e1 #f1')).toMatchObject({ ok: false, reason: 'hashtags' });

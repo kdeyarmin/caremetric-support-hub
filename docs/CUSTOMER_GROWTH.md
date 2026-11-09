@@ -8,7 +8,7 @@ The Growth workspace at `/admin/growth` adds a Marketing Manager and customer-su
 | --- | --- |
 | Prospect research and qualification | Scheduled or owner-requested public business research, dated sources, model-assisted fit rationale, separate observed intent, manual contact verification and lifecycle qualification |
 | Persistent shared customer history | One organization and contact across product opportunities; goals, promises, blockers, objections, loss reasons, owner and dated next action |
-| Marketing outreach | Versioned product claims, booking link, evidence-backed drafts, individual model-message approval, a maximum of three touches, shared contact frequency across growth and native lifecycle emails, and per-product daily limits |
+| Marketing outreach | Versioned product claims, evidence-backed drafts, individual model-message approval, a maximum of three touches, shared contact frequency across growth and native lifecycle emails, and per-product daily limits |
 | Reply and cancellation handling | Signed email webhook ingestion correlates a known sender, classifies simple response signals, stops both product sequences and creates a follow-up/recovery task; complete conversations remain in Communications. Growth capture can never lose an email: if it fails (for example a sender domain the growth records cannot hold) or the growth lock stays busy past a 3-second lock timeout, the message is still saved; for a sender who is already a growth contact, an unsubscribe request is still honoured and unsent outreach is still cancelled; and a `growth.inquiry_failed` audit row records the message and error codes only. The growth lock is held until the inbox commits, so a send claim queued behind a reply always sees it |
 | Conversion handoff | Scoped, signed and deduplicated product events transfer trial/customer work to the Account Manager without accepting clinical records |
 | Onboarding and retention | First-step onboarding, 48-hour activation check, trial deadlines, adoption recovery with fresh telemetry, support coordination, cancellation recovery, renewal and demonstrated expansion interest |
@@ -33,7 +33,7 @@ The existing Billing and weekly account report remain the source of MRR/ARR. The
    every product switched off, from their next run, and customers' onboarding and support are unaffected.
 5. For automatic discovery, configure `HUB_GROWTH_SEARCH_API_KEY` for Brave Search. The adapter requests bounded public search results; snippets are unverified evidence. It does not invent emails. Owner-supplied source evidence works without this provider. Intel's tenant-owned provider lists and campaigns are not imported into CareMetric's sales audience.
 6. Configure the signed SendGrid Event Webhook at `/api/growth/delivery` and set `HUB_SENDGRID_EVENT_PUBLIC_KEY`. Subscribe to delivery, bounce, dropped, spam report and unsubscribe events. Keep the existing signed Inbound Parse route for replies; the growth sender's Reply-To points to the configured support inbox.
-7. In Growth, map existing tenants to their organizations and classify internal accounts. Add the correct buyer/champion, verify its business source and outreach eligibility, record the goal, and qualify the opportunity. Review each product benefit and booking URL in its policy. Policies start disabled.
+7. In Growth, map existing tenants to their organizations and classify internal accounts. Add the correct buyer/champion, verify its business source and outreach eligibility, record the goal, and qualify the opportunity. Review each product benefit in its policy (there is no booking link: CareMetric does no demos, calls or meetings). Policies start disabled.
 8. Resume Marketing Manager and Account Manager in **Propose** mode for the pilot. The scheduler also needs `HUB_AGENTS_ENABLED=true`. Set `HUB_GROWTH_SEND_ENABLED=true` only when the configured channel and reviewed cohort are ready. Approve exact messages in Team; changing policy, contact, or opportunity invalidates stale drafts.
 9. Review pilot replies, objections, activation and retention separately for each product. Optional template autonomy needs an active agent in Act mode, an enabled product policy with template sending allowed, and a passing `growth.1` behavioral evaluation recorded in the last 30 days. **Model-written messages require individual approval** unless the owner hands sales follow-ups or cold email over (next section). The latest failed evaluation blocks every message nobody approved.
 
@@ -106,7 +106,7 @@ claim still comes from the fact sheet (`server/agents/content/facts.mjs`, the co
   paid plan, with the Founders Sale applied automatically), the organization's name and domain, and the product's own pages it may link to. Every model draft must
   then pass the Content Marketer's claim rules (no unlisted price or number, guarantee, compliance assurance, certification,
   competitor, testimonial, call or demo as a step, "prove" about CareBase), may state only its own product's prices, may link only to
-  its product's pages or the booking page, and has its vocabulary fixed (ALF, surveyor). A draft that fails is dropped. The template
+  its product's pages, and has its vocabulary fixed (ALF, surveyor). A draft that fails is dropped. The template
   path used without a model, and every send rule, are unchanged.
 - **Evaluation**: `growth.1` remains the key the database's send claim requires for a recent passing evaluation; it now names the
   guardrail suite, not the prompt (each run records the prompt version). The suite adds cases for an unlisted price, a guarantee, a
@@ -128,12 +128,20 @@ terms (owner decision 2026-11-08).
 `utm_campaign=growth-<product>-touch<n>` with the variant (`control` or `concise`) as `utm_content`; an Account Manager email from the
 pipeline is `success-<product>-<moment>`. The template path tags its free-trial link the same way. The writer is still given the plain
 addresses; the code tags every product page in its draft (replacing tags it wrote) before the checks, which accept a product page
-with tags alone added and refuse a tag that would carry another host, path or parameter, and tags on the booking page. The website
+with tags alone added and refuse a tag that would carry another host, path or parameter, and any booking page. The website
 under the sign-off carries the message's own tags (or `growth-<product>` / `success-<product>` for a message without a tagged link).
 Intel's playbook may now link the walkthrough (`https://www.caremetricintel.com/#how-it-works`) and the free county report
 (`https://www.caremetricintel.com/county-report`), and its "demo" objection names both. The guardrail suite adds four cases: a tagged
 product page is allowed, it ends up with the touch's tags, a tagged link to another host is refused, and a tag carrying another
 address is refused.
+
+**No personal demos with anyone (owner decision 2026-11-09, `growth.6`).** No message offers a booking page any more: drafts are
+never given one (the policy's old booking link is ignored, and the Growth screen no longer has the field), and the writer is told
+never to offer a call, a meeting, a conversation, a chat or a demo, or to ask for a time to talk. Code backs it: `offersMeeting`
+(`server/growth/playbook.mjs`) refuses a draft that offers one (`meeting_offer`), while a sentence that declines a demo, or is about
+the reader's own meetings, passes. The planner's next steps no longer name a meeting. The guardrail suite adds four cases: a
+conversation, a demo or call, and a time to meet are refused; declining a demo is accepted. See
+[No demos, calls or meetings](AI_TEAM.md#no-demos-calls-or-meetings).
 
 Changing the playbook's wording changes what the models read: bump `playbookVersion`, run `npm test -- server/growth` and
 `npm run evaluate:growth`, and review the next drafts before widening any autonomy.

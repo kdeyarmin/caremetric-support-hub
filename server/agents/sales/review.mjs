@@ -52,7 +52,8 @@ export function composeReview({ items, now = new Date(), publicOrigin = null }) 
     const deals = open.filter(o => o.product === product);
     const counts = Object.fromEntries(Object.entries(groups).map(([group, stages]) => [group, deals.filter(o => stages.includes(o.stage)).length]));
     const week = kind => deals.reduce((sum, o) => sum + (o.events ?? []).filter(event => event.kind === kind && (at(event.occurred_at) ?? 0) >= since).length, 0);
-    const moved = { replies: week('positive_reply') + week('reply'), meetings: week('meeting_booked'), trials: week('trial_started'), paid: week('paid') };
+    // No meetings row: CareMetric does no demos, calls or meetings with anyone (owner decision 2026-11-09).
+    const moved = { replies: week('positive_reply') + week('reply'), trials: week('trial_started'), paid: week('paid') };
     return { product, counts, moved };
   });
   const needs = open.map(o => ({ o, why: attention(o, now) })).filter(entry => entry.why).sort((a, b) => a.why.rank - b.why.rank || String(a.o.name).localeCompare(String(b.o.name)));
@@ -75,7 +76,7 @@ export function composeReview({ items, now = new Date(), publicOrigin = null }) 
       { type: 'details', rows: [
         ['Prospects (researched or qualified)', String(c.prospects)], ['In conversation', String(c.conversations)], ['In a free trial', String(c.trials)],
         ['Customers', String(c.customers)], ['Not now (nurture)', String(c.nurture)], ['Closed or lost', String(c.closed)],
-        ['This week: replies', String(moved.replies)], ['This week: meetings', String(moved.meetings)], ['This week: trials started', String(moved.trials)], ['This week: became paying', String(moved.paid)],
+        ['This week: replies', String(moved.replies)], ['This week: trials started', String(moved.trials)], ['This week: became paying', String(moved.paid)],
       ] },
     ]),
     { type: 'paragraph', text: 'Trials that convert get the Founders Sale automatically (50% off eligible charges for the first 12 months of paid service). Counts come from the growth records and the products\' own events; a missing event is not proof that nothing happened.' },

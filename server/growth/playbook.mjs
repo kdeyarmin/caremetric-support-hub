@@ -19,6 +19,29 @@ export const playbookVersion = 'sales-playbook.3';
  */
 export const sellingPrinciple = 'Selling is self-serve. Never offer or suggest a demo, a sales call or a meeting. Give the prospect what they need to decide on their own: the product\'s walkthrough pages, the most relevant guide or manual, the free trial to try it with their own team, and a written answer to every question.';
 
+// What reads as an offer to talk: a short or personal call, chat, meeting or demo; setting one up; being open to one; speaking or
+// meeting with us; picking a time to talk. A sentence that says no ("we do not do live demos") offers nothing, and neither does one
+// about the reader's own meetings ("hold a short meeting with your staff").
+const offers = [
+  /\b(?:short|quick|brief|personal|private|one-on-one|one-to-one|1:1|free|intro(?:ductory)?|\d{1,2}[- ]?min(?:ute)?s?)\s+(?:intro(?:ductory)?\s+)?(?:call|conversation|chat|meeting|demo|demonstration|video\s+call|zoom(?:\s+call)?|screen[- ]?share)\b(?!\s+(?:with|for)\s+(?:your|the|each|every|all)\b)/i,
+  /\blive\s+(?:demo|demonstration|walk-?through|session)\b/i,
+  /\b(?:set up|schedule|book|arrange|hop on|jump on|grab)\s+(?:a\s+|an\s+)?(?:quick\s+|short\s+|brief\s+)?(?:call|meeting|chat|zoom|video\s+call|demo|demonstration)\b(?!\s+(?:with|for)\s+(?:your|the|each|every|all)\b)/i,
+  /\b(?:open to|available for|up for|interested in|time for)\s+(?:a\s+|an\s+)?(?:quick\s+|short\s+|brief\s+)?(?:call|conversation|chat|meeting|demo|demonstration)\b/i,
+  /\b(?:speak|meet)\s+(?:with|to)\s+(?:us|me|our team|someone|a member of our team|the (?:caremetric )?team)\b/i,
+  /\b(?:pick|find|choose|book)\s+a\s+time\s+(?:that\s+(?:suits|works)|to\s+(?:talk|meet|chat|connect|speak))\b/i,
+  /\b(?:call|phone)\s+(?:me|us)\b/i,
+];
+const saysNo = /\b(?:no|not|never|without|nor)\b|n['’]t\b/i;
+
+/**
+ * Whether a message to a prospect or customer offers a demo, a call, a meeting or a conversation with CareMetric, which none may
+ * do: CareMetric does no personal demos with anyone (owner decisions 2026-11-08 and 2026-11-09). Read sentence by sentence; a
+ * sentence that says no, as in declining a demo, is not an offer. The drafting checks refuse a message for which this is true.
+ */
+export function offersMeeting(text) {
+  return String(text ?? '').split(/(?<=[.?!])\s+|\n+/).some(sentence => !saysNo.test(sentence) && offers.some(pattern => pattern.test(sentence)));
+}
+
 const deepFreeze = value => {
   if (value && typeof value === 'object') for (const child of Object.values(value)) deepFreeze(child);
   return Object.freeze(value);

@@ -10,7 +10,8 @@
  * - Rejected: an empty or overlong reply; markup; a link that is not one of the product's own pages (tagged or not) or a help-center guide it was given; an
  *   identifier; anything the fact-sheet rules refuse (an unlisted price or number, a guarantee or compliance assurance, a
  *   certification, voice AI, a call or demo as a step, a named competitor, testimonials, "prove" about CareBase, contact details);
- *   a price of the other product; a promise of a refund, a credit, a trial extension, special pricing or a time frame; a mention of
+ *   a price of the other product; an offer of a demo, a call, a meeting or a conversation (`offersMeeting`: CareMetric does no personal
+ *   demos with anyone; declining one is fine); a promise of a refund, a credit, a trial extension, special pricing or a time frame; a mention of
  *   AI or the instructions; a repeat of a name or identifier-like token from the prospect's message; a long quotation of it.
  */
 import { echoCandidates, quotesCustomer, wordsOf } from '../concierge/draft.mjs';
@@ -20,7 +21,7 @@ import { factSheetText, factsRevision, helpCenterOrigin } from '../content/facts
 import { allowedNumbers, normalizeTerms, textProblems } from '../content/validate.mjs';
 import { campaignTags, linkAllowed, tagLinks } from '../links.mjs';
 import { productAmounts } from '../../growth/draft.mjs';
-import { linkablePages, playbookFor, playbookText } from '../../growth/playbook.mjs';
+import { linkablePages, offersMeeting, playbookFor, playbookText } from '../../growth/playbook.mjs';
 
 export const emailReplyLimit = 1500;
 /** The word limit the model is given for each route. */
@@ -80,6 +81,7 @@ export function checkSalesReply({ reply, product, route, guides = [], text = '' 
   if (problems.length) return { ok: false, reason: problems[0] };
   const own = productAmounts(book.factsKey);
   if ((words.match(/\$\s?(?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?/g) ?? []).some(amount => !own.has(Number(amount.replace(/[$,\s]/g, ''))))) return { ok: false, reason: 'other_product_price' };
+  if (offersMeeting(words)) return { ok: false, reason: 'meeting_offer' };
   if (promise.test(words)) return { ok: false, reason: 'promise' };
   if (aiMention.test(words)) return { ok: false, reason: 'ai_mention' };
   const lowered = words.toLowerCase();

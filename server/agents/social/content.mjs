@@ -7,7 +7,8 @@
  * any campaign tags left out, since they lengthen a link, not the words); no markup;
  * links only to the product's own pages (plain, or with campaign tags and nothing else: ../links.mjs), none in an Instagram caption
  * or in ad copy; at most five hashtags (eight on Instagram) and
- * three emoji; the product's own prices only; no promise of a refund, a credit, an extension or special pricing; no claim about a
+ * three emoji; the product's own prices only; no offer of a demo, a call, a meeting or a conversation (CareMetric does no personal
+ * demos with anyone); no promise of a refund, a credit, an extension or special pricing; no claim about a
  * person's personal attributes in an ad (Meta's policy); no mention of AI; for a reply, nothing repeated from the person's message.
  */
 import { echoCandidates, quotesCustomer, wordsOf } from '../concierge/draft.mjs';
@@ -15,7 +16,7 @@ import { screenIdentifiers } from '../concierge/screen.mjs';
 import { factSheetText, factsRevision } from '../content/facts.mjs';
 import { allowedNumbers, normalizeTerms, textProblems } from '../content/validate.mjs';
 import { productAmounts } from '../../growth/draft.mjs';
-import { linkablePages, playbookFor, playbookText } from '../../growth/playbook.mjs';
+import { linkablePages, offersMeeting, playbookFor, playbookText } from '../../growth/playbook.mjs';
 import { linkAllowed, tagLinks } from '../links.mjs';
 
 export const planPromptVersion = 'social-plan.3';
@@ -169,6 +170,7 @@ export function checkSocialText(value, { surface, product = null, theirText = ''
     const own = productAmounts(book.factsKey);
     if ((words.match(/\$\s?(?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?/g) ?? []).some(amount => !own.has(Number(amount.replace(/[$,\s]/g, ''))))) return { ok: false, reason: 'other_product_price' };
   }
+  if (offersMeeting(words)) return { ok: false, reason: 'meeting_offer' };
   if (promise.test(words)) return { ok: false, reason: 'promise' };
   if (surface.startsWith('ad_') && personalAttribute.test(words)) return { ok: false, reason: 'personal_attribute' };
   if (aiMention.test(words)) return { ok: false, reason: 'ai_mention' };

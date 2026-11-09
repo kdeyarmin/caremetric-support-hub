@@ -10,6 +10,7 @@ import { markets } from '../marketing.mjs';
 import { factSheetText, productPages, products } from './facts.mjs';
 import { allowedNumbers, markupProblems, normalizeTerms, textProblems } from './validate.mjs';
 import { campaignTags, taggedUrl } from '../links.mjs';
+import { offersMeeting } from '../../growth/playbook.mjs';
 
 export const outreachPromptVersion = 'outreach.3';
 export const maxDrafts = 5;
@@ -91,6 +92,9 @@ function draftProblems(texts, product) {
   const joined = texts.join('\n');
   const reasons = new Set([...markupProblems(joined).filter(reason => !reason.startsWith('link_')), ...textProblems(joined, { product, numbers })]);
   if (/[*_`#[\]<>]/.test(joined)) reasons.add('markup');
+  // The software is sold without demos, calls or meetings with anyone (owner decision 2026-11-09). Advisors is consulting, whose
+  // next step is its consultation request form, so its pitches are judged by the claim rules alone.
+  if (product !== 'advisors' && offersMeeting(joined)) reasons.add('meeting_offer');
   // An email address is judged by textProblems (contact_detail), not again here as a link.
   for (const address of joined.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, ' ').match(addressPattern) ?? []) {
     if (!ownDomains.has(address.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/[/?#].*$/, '').toLowerCase())) reasons.add('link_not_allowed');

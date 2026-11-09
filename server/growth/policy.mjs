@@ -21,9 +21,9 @@ export function planOpportunity(o, now = new Date()) {
     if (o.stage === 'identified') add('research','research','Verify organization fit, business contact and source evidence.','Fit and intent documented with dated sources.');
     if (['qualified','contacted'].includes(o.stage) && time(o.next_at)<=at && Number(o.touches ?? 0)<(o.policy?.max_touches ?? 3)) {
       const replied = latest(o,['reply','positive_reply','negative_reply','not_now','meeting_booked','trial_started']);
-      if (!replied) add(`outreach:${o.touches ?? 0}`,'outreach','Offer one relevant next step based on verified product fit.','A qualified reply, meeting, trial or explicit disposition is recorded.');
+      if (!replied) add(`outreach:${o.touches ?? 0}`,'outreach','Offer one relevant next step based on verified product fit.','A qualified reply, trial or explicit disposition is recorded.');
     }
-    if (['engaged','demo'].includes(o.stage) && time(o.next_at)<=at) add(`followup:${o.version}`,'reply','Resolve the prospect question and agree a dated next step.','Meeting, trial, nurture or loss reason confirmed.');
+    if (['engaged','demo'].includes(o.stage) && time(o.next_at)<=at) add(`followup:${o.version}`,'reply','Answer the prospect\'s question in writing and agree a dated next step.','Trial, nurture or loss reason confirmed.');
     return plans;
   }
   const milestone = playbooks[o.product].milestone;
