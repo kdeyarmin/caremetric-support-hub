@@ -18,7 +18,7 @@
  * email's blocks, which the notifier never stores.
  */
 import { contentDeclared } from '../content/executor.mjs';
-import { products } from '../content/facts.mjs';
+import { articleHomeUrl, products } from '../content/facts.mjs';
 import { marketedNow, markets } from '../marketing.mjs';
 import { buildUserMessage, promptVersion, responseSchema, systemPrompt } from '../content/prompt.mjs';
 import { checkOutreach, composeOutreachEmail, outreachProducts, outreachPromptVersion, outreachSchema, outreachSystemPrompt, outreachUserMessage } from '../content/outreach.mjs';
@@ -99,7 +99,8 @@ export function contentHandlers({ store, notifier, model = null, features = null
       taskId: task.id, runId: ran.runId ?? null, kind: 'content.publish', targetKind: 'content_item', targetId: slug, preview: checked.preview, input: checked.article,
     });
     log(JSON.stringify({ event: 'hub_content_article_proposed', task_id: task.id, topic: topic.key, action_id: proposal?.id ?? null }));
-    return { status: 'awaiting_approval', result: { outcome: 'proposed', topic: topic.key, slug, actionId: proposal?.id ?? null, rewrites: checked.rewrites } };
+    // The address the article will live at: Intel's website for an Intel article, the help center for the rest.
+    return { status: 'awaiting_approval', result: { outcome: 'proposed', topic: topic.key, slug, url: articleHomeUrl(checked.article.product, slug), actionId: proposal?.id ?? null, rewrites: checked.rewrites } };
   }
 
   async function outreach(task, { signal, now = () => new Date() } = {}) {

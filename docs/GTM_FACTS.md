@@ -36,8 +36,8 @@ CareBase is a flat $499 per organization. That package is retired from sale (`BI
 - Founder: **Dr. Kevin C. Deyarmin** (ND, MSW, CHPCA, NCG), founder and principal advisor of CareMetric Healthcare Advisors and
   the founder behind CareBase. Source: Advisors `site-content.mjs` (`brand.founder`), CareBase `About.tsx`.
 - Public addresses: support@caremetric.ai and the central support line (877) 521-2890 (Hub `server/email-layout.mjs`);
-  hello@caremetric.ai for founding partners (CareBase `About.tsx`). The help center is **https://help.caremetric.ai**. AI-written
-  articles carry no email address or phone number; they link to the product pages below.
+  hello@caremetric.ai for founding partners (CareBase `About.tsx`). The help center is **https://help.caremetric.ai**; articles about
+  CareMetric Intel live at **https://www.caremetricintel.com/resources/<address>** (`intelArticleOrigin`). AI-written articles carry no email address or phone number; they link to the product pages below.
 
 ## CareMetric CareBase
 

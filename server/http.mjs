@@ -54,7 +54,7 @@ export const privateHubMessage='This Hub is private. Only its owner can sign in.
  * treated as signed out, a sign-in that fails it is revoked at once, and the routes that create
  * sign-ins for anyone else (invitation claims and application self-service) are closed.
  */
-export function appServer({auth,password,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,selfService,agents,growth,leads,leadAdmin,mediaImport=null,health,owner,origins,helpCenter=null,dist=resolve('dist')}) {
+export function appServer({auth,password,gateway,delegations,publications,aiCases,readiness,integrationSetup,communications,bulkEmail,billing,selfService,agents,growth,leads,leadAdmin,mediaImport=null,health,owner,origins,helpCenter=null,publicArticles=null,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -74,6 +74,12 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           if(!['GET','HEAD'].includes(req.method)) throw new HttpError(405,'Method not allowed.');
           if(health) { try { await health(); } catch { throw new HttpError(503,'Unavailable.'); } }
           return json({ok:true});
+        }
+        // A product's public help articles as JSON for its own website (server/public-articles.mjs): read-only, no session, cacheable.
+        // Answered only when the database declares content.public-articles.v1; otherwise the address does not exist.
+        if(path==='/api/public/articles' || path.startsWith('/api/public/articles/')) {
+          if(publicArticles && await publicArticles.serve(req,res,url)) return;
+          throw new HttpError(404,'This resource is unavailable.');
         }
         if (path.startsWith('/api/internal/')) {
           if(req.method!=='POST' || req.headers.origin || req.headers.cookie) throw new HttpError(403,'Forbidden.');

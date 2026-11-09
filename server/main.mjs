@@ -25,7 +25,8 @@ import { bookingLink } from './agents/concierge/templates.mjs';
 import { leadAdmin, leadFeature, leadIntake, leadSecrets } from './leads.mjs';
 import { leadRetention } from './lead-retention.mjs';
 import { helpCenter } from './help-center.mjs';
-import { helpCenterOrigin } from './agents/content/facts.mjs';
+import { articleHomeUrl, helpCenterOrigin, servedElsewhere } from './agents/content/facts.mjs';
+import { publicArticleFeed, publicArticlesFeature } from './public-articles.mjs';
 import { growthStore } from './growth/store.mjs';
 import { growthService } from './growth/service.mjs';
 import { growthResearch } from './growth/research.mjs';
@@ -138,8 +139,13 @@ const mediaImport=learningMediaImport({pool,hosts:importHosts,enabled:features.h
     download:(sessionToken,path)=>capabilities.media(sessionToken,path,'download')}});
 const setup=integrationSetup({rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
 // Public articles as HTML for crawlers, read exactly as an anonymous visitor's app reads them, at their canonical address.
-const help=helpCenter({load:()=>api.rpc('list_published_content',{}),origin:helpCenterOrigin});
-const server=appServer({auth:smsAuth({pool,provider}),password:passwordAuth({pool}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,growth,leads,leadAdmin:leadDesk,mediaImport,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help});
+// A product's public articles as JSON for its own website: answered only when the database declares content.public-articles.v1.
+const publicArticles=features.has(publicArticlesFeature)?publicArticleFeed({load:async product=>(await pool.query({text:'select private.public_articles($1) as articles',values:[product],query_timeout:5000})).rows[0].articles}):null;
+console.info(`Public article feed: ${publicArticles?'answering':'waiting for the content.public-articles.v1 migration'}.`);
+// Once the feed answers, an article whose product's own website serves it (CareMetric Intel's) keeps its page here but names that
+// address as canonical and leaves the sitemap. Before, the help center stays every article's home.
+const help=helpCenter({load:()=>api.rpc('list_published_content',{}),...(publicArticles?{loadProducts:()=>api.rows('products'),elsewhere:(product,key)=>servedElsewhere(product)?articleHomeUrl(product,key):null}:{}),origin:helpCenterOrigin});
+const server=appServer({auth:smsAuth({pool,provider}),password:passwordAuth({pool}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,growth,leads,leadAdmin:leadDesk,mediaImport,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help,publicArticles});
 let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;

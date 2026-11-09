@@ -147,7 +147,7 @@ try {
   // ---- 1. The weekly article: drafted, checked, proposed whole -----------------------------------------------------------------------
   const first = await runTask('content.weekly');
   assert.equal(first.status, 'awaiting_approval');
-  assert.deepEqual(first.result, { outcome: 'proposed', topic: 'pa-fire-drill-requirements', slug: slugs.fire, actionId: first.result.actionId, rewrites: 0 });
+  assert.deepEqual(first.result, { outcome: 'proposed', topic: 'pa-fire-drill-requirements', slug: slugs.fire, url: `https://help.caremetric.ai/help/articles/${slugs.fire}`, actionId: first.result.actionId, rewrites: 0 });
   assert.equal(requests.length, 1);
   assert.equal(requests[0].model, 'claude-sonnet-5-5');
   assert.match(requests[0].user, /Working title: Fire drill requirements/);

@@ -19,8 +19,8 @@
 import { screenIdentifiers } from '../concierge/screen.mjs';
 import { phoneNumber } from '../concierge/redact.mjs';
 import {
-  allowedAmounts, allowedHost, allowedPercents, articleUrl, factSheetText, factsRevision, legalDisclaimer, officialSources, productBySlug, productPage,
-  productPages, products,
+  allowedAmounts, allowedHost, allowedPercents, articleHomeUrl, articleUrl, factSheetText, factsRevision, legalDisclaimer, officialSources, productBySlug, productPage,
+  productPages, products, servedElsewhere,
 } from './facts.mjs';
 import { linkTags, tagLinks, untaggedUrl } from '../links.mjs';
 
@@ -243,11 +243,17 @@ export function assembleArticle({ summary, body, faq, citations, links }, topic)
   return tagLinks(parts.join('\n\n'), linkTags.article(topic.product));
 }
 
-/** What the owner reads and approves: where the article will live, then the whole article exactly as it will be published. */
+/**
+ * What the owner reads and approves: where the article will live, then the whole article exactly as it will be published. A
+ * CareMetric Intel article lives on Intel's website (its canonical address) and stays readable in the help center.
+ */
 export function previewOf(article) {
   const product = productBySlug(article.product);
   return [
-    `Publish on the public help center: ${articleUrl(article.slug)}`,
+    ...(servedElsewhere(article.product)
+      ? [`Publish on ${product?.name ?? article.product}'s website: ${articleHomeUrl(article.product, article.slug)}`,
+        `Also readable in the help center (its canonical link points to the address above): ${articleUrl(article.slug)}`]
+      : [`Publish on the public help center: ${articleUrl(article.slug)}`]),
     `Product: ${product?.name ?? article.product}`,
     `Title: ${article.title}`,
     `Description: ${article.description}`,
