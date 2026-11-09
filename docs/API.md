@@ -283,7 +283,7 @@ session (public, published articles), read at most once every five minutes.
 Implemented in `server/public-articles.mjs`, for a product's own website: Intel's website reads it to serve the
 Content Marketer's CareMetric Intel articles at `https://www.caremetricintel.com/resources/<content key>`, their
 canonical address. Answered only when the database declares `content.public-articles.v1`
-(`supabase/migrations/20261109120000_public_articles.sql` and its contract); before that the addresses answer 404.
+(`supabase/migrations/20261109130000_public_articles.sql` and its contract); before that the addresses answer 404.
 No session or cookie is read or set, GET and HEAD only, and every response keeps the Hub's security headers. It sends
 no CORS headers: read it server to server.
 

@@ -11,7 +11,7 @@ import { productSlugs } from './agents/content/facts.mjs';
  *   public article.
  *
  * Only what an anonymous help-center visitor can already read: published, public articles published for every visitor (audience
- * "all") whose every publication is for that product, read by private.public_articles (20261109120000_public_articles.sql), which
+ * "all") whose every publication is for that product, read by private.public_articles (20261109130000_public_articles.sql), which
  * returns no ids, authors, approvers, revision variables or anything about drafts or the publishing action. The stored Markdown
  * is the article as the help center shows it; the feed also returns its parts (`splitArticle`), so a site can lay them out.
  *

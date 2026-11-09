@@ -14,7 +14,7 @@ import { transaction } from '../sms-auth.mjs';
  * work can be handed back. Against a database without those operations the calls keep their old shape
  * and the extras are ignored, so a server can be deployed before the migration is applied.
  */
-export function sqlAgentStore(pool, { fenced = false, growth = false, social = false, marketing = false } = {}) {
+export function sqlAgentStore(pool, { fenced = false, growth = false, social = false, marketing = false, scorecard = false } = {}) {
   const call = (operation, args = []) => transaction(pool, async client =>
     (await client.query(`select ${operation}(${args.map((_, index) => `$${index + 1}`).join(', ')}) as result`, args)).rows[0].result);
   return {
@@ -31,6 +31,13 @@ export function sqlAgentStore(pool, { fenced = false, growth = false, social = f
     } : {}),
     // The owner's marketing switches (platform.agents.marketing.v1): the product keys switched on right now.
     ...(marketing ? { marketedProducts: () => call('private.marketed_products') } : {}),
+    // The Chief of Staff's Monday scorecard (platform.agents.scorecard.v1).
+    ...(scorecard ? {
+      /** Whether the five weekly reports' scheduled runs email the owner beside the scorecard (the owner's setting; off by default). */
+      individualReports: () => call('private.agent_individual_reports'),
+      /** Per product, between `since` and `until`: county reports, trial sign-ups, first activations, outbound email outcomes and replies, and the AI spend. Counts only. */
+      scorecardFacts: ({ since, until }) => call('private.agent_scorecard_facts', [since, until]),
+    } : {}),
     ...(growth ? { reserveBudget:(taskId,cents)=>call('private.growth_budget_reserve',[taskId,cents]),releaseBudget:id=>call('private.growth_budget_release',[id]),accountsPage: ({limit=200,offset=0}={})=>call('private.agent_accounts_page',[limit,offset]), notificationStatus: key=>call('private.growth_notification_status',[key]) } : {}),
     /** Turns due schedules of the given task kinds (the ones this server can handle) into tasks. */
     fireSchedules: (kinds, limit = 10) => call('private.agent_schedule_fire', [limit, kinds]),

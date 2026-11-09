@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { config } from "../lib/config";
 import { sessionEvent } from "../lib/appSession";
-import { activitySchemas, agentSchema, auditSchema, autonomyStepSchema, decisionSchema, externalEmailProposalSchema, marketingProductSchema, offerSchema, overviewSchema, taskResultSchema, waitingSchema } from "./teamProtocol";
-import type { ActivityKind, ActivityPage, AuditPage, AutonomyStep, Decision, ExternalEmailDraft, ExternalEmailProposal, MarketingProduct, MenuOffer, TeamAgent, TeamOverview } from "./teamProtocol";
+import { activitySchemas, agentSchema, auditSchema, autonomyStepSchema, decisionSchema, externalEmailProposalSchema, marketingProductSchema, offerSchema, overviewSchema, scorecardSettingsSchema, taskResultSchema, waitingSchema } from "./teamProtocol";
+import type { ActivityKind, ActivityPage, AuditPage, AutonomyStep, Decision, ExternalEmailDraft, ExternalEmailProposal, MarketingProduct, MenuOffer, ScorecardSettings, TeamAgent, TeamOverview } from "./teamProtocol";
 
 /**
  * A failed AI team request. The message is the server's reviewed text (for example "This agent
@@ -55,6 +55,8 @@ export interface TeamClient {
   addOffer(input: { label: string; kind: "trial_extension" | "coupon"; trialDays?: number; couponId?: string; apps: string[]; windowDays: number; monthlyCap: number }): Promise<MenuOffer>;
   /** Switches marketing of one product on or off. The agents follow it from their next run. */
   setMarketing(input: { product: MarketingProduct["product"]; marketed: boolean; expectedChangedAt: string }): Promise<MarketingProduct>;
+  /** Switches the five weekly reports' own emails on or off. While they are off, the Monday scorecard carries them. */
+  setReports(input: { send: boolean; expectedChangedAt: string }): Promise<ScorecardSettings>;
   activity<K extends ActivityKind>(input: { kind: K; agentKey: string | null; offset: number; limit: number }, options: { signal: AbortSignal }): Promise<ActivityPage<K>>;
   audit(input: { prefix: string | null; offset: number; limit: number }, options: { signal: AbortSignal }): Promise<AuditPage>;
 }
@@ -77,6 +79,7 @@ export const teamClient: TeamClient = {
   setOffer: input => post("admin/team/offer", input, offerSchema),
   addOffer: input => post("admin/team/addOffer", input, offerSchema),
   setMarketing: input => post("admin/team/marketing", input, marketingProductSchema),
+  setReports: input => post("admin/team/reports", input, scorecardSettingsSchema),
   activity: (input, { signal }) => post("rpc/list_agent_activity", { p_kind: input.kind, p_agent_key: input.agentKey, p_offset: input.offset, p_limit: input.limit }, activitySchemas[input.kind], signal) as never,
   audit: (input, { signal }) => post("rpc/list_audit_events", { p_action_prefix: input.prefix, p_offset: input.offset, p_limit: input.limit }, auditSchema, signal),
 };

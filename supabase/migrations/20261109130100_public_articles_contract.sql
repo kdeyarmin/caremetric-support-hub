@@ -1,4 +1,4 @@
--- Additive deployment gate for the public article feed (20261109120000_public_articles.sql). Declaring the feature changes no
+-- Additive deployment gate for the public article feed (20261109130000_public_articles.sql). Declaring the feature changes no
 -- behavior by itself: until it is declared, the Hub server does not answer /api/public/articles. It states that the read exists,
 -- is a security definer with a pinned empty search path that checks for the Hub server first, and is executable by the Hub server
 -- alone. Every test fails closed.

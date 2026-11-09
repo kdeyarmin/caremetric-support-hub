@@ -62,6 +62,7 @@ function fakeClient(data: TeamOverview = overview(), overrides: Partial<TeamClie
     prepareEmail: vi.fn(async (input: ExternalEmailDraft & { requestKey: string }) => ({ id: ids.action, kind: "email.external" as const, status: "proposed" as const, created: true, requestKey: input.requestKey })),
     cancel: vi.fn(async () => ({ id: ids.task, status: "cancelled" })), waiting: vi.fn(async () => ({ started: 2, actions: 0 })),
     setStep: vi.fn(async () => steps[0]), setOffer: vi.fn(async () => menu.offers[0]), addOffer: vi.fn(async () => menu.offers[0]), setMarketing: vi.fn(async () => marketing[1]),
+    setReports: vi.fn(async () => ({ individualReports: true, changedAt: "2026-11-09T12:00:00.000001+00:00" })),
     activity: vi.fn(async () => emptyPage) as TeamClient["activity"], audit: vi.fn(async () => emptyPage), ...overrides,
   };
 }
@@ -331,6 +332,22 @@ describe("AI team screen", () => {
     expect(await screen.findByText("The team markets CareMetric CareBase from its next run.")).toBeTruthy();
     fireEvent.click(within(panel).getByRole("button", { name: "Stop marketing CareMetric Intel" }));
     await waitFor(() => expect(client.setMarketing).toHaveBeenLastCalledWith({ product: "caremetric-intel", marketed: false, expectedChangedAt: "2026-11-08T21:00:00.123456+00:00" }));
+  });
+
+  it("folds the weekly reports into the Monday scorecard until the owner asks for them as well", async () => {
+    const client = fakeClient({ ...overview(), reports: { individualReports: false, changedAt: "2026-11-09T12:00:00.123456+00:00" } });
+    render(<Team client={client} />);
+    const panel = await screen.findByRole("region", { name: "Weekly reports" });
+    expect(within(panel).getByText("In the scorecard only")).toBeTruthy();
+    fireEvent.click(within(panel).getByRole("button", { name: "Send them as well" }));
+    await waitFor(() => expect(client.setReports).toHaveBeenCalledWith({ send: true, expectedChangedAt: "2026-11-09T12:00:00.123456+00:00" }));
+    expect(await screen.findByText("The five weekly reports are emailed again from their next run, beside the Monday scorecard.")).toBeTruthy();
+  });
+
+  it("leaves the weekly reports setting out against a database without the Monday scorecard", async () => {
+    render(<Team client={fakeClient({ ...overview(), reports: null })} />);
+    await screen.findByRole("region", { name: "What the team can use" });
+    expect(screen.queryByRole("region", { name: "Weekly reports" })).toBeNull();
   });
 
   it("leaves the marketing switches out against a database that does not have them yet", async () => {

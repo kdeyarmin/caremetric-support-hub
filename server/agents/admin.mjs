@@ -22,7 +22,7 @@ const stepCategory = /^[a-z][a-z_]{2,39}$/;
 const offerKeyPattern = /^[a-z][a-z0-9_]{2,39}$/;
 const productSlug = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const couponId = /^[A-Za-z0-9_-]{1,255}$/;
-export const agentAdminActions = new Set(['overview', 'status', 'autonomy', 'budget', 'decide', 'run', 'cancel', 'waiting', 'step', 'email', 'offer', 'addOffer', 'marketing']);
+export const agentAdminActions = new Set(['overview', 'status', 'autonomy', 'budget', 'decide', 'run', 'cancel', 'waiting', 'step', 'email', 'offer', 'addOffer', 'marketing', 'reports']);
 
 function reviewed(error) {
   if (error instanceof HttpError) return error;
@@ -95,7 +95,9 @@ export function agentAdmin({ pool, actions, services = () => ({}), kick = null, 
       const offers = await query(token, 'hub.get_agent_offers').catch(error => { if (error?.code === '42883') return null; throw error; });
       // The owner's marketing switches (which products the team markets), likewise null until their migration is applied.
       const marketing = await query(token, 'hub.get_marketing_products').catch(error => { if (error?.code === '42883') return null; throw error; });
-      return { team, services: services(), waitingActions, autonomy, offers, marketing };
+      // The Monday scorecard's setting (whether the five weekly reports still email you), likewise null until its migration is applied.
+      const reports = await query(token, 'hub.get_scorecard_settings').catch(error => { if (error?.code === '42883') return null; throw error; });
+      return { team, services: services(), waitingActions, autonomy, offers, marketing, reports };
     },
     async status(token, input) {
       exactly(input, ['key', 'status', 'expectedUpdatedAt']);
@@ -164,6 +166,12 @@ export function agentAdmin({ pool, actions, services = () => ({}), kick = null, 
       exactly(input, ['product', 'marketed', 'expectedChangedAt']);
       if (typeof input.marketed !== 'boolean') throw new HttpError(400, 'Invalid marketing setting.');
       return query(token, 'hub.set_marketing_product', [oneOf(input.product, ['caremetric-intel', 'carebase', 'advisors'], 'product'), input.marketed, matching(input.expectedChangedAt, instant, 'version')]);
+    },
+    /** Switch the five weekly reports' own emails on or off. The Monday scorecard carries them while they are off. */
+    async reports(token, input) {
+      exactly(input, ['send', 'expectedChangedAt']);
+      if (typeof input.send !== 'boolean') throw new HttpError(400, 'Invalid report setting.');
+      return query(token, 'hub.set_individual_reports', [input.send, matching(input.expectedChangedAt, instant, 'version')]);
     },
     /** Add an offer to the menu: a trial extension of 1 to 30 days, or one of the owner's own Stripe coupons. It starts switched off. */
     async addOffer(token, input) {
