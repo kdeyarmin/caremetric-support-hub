@@ -15,10 +15,26 @@
 import { delivered } from '../notify.mjs';
 import { composeAccountsReport } from '../accounts/report.mjs';
 import { weekStart } from '../accounts/week.mjs';
-import { recordRun } from './shared.mjs';
+import { heldForScorecard, heldResult, recordRun } from './shared.mjs';
 
 export const accountsFeature = 'platform.agents.accounts.v1';
 const snapshotLimit = 200;
+
+/**
+ * Every page of the billing snapshot (up to `snapshotLimit` accounts a page) as one snapshot. The scorecard reads it the same way.
+ * A database without the paged read (customer growth not applied) gives its single first page.
+ */
+export async function readAccountsSnapshot(store) {
+  let snapshot = store.accountsPage ? await store.accountsPage({ limit: snapshotLimit, offset: 0 }) : await store.accountsSnapshot({ limit: snapshotLimit });
+  if (store.accountsPage) {
+    while (snapshot.accounts.length < snapshot.total && snapshot.truncated) {
+      const page = await store.accountsPage({ limit: snapshotLimit, offset: snapshot.accounts.length });
+      if (!page.accounts.length) break;
+      snapshot = { ...snapshot, accounts: [...snapshot.accounts, ...page.accounts], total: page.total, truncated: page.truncated };
+    }
+  }
+  return snapshot;
+}
 
 const declared = features => (features instanceof Set ? features.has(accountsFeature) : Array.isArray(features) && features.includes(accountsFeature));
 
@@ -30,14 +46,9 @@ export function accountsHandlers({ store, notifier, publicOrigin, features = nul
     const moment = now();
     const week = weekStart(moment);
     const asked = task.sourceKind === 'owner';
-    let snapshot = store.accountsPage ? await store.accountsPage({limit:snapshotLimit,offset:0}) : await store.accountsSnapshot({limit:snapshotLimit});
-    if (store.accountsPage) {
-      while (snapshot.accounts.length < snapshot.total && snapshot.truncated) {
-        const page = await store.accountsPage({limit:snapshotLimit,offset:snapshot.accounts.length});
-        if (!page.accounts.length) break;
-        snapshot = {...snapshot,accounts:[...snapshot.accounts,...page.accounts],total:page.total,truncated:page.truncated};
-      }
-    }
+    // The Monday scorecard carries this report while the owner's "Send the individual weekly reports" is off.
+    if (await heldForScorecard({ store, log }, task)) return heldResult({ week });
+    const snapshot = await readAccountsSnapshot(store);
     const report = composeAccountsReport({ snapshot, now: moment, publicOrigin });
     if (report.result.accounts === 0) return { result: { skipped: 'no_accounts', week } };
 

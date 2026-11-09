@@ -25,6 +25,8 @@ is built so far.
 > The **Social Media Manager** runs the Facebook Page, Instagram, the LinkedIn Page and the Meta and LinkedIn ad accounts for engagement: a weekly post plan,
 > replies to comments and messages, a daily ad review that pauses, refreshes and (only with your approval) re-budgets ads, and a
 > weekly report. See [Social media](SOCIAL_MEDIA.md).
+> The **Monday scorecard** from the Chief of Staff replaces the five weekly report emails with one: six numbers per product beside
+> last week's, what changed, and at most three decisions (see "The Monday scorecard" and [Monday scorecard](MONDAY_SCORECARD.md)).
 > **Only CareMetric Intel is marketed** while CareBase is in its pilot. You switch products on and off under "Products we market" on
 > the AI team page (see "What the team markets").
 
@@ -281,6 +283,32 @@ provider refuses the send, the task is tried again a few minutes later under the
 with **Run now** is sent once per request and is not repeated by a retry. It goes by email only, since an incident
 already texts you when it happens. If email is not set up or the send fails, the run on the Team
 screen says the brief was written but not delivered.
+
+### The Monday scorecard
+
+Every Monday at 07:50 Eastern (task `scorecard.weekly`, shown as "Monday scorecard") the Chief of Staff sends one email in place of
+the five weekly reports (`accounts.weekly`, `growth.weekly`, `seo.weekly`, `sales.review` and `social.report`). It uses no model.
+
+- **Needs you**: at most three items, most urgent first, each with a button to the screen that handles it: products down, proposals
+  waiting for approval, accounts that need attention, deals waiting on you, ads losing money and urgent website problems, as the brief and the
+  five reports flag them.
+- **Six numbers per product** (CareBase and Intel), each beside last week's: website visitors (only from a connected source; none is
+  connected, so "Not connected", never an estimate), county reports and trial starts, activated trials (first `first_value` events),
+  new paying customers and MRR (the Billing screen's maths), outbound email delivered, replies, bounces and complaints, and cost per
+  trial (AI spend on agent runs, plus ad spend when an ad account is connected). Organic search clicks are added when Search Console
+  is connected.
+- **What changed**: every count that moved from the week before.
+
+It reads what the reports already read (the brief's facts, the billing snapshot, the growth pipeline, the ad accounts, the SEO crawl
+and Search Console) and one new server-only read, `private.agent_scorecard_facts`. A source that cannot be read is named and the rest
+still goes out. The subject, stored body, run and task result carry counts only; money is only in the email's layout blocks. Every
+scheduled run in an Eastern week shares `scorecard:<Monday>`, so the week is sent once; a refused send is retried under the same key;
+**Run now** reports the last full week under a key of its own.
+
+The owner's setting **Send the individual weekly reports** (AI team page, "Weekly reports") starts off. While it is off and the
+Chief of Staff is working, the five reports' scheduled runs are held (`skipped: in_scorecard`) and send nothing; **Run now** on any
+of them still emails it. With the Chief of Staff paused, or the setting unreadable, they email as before. Details:
+[Monday scorecard](MONDAY_SCORECARD.md).
 
 ## The SEO Analyst
 
@@ -1110,6 +1138,12 @@ never hold a name, an address or anything about a person.
   definer with a pinned empty search path, executable by `hub_app_server` alone and refusing every other session user, its
   helpers are executable by no role, and the agent, its three schedules and the lead form check exist. Every test fails closed.
 
+- `20261109120100_monday_scorecard_contract.sql` declares `platform.agents.scorecard.v1` only when the scorecard setting is one row
+  closed to every role, `private.agent_individual_reports` and `private.agent_scorecard_facts` are security definers with a pinned
+  empty search path executable by `hub_app_server` alone and refusing every other session user, their helpers are executable by no
+  role, `hub.get_scorecard_settings` and `hub.set_individual_reports` authorize the owner's session themselves and are closed to
+  anonymous callers, and the Chief of Staff has its 07:50 schedule. Every test fails closed.
+
 ## Hardening
 
 `20261102180000_agent_hardening.sql` closes the findings of the review of the first migrations. It adds no
@@ -1157,11 +1191,12 @@ Server (`hub_app_server` only): `agent_schedule_fire`, `agent_maintenance`, `age
 `agent_growth_pending`, `agent_growth_lead`, `agent_growth_mark_seen`, `agent_growth_unanswered`, `agent_growth_facts`,
 `agent_lead_probe_seen`,
 `agent_lifecycle_snapshot`, `agent_lifecycle_begin_send`, `agent_lifecycle_finish_send`,
-`agent_content_state`, `agent_content_publish`.
+`agent_content_state`, `agent_content_publish`, `agent_individual_reports`, `agent_scorecard_facts`.
 
 Owner (current administrator session): `get_agent_team`, `list_agent_activity`,
 `list_audit_events` (reads) and `set_agent_status`, `set_agent_autonomy`, `set_agent_budget`,
-`decide_agent_action`, `request_agent_task`, `cancel_agent_task` (changes).
+`decide_agent_action`, `request_agent_task`, `cancel_agent_task` (changes), and `get_scorecard_settings` (read) and
+`set_individual_reports` (change) for the Monday scorecard.
 
 ## What runs on the server
 
@@ -1391,6 +1426,13 @@ Apply the migrations in order with the usual procedure:
    and the three autonomy steps (off), and declare `platform.agents.social.v1` (it needs the control plane, the hardening, autonomy
    steps and customer growth). Restart the Hub after it. Nothing reaches Meta until `HUB_META_ACCESS_TOKEN` and `HUB_META_PAGE_ID` are set
    and the owner resumes the agent.
+19. `20261109120000_monday_scorecard.sql`, then its gate `20261109120100_monday_scorecard_contract.sql`, which add the owner's
+   "Send the individual weekly reports" setting (off), the server-only `private.agent_individual_reports` and
+   `private.agent_scorecard_facts`, the owner's `hub.get_scorecard_settings` and `hub.set_individual_reports`, and the Chief of
+   Staff's daily `scorecard.weekly` schedule at 07:50 Eastern, and declare `platform.agents.scorecard.v1` (it needs the control
+   plane, the hardening, the brief, the Account Manager, the Growth Manager and customer growth). Restart the Hub after it. While the
+   Chief of Staff is resumed, the five weekly reports' scheduled emails then stop and the scorecard carries them; switch "Send the
+   individual weekly reports" on under **Weekly reports** to get them as well. See [Monday scorecard](MONDAY_SCORECARD.md).
 
 The Hub build does not require any of these features, so a Hub whose database lacks them still starts and
 serves everything else. The AI team is opt-in twice over: nothing runs unless `HUB_AGENTS_ENABLED`

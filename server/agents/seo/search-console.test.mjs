@@ -196,6 +196,22 @@ describe('the Search Console reader', () => {
     });
   });
 
+  it('reads only the totals for the Monday scorecard, over the window it asks for, and reports a property it cannot read', async () => {
+    const net = network({ api: (property, request) => (property.includes('caremetricintel') ? json({ error: { code: 403 } }, 403) : json(apiAnswer(property, request))) });
+    const { instance, logs } = reader({ net, sites: 'sc-domain:cmcarebase.com,https://www.caremetricintel.com/' });
+    const read = await instance.totals({ now: moment, days: 7 });
+    expect(read.window).toEqual({ current: { startDate: '2026-10-24', endDate: '2026-10-30' }, previous: { startDate: '2026-10-17', endDate: '2026-10-23' } });
+    const bodies = net.apiCalls().filter(request => request.url.includes('cmcarebase')).map(request => JSON.parse(request.body));
+    expect(bodies).toEqual([
+      { startDate: '2026-10-24', endDate: '2026-10-30', type: 'web', dataState: 'final' },
+      { startDate: '2026-10-17', endDate: '2026-10-23', type: 'web', dataState: 'final' },
+    ]);
+    expect(read.properties[0]).toEqual({ property: 'sc-domain:cmcarebase.com', ok: true, current: { clicks: 100, impressions: 4000 }, previous: { clicks: 100, impressions: 4000 } });
+    expect(read.properties[1]).toMatchObject({ property: 'https://www.caremetricintel.com/', ok: false, status: 403 });
+    expect(logs.join('\n')).not.toContain(accessToken);
+    await expect(searchConsoleReader({ credentials: undefined, sites: undefined }).totals()).rejects.toMatchObject({ code: 'not_configured' });
+  });
+
   it('keeps the access token until shortly before it expires, and shares one sign-in between requests made together', async () => {
     let time = moment.getTime();
     const { instance, net } = reader({ clock: () => time });
