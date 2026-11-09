@@ -7,7 +7,7 @@
  * - its own counts (private.agent_scorecard_facts) for the week and the week before: county reports, trial sign-ups, first activations,
  *   outbound email outcomes, replies and the AI spend on agent runs;
  * - the morning brief's facts: proposals waiting for approval and products that are down;
- * - the Account Manager's billing snapshot: MRR with the Billing screen's maths, new paying customers and accounts at risk;
+ * - the Account Manager's billing snapshot: MRR with the Billing screen's maths, new paying customers and the accounts that need attention;
  * - the Sales Executive's pipeline (the growth snapshot): deals that need the owner;
  * - the Social Media Manager's ad accounts, when one is connected: ad spend and ads losing money;
  * - the SEO Analyst's crawl of the websites (urgent problems) and Search Console, when it is connected (organic clicks).
@@ -133,7 +133,7 @@ export function scorecardHandlers({
     const review = pipeline ? composeReview({ items: pipeline, now: moment, publicOrigin }).result : null;
     const notes = [
       brief ? null : 'The approvals waiting and products down could not be read this morning.',
-      snapshot ? null : 'Billing could not be read this morning, so MRR, new paying customers and accounts at risk are missing.',
+      snapshot ? null : 'Billing could not be read this morning, so MRR, new paying customers and accounts needing attention are missing.',
       growth?.store?.snapshot && !pipeline ? 'The pipeline could not be read this morning, so deals waiting on you are missing.' : null,
       urgent === null ? 'The websites could not be checked this morning.' : null,
     ].filter(Boolean);
@@ -141,7 +141,7 @@ export function scorecardHandlers({
       week, facts: { current, previous }, billing: billingFigures(snapshot, { now: moment, until }), search, ads: adFigures, visitors: seen, publicOrigin, notes,
       needs: {
         incidents: Array.isArray(brief?.incidents) ? brief.incidents.length : 0, approvals: brief?.approvals ?? null,
-        atRisk: accounts?.atRisk ?? null, stuckDeals: review?.needsYou ?? null, failingAds: adFigures?.failing ?? null, siteProblems: urgent,
+        accounts: accounts?.needsYou ?? null, stuckDeals: review?.needsYou ?? null, failingAds: adFigures?.failing ?? null, siteProblems: urgent,
       },
     });
 

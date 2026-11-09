@@ -148,6 +148,15 @@ describe('the Monday scorecard task', () => {
     expect(JSON.stringify(missing.notifier.send.mock.calls[0][0].blocks)).toContain('Search Console is not connected');
   });
 
+  it('carries every account the account report would flag, not only those at risk', async () => {
+    const owing = book();
+    owing.accounts.push(account({ slug: 'birch', name: 'Birch House', subscriptions: [subscription({ app: 'carebase', status: 'past_due', created: at(-90) })], invoices: { open: 1, overdue: 1, remainingCents: 4900 } }));
+    const { run, notifier } = fixture({ snapshot: owing, brief: { approvals: { count: 0 }, incidents: [] } });
+    const outcome = await run();
+    expect(outcome.result.needs).toEqual(['accounts']);
+    expect(notifier.send.mock.calls[0][0].body).toContain('- 1 customer account needs attention');
+  });
+
   it('never shows a Search Console property it could not read as zero clicks', async () => {
     const reader = fakeReader([
       { property: 'sc-domain:caremetricintel.com', ok: false, code: 'not_permitted', status: 403 },
@@ -268,8 +277,8 @@ describe('the scorecard\'s figures', () => {
   });
 
   it('ranks what needs the owner and keeps three', () => {
-    const ranked = rankNeeds({ incidents: 0, approvals: { count: 1 }, atRisk: 2, stuckDeals: 3, failingAds: 1, siteProblems: 4 });
-    expect(ranked.kept.map(item => [item.key, item.path])).toEqual([['approvals', '/admin/team'], ['at_risk_accounts', '/admin/billing?tab=customers'], ['stuck_deals', '/admin/growth']]);
+    const ranked = rankNeeds({ incidents: 0, approvals: { count: 1 }, accounts: 2, stuckDeals: 3, failingAds: 1, siteProblems: 4 });
+    expect(ranked.kept.map(item => [item.key, item.path])).toEqual([['approvals', '/admin/team'], ['accounts', '/admin/billing?tab=customers'], ['stuck_deals', '/admin/growth']]);
     expect(ranked.more).toBe(2);
     expect(rankNeeds({}).kept).toEqual([]);
   });

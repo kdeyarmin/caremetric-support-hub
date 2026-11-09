@@ -129,11 +129,11 @@ function costPerTrial(spendCents, trials) {
 }
 
 /** What needs the owner, most urgent first, from what the five reports and the brief already flag. Each has a link; at most three are kept. */
-export function rankNeeds({ incidents = 0, approvals = null, atRisk = null, stuckDeals = null, failingAds = null, siteProblems = null }) {
+export function rankNeeds({ incidents = 0, approvals = null, accounts = null, stuckDeals = null, failingAds = null, siteProblems = null }) {
   const items = [
     count(incidents) && { key: 'site_down', rank: 1, text: `${plural(count(incidents), 'product')} down right now`, path: '/admin/team', button: 'Open the AI team' },
     count(approvals?.count) && { key: 'approvals', rank: 2, text: `${plural(count(approvals.count), 'proposal')} waiting for your approval`, path: '/admin/team', button: 'Open the AI team' },
-    count(atRisk) && { key: 'at_risk_accounts', rank: 3, text: `${plural(count(atRisk), 'customer account')} at risk`, path: '/admin/billing?tab=customers', button: 'Open Billing' },
+    count(accounts) && { key: 'accounts', rank: 3, text: `${plural(count(accounts), 'customer account')} ${count(accounts) === 1 ? 'needs' : 'need'} attention`, path: '/admin/billing?tab=customers', button: 'Open Billing' },
     count(stuckDeals) && { key: 'stuck_deals', rank: 4, text: `${plural(count(stuckDeals), 'deal')} waiting on you in the pipeline`, path: '/admin/growth', button: 'Open Customer growth' },
     count(failingAds) && { key: 'failing_ads', rank: 5, text: `${plural(count(failingAds), 'ad')} losing money`, path: '/admin/team', button: 'Open the AI team' },
     count(siteProblems) && { key: 'site_problems', rank: 6, text: `${plural(count(siteProblems), 'urgent website problem')} that could keep pages out of search`, path: '/admin/team', button: 'Open the AI team' },

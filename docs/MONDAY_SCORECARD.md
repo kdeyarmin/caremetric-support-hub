@@ -17,7 +17,7 @@ brief and the five reports already flag:
 | --- | --- | --- | --- |
 | 1 | Products down right now | the brief (open incidents) | AI team |
 | 2 | Proposals waiting for your approval | the brief | AI team |
-| 3 | Customer accounts at risk | the account report's health bands | Billing, Customers |
+| 3 | Customer accounts that need attention | the account report's "needs you" list (at risk, unpaid, cancelling, urgent cases and the rest it flags) | Billing, Customers |
 | 4 | Deals waiting on you in the pipeline | the pipeline review | Customer growth |
 | 5 | Ads losing money | the ad rules the daily ad review uses (ads it would pause) | AI team |
 | 6 | Urgent website problems | the SEO crawl's high-severity findings | AI team |

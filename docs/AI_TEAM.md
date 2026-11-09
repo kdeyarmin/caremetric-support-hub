@@ -1032,7 +1032,7 @@ Every Monday at 07:50 Eastern (task `scorecard.weekly`, shown as "Monday scoreca
 the five weekly reports (`accounts.weekly`, `growth.weekly`, `seo.weekly`, `sales.review` and `social.report`). It uses no model.
 
 - **Needs you**: at most three items, most urgent first, each with a button to the screen that handles it: products down, proposals
-  waiting for approval, accounts at risk, deals waiting on you, ads losing money and urgent website problems, as the brief and the
+  waiting for approval, accounts that need attention, deals waiting on you, ads losing money and urgent website problems, as the brief and the
   five reports flag them.
 - **Six numbers per product** (CareBase and Intel), each beside last week's: website visitors (only from a connected source; none is
   connected, so "Not connected", never an estimate), county reports and trial starts, activated trials (first `first_value` events),
