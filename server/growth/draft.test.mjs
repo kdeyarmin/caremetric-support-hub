@@ -69,19 +69,16 @@ it('never offers a call, a meeting or a demo: templates point to the free trial 
  expect(model.run.mock.calls[0][1].system[0].text).not.toContain('bookingUrl');
  expect(model.run.mock.calls[0][1].system[0].text).toContain('Never offer or suggest a demo, a sales call or a meeting.');
 });
-it('tags every product page it writes with growth-<product>-touch<n> and the variant, and a customer email with its moment',async()=>{
- const tags=touch=>`utm_source=caremetric&utm_medium=email&utm_campaign=growth-carebase-touch${touch}&utm_content=control`;
- // The template: the free-trial page carries the outreach tags; the booking page never appears.
- const template=await draftMessage({opportunity:{...opportunity,touches:1},work,task:{}});
- expect(template.body).toContain(`https://cmcarebase.com/signup?${tags(2)}`);
- // The model is given the plain addresses; its product pages are tagged (its own tags replaced), the booking page left alone.
- const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Staff training records',body:'How do you track annual training hours today?\n\nhttps://cmcarebase.com/signup?utm_source=google\n\nAny question, just reply here.',citations:['source-1'],needsHuman:false}}))};
- const draft=await draftMessage({opportunity,work,task:{},model});
- expect(draft.body).toBe(`How do you track annual training hours today?\n\nhttps://cmcarebase.com/signup?${tags(1)}\n\nAny question, just reply here.`);
- expect(JSON.parse(model.run.mock.calls[0][1].user).links.map(link=>link.url)).toContain('https://cmcarebase.com/signup');
- model.run.mockResolvedValue({outcome:'completed',output:{subject:'Before your trial ends',body:'What is left to decide?\n\nhttps://cmcarebase.com/faq',citations:[],needsHuman:false}});
- expect((await draftMessage({opportunity:{...opportunity,stage:'trial'},work:{kind:'trial',action:'x',success:'y'},task:{},model})).body)
-  .toBe('What is left to decide?\n\nhttps://cmcarebase.com/faq?utm_source=caremetric&utm_medium=email&utm_campaign=success-carebase-trial');
+it('tags the product links of a passing outreach draft with its touch',async()=>{
+ const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Staff training records',body:'How do you track annual training hours today?\n\nhttps://cmcarebase.com/signup',citations:['source-1'],needsHuman:false}}))};
+ const draft=await draftMessage({opportunity:{...opportunity,touches:1},work,task:{},model});
+ expect(draft.body).toBe('How do you track annual training hours today?\n\nhttps://cmcarebase.com/signup?utm_source=caremetric&utm_medium=email&utm_campaign=growth-carebase-touch2');
+});
+it('accepts a draft whose product link already carries well-formed tags, and refuses a tag that leads elsewhere',async()=>{
+ const run=body=>draftMessage({opportunity,work,task:{},model:{configured:true,run:async()=>({outcome:'completed',output:{subject:'Staff training records',body,citations:['source-1'],needsHuman:false}})}});
+ expect((await run('Try it free:\nhttps://cmcarebase.com/signup?utm_source=x&utm_medium=y&utm_campaign=z'))?.body).toBe('Try it free:\nhttps://cmcarebase.com/signup?utm_source=caremetric&utm_medium=email&utm_campaign=growth-carebase-touch1');
+ expect(await run('Try it free:\nhttps://evil.example/?utm_source=x&utm_medium=y&utm_campaign=z')).toBeNull();
+ expect(await run('Try it free:\nhttps://cmcarebase.com/signup?utm_source=x&utm_medium=y&utm_campaign=z&next=https://evil.example')).toBeNull();
 });
 it('refuses a tag that carries another host, path or parameter, and any booking page',async()=>{
  const run=body=>draftMessage({opportunity,work,task:{},model:{configured:true,run:async()=>({outcome:'completed',output:{subject:'Training',citations:['source-1'],needsHuman:false,body}})}});
@@ -98,4 +95,11 @@ it('refuses a draft that offers a conversation, a call, a meeting or a demo, and
   expect(await run(body),body).toBeNull();
  expect((await run('CareMetric does not do live demos. The free trial shows every step:\n\nhttps://cmcarebase.com/signup'))?.modelGenerated).toBe(true);
  expect((await run('Hold a short monthly meeting with your staff to review training. Would a free trial help?'))?.modelGenerated).toBe(true);
+});
+it('tags the template and a customer message with the Account Manager campaign for the moment',async()=>{
+ const template=await draftMessage({opportunity,work,task:{}});
+ expect(template.body).toContain('https://cmcarebase.com/signup?utm_source=caremetric&utm_medium=email&utm_campaign=growth-carebase-touch1');
+ const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Your first setup step',body:'Where are you in setup?\n\nhttps://cmcarebase.com/how-it-works',citations:[],needsHuman:false}}))};
+ const draft=await draftMessage({opportunity:{...opportunity,stage:'trial',owner_agent:'account_manager'},work:{kind:'onboarding',action:'Agree the goal',success:'First value'},task:{},model});
+ expect(draft.body).toContain('https://cmcarebase.com/how-it-works?utm_source=caremetric&utm_medium=email&utm_campaign=account-carebase-onboarding');
 });

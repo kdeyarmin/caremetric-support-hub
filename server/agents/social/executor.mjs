@@ -2,8 +2,7 @@
  * Carries out the Social Media Manager's approved actions on Meta and LinkedIn (an action's `platform` "linkedin" goes to LinkedIn). Each runs once (the database hands an approved action to one
  * caller); none needs the owner's session, so approved and handed-over work runs on the background drain.
  *
- * - social.post: waits for its time slot (an early start is handed back with the same hold), re-checks the words and the link (one of
- *   the product's own pages, with campaign tags or without), then publishes.
+ * - social.post: waits for its time slot (an early start is handed back with the same hold), re-checks the words, then publishes.
  * - social.reply: reads the comment or message again first, and refuses if someone already answered it, it was deleted, or (for a
  *   private message) Meta's 24-hour reply window has closed. The reply goes to the person who wrote the latest message.
  * - social.moderate: hides the comment. On LinkedIn, which has no "hide", it deletes it, and because a deletion cannot be undone, only on
@@ -15,8 +14,7 @@
  * A request Meta or LinkedIn may have received but did not confirm is never retried: it fails as `social_unconfirmed` and the owner
  * is asked to look before trying again.
  */
-import { checkSocialText, socialLinks } from './content.mjs';
-import { linkAllowed } from '../links.mjs';
+import { checkSocialText } from './content.mjs';
 import { metaId } from './meta.mjs';
 import { linkedinComment, linkedinPost } from './linkedin.mjs';
 
@@ -56,7 +54,8 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
       const checked = checkSocialText(input.message, { surface: input.platform, product: input.product ?? null });
       if (!checked.ok || checked.text !== input.message) throw failure('invalid_post');
       if (input.platform === 'instagram' && !/^https:\/\//.test(input.imageUrl ?? '')) throw failure('image_missing');
-      if (input.link && (!/^https:\/\//.test(input.link) || !linkAllowed(input.link, socialLinks(input.product ?? null).map(link => link.url)))) throw failure('invalid_post');
+      // The link beside a post: one of the product's own pages, as written or with well-formed campaign tags (links.mjs), nothing else.
+      if (input.link && (!/^https:\/\//.test(input.link) || !checkSocialText(`Start here: ${input.link}`, { surface: 'facebook', product: input.product ?? null }).ok)) throw failure('invalid_post');
       if (input.imageUrl && !/^https:\/\//.test(input.imageUrl)) throw failure('invalid_post');
       const published = await careful(execution, () => (onLinkedIn(input)
         ? li.publishPost({ message: input.message, link: input.link ?? null, linkTitle: input.linkLabel ?? null, imageUrl: input.imageUrl ?? null })

@@ -1,153 +1,104 @@
 import { describe, expect, it } from 'vitest';
-import { articleUrl, officialSources, productPages } from './content/facts.mjs';
-import {
-  addressesIn, campaignTags, linkAllowed, productCode, productHosts, productSiteUrl, tagKeys, tagLinks, taggedUrl, tagsOf, tagValue, untaggedUrl,
-} from './links.mjs';
+import { productPages } from './content/facts.mjs';
+import { campaignProduct, linkTags, productPageFor, tagLinks, taggedUrl, tagValue, untaggedUrl, untagLinks, validTagValue } from './links.mjs';
 
-const tags = { source: 'caremetric', medium: 'email', campaign: 'growth-intel-touch1', content: 'control' };
-const query = 'utm_source=caremetric&utm_medium=email&utm_campaign=growth-intel-touch1&utm_content=control';
-const valid = value => typeof value === 'string' && value.length >= 1 && value.length <= 80 && /^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/.test(value);
+const tags = { source: 'caremetric', medium: 'email', campaign: 'growth-carebase-touch1' };
 
-describe('what may be tagged', () => {
-  it('is an https address on a product site (the hosts of the product pages), nothing else', () => {
-    expect(productHosts).toEqual(['cmcarebase.com', 'www.caremetricintel.com', 'caremetricadvisors.com']);
-    for (const page of productPages) expect(productSiteUrl(page.url), page.url).toBe(true);
-    for (const value of [
-      'http://cmcarebase.com/signup', 'https://help.caremetric.ai/help/articles/x', 'https://www.cms.gov/', 'https://calendly.com/caremetric',
-      'https://cmcarebase.com.evil.test/', 'https://evil.test/?u=https://cmcarebase.com/', 'https://user:pw@cmcarebase.com/', 'https://cmcarebase.com:8443/',
-      'https://caremetricintel.com/', 'not a url', '', null,
-    ]) expect(productSiteUrl(value), String(value)).toBe(false);
+describe('taggedUrl', () => {
+  it('adds source, medium, campaign and content to a product page, before its fragment', () => {
+    expect(taggedUrl('https://cmcarebase.com/signup', tags)).toBe('https://cmcarebase.com/signup?utm_source=caremetric&utm_medium=email&utm_campaign=growth-carebase-touch1');
+    expect(taggedUrl('https://cmcarebase.com/#pricing', { ...tags, content: 'post' })).toBe('https://cmcarebase.com/?utm_source=caremetric&utm_medium=email&utm_campaign=growth-carebase-touch1&utm_content=post#pricing');
+    expect(taggedUrl('https://www.caremetricintel.com/#how-it-works', tags)).toBe('https://www.caremetricintel.com/?utm_source=caremetric&utm_medium=email&utm_campaign=growth-carebase-touch1#how-it-works');
   });
 
-  it('names products by a short code and writes values as short lowercase words', () => {
-    expect([productCode('carebase'), productCode('caremetric-intel'), productCode('intel'), productCode('advisors'), productCode('breathe')]).toEqual(['carebase', 'intel', 'intel', 'advisors', null]);
-    expect(tagValue('Growth Intel  Touch 1')).toBe('growth-intel-touch-1');
-    expect(tagValue('trial_checkin')).toBe('trial_checkin');
-    expect(tagValue('--https://evil.test/a?b=c--')).toBe('https-evil-test-a-b-c');
-    expect(tagValue(null)).toBe('');
-    expect(tagValue('x'.repeat(200))).toHaveLength(80);
-  });
-});
-
-describe('tagging an address', () => {
-  it('adds the tags in a fixed order before the fragment, and replaces tags it carried', () => {
-    expect(taggedUrl('https://cmcarebase.com/signup', tags)).toBe(`https://cmcarebase.com/signup?${query}`);
-    expect(taggedUrl('https://www.caremetricintel.com/#pricing', tags)).toBe(`https://www.caremetricintel.com/?${query}#pricing`);
-    expect(taggedUrl('https://www.caremetricintel.com', tags)).toBe(`https://www.caremetricintel.com/?${query}`);
-    expect(taggedUrl('https://cmcarebase.com/signup?utm_source=old&utm_campaign=old', { campaign: 'new', source: 'caremetric' }))
-      .toBe('https://cmcarebase.com/signup?utm_source=caremetric&utm_campaign=new');
-    expect(taggedUrl('https://cmcarebase.com/signup', { source: 'Face Book', medium: '', campaign: null })).toBe('https://cmcarebase.com/signup?utm_source=face-book');
+  it('leaves every address that is not exactly a product page as it is: citations, the help center, unsubscribe and booking links', () => {
+    for (const url of [
+      'https://www.pacodeandbulletin.gov/secure/pacode/data/055/chapter2600/s2600.132.html',
+      'https://help.caremetric.ai/help/articles/assign-annual-training',
+      'https://cmcarebase.com/app/help',
+      'https://hub.example.test/api/growth/unsubscribe/abc',
+      'https://calendly.com/caremetric/intro',
+      'https://cmcarebase.com',
+      'https://cmcarebase.com/signup?ref=1',
+    ]) expect(taggedUrl(url, tags)).toBe(url);
   });
 
-  it('with no tags, removes the ones it carried; it never changes another address', () => {
-    expect(taggedUrl(`https://www.caremetricintel.com/?${query}#pricing`, null)).toBe('https://www.caremetricintel.com/#pricing');
-    expect(taggedUrl('https://cmcarebase.com/signup', {})).toBe('https://cmcarebase.com/signup');
-    for (const value of [articleUrl('assign-annual-training'), officialSources['cms-home-health'].url, 'https://calendly.com/caremetric?month=2026-11', 'https://cmcarebase.com/signup?ref=abc', 'mailto:support@caremetric.ai']) {
-      expect(taggedUrl(value, tags), value).toBe(value);
+  it('refuses a missing or unsafe tag value rather than writing it', () => {
+    expect(() => taggedUrl('https://cmcarebase.com/', { source: 'caremetric', medium: 'email' })).toThrow(/utm_campaign/);
+    for (const bad of ['Upper', 'a b', 'name@example.com', 'x/y', 'x%2F', 'x&y=z', 'x?y', '-lead', 'a'.repeat(41), '']) {
+      expect(() => taggedUrl('https://cmcarebase.com/', { ...tags, campaign: bad }), bad).toThrow();
     }
   });
 
-  it('keeps every product page exactly as listed underneath its tags', () => {
+  it('round-trips every product page through untaggedUrl', () => {
     for (const page of productPages) {
-      const tagged = taggedUrl(page.url, tags);
-      expect(tagged, page.id).not.toBe(page.url);
-      expect(untaggedUrl(tagged), page.id).toBe(page.url);
-      expect(tagsOf(tagged), page.id).toEqual(tags);
-      expect(linkAllowed(tagged, [page.url]), page.id).toBe(true);
-      expect(new URL(tagged).searchParams.get('utm_campaign'), page.id).toBe('growth-intel-touch1');
+      expect(productPageFor(page.url)).toBe(page);
+      expect(untaggedUrl(taggedUrl(page.url, { ...tags, content: 'ad' }))).toBe(page.url);
     }
-  });
-
-  it('tags every product page in a text, keeps the punctuation after it and leaves other addresses alone', () => {
-    const text = 'Try it (https://cmcarebase.com/signup). Pricing: https://cmcarebase.com/#pricing, guide https://help.caremetric.ai/help/articles/a-guide.\n[Features](https://cmcarebase.com/features) and https://www.cms.gov/x?y=1';
-    expect(tagLinks(text, tags)).toBe(`Try it (https://cmcarebase.com/signup?${query}). Pricing: https://cmcarebase.com/?${query}#pricing, guide https://help.caremetric.ai/help/articles/a-guide.\n[Features](https://cmcarebase.com/features?${query}) and https://www.cms.gov/x?y=1`);
-    expect(tagLinks('Start: https://cmcarebase.com/signup?utm_source=google', tags)).toBe(`Start: https://cmcarebase.com/signup?${query}`);
-    // A product-site address with a query of its own is left for the checks to refuse.
-    expect(tagLinks('https://cmcarebase.com/signup?next=https://evil.test', tags)).toBe('https://cmcarebase.com/signup?next=https://evil.test');
-    expect(tagLinks(`https://cmcarebase.com/signup?${query}`, null)).toBe('https://cmcarebase.com/signup');
-    expect(addressesIn(`See https://cmcarebase.com/signup?${query}. Or https://help.caremetric.ai/help.`)).toEqual([`https://cmcarebase.com/signup?${query}`, 'https://help.caremetric.ai/help']);
   });
 });
 
-describe('the link check', () => {
-  const allowed = new Set(['https://cmcarebase.com/signup', 'https://www.caremetricintel.com/#pricing', 'https://help.caremetric.ai/help/articles/a-guide', officialSources['cms-data'].url, 'https://calendly.com/caremetric']);
-
-  it('accepts an allowed address, plain or with well-formed tags', () => {
-    expect(linkAllowed('https://cmcarebase.com/signup', allowed)).toBe(true);
-    expect(linkAllowed(`https://cmcarebase.com/signup?${query}`, allowed)).toBe(true);
-    expect(linkAllowed('https://cmcarebase.com/signup?utm_campaign=sales-carebase', allowed)).toBe(true);
-    expect(linkAllowed(`https://www.caremetricintel.com/?${query}#pricing`, allowed)).toBe(true);
-    expect(linkAllowed('https://calendly.com/caremetric', [...allowed])).toBe(true);
+describe('untaggedUrl', () => {
+  it('reads a tagged product link as its page, whatever the order of the tags', () => {
+    expect(untaggedUrl('https://cmcarebase.com/signup?utm_campaign=c&utm_source=s&utm_medium=m')).toBe('https://cmcarebase.com/signup');
   });
 
-  it('never lets a tag carry another host, path, parameter or fragment', () => {
-    for (const value of [
-      `https://evil.test/signup?${query}`,
-      `https://cmcarebase.com.evil.test/signup?${query}`,
-      `https://cmcarebase.com/signup/../admin?${query}`,
-      `https://cmcarebase.com/other?${query}`,
-      `https://cmcarebase.com/signup?${query}&next=https://evil.test`,
-      'https://cmcarebase.com/signup?next=https://evil.test&utm_source=caremetric',
-      'https://cmcarebase.com/signup?utm_source=evil.test',
-      'https://cmcarebase.com/signup?utm_source=https://evil.test/',
-      'https://cmcarebase.com/signup?utm_source=a/b',
-      'https://cmcarebase.com/signup?utm_source=a%2Fb',
-      'https://cmcarebase.com/signup?utm_source=a@b',
-      'https://cmcarebase.com/signup?utm_source=Caremetric',
-      'https://cmcarebase.com/signup?utm_source=',
-      'https://cmcarebase.com/signup?utm_source=a&utm_source=b',
-      'https://cmcarebase.com/signup?utm_term=x',
-      'https://cmcarebase.com/signup?utm_source=a?utm_medium=b',
-      `https://cmcarebase.com/signup?utm_source=${'a'.repeat(81)}`,
-      'https://cmcarebase.com/signup?&utm_source=a',
-      `https://cmcarebase.com/signup?${query}#evil`,
-      'https://www.caremetricintel.com/#pricing?utm_source=a',
-      `https://www.caremetricintel.com/?${query}`,
-      `http://cmcarebase.com/signup?${query}`,
-      `https://CMCAREBASE.com/signup?${query}`,
-    ]) expect(linkAllowed(value, allowed), value).toBe(false);
-  });
-
-  it('never accepts tags on a citation, a help-center guide or the booking page', () => {
-    expect(linkAllowed(`${officialSources['cms-data'].url}?${query}`, allowed)).toBe(false);
-    expect(linkAllowed(`https://help.caremetric.ai/help/articles/a-guide?${query}`, allowed)).toBe(false);
-    expect(linkAllowed(`https://calendly.com/caremetric?${query}`, allowed)).toBe(false);
+  it('never reads anything but well-formed tags on an exact product page as one', () => {
+    for (const url of [
+      'https://cmcarebase.com/signup',
+      'https://cmcarebase.com/signup?utm_source=s&utm_medium=m',
+      'https://cmcarebase.com/signup?utm_source=s&utm_medium=m&utm_campaign=c&next=https://evil.example',
+      'https://cmcarebase.com/signup?utm_source=s&utm_source=t&utm_medium=m&utm_campaign=c',
+      'https://cmcarebase.com/signup?utm_source=s&utm_medium=m&utm_campaign=c&utm_term=t',
+      'https://cmcarebase.com/signup?utm_source=s&utm_medium=m&utm_campaign=evil.example/x',
+      'https://cmcarebase.com/signup?utm_source=s&utm_medium=m&utm_campaign=x=person@example.com',
+      'https://cmcarebase.com/signup?utm_source=s&utm_medium=m&utm_campaign=x=y',
+      'https://cmcarebase.com/signup?utm_source=s@evil.example&utm_medium=m&utm_campaign=c',
+      'https://cmcarebase.com/signup?utm_source=%2F%2Fevil&utm_medium=m&utm_campaign=c',
+      'https://cmcarebase.com/signup?utm_source=&utm_medium=m&utm_campaign=c',
+      'https://cmcarebase.com/signup?utm_source=s&utm_medium=m&utm_campaign=c#frag',
+      'https://cmcarebase.com/other?utm_source=s&utm_medium=m&utm_campaign=c',
+      'https://cmcarebase.com.evil.example/signup?utm_source=s&utm_medium=m&utm_campaign=c',
+      'https://user@cmcarebase.com/signup?utm_source=s&utm_medium=m&utm_campaign=c',
+      'http://cmcarebase.com/signup?utm_source=s&utm_medium=m&utm_campaign=c',
+      'https://evil.example/?utm_source=s&utm_medium=m&utm_campaign=c',
+    ]) expect(untaggedUrl(url), url).toBeNull();
   });
 });
 
-describe('what each agent writes', () => {
-  it('uses short lowercase values, the product code and no personal data', () => {
-    const written = [
-      campaignTags.outreach({ product: 'caremetric-intel', touch: 2, variant: 'concise' }),
-      campaignTags.success({ product: 'carebase', kind: 'trial' }),
-      campaignTags.account({ product: 'caremetric-intel', template: 'trial_checkin' }),
-      campaignTags.sales({ product: 'carebase', route: 'sms' }),
-      campaignTags.socialPost({ platform: 'instagram', product: 'caremetric-intel', pillar: 'tip' }),
-      campaignTags.socialReply({ platform: 'messenger', product: 'carebase', kind: 'message' }),
-      campaignTags.ad({ platform: 'meta', product: 'carebase', content: '2026-11-09-1' }),
-      campaignTags.article({ product: 'intel', slug: 'territory-planning-with-public-data' }),
-      campaignTags.listing({ directory: 'software_advice', product: 'intel' }),
-      campaignTags.pitch({ audience: 'provider_association', product: 'advisors' }),
-    ];
-    expect(written).toEqual([
-      { source: 'caremetric', medium: 'email', campaign: 'growth-intel-touch2', content: 'concise' },
-      { source: 'caremetric', medium: 'email', campaign: 'success-carebase-trial' },
-      { source: 'caremetric', medium: 'email', campaign: 'account-intel-trial_checkin' },
-      { source: 'caremetric', medium: 'sms', campaign: 'sales-carebase' },
-      { source: 'instagram', medium: 'social', campaign: 'social-intel', content: 'tip' },
-      { source: 'facebook', medium: 'social', campaign: 'social-carebase-reply', content: 'message' },
-      { source: 'facebook', medium: 'paid_social', campaign: 'ads-carebase', content: '2026-11-09-1' },
-      { source: 'help-center', medium: 'referral', campaign: 'article-intel', content: 'territory-planning-with-public-data' },
-      { source: 'software_advice', medium: 'referral', campaign: 'listing-intel' },
-      { source: 'partner', medium: 'email', campaign: 'pitch-advisors', content: 'provider_association' },
-    ]);
-    for (const item of written) for (const [key, value] of Object.entries(item)) {
-      expect(tagKeys).toContain(key);
-      expect(valid(value), `${key}=${value}`).toBe(true);
-    }
-    // A link made from any of them passes the check for its page.
-    for (const item of written) expect(linkAllowed(taggedUrl('https://cmcarebase.com/signup', item), ['https://cmcarebase.com/signup'])).toBe(true);
-    expect(campaignTags.sales({ product: 'carebase', route: 'fax' }).medium).toBe('email');
-    expect(campaignTags.outreach({ product: 'carebase', touch: null }).campaign).toBe('growth-carebase-touch1');
+describe('tagLinks and untagLinks', () => {
+  it('tag product pages in text and Markdown, keep punctuation, and leave other addresses alone', () => {
+    const text = 'Start here: https://cmcarebase.com/signup.\nSee [features](https://cmcarebase.com/features) and https://help.caremetric.ai/help/articles/x';
+    const tagged = tagLinks(text, tags);
+    expect(tagged).toBe('Start here: https://cmcarebase.com/signup?utm_source=caremetric&utm_medium=email&utm_campaign=growth-carebase-touch1.\nSee [features](https://cmcarebase.com/features?utm_source=caremetric&utm_medium=email&utm_campaign=growth-carebase-touch1) and https://help.caremetric.ai/help/articles/x');
+    expect(untagLinks(tagged)).toBe(text);
+  });
+
+  it('replace well-formed tags already on a product page with the agent\'s own', () => {
+    expect(tagLinks('https://cmcarebase.com/signup?utm_source=x&utm_medium=y&utm_campaign=z', tags)).toBe(taggedUrl('https://cmcarebase.com/signup', tags));
+  });
+
+  it('leave a malformed tag as written, so the link check that follows refuses it', () => {
+    expect(tagLinks('https://cmcarebase.com/signup?utm_source=x&next=y', tags)).toBe('https://cmcarebase.com/signup?utm_source=x&next=y');
+    const text = 'https://cmcarebase.com/signup?utm_source=s&utm_medium=m&utm_campaign=c&next=https://evil.example';
+    expect(untagLinks(text)).toBe(text);
+  });
+});
+
+describe('the tags each agent uses', () => {
+  it('are short, lowercase and free of personal data', () => {
+    expect(linkTags.growthOutreach('carebase', 2)).toEqual({ source: 'caremetric', medium: 'email', campaign: 'growth-carebase-touch2' });
+    expect(linkTags.growthOutreach('caremetric-intel', 1)).toEqual({ source: 'caremetric', medium: 'email', campaign: 'growth-intel-touch1' });
+    expect(linkTags.accountEmail('caremetric-intel', 'onboarding')).toEqual({ source: 'caremetric', medium: 'email', campaign: 'account-intel-onboarding' });
+    expect(linkTags.sales('carebase', 'sms')).toEqual({ source: 'caremetric', medium: 'sms', campaign: 'sales-carebase' });
+    expect(linkTags.social('instagram', 'carebase', 'reply')).toEqual({ source: 'instagram', medium: 'social', campaign: 'social-carebase', content: 'reply' });
+    expect(linkTags.social('messenger', null, 'reply')).toMatchObject({ source: 'facebook', campaign: 'social-caremetric' });
+    expect(linkTags.social('linkedin', 'caremetric-intel', 'ad', { paid: true })).toEqual({ source: 'linkedin', medium: 'paid_social', campaign: 'social-intel', content: 'ad' });
+    expect(linkTags.article('advisors')).toEqual({ source: 'help_center', medium: 'article', campaign: 'content-advisors' });
+    expect(linkTags.listing('software_advice', 'intel')).toEqual({ source: 'software-advice', medium: 'directory', campaign: 'outreach-intel' });
+    expect(campaignProduct('unknown')).toBe('caremetric');
+    expect(tagValue('Growth', 'CareBase', 'touch 3')).toBe('growth-carebase-touch-3');
+    expect(validTagValue('paid_social')).toBe(true);
+    expect(() => tagValue('—')).toThrow();
   });
 });

@@ -10,7 +10,7 @@
  */
 import { products as facts, productPages } from '../agents/content/facts.mjs';
 
-export const playbookVersion = 'sales-playbook.3';
+export const playbookVersion = 'sales-playbook.2';
 
 /**
  * How CareMetric sells (owner decision 2026-11-08): entirely self-serve. Nobody offers a demo, a sales call or a meeting. A prospect gets
@@ -172,7 +172,7 @@ export const salesPlaybook = deepFreeze({
       'A 14-day free trial with no credit card.',
     ],
     nextStep: { label: 'Start a CareMetric Intel free trial', url: pageUrl('intel-home') },
-    pages: ['intel-home', 'intel-pricing', 'intel-walkthrough', 'intel-county-report', 'intel-resources', 'intel-targeted-marketing', 'intel-territory-analysis', 'intel-referral-measurement', 'intel-manager-playbook'],
+    pages: ['intel-home', 'intel-how-it-works', 'intel-county-report', 'intel-pricing', 'intel-resources', 'intel-targeted-marketing', 'intel-territory-analysis', 'intel-referral-measurement', 'intel-manager-playbook'],
     qualifyingQuestions: [
       'Which counties or service areas does your team cover today?',
       'How many marketers or liaisons do you have, and how do they track visits and follow-ups?',
@@ -186,7 +186,7 @@ export const salesPlaybook = deepFreeze({
       { key: 'current_system', when: 'They already use a CRM, a spreadsheet or another data tool.', answer: 'Ask what it leaves out (territory analysis, focused lists, recorded referrals in one place). Never name or criticize another product.' },
       { key: 'data_trust', when: 'They ask whether the data shows real referrals.', answer: 'Be precise: public Medicare and Census figures are research signals; referrals are what the organization records in Intel.' },
       { key: 'authority', when: 'They must ask an owner or a corporate office.', answer: 'Offer a short summary they can forward and ask who else should see it.' },
-      { key: 'demo', when: 'They ask for a demo, a call or a meeting.', answer: 'CareMetric does not do live demos or sales calls. Offer the written walkthrough instead: the walkthrough page (how CareMetric Intel works) or the resource or guide that shows what they want to see, the free county report for their own county, the 14-day free trial (no credit card) on one county, and answers to any question by email.' },
+      { key: 'demo', when: 'They ask for a demo, a call or a meeting.', answer: 'CareMetric does not do live demos or sales calls. Offer the written walkthrough instead: the resource or guide that shows what they want to see, the 14-day free trial (no credit card) on one county, and answers to any question by email.' },
       { key: 'results', when: 'They ask for proof of results or case studies.', answer: 'There are no approved customer results to share. Suggest the free trial on one county so they can judge it on their own market.' },
     ],
   },

@@ -185,10 +185,11 @@ and [the verified live configuration](evidence/founders-sale-20261108.json) are 
 
 - Product pages, by id, in `facts.mjs` (`productPages`): only routes each product's own code defines. The CareBase and Intel
   sites answer 200 for any address, so an invented path such as cmcarebase.com/pricing would look fine and show the home page;
-  pricing lives at `/#pricing` on both. Intel's walkthrough is the home page's `#how-it-works` section and its free county report
-  is `/county-report`, a route with its own page (both checked on the live site on 2026-11-09). When an agent places one of these
-  links it adds campaign tags (`server/agents/links.mjs`; see [Campaign tags](AI_TEAM.md#campaign-tags)); the pages are listed
-  without them, and a citation never carries them.
+  pricing lives at `/#pricing` on both. Intel's walkthrough is `/#how-it-works` and its free county report `/county-report`
+  (both checked on the live site on 2026-11-09: the home page carries `id="how-it-works"` and links `/county-report`).
+- Campaign tags: every product page an agent puts in front of a person carries utm_source, utm_medium and utm_campaign
+  (`server/agents/links.mjs`; the values are listed in docs/AI_TEAM.md). Citations, help-center links and unsubscribe links are
+  never tagged, and no message carries a booking link.
 - Official sources, by id, in `facts.mjs` (`officialSources`): the Pennsylvania Code chapters and sections the backlog's topics
   cite (55 Pa. Code Chapters 20, 2600 and 2800 on pacodeandbulletin.gov, in the form cmcarebase.com already cites), the DHS
   personal care home reports page on pa.gov, and CMS and Census data pages for Intel's topics. Each address was opened and

@@ -174,20 +174,6 @@ it('markets only the owner\'s products: a CareBase prospect gets no discovery, r
  expect((await growthHandlers({growth:{store:content,research},marketed:intelOnly})['growth.content']({id:'t',agent:{autonomy:'propose'},sourceKind:'schedule'})).result).toMatchObject({proposals:0});
  expect(research.search).not.toHaveBeenCalled();
 });
-it('makes a tagged product page a link and gives the website under the sign-off the message\'s own tags',()=>{
- const tags='utm_source=caremetric&utm_medium=email&utm_campaign=growth-intel-touch2&utm_content=control';
- const body=`How do your liaisons track physician visits?\n\nhttps://www.caremetricintel.com/?${tags}#pricing`;
- const email=growthEmail({product:'caremetric-intel',subject:'Physician outreach',body,postalAddress:'1 Main St',unsubscribeUrl:'https://hub.example.org/u/t',purpose:'marketing'});
- const html=tags.replaceAll('&','&amp;');
- expect(email.html).toContain(`<a href="https://www.caremetricintel.com/?${html}#pricing" target="_blank"`);
- expect(email.html).toContain(`<a href="https://www.caremetricintel.com/?${html}" target="_blank"`);
- expect(email.text).toContain(`The CareMetric Intel team\nhttps://www.caremetricintel.com/?${tags}\n`);
- // A message with no tagged link: the website carries growth-<product> or success-<product> by the message's purpose.
- expect(growthEmail({product:'carebase',subject:'S',body:'Reply any time.',postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t',purpose:'success'}).text)
-  .toContain('https://cmcarebase.com/?utm_source=caremetric&utm_medium=email&utm_campaign=success-carebase\n');
- // A query that is not tags alone never becomes part of a link (the checks refuse such a draft before it gets here).
- expect(growthEmail({product:'carebase',subject:'S',body:'https://cmcarebase.com/signup?utm_source=a&next=x',postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'}).html).not.toContain('href="https://cmcarebase.com/signup?');
-});
 it('sends a growth message as a letter: Hello, the approved words, the product team\'s sign-off and website, a preview and the unsubscribe link',()=>{
  const body='Your agency covers three counties. How do your liaisons track which physicians they have reached?\n\nYou can try it with your own team:\nhttps://www.caremetricintel.com/';
  const email=growthEmail({product:'caremetric-intel',subject:'Physician outreach',body,postalAddress:'1 Main St, Altoona, PA',unsubscribeUrl:'https://hub.example.org/api/growth/unsubscribe/t'});
@@ -200,4 +186,13 @@ it('sends a growth message as a letter: Hello, the approved words, the product t
  expect(growthEmail({product:'caremetric-intel',subject:'S',body:'B',postalAddress:'CareMetric, 1 Main St',unsubscribeUrl:'https://hub.example.org/u/t'}).text.endsWith('\n\nCareMetric, 1 Main St\nUnsubscribe from these emails: https://hub.example.org/u/t')).toBe(true);
  // A CareBase page in an Intel message is never made a link.
  expect(growthEmail({product:'caremetric-intel',subject:'S',body:'See https://cmcarebase.com/signup',postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'}).html).not.toContain('href="https://cmcarebase.com/signup"');
+});
+it('links a product page with well-formed campaign tags in a growth email, and never a tag that leads elsewhere',()=>{
+ const tagged='https://www.caremetricintel.com/county-report?utm_source=caremetric&utm_medium=email&utm_campaign=growth-intel-touch1';
+ const html=growthEmail({product:'caremetric-intel',subject:'S',body:`See your county:\n${tagged}`,postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'}).html;
+ expect(html).toContain(`href="${tagged.replaceAll('&','&amp;')}"`);
+ const smuggled=`${tagged}&next=https://evil.example`;
+ const refused=growthEmail({product:'caremetric-intel',subject:'S',body:`See:\n${smuggled}`,postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'}).html;
+ expect(refused).not.toContain('evil.example"');
+ expect(refused).not.toMatch(/href="[^"]*evil\.example/);
 });

@@ -2,14 +2,12 @@
  * The Content Marketer's monthly outreach drafts: listing descriptions for software directories and short partnership pitches
  * that the owner can copy and send personally. The model writes them from the fact sheet; this module checks each one with the
  * same rules as an article (validate.mjs) and builds the one email that carries them, to the owner and nobody else. A draft that
- * fails a check is left out and only the name of the check is recorded. Each draft comes with its product's website address carrying
- * campaign tags (../links.mjs: the directory or "partner" as the source, listing-<product> or pitch-<product>), for the owner to give
- * the directory or put in the pitch, so a lead from it shows where it came from.
+ * fails a check is left out and only the name of the check is recorded.
  */
 import { markets } from '../marketing.mjs';
-import { factSheetText, productPages, products } from './facts.mjs';
+import { factSheetText, productPage, productPages, products } from './facts.mjs';
+import { linkTags, taggedUrl, untaggedUrl, untagLinks } from '../links.mjs';
 import { allowedNumbers, markupProblems, normalizeTerms, textProblems } from './validate.mjs';
-import { campaignTags, taggedUrl } from '../links.mjs';
 import { offersMeeting } from '../../growth/playbook.mjs';
 
 export const outreachPromptVersion = 'outreach.3';
@@ -91,13 +89,16 @@ const addressPattern = /\b(?:https?:\/\/|www\.)\S+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*
 function draftProblems(texts, product) {
   const joined = texts.join('\n');
   const reasons = new Set([...markupProblems(joined).filter(reason => !reason.startsWith('link_')), ...textProblems(joined, { product, numbers })]);
-  if (/[*_`#[\]<>]/.test(joined)) reasons.add('markup');
+  // Read with campaign-tagged product links as their pages, so a tag's "utm_" is not taken for markup.
+  if (/[*_`#[\]<>]/.test(untagLinks(joined))) reasons.add('markup');
   // The software is sold without demos, calls or meetings with anyone (owner decision 2026-11-09). Advisors is consulting, whose
   // next step is its consultation request form, so its pitches are judged by the claim rules alone.
   if (product !== 'advisors' && offersMeeting(joined)) reasons.add('meeting_offer');
   // An email address is judged by textProblems (contact_detail), not again here as a link.
   for (const address of joined.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, ' ').match(addressPattern) ?? []) {
     if (!ownDomains.has(address.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/[/?#].*$/, '').toLowerCase())) reasons.add('link_not_allowed');
+    // A query is allowed only as well-formed campaign tags on a product page (links.mjs), so no tag can carry another address.
+    else if (address.includes('?') && !untaggedUrl(address.replace(/[.,;:!?)\]]+$/, ''))) reasons.add('link_not_allowed');
   }
   return [...reasons];
 }
@@ -142,12 +143,14 @@ export function checkOutreach(output, { marketed = null } = {}) {
   return { listings, pitches, dropped, reasons: [...reasons].sort(), rewrites };
 }
 
+/**
+ * The product's home page with campaign tags, for the owner to use with a draft: a listing's website field (<directory> / directory /
+ * outreach-<product>) or the link in a pitch (caremetric / email / outreach-<product>, content the kind of partner).
+ */
+export const outreachLink = (kind, item) => taggedUrl(productPage(`${item.product}-home`)?.url ?? '',
+  kind === 'listing' ? linkTags.listing(item.directory, item.product) : linkTags.pitch(item.audience, item.product)) || null;
+
 const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
-const home = product => productPages.find(page => page.id === `${product}-home`)?.url ?? products[product].site;
-/** The product's home page with the listing's campaign tags: the directory as the source. */
-export const listingLink = item => taggedUrl(home(item.product), campaignTags.listing({ directory: item.directory, product: item.product }));
-/** The product's home page with the pitch's campaign tags: "partner" as the source, the audience as the content. */
-export const pitchLink = item => taggedUrl(home(item.product), campaignTags.pitch({ audience: item.audience, product: item.product }));
 
 /**
  * The owner's email. The stored body (shown on the Team screen) holds counts only; the drafts travel in the email's blocks,
@@ -161,25 +164,18 @@ export function composeOutreachEmail({ month, label, listings, pitches, dropped,
     ? `${plural(listings.length, 'directory listing')} and ${plural(pitches.length, 'partnership pitch').replace('pitchs', 'pitches')} are ready for you to send yourself.${left} Nothing was sent to anyone else.`
     : `No draft passed the checks this month (${reasons.map(reason => reason.replaceAll('_', ' ')).join(', ') || 'none were written'}). Nothing was sent to anyone else.`;
   const blocks = [
-    { type: 'callout', tone: 'info', title: 'For you to send.', text: 'These are drafts for you to copy, adjust and send personally. Nothing was sent to a directory, a partner or a customer. Each comes with a website address that carries campaign tags: use it as the listing\'s website or the link in the pitch, so a lead from it shows where it came from.' },
-    ...listings.flatMap(item => {
-      const link = listingLink(item);
-      return [
-        { type: 'paragraph', text: `${directories[item.directory]} listing for ${products[item.product].name}` },
-        { type: 'message', text: `Tagline: ${item.tagline}\n\n${item.description}` },
-        { type: 'message', text: `Website address for this listing:\n${link}`, links: [link] },
-      ];
-    }),
-    ...pitches.flatMap(item => {
-      const link = pitchLink(item);
-      return [
-        { type: 'paragraph', text: `Pitch to ${audiences[item.audience].toLowerCase()} about ${products[item.product].name}` },
-        { type: 'message', text: `Subject: ${item.subject}\n\n${item.body}` },
-        { type: 'message', text: `Link to use in this pitch:\n${link}`, links: [link] },
-      ];
-    }),
+    { type: 'callout', tone: 'info', title: 'For you to send.', text: 'These are drafts for you to copy, adjust and send personally. Nothing was sent to a directory, a partner or a customer.' },
+    ...listings.flatMap(item => [
+      { type: 'paragraph', text: `${directories[item.directory]} listing for ${products[item.product].name}` },
+      { type: 'message', text: `Tagline: ${item.tagline}\n\n${item.description}\n\nWebsite link: ${outreachLink('listing', item)}`, links: [outreachLink('listing', item)] },
+    ]),
+    ...pitches.flatMap(item => [
+      { type: 'paragraph', text: `Pitch to ${audiences[item.audience].toLowerCase()} about ${products[item.product].name}` },
+      { type: 'message', text: `Subject: ${item.subject}\n\n${item.body}\n\nLink to use: ${outreachLink('pitch', item)}`, links: [outreachLink('pitch', item)] },
+    ]),
     ...(dropped ? [{ type: 'paragraph', text: `Left out by the checks: ${plural(dropped, 'draft')} (${reasons.map(reason => reason.replaceAll('_', ' ')).join(', ')}).` }] : []),
     { type: 'paragraph', text: 'Every draft uses only the prices and claims in the CareMetric fact sheet (docs/GTM_FACTS.md). Check them before you send.' },
+    ...(total ? [{ type: 'paragraph', text: 'Use the link under each draft as written: its campaign tags let the weekly report count the leads it brings.' }] : []),
   ];
   return { subject, body, blocks, dedupeMonth: month };
 }

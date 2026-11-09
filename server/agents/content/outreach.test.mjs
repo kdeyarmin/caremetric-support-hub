@@ -49,6 +49,10 @@ describe('the monthly outreach drafts', () => {
     expect(rewritten.rewrites).toBe(2);
     // The company's own sites may be named as a bare domain.
     expect(verdict({ body: `${pitch().body} More at www.caremetricintel.com and caremetricadvisors.com.` }).reasons).toEqual([]);
+    // A query on the company's own domain is allowed only as well-formed campaign tags on a product page.
+    expect(verdict({ body: `${pitch().body} https://cmcarebase.com/?utm_source=caremetric&utm_medium=email&utm_campaign=outreach-carebase.` }).reasons).toEqual([]);
+    expect(verdict({ body: `${pitch().body} https://cmcarebase.com/?utm_source=caremetric&utm_medium=email&utm_campaign=x&next=https://evil.example` }).reasons).toContain('link_not_allowed');
+    expect(verdict({ body: `${pitch().body} https://cmcarebase.com/?redirect=evil.example` }).reasons).toContain('link_not_allowed');
   });
 
   it('reads at most five of each', () => {
@@ -80,17 +84,13 @@ describe("the owner's outreach email", () => {
     const text = JSON.stringify(email.blocks);
     expect(text).toContain('Capterra listing for CareMetric CareBase');
     expect(text).toContain('Pitch to state and regional provider associations about CareMetric CareBase');
-    expect(email.blocks.find(block => block.type === 'message').text).toBe(`Tagline: ${outreachDraft.listings[0].tagline}\n\n${outreachDraft.listings[0].description}`);
+    const listing = email.blocks.find(block => block.type === 'message');
+    expect(listing.text).toBe(`Tagline: ${outreachDraft.listings[0].tagline}\n\n${outreachDraft.listings[0].description}\n\nWebsite link: https://cmcarebase.com/?utm_source=capterra&utm_medium=directory&utm_campaign=outreach-carebase`);
+    expect(listing.links).toEqual(['https://cmcarebase.com/?utm_source=capterra&utm_medium=directory&utm_campaign=outreach-carebase']);
+    const pitch = email.blocks.filter(block => block.type === 'message')[outreachDraft.listings.length];
+    expect(pitch.text).toMatch(/\n\nLink to use: https:\/\/cmcarebase\.com\/\?utm_source=caremetric&utm_medium=email&utm_campaign=outreach-carebase&utm_content=provider-association$/);
     const rendered = renderOwnerEmail({ subject: email.subject, body: email.body, blocks: email.blocks, publicOrigin: 'https://hub.example.test' });
     expect(rendered.text).toContain(outreachDraft.pitches[0].body);
-  });
-
-  it('gives each draft its product\'s website address with campaign tags, for the owner to use', () => {
-    const messages = email.blocks.filter(block => block.type === 'message').map(block => block.text);
-    expect(messages).toContain('Website address for this listing:\nhttps://cmcarebase.com/?utm_source=capterra&utm_medium=referral&utm_campaign=listing-carebase');
-    expect(messages.some(text => text.startsWith('Link to use in this pitch:\nhttps://cmcarebase.com/?utm_source=partner&utm_medium=email&utm_campaign=pitch-carebase&utm_content=provider_association'))).toBe(true);
-    const rendered = renderOwnerEmail({ subject: email.subject, body: email.body, blocks: email.blocks, publicOrigin: 'https://hub.example.test' });
-    expect(rendered.html).toContain('href="https://cmcarebase.com/?utm_source=capterra&amp;utm_medium=referral&amp;utm_campaign=listing-carebase"');
   });
 
   it('says so when nothing passed', () => {

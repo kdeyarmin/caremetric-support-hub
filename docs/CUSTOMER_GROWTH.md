@@ -145,9 +145,15 @@ claim still comes from the fact sheet (`server/agents/content/facts.mjs`, the co
   competitor, testimonial, call or demo as a step, "prove" about CareBase), may state only its own product's prices, may link only to
   its product's pages, and has its vocabulary fixed (ALF, surveyor). A draft that fails is dropped. The template
   path used without a model, and every send rule, are unchanged.
+- **Campaign tags**: the product pages in every growth message, model-written or template, carry utm_source `caremetric`,
+  utm_medium `email` and utm_campaign `growth-<product>-touch<n>` for outreach or `account-<product>-<moment>` for a customer play
+  (`server/agents/links.mjs`; no message carries a booking link). The tags are added after the checks and the tagged message is checked
+  again; the link check reads a tagged page as that page only when the tags are well formed, so a tag can never carry another host
+  or path. The sent email makes the tagged addresses links like the plain ones.
 - **Evaluation**: `growth.1` remains the key the database's send claim requires for a recent passing evaluation; it now names the
   guardrail suite, not the prompt (each run records the prompt version). The suite adds cases for an unlisted price, a guarantee, a
-  named competitor, product-page links, the other product's page, daily discovery rotation and directory filtering.
+  named competitor, product-page links, the other product's page, a tagged product-page link (accepted and given its own tags),
+  a tagged link to another host and a tag carrying another address (both rejected), daily discovery rotation and directory filtering.
 - The **Sales Executive** (see [AI team](AI_TEAM.md#the-sales-executive)) answers prospects' replies and inquiries from the same
   playbook and sends a weekly pipeline review.
 
@@ -159,18 +165,6 @@ conversation. The playbook has a "demo" objection for both products: send the wa
 **The Founders Sale in the trial check-in.** Billing applies the Founders coupon automatically at checkout and trial conversion (#152),
 so every agent says it applies on its own, with no code needed. The Account Manager's trial check-in email states it in its exact
 terms (owner decision 2026-11-08).
-
-**Campaign tags and Intel's walkthrough (`sales-playbook.3`, 2026-11-09).** Every product page in a growth email carries campaign tags
-(`server/agents/links.mjs`; see [Campaign tags](AI_TEAM.md#campaign-tags)): outreach is `utm_source=caremetric`, `utm_medium=email`,
-`utm_campaign=growth-<product>-touch<n>` with the variant (`control` or `concise`) as `utm_content`; an Account Manager email from the
-pipeline is `success-<product>-<moment>`. The template path tags its free-trial link the same way. The writer is still given the plain
-addresses; the code tags every product page in its draft (replacing tags it wrote) before the checks, which accept a product page
-with tags alone added and refuse a tag that would carry another host, path or parameter, and any booking page. The website
-under the sign-off carries the message's own tags (or `growth-<product>` / `success-<product>` for a message without a tagged link).
-Intel's playbook may now link the walkthrough (`https://www.caremetricintel.com/#how-it-works`) and the free county report
-(`https://www.caremetricintel.com/county-report`), and its "demo" objection names both. The guardrail suite adds four cases: a tagged
-product page is allowed, it ends up with the touch's tags, a tagged link to another host is refused, and a tag carrying another
-address is refused.
 
 **No personal demos with anyone (owner decision 2026-11-09, `growth.6`).** No message offers a booking page any more: drafts are
 never given one (the policy's old booking link is ignored, and the Growth screen no longer has the field), and the writer is told
