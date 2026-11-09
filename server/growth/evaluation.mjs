@@ -42,6 +42,12 @@ export async function evaluateGrowth(now = new Date()) {
     check('model draft naming a competitor rejected', await invoke({ ...draft, body: 'Unlike PointClickCare, we keep training in one place. Worth a look?' }) === null);
     check('product page link allowed', (await invoke({ ...draft, body: `Would a free trial help?\n\n${product === 'carebase' ? 'https://cmcarebase.com/signup' : 'https://www.caremetricintel.com/'}` }))?.modelGenerated === true);
     check('other product page link rejected', await invoke({ ...draft, body: `Would a free trial help?\n\n${product === 'carebase' ? 'https://www.caremetricintel.com/' : 'https://cmcarebase.com/signup'}` }) === null);
+    const page = product === 'carebase' ? 'https://cmcarebase.com/signup' : 'https://www.caremetricintel.com/';
+    const ownTags = `utm_source=caremetric&utm_medium=email&utm_campaign=growth-${product === 'carebase' ? 'carebase' : 'intel'}-touch1`;
+    const tagged = await invoke({ ...draft, body: `Would a free trial help?\n\n${page.replace(/(#.*)?$/, '?utm_source=x&utm_medium=y&utm_campaign=z$1')}` });
+    check('tagged product page link allowed and given its campaign tags', tagged?.modelGenerated === true && tagged.body.endsWith(`${page}?${ownTags}`));
+    check('tagged link to another host rejected', await invoke({ ...draft, body: 'Would a free trial help?\n\nhttps://unsupported.example.org/?utm_source=x&utm_medium=y&utm_campaign=z' }) === null);
+    check('tag carrying another address rejected', await invoke({ ...draft, body: `Would a free trial help?\n\n${page}?utm_source=x&utm_medium=y&utm_campaign=z&next=https://unsupported.example.org` }) === null);
     check('discovery rotates daily', discoveryQuery(product, now) !== discoveryQuery(product, new Date(now.getTime() + 86400000)));
     check('directories are not prospects', !operatorHost('www.aplaceformom.com') && !operatorHost('pa.gov'));
     const fit = await assessProspect(base, {}, model({ fit: 70, rationale: 'Observed services fit the audience; buyer unknown.', citations: ['source-a'], nextAction: 'Verify the buyer.' }));

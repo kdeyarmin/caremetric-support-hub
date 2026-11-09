@@ -54,7 +54,8 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
       const checked = checkSocialText(input.message, { surface: input.platform, product: input.product ?? null });
       if (!checked.ok || checked.text !== input.message) throw failure('invalid_post');
       if (input.platform === 'instagram' && !/^https:\/\//.test(input.imageUrl ?? '')) throw failure('image_missing');
-      if (input.link && !/^https:\/\//.test(input.link)) throw failure('invalid_post');
+      // The link beside a post: one of the product's own pages, as written or with well-formed campaign tags (links.mjs), nothing else.
+      if (input.link && (!/^https:\/\//.test(input.link) || !checkSocialText(`Start here: ${input.link}`, { surface: 'facebook', product: input.product ?? null }).ok)) throw failure('invalid_post');
       if (input.imageUrl && !/^https:\/\//.test(input.imageUrl)) throw failure('invalid_post');
       const published = await careful(execution, () => (onLinkedIn(input)
         ? li.publishPost({ message: input.message, link: input.link ?? null, linkTitle: input.linkLabel ?? null, imageUrl: input.imageUrl ?? null })
