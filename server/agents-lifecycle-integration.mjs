@@ -180,6 +180,7 @@ try {
   await admin.query("update private.agents set status = 'active', autonomy = 'observe' where key = 'account_manager'");
   await admin.query("update private.agent_schedules set next_run_at = now() + interval '1 day', enabled = true");
   const customerMail = { configured: true, send: async message => { sent.push(message); return outcomes.shift() ?? { delivery: 'sent', id: `lc-msg-${sent.length}` }; } };
+  // A booking link handed in as before is never used: CareMetric does no personal demos with anyone (owner decision 2026-11-09).
   const customerEmail = { mail: customerMail, postalAddress: postal, bookingUrl: booking };
   const teamFor = (options = {}) => agentTeam({
     pool, enabled: true, ownerEmail: 'owner@example.test', publicOrigin: origin, log: line => logs.push(line), features: new Set(features),
@@ -248,7 +249,8 @@ try {
   const welcomeAction = await actionFor('welcome');
   // The subject, then the headline of the branded email, then the greeting.
   assert.ok(welcomeAction.preview.startsWith('Subject: Welcome to CareMetric CareBase\n\nWelcome to CareMetric CareBase\n\nHello,'));
-  assert.ok(welcomeAction.preview.includes(`Pick a time to go through setup together:\n${booking}`), 'with the owner\'s booking link');
+  assert.ok(!welcomeAction.preview.includes(booking) && !/pick a time/i.test(welcomeAction.preview), 'no booking link and no time to meet');
+  assert.equal(welcomeAction.input.bookingUrl, null, 'the stored facts hold no booking link');
   assert.ok(welcomeAction.preview.includes(`${unsubscribeLabel}: a personal link is added when the email is sent\n${postal}`));
   assert.equal((await lastRun()).summary, 'Proposed 10 customer emails (7 welcome, 1 setup help, 1 trial check-in, 1 testimonial request) for your approval. Skipped 1 account with no billing email. Skipped 1 account that unsubscribed. 1 more waits for the next run.');
 

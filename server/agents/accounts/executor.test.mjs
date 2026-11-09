@@ -11,7 +11,7 @@ const fact = (over = {}) => ({
   trialStart: '2026-11-02T12:00:00Z', trialEnd: '2026-12-02T12:00:00Z', created: '2026-11-02T12:00:00Z', firstPaidAt: null, cancelling: false,
   hasEmail: true, suppressed: false, hasUsage: false, openUrgentCases: 0, emails: {}, ...over,
 });
-const input = (template = 'welcome', over = {}) => lifecycleInput(fact(over), template, { bookingUrl: 'https://cal.example.com/owner' });
+const input = (template = 'welcome', over = {}) => lifecycleInput(fact(over), template);
 const execution = (over = {}) => ({
   id: '11111111-1111-4111-8111-111111111111', agentKey: 'account_manager', taskId: '22222222-2222-4222-8222-222222222222', kind: 'email.send',
   targetKind: 'billing_account', targetId: 'maple-grove', input: input(), requestKey: '44444444-4444-4444-8444-444444444444', autoApproved: false, execution: 1, ...over,
@@ -127,6 +127,11 @@ describe('sending an approved customer email', () => {
     const { send, mail } = fixture();
     await expect(send(execution({ input: { ...approved, tenantName: 'Someone Else' } }))).rejects.toSatisfy(refusal('wording_changed'));
     await expect(send(execution({ input: { ...approved, textHash: 'f'.repeat(64) } }))).rejects.toSatisfy(refusal('wording_changed'));
+    // An email approved with the owner's old "Pick a time" button: its approved wording had the button, which is no longer drawn
+    // (no personal demos with anyone, 2026-11-09), so it is refused rather than sent without what the owner read.
+    const withButton = `${lifecycleWording(approved)}\n\nPick a time to go through setup together:\nhttps://cal.example.com/owner`;
+    const old = { ...approved, bookingUrl: 'https://cal.example.com/owner', textHash: createHash('sha256').update(withButton).digest('hex') };
+    await expect(send(execution({ input: old }))).rejects.toSatisfy(refusal('wording_changed'));
     expect(mail.send).not.toHaveBeenCalled();
   });
 

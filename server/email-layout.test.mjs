@@ -20,7 +20,7 @@ const emails = {
     return { html: bulkEmailHtml(message), text: composeBulkEmail(message) };
   },
   'customer check-in email': () => renderLifecycleEmail(
-    lifecycleInput({ tenant: 'maple-grove', tenantName: `Maple ${hostile}`, product: 'carebase', productName: 'CareMetric CareBase' }, 'welcome', { bookingUrl: 'https://cal.example.com/owner' }),
+    lifecycleInput({ tenant: 'maple-grove', tenantName: `Maple ${hostile}`, product: 'carebase', productName: 'CareMetric CareBase' }, 'welcome'),
     { unsubscribeUrl: `https://hub.example/api/email/unsubscribe/${'a'.repeat(64)}`, postalAddress: `1 Main St ${hostile}` }),
   'Intel customer email': () => renderLifecycleEmail(
     lifecycleInput({ tenant: 'riverbend', tenantName: `Riverbend ${hostile}`, product: 'caremetric-intel', productName: 'CareMetric Intel' }, 'trial_checkin', {}),

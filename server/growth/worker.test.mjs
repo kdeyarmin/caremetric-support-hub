@@ -52,7 +52,7 @@ it('does not pay for a new draft of work whose last message was cancelled under 
  const cancelled={trigger_key:'outreach:0',status:'open',message_id:'old',message_status:'cancelled',message_withdrawn:false,message_opportunity_version:4,message_contact_version:7,message_policy_version:9};
  const run=async work=>{
   const store={snapshot:vi.fn(async()=>({total:1,items:[{...o,work:[work]}]})),plan:vi.fn(async()=> 'work'),draft:vi.fn(async()=>({id:'message',status:'draft'})),propose:vi.fn()};
-  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'A question',body:'Would a short conversation help?',citations:['source'],needsHuman:false}}))};
+  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'A question',body:'Would a free trial help?',citations:['source'],needsHuman:false}}))};
   await growthHandlers({growth:{store,signingReady:true,hash:x=>x,unsubscribeToken:()=> 'token'},model})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'});
   return {drafted:store.draft.mock.calls.length,modelCalls:model.run.mock.calls.length};
  };

@@ -15,7 +15,9 @@
  * Each is proposed at most once per account and product (its period key, account:<template>:<tenant>:<product>). The emails say
  * nothing about AI, quote no price (the trial check-in states the Founders Sale's percentage and term only), promise no time or outcome, never mention a phone call or voicemail, and use the company's
  * vocabulary for CareBase (an Assisted Living Facility, ALF, and a surveyor; never the regulation's own name for the facility type or
- * an auditor). The owner's booking link appears only when HUB_BOOKING_URL is an https address.
+ * an auditor). None offers a time to meet, a call or a demo: CareMetric does no personal demos with anyone (owner decision
+ * 2026-11-09), so help comes by reply and through the product's help pages. An email proposed with the owner's old booking button
+ * is refused when it would be sent (its wording no longer matches what was approved), so no such button goes out.
  *
  * What the owner approves is the subject and the message ("the wording"). The action keeps the facts that rebuild it and a hash of
  * it, never the address; the email that is sent is rebuilt from those facts and is refused if its wording no longer matches the hash.
@@ -71,8 +73,6 @@ const tidy = (value, limit) => {
 };
 
 export const periodKey = ({ template, tenant, product }) => `account:${template}:${tenant}:${product}`;
-/** The owner's booking page, when it is an https address; anything else is left out of every email. */
-export const bookingLink = value => (typeof value === 'string' && httpsLink.test(value.trim()) ? value.trim() : null);
 
 /**
  * The templates an account and product are due, most pressing first, from one row of the database's facts
@@ -146,12 +146,10 @@ export const foundersWords = productName => `If you decide to keep ${productName
  * One customer email, from the facts kept on its action: the subject, the inbox preview, the headline, the message blocks and the
  * sign-off. It is sent in the branded layout under the product's own name, and greets "Hello," before the blocks.
  */
-export function lifecycleEmail({ template, tenantName, productName, product, helpUrl, bookingUrl = null }) {
+export function lifecycleEmail({ template, tenantName, productName, product, helpUrl }) {
   const words = lifecycleProducts[product];
   if (!words || !lifecycleTemplates.includes(template)) throw new TypeError('Unknown customer email.');
   const help = { type: 'button', label: words.helpLabel, url: helpUrl };
-  const booking = bookingLink(bookingUrl);
-  const together = label => (booking ? [{ type: 'button', label, url: booking }] : []);
   const signature = signatureFor(productName, words.site);
   if (template === 'welcome') {
     return {
@@ -162,7 +160,6 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
         { type: 'paragraph', text: `Thank you for starting a ${productName} trial for ${tenantName}. Here is the quickest way to see it working with your own team:` },
         { type: 'steps', items: words.firstSteps },
         help,
-        ...together('Pick a time to go through setup together'),
         { type: 'paragraph', text: 'Each step has a short guide. If anything is unclear, reply to this email and we will help you through it.' },
       ],
       signature,
@@ -178,7 +175,6 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
         { type: 'callout', tone: 'info', title: 'Where most teams start:', text: words.setup },
         help,
         { type: 'paragraph', text: 'If something is slowing you down, or you are not sure where to start, reply to this email and tell us what you would like to get done first. We will send you the steps for it.' },
-        ...together('Pick a time to go through it together'),
       ],
       signature,
     };
@@ -194,7 +190,6 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
         { type: 'paragraph', text: 'Reply to this email and let us know. We will answer here.' },
         // Owner decision 2026-11-08: the trial check-in names the Founders Sale, in its exact terms (docs/GTM_FACTS.md).
         { type: 'callout', tone: 'success', title: 'The Founders Sale.', text: foundersWords(productName) },
-        ...together('Pick a time to go through it together'),
       ],
       signature,
     };
@@ -248,12 +243,14 @@ export function renderLifecycleEmail(input, { unsubscribeUrl, postalAddress }) {
  * The facts an action keeps to rebuild its email, from one row of the database's facts: never an address. Names are clipped and
  * their spacing collapsed, so a name with a line break cannot change the shape of the email.
  */
-export function lifecycleInput(fact, template, { bookingUrl = null } = {}) {
+export function lifecycleInput(fact, template) {
   const product = lifecycleProducts[fact.product];
   if (!product || !slug.test(fact.tenant ?? '') || !lifecycleTemplates.includes(template)) throw new TypeError('Unknown customer email.');
   const input = {
     template, tenant: fact.tenant, tenantName: tidy(fact.tenantName, 80) || fact.tenant, product: fact.product,
-    productName: tidy(fact.productName, 60) || fact.product, helpUrl: product.helpUrl, bookingUrl: bookingLink(bookingUrl),
+    productName: tidy(fact.productName, 60) || fact.product, helpUrl: product.helpUrl,
+    // Kept as null: the database's shape for this action still has the key, and no email offers a booking page any more.
+    bookingUrl: null,
     periodKey: periodKey({ template, tenant: fact.tenant, product: fact.product }),
   };
   return { ...input, textHash: wordingHash(input) };

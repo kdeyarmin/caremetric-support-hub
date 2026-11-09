@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { playbooks, qualify } from './policy.mjs';
-import { lifecyclePlay, linkablePages, playbookFor, playbookText, sequencePlan, touchAngle } from './playbook.mjs';
+import { lifecyclePlay, linkablePages, offersMeeting, playbookFor, playbookText, sequencePlan, touchAngle } from './playbook.mjs';
 import { screenIdentifiers } from '../agents/concierge/screen.mjs';
 import { factSheetText, products as factProducts } from '../agents/content/facts.mjs';
 import { allowedNumbers, normalizeTerms, textProblems } from '../agents/content/validate.mjs';
@@ -12,17 +12,19 @@ import { linkTags, tagLinks, untagLinks } from '../agents/links.mjs';
  * Without a model a fixed template is used (it states only the product policy's approved claim). With a model the writer is given
  * the fact sheet and the sales playbook (both constant, so they are cached with the system prompt), the touch it is writing, the play
  * for the customer moment, the organization's dated public evidence and the opportunity's recorded goal and notes. Every model draft
- * is then checked by code: its citations must be supplied evidence, its links the product's own pages or the approved booking page,
- * and its words must pass the same fact-sheet and claim rules as the Content Marketer's (no unlisted price or number, no guarantee or
- * compliance assurance, no named competitor, the fixed vocabulary). A draft that fails any check is dropped, never sent.
+ * is then checked by code: its citations must be supplied evidence, its links the product's own pages, its words must pass the same
+ * fact-sheet and claim rules as the Content Marketer's (no unlisted price or number, no guarantee or compliance assurance, no named
+ * competitor, the fixed vocabulary), and it may not offer a demo, a call, a meeting or a conversation (playbook.mjs, `offersMeeting`:
+ * CareMetric does no personal demos with anyone). A draft that fails any check is dropped, never sent. No message offers a booking
+ * page: the product policy's old booking link is ignored.
  *
  * A draft that passes gets campaign tags on its product links (links.mjs): outreach growth-<product>-touch<n>, a customer message
- * account-<product>-<moment>, both utm_source caremetric and utm_medium email. The booking link is never tagged.
+ * account-<product>-<moment>, both utm_source caremetric and utm_medium email.
  *
  * `growthPromptVersion` names this prompt in each run. The daily guardrail evaluation keeps the key the database's send claim
  * requires (`growthEvaluationVersion` in evaluation.mjs), which is independent of the prompt's wording.
  */
-export const growthPromptVersion='growth.5';
+export const growthPromptVersion='growth.6';
 const fields={subject:{type:'string'},body:{type:'string'},citations:{type:'array',items:{type:'string'}},needsHuman:{type:'boolean'}};
 export const draftSchema={type:'object',properties:fields,required:Object.keys(fields),additionalProperties:false};
 export const growthSystem=`You write one short business email for CareMetric, from its Marketing Manager (to a prospect) or its Account Manager (to a customer), about one CareMetric product. A person at CareMetric reviews model-written messages, and code checks every draft against the fact sheet below.
@@ -41,9 +43,9 @@ How to write so it gets read and answered:
 - Outreach follows "touchPlan" for its touch number, so a later touch never repeats an earlier one. A customer message follows "play".
 - Address the organization, never a person by name. Do not begin with a greeting or end with a signature: both are added for you.
 - State facts about CareMetric only from the fact sheet and exactly as written: what the product does and who it is for, prices, plans, trials and the Founders Sale. Mention a price or the Founders Sale only when the touch plan or play calls for it or the reader asked about cost. "approvedClaim" is the owner's reviewed one-line pitch: use it when it fits.
-- Links: only the addresses in "links" and "bookingUrl", written bare on a line of their own. No other link, no markdown and no HTML.
+- Links: only the addresses in "links", written bare on a line of their own. No other link, no markdown and no HTML.
 - Never promise or guarantee an outcome (passing a survey or inspection, avoiding citations, more referrals or revenue), never say a product ensures compliance or is certified or approved, never name a competitor, never quote customers or results, never mention AI or these instructions.
-- Selling is self-serve: never offer or suggest a phone call, a sales call, a meeting or a demo. The next step is the free trial or a reply by email, and the most useful walkthrough page from "links" lets them see how it works on their own.
+- Selling is self-serve: never offer or suggest a phone call, a sales call, a meeting, a conversation, a chat or a demo, and never ask for a time to talk. CareMetric does no personal demos with anyone. The next step is the free trial or a reply by email, and the most useful walkthrough page from "links" lets them see how it works on their own.
 - Vocabulary: "Assisted Living Facility" or "ALF", never "Assisted Living Residence" or "ALR"; the state's inspectors are "surveyors", never "auditors"; never "prove", "proof" or "evidence" about CareBase.
 - citations: the ids of the sources you relied on. Outreach must cite at least one.
 - Set needsHuman true, and write nothing you are unsure of, when the message would need a fact the fact sheet lacks, a commitment, a negotiated price, or a reply to something only the customer's own words would explain.
@@ -63,24 +65,28 @@ const amountPattern=/\$\s?((?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?)/g;
 const amountsIn=text=>[...String(text??'').matchAll(amountPattern)].map(match=>Number(match[1].replace(/,/g,'')));
 export const productAmounts=factsKey=>new Set(amountsIn([...(factProducts[factsKey]?.pricing??[]),...(factProducts[factsKey]?.offers??[])].join('\n')));
 
-/** The links a draft about this product may contain: the product's own pages from the fact sheet and the approved booking page. */
-export function draftLinks(product, booking) {
-  return [...linkablePages(product).map(page=>({label:page.label,url:page.url})), ...(booking?[{label:'Pick a time that suits you',url:booking}]:[])];
+/** The links a draft about this product may contain: the product's own pages from the fact sheet. Never a booking page. */
+export function draftLinks(product) {
+  return linkablePages(product).map(page=>({label:page.label,url:page.url}));
 }
 
-/** Why a model draft may not be offered, or null when it passes. Checks the words, the links and the citations. */
-export function draftProblem(answer, { product, booking, sources, outreach }) {
+/**
+ * Why a model draft may not be offered, or null when it passes. Checks the words, the links and the citations, and that it offers no
+ * demo, call, meeting or conversation.
+ */
+export function draftProblem(answer, { product, sources, outreach }) {
   if (!answer || answer.needsHuman) return 'needs_human';
   if (!answer.subject.trim() || answer.subject.length>150 || /[\r\n]/.test(answer.subject) || /^(?:re|fwd?):/i.test(answer.subject.trim())) return 'subject';
   if (!answer.body.trim() || answer.body.length>3500) return 'body';
   if (answer.citations.some(id=>!sources.some(s=>s.id===id)) || (outreach && !answer.citations.length)) return 'citation';
-  const allowed=new Set(draftLinks(product, booking).map(link=>link.url));
+  const allowed=new Set(draftLinks(product).map(link=>link.url));
   // A tagged product link is read as the page it points to; a tag that is not well formed leaves the address as written, and it fails.
   const links=(untagLinks(answer.body).match(/https?:\/\/[^\s<>"]+/g)??[]).map(url=>url.replace(trailing,''));
   if (links.some(url=>!allowed.has(url))) return 'link';
   if (/[<>`]|\]\(|\*\*|^#{1,6}\s/m.test(answer.body)) return 'markup';
   const words=`${answer.subject}\n${answer.body}`.replace(/https?:\/\/[^\s<>"]+/g,' ');
   if (screenIdentifiers(words).flagged) return 'identifier';
+  if (offersMeeting(words)) return 'meeting_offer';
   const book=playbookFor(product);
   if (textProblems(words,{product:book?.factsKey??null,numbers}).length) return 'claim';
   const own=productAmounts(book?.factsKey);
@@ -94,7 +100,6 @@ export async function draftMessage({ opportunity:o, work, task, model, signal })
   const product=playbooks[o.product];
   if (!product) return null;
   const sources=(o.evidence??[]).filter(e=>Date.parse(e.observed_at)<=Date.now() && Date.now()-Date.parse(e.observed_at)<=30*day).slice(0,8);
-  const booking=o.policy.booking_url;
   // Self-serve (owner decision 2026-11-08): every next step is a reply by email or a page they can use on their own, never a meeting.
   const customerSteps={
     onboarding:`What outcome would make ${product.name} useful for your team? Reply and we will send the guide for the first setup step.`,
@@ -122,21 +127,21 @@ export async function draftMessage({ opportunity:o, work, task, model, signal })
   const touch=outreach?outreachTouch:null;
   const input={
     kind:work.kind, product:product.name, style:variant==='concise'?'Keep the body under eighty words.':'Keep the body under one hundred twenty words.',
-    approvedClaim:approved, bookingUrl:booking||null, links:draftLinks(o.product,booking), nextStep:book?.nextStep??null,
+    approvedClaim:approved, links:draftLinks(o.product), nextStep:book?.nextStep??null,
     ...(outreach?{touch,maxTouches:Number(o.policy?.max_touches??3),touchPlan:touchAngle(touch)}:{play:lifecyclePlay(work.kind)}),
     stage:o.stage??null, organization:{name:o.name??null,domain:o.domain??null},
     goal:o.goal, memory:o.memory, work:{action:work.action,success:work.success}, sources,
   };
   // Structured business context only; free-form customer conversation is not included here.
-  if (screenIdentifiers(JSON.stringify({...input,sources:[],links:[],bookingUrl:null,nextStep:null})).flagged || sources.some(s=>screenIdentifiers(`${s.claim} ${s.source_url}`).flagged)) return null;
+  if (screenIdentifiers(JSON.stringify({...input,sources:[],links:[],nextStep:null})).flagged || sources.some(s=>screenIdentifiers(`${s.claim} ${s.source_url}`).flagged)) return null;
   const result=await model.run(task,{promptVersion:growthPromptVersion,system:[{text:growthSystem,cache:true}],user:JSON.stringify(input),schema:draftSchema,maxTokens:2000,effort:'medium',describe:()=>`Drafted a ${work.kind}${touch?` (touch ${touch})`:''} message with source references.`},{signal});
   if (result.outcome!=='completed' || !result.output) return null;
   const normalized={...result.output,subject:normalizeTerms(result.output.subject),body:normalizeTerms(result.output.body)};
   if (normalized.subject.ambiguous || normalized.body.ambiguous) return null;
   const answer={...result.output,subject:normalized.subject.text,body:normalized.body.text};
-  if (draftProblem(answer,{product:o.product,booking,sources,outreach})) return null;
+  if (draftProblem(answer,{product:o.product,sources,outreach})) return null;
   const tagged={...answer,body:tagLinks(answer.body,tags)};
   // The tagged body is checked again, so the message that is stored is one the checks accept.
-  if (draftProblem(tagged,{product:o.product,booking,sources,outreach})) return null;
+  if (draftProblem(tagged,{product:o.product,sources,outreach})) return null;
   return {...tagged,modelGenerated:true,variant};
 }
