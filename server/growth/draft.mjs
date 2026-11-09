@@ -4,6 +4,7 @@ import { lifecyclePlay, linkablePages, playbookFor, playbookText, sequencePlan, 
 import { screenIdentifiers } from '../agents/concierge/screen.mjs';
 import { factSheetText, products as factProducts } from '../agents/content/facts.mjs';
 import { allowedNumbers, normalizeTerms, textProblems } from '../agents/content/validate.mjs';
+import { linkTags, tagLinks, untagLinks } from '../agents/links.mjs';
 
 /**
  * Growth messages: the Marketing Manager's outreach and the Account Manager's customer-success emails.
@@ -14,6 +15,9 @@ import { allowedNumbers, normalizeTerms, textProblems } from '../agents/content/
  * is then checked by code: its citations must be supplied evidence, its links the product's own pages or the approved booking page,
  * and its words must pass the same fact-sheet and claim rules as the Content Marketer's (no unlisted price or number, no guarantee or
  * compliance assurance, no named competitor, the fixed vocabulary). A draft that fails any check is dropped, never sent.
+ *
+ * A draft that passes gets campaign tags on its product links (links.mjs): outreach growth-<product>-touch<n>, a customer message
+ * account-<product>-<moment>, both utm_source caremetric and utm_medium email. The booking link is never tagged.
  *
  * `growthPromptVersion` names this prompt in each run. The daily guardrail evaluation keeps the key the database's send claim
  * requires (`growthEvaluationVersion` in evaluation.mjs), which is independent of the prompt's wording.
@@ -71,7 +75,8 @@ export function draftProblem(answer, { product, booking, sources, outreach }) {
   if (!answer.body.trim() || answer.body.length>3500) return 'body';
   if (answer.citations.some(id=>!sources.some(s=>s.id===id)) || (outreach && !answer.citations.length)) return 'citation';
   const allowed=new Set(draftLinks(product, booking).map(link=>link.url));
-  const links=(answer.body.match(/https?:\/\/[^\s<>"]+/g)??[]).map(url=>url.replace(trailing,''));
+  // A tagged product link is read as the page it points to; a tag that is not well formed leaves the address as written, and it fails.
+  const links=(untagLinks(answer.body).match(/https?:\/\/[^\s<>"]+/g)??[]).map(url=>url.replace(trailing,''));
   if (links.some(url=>!allowed.has(url))) return 'link';
   if (/[<>`]|\]\(|\*\*|^#{1,6}\s/m.test(answer.body)) return 'markup';
   const words=`${answer.subject}\n${answer.body}`.replace(/https?:\/\/[^\s<>"]+/g,' ');
@@ -101,6 +106,8 @@ export async function draftMessage({ opportunity:o, work, task, model, signal })
     recovery:`We would like to understand your cancellation concerns and help with any unresolved issue. What led to the decision?`,
     expansion:`You mentioned an additional need. Reply with what you would like to do and we will send the right option.`,
   };
+  const outreachTouch=Math.min(Number(o.touches??0)+1,sequencePlan.length);
+  const tags=work.kind==='outreach'?linkTags.growthOutreach(o.product,outreachTouch):linkTags.accountEmail(o.product,work.kind);
   const variant=o.policy.experiment_enabled && createHash('sha256').update(String(o.organization_id??o.id)).digest()[0]%2 ? 'concise':'control';
   const trialPage=playbookFor(o.product)?.nextStep?.url??null;
   const fallback={subject:`${product.name}: ${work.kind==='outreach'?'a useful next step':'your next step'}`,
@@ -108,10 +115,11 @@ export async function draftMessage({ opportunity:o, work, task, model, signal })
       :`How is your progress with ${product.name}?\n\n${customerSteps[work.kind]??"Reply with the step you need help with."}`,
     citations:sources.map(s=>s.id),modelGenerated:false,variant};
   if(variant==='concise' && work.kind==='outreach')fallback.body=`${approved}\n\nTry it free:${trialPage?` ${trialPage}`:' reply and we will send the link.'}`;
+  fallback.body=tagLinks(fallback.body,tags);
   if (!model?.configured) return fallback;
   const book=playbookFor(o.product);
   const outreach=work.kind==='outreach';
-  const touch=outreach?Math.min(Number(o.touches??0)+1,sequencePlan.length):null;
+  const touch=outreach?outreachTouch:null;
   const input={
     kind:work.kind, product:product.name, style:variant==='concise'?'Keep the body under eighty words.':'Keep the body under one hundred twenty words.',
     approvedClaim:approved, bookingUrl:booking||null, links:draftLinks(o.product,booking), nextStep:book?.nextStep??null,
@@ -127,5 +135,8 @@ export async function draftMessage({ opportunity:o, work, task, model, signal })
   if (normalized.subject.ambiguous || normalized.body.ambiguous) return null;
   const answer={...result.output,subject:normalized.subject.text,body:normalized.body.text};
   if (draftProblem(answer,{product:o.product,booking,sources,outreach})) return null;
-  return {...answer,modelGenerated:true,variant};
+  const tagged={...answer,body:tagLinks(answer.body,tags)};
+  // The tagged body is checked again, so the message that is stored is one the checks accept.
+  if (draftProblem(tagged,{product:o.product,booking,sources,outreach})) return null;
+  return {...tagged,modelGenerated:true,variant};
 }

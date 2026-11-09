@@ -100,6 +100,9 @@ answers**, **Article publishing** and **Offers**; **Sales follow-ups** and **Col
 auto-approval lists (`auto_send_templates` for the account emails, `auto_approve_kinds` for the others: `communication.answer`
 for support answers, `content.publish` for articles, `offer.apply` for offers, and the trust values `growth.sales_followup` and
 `growth.cold_email`, which the growth operations read, for the Marketing Manager's two steps); only migrations write that list.
+The Marketing Manager's email (both steps, and anything the owner approves) can come from its own sender on a subdomain,
+`HUB_GROWTH_FROM_EMAIL`, with replies still going to the support inbox; every other agent's email stays on the support address
+(see [A separate sender for prospecting](CUSTOMER_GROWTH.md#a-separate-sender-for-prospecting)).
 
 - **Start supervised week** (Team screen, under "Work the team does on its own"): the step is supervised for seven days. Any
   agent it involves that could only observe moves up to Propose, and the step's values come off the agents' lists (one the owner
@@ -257,6 +260,32 @@ provider refuses the send, the task is tried again a few minutes later under the
 with **Run now** is sent once per request and is not repeated by a retry. It goes by email only, since an incident
 already texts you when it happens. If email is not set up or the send fails, the run on the Team
 screen says the brief was written but not delivered.
+
+### The Monday scorecard
+
+Every Monday at 07:50 Eastern (task `scorecard.weekly`, shown as "Monday scorecard") the Chief of Staff sends one email in place of
+the five weekly reports (`accounts.weekly`, `growth.weekly`, `seo.weekly`, `sales.review` and `social.report`). It uses no model.
+
+- **Needs you**: at most three items, most urgent first, each with a button to the screen that handles it: products down, proposals
+  waiting for approval, accounts that need attention, deals waiting on you, ads losing money and urgent website problems, as the brief and the
+  five reports flag them.
+- **Six numbers per product** (CareBase and Intel), each beside last week's: website visitors (only from a connected source; none is
+  connected, so "Not connected", never an estimate), county reports and trial starts, activated trials (first `first_value` events),
+  new paying customers and MRR (the Billing screen's maths), outbound email delivered, replies, bounces and complaints, and cost per
+  trial (AI spend on agent runs, plus ad spend when an ad account is connected). Organic search clicks are added when Search Console
+  is connected.
+- **What changed**: every count that moved from the week before.
+
+It reads what the reports already read (the brief's facts, the billing snapshot, the growth pipeline, the ad accounts, the SEO crawl
+and Search Console) and one new server-only read, `private.agent_scorecard_facts`. A source that cannot be read is named and the rest
+still goes out. The subject, stored body, run and task result carry counts only; money is only in the email's layout blocks. Every
+scheduled run in an Eastern week shares `scorecard:<Monday>`, so the week is sent once; a refused send is retried under the same key;
+**Run now** reports the last full week under a key of its own.
+
+The owner's setting **Send the individual weekly reports** (AI team page, "Weekly reports") starts off. While it is off and the
+Chief of Staff is working, the five reports' scheduled runs are held (`skipped: in_scorecard`) and send nothing; **Run now** on any
+of them still emails it. With the Chief of Staff paused, or the setting unreadable, they email as before. Details:
+[Monday scorecard](MONDAY_SCORECARD.md).
 
 ## The SEO Analyst
 
@@ -880,7 +909,8 @@ applied automatically), ask at most one qualifying question, handle objections t
 draft (`server/agents/sales/check.mjs`): only that product's listed prices, no other product's; links only to that product's pages
 or the booking page; no guarantee, compliance assurance, certification, named competitor, testimonial, call or demo as a step, voice
 AI, trial extension, special pricing, refund, time frame, mention of AI, identifier, name from the message or long quotation; the
-fixed vocabulary is rewritten (ALF, surveyor); links may go only to the product's pages and the guides it was given. A draft that passes
+fixed vocabulary is rewritten (ALF, surveyor); links may go only to the product's pages and the guides it was given. Product pages in a
+passing draft get campaign tags (see "Campaign tags on product links"); help-center guides do not. A draft that passes
 and goes back by email or chat is proposed as a `communication.answer` (the session-less path the Concierge's support answers use, with
 the same database checks); by text message it is a `communication.reply`. The owner gets one email per draft (at most 20 a day). The
 **Sales answers** autonomy step (off) hands answers over after a supervised week: they then go out on their own, authored as the
@@ -965,7 +995,8 @@ not legal advice. A draft that fails proposes nothing; the task's result and the
 
 **What the owner approves.** A `content.publish` action ("Publish a help article") whose preview is the whole article: the
 address it will live at, the product, the title and the description, then the Markdown exactly as it will be published (the
-summary, the body, the questions and answers, the sources, the links and, for a regulation, the disclaimer). It must fit the
+summary, the body, the questions and answers, the sources, the links and, for a regulation, the disclaimer; every product page in
+it carries the Content Marketer's campaign tags, the cited sources none). It must fit the
 6,000 characters an action's preview holds, so articles are compact (about 300 to 600 words of body).
 
 **How approval publishes.** Approving runs the executor at once; it needs no owner session and no model. It checks the stored
@@ -991,7 +1022,9 @@ Content Security Policy are unchanged. The help center's list links each public 
 listing descriptions for software directories (Capterra, G2, GetApp, Software Advice; CareBase and Intel) and up to five short
 partnership pitches (state and regional provider associations, senior-care consultants, pharmacy and therapy partners,
 compliance trainers), from the fact sheet. Each draft gets the same checks as an article (and no markup or links, only the
-company's own domains); one that fails is left out and only the name of the check is kept. The ones that pass go to the owner in
+company's own domains; an address with a query passes only as a campaign-tagged product page); one that fails is left out and only
+the name of the check is kept. Under each draft the email gives the product's home page with campaign tags to use with it (a
+listing's website field, a pitch's link). The ones that pass go to the owner in
 one email, word for word, to adjust and send personally. Nothing is sent to anyone else. The stored copy of the alert (shown on
 the Team screen) holds counts only; the drafts travel only in the email.
 
@@ -1026,31 +1059,42 @@ its revision variables and its audit row; the owner's own approvals are unchange
 (`server/agents/content/facts.mjs`, `docs/GTM_FACTS.md`) is what keeps automatic articles accurate: confirm it before the
 articles step switches.
 
-### The Monday scorecard
+## Campaign tags on product links
 
-Every Monday at 07:50 Eastern (task `scorecard.weekly`, shown as "Monday scorecard") the Chief of Staff sends one email in place of
-the five weekly reports (`accounts.weekly`, `growth.weekly`, `seo.weekly`, `sales.review` and `social.report`). It uses no model.
+Every link to one of the company's product pages that an agent puts in front of a person carries utm_source, utm_medium and
+utm_campaign (and sometimes utm_content), so a lead shows which agent and channel produced it: the product sites and Intel record the
+tags with the lead, the Hub keeps them in `private.leads` and the Growth Manager's weekly report groups leads by source and campaign.
+One helper does it, `server/agents/links.mjs` (`taggedUrl`, `tagLinks`, `untaggedUrl`), and one table names every value:
 
-- **Needs you**: at most three items, most urgent first, each with a button to the screen that handles it: products down, proposals
-  waiting for approval, accounts that need attention, deals waiting on you, ads losing money and urgent website problems, as the brief and the
-  five reports flag them.
-- **Six numbers per product** (CareBase and Intel), each beside last week's: website visitors (only from a connected source; none is
-  connected, so "Not connected", never an estimate), county reports and trial starts, activated trials (first `first_value` events),
-  new paying customers and MRR (the Billing screen's maths), outbound email delivered, replies, bounces and complaints, and cost per
-  trial (AI spend on agent runs, plus ad spend when an ad account is connected). Organic search clicks are added when Search Console
-  is connected.
-- **What changed**: every count that moved from the week before.
+| Who and where | utm_source | utm_medium | utm_campaign | utm_content |
+| --- | --- | --- | --- | --- |
+| Marketing Manager outreach email | caremetric | email | growth-<product>-touch<n> | |
+| Account Manager customer email (growth plays) | caremetric | email | account-<product>-<moment> | |
+| Sales Executive answer | caremetric | email, chat or sms | sales-<product> | |
+| Social Media Manager post, reply | facebook, instagram or linkedin | social | social-<product> | post, reply |
+| Social Media Manager ad | facebook (Meta ads) or linkedin | paid_social | social-<product> | ad |
+| Content Marketer article | help_center | article | content-<product> | |
+| Monthly outreach: directory listing | the directory (capterra, g2, getapp, software-advice) | directory | outreach-<product> | |
+| Monthly outreach: partner pitch | caremetric | email | outreach-<product> | the kind of partner |
 
-It reads what the reports already read (the brief's facts, the billing snapshot, the growth pipeline, the ad accounts, the SEO crawl
-and Search Console) and one new server-only read, `private.agent_scorecard_facts`. A source that cannot be read is named and the rest
-still goes out. The subject, stored body, run and task result carry counts only; money is only in the email's layout blocks. Every
-scheduled run in an Eastern week shares `scorecard:<Monday>`, so the week is sent once; a refused send is retried under the same key;
-**Run now** reports the last full week under a key of its own.
+`<product>` is carebase, intel or advisors. Values are short and lowercase (letters, digits, "-" and "_", at most 40 characters) and
+never hold a name, an address or anything about a person.
 
-The owner's setting **Send the individual weekly reports** (AI team page, "Weekly reports") starts off. While it is off and the
-Chief of Staff is working, the five reports' scheduled runs are held (`skipped: in_scorecard`) and send nothing; **Run now** on any
-of them still emails it. With the Chief of Staff paused, or the setting unreadable, they email as before. Details:
-[Monday scorecard](MONDAY_SCORECARD.md).
+- **Only product pages are tagged:** an address that is exactly one of `productPages` in `server/agents/content/facts.mjs`. Citations,
+  help-center links (the help center's own guides and the apps' in-app help), unsubscribe links and the booking link are never
+  tagged, and neither are the fixed sign-off lines under an email (the product's website), so an approved customer email's wording
+  and its hash are unchanged.
+- **Tags are added by code after the checks,** never written by the model; tags the model wrote itself are replaced with the agent's
+  own. The tagged text is what the owner approves and what is sent.
+- **Every link check reads tags strictly** (`untaggedUrl`): a tagged address counts as a page only when its query is nothing but
+  utm_source, utm_medium, utm_campaign and utm_content, each once and each a valid value, and the address without them is exactly a page
+  the check already allows. Any other parameter, an encoded character, an "@", a tag on another host or path, or a malformed tag fails
+  the check as an unknown link. Length limits on social text count the page's own address, so tags never push a post over.
+- A Sales Executive answer by text message keeps its link untagged when the tags would not fit in one message.
+- The Support Concierge's drafted answers may contain no link at all (`server/agents/concierge/draft.mjs`), so they carry no tags.
+- The Account Manager's fixed customer emails (welcome, setup nudge, trial check-in, testimonial ask) link only to the product's
+  in-app help and the booking page, which are not tagged; its growth plays (onboarding, activation, trial and the others drafted by
+  `server/growth/draft.mjs`) are.
 
 ## Boundary
 

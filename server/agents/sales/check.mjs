@@ -10,6 +10,9 @@
  *   certification, voice AI, a call or demo as a step, a named competitor, testimonials, "prove" about CareBase, contact details);
  *   a price of the other product; a promise of a refund, a credit, a trial extension, special pricing or a time frame; a mention of
  *   AI or the instructions; a repeat of a name or identifier-like token from the prospect's message; a long quotation of it.
+ * - A reply that passes gets campaign tags on its product links (links.mjs: caremetric / the route / sales-<product>); help-center
+ *   guides are never tagged. A text message keeps its links untagged when the tags would not fit in one message. A link the model
+ *   wrote with tags of its own is read as the page it points to only when the tags are well formed (links.mjs `untaggedUrl`).
  */
 import { echoCandidates, quotesCustomer, wordsOf } from '../concierge/draft.mjs';
 import { screenIdentifiers } from '../concierge/screen.mjs';
@@ -18,6 +21,7 @@ import { factSheetText, factsRevision, helpCenterOrigin } from '../content/facts
 import { allowedNumbers, normalizeTerms, textProblems } from '../content/validate.mjs';
 import { productAmounts } from '../../growth/draft.mjs';
 import { linkablePages, playbookFor, playbookText } from '../../growth/playbook.mjs';
+import { linkTags, tagLinks, untagLinks } from '../links.mjs';
 
 export const emailReplyLimit = 1500;
 /** The word limit the model is given for each route. */
@@ -61,7 +65,7 @@ export function guideLinks(guides = []) {
 export function checkSalesReply({ reply, product, route, guides = [], text = '' }) {
   const book = playbookFor(product);
   if (!book) return { ok: false, reason: 'product' };
-  const terms = normalizeTerms(String(reply ?? '').replace(/\r\n?/g, '\n').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim());
+  const terms = normalizeTerms(untagLinks(String(reply ?? '')).replace(/\r\n?/g, '\n').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim());
   if (terms.ambiguous) return { ok: false, reason: 'vocabulary' };
   const normalized = terms.text;
   if (!normalized) return { ok: false, reason: 'empty' };
@@ -82,5 +86,9 @@ export function checkSalesReply({ reply, product, route, guides = [], text = '' 
   const lowered = words.toLowerCase();
   if (echoCandidates(text, sheet().vocabulary).some(word => new RegExp(String.raw`\b${word.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\b`).test(lowered))) return { ok: false, reason: 'name_echo' };
   if (quotesCustomer(words, text)) return { ok: false, reason: 'quotes_customer' };
-  return { ok: true, reply: normalized, body };
+  // Tagged after every check, on the page addresses the check accepted. A text message keeps them untagged if one message cannot hold them.
+  const tagged = tagLinks(normalized, linkTags.sales(product, route));
+  const taggedBody = wrapReply(tagged, route);
+  if (route === 'sms' ? taggedBody.length > smsLimit : tagged.length > emailReplyLimit) return { ok: true, reply: normalized, body };
+  return { ok: true, reply: tagged, body: taggedBody };
 }

@@ -5,7 +5,8 @@
  * fails a check is left out and only the name of the check is recorded.
  */
 import { markets } from '../marketing.mjs';
-import { factSheetText, productPages, products } from './facts.mjs';
+import { factSheetText, productPage, productPages, products } from './facts.mjs';
+import { linkTags, taggedUrl, untaggedUrl, untagLinks } from '../links.mjs';
 import { allowedNumbers, markupProblems, normalizeTerms, textProblems } from './validate.mjs';
 
 export const outreachPromptVersion = 'outreach.3';
@@ -87,10 +88,13 @@ const addressPattern = /\b(?:https?:\/\/|www\.)\S+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*
 function draftProblems(texts, product) {
   const joined = texts.join('\n');
   const reasons = new Set([...markupProblems(joined).filter(reason => !reason.startsWith('link_')), ...textProblems(joined, { product, numbers })]);
-  if (/[*_`#[\]<>]/.test(joined)) reasons.add('markup');
+  // Read with campaign-tagged product links as their pages, so a tag's "utm_" is not taken for markup.
+  if (/[*_`#[\]<>]/.test(untagLinks(joined))) reasons.add('markup');
   // An email address is judged by textProblems (contact_detail), not again here as a link.
   for (const address of joined.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, ' ').match(addressPattern) ?? []) {
     if (!ownDomains.has(address.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/[/?#].*$/, '').toLowerCase())) reasons.add('link_not_allowed');
+    // A query is allowed only as well-formed campaign tags on a product page (links.mjs), so no tag can carry another address.
+    else if (address.includes('?') && !untaggedUrl(address.replace(/[.,;:!?)\]]+$/, ''))) reasons.add('link_not_allowed');
   }
   return [...reasons];
 }
@@ -135,6 +139,13 @@ export function checkOutreach(output, { marketed = null } = {}) {
   return { listings, pitches, dropped, reasons: [...reasons].sort(), rewrites };
 }
 
+/**
+ * The product's home page with campaign tags, for the owner to use with a draft: a listing's website field (<directory> / directory /
+ * outreach-<product>) or the link in a pitch (caremetric / email / outreach-<product>, content the kind of partner).
+ */
+export const outreachLink = (kind, item) => taggedUrl(productPage(`${item.product}-home`)?.url ?? '',
+  kind === 'listing' ? linkTags.listing(item.directory, item.product) : linkTags.pitch(item.audience, item.product)) || null;
+
 const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
 /**
@@ -152,14 +163,15 @@ export function composeOutreachEmail({ month, label, listings, pitches, dropped,
     { type: 'callout', tone: 'info', title: 'For you to send.', text: 'These are drafts for you to copy, adjust and send personally. Nothing was sent to a directory, a partner or a customer.' },
     ...listings.flatMap(item => [
       { type: 'paragraph', text: `${directories[item.directory]} listing for ${products[item.product].name}` },
-      { type: 'message', text: `Tagline: ${item.tagline}\n\n${item.description}` },
+      { type: 'message', text: `Tagline: ${item.tagline}\n\n${item.description}\n\nWebsite link: ${outreachLink('listing', item)}`, links: [outreachLink('listing', item)] },
     ]),
     ...pitches.flatMap(item => [
       { type: 'paragraph', text: `Pitch to ${audiences[item.audience].toLowerCase()} about ${products[item.product].name}` },
-      { type: 'message', text: `Subject: ${item.subject}\n\n${item.body}` },
+      { type: 'message', text: `Subject: ${item.subject}\n\n${item.body}\n\nLink to use: ${outreachLink('pitch', item)}`, links: [outreachLink('pitch', item)] },
     ]),
     ...(dropped ? [{ type: 'paragraph', text: `Left out by the checks: ${plural(dropped, 'draft')} (${reasons.map(reason => reason.replaceAll('_', ' ')).join(', ')}).` }] : []),
     { type: 'paragraph', text: 'Every draft uses only the prices and claims in the CareMetric fact sheet (docs/GTM_FACTS.md). Check them before you send.' },
+    ...(total ? [{ type: 'paragraph', text: 'Use the link under each draft as written: its campaign tags let the weekly report count the leads it brings.' }] : []),
   ];
   return { subject, body, blocks, dedupeMonth: month };
 }
