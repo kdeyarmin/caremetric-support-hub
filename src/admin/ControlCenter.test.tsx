@@ -219,7 +219,7 @@ describe("control center", () => {
     // A required flag that is present but false is shown with its value and still needs setup.
     expect(within(rows[1]).getByText("HUB_CHAT_ENABLED").parentElement!.textContent).toBe("HUB_CHAT_ENABLED false");
     expect(within(rows[1]).getByText("HUB_CHAT_ENABLED").parentElement!.className).toBe("is-missing");
-    expect(setup.textContent).toContain("The Hub never stores or sends a secret from the browser.");
+    expect(setup.textContent).toContain("Meta and LinkedIn credentials can be saved securely in Settings → Social media.");
   });
 
   it("labels AI usage that could not be loaded on every card instead of hiding it", async () => {

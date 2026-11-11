@@ -36,7 +36,7 @@ export const teamSchema = z.object({
 export const marketingToolSchema = z.object({
   key: z.string().min(1).max(80), label: z.string().min(1).max(120), agents: z.array(agentKey), configured: z.boolean(), supported: z.boolean().optional(),
   missing: z.array(z.string().min(1).max(1000)), detail: z.string().max(2000),
-  settingsPath: z.enum(["/admin", "/admin/settings", "/admin/growth", "/admin/creative"]).optional(),
+  settingsPath: z.enum(["/admin", "/admin/settings", "/admin/settings#settings-social", "/admin/growth", "/admin/creative"]).optional(),
 });
 export const servicesSchema = z.object({ enabled: z.boolean(), handlers: z.array(taskKind), sms: z.boolean(), email: z.boolean(), ownerEmail: z.boolean(), ai: z.boolean(), customerTextToAi: z.boolean(), externalEmail: z.boolean().optional(),
   marketingTools: z.array(marketingToolSchema).optional(),

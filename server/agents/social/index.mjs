@@ -3,7 +3,7 @@
  * account, Meta ad account, LinkedIn Company Page and LinkedIn ad account for engagement, with every post, reply and ad change approved by the owner until the owner hands that
  * kind of work over. Its handlers and executors register only when the database declares `platform.agents.social.v1`.
  *
- * `social` is the Hub's configuration (server/main.mjs): the tokens from Railway, and the ids, the Instagram image list and the ad
+ * `social` is the Hub's configuration (server/main.mjs): resolved encrypted credentials (or legacy Railway tokens), and the ids, the Instagram image list and the ad
  * settings from the Hub's Settings page. The daily budget cap is "Most any ad may spend per day"; with none set no budget is ever
  * raised. Comments and messages reach the model only while the owner's switch for customer text (Settings → AI team) is on.
  *
@@ -23,8 +23,8 @@ export const socialDeclared = features => (features instanceof Set ? features.ha
 const cents = value => { const number = Number(value); return Number.isInteger(number) && number >= 0 && number <= 10_000_000 ? number : null; };
 
 /**
- * The configuration, validated. Unset or invalid values mean "not connected" or "no cap". The tokens always come from Railway
- * (`env`); the ids, versions, images and ad limits come from the Hub's settings when `setting` (hub-settings `get`) is given, and from
+ * The configuration, validated. Unset or invalid values mean "not connected" or "no cap". Tokens come from the server's resolved
+ * credentials (`env`); the ids, versions, images and ad limits come from the Hub's settings when `setting` (hub-settings `get`) is given, and from
  * the old Railway variables otherwise.
  */
 export function socialConfig(env = {}, setting = null) {
@@ -50,7 +50,7 @@ export function socialConfig(env = {}, setting = null) {
 
 export function socialTeam({ social = null, features = null, fetchImpl = fetch, meta: givenMeta = null, linkedin: givenLinkedin = null }) {
   if (!socialDeclared(features)) return { handlers: () => ({}), executors: () => ({}), meta: null, linkedin: null, ads: null };
-  // `social` may be a function (server/main.mjs: the Hub's settings with Railway's tokens), read on each use. The clients are built
+  // `social` may be a function (server/main.mjs: live settings and resolved credentials), read on each use. The clients are built
   // again only when what they are built from changes, so a page id or ad account saved in Settings applies to the next request.
   const config = () => live(social) ?? socialConfig({});
   const meta = givenMeta ?? rebuilt(() => config().meta, input => metaClient({ ...input, fetchImpl }));

@@ -126,6 +126,12 @@ A draft that fails is dropped. The run records only the check's name.
 
 ## Setting it up
 
+The owner enters credentials in **Settings → Social media**, using the Meta and LinkedIn cards. Each card has a link to the
+provider’s setup, guidance beside each field, masked token entry and **Save and check**. A blank token preserves the saved value;
+the explicit removal checkbox clears it. Saved secrets are never returned to the browser. A check reads the Page and any configured
+Instagram/ad account; it does not publish, message anyone, change budgets or prove write permissions. Provider app approval still
+applies. Signing in to a provider alone does not connect its API. A stale form is rejected rather than overwriting another edit.
+
 1. **In Meta Business Settings**, make sure CareMetric's Business owns the Facebook Page, the Instagram professional account (linked to
    the Page) and the ad account.
 2. **Create a Meta app and a system user.** Create an app of the Business type and add it to the Business. Create a system user (Admin)
@@ -137,17 +143,16 @@ A draft that fails is dropped. The run records only the check's name.
    - `business_management`.
 
    Meta may ask for app review of some permissions before they work outside development mode.
-3. **Set the token and the account ids.**
-   - On Railway, the secret: `HUB_META_ACCESS_TOKEN` (required). The Control center's integration panel shows whether it is set.
-   - In the Hub, under Settings → Social media: "Facebook Page id" (required), and optionally "Instagram account id", "Meta ad
-     account id", "Approved brand images" (one https address per line, at most 20), "Target cost per lead or sign-up" and "Most any
-     ad may spend per day" (both in dollars).
+3. **Open Settings → Social media → Meta.** Paste the **Facebook Page ID or profile link** and **Meta access token**, then choose
+   **Save and check**. A numeric Page ID or `https://www.facebook.com/profile.php?id=…` link works. Under **Advanced**, optionally add
+   the **Instagram professional account ID** and **Meta ad account ID**. The numeric Instagram ID is different from its @username.
+   Below the cards, set **Approved brand images**, **Target cost per lead or sign-up** and **Most any ad may spend per day** as needed.
 
    To draft replies, Settings → AI team → "Let agents send customer messages to the AI" must be on and the Anthropic key set too.
    The ids, images and ad limits used to be Railway variables (`HUB_META_PAGE_ID` and the others); the Hub copies them into Settings
    once on its first start after the settings migration, and they can then be deleted. [Settings](SETTINGS.md) lists every setting.
-4. **Apply the two migrations and restart the Hub** so it reads the feature. Then resume the Social Media Manager on **AI team**, in
-   **Propose**, and press **Run now** on "Weekly social report" to check the connection, then on "Weekly social plan".
+4. Once the connection check succeeds, resume the Social Media Manager on **AI team**, in **Propose**, and press **Run now** on
+   "Weekly social plan" to prepare drafts for review. Connecting accounts does not resume the agent or enable automatic approval.
 5. **Review a few weeks** of posts, replies and ad changes. Then hand work over one kind at a time under "Work the team does on its
    own". Each step runs a supervised week, then switches automatically:
    - **Social posts** (`social.post`);
@@ -168,10 +173,8 @@ LinkedIn decides who may use its Page and advertising APIs. Approval is a review
 2. **Create a developer app** at developer.linkedin.com for CareMetric, and have the Page verify it (Settings → Verify).
 3. **Request the Community Management API** product for the app (posts, comments and engagement on the Page). LinkedIn reviews the
    request. LinkedIn may require this product to be the only one on its app.
-4. **Request the Advertising API** product for ads: on the same app if LinkedIn allows, otherwise on a second app. If it is a second
-   app, its token goes in `HUB_LINKEDIN_ADS_ACCESS_TOKEN` on Railway (and its refresh token and client secret in
-   `HUB_LINKEDIN_ADS_REFRESH_TOKEN` and `HUB_LINKEDIN_ADS_CLIENT_SECRET`), and its client id in Settings → Social media →
-   "LinkedIn advertising app client id".
+4. **Request the Advertising API** product if you want ads: on the same app if LinkedIn allows, otherwise on a second app. The separate
+   app’s token, client ID, client secret and refresh token go under **Advanced** in the LinkedIn card.
 5. **Generate the tokens** (OAuth 2.0 authorization code flow, or the developer portal's token generator), signed in as the Page's admin:
    - Page app: `r_organization_social`, `w_organization_social` and `rw_organization_admin`, plus any comment scopes LinkedIn adds to
      the product (such as `r_organization_social_feed` and `w_organization_social_feed`);
@@ -180,16 +183,34 @@ LinkedIn decides who may use its Page and advertising APIs. Approval is a review
 
    An access token lasts 60 days. If LinkedIn also issues a refresh token, set it with the app's client id and secret and the Hub
    renews the access token by itself. Otherwise, renew the token before it expires; the Hub warns once a day when LinkedIn refuses it.
-6. **Set the tokens and the ids.**
-   - On Railway, the secrets: `HUB_LINKEDIN_ACCESS_TOKEN` (required), and optionally `HUB_LINKEDIN_REFRESH_TOKEN`,
-     `HUB_LINKEDIN_CLIENT_SECRET` and a second app's `HUB_LINKEDIN_ADS_ACCESS_TOKEN`, `HUB_LINKEDIN_ADS_REFRESH_TOKEN` and
-     `HUB_LINKEDIN_ADS_CLIENT_SECRET`.
-   - In the Hub, under Settings → Social media: "LinkedIn Company Page id" (required; the Page's numeric id), and optionally
-     "LinkedIn ad account id", "LinkedIn app client id" (needed with the refresh token and client secret), "LinkedIn advertising
-     app client id" (a second app only) and "LinkedIn API version" (default `202609`; enter a newer YYYYMM when LinkedIn retires it).
-7. **Restart the Hub**, then press **Run now** on "Weekly social report" to check the connection. The same hand-over steps cover
+6. **Open Settings → Social media → LinkedIn.** Paste the **LinkedIn Company Page ID or admin link** and **LinkedIn access token**, then
+   choose **Save and check**. A numeric ID, `urn:li:organization:…` or numeric `/company/123456/admin/` link works; a public vanity-name
+   link does not. Renewal and advertising fields are under **Advanced**. The **LinkedIn API version** setting remains below the cards
+   (default `202609`; change it when LinkedIn retires that version).
+7. Saved connections apply within a minute without a restart. The same hand-over steps cover
    LinkedIn: "Social posts", "Social replies" (except deletions, which always wait for you) and "Ad tuning". A LinkedIn budget change,
    like Meta's, only ever happens on your own approval and under your cap.
+
+## Secure connection storage (deployment and recovery)
+
+Apply `20261111060000_social_connections.sql` and `20261111060001_social_connections_contract.sql`. Provision
+`HUB_SOCIAL_CREDENTIALS_KEY` on the Hub service as **64 hexadecimal characters generated from 32 random bytes** before releasing the
+server. This is an encryption secret, not a user-facing setting. The owner must have a current Hub command session to save or check.
+Provider credentials use AES-256-GCM with a fresh nonce and provider-specific authenticated data. The private table holds ciphertext
+only, has RLS without policies and no direct role grants; its functions are restricted to the application server. Audit events contain
+provider/key names, never tokens or ciphertext. Account IDs and versions remain ordinary Hub settings. Each form saves those IDs and
+its encrypted bundle in one transaction with optimistic version checks.
+
+Legacy social token variables remain a fallback **only until that provider’s first save in the Hub**. Afterward the encrypted bundle
+is authoritative, including explicit removals; deleting an old Railway token cannot erase a saved credential. Integration setup and
+the running agents use the same resolved credentials. Agents read account/client IDs and tokens from one database snapshot, so
+independently refreshed general settings cannot temporarily pair a token with an older account. A failed database read or decryption disables provider credentials until a
+successful refresh; it never restores an older Railway token. The refresh interval is 30 seconds.
+
+Keep the encryption key in the service’s protected secret store and preserve it across deployments and database restores. Do not
+replace it casually: a different key cannot decrypt existing bundles. Recovery requires restoring the original key. Planned rotation
+requires a maintenance migration that decrypts with the old key and re-encrypts every bundle with the new key before switching all
+service instances. There is no automatic key-rotation or recovery UI in this release. Database backups alone cannot recover tokens.
 
 ## Verification
 

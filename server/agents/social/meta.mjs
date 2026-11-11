@@ -103,6 +103,14 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
     configured,
     ids: { page, instagram, account },
 
+    /** Read-only setup check. Never publish, send a message or change an ad. */
+    async checkConnection({ signal } = {}) {
+      if (!configured.pages) throw failure('meta_not_configured');
+      await get(`${page}/posts`, { fields: 'id', limit: 1 }, { as: 'page', signal });
+      if (configured.instagram) await get(`${instagram}/media`, { fields: 'id', limit: 1 }, { signal });
+      if (configured.ads) await get(`act_${account}`, { fields: 'id' }, { signal });
+    },
+
     /** Recent posts with their public engagement counts (reactions or likes, comments, shares). Our own words only. */
     async recentPosts({ signal } = {}) {
       const posts = [];

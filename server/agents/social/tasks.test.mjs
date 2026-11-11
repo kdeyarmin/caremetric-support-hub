@@ -153,7 +153,7 @@ describe('comments and messages', () => {
       linkedin: linkedinOf({ recentInbox: vi.fn(async () => { throw Object.assign(new Error('x'), { code: 'linkedin_token_invalid' }); }) }) });
     expect((await refused.handlers['social.inbox'](task('social.inbox'), { now })).result).toEqual({ seen: 1, enqueued: 1, comments: 1, messages: 0, refused: ['linkedin_token_invalid'] });
     expect(refused.sent[0]).toMatchObject({ severity: 'warning', subject: 'The Social Media Manager cannot reach LinkedIn', dedupeKey: 'social:access:linkedin_token_invalid:2026-11-09' });
-    expect(refused.sent[0].body).toContain('HUB_LINKEDIN_ACCESS_TOKEN');
+    expect(refused.sent[0].body).toContain('Settings → Social media → LinkedIn');
   });
 
   it('on LinkedIn, replies through LinkedIn and proposes deleting spam (LinkedIn has no hide), but never once deletions would be automatic', async () => {

@@ -1515,8 +1515,8 @@ Apply the migrations in order with the usual procedure:
    Manager (paused, Propose) and its four schedules, add the six `social.*` action kinds and four targets with their ownership check
    (a budget change can never be automatically approved), the server-only `private.social_open_targets` and `private.social_schedule`,
    and the three autonomy steps (off), and declare `platform.agents.social.v1` (it needs the control plane, the hardening, autonomy
-   steps and customer growth). Restart the Hub after it. Nothing reaches Meta until `HUB_META_ACCESS_TOKEN` is set in Railway, the
-   "Facebook Page id" is filled in under Settings → Social media, and the owner resumes the agent.
+   steps and customer growth). Restart the Hub after it. Nothing reaches Meta until the owner connects the Meta card in
+   Settings → Social media and resumes the agent. The guided cards require the social connection migrations described in [Social media](SOCIAL_MEDIA.md).
 19. `20261109120000_monday_scorecard.sql`, then its gate `20261109120100_monday_scorecard_contract.sql`, which add the owner's
    "Send the individual weekly reports" setting (off), the server-only `private.agent_individual_reports` and
    `private.agent_scorecard_facts`, the owner's `hub.get_scorecard_settings` and `hub.set_individual_reports`, and the Chief of

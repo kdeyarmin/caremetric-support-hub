@@ -74,7 +74,7 @@ export const privateHubMessage='This Hub is private. Only its owner can sign in.
  * treated as signed out, a sign-in that fails it is revoked at once, and the routes that create
  * sign-ins for anyone else (invitation claims and application self-service) are closed.
  */
-export function appServer({auth,password,gateway,delegations,publications,aiCases,readiness,integrationSetup,settings=null,communications,bulkEmail,billing,selfService,agents,growth,leads,leadAdmin,mediaImport=null,health,owner,origins,helpCenter=null,publicArticles=null,creative=null,dist=resolve('dist')}) {
+export function appServer({auth,password,gateway,delegations,publications,aiCases,readiness,integrationSetup,settings=null,socialConnections=null,communications,bulkEmail,billing,selfService,agents,growth,leads,leadAdmin,mediaImport=null,health,owner,origins,helpCenter=null,publicArticles=null,creative=null,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -377,6 +377,11 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           if(req.method!=='POST'||url.search) throw new HttpError(400,'Use the Settings page.');
           if(!settings) throw new HttpError(503,'Settings are not configured.');
           return json(await settings.admin(session,await jsonBody(req,32768)));
+        }
+        if(path==='/api/admin/social-connections') {
+          if(req.method!=='POST'||url.search) throw new HttpError(400,'Use Social media in Settings.');
+          if(!socialConnections) throw new HttpError(503,'Social connection setup is unavailable.');
+          return json(await socialConnections.admin(session,await jsonBody(req,65536)));
         }
         if(path==='/api/admin/growth') {
           if(req.method!=='POST'||url.search)throw new HttpError(400,'Use the growth workspace.');

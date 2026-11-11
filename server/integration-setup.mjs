@@ -1,13 +1,13 @@
 import { HttpError } from './sms-auth.mjs';
 
 /**
- * What the Hub service still needs from Railway, read from the service environment at request time for the platform administrator
+ * What the Hub service needs, read from the resolved server credentials at request time for the platform administrator
  * only: the secrets (API keys, tokens, signing keys) and the few values that wire the service itself. Every switch, address, account id
  * and limit is a Hub setting on the Settings page instead (server/hub-settings.mjs, docs/SETTINGS.md), so it is not listed here.
  * A secret contributes booleans only: whether it is set and, where the service requires a minimum length (minLength), whether it meets
  * it, the same test the service applies before using it. No part of its value or its length is returned or logged. A non-secret value
  * (the public origin, the Telnyx profile id) is returned so the owner can confirm it. This endpoint reports; it never sets anything.
- * Secrets are set on the Hub service (Railway → Variables) and take effect when the service redeploys.
+ * Most secrets are set in Railway. Social tokens can also be entered in Settings; the resolver supplies their decrypted values here.
  */
 const present = (value) => typeof value === 'string' && value.trim().length > 0;
 
@@ -81,11 +81,12 @@ export function integrationSetup({ rpc, env = process.env, now = () => new Date(
     if (context?.role !== 'platform_admin') {
       throw new HttpError(403, 'Integration setup is available to the platform administrator only.');
     }
+    const environment = typeof env === 'function' ? env() : env;
     return {
       checkedAt: now().toISOString(),
       integrations: integrationCatalog.map((integration) => {
         const variables = integration.variables.map((variable) => {
-          const value = env[variable.name];
+          const value = environment[variable.name];
           const set = present(value);
           return {
             name: variable.name, secret: variable.secret, required: variable.required, purpose: variable.purpose, set,

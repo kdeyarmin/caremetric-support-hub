@@ -15,6 +15,15 @@ function harness(role = 'platform_admin', environment = env) {
 }
 
 describe('integration setup report', () => {
+  it('reads live social credentials without returning their values', async () => {
+    let current = {};
+    const report = harness('platform_admin', () => current);
+    expect((await report.handle('owner')).integrations.find(item => item.id === 'social-media').ready).toBe(false);
+    current = { HUB_META_ACCESS_TOKEN: 'stored-encrypted-social-token-for-tests' };
+    const next = await report.handle('owner');
+    expect(next.integrations.find(item => item.id === 'social-media').ready).toBe(true);
+    expect(JSON.stringify(next)).not.toContain(current.HUB_META_ACCESS_TOKEN);
+  });
   it('reports presence for secrets and values for wiring, in catalog order', async () => {
     const report = await harness().handle('token');
     expect(report.checkedAt).toBe('2026-10-21T12:00:00.000Z');

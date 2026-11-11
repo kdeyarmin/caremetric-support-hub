@@ -137,15 +137,15 @@ function AiUsagePanel({ state, period, onPeriod, retry }: { state: AdminReadStat
 
 function IntegrationSetupPanel({ state, retry }: { state: AdminReadState<IntegrationSetupReport | null>; retry: () => void }) {
   return <section className="panel control-panel" aria-label="Integration setup">
-    <div className="panel-heading"><div><h2>Integration setup</h2><p>The secrets each integration needs in Railway and whether they are set. A secret shows only as set or missing; its value never leaves the service. Switches, addresses and account ids are in <Link to="/admin/settings">Settings</Link>.</p></div></div>
+    <div className="panel-heading"><div><h2>Integration setup</h2><p>The credentials each integration needs and whether they are set. Saved secrets show only as set or missing. Connect Meta and LinkedIn in <Link to="/admin/settings#settings-social">Settings → Social media</Link>.</p></div></div>
     {state.status === "loading" && <Loading label="Checking integration settings" app="the Hub service" />}
     {state.status === "error" && <ReadFailure error={state.error} retry={retry} />}
     {state.status === "ready" && state.data === null && <p className="control-panel-note">{previewNote}</p>}
     {state.status === "ready" && state.data && <ul className="control-list control-integrations">{state.data.integrations.map(integration => <li key={integration.id}><Plug size={16} aria-hidden="true" /><div><strong>{integration.name}</strong><span className="control-detail">{integration.purpose}{integration.ready && !integration.complete ? " Optional settings are not set." : ""}</span>
       <div className="control-chips control-variables">{integration.variables.map(variable => <span key={variable.name} className={variable.satisfied ? "is-set" : variable.required ? "is-missing" : "is-optional"} title={variable.purpose}><code>{variable.name}</code> {variable.set ? variable.secret ? "set" : variable.value : variable.required ? "missing" : "not set"}</span>)}</div>
-      <div className="control-links"><a href={docsUrl(integration.docs)} target="_blank" rel="noreferrer">Setup steps</a></div></div>
+      <div className="control-links">{["social-media", "social-linkedin"].includes(integration.id) && <Link to="/admin/settings#settings-social">Enter connection details</Link>}<a href={docsUrl(integration.docs)} target="_blank" rel="noreferrer">Setup steps</a></div></div>
       <Status done={integration.ready} yes="Ready" no="Needs setup" /></li>)}</ul>}
-    <div className="control-panel-footer"><p className="control-panel-note">To add or change a secret, open the Hub service in Railway, choose Variables, set the exact name shown here and let the service redeploy, then refresh this page. The Hub never stores or sends a secret from the browser.</p></div>
+    <div className="control-panel-footer"><p className="control-panel-note">Meta and LinkedIn credentials can be saved securely in Settings → Social media. For other integrations, update the Hub service’s Railway variables and let it redeploy. A saved credential alone does not verify provider permissions.</p></div>
   </section>;
 }
 

@@ -1,0 +1,12 @@
+begin;
+select plan(8);
+select ok(hub.get_backend_contract() -> 'features' @> '["platform.social-connections.v1"]'::jsonb, 'Social connection setup is declared');
+select ok((select relrowsecurity from pg_class where oid='private.social_connections'::regclass), 'Credential state has RLS');
+select is((select count(*) from pg_policies where schemaname='private' and tablename='social_connections'), 0::bigint, 'No direct credential policies');
+select is((select count(*) from private.social_connections), 2::bigint, 'Exactly the supported providers');
+select ok(not exists(select 1 from unnest(array['anon','authenticated','service_role','hub_app_server']) r where has_table_privilege(r,'private.social_connections','select,insert,update,delete,truncate')), 'No role has direct credential access');
+select ok(not exists(select 1 from unnest(array['anon','authenticated','service_role']) r where has_function_privilege(r,'private.social_connection_values()','execute') or has_function_privilege(r,'private.save_social_connection(text,uuid,text,jsonb)','execute')), 'Browser and service roles cannot read or replace ciphertext');
+select ok(position('hub.authorize_app_command()' in pg_get_functiondef('private.save_social_connection(text,uuid,text,jsonb)'::regprocedure))>0, 'Writes independently authorize the owner');
+select ok(position('private.require_hub_app_server()' in pg_get_functiondef('private.social_connection_values()'::regprocedure))>0, 'Runtime read independently requires the app server');
+select * from finish();
+rollback;

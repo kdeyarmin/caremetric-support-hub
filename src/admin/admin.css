@@ -374,3 +374,22 @@
   .settings-row { grid-template-columns: 1fr; }
   .settings-field-switch { justify-items: start; }
 }
+/* Guided social connection entry also fits a phone without horizontal scrolling. */
+#settings-social { scroll-margin-top: 6rem; }
+.social-connections { display: grid; gap: 1rem; margin-bottom: 1.5rem; }
+.social-connections > p { margin: 0; }
+.social-connections > button { justify-self: start; }
+.social-connection-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 1.25rem; align-items: start; }
+.social-connection-card { display: grid; gap: 1rem; min-width: 0; padding: 1.25rem; border: 1px solid var(--line); border-radius: 12px; }
+.social-connection-heading { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: .75rem; }
+.social-connection-heading h3, .social-connection-heading p { margin: 0 0 .35rem; }
+.social-connection-heading a { display: inline-flex; align-items: center; gap: .3rem; }
+.social-connection-field { display: grid; gap: .45rem; min-width: 0; }
+.social-connection-field > label:first-child { font-weight: 600; }
+.social-connection-field > input { width: 100%; min-width: 0; }
+.social-connection-field small { line-height: 1.5; overflow-wrap: anywhere; }
+.social-connection-field .social-remove { display: flex; align-items: start; gap: .5rem; font-size: .8rem; }
+.social-remove input { width: auto; margin-top: .15rem; }
+.social-advanced { display: grid; gap: 1rem; }
+.social-advanced summary { cursor: pointer; font-weight: 600; padding: .5rem 0; }
+.social-advanced .social-connection-field { margin-top: 1rem; }

@@ -1,5 +1,5 @@
-import { useCallback, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { RefreshCw, RotateCcw, Save, SlidersHorizontal } from "lucide-react";
 import { Loading, ReadFailure } from "./AdminReads";
 import { SettingsApiError, settingsClient } from "./settingsClient";
@@ -7,6 +7,8 @@ import type { HubSetting, SettingValue, SettingsClient, SettingsView } from "./s
 import { fieldText, fieldValue } from "./settingsFields";
 import { timeLabel } from "./readState";
 import { useAdminRead } from "./useAdminRead";
+import { SocialConnections } from "./SocialConnections";
+import { guidedSocialSettings } from "./socialConnectionsClient";
 import "./admin.css";
 
 type Notice = { ok: boolean; text: string } | null;
@@ -95,6 +97,7 @@ function SettingRow({ setting, editable, busy, onSave }: { setting: HubSetting; 
  * within a minute, without a restart. Until the settings migration is applied the page shows what the Railway variables say, read-only.
  */
 export function Settings({ client = settingsClient }: { client?: SettingsClient }) {
+  const { hash } = useLocation();
   const [refresh, setRefresh] = useState(0);
   const [busy, setBusy] = useState("");
   const changing = useRef(false);
@@ -105,6 +108,10 @@ export function Settings({ client = settingsClient }: { client?: SettingsClient 
   const reader = useCallback((signal: AbortSignal) => { void refresh; return client.view({ signal }); }, [client, refresh]);
   const state = useAdminRead(reader);
   const shown = saved ?? (state.status === "ready" ? { view: state.data, at: state.receivedAt } : null);
+  const loaded = Boolean(shown);
+  useEffect(() => {
+    if (loaded && hash === "#settings-social") document.getElementById("settings-social")?.scrollIntoView?.({ block: "start" });
+  }, [hash, loaded]);
 
   const onSave = async (setting: HubSetting, value: SettingValue) => {
     if (changing.current || !setting.changedAt) return;
@@ -124,7 +131,7 @@ export function Settings({ client = settingsClient }: { client?: SettingsClient 
 
   return <div className="settings">
     <div className="page-heading"><div><span className="eyebrow">CareMetric Admin</span><h1><SlidersHorizontal size={22} aria-hidden="true" /> Settings</h1>
-      <p>Turn features on and off, and set the addresses, account ids and limits the Hub uses. A change applies within a minute, with nothing to redeploy. Only secrets (API keys, tokens and signing keys) stay in Railway: <Link to="/admin">Integration setup</Link> on the Control center shows which are set.</p></div>
+      <p>Turn features on and off, and set the addresses, accounts and limits the Hub uses. Connect Meta and LinkedIn below in <a href="#settings-social">Social media</a>. Changes apply within a minute. <Link to="/admin">Integration setup</Link> shows the other services the Hub uses.</p></div>
       <button type="button" className="button button-secondary" onClick={reload} disabled={state.status === "loading" && !shown}><RefreshCw size={16} aria-hidden="true" /> Refresh</button></div>
     {notice && <p role={notice.ok ? "status" : "alert"} className={notice.ok ? "admin-explanation" : "form-message form-error"}>{notice.text}</p>}
     {!shown && state.status === "loading" && <Loading label="Loading settings" app="Hub" />}
@@ -134,7 +141,8 @@ export function Settings({ client = settingsClient }: { client?: SettingsClient 
       {!shown.view.editable && <p className="admin-explanation settings-readonly" role="status">Read-only for now: apply the settings migration (supabase/migrations/20261109150000_hub_settings.sql) and its contract, and the Hub copies these values in from Railway. After that you change them here.</p>}
       {shown.view.groups.map(group => <section key={group.id} className="panel settings-group" aria-labelledby={`settings-${group.id}`}>
         <div className="admin-section-title"><div><h2 id={`settings-${group.id}`}>{group.label}</h2><p>{group.description}</p></div></div>
-        <ul className="settings-list">{group.settings.map(setting =>
+        {group.id === "social" && <SocialConnections key={refresh} />}
+        <ul className="settings-list">{group.settings.filter(setting => !guidedSocialSettings.has(setting.key)).map(setting =>
           <SettingRow key={`${setting.key}:${setting.changedAt ?? ""}:${JSON.stringify(setting.value)}`} setting={setting} editable={shown.view.editable} busy={Boolean(busy)} onSave={onSave} />)}</ul>
       </section>)}
     </>}
