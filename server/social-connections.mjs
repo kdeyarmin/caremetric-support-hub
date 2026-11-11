@@ -16,6 +16,7 @@ const secretFields = {
     adsToken: 'HUB_LINKEDIN_ADS_ACCESS_TOKEN', adsRefreshToken: 'HUB_LINKEDIN_ADS_REFRESH_TOKEN', adsClientSecret: 'HUB_LINKEDIN_ADS_CLIENT_SECRET' },
 };
 const providers = Object.keys(connectionFields);
+const accountSettings = new Set(Object.values(connectionFields).flatMap(Object.values));
 const variables = Object.values(secretFields).flatMap(Object.values);
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const exact = (value, keys) => object(value) && Object.keys(value).sort().join(',') === [...keys].sort().join(',');
@@ -78,7 +79,8 @@ const failureMessage = code => {
 
 export function socialConnections({ pool, features, settings, env = process.env, fetchImpl = fetch, log = console, refreshMs = 30000,
   session = (token, work) => withSession(pool, token, work),
-  read = () => transaction(pool, async db => (await db.query('select private.social_connection_values() as result')).rows[0].result),
+  // One SQL statement gives credentials and account settings the same MVCC snapshot.
+  read = () => transaction(pool, async db => (await db.query("select jsonb_build_object('connections', private.social_connection_values(), 'settings', private.hub_settings_values()) as result")).rows[0].result),
 }) {
   const declared = features?.has(socialConnectionsFeature) === true;
   let cached = null, timer = null, refreshing = null;
@@ -91,15 +93,27 @@ export function socialConnections({ pool, features, settings, env = process.env,
   // Never continue using cached/replaced credentials after a failed read or decryption.
   async function refresh() {
     if (!declared) return;
-    if (!refreshing) refreshing = (async () => { try { cached = decode(await read()); } catch { cached = null; throw unavailable(); } finally { refreshing = null; } })();
+    if (!refreshing) refreshing = (async () => {
+      try {
+        const snapshot = await read();
+        if (!object(snapshot?.settings)) throw unavailable();
+        cached = { connections: decode(snapshot.connections), settings: snapshot.settings };
+      } catch { cached = null; throw unavailable(); } finally { refreshing = null; }
+    })();
     return refreshing;
   }
   function resolvedEnv() {
     if (!declared) return env;
     const next = { ...env };
     for (const variable of variables) next[variable] = '';
-    if (cached) for (const provider of providers) for (const [field, variable] of Object.entries(secretFields[provider])) next[variable] = cached[provider].secrets[field];
+    if (cached) for (const provider of providers) for (const [field, variable] of Object.entries(secretFields[provider])) next[variable] = cached.connections[provider].secrets[field];
     return next;
+  }
+  // Workers consume the paired account IDs/client IDs, even if the general settings
+  // cache is refreshed earlier or later. Other settings retain their usual live reader.
+  function getSetting(key) {
+    if (!declared || !accountSettings.has(key)) return settings.get(key);
+    return cached?.settings[key] ?? catalog.get(key)?.default;
   }
   async function start() {
     if (!declared) return;
@@ -181,5 +195,5 @@ export function socialConnections({ pool, features, settings, env = process.env,
     if (exact(input, ['action','provider']) && input.action === 'check' && providers.includes(input.provider)) return check(token, input.provider);
     throw new HttpError(400, 'Invalid social connection request.');
   }
-  return { start, stop, refresh, resolvedEnv, admin, list, save, check };
+  return { start, stop, refresh, resolvedEnv, getSetting, admin, list, save, check };
 }

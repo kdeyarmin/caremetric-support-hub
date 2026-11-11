@@ -39,6 +39,7 @@ try {
   await service.save(token, input(first, { token: credential }));
   assert.equal(settings.get('social.meta_page_id'), '123');
   assert.equal(service.resolvedEnv().HUB_META_ACCESS_TOKEN, credential);
+  assert.equal(service.getSetting('social.meta_page_id'), '123');
   assert.equal((await service.check(token, 'meta')).ok, true);
   const stored = (await admin.query("select ciphertext,revision from private.social_connections where provider='meta'")).rows[0];
   assert.ok(!stored.ciphertext.includes(credential));
@@ -50,6 +51,9 @@ try {
   // A different Settings edit invalidates the form, and all account/secret writes roll back.
   const before = await current('meta');
   await settings.save(token, { key: 'social.meta_page_id', value: '789', expectedChangedAt: before.fields.pageId.changedAt });
+  assert.equal(service.getSetting('social.meta_page_id'), '123', 'Social runtime retains its coherent snapshot until refreshed');
+  await service.refresh();
+  assert.equal(service.getSetting('social.meta_page_id'), '789', 'Credential and account snapshots refresh together');
   const stale = input(before, { token: `${credential}-must-not-save` });
   stale.fields.adAccountId.value = '555';
   await assert.rejects(service.save(token, stale), refused('40001'));

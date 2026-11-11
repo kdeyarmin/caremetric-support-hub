@@ -40,7 +40,8 @@ it('accepts only useful Page links and normalizes them without a network lookup'
 function harness({ environment = {}, denied = false } = {}) {
   const state = { rows: rows(), fail: false, denied, queries: [] };
   const values = Object.values(connectionFields).flatMap(Object.entries).map(([name, key]) => ({ key, value: name === 'pageId' || name === 'organizationId' ? '123' : null, changedAt: version }));
-  const read = vi.fn(async () => { if (state.fail) throw new Error(token); return state.rows; });
+  state.values = values;
+  const read = vi.fn(async () => { if (state.fail) throw new Error(token); return { connections: state.rows, settings: Object.fromEntries(state.values.map(row => [row.key, row.value])) }; });
   const session = vi.fn(async (_session, work) => work({ query: async (sql, args) => {
     state.queries.push(sql);
     if (sql.includes('authorize_app_') && state.denied) throw new HttpError(403, 'Owner access required.');
@@ -55,7 +56,7 @@ function harness({ environment = {}, denied = false } = {}) {
   } }));
   const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ data: [], elements: [] }), { status: 200 }));
   const env = { HUB_SOCIAL_CREDENTIALS_KEY: key, ...environment };
-  const service = socialConnections({ features: new Set([socialConnectionsFeature]), settings: { refresh: vi.fn(async () => {}) }, env, read, session, fetchImpl });
+  const service = socialConnections({ features: new Set([socialConnectionsFeature]), settings: { get: () => 'older-general-cache', refresh: vi.fn(async () => {}) }, env, read, session, fetchImpl });
   return { state, service, read, fetchImpl };
 }
 
@@ -92,6 +93,20 @@ it('fails closed while storage is unavailable, including after a previously succ
   state.rows[0].ciphertext = sealConnection('meta', { token }, randomBytes(32).toString('hex'));
   await expect(service.refresh()).rejects.toThrow('Social connection storage is unavailable');
   expect(service.resolvedEnv().HUB_META_ACCESS_TOKEN).toBe('');
+});
+
+it('keeps tokens and account IDs paired when the general settings cache is older or a refresh fails', async () => {
+  const { service, state } = harness({ environment: { HUB_META_ACCESS_TOKEN: token } });
+  await service.refresh();
+  expect(service.getSetting('social.meta_page_id')).toBe('123');
+  state.values.find(row => row.key === 'social.meta_page_id').value = '456';
+  state.rows[0].ciphertext = sealConnection('meta', { token: 'replacement-token-for-page-456' }, key);
+  expect([service.resolvedEnv().HUB_META_ACCESS_TOKEN, service.getSetting('social.meta_page_id')]).toEqual([token, '123']);
+  await service.refresh();
+  expect([service.resolvedEnv().HUB_META_ACCESS_TOKEN, service.getSetting('social.meta_page_id')]).toEqual(['replacement-token-for-page-456', '456']);
+  expect(service.getSetting('social.max_daily_budget_cents')).toBe('older-general-cache');
+  state.fail = true; await expect(service.refresh()).rejects.toThrow();
+  expect([service.resolvedEnv().HUB_META_ACCESS_TOKEN, service.getSetting('social.meta_page_id')]).toEqual(['', null]);
 });
 
 it('keeps legacy configuration working before the deployment gate', async () => {

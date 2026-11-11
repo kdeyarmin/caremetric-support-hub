@@ -203,7 +203,8 @@ its encrypted bundle in one transaction with optimistic version checks.
 
 Legacy social token variables remain a fallback **only until that provider’s first save in the Hub**. Afterward the encrypted bundle
 is authoritative, including explicit removals; deleting an old Railway token cannot erase a saved credential. Integration setup and
-the running agents use the same resolved credentials. A failed database read or decryption disables provider credentials until a
+the running agents use the same resolved credentials. Agents read account/client IDs and tokens from one database snapshot, so
+independently refreshed general settings cannot temporarily pair a token with an older account. A failed database read or decryption disables provider credentials until a
 successful refresh; it never restores an older Railway token. The refresh interval is 30 seconds.
 
 Keep the encryption key in the service’s protected secret store and preserve it across deployments and database restores. Do not
