@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { linkedinClient, linkedinComment, linkedinPost, littleText } from './linkedin.mjs';
+import { linkedinClient, linkedinComment, linkedinPost, linkedinVideo, littleText } from './linkedin.mjs';
 
 const token = 'AQX-linkedin-member-token-0123456789';
 const fresh = 'AQX-renewed-linkedin-token-abcdefghij';
@@ -16,6 +16,119 @@ const route = handlers => vi.fn(async (url, init = {}) => {
 });
 const client = (fetchImpl, over = {}) => linkedinClient({ token, organizationId: '5550001', adAccountId: '5080001', fetchImpl, ...over });
 const bodyOf = call => JSON.parse(call[1].body);
+
+describe('LinkedIn approved videos', () => {
+  const video = 'urn:li:video:C4E10AQFvideo';
+  const videoUrl = `https://help.caremetric.ai/api/creative/a/${'a'.repeat(64)}.mp4`;
+  const mp4 = () => { const bytes = Buffer.alloc(80_000, 0); bytes.write('ftyp', 4); return bytes; };
+  const instructions = () => [
+    { uploadUrl: 'https://www.linkedin.com/dms-uploads/video/1', firstByte: 0, lastByte: 39_999 },
+    { uploadUrl: 'https://www.linkedin.com/dms-uploads/video/2', firstByte: 40_000, lastByte: 79_999 },
+  ];
+  function videoFetch({ parts = instructions(), sourceType = 'video/mp4', sourceLength = null, uploadStatus = 201, etag = true, status = 'AVAILABLE', postId = post, owner = org } = {}) {
+    return vi.fn(async (url, init = {}) => {
+      const parsed = new URL(url);
+      if (parsed.host === 'help.caremetric.ai') return new Response(mp4(), { headers: { 'Content-Type': sourceType, ...(sourceLength ? { 'Content-Length': String(sourceLength) } : {}) } });
+      if (parsed.pathname === '/rest/videos' && parsed.searchParams.get('action') === 'initializeUpload') return json({ value: { video, uploadToken: 'upload-session', uploadInstructions: parts } });
+      if (parsed.pathname.startsWith('/dms-uploads/')) return new Response(null, { status: uploadStatus, headers: etag ? { ETag: `"part-${parsed.pathname.at(-1)}"` } : {} });
+      if (parsed.pathname === '/rest/videos' && parsed.searchParams.get('action') === 'finalizeUpload') return json({});
+      if (parsed.pathname.startsWith('/rest/videos/')) return json({ id: video, status, owner });
+      if (parsed.pathname === '/rest/posts') return json({}, 201, postId ? { 'x-restli-id': postId } : {});
+      return json({}, 404);
+    });
+  }
+
+  it('prepares every exact byte range, finalizes in ETag order, and publishes only in the separate stage', async () => {
+    const fetchImpl = videoFetch();
+    const li = client(fetchImpl);
+    expect(linkedinVideo(video)).toBe(video);
+    expect(linkedinVideo('urn:li:video:bad/../posts')).toBeNull();
+    expect(await li.prepareVideo({ videoUrl })).toEqual({ id: video });
+    expect(fetchImpl.mock.calls.filter(([url]) => new URL(url).pathname === '/rest/posts')).toHaveLength(0);
+    expect(fetchImpl.mock.calls[0][1]).toMatchObject({ redirect: 'error' });
+    expect(fetchImpl.mock.calls[0][1].headers).toBeUndefined();
+    expect(bodyOf(fetchImpl.mock.calls[1])).toEqual({ initializeUploadRequest: { owner: org, fileSizeBytes: 80_000, uploadCaptions: false, uploadThumbnail: false } });
+    const puts = fetchImpl.mock.calls.filter(([, init]) => init.method === 'PUT');
+    expect(puts.map(([, init]) => init.body.length)).toEqual([40_000, 40_000]);
+    expect(Buffer.concat(puts.map(([, init]) => init.body))).toEqual(mp4());
+    for (const [url, init] of puts) {
+      expect(new URL(url).host).toBe('www.linkedin.com');
+      expect(init).toMatchObject({ redirect: 'error', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' } });
+    }
+    expect(bodyOf(fetchImpl.mock.calls.at(-1))).toEqual({ finalizeUploadRequest: { video, uploadToken: 'upload-session', uploadedPartIds: ['part-1', 'part-2'] } });
+    expect(await li.readVideo(video)).toEqual({ ready: true, failed: false });
+    expect(await li.publishVideo({ videoId: video, message: 'See this workflow. #HomeHealth' })).toEqual({ id: post });
+    expect(bodyOf(fetchImpl.mock.calls.at(-1))).toMatchObject({ author: org, commentary: 'See this workflow. {hashtag|\\#|HomeHealth}',
+      distribution: { feedDistribution: 'MAIN_FEED' }, lifecycleState: 'PUBLISHED', content: { media: { id: video } } });
+  });
+
+  it.each(['PROCESSING', 'WAITING_UPLOAD', 'PROCESSING_FAILED'])('polls %s without posting', async status => {
+    const fetchImpl = videoFetch({ status });
+    const li = client(fetchImpl);
+    expect(await li.readVideo(video)).toEqual({ ready: false, failed: status === 'PROCESSING_FAILED' });
+    expect(fetchImpl.mock.calls.every(([, init]) => init.method === 'GET')).toBe(true);
+  });
+
+  it('rejects bad sources, oversized downloads and non-MP4 media before asking LinkedIn to upload', async () => {
+    for (const invalidUrl of ['http://help.caremetric.ai/a.mp4', 'https://user:secret@help.caremetric.ai/a.mp4', 'https://help.caremetric.ai/unapproved.mp4', `${videoUrl}?x=1`, 'not-a-url']) {
+      const fetchImpl = videoFetch();
+      await expect(client(fetchImpl).prepareVideo({ videoUrl: invalidUrl })).rejects.toMatchObject({ code: 'linkedin_invalid_video' });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    }
+    for (const input of [{ sourceType: 'image/png' }, { sourceLength: 60 * 1024 * 1024 + 1 }]) {
+      const fetchImpl = videoFetch(input);
+      await expect(client(fetchImpl).prepareVideo({ videoUrl })).rejects.toMatchObject({ code: 'linkedin_invalid_video' });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    }
+    const fetchImpl = vi.fn(async () => new Response(Buffer.alloc(80_000), { headers: { 'Content-Type': 'video/mp4' } }));
+    await expect(client(fetchImpl).prepareVideo({ videoUrl })).rejects.toMatchObject({ code: 'linkedin_invalid_video' });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('validates every upload destination and contiguous range before sending any token or bytes', async () => {
+    for (const change of [
+      { uploadUrl: 'https://evil.example/dms-uploads/video' }, { uploadUrl: 'https://www.linkedin.com.evil.example/video' },
+      { uploadUrl: 'http://www.linkedin.com/video' }, { uploadUrl: 'https://user:secret@www.linkedin.com/video' },
+      { firstByte: 39_999 }, { lastByte: 80_000 }, { firstByte: '40000' }, { lastByte: 79_998 },
+    ]) {
+      const parts = instructions(); parts[1] = { ...parts[1], ...change };
+      const fetchImpl = videoFetch({ parts });
+      await expect(client(fetchImpl).prepareVideo({ videoUrl })).rejects.toMatchObject({ code: 'linkedin_invalid_upload' });
+      expect(fetchImpl.mock.calls.some(([, init]) => init.method === 'PUT')).toBe(false);
+    }
+  });
+
+  it('does not finalize an upload with missing ETags or conceal uncertain publication', async () => {
+    const missingEtag = videoFetch({ etag: false });
+    await expect(client(missingEtag).prepareVideo({ videoUrl })).rejects.toMatchObject({ code: 'linkedin_unconfirmed' });
+    expect(missingEtag.mock.calls.some(([url]) => new URL(url).searchParams.get('action') === 'finalizeUpload')).toBe(false);
+    const noPostId = videoFetch({ postId: null });
+    await expect(client(noPostId).publishVideo({ videoId: video, message: 'Approved text' })).rejects.toMatchObject({ code: 'linkedin_unconfirmed', transient: false });
+    for (const mode of ['network', 'body', 'server', 'server_body']) {
+      const known = videoFetch();
+      const fetchImpl = vi.fn(async (url, init) => {
+        if (new URL(url).pathname !== '/rest/posts') return known(url, init);
+        if (mode === 'network') throw new Error(`lost ${token}`);
+        if (mode === 'server') return json({}, 503);
+        return { ok: mode !== 'server_body', status: mode === 'server_body' ? 503 : 201,
+          body: new ReadableStream({ start(controller) { controller.error(new Error('truncated body')); } }) };
+      });
+      const error = await client(fetchImpl).publishVideo({ videoId: video, message: 'Approved text' }).catch(error => error);
+      expect(error).toMatchObject({ code: 'linkedin_unconfirmed', transient: false });
+      expect(error.message).not.toContain(token);
+      expect(fetchImpl.mock.calls.filter(([url]) => new URL(url).pathname === '/rest/posts')).toHaveLength(1);
+    }
+  });
+
+  it('refuses a different organization’s media and requires Page configuration', async () => {
+    const fetchImpl = videoFetch({ owner: 'urn:li:organization:9' });
+    await expect(client(fetchImpl).readVideo(video)).rejects.toMatchObject({ code: 'linkedin_invalid_video' });
+    const li = client(vi.fn(), { token: '' });
+    await expect(li.prepareVideo({ videoUrl })).rejects.toMatchObject({ code: 'linkedin_not_configured' });
+    await expect(li.readVideo(video)).rejects.toMatchObject({ code: 'linkedin_not_configured' });
+    await expect(li.publishVideo({ videoId: video, message: 'Approved' })).rejects.toMatchObject({ code: 'linkedin_not_configured' });
+  });
+});
 
 describe('LinkedIn text and ids', () => {
   it('escapes LinkedIn\'s reserved characters, so nothing a draft says becomes a mention or markup, and keeps real hashtags', () => {

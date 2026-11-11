@@ -49,13 +49,14 @@ export function agentTeam({
   pool, growth: givenGrowth = null, growthMail = null, postalAddress = '', store: givenStore = null, handlers = {}, executors = {}, sms, email, ownerEmail, publicOrigin,
   fetchImpl = fetch, enabled = false, log = line => console.warn(line), now = () => new Date(), communications = null, features = null,
   anthropicApiKey = null, record = null, model = null, guides = null, customerTextToAi = false, leadSecrets = {}, lifecycle = null, offerBilling = null,
-  social = null, meta = null, marketed = null, searchConsoleSites = undefined, searchConsoleCredentials = '', creative = null,
+  social = null, meta = null, marketed = null, searchConsoleSites = undefined, searchConsoleCredentials = '', creative = null, visitorMetrics = null,
 }) {
   // Fenced operations (the attempt a task was claimed under, the execution an action started) exist once the database declares the hardening feature.
   const marketing = features?.has?.(marketingFeature) === true;
   const creativeOn = creativeDeclared(features);
   const store = givenStore ?? sqlAgentStore(pool, { fenced: features?.has?.('platform.agents.hardening.v1') === true, growth: features?.has?.('platform.agents.customer-growth.v1') === true,
-    social: socialDeclared(features), marketing, scorecard: scorecardDeclared(features), creative: creativeOn });
+    social: socialDeclared(features), socialVideo: features?.has?.('platform.agents.social-video.v1') === true,
+    marketing, scorecard: scorecardDeclared(features), creative: creativeOn });
   // What the team markets: the owner's switches on the AI team page, read when each marketing task starts (marketing.mjs). Until the
   // database declares them, CareMetric Intel only. A caller (a test) may pass its own list or reader.
   const marketedSource = marketed ?? (marketing && typeof store.marketedProducts === 'function' ? () => store.marketedProducts() : [...defaultMarketed]);
@@ -79,7 +80,7 @@ export function agentTeam({
   const actions = actionExecutor({ store, executors: {
     ...recordOnlyExecutors, ...growthExecutors({growth,mail:growthMail,publicOrigin,postalAddress}), ...conciergeExecutors({ communications, store, notifier, features, log }), ...lifecycleExecutors({ store, features, lifecycle: customerEmail, log }),
     ...offerExecutors({ store, features, billing: offerBilling, notifier, log }),
-    ...contentExecutors({ store, features, log }), ...externalEmailExecutors({ store, features, email, log }), ...socialWork.executors({ notifier, log, creative: creativeLink }),
+    ...contentExecutors({ store, features, log }), ...externalEmailExecutors({ store, features, email, log }), ...socialWork.executors({ notifier, log, creative: creativeLink, store, publicOrigin }),
     ...(creativeOn && typeof store.creativeHandoff === 'function' ? creativeExecutors({ store }) : {}),
     ...(typeof executors === 'function' ? executors(shared) : executors),
   }, log });
@@ -88,7 +89,7 @@ export function agentTeam({
     ...salesHandlers({ store, notifier, model: runtime, growth, features, customerTextToAi, publicOrigin, guides, marketed: marketedSource, log }),
     ...socialWork.handlers({ store, notifier, model: runtime, customerTextToAi, publicOrigin, marketed: marketedSource, log, creative: creativeLink }),
     ...creativeWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, publicOrigin, marketed: marketedSource, log }),
-    ...scorecardHandlers({ store, notifier, publicOrigin, features, growth, ads: socialWork.ads, fetchImpl, searchConsoleSites, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, leadSecrets, lifecycle: customerEmail, marketed: marketedSource, searchConsoleSites, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
+    ...scorecardHandlers({ store, notifier, publicOrigin, features, growth, ads: socialWork.ads, fetchImpl, searchConsoleSites, visitors: visitorMetrics ? input => visitorMetrics.read(input) : null, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, leadSecrets, lifecycle: customerEmail, marketed: marketedSource, searchConsoleSites, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   const scheduler = agentScheduler({ store, handlers: registry, actions, enabled, log, now });
   const admin = agentAdmin({
     pool, actions, kick: () => scheduler.tick(), waiting: scheduler.runWaiting,
@@ -99,7 +100,7 @@ export function agentTeam({
       customerTextToAi: draftingFor({ model: runtime, guides, customerTextToAi: live(customerTextToAi) }) !== null,
       externalEmail: externalEmailAvailable({ features, email }),
       marketingTools: marketingToolkit({ features, growth, growthMail, model: runtime, customerTextToAi, communications, email, leadSecrets,
-        lifecycle: customerEmail, social, socialWork, creativeWork, searchConsoleCredentials, searchConsoleSites,
+        lifecycle: customerEmail, social, socialWork, creativeWork, searchConsoleCredentials, searchConsoleSites, visitorMetrics,
         marketed: Array.isArray(products) ? products.filter(product => product.marketed).map(product => product.product) : Array.isArray(marketed) ? marketed : defaultMarketed }),
       creative: (() => { const config = creativeWork.config(); const on = creativeOn && creativeWork.enabled(); return { declared: creativeOn, enabled: on, videoProvider: on ? config.videoProvider : null, dailyRenderCap: config.dailyRenderCap }; })(),
     }),

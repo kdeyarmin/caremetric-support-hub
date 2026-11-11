@@ -1,5 +1,5 @@
 import {it,expect,vi} from 'vitest';
-import {createHmac} from 'node:crypto';
+import {createHmac,createHash} from 'node:crypto';
 import {growthService} from './service.mjs';
 import {customerActivityClient} from './event-client.mjs';
 const key='synthetic-key-for-tests-only-32-characters';
@@ -24,4 +24,19 @@ it('preserves the native event ID across retries and interoperates with ingress 
 });
 it('refuses Breathe and unknown administration fields',async()=>{
  const {service,store}=fixture();await expect(service.admin('token',{operation:'create',data:{name:'Example',domain:'example.org',product:'breathe',email:'',contactName:'',role:'',goal:''}})).rejects.toMatchObject({status:400});expect(store.manage).not.toHaveBeenCalled();
+});
+
+it('native activity uses a hashed application key, rejects purchase assertions and keeps missing mappings retryable',async()=>{
+ const appEvent=vi.fn(async()=>({replay:false}));const appKey='cmb_'+'x'.repeat(43);
+ const service=growthService({store:{appEvent},features:new Set(['platform.agents.customer-growth.v1','platform.agents.app-growth.v1'])});
+ const input={account:'000000000000000000000002',eventKey:'22222222-2222-4222-8222-222222222222',kind:'first_value',occurredAt:new Date(now).toISOString(),facts:{metric:'provider_lists',count:1}};
+ await service.appActivity('Bearer '+appKey,input);
+ expect(appEvent).toHaveBeenCalledWith(createHash('sha256').update(appKey).digest('hex'),input);
+ for(const invalid of [{...input,kind:'paid'},{...input,tenantId:event.tenantId},{...input,facts:{count:0,metric:'provider_lists'}},{...input,facts:{patientName:'forbidden'}}]) {
+  await expect(service.appActivity('Bearer '+appKey,invalid)).rejects.toMatchObject({status:400});
+ }
+ await expect(service.appActivity('bad',input)).rejects.toMatchObject({status:401});
+ appEvent.mockRejectedValue(Object.assign(new Error('missing'),{code:'P0002'}));
+ await expect(service.appActivity('Bearer '+appKey,input)).rejects.toMatchObject({status:503});
+ expect(service.readiness()).toMatchObject({appEvents:true,events:{'caremetric-intel':false}});
 });

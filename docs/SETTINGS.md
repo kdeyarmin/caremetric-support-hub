@@ -58,6 +58,7 @@ does nothing. A setting you saved, or cleared back to its default, is never over
 | Social media | Target cost per lead or sign-up (dollars) | `HUB_SOCIAL_TARGET_COST_PER_RESULT_CENTS` |
 | Social media | Most any ad may spend per day (dollars) | `HUB_SOCIAL_AD_MAX_DAILY_BUDGET_CENTS` |
 | Search | Search Console properties (one per line) | `HUB_SEARCH_CONSOLE_SITES` |
+| Website analytics | Read Intel website sessions | none: a setting from the start |
 | Creative | Turn on the Creative Director | none: a setting from the start |
 | Creative | Most renders a day | none: a setting from the start |
 | Creative | How videos are made | none: a setting from the start |
@@ -81,6 +82,7 @@ Secrets, which are never shown on screen or stored in the database:
 - `HUB_LINKEDIN_ACCESS_TOKEN`, `HUB_LINKEDIN_REFRESH_TOKEN`, `HUB_LINKEDIN_CLIENT_SECRET`,
   `HUB_LINKEDIN_ADS_ACCESS_TOKEN`, `HUB_LINKEDIN_ADS_REFRESH_TOKEN`, `HUB_LINKEDIN_ADS_CLIENT_SECRET`
 - `HUB_SEARCH_CONSOLE_CREDENTIALS`
+- `HUB_VISITOR_METRICS_KEY` (dedicated shared key for Intel’s aggregate website session reports)
 - `HUB_HEYGEN_API_KEY` (only for HeyGen presenter videos, Settings → Creative)
 - `CAREBASE_DISTRIBUTION_OBSERVER_TOKEN`
 

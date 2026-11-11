@@ -16,13 +16,14 @@ const appUrl = new URL(databaseUrl);
 appUrl.username = 'hub_app_server';
 appUrl.password = 'ephemeral-test-only';
 const pool = new pg.Pool({ connectionString: appUrl.href });
-const store = sqlAgentStore(pool, { fenced: true, growth: true, social: true });
+const store = sqlAgentStore(pool, { fenced: true, growth: true, social: true, socialVideo: true });
 
 const run = randomUUID().slice(0, 8);
 const row = async (sql, params = []) => (await admin.query(sql, params)).rows[0];
 const original = await row("select status, autonomy, config from private.agents where key = 'social_manager'");
 assert.ok(original, 'The Social Media Manager is seeded');
 const tasks = [];
+let videoBrief = null;
 async function runningTask(agent, kind) {
   const created = await row("insert into private.agent_tasks (agent_key, kind, request_key, status, claimed_at, lease_until, attempts) values ($1, $2, $3, 'running', now(), now() + interval '10 minutes', 1) returning id", [agent, kind, `social-it-${run}-${tasks.length}`]);
   tasks.push(created.id);
@@ -65,9 +66,46 @@ try {
   const brief = await runningTask('chief_of_staff', 'brief.daily');
   await assert.rejects(store.proposeAction({ taskId: brief, kind: 'social.post', targetKind: 'social_post', targetId: `x-${run}`, preview: 'A post', input: {} }), error => error.code === '23514');
 
+  // Video provider state is private, fenced, asset-bound, and never resets an uncertain upload or publish.
+  await admin.query("update private.agents set autonomy = 'propose', config = jsonb_set(config, '{auto_approve_kinds}', '[]') where key = 'social_manager'");
+  videoBrief = (await row("insert into private.creative_briefs(product,goal,audience,platforms,formats,source,request_key) values('carebase','Explain training','Administrators',array['meta'],array['video'],'owner',$1) returning id", [`social-video:${run}`])).id;
+  const publicToken = `${randomUUID().replaceAll('-', '')}${randomUUID().replaceAll('-', '')}`;
+  const video = await row(`insert into private.creative_assets(brief_id,product,platform,placement,kind,layout,width,height,duration_seconds,variant_label,hook_type,status,public_token,content_type)
+    values($1,'carebase','meta','meta.video_vertical','video','headline',1080,1920,15,'A','problem','approved',$2,'video/mp4') returning id`, [videoBrief, publicToken]);
+  const videoPost = await store.proposeAction({ taskId: plan, kind: 'social.post', targetKind: 'social_post', targetId: `instagram:${run}:video`, preview: 'Approved video',
+    input: { platform: 'instagram', product: 'carebase', message: 'Training in one place.', videoUrl: `https://hub.example.test/api/creative/a/${publicToken}.mp4`, creativeAssetId: video.id, scheduledFor: new Date(Date.now() - 1000).toISOString() } });
+  await admin.query("update private.agent_actions set status = 'approved', decided_at = now() where id = $1", [videoPost.id]);
+  const firstVideo = await store.beginExecution(videoPost.id);
+  assert.equal((await store.socialVideoStage(videoPost.id, firstVideo.execution)).phase, 'new');
+  await admin.query('update private.creative_assets set content_type = null where id = $1', [video.id]);
+  await assert.rejects(store.socialVideoStage(videoPost.id, firstVideo.execution), error => error.code === '55000', 'A video without MP4 metadata is refused');
+  await admin.query("update private.creative_assets set content_type = 'video/mp4' where id = $1", [video.id]);
+  await assert.rejects(store.socialVideoStage(videoPost.id, firstVideo.execution + 1), error => error.code === '55000', 'A stale or invented execution is refused');
+  await assert.rejects(store.socialVideoStage(videoPost.id, firstVideo.execution, 'published', '900'), error => error.code === '55000', 'Publishing cannot skip uploading');
+  assert.equal((await store.socialVideoStage(videoPost.id, firstVideo.execution, 'uploading')).phase, 'uploading');
+  await assert.rejects(store.socialVideoStage(videoPost.id, firstVideo.execution, 'uploading'), error => error.code === '55000', 'An upload is never attempted twice');
+  assert.equal((await store.socialVideoStage(videoPost.id, firstVideo.execution, 'processing', '900')).providerId, '900');
+  assert.equal(await store.deferExecution(videoPost.id, firstVideo.execution, 'social.post'), true);
+  await admin.query('update private.agent_actions set not_before = null where id = $1', [videoPost.id]);
+  const nextVideo = await store.beginExecution(videoPost.id);
+  assert.equal((await store.socialVideoStage(videoPost.id, nextVideo.execution)).providerId, '900', 'A retry resumes the same provider video');
+  await assert.rejects(store.socialVideoStage(videoPost.id, firstVideo.execution), error => error.code === '55000');
+  await admin.query("update private.creative_assets set status = 'retired', public_token = null where id = $1", [video.id]);
+  await assert.rejects(store.socialVideoStage(videoPost.id, nextVideo.execution, 'publishing'), error => error.code === '55000', 'A retired video cannot publish');
+  await admin.query("update private.creative_assets set status = 'approved', public_token = $2 where id = $1", [video.id, publicToken]);
+  await store.socialVideoStage(videoPost.id, nextVideo.execution, 'publishing');
+  await assert.rejects(store.socialVideoStage(videoPost.id, nextVideo.execution, 'processing', '900'), error => error.code === '55000', 'An uncertain publish never rolls back to processing');
+  assert.equal((await store.socialVideoStage(videoPost.id, nextVideo.execution, 'published', '901')).publishedId, '901');
+  await assert.rejects(pool.query('select * from private.social_video_publications'), error => error.code === '42501');
+  await assert.rejects(admin.query('select private.social_video_stage($1,1,$2,null)', [videoPost.id, 'read']), error => error.code === '42501');
+
   await assert.rejects(admin.query('select private.social_open_targets()'), error => error.code === '42501', 'Only the Hub server reads open targets');
   console.log('Social Media Manager database checks passed.');
 } finally {
+  if (videoBrief) {
+    await admin.query('delete from private.creative_assets where brief_id = $1', [videoBrief]);
+    await admin.query('delete from private.creative_briefs where id = $1', [videoBrief]);
+  }
   await admin.query('delete from private.agent_runs where task_id = any($1::uuid[])', [tasks]);
   await admin.query('delete from private.agent_actions where task_id = any($1::uuid[])', [tasks]);
   await admin.query('delete from private.agent_tasks where id = any($1::uuid[])', [tasks]);

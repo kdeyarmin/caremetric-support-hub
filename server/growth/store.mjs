@@ -19,6 +19,7 @@ export function growthStore(pool) {
     manage:(token,operation,data)=>withSession(pool,token,db=>run(db,'hub.growth_manage',[operation,data])),
     snapshot:(offset=0)=>server('private.growth_snapshot',[offset]),
     event:(product,data)=>server('private.growth_record_event',[product,data]),
+    appEvent:(keyHash,data)=>server('private.growth_app_event',[keyHash,data]),
     plan:(id,data)=>server('private.growth_plan',[id,data]),
     draft:(id,work,data)=>server('private.growth_draft',[id,work,data]),
     propose:(taskId,messageId)=>server('private.growth_propose',[taskId,messageId]),

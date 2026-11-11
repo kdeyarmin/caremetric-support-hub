@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { HttpError } from '../sms-auth.mjs';
 import { live } from '../live.mjs';
 import { sendgridSignatureValid } from '../communications.mjs';
-import { activitySchema } from './protocol.mjs';
+import { activitySchema, appActivitySchema } from './protocol.mjs';
 import { products, stages } from './policy.mjs';
 const uuid=z.uuid(), text=(n)=>z.string().max(n), instant=z.iso.datetime({offset:true});
 const https=z.union([z.literal(''),z.url().refine(v=>new URL(v).protocol==='https:' && !new URL(v).username && !new URL(v).password)]);
@@ -33,7 +33,7 @@ export function growthService({store,research,contacts=null,features,enabled=fal
       let deliveryFeedback = false;
       try { createPublicKey(webhookPublicKey.includes('BEGIN') ? webhookPublicKey : { key: Buffer.from(webhookPublicKey, 'base64'), format: 'der', type: 'spki' }); deliveryFeedback = true; } catch { /* Missing or invalid key. */ }
       return { sending: sending(), signing: signingKey.length >= 32, postalAddress: Boolean(postal().trim()), publicOrigin: /^https:\/\//.test(publicOrigin ?? ''),
-        research: research?.configured === true, deliveryFeedback,
+        research: research?.configured === true, deliveryFeedback, appEvents: features?.has('platform.agents.app-growth.v1') === true,
         events: Object.fromEntries(products.map(product => [product, typeof eventKeys[product] === 'string' && eventKeys[product].length >= 32])) };
     },
     configured:()=>sending()&&signingKey.length>=32&&postal().trim().length>0&&/^https:\/\//.test(publicOrigin??''),
@@ -60,6 +60,19 @@ export function growthService({store,research,contacts=null,features,enabled=fal
       if(!equal(headers['x-caremetric-signature'],expected))throw new HttpError(401,'Invalid event signature.');
       let input;try{input=JSON.parse(raw);}catch{throw new HttpError(400,'Invalid event.');}
       return safe(()=>store.event(product,parse(activitySchema,input)));
+    },
+    async appActivity(authorization,input) {
+      ready();
+      if(!features?.has('platform.agents.app-growth.v1'))throw new HttpError(503,'Application activity is not available yet.');
+      const match=typeof authorization==='string'&&/^Bearer (cmb_[A-Za-z0-9_-]{43})$/.exec(authorization);
+      if(!match)throw new HttpError(401,'Application key required.');
+      const data=parse(appActivitySchema,input);
+      try { return await store.appEvent(hash(match[1]),data); }
+      catch(error) {
+        if(error?.code==='28000')throw new HttpError(401,'Application key required.');
+        if(error?.code==='P0002')throw new HttpError(503,'The application account is not linked yet. Retry after billing connects it.');
+        return safe(()=>{throw error;});
+      }
     },
     async delivery(raw,headers,now=Date.now()) {
       ready(); const stamp=headers['x-twilio-email-event-webhook-timestamp'],signature=headers['x-twilio-email-event-webhook-signature'];

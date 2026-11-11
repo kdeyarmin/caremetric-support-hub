@@ -195,7 +195,7 @@ copy and the landing page; the Creative screen also shows the image or plays the
 a download.
 
 - **Approve**: the executor hands the asset to the Social Media Manager (`private.creative_handoff`): it becomes `approved` and gets an
-  unguessable public address (`/api/creative/a/<token>.png`) that Meta and LinkedIn fetch while it is approved or live, and never after.
+  unguessable public address (`/api/creative/a/<token>.png` or `.mp4`) that Meta and LinkedIn fetch while it is approved or live, and never after.
   The database hands it over only inside the execution it started for an approved action.
 - **Reject**: the asset becomes `rejected`. **Request changes** is a rejection with a note (required): the note becomes a **revision
   brief** in the same transaction (a database trigger), with a task to draft it, and the new variants come back for approval.
@@ -205,14 +205,21 @@ a download.
 
 Backward compatible: without approved creative it works exactly as before.
 
-- **Posts**: an Instagram or LinkedIn post in the weekly plan uses an approved image of that product and platform before the configured
-  image list (`HUB_SOCIAL_IMAGE_URLS`), once each. An Instagram post can now be planned with approved creative and no image list.
-  Facebook posts stay link posts.
+- **Posts**: with the social video migration installed, the weekly plan can publish approved MP4 creative as a Facebook Page video,
+  Instagram Reel (vertical placement only), or LinkedIn Page video. The post still needs its own approval or the owner's existing
+  social-post hand-over. Otherwise, Instagram and LinkedIn use an approved image of that product and platform before the configured
+  image list (`HUB_SOCIAL_IMAGE_URLS`), once each; Facebook uses a link post. Instagram can be planned with approved creative and no image list.
 - **Ads**: when the daily ad review asks for a new ad, approved creative for the product and platform is used before writing new copy: its
   primary text, headline and description (checked again with the social checks), its image (Meta fetches it as the ad's picture) and its
   landing address with `utm_content`. Already approved creative can be used even when the model is not connected; only drafting fresh
   copy requires the model.
 - Publishing a post or starting an ad from an asset marks it `live`.
+
+Video publication needs `20261111031736_social_video_publication.sql` and its contract migration, then a Hub restart. The stored
+upload and publication stages let the worker wait for processing across runs without uploading or publishing twice. An uncertain
+send stops for the owner to inspect the platform. LinkedIn uploads are capped at 60 MiB; processing times out after an hour. See
+[Social media](SOCIAL_MEDIA.md#approved-video-posts) for platform permissions and recovery. Paid video ads and YouTube publication
+remain manual; the ad refresh tool uses approved images.
 
 ## Learning
 

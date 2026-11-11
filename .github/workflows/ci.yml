@@ -177,6 +177,8 @@ jobs:
           node server/agents-content-integration.mjs
           node server/growth-integration.mjs
           node server/growth-integration.mjs
+          node server/growth-lifecycle-integration.mjs
+          node server/growth-lifecycle-integration.mjs
           node server/agents-autonomy-integration.mjs
           node server/agents-autonomy-integration.mjs
           node server/agents-answers-integration.mjs
