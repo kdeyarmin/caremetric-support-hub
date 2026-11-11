@@ -32,7 +32,14 @@ export const teamSchema = z.object({
   loadedAt: instant, dayStart: instant, agents: z.array(agentSchema), approvals: z.array(approvalSchema),
   approvalCount: z.number().int(), awaitingSessionCount: z.number().int(),
 });
+/** Configuration checks only: provider access and successful execution are established by task results. */
+export const marketingToolSchema = z.object({
+  key: z.string().min(1).max(80), label: z.string().min(1).max(120), agents: z.array(agentKey), configured: z.boolean(), supported: z.boolean().optional(),
+  missing: z.array(z.string().min(1).max(1000)), detail: z.string().max(2000),
+  settingsPath: z.enum(["/admin", "/admin/settings", "/admin/growth", "/admin/creative"]).optional(),
+});
 export const servicesSchema = z.object({ enabled: z.boolean(), handlers: z.array(taskKind), sms: z.boolean(), email: z.boolean(), ownerEmail: z.boolean(), ai: z.boolean(), customerTextToAi: z.boolean(), externalEmail: z.boolean().optional(),
+  marketingTools: z.array(marketingToolSchema).optional(),
   creative: z.object({ declared: z.boolean(), enabled: z.boolean(), videoProvider: z.enum(["internal", "heygen"]).nullable(), dailyRenderCap: z.number().int().min(0) }).optional() });
 /**
  * One kind of work the owner hands over: off, a supervised week (they approve each item until `automaticAt`), automatic (the agent

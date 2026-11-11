@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { account, item, subscription } from '../accounts/fixtures.mjs';
-import { billingFigures, composeScorecard, payingAt, payingSince, rankNeeds, searchFigures } from './compose.mjs';
+import { billingFigures, composeScorecard, payingAt, payingSince, rankNeeds, searchFigures, searchOpportunityBlocks } from './compose.mjs';
 import { scorecardFeature, scorecardHandlers } from './index.mjs';
 
 const origin = 'https://hub.example.test';
@@ -50,7 +50,7 @@ function fixture({
   };
   const notifier = { send: vi.fn(async () => deliveries) };
   const growth = pipeline ? { store: { snapshot: vi.fn(async offset => ({ total: pipeline.length, items: offset ? [] : pipeline })) } } : null;
-  const handlers = scorecardHandlers({ store, notifier, publicOrigin: origin, features, growth, ads, searchConsole, env: {}, sites: [{ key: 'intel', label: 'Intel' }], audit, log: line => logs.push(line) });
+  const handlers = scorecardHandlers({ store, notifier, publicOrigin: origin, features, growth, ads, searchConsole, env: {}, sites: [{ key: 'intel', label: 'Intel', origin: 'https://caremetricintel.com', variants: ['https://www.caremetricintel.com'] }], audit, log: line => logs.push(line) });
   return { store, notifier, logs, handlers, run: (over, now = monday, signal) => handlers['scorecard.weekly'](task(over), { now: () => now, signal }) };
 }
 
@@ -146,6 +146,62 @@ describe('the Monday scorecard task', () => {
     expect(without.result.products.carebase.clicks).toBeUndefined();
     expect(without.result.sources.search).toBe('not_configured');
     expect(JSON.stringify(missing.notifier.send.mock.calls[0][0].blocks)).toContain('Search Console is not connected');
+  });
+
+  it('preserves bounded actionable search insights in the single scorecard, without storing queries', async () => {
+    const metrics = { clicks: 1, impressions: 200, ctr: 0.005, position: 9 };
+    const query = 'targeted agency territory planning';
+    const page = 'https://caremetricintel.com/territories';
+    const duplicate = 'https://www.caremetricintel.com/territories';
+    const reader = fakeReader();
+    reader.read = vi.fn(async () => ({
+      window: { current: { startDate: '2026-10-02', endDate: '2026-10-29' } },
+      properties: [{
+        property: 'sc-domain:caremetricintel.com', ok: true, totals: { current: metrics, previous: metrics },
+        queries: [{ keys: ['someone@example.com'], ...metrics }, { keys: [query], ...metrics }, ...Array.from({ length: 8 }, (_, i) => ({ keys: [`agency strategy ${i}`], ...metrics }))],
+        pages: Array.from({ length: 8 }, (_, i) => ({ keys: [`${page}/${i}`], ...metrics })),
+        pairs: [{ keys: [query, page], ...metrics }, { keys: [query, duplicate], ...metrics }],
+      }, { property: 'https://cmcarebase.com/', ok: false, code: 'not_permitted', status: 403 }],
+    }));
+    const { run, notifier, store, logs } = fixture({ searchConsole: reader, store: { individualReports: vi.fn(async () => false) } });
+    const outcome = await run();
+    expect(reader.read).toHaveBeenCalledWith({ now: monday, signal: undefined });
+    expect(reader.totals).toHaveBeenCalledWith({ now: monday, signal: undefined, days: 7 });
+    expect(notifier.send).toHaveBeenCalledTimes(1);
+    const { blocks, body, subject } = notifier.send.mock.calls[0][0];
+    const details = blocks.find(block => block.type === 'details' && block.rows[0]?.[0] === 'Improve a search snippet');
+    expect(details.rows).toHaveLength(3);
+    expect(JSON.stringify(blocks)).toContain(query);
+    expect(JSON.stringify(blocks)).toContain('2026-10-02 to 2026-10-29');
+    expect(JSON.stringify(blocks)).toContain('1 Search Console property could not be read for opportunities');
+    expect(JSON.stringify(blocks)).toContain('Run now on Weekly SEO check');
+    expect(JSON.stringify(blocks)).not.toContain('someone@example.com');
+    const stored = JSON.stringify([body, subject, outcome, store.finishRun.mock.calls, logs]);
+    expect(stored).not.toContain(query);
+    expect(stored).not.toContain(page);
+    expect(outcome.result.products['caremetric-intel'].clicks).toEqual([120, 100]);
+  });
+
+  it('keeps click totals when detailed search fails, and opportunities when totals fail', async () => {
+    const reader = fakeReader();
+    reader.read = vi.fn(async () => { throw Object.assign(new Error('private provider response'), { code: 'rate_limited' }); });
+    const withoutDetails = fixture({ searchConsole: reader });
+    expect((await withoutDetails.run()).result.products['caremetric-intel'].clicks).toEqual([120, 100]);
+    expect(JSON.stringify(withoutDetails.notifier.send.mock.calls[0][0].blocks)).toContain('Search opportunities could not be read');
+    expect(JSON.stringify(withoutDetails.logs)).not.toContain('private provider response');
+
+    reader.totals.mockRejectedValue(new Error('totals failed'));
+    const metrics = { clicks: 1, impressions: 200, ctr: 0.005, position: 9 };
+    reader.read.mockResolvedValue({ properties: [{ property: 'sc-domain:caremetricintel.com', ok: true,
+      totals: { current: metrics, previous: metrics }, queries: [{ keys: ['agency territories'], ...metrics }], pages: [], pairs: [] }] });
+    const withoutTotals = fixture({ searchConsole: reader });
+    expect((await withoutTotals.run()).result.products['caremetric-intel'].clicks).toBeUndefined();
+    expect(JSON.stringify(withoutTotals.notifier.send.mock.calls[0][0].blocks)).toContain('agency territories');
+  });
+
+  it('does not describe unread search properties as having no opportunities', () => {
+    expect(JSON.stringify(searchOpportunityBlocks({ sites: [], failures: [{ code: 'not_permitted' }] }))).toContain('could not be read');
+    expect(JSON.stringify(searchOpportunityBlocks({ sites: [{}], striking: [], lowCtr: [], competing: [], failures: [] }))).toContain('No search opportunities met the evidence thresholds');
   });
 
   it('carries every account the account report would flag, not only those at risk', async () => {

@@ -47,6 +47,12 @@ search clicks** per product are added: the last seven days with final data again
 product; other sites (Healthcare Advisors, the help center) are left out. A product with no property has no clicks row, and one whose
 properties could not be read says so instead of showing zero.
 
+The same email also carries **up to three search opportunities**, one of each kind: a page seen often but rarely clicked, a search
+near the first page, and a search for which two of the company's sites compete. These use the SEO Analyst's existing rules on the
+last 28 days of final Google data; the date range is shown separately from the seven-day click totals. A failed detailed read does
+not hide available click totals, and a failed totals read does not hide available opportunities. Partial property failures are
+reported. Queries that look personal are excluded by the same rules as the full SEO report.
+
 **What changed** lists every count that moved from the week before, totalled over both products.
 
 A source that cannot be read (billing, the pipeline, the ad accounts, the websites, the brief's facts) is named in the email and
@@ -57,6 +63,7 @@ the rest still goes out. Only the scorecard's own counts are required: if they c
 The subject, the stored body (the notification log and the Team screen), the run summary and the task result carry counts only. MRR,
 spend and cost per trial are only in the email's layout blocks, which the notifier never stores. No customer name, amount or address
 is kept, as with the other reports.
+Search opportunity queries and page addresses also travel only in those layout blocks.
 
 ## Once a week
 
@@ -74,6 +81,10 @@ nothing; the scorecard carries their figures. **Run now** on any of them still e
 get them again beside the scorecard. A stale screen is refused and every change is audited (`agent.individual_reports`). If the
 setting cannot be read, or the Chief of Staff is paused, the reports send: a second email is better than a missing one. Without the scorecard's migration nothing
 changes: every report emails as before.
+
+The scorecard includes actionable search opportunities without a model call. The SEO Analyst's full report also produces checked
+title and description drafts when its model is connected: use **Run now → Weekly SEO check** to request them, or enable
+**Send the individual weekly reports** for scheduled drafts. They are suggestions for the owner to apply; no page is changed automatically.
 
 ## Boundary
 

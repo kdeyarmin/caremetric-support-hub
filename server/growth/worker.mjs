@@ -7,6 +7,7 @@ import { marketedNow, markets } from '../agents/marketing.mjs';
 import { draftMessage } from './draft.mjs';
 import { renderEmail, themeFor } from '../email-layout.mjs';
 import { evaluateGrowth } from './evaluation.mjs';
+import { enrichProspects } from './enrichment.mjs';
 import { discoveryQuery, linkablePages, senderFor } from './playbook.mjs';
 import { untaggedUrl } from '../agents/links.mjs';
 const deferred=()=>Object.assign(new Error('Action is deferred'),{code:'action_deferred'});
@@ -95,7 +96,11 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     if(!searched.length)return {result:{skipped:'no_marketed_product'}};
     // A different segment-and-place search each day (playbook.mjs), so discovery keeps finding new organizations; CareBase stays in Pennsylvania.
     for(const product of searched){signal?.throwIfAborted(); const rows=await growth.research.search(product,{query:discoveryQuery(product,now()),signal});signal?.throwIfAborted();candidates+=await growth.store.discover(product,rows);}
-    if(!autonomy||!growth.contacts?.configured)return {result:{candidates}};
+    // Search the organization's own pages where the first discovery snippet did not establish fit. New dated evidence lets the
+    // next pipeline sweep reassess the prospect; it never lowers the qualification threshold or changes contact permissions.
+    const enrichment=await enrichProspects({growth,marketed:marketedList,moment:now(),signal});
+    const researched=enrichment?{enrichment}:{};
+    if(!autonomy||!growth.contacts?.configured)return {result:{candidates,...researched}};
     // The contact finder reads each new business's own website for one public role address; a business with none stays without a
     // contact (and is not read again for 90 days). Only the counts are kept here: never an address.
     const contacts={searched:0,found:0,none:0};
@@ -110,7 +115,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
       if(recorded?.found)contacts.found++; else contacts.none++;
     }
     const qualified=(await growth.store.autoQualify(qualifyLimit))?.qualified??0;
-    return {result:{candidates,contacts,qualified}};
+    return {result:{candidates,contacts,qualified,...researched}};
   }
   // The guardrail check that messages nobody approved need (growth.1, within 30 days). Synthetic cases only: no model, no customer data.
   async function evaluate(task,{now=()=>new Date()}={}) {

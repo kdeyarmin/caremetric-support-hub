@@ -11,6 +11,7 @@
  */
 import { monthlyTotals } from '../accounts/money.mjs';
 import { plural } from '../tasks/shared.mjs';
+import { shownPage } from '../seo/insights.mjs';
 
 export const composeVersion = 'scorecard.1';
 export const products = Object.freeze([
@@ -110,6 +111,26 @@ export function searchFigures(read) {
     } else figures[key].failed += 1;
   }
   return { state: 'connected', products: figures };
+}
+
+/** Up to three actionable SEO opportunities, one of each kind, for the consolidated email only. */
+export function searchOpportunityBlocks(insights) {
+  if (!insights) return [];
+  if (insights.unavailable || !insights.sites?.length) return [{ type: 'paragraph', text: 'Search opportunities could not be read this week. Organic click totals are reported separately when available.' }];
+  const rows = [];
+  const low = insights.lowCtr?.[0];
+  if (low) rows.push(['Improve a search snippet', `${shownPage(low.page)}: ${Math.round(low.impressions)} impressions, ${(low.ctr * 100).toFixed(1)}% clicked at position ${low.position.toFixed(1)}. Review its title and description.`]);
+  const near = insights.striking?.[0];
+  if (near) rows.push(['Strengthen a page near the first page', `“${near.query}”: position ${near.position.toFixed(1)}, ${Math.round(near.impressions)} impressions.${near.page ? ` Improve ${shownPage(near.page)} and link to it from relevant pages.` : ' Identify the relevant page and improve its answer to this search.'}`]);
+  const competing = insights.competing?.[0];
+  if (competing) rows.push(['Choose one page for this search', `“${competing.query}”: your sites compete. Choose the canonical page and link or redirect the others: ${competing.hosts.slice(0, 2).map(row => shownPage(row.page)).join(' and ')}.`]);
+  const window = insights.window?.current;
+  return [
+    { type: 'paragraph', text: `Search opportunities${window ? ` (${window.startDate} to ${window.endDate}, final Google data)` : ''}.` },
+    ...(rows.length ? [{ type: 'details', rows }, { type: 'paragraph', text: 'For checked title and description drafts, open AI team → SEO Analyst → Run now on Weekly SEO check. No page changes automatically.' }]
+      : [{ type: 'paragraph', text: 'No search opportunities met the evidence thresholds in the properties read.' }]),
+    ...(insights.failures?.length ? [{ type: 'paragraph', text: `${plural(insights.failures.length, 'Search Console property')} could not be read for opportunities; these suggestions use the properties that responded.` }] : []),
+  ];
 }
 
 // ---- The email ------------------------------------------------------------------------------------------------------------------

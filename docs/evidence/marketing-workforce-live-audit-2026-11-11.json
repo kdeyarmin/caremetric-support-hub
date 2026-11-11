@@ -1,0 +1,544 @@
+{
+  "reviewedAt": "2026-11-11 02:48:48.49261+00",
+  "projectId": "xgauehtwksmnoqhgqegm",
+  "scope": "Read-only production database review; aggregate operational data only. No customer messages, contact identifiers, secrets, production mutations, or task executions.",
+  "agents": [
+    {
+      "key": "account_manager",
+      "display_name": "Account Manager",
+      "status": "active",
+      "autonomy": "act",
+      "daily_budget_cents": 50,
+      "tool_allowlist": [
+        "get_accounts",
+        "notify_owner"
+      ],
+      "auto_approve_kinds": [
+        "offer.apply"
+      ]
+    },
+    {
+      "key": "chief_of_staff",
+      "display_name": "Chief of Staff",
+      "status": "active",
+      "autonomy": "observe",
+      "daily_budget_cents": 100,
+      "tool_allowlist": [
+        "get_team_facts",
+        "notify_owner"
+      ],
+      "auto_approve_kinds": []
+    },
+    {
+      "key": "content_marketer",
+      "display_name": "Content Marketer",
+      "status": "active",
+      "autonomy": "act",
+      "daily_budget_cents": 150,
+      "tool_allowlist": [
+        "get_content_state",
+        "propose_article",
+        "notify_owner"
+      ],
+      "auto_approve_kinds": [
+        "content.publish"
+      ]
+    },
+    {
+      "key": "growth_manager",
+      "display_name": "Growth Manager",
+      "status": "active",
+      "autonomy": "observe",
+      "daily_budget_cents": 50,
+      "tool_allowlist": [
+        "notify_owner"
+      ],
+      "auto_approve_kinds": null
+    },
+    {
+      "key": "marketing_manager",
+      "display_name": "Marketing Manager",
+      "status": "active",
+      "autonomy": "act",
+      "daily_budget_cents": 300,
+      "tool_allowlist": [
+        "growth_research",
+        "growth_plan",
+        "growth_draft"
+      ],
+      "auto_approve_kinds": [
+        "growth.cold_email",
+        "growth.sales_followup"
+      ]
+    },
+    {
+      "key": "platform_engineer",
+      "display_name": "Platform Engineer",
+      "status": "active",
+      "autonomy": "observe",
+      "daily_budget_cents": 50,
+      "tool_allowlist": [
+        "notify_owner"
+      ],
+      "auto_approve_kinds": [
+        "incident.open",
+        "incident.resolve"
+      ]
+    },
+    {
+      "key": "sales_executive",
+      "display_name": "Sales Executive",
+      "status": "active",
+      "autonomy": "propose",
+      "daily_budget_cents": 300,
+      "tool_allowlist": [
+        "sales_reply",
+        "sales_review"
+      ],
+      "auto_approve_kinds": []
+    },
+    {
+      "key": "seo_analyst",
+      "display_name": "SEO Analyst",
+      "status": "active",
+      "autonomy": "observe",
+      "daily_budget_cents": 50,
+      "tool_allowlist": [],
+      "auto_approve_kinds": []
+    },
+    {
+      "key": "social_manager",
+      "display_name": "Social Media Manager",
+      "status": "paused",
+      "autonomy": "propose",
+      "daily_budget_cents": 400,
+      "tool_allowlist": [
+        "social_post",
+        "social_reply",
+        "social_ads",
+        "social_report"
+      ],
+      "auto_approve_kinds": []
+    },
+    {
+      "key": "support_concierge",
+      "display_name": "Support Concierge",
+      "status": "active",
+      "autonomy": "act",
+      "daily_budget_cents": 300,
+      "tool_allowlist": [
+        "get_communication",
+        "search_knowledge",
+        "propose_reply",
+        "propose_classification",
+        "add_internal_note",
+        "notify_owner"
+      ],
+      "auto_approve_kinds": [
+        "communication.answer"
+      ]
+    }
+  ],
+  "scheduler": {
+    "latestTask": "2026-11-11 02:47:45.122024+00",
+    "active": true,
+    "evidence": "Recurring pipeline, support, and probe tasks completed during the review window."
+  },
+  "marketingProducts": [
+    {
+      "product": "advisors",
+      "marketed": false
+    },
+    {
+      "product": "carebase",
+      "marketed": false
+    },
+    {
+      "product": "caremetric-intel",
+      "marketed": true
+    }
+  ],
+  "database": {
+    "latestMigrations": [
+      {
+        "version": "20261109120100",
+        "name": "monday_scorecard_contract"
+      },
+      {
+        "version": "20261109120000",
+        "name": "monday_scorecard"
+      },
+      {
+        "version": "20261108210100",
+        "name": "marketing_switches_contract"
+      },
+      {
+        "version": "20261108210000",
+        "name": "marketing_switches"
+      },
+      {
+        "version": "20261108190100",
+        "name": "social_manager_contract"
+      },
+      {
+        "version": "20261108190000",
+        "name": "social_manager"
+      },
+      {
+        "version": "20261108180100",
+        "name": "sales_executive_contract"
+      },
+      {
+        "version": "20261108180000",
+        "name": "sales_executive"
+      },
+      {
+        "version": "20261108025633",
+        "name": "owner_email_login"
+      },
+      {
+        "version": "20261108010205",
+        "name": "owner_password_login"
+      },
+      {
+        "version": "20261107190000",
+        "name": "approval_queue"
+      },
+      {
+        "version": "20261107180000",
+        "name": "review_comment_fixes"
+      },
+      {
+        "version": "20261107170000",
+        "name": "review_follow_ups"
+      },
+      {
+        "version": "20261107160000",
+        "name": "owner_decisions"
+      },
+      {
+        "version": "20261107150000",
+        "name": "billing_and_learning_review"
+      },
+      {
+        "version": "20261107140000",
+        "name": "review_round_two"
+      }
+    ],
+    "declaredFeatures": [
+      "platform.agents.v1",
+      "platform.agents.probes.v1",
+      "platform.agents.brief.v1",
+      "platform.agents.seo.v1",
+      "platform.agents.concierge.v1",
+      "platform.agents.accounts.v1",
+      "platform.agents.hardening.v1",
+      "platform.agents.growth.v1",
+      "platform.agents.lifecycle.v1",
+      "platform.agents.content.v1",
+      "platform.agents.customer-growth.v1",
+      "platform.agents.autonomy.v1",
+      "platform.agents.external-email.v1",
+      "platform.agents.concierge-autosend.v1",
+      "platform.agents.content-autopublish.v1",
+      "platform.agents.growth-autonomy.v1",
+      "platform.agents.offers.v1",
+      "platform.agents.sales-executive.v1",
+      "platform.agents.social.v1",
+      "platform.agents.marketing.v1",
+      "platform.agents.scorecard.v1"
+    ],
+    "missingFeatures": [
+      "content.public-articles.v1",
+      "platform.settings.v1",
+      "platform.agents.creative.v1"
+    ],
+    "note": "The social feature is installed; it uses existing agent action tables and does not require separate social tables."
+  },
+  "pipeline": {
+    "counts": {
+      "contacts": 6,
+      "messages": 1,
+      "opportunities": 20,
+      "organizations": 20,
+      "activityEvents": 0
+    },
+    "events": null,
+    "stages": [
+      {
+        "count": 5,
+        "stage": "nurture",
+        "product": "carebase"
+      },
+      {
+        "count": 14,
+        "stage": "researched",
+        "product": "caremetric-intel"
+      },
+      {
+        "count": 1,
+        "stage": "contacted",
+        "product": "caremetric-intel"
+      }
+    ],
+    "contacts": [
+      {
+        "count": 6,
+        "verified": true,
+        "eligibility": "permitted"
+      }
+    ],
+    "policies": [
+      {
+        "enabled": true,
+        "product": "carebase",
+        "auto_send": false,
+        "daily_limit": 10,
+        "max_touches": 3,
+        "min_gap_hours": 72,
+        "next_step_url_present": false,
+        "approved_claim_present": true
+      },
+      {
+        "enabled": true,
+        "product": "caremetric-intel",
+        "auto_send": false,
+        "daily_limit": 10,
+        "max_touches": 3,
+        "min_gap_hours": 72,
+        "next_step_url_present": false,
+        "approved_claim_present": true
+      }
+    ]
+  },
+  "discovery": [
+    {
+      "kind": "growth.discovery",
+      "status": "done",
+      "result": {
+        "contacts": {
+          "none": 4,
+          "found": 1,
+          "searched": 5
+        },
+        "qualified": 0,
+        "candidates": 5
+      },
+      "created_at": "2026-11-10 13:00:35.85291+00"
+    },
+    {
+      "kind": "growth.discovery",
+      "status": "done",
+      "result": {
+        "contacts": {
+          "none": 4,
+          "found": 2,
+          "searched": 6
+        },
+        "qualified": 0,
+        "candidates": 6
+      },
+      "created_at": "2026-11-09 13:00:01.048882+00"
+    },
+    {
+      "kind": "growth.discovery",
+      "status": "done",
+      "result": {
+        "contacts": {
+          "none": 6,
+          "found": 3,
+          "searched": 9
+        },
+        "qualified": 0,
+        "candidates": 10
+      },
+      "created_at": "2026-11-08 18:12:50.294608+00"
+    },
+    {
+      "kind": "growth.discovery",
+      "status": "done",
+      "result": {
+        "skipped": "research_not_configured"
+      },
+      "created_at": "2026-11-08 13:00:31.769612+00"
+    }
+  ],
+  "latestPipeline": {
+    "kind": "growth.pipeline",
+    "status": "done",
+    "result": {
+      "drafted": 0,
+      "planned": 0,
+      "inspected": 20
+    },
+    "created_at": "2026-11-11 02:47:45.122024+00"
+  },
+  "measurement": {
+    "ads": "not_connected",
+    "search": "not_configured",
+    "billing": "read",
+    "visitors": "not_connected"
+  },
+  "observedSkips": [
+    {
+      "agent_key": "marketing_manager",
+      "kind": "growth.discovery",
+      "status": "done",
+      "last_error_code": null,
+      "skipped": "research_not_configured",
+      "count": 5,
+      "latest": "2026-11-08 13:00:31.769612+00"
+    },
+    {
+      "agent_key": "sales_executive",
+      "kind": "sales.review",
+      "status": "done",
+      "last_error_code": null,
+      "skipped": "in_scorecard",
+      "count": 2,
+      "latest": "2026-11-10 12:45:35.693692+00"
+    },
+    {
+      "agent_key": "seo_analyst",
+      "kind": "growth.content",
+      "status": "done",
+      "last_error_code": null,
+      "skipped": "content_research_not_enabled",
+      "count": 7,
+      "latest": "2026-11-10 13:30:36.162684+00"
+    },
+    {
+      "agent_key": "seo_analyst",
+      "kind": "seo.weekly",
+      "status": "done",
+      "last_error_code": null,
+      "skipped": "already_attempted",
+      "count": 4,
+      "latest": "2026-11-08 11:30:30.749111+00"
+    },
+    {
+      "agent_key": "seo_analyst",
+      "kind": "seo.weekly",
+      "status": "done",
+      "last_error_code": null,
+      "skipped": "in_scorecard",
+      "count": 2,
+      "latest": "2026-11-10 11:30:34.780918+00"
+    }
+  ],
+  "schedules": [
+    {
+      "agent_key": "marketing_manager",
+      "task_kind": "growth.discovery",
+      "enabled": true,
+      "last_run_at": "2026-11-10 13:00:35.85291+00",
+      "next_run_at": "2026-11-11 13:00:00+00"
+    },
+    {
+      "agent_key": "marketing_manager",
+      "task_kind": "growth.evaluate",
+      "enabled": true,
+      "last_run_at": "2026-11-10 11:40:34.903694+00",
+      "next_run_at": "2026-11-11 11:40:00+00"
+    },
+    {
+      "agent_key": "marketing_manager",
+      "task_kind": "growth.pipeline",
+      "enabled": true,
+      "last_run_at": "2026-11-11 02:47:45.122024+00",
+      "next_run_at": "2026-11-11 03:01:57.683708+00"
+    },
+    {
+      "agent_key": "sales_executive",
+      "task_kind": "sales.review",
+      "enabled": true,
+      "last_run_at": "2026-11-10 12:45:35.693692+00",
+      "next_run_at": "2026-11-11 12:45:00+00"
+    },
+    {
+      "agent_key": "seo_analyst",
+      "task_kind": "growth.content",
+      "enabled": true,
+      "last_run_at": "2026-11-10 13:30:36.162684+00",
+      "next_run_at": "2026-11-11 13:30:00+00"
+    },
+    {
+      "agent_key": "seo_analyst",
+      "task_kind": "seo.weekly",
+      "enabled": true,
+      "last_run_at": "2026-11-10 11:30:34.780918+00",
+      "next_run_at": "2026-11-11 11:30:00+00"
+    },
+    {
+      "agent_key": "social_manager",
+      "task_kind": "social.ads",
+      "enabled": true,
+      "last_run_at": null,
+      "next_run_at": "2026-11-09 14:10:00+00"
+    },
+    {
+      "agent_key": "social_manager",
+      "task_kind": "social.inbox",
+      "enabled": true,
+      "last_run_at": null,
+      "next_run_at": "2026-11-08 17:22:23.268888+00"
+    },
+    {
+      "agent_key": "social_manager",
+      "task_kind": "social.plan",
+      "enabled": true,
+      "last_run_at": null,
+      "next_run_at": "2026-11-09 13:15:00+00"
+    },
+    {
+      "agent_key": "social_manager",
+      "task_kind": "social.report",
+      "enabled": true,
+      "last_run_at": null,
+      "next_run_at": "2026-11-09 13:05:00+00"
+    }
+  ],
+  "railwaySecretPresence": {
+    "source": "Parent agent's redacted names-only Railway production variable inspection; no values included.",
+    "projectId": "3f687ca2-36a8-427e-b7e9-bbe8132dd44b",
+    "serviceId": "17392a89-0ee0-4af1-99ee-2f8c2dbf3308",
+    "environmentId": "88191d70-eed1-4949-9727-9fc635097c77",
+    "present": [
+      "HUB_GROWTH_SEARCH_API_KEY",
+      "ANTHROPIC_API_KEY",
+      "HUB_GROWTH_SIGNING_KEY",
+      "HUB_SENDGRID_EVENT_PUBLIC_KEY"
+    ],
+    "absent": [
+      "HUB_META_ACCESS_TOKEN",
+      "HUB_SEARCH_CONSOLE_CREDENTIALS",
+      "HUB_GROWTH_CAREBASE_EVENT_KEY",
+      "HUB_GROWTH_INTEL_EVENT_KEY",
+      "HUB_HEYGEN_API_KEY"
+    ],
+    "absentPrefixes": [
+      "HUB_LINKEDIN_"
+    ],
+    "notes": [
+      "SendGrid secret is present per parent audit; exact variable name not copied here.",
+      "Hub settings migration is absent, so production still uses legacy Railway settings.",
+      "HeyGen is optional: internal rendering does not need its key."
+    ]
+  },
+  "findings": [
+    "Discovery has been connected since November 8; an older missing-key finding is no longer current.",
+    "Social Media Manager is paused and all four schedules have never run. Provider credentials are absent.",
+    "Creative Director and public-article/settings features exist in source but their migrations are not applied to production.",
+    "Search Console and ad sources are not connected in the latest scorecard; visitors analytics has no source.",
+    "No native product activity events have been received; per-product event signing keys are absent.",
+    "Fourteen Intel prospects remain researched. Of them only one reaches the active minimum fit of 75; that prospect has no contact. Do not weaken qualification to force sending.",
+    "Weekly SEO scheduled work records in_scorecard; content research records content_research_not_enabled while SEO Analyst is in Observe.",
+    "Nine existing agents are active; Social Media Manager is the sole paused registered agent. Creative Director is not yet registered."
+  ],
+  "limitations": [
+    "Database evidence cannot establish provider permissions or deliverability.",
+    "Secret presence verifies configuration only, not successful remote access.",
+    "Product activity events are distinct from billing counts; the scorecard has billing data even though native product events are absent.",
+    "No live model or provider calls were made for this audit."
+  ]
+}

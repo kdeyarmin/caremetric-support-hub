@@ -18,6 +18,7 @@ import { creativeDeclared, creativeTeam } from './creative/index.mjs';
 import { creativeExecutors } from './creative/executor.mjs';
 import { scorecardDeclared, scorecardHandlers } from './scorecard/index.mjs';
 import { live } from '../live.mjs';
+import { marketingToolkit } from './toolkit.mjs';
 
 const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 
@@ -48,7 +49,7 @@ export function agentTeam({
   pool, growth: givenGrowth = null, growthMail = null, postalAddress = '', store: givenStore = null, handlers = {}, executors = {}, sms, email, ownerEmail, publicOrigin,
   fetchImpl = fetch, enabled = false, log = line => console.warn(line), now = () => new Date(), communications = null, features = null,
   anthropicApiKey = null, record = null, model = null, guides = null, customerTextToAi = false, leadSecrets = {}, lifecycle = null, offerBilling = null,
-  social = null, meta = null, marketed = null, searchConsoleSites = undefined, creative = null,
+  social = null, meta = null, marketed = null, searchConsoleSites = undefined, searchConsoleCredentials = '', creative = null,
 }) {
   // Fenced operations (the attempt a task was claimed under, the execution an action started) exist once the database declares the hardening feature.
   const marketing = features?.has?.(marketingFeature) === true;
@@ -92,11 +93,14 @@ export function agentTeam({
   const admin = agentAdmin({
     pool, actions, kick: () => scheduler.tick(), waiting: scheduler.runWaiting,
     externalEmailReady: externalEmailRecovery({ store, features }),
-    services: () => ({
+    services: ({ marketing: products } = {}) => ({
       enabled: scheduler.active(), handlers: scheduler.kinds(),
       sms: Boolean(sms?.configured), email: Boolean(email?.configured), ownerEmail: emailAddress.test(live(ownerEmail) ?? ''), ai: Boolean(runtime.configured),
       customerTextToAi: draftingFor({ model: runtime, guides, customerTextToAi: live(customerTextToAi) }) !== null,
       externalEmail: externalEmailAvailable({ features, email }),
+      marketingTools: marketingToolkit({ features, growth, growthMail, model: runtime, customerTextToAi, communications, email, leadSecrets,
+        lifecycle: customerEmail, social, socialWork, creativeWork, searchConsoleCredentials, searchConsoleSites,
+        marketed: Array.isArray(products) ? products.filter(product => product.marketed).map(product => product.product) : Array.isArray(marketed) ? marketed : defaultMarketed }),
       creative: (() => { const config = creativeWork.config(); const on = creativeOn && creativeWork.enabled(); return { declared: creativeOn, enabled: on, videoProvider: on ? config.videoProvider : null, dailyRenderCap: config.dailyRenderCap }; })(),
     }),
   });

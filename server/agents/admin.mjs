@@ -98,7 +98,7 @@ export function agentAdmin({ pool, actions, services = () => ({}), kick = null, 
       const marketing = await query(token, 'hub.get_marketing_products').catch(error => { if (error?.code === '42883') return null; throw error; });
       // The Monday scorecard's setting (whether the five weekly reports still email you), likewise null until its migration is applied.
       const reports = await query(token, 'hub.get_scorecard_settings').catch(error => { if (error?.code === '42883') return null; throw error; });
-      return { team, services: services(), waitingActions, autonomy, offers, marketing, reports };
+      return { team, services: services({ marketing }), waitingActions, autonomy, offers, marketing, reports };
     },
     async status(token, input) {
       exactly(input, ['key', 'status', 'expectedUpdatedAt']);
