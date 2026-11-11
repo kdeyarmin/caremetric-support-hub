@@ -27,6 +27,8 @@ export default defineConfig(async ({ command, mode }) => {
     },
     test: {
       environment: "node",
+      // Real password hashing and DOM-heavy admin flows can exceed five seconds on shared runners.
+      testTimeout: 15_000,
       coverage: {
         reporter: ["text", "json", "html"],
       },

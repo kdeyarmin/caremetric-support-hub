@@ -93,6 +93,7 @@ const team=agentTeam({pool,growth,growthMail,postalAddress,sms:textSender,email:
   social:()=>socialConfig(process.env,settings.get),
   // The Creative Director: Settings → Creative, with HeyGen's key from Railway.
   creative:()=>creativeConfig(process.env,settings.get),searchConsoleSites:setting('seo.search_console_sites'),
+  searchConsoleCredentials:process.env.HUB_SEARCH_CONSOLE_CREDENTIALS,
   lifecycle:{mail:customerMail,get postalAddress(){return postalAddress().trim();}},
   // Offers from the owner's menu: platform billing (created below) makes them, so the call is deferred until an offer is approved.
   offerBilling:{agentOffer:input=>billing.agentOffer(input)}});

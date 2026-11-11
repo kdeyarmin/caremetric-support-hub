@@ -210,7 +210,8 @@ Backward compatible: without approved creative it works exactly as before.
   Facebook posts stay link posts.
 - **Ads**: when the daily ad review asks for a new ad, approved creative for the product and platform is used before writing new copy: its
   primary text, headline and description (checked again with the social checks), its image (Meta fetches it as the ad's picture) and its
-  landing address with `utm_content`.
+  landing address with `utm_content`. Already approved creative can be used even when the model is not connected; only drafting fresh
+  copy requires the model.
 - Publishing a post or starting an ad from an asset marks it `live`.
 
 ## Learning

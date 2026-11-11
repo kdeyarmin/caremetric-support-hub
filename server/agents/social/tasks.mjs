@@ -341,7 +341,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
             preview: `Raise the daily budget of the ${source.name} ${where} "${rec.adsetName}" from ${money(rec.from)} to ${money(rec.to)}: ${rec.reason}. Your cap is ${money(settings.maxDailyBudgetCents)} a day. Only you can approve a budget change.`,
             input: { adsetId: rec.adsetId, from: rec.from, to: rec.to, reason: rec.reason, ...platform } })) counts.budget += 1;
         } else if (rec.kind === 'refresh') {
-          if (!model?.configured || [...targets].some(value => value.startsWith(`social.ad_create:${source.key(rec.adsetId)}:`))) { counts.skipped += 1; continue; }
+          if ([...targets].some(value => value.startsWith(`social.ad_create:${source.key(rec.adsetId)}:`))) { counts.skipped += 1; continue; }
           counts.create += await refresh(task, rec, overview, today, signal, counts, source, marketedList);
         }
       }
@@ -365,6 +365,8 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     // creative checks, its image is the one the owner approved, and its link carries the asset's id for the weekly report.
     const fromCreative = await creativeAd(task, rec, overview, today, source, product);
     if (fromCreative !== null) return fromCreative;
+    // Already approved copy and images need no model. Only the fallback that writes fresh copy needs an AI connection.
+    if (!model?.configured) { counts.skipped += 1; return 0; }
     const allowed = socialLinks(product).map(link => link.url);
     // The base ad's page (read through any campaign tags it already carries), else the product's next step, tagged as a paid ad.
     const page = [base.copy.link, untaggedUrl(base.copy.link)].find(url => allowed.includes(url)) ?? playbookFor(product).nextStep.url;

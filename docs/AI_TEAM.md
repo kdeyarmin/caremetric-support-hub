@@ -303,12 +303,19 @@ the five weekly reports (`accounts.weekly`, `growth.weekly`, `seo.weekly`, `sale
   trial (AI spend on agent runs, plus ad spend when an ad account is connected). Organic search clicks are added when Search Console
   is connected.
 - **What changed**: every count that moved from the week before.
+- **Search opportunities**: with Search Console connected, up to three evidenced improvements from its last 28 days of final data:
+  a page whose search snippet needs work, a query near the first page, and a search for which the company's sites compete. These
+  survive consolidation of the weekly reports; unavailable properties are named by count rather than treated as having no opportunity.
 
 It reads what the reports already read (the brief's facts, the billing snapshot, the growth pipeline, the ad accounts, the SEO crawl
 and Search Console) and one new server-only read, `private.agent_scorecard_facts`. A source that cannot be read is named and the rest
 still goes out. The subject, stored body, run and task result carry counts only; money is only in the email's layout blocks. Every
 scheduled run in an Eastern week shares `scorecard:<Monday>`, so the week is sent once; a refused send is retried under the same key;
 **Run now** reports the last full week under a key of its own.
+
+The scorecard does not call the model for title and description rewrites. Use **Run now** on the SEO Analyst's **Weekly SEO check**
+for those checked drafts, or turn on **Send the individual weekly reports** to receive them on schedule. Search queries and page
+addresses appear only in email layout blocks; they are not added to stored scorecard bodies or results.
 
 The owner's setting **Send the individual weekly reports** (AI team page, "Weekly reports") starts off. While it is off and the
 Chief of Staff is working, the five reports' scheduled runs are held (`skipped: in_scorecard`) and send nothing; **Run now** on any

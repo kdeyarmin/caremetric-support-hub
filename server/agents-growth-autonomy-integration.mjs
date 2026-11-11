@@ -101,7 +101,7 @@ try {
   const pending = await store.contactCandidates(20);
   assert.deepEqual(pending.map(entry => entry.domain).filter(d => !domains.includes(d)), [], 'no other discovered business is waiting');
   const discovery = await growthHandlers({ growth: { store, research, contacts: finder }, features })['growth.discovery']({ id: await task(), agent: { autonomy: 'propose' } });
-  assert.deepEqual(discovery.result, { candidates: 3, contacts: { searched: 3, found: 1, none: 2 }, qualified: 0 });
+  assert.deepEqual(discovery.result, { candidates: 3, contacts: { searched: 3, found: 1, none: 2 }, qualified: 0, enrichment: { searched: 3, evidenceRows: 3 } });
   assert.ok(!JSON.stringify(discovery).includes('@'), 'the task result holds no address');
   const foundContact = await row("select c.* from private.growth_contacts c join private.growth_organizations g on g.id=c.organization_id where g.domain=$1", [found]);
   assert.deepEqual([foundContact.email, foundContact.source_kind, foundContact.eligibility, foundContact.source_url], [`info@${found}`, 'role_address', 'permitted', `https://${found}/contact`]);

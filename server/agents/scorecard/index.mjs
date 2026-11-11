@@ -28,10 +28,11 @@ import { composeReview, readPipeline } from '../sales/review.mjs';
 import { evaluateAds } from '../social/rules.mjs';
 import { auditSite, summarizeFindings } from '../seo/audit.mjs';
 import { searchConsoleReader } from '../seo/search-console.mjs';
+import { searchInsights } from '../seo/insights.mjs';
 import { sites as defaultSites } from '../seo/sites.mjs';
 import { readAccountsSnapshot } from '../tasks/accounts.mjs';
 import { dueMoment, mustHaveReached, recordRun } from '../tasks/shared.mjs';
-import { billingFigures, composeScorecard, composeVersion, searchFigures } from './compose.mjs';
+import { billingFigures, composeScorecard, composeVersion, searchFigures, searchOpportunityBlocks } from './compose.mjs';
 import { live, rebuilt } from '../../live.mjs';
 // The Settings page keeps the properties as a list; the reader takes them as one comma-separated text, as the old variable held them.
 const consoleSites = value => (Array.isArray(value) ? value.join(',') : value);
@@ -94,7 +95,19 @@ export function scorecardHandlers({
   async function readSearch(moment, signal) {
     if (!reader) return null;
     if (!reader.configured || typeof reader.totals !== 'function') return { state: reader.state ?? 'not_configured' };
-    return searchFigures(await reader.totals({ signal, now: moment, days: 7 }));
+    // Keep the scorecard's seven-day click comparison. The richer 28-day read preserves the SEO Analyst's opportunities even when
+    // individual reports are held. Either read may fail without hiding the other; older totals-only readers remain supported.
+    const [totals, detail] = await Promise.all([
+      optional('search_console_totals', () => reader.totals({ signal, now: moment, days: 7 }), signal),
+      typeof reader.read === 'function' ? optional('search_console_opportunities', () => reader.read({ signal, now: moment }), signal) : null,
+    ]);
+    const owners = sites.flatMap(site => [site.origin, ...(site.variants ?? [])]).flatMap(address => {
+      try { return [new URL(address).host.toLowerCase()]; } catch { return []; }
+    });
+    return {
+      ...(searchFigures(totals) ?? { state: 'unavailable' }),
+      ...(typeof reader.read === 'function' ? { opportunities: detail ? searchInsights(detail, { owners }) : { unavailable: true } } : {}),
+    };
   }
 
   // The SEO Analyst's crawl, for the urgent problems only: the same findings its report counts as urgent.
@@ -149,6 +162,8 @@ export function scorecardHandlers({
         accounts: accounts?.needsYou ?? null, stuckDeals: review?.needsYou ?? null, failingAds: adFigures?.failing ?? null, siteProblems: urgent,
       },
     });
+    // Search queries and page addresses travel only in email blocks, never the stored body, result, run or logs.
+    card.blocks.push(...searchOpportunityBlocks(search?.opportunities));
 
     const results = await notifier.send({
       severity: card.needsYou ? 'warning' : 'info', subject: card.subject, body: card.body, blocks: card.blocks,

@@ -390,7 +390,7 @@ describe('approved creative from the Creative Director', () => {
     expect(post.input).not.toHaveProperty('creativeAssetId');
   });
 
-  it('starts a new ad from approved creative before writing new copy', async () => {
+  it.each([true, false])('starts a new ad from approved creative when the model is configured: %s', async configured => {
     const adset = { id: '120200000000001', name: 'Intel prospecting', effective_status: 'ACTIVE' };
     const meta = metaOf({ adsOverview: vi.fn(async () => ({
       adsets: [{ id: adset.id, name: adset.name, active: true, dailyBudget: 2000 }],
@@ -398,11 +398,26 @@ describe('approved creative from the Creative Director', () => {
       current: [], previous: [],
     })) });
     const model = modelReturning({ variants: [] });
+    model.configured = configured;
     const creative = { approved: vi.fn(async ({ platform }) => (platform === 'meta' ? [approvedAsset()] : [])) };
     const { store, handlers } = harness({ meta, model, creative });
     await handlers['social.ads'](task('social.ads'), { now });
     const created = store.proposeAction.mock.calls.map(([input]) => input).find(input => input.kind === 'social.ad_create');
     expect(created.input).toMatchObject({ creativeAssetId: approvedAsset().id, imageUrl: `https://help.caremetric.ai/api/creative/a/${token}.png`, link: approvedAsset().landingUrl, callToAction: 'SIGN_UP' });
     expect(model.run).not.toHaveBeenCalled();
+  });
+
+  it('skips a refresh without a model or usable approved creative', async () => {
+    const meta = metaOf({ adsOverview: vi.fn(async () => ({
+      adsets: [{ id: '40', name: 'Intel prospecting', active: true, dailyBudget: 2000 }],
+      ads: [{ id: '1', name: 'Only ad', adsetId: '40', active: true, createdAt: '2026-10-01T00:00:00Z', copy: { link: 'https://www.caremetricintel.com/' } }],
+      current: [], previous: [],
+    })) });
+    const creative = { approved: vi.fn(async () => [approvedAsset({ primaryText: 'We guarantee results.' })]) };
+    const { store, handlers } = harness({ meta, model: null, creative });
+    const outcome = await handlers['social.ads'](task('social.ads'), { now });
+    expect(creative.approved).toHaveBeenCalled();
+    expect(store.proposeAction).not.toHaveBeenCalled();
+    expect(outcome.result).toMatchObject({ create: 0, skipped: 1 });
   });
 });

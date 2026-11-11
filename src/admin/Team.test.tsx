@@ -415,11 +415,11 @@ describe("AI team screen", () => {
     expect(screen.getAllByText("No code behind it yet").length).toBeGreaterThan(0);
   });
 
-  it("shows the model as ready when a key is set, and says an agent uses it only where its own setting allows", async () => {
+  it("shows the model key as configured without claiming provider access", async () => {
     render(<Team client={fakeClient(overview())} />);
     const services = await screen.findByRole("region", { name: "What the team can use" });
     const row = within(services).getByText("AI model").closest("li") as HTMLElement;
-    expect(within(row).getByText("Ready")).toBeTruthy();
+    expect(within(row).getByText("Key configured")).toBeTruthy();
     expect(within(row).getByText(/uses it only where its own setting says so/)).toBeTruthy();
     expect(within(services).queryByText(/Set ANTHROPIC_API_KEY/)).toBeNull();
   });
@@ -433,8 +433,77 @@ describe("AI team screen", () => {
     render(<Team client={fakeClient(overview({}, { customerTextToAi: true }))} />);
     row = (await within(await screen.findByRole("region", { name: "What the team can use" })).findByText("Customer text to AI")).closest("li") as HTMLElement;
     expect(within(row).getByText("On")).toBeTruthy();
-    expect(within(row).getByText(/scrubbed text to the model to draft an answer for you to approve/)).toBeTruthy();
+    expect(within(row).getByText(/Concierge and Sales Executive.*scrubbed text to the model to draft answers under your approval settings/)).toBeTruthy();
     expect(within(row).getByText(/never go/)).toBeTruthy();
+  });
+
+  it("shows actionable marketing setup, agent blockers and configuration limits without changing any controls", async () => {
+    const client = fakeClient(overview({}, { enabled: false, marketingTools: [
+      { key: "discovery", label: "Business discovery", agents: ["support_concierge"], configured: false,
+        detail: "Find prospective organizations from public business sources.", missing: ["Set the Brave Search key on the Hub service."], settingsPath: "/admin" },
+      { key: "search", label: "Search performance", agents: ["platform_engineer"], configured: true,
+        detail: "Read search clicks and impressions.", missing: [], settingsPath: "/admin/settings" },
+    ] }));
+    render(<Team client={client} />);
+    const panel = await screen.findByRole("region", { name: "Marketing toolkit" });
+    const discovery = within(panel).getByText("Business discovery").closest("li") as HTMLElement;
+    expect(within(discovery).getByText("Setup needed")).toBeTruthy();
+    expect(discovery.querySelector("details")?.open).toBe(false);
+    fireEvent.click(within(discovery).getByText("Details and setup · 1 step"));
+    expect(within(discovery).getByRole("list", { name: "Setup for Business discovery" }).textContent).toContain("Brave Search key");
+    expect(discovery.textContent).toContain("Support Concierge (paused)");
+    expect(within(discovery).getByRole("link", { name: "Open integration setup" }).getAttribute("href")).toBe("/admin");
+    const search = within(panel).getByText("Search performance").closest("li") as HTMLElement;
+    expect(within(search).getByText("Configured")).toBeTruthy();
+    fireEvent.click(within(search).getByText("Details and setup"));
+    expect(within(search).getByRole("link", { name: "Open Settings" }).getAttribute("href")).toBe("/admin/settings");
+    expect(panel.textContent).toContain("does not confirm provider authorization or connectivity");
+    expect(panel.textContent).toContain("The scheduler is off");
+    expect(client.setStatus).not.toHaveBeenCalled();
+    expect(client.setAutonomy).not.toHaveBeenCalled();
+    expect(client.run).not.toHaveBeenCalled();
+  });
+
+  it("updates marketing setup and agent availability after refresh", async () => {
+    const tool = { key: "discovery", label: "Business discovery", agents: ["support_concierge", "marketing_manager"],
+      configured: false, detail: "Find prospective organizations.", missing: ["Configure business research."] };
+    const client = fakeClient(overview({}, { marketingTools: [tool] }));
+    vi.mocked(client.overview).mockResolvedValueOnce(overview({}, { marketingTools: [tool] }))
+      .mockResolvedValue(overview({ agents: [{ ...concierge, status: "active", autonomy: "observe" }] }, { marketingTools: [{ ...tool, configured: true, missing: [] }] }));
+    render(<Team client={client} />);
+    let panel = await screen.findByRole("region", { name: "Marketing toolkit" });
+    expect(panel.textContent).toContain("Configure business research.");
+    expect(panel.textContent).toContain("marketing manager (not available on this Hub)");
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => {
+      panel = screen.getByRole("region", { name: "Marketing toolkit" });
+      expect(within(panel).getByText("Configured")).toBeTruthy();
+      expect(panel.textContent).toContain("Support Concierge (Observe: proposals and actions are off)");
+    });
+    expect(within(panel).queryByText("Configure business research.")).toBeNull();
+  });
+
+  it("keeps older Hubs usable without inventing marketing readiness", async () => {
+    render(<Team client={fakeClient()} />);
+    const services = await screen.findByRole("region", { name: "What the team can use" });
+    expect(within(services).getByText("1 registered")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Marketing toolkit" })).toBeNull();
+  });
+
+  it("distinguishes unavailable capabilities from missing setup and never calls contradictory setup configured", async () => {
+    render(<Team client={fakeClient(overview({}, { marketingTools: [
+      { key: "analytics", label: "Visitor conversion analytics", agents: [], supported: false, configured: false,
+        detail: "No analytics provider reader is implemented.", missing: ["Add an analytics integration to the Hub."] },
+      { key: "discovery", label: "Business discovery", agents: [], configured: true,
+        detail: "Find prospects.", missing: ["Configure business research."] },
+    ] }))} />);
+    const panel = await screen.findByRole("region", { name: "Marketing toolkit" });
+    const analytics = within(panel).getByText("Visitor conversion analytics").closest("li") as HTMLElement;
+    expect(within(analytics).getByText("Not available")).toBeTruthy();
+    expect(within(analytics).getByText("Details and next steps · 1 step")).toBeTruthy();
+    const discovery = within(panel).getByText("Business discovery").closest("li") as HTMLElement;
+    expect(within(discovery).getByText("Setup needed")).toBeTruthy();
+    expect(within(panel).queryByText("Configured")).toBeNull();
   });
 
   it("runs the work that was waiting for the owner's sign-in, and says how much started", async () => {

@@ -80,6 +80,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Reserve the disposable Supabase ports
+        # These fixed ports are inside Linux's ephemeral range. Reserve them before
+        # network activity so image downloads cannot occupy the database/mail ports.
+        # Keep existing reservations and the integration tests' strict local targets.
+        run: |
+          supabase_reserved_ports="$(sysctl -n net.ipv4.ip_local_reserved_ports)"
+          sudo sysctl -w "net.ipv4.ip_local_reserved_ports=${supabase_reserved_ports:+${supabase_reserved_ports},}54320-54329"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:

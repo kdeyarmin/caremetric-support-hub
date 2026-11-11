@@ -34,18 +34,18 @@ function ServicesPanel({ services, awaitingSession, waitingActions, busy, onRunW
   const rows: Array<{ name: string; good: boolean; state: string; detail: string }> = [
     { name: "Scheduler", good: services.enabled, state: services.enabled ? "On" : "Off",
       detail: services.enabled ? "The team's clock runs every minute." : "Switch on \"Run the AI team\" in Settings to start the team." },
-    { name: "Work with code behind it", good: handled.length > 0, state: handled.length ? `${handled.length} ready` : "None yet",
+    { name: "Work with code behind it", good: handled.length > 0, state: handled.length ? `${handled.length} registered` : "None yet",
       detail: handled.length ? handled.join(", ") : "An agent stays idle until the code for its work ships. Nothing here is broken." },
     { name: "Your email address", good: services.ownerEmail, state: services.ownerEmail ? "Set" : "Missing", detail: services.ownerEmail ? "Alerts and the morning brief go here." : "Add your email in Settings (AI team) so the team can email you." },
     { name: "Email delivery", good: services.email, state: services.email ? "Ready" : "Not set up", detail: services.email ? "Through SendGrid." : "Set HUB_SENDGRID_API_KEY so the team can email you." },
     { name: "Text alerts", good: services.sms, state: services.sms ? "Ready" : "Not set up", detail: services.sms ? "Urgent items are texted to your verified number." : "Urgent items fall back to email until Twilio is configured." },
-    { name: "AI model", good: services.ai, state: services.ai ? "Ready" : "Not set up", detail: services.ai ? "Anthropic is connected. An agent uses it only where its own setting says so." : "Set ANTHROPIC_API_KEY on the Hub service. Agents that need a model wait until then." },
+    { name: "AI model", good: services.ai, state: services.ai ? "Key configured" : "Not set up", detail: services.ai ? "An Anthropic key is configured. An agent uses it only where its own setting says so. Check task results to confirm access." : "Set ANTHROPIC_API_KEY on the Hub service. Agents that need a model wait until then." },
     ...(services.creative?.declared ? [{ name: "Creative Director", good: services.creative.enabled, state: services.creative.enabled ? "On" : "Off",
       detail: services.creative.enabled
         ? `Renders up to ${services.creative.dailyRenderCap} assets a day; videos by ${services.creative.videoProvider === "heygen" ? "HeyGen" : "the Hub itself"}. Review them on the Creative screen.`
         : "Switch on \"Turn on the Creative Director\" in Settings → Creative to let it work. Creative you already approved is still handed over." }] : []),
     { name: "Customer text to AI", good: services.customerTextToAi, state: services.customerTextToAi ? "On" : "Off",
-      detail: services.customerTextToAi ? "The Concierge sends a plain question's scrubbed text to the model to draft an answer for you to approve. Billing, outages, sales and anything with personal identifiers never go." : "Customer messages stay in the Hub. Switch on \"Let agents send customer messages to the AI\" in Settings, with the AI model ready, to let the Concierge draft answers from your published guides." },
+      detail: services.customerTextToAi ? "The Concierge and Sales Executive can send eligible questions' scrubbed text to the model to draft answers under your approval settings. Billing, outages and anything with personal identifiers never go." : "Customer messages stay in the Hub. Switch on \"Let agents send customer messages to the AI\" in Settings, with the AI model configured, to let the Concierge draft support answers and the Sales Executive draft eligible prospect answers." },
   ];
   return <section className="panel team-services" aria-labelledby="team-services-title">
     <div className="admin-section-title"><div><h2 id="team-services-title">What the team can use</h2><p>The team only does what is switched on here.</p></div></div>
@@ -60,6 +60,36 @@ function ServicesPanel({ services, awaitingSession, waitingActions, busy, onRunW
       {/* Message status checks and completion work with this session even when the scheduler is off; waiting tasks need it on. */}
       <button type="button" className="button button-primary button-small" disabled={Boolean(busy) || (!services.enabled && waitingActions === 0)} onClick={onRunWaiting}>Run what's waiting</button>
     </div>}
+  </section>;
+}
+
+function ToolkitLink({ path }: { path: NonNullable<NonNullable<TeamServices["marketingTools"]>[number]["settingsPath"]> }) {
+  const label = path === "/admin" ? "Open integration setup" : path === "/admin/growth" ? "Open customer growth" : path === "/admin/creative" ? "Open Creative" : "Open Settings";
+  return useInRouterContext() ? <Link to={path}>{label}</Link> : <a href={path}>{label}</a>;
+}
+
+function MarketingToolkit({ services, agents }: { services: TeamServices; agents: TeamAgent[] }) {
+  if (!services.marketingTools) return null;
+  const agentByKey = new Map(agents.map(agent => [agent.key, agent]));
+  return <section className="panel team-services team-toolkit" aria-labelledby="team-toolkit-title">
+    <div className="admin-section-title"><div><h2 id="team-toolkit-title">Marketing toolkit</h2>
+      <p>Configuration checks for finding prospects, creating campaigns and measuring sales. Configured does not confirm provider authorization or connectivity; check task results to verify each connection.</p></div></div>
+    <p className="admin-explanation">The scheduler, each agent's status, campaign policies and approval settings still control whether work runs. {services.enabled ? "The scheduler is on." : "The scheduler is off. Switch on Run the AI team in Settings to start scheduled work."}</p>
+    {services.marketingTools.length === 0 ? <p>No marketing tool checks were returned by this Hub.</p> : <ul className="team-service-list">
+      {services.marketingTools.map(tool => <li key={tool.key}>
+        <span className="team-service-name">{tool.label}</span>
+        <Pill good={tool.supported !== false && tool.configured && tool.missing.length === 0}>{tool.supported === false ? "Not available" : tool.configured && tool.missing.length === 0 ? "Configured" : "Setup needed"}</Pill>
+        <details className="muted"><summary>Details and {tool.supported === false ? "next steps" : "setup"}{tool.missing.length > 0 ? ` · ${plural(tool.missing.length, "step")}` : ""}</summary><p>{tool.detail}</p>
+          {tool.agents.length > 0 && <p>Used by: {tool.agents.map(key => {
+            const agent = agentByKey.get(key);
+            if (!agent) return `${key.replaceAll("_", " ")} (not available on this Hub)`;
+            return `${agent.displayName}${agent.status === "paused" ? " (paused)" : agent.autonomy === "observe" ? " (Observe: proposals and actions are off)" : ""}`;
+          }).join(", ")}</p>}
+          {tool.missing.length > 0 && <ul className="team-toolkit-setup" aria-label={`Setup for ${tool.label}`}>{tool.missing.map((item, index) => <li key={`${index}:${item}`}>{item}</li>)}</ul>}
+          {tool.settingsPath && <ToolkitLink path={tool.settingsPath} />}
+        </details>
+      </li>)}
+    </ul>}
   </section>;
 }
 
@@ -594,6 +624,7 @@ export function Team({ client = teamClient }: { client?: TeamClient }) {
     {shown && <>
       <p className="admin-read-time">Loaded {timeLabel(shown.receivedAt)}.</p>
       <ServicesPanel services={shown.data.services} awaitingSession={shown.data.team.awaitingSessionCount} waitingActions={shown.data.waitingActions} busy={busy} onRunWaiting={onRunWaiting} />
+      <MarketingToolkit services={shown.data.services} agents={shown.data.team.agents} />
       {shown.data.marketing && shown.data.marketing.length > 0 && <MarketingPanel products={shown.data.marketing} busy={busy} onMarketing={onMarketing} />}
       {shown.data.reports && <ReportsPanel settings={shown.data.reports} busy={busy} onReports={onReports} />}
       {shown.data.autonomy && shown.data.autonomy.length > 0 && <AutonomyPanel steps={shown.data.autonomy} busy={busy} onStep={onStep} />}

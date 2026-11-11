@@ -28,6 +28,14 @@ export function growthService({store,research,contacts=null,features,enabled=fal
   const unsubscribeToken=workId=>createHmac('sha256',signingKey).update(`growth:${workId}`).digest('hex');
   return {
     ready, store, research, contacts, get enabled(){return sending();}, unsubscribeToken, hash, signingReady:signingKey.length>=32,
+    // Configuration only: no provider request and no credential value leaves this service.
+    readiness() {
+      let deliveryFeedback = false;
+      try { createPublicKey(webhookPublicKey.includes('BEGIN') ? webhookPublicKey : { key: Buffer.from(webhookPublicKey, 'base64'), format: 'der', type: 'spki' }); deliveryFeedback = true; } catch { /* Missing or invalid key. */ }
+      return { sending: sending(), signing: signingKey.length >= 32, postalAddress: Boolean(postal().trim()), publicOrigin: /^https:\/\//.test(publicOrigin ?? ''),
+        research: research?.configured === true, deliveryFeedback,
+        events: Object.fromEntries(products.map(product => [product, typeof eventKeys[product] === 'string' && eventKeys[product].length >= 32])) };
+    },
     configured:()=>sending()&&signingKey.length>=32&&postal().trim().length>0&&/^https:\/\//.test(publicOrigin??''),
     async admin(token,input) {
       ready(); const {operation,data}=parse(z.object({operation:z.string(),data:z.record(z.string(),z.unknown()).default({})}).strict(),input);

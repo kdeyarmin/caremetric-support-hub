@@ -137,6 +137,21 @@ describe("AI team display", () => {
     expect(servicesSchema.parse({ ...older, externalEmail: true }).externalEmail).toBe(true);
   });
 
+  it("accepts optional marketing setup checks but confines setup links to supported admin workspaces", () => {
+    const services = { enabled: true, handlers: [], sms: false, email: true, ownerEmail: true, ai: false, customerTextToAi: false };
+    const tool = { key: "discovery", label: "Business discovery", agents: ["marketing_manager"], configured: false,
+      detail: "Find prospective organizations.", missing: ["Configure the search key."], settingsPath: "/admin" };
+    expect(servicesSchema.parse(services).marketingTools).toBeUndefined();
+    expect(servicesSchema.parse({ ...services, marketingTools: [tool] }).marketingTools).toEqual([tool]);
+    expect(servicesSchema.parse({ ...services, marketingTools: [{ ...tool, supported: false }] }).marketingTools?.[0].supported).toBe(false);
+    for (const configured of [undefined, "true", null]) {
+      expect(servicesSchema.safeParse({ ...services, marketingTools: [{ ...tool, configured }] }).success).toBe(false);
+    }
+    for (const settingsPath of ["https://example.org", "javascript:alert(1)", "/admin/control-center"]) {
+      expect(servicesSchema.safeParse({ ...services, marketingTools: [{ ...tool, settingsPath }] }).success).toBe(false);
+    }
+  });
+
   it("explains why an action could not be carried out, and shows an unknown code as it is", () => {
     expect(errorLabel("thread_changed")).toMatch(/customer wrote again/);
     expect(errorLabel("conversation_closed")).toBe("The conversation was closed, so nothing was sent.");
