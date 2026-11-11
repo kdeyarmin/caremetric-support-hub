@@ -4,8 +4,8 @@ import { readProperties } from './agents/seo/search-console.mjs';
 
 /**
  * The Hub's settings (supabase/migrations/20261109150000_hub_settings.sql): every switch and value that is not a secret, changed by
- * the owner on the Settings page (/admin/settings) instead of in Railway variables. Secrets (API keys, tokens, signing keys) and the
- * service's own wiring (the database URL, the port, the public origin) stay in Railway; docs/SETTINGS.md lists both.
+ * the owner on the Settings page (/admin/settings) instead of in Railway variables. Ordinary settings never contain secrets.
+ * Most secrets and the service's wiring stay in Railway; social-connections.mjs separately encrypts Meta/LinkedIn credentials.
  *
  * Once the database declares `platform.settings.v1`:
  * - at start the server copies the value of each Railway variable a setting replaces into the setting, once, and only into a setting
@@ -47,7 +47,7 @@ export const settingGroups = Object.freeze([
   { id: 'sms', label: 'Text messages', description: 'The Twilio sender staff replies and owner alerts are texted from.' },
   { id: 'growth', label: 'Customer growth', description: 'Sending reviewed prospecting and follow-up email.' },
   { id: 'billing', label: 'Billing', description: 'What customers can buy themselves and how prices stay in step with Intel.' },
-  { id: 'social', label: 'Social media', description: 'The Facebook Page, Instagram account, LinkedIn Page and ad accounts the Social Media Manager works on, and its ad limits. The access tokens stay in Railway.' },
+  { id: 'social', label: 'Social media', description: 'The Facebook Page, Instagram account, LinkedIn Page and ad accounts the Social Media Manager works on, and its ad limits. Connect the Pages and save encrypted access tokens here.' },
   { id: 'creative', label: 'Creative', description: 'The Creative Director: whether it works, how many images and videos it starts a day, and how videos are made. HeyGen\'s key stays in Railway.' },
   { id: 'seo', label: 'Search', description: 'The Search Console properties the SEO Analyst and the Monday scorecard read. The service account key stays in Railway.' },
   { id: 'analytics', label: 'Website analytics', description: 'Read first-party measurements from the public marketing website. Signing keys stay in Railway.' },
@@ -100,7 +100,7 @@ export const settingsCatalog = Object.freeze([
   { key: 'learning.legacy_distribution_opt_in', group: 'learning', kind: 'flag', input: 'toggle', default: false, env: 'HUB_LEGACY_DISTRIBUTION_OPT_IN', fromEnv: fromFlag,
     label: 'Allow legacy opt-in distribution', help: 'Lets a course distribution use the older opt-in mode for facilities that have not moved to entitlements. Leave off unless you were told to use it.' },
   { key: 'social.meta_page_id', group: 'social', kind: 'text', input: 'text', default: null, env: 'HUB_META_PAGE_ID', fromEnv: fromText, valid: matches(/^[0-9]{1,40}$/),
-    label: 'Facebook Page id', help: 'Your Facebook Page\'s numeric id. The Meta access token stays in Railway.' },
+    label: 'Facebook Page id', help: 'Your Facebook Page\'s numeric id. Connect it using the Meta setup card.' },
   { key: 'social.instagram_id', group: 'social', kind: 'text', input: 'text', default: null, env: 'HUB_META_INSTAGRAM_ID', fromEnv: fromText, valid: matches(/^[0-9]{1,40}$/),
     label: 'Instagram account id', help: 'The numeric id of the Instagram professional account linked to the Page. Empty: Instagram is left out.' },
   { key: 'social.meta_ad_account_id', group: 'social', kind: 'text', input: 'text', default: null, env: 'HUB_META_AD_ACCOUNT_ID', fromEnv: fromText, valid: matches(/^(act_)?[0-9]{1,40}$/),
@@ -108,11 +108,11 @@ export const settingsCatalog = Object.freeze([
   { key: 'social.meta_graph_version', group: 'social', kind: 'text', input: 'text', default: 'v23.0', env: 'HUB_META_GRAPH_VERSION', fromEnv: fromText, valid: matches(/^v\d{1,2}\.\d$/),
     label: 'Meta Graph API version', help: 'Change it only when Meta retires the current one.' },
   { key: 'social.linkedin_organization_id', group: 'social', kind: 'text', input: 'text', default: null, env: 'HUB_LINKEDIN_ORGANIZATION_ID', fromEnv: fromText, valid: matches(/^(urn:li:organization:)?\d{1,30}$/),
-    label: 'LinkedIn Company Page id', help: 'The numeric organization id (the digits in the Page\'s admin address). The LinkedIn tokens stay in Railway.' },
+    label: 'LinkedIn Company Page id', help: 'The numeric organization id (the digits in the Page\'s admin address). Connect it using the LinkedIn setup card.' },
   { key: 'social.linkedin_ad_account_id', group: 'social', kind: 'text', input: 'text', default: null, env: 'HUB_LINKEDIN_AD_ACCOUNT_ID', fromEnv: fromText, valid: matches(/^(urn:li:sponsoredAccount:)?\d{1,30}$/),
     label: 'LinkedIn ad account id', help: 'The numeric id from Campaign Manager. Empty: LinkedIn ads are left out.' },
   { key: 'social.linkedin_client_id', group: 'social', kind: 'text', input: 'text', default: null, env: 'HUB_LINKEDIN_CLIENT_ID', fromEnv: fromText, valid: matches(/^[A-Za-z0-9_-]{4,100}$/),
-    label: 'LinkedIn app client id', help: 'Used only to renew the Page access token by itself, with the refresh token and client secret in Railway.' },
+    label: 'LinkedIn app client id', help: 'Used only to renew the Page access token by itself, with the refresh token and client secret in the LinkedIn setup card.' },
   { key: 'social.linkedin_ads_client_id', group: 'social', kind: 'text', input: 'text', default: null, env: 'HUB_LINKEDIN_ADS_CLIENT_ID', fromEnv: fromText, valid: matches(/^[A-Za-z0-9_-]{4,100}$/),
     label: 'LinkedIn advertising app client id', help: 'Only when ads use a second LinkedIn app. Empty: the Page app\'s client id.' },
   { key: 'social.linkedin_api_version', group: 'social', kind: 'text', input: 'text', default: '202609', env: 'HUB_LINKEDIN_API_VERSION', fromEnv: fromText, valid: matches(/^20\d{4}$/),

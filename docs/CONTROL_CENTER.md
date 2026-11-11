@@ -60,9 +60,9 @@ The ledger starts empty; calls made before the migration were only logged.
 
 ## Integration setup
 
-The Hub's integrations need their secrets on the Hub service (Railway → the Hub
-service → Variables). Everything that is not a secret (switches, addresses,
-account ids, limits) is on the [Settings](SETTINGS.md) page instead. The control
+Most integrations take their secrets from the Hub service (Railway → the Hub
+service → Variables). Meta and LinkedIn also support encrypted credential entry in **Settings → Social media**.
+Everything that is not a secret (switches, addresses, account ids, limits) is on the [Settings](SETTINGS.md) page. The control
 center lists, for each integration, the exact secret names, what each one does,
 whether it is set, and a link to the setup steps:
 
@@ -80,14 +80,15 @@ A secret is reported as **set** or **missing** only. The server returns a boolea
 for it, and the browser client's schema refuses any value sent for a secret, so
 no part of a secret can reach the browser through this panel. The two non-secret
 values left here (the webhook origin and the Telnyx profile id) are shown so they can be
-confirmed. The panel reports; it never writes. To add or change a secret, set
-the variable on the Hub service and let it redeploy, then refresh the page.
+confirmed. This panel reports; its Meta and LinkedIn links open the guided connection cards in Settings.
+Those cards accept account IDs and masked tokens together and run a read-only connection check. Other integration secrets
+are still changed on the Hub service and take effect after redeployment.
 
-Secret values are deliberately not entered through the Hub. Doing so would move
-provider credentials into the application database or require the Hub to hold a
-deployment-platform token; both widen the security boundary that
-[SECURITY.md](../SECURITY.md) and the go-live readiness panel (presence only)
-keep closed today.
+Social credentials are encrypted before entering a separate private database table. Their encryption key stays in Railway;
+the Hub does not hold a deployment-platform token. Only the current owner command session can save or check credentials,
+and no saved secret is returned to the browser. See [Social media](SOCIAL_MEDIA.md#secure-connection-storage-deployment-and-recovery)
+for the storage boundary, legacy fallback behavior and recovery requirements. The integration panel reads the same resolved
+credential presence as the agents; presence alone does not verify access or publishing permission.
 
 ## Verification
 

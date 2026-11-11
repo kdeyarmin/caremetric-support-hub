@@ -87,12 +87,12 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
       ], '/admin/growth');
   }
   for (const [key, label, configured, setup] of [
-    ['facebook', 'Facebook publishing and inbox', meta.pages, 'Set HUB_META_ACCESS_TOKEN and Settings → Social media → Facebook Page id.'],
-    ['instagram', 'Instagram publishing and comments', meta.instagram, 'Set HUB_META_ACCESS_TOKEN, Facebook Page id and Instagram account id in Settings → Social media.'],
-    ['linkedin', 'LinkedIn publishing and comments', linkedin.page, 'Connect a LinkedIn Page token (or full refresh credentials) and Settings → Social media → LinkedIn Company Page id.'],
+    ['facebook', 'Facebook publishing and inbox', meta.pages, 'Open Settings → Social media → Meta. Enter the Page ID and access token, then Save and check.'],
+    ['instagram', 'Instagram publishing and comments', meta.instagram, 'Connect Meta in Settings → Social media, then add the Instagram professional account ID under Advanced.'],
+    ['linkedin', 'LinkedIn publishing and comments', linkedin.page, 'Open Settings → Social media → LinkedIn. Enter the Company Page ID and access token, then Save and check.'],
   ]) add(key, label, ['social_manager'], key === 'linkedin'
     ? 'Publishes posts and handles comments after LinkedIn grants API access. Private Page messages remain with the owner.'
-    : 'Publishes planned posts and handles eligible interactions after provider permissions are granted.', [socialFeature, [configured === true, setup], [ai, modelStep]]);
+    : 'Publishes planned posts and handles eligible interactions after provider permissions are granted.', [socialFeature, [configured === true, setup], [ai, modelStep]], '/admin/settings#settings-social');
   add('social_images', 'Fallback images for social publishing', ['social_manager', 'creative_director'],
     'Optional when approved images are available on Creative. Instagram requires either an approved Creative image or a fallback image to publish.', [
       socialFeature, [(socialSettings.imageUrls?.length ?? 0) > 0, 'Add fallback images in Settings → Social media → Approved brand images if you are not supplying approved images through Creative.'],

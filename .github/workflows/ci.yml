@@ -205,6 +205,9 @@ jobs:
           node server/settings-integration.mjs
           # Repeat with fresh fixtures to prove complete teardown.
           node server/settings-integration.mjs
+          node server/social-connections-integration.mjs
+          # Repeat to prove credential and setting fixtures are restored.
+          node server/social-connections-integration.mjs
           node server/agents-creative-integration.mjs
           # Repeat with fresh fixtures to prove complete teardown.
           node server/agents-creative-integration.mjs

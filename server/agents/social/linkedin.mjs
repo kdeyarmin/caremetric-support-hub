@@ -284,6 +284,13 @@ export function linkedinClient({
     ids: { organization, account },
     prepareVideo, readVideo, publishVideo,
 
+    /** Read-only setup check; publishing and ad changes retain their normal approval path. */
+    async checkConnection({ signal } = {}) {
+      if (!configured.page) throw failure('linkedin_not_configured');
+      await get('posts', `author=${enc(org)}&q=author&count=1&sortBy=LAST_MODIFIED`, { signal });
+      if (configured.ads) await get(`adAccounts/${account}`, '', { signal, auth: adsAuth });
+    },
+
     async recentPosts({ signal } = {}) {
       if (!configured.page) return [];
       const posts = await pagePosts(signal);

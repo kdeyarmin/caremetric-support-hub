@@ -143,6 +143,7 @@ describe("AI team display", () => {
       detail: "Find prospective organizations.", missing: ["Configure the search key."], settingsPath: "/admin" };
     expect(servicesSchema.parse(services).marketingTools).toBeUndefined();
     expect(servicesSchema.parse({ ...services, marketingTools: [tool] }).marketingTools).toEqual([tool]);
+    expect(servicesSchema.safeParse({ ...services, marketingTools: [{ ...tool, settingsPath: "/admin/settings#settings-social" }] }).success).toBe(true);
     expect(servicesSchema.parse({ ...services, marketingTools: [{ ...tool, supported: false }] }).marketingTools?.[0].supported).toBe(false);
     for (const configured of [undefined, "true", null]) {
       expect(servicesSchema.safeParse({ ...services, marketingTools: [{ ...tool, configured }] }).success).toBe(false);

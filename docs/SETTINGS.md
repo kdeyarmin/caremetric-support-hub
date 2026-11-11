@@ -5,8 +5,10 @@ Everything the Hub uses that is **not a secret** is a setting you change in the 
 reads settings every 30 seconds (and at once after you save), so a change applies within a minute with nothing to
 redeploy. Every change is recorded in the audit trail.
 
-Only **secrets** (API keys, tokens and signing keys) and the service's own wiring stay in Railway. Integration setup on
-the Control center (`/admin`) shows which of those are set, by presence only.
+Most **secrets** (API keys and signing keys) and the service's own wiring stay in Railway. Meta and LinkedIn have guided connection
+cards under **Social media**: enter account details and masked tokens together, then **Save and check**. Their tokens are encrypted
+in separate private storage and never returned by Settings. See [Social media](SOCIAL_MEDIA.md#secure-connection-storage-deployment-and-recovery)
+for deployment and recovery. Integration setup on the Control center (`/admin`) shows credential presence only.
 
 ## Moving off the Railway variables
 
@@ -78,9 +80,11 @@ Secrets, which are never shown on screen or stored in the database:
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
 - `HUB_GROWTH_SIGNING_KEY`, `HUB_GROWTH_SEARCH_API_KEY`, `HUB_GROWTH_CAREBASE_EVENT_KEY`, `HUB_GROWTH_INTEL_EVENT_KEY`
 - `HUB_LEAD_SECRET_CAREBASE`, `HUB_LEAD_SECRET_INTEL`, `HUB_LEAD_SECRET_ADVISORS`
-- `HUB_META_ACCESS_TOKEN`
+- `HUB_SOCIAL_CREDENTIALS_KEY` (server encryption key for the Meta and LinkedIn connection cards)
+- `HUB_META_ACCESS_TOKEN` (legacy fallback until the Meta card is first saved)
 - `HUB_LINKEDIN_ACCESS_TOKEN`, `HUB_LINKEDIN_REFRESH_TOKEN`, `HUB_LINKEDIN_CLIENT_SECRET`,
   `HUB_LINKEDIN_ADS_ACCESS_TOKEN`, `HUB_LINKEDIN_ADS_REFRESH_TOKEN`, `HUB_LINKEDIN_ADS_CLIENT_SECRET`
+  (legacy fallbacks until the LinkedIn card is first saved)
 - `HUB_SEARCH_CONSOLE_CREDENTIALS`
 - `HUB_VISITOR_METRICS_KEY` (dedicated shared key for Intel’s aggregate website session reports)
 - `HUB_HEYGEN_API_KEY` (only for HeyGen presenter videos, Settings → Creative)
@@ -107,4 +111,4 @@ Do not add a Railway variable for anything that is not a secret. Add a setting:
 3. Pass `settings.reader('<key>')` (or `() => settings.get('<key>')`) from `server/main.mjs` to the service, and read it
    with `live(value)` (`server/live.mjs`) each time it is used, so a change applies without a restart.
 
-The Settings page renders whatever the server's catalog lists, so it needs no change.
+The Settings page renders the catalog, except the account and client IDs handled together by the guided social connection cards.

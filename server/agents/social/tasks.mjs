@@ -238,8 +238,8 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     const onLinkedIn = code.startsWith('linkedin_');
     await notifier.send({ severity: 'warning', subject: `The Social Media Manager cannot reach ${onLinkedIn ? 'LinkedIn' : 'Meta'}`,
       body: onLinkedIn
-        ? `LinkedIn refused the Social Media Manager's token (${code.replaceAll('_', ' ')}). Renew the access token (or its refresh token) or its permissions and update HUB_LINKEDIN_ACCESS_TOKEN; until then LinkedIn is not read.`
-        : `Meta refused the Social Media Manager's token (${code.replaceAll('_', ' ')}). Renew the system user token or its permissions and update HUB_META_ACCESS_TOKEN; until then no comment or message is read.`,
+        ? `LinkedIn refused the Social Media Manager's token (${code.replaceAll('_', ' ')}). Renew the token or its permissions in LinkedIn, then open Settings → Social media → LinkedIn and Save and check the updated credentials; until then LinkedIn is not read.`
+        : `Meta refused the Social Media Manager's token (${code.replaceAll('_', ' ')}). Renew the system user token or its permissions in Meta, then open Settings → Social media → Meta and Save and check the updated credentials; until then no comment or message is read.`,
       dedupeKey: `social:access:${code}:${easternDate(moment)}`, agentKey: task.agentKey, taskId: task.id });
   }
 

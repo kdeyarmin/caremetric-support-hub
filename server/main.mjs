@@ -37,6 +37,7 @@ import { creativeConfig } from './agents/creative/index.mjs';
 import { creativeAdmin } from './agents/creative/admin.mjs';
 import { learningMediaImport, mediaImportFeature, mediaImportHosts } from './learning-media-import.mjs';
 import { hubSettings } from './hub-settings.mjs';
+import { socialConnections } from './social-connections.mjs';
 
 const storageUrl='https://xgauehtwksmnoqhgqegm.supabase.co';
 const pool=new pg.Pool(databaseConfig());
@@ -53,6 +54,8 @@ const features=new Set(contract.features);
 // Until the settings migration is applied, the readers return what the old Railway variables say.
 const settings=hubSettings({pool,features});
 await settings.start();
+const connections=socialConnections({pool,features,settings});
+await connections.start();
 const setting=settings.reader;
 const observer=distributionObserver({pool,token:process.env.CAREBASE_DISTRIBUTION_OBSERVER_TOKEN});
 const capabilities=delegations({pool,storageUrl,provider,observer,legacyDistributionOptIn:setting('learning.legacy_distribution_opt_in')});
@@ -91,7 +94,7 @@ const customerMail=sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,fro
 const team=agentTeam({pool,growth,growthMail,postalAddress,sms:textSender,email:mailSender,ownerEmail:setting('agents.owner_email'),publicOrigin,enabled:setting('agents.enabled'),communications:messaging,features,anthropicApiKey:process.env.ANTHROPIC_API_KEY,record:sqlAiUsageRecorder(pool).record,guides:guideLibrary({load:()=>api.rpc('list_published_content',{}),loadProducts:()=>api.rows('products')}),customerTextToAi:setting('agents.customer_text_to_ai'),
   leadSecrets:leadSecrets(process.env),
   // The social media tokens from Railway, with the page ids, ad accounts, images and ad limits from Settings → Social media.
-  social:()=>socialConfig(process.env,settings.get),
+  social:()=>socialConfig(connections.resolvedEnv(),settings.get),
   // The Creative Director: Settings → Creative, with HeyGen's key from Railway.
   creative:()=>creativeConfig(process.env,settings.get),searchConsoleSites:setting('seo.search_console_sites'),
   searchConsoleCredentials:process.env.HUB_SEARCH_CONSOLE_CREDENTIALS,
@@ -148,7 +151,7 @@ if(!importHosts) console.warn('HUB_MEDIA_IMPORT_HOSTS must list exact host names
 const mediaImport=learningMediaImport({pool,hosts:importHosts,enabled:features.has(mediaImportFeature),
   storage:{upload:(sessionToken,path,body,contentType)=>capabilities.media(sessionToken,path,'upload',body,contentType),
     download:(sessionToken,path)=>capabilities.media(sessionToken,path,'download')}});
-const setup=integrationSetup({rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken)});
+const setup=integrationSetup({rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken),env:connections.resolvedEnv});
 // Public articles as HTML for crawlers, read exactly as an anonymous visitor's app reads them, at their canonical address.
 // A product's public articles as JSON for its own website: answered only when the database declares content.public-articles.v1.
 const publicArticles=features.has(publicArticlesFeature)?publicArticleFeed({load:async product=>(await pool.query({text:'select private.public_articles($1) as articles',values:[product],query_timeout:5000})).rows[0].articles}):null;
@@ -158,7 +161,7 @@ console.info(`Public article feed: ${publicArticles?'answering':'waiting for the
 const help=helpCenter({load:()=>api.rpc('list_published_content',{}),...(publicArticles?{loadProducts:()=>api.rows('products'),elsewhere:(product,key)=>servedElsewhere(product)?articleHomeUrl(product,key):null}:{}),origin:helpCenterOrigin});
 // The Creative screen and the approved-asset addresses Meta and LinkedIn fetch (platform.agents.creative.v1).
 const creativeWeb=features.has('platform.agents.creative.v1')?{admin:creativeAdmin({pool,kick:()=>team.tick()}),publicFile:token=>team.store.creativePublicFile(token)}:null;
-const server=appServer({auth:smsAuth({pool,provider}),password:passwordAuth({pool}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,settings,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,growth,leads,leadAdmin:leadDesk,mediaImport,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help,publicArticles,creative:creativeWeb});
+const server=appServer({auth:smsAuth({pool,provider}),password:passwordAuth({pool}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,settings,socialConnections:connections,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,growth,leads,leadAdmin:leadDesk,mediaImport,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help,publicArticles,creative:creativeWeb});
 let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;
@@ -181,4 +184,4 @@ const deliverEmail=async()=>{try{await announcements.tick();}catch{console.warn(
 const emailTimer=setInterval(()=>void deliverEmail(),60*1000);emailTimer.unref();void deliverEmail();
 server.requestTimeout=130000; server.headersTimeout=15000;
 server.listen(Number(process.env.PORT || 8080),'0.0.0.0');
-for(const signal of ['SIGTERM','SIGINT']) process.on(signal,() => { settings.stop(); clearInterval(billingTimer); clearInterval(catalogTimer); clearInterval(cleanupTimer); clearInterval(courseTimer); clearInterval(aiTimer); clearInterval(agentTimer); clearInterval(emailTimer); server.close(() => { void pool.end(); }); });
+for(const signal of ['SIGTERM','SIGINT']) process.on(signal,() => { settings.stop(); connections.stop(); clearInterval(billingTimer); clearInterval(catalogTimer); clearInterval(cleanupTimer); clearInterval(courseTimer); clearInterval(aiTimer); clearInterval(agentTimer); clearInterval(emailTimer); server.close(() => { void pool.end(); }); });
