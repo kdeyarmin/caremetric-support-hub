@@ -14,7 +14,7 @@ import { transaction } from '../sms-auth.mjs';
  * work can be handed back. Against a database without those operations the calls keep their old shape
  * and the extras are ignored, so a server can be deployed before the migration is applied.
  */
-export function sqlAgentStore(pool, { fenced = false, growth = false, social = false, marketing = false, scorecard = false, creative = false } = {}) {
+export function sqlAgentStore(pool, { fenced = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false } = {}) {
   const call = (operation, args = []) => transaction(pool, async client =>
     (await client.query(`select ${operation}(${args.map((_, index) => `$${index + 1}`).join(', ')}) as result`, args)).rows[0].result);
   return {
@@ -28,6 +28,10 @@ export function sqlAgentStore(pool, { fenced = false, growth = false, social = f
       socialOpenTargets: () => call('private.social_open_targets'),
       /** Holds a proposed or approved post until its `scheduledFor`. */
       socialSchedule: (actionId, execution = null) => call('private.social_schedule', [actionId, execution]),
+    } : {}),
+    ...(socialVideo ? {
+      /** Durable upload/publish intent, fenced by the current action execution and its approved video asset. */
+      socialVideoStage: (actionId, execution, phase = 'read', providerId = null) => call('private.social_video_stage', [actionId, execution, phase, providerId]),
     } : {}),
     // The Creative Director (platform.agents.creative.v1). Briefs, assets and files are reached only through these operations.
     ...(creative ? {

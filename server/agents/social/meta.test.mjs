@@ -12,6 +12,37 @@ const route = handlers => vi.fn(async (url, init = {}) => {
 const client = (fetchImpl, over = {}) => metaClient({ token, pageId: '1111', instagramId: '2222', adAccountId: 'act_3333', fetchImpl, ...over });
 
 describe('the Meta client', () => {
+  it.each(['facebook', 'instagram'])('stages %s video, reads processing and publishes only on a separate call', async platform => {
+    const fetchImpl = route([
+      [/^GET \/v23\.0\/1111$/, { access_token: 'EAAG-page-token-abcdefghijklmnop' }],
+      [/^POST \/v23\.0\/(1111\/videos|2222\/media)$/, (url, params) => {
+        expect(params.get(platform === 'facebook' ? 'file_url' : 'video_url')).toMatch(/\/api\/creative\/a\/[f]{64}\.mp4$/);
+        if (platform === 'facebook') { expect(url.host).toBe('graph-video.facebook.com'); expect(params.get('published')).toBe('false'); }
+        else expect(params.get('media_type')).toBe('REELS');
+        return json({ id: '900' });
+      }],
+      [/^GET \/v23\.0\/900$/, { status: { video_status: 'ready' }, status_code: 'FINISHED' }],
+      [/^POST \/v23\.0\/900$/, (url, params) => { expect(params.get('published')).toBe('true'); return json({ success: true }); }],
+      [/^POST \/v23\.0\/2222\/media_publish$/, (url, params) => { expect(params.get('creation_id')).toBe('900'); return json({ id: '901' }); }],
+    ]);
+    const meta = client(fetchImpl);
+    const staged = await meta.prepareVideo({ platform, videoUrl: `https://help.caremetric.ai/api/creative/a/${'f'.repeat(64)}.mp4`, message: 'Territory planning.' });
+    expect(staged).toEqual({ id: '900' });
+    expect(fetchImpl.mock.calls.some(([url]) => String(url).includes('media_publish'))).toBe(false);
+    expect(await meta.readVideo(staged.id, { platform })).toEqual({ ready: true, failed: false });
+    expect(await meta.publishVideo({ platform, videoId: staged.id, message: 'Territory planning.' })).toEqual({ id: platform === 'facebook' ? '900' : '901' });
+  });
+
+  it('treats unfinished/failed video processing separately and never retries an uncertain publish', async () => {
+    const fetchImpl = route([[/GET/, { status_code: 'IN_PROGRESS' }], [/POST/, json({}, 200)]]);
+    const meta = client(fetchImpl);
+    expect(await meta.readVideo('900', { platform: 'instagram' })).toEqual({ ready: false, failed: false });
+    await expect(meta.publishVideo({ platform: 'instagram', videoId: '900', message: 'A post' })).rejects.toMatchObject({ code: 'meta_unconfirmed' });
+    expect(fetchImpl.mock.calls.filter(([, init]) => init.method === 'POST')).toHaveLength(1);
+    expect(await client(route([[/GET/, { status_code: 'ERROR' }]])).readVideo('900', { platform: 'instagram' })).toEqual({ ready: false, failed: true });
+    await expect(client(route([[/POST/, json({ error: { code: 2 } }, 503)]])).publishVideo({ platform: 'instagram', videoId: '900' })).rejects.toMatchObject({ code: 'meta_unconfirmed' });
+    await expect(meta.prepareVideo({ platform: 'instagram', videoUrl: 'https://example.org/random.mp4' })).rejects.toMatchObject({ code: 'meta_invalid_request' });
+  });
   it('knows what is connected, from valid ids and a token only', () => {
     expect(client(vi.fn()).configured).toEqual({ pages: true, instagram: true, ads: true });
     expect(metaClient({ token, pageId: '1111' }).configured).toEqual({ pages: true, instagram: false, ads: false });

@@ -65,6 +65,6 @@ export function socialTeam({ social = null, features = null, fetchImpl = fetch, 
       sources: () => [{ name: 'Meta', client: meta, on: meta.configured?.ads }, { name: 'LinkedIn', client: linkedin, on: linkedin.configured?.ads }].filter(source => source.on === true),
     },
     handlers: ({ store, notifier, model, customerTextToAi, publicOrigin, marketed = null, log, creative = null }) => socialHandlers({ store, notifier, model, meta, linkedin, settings, imageUrls, customerTextToAi, publicOrigin, marketed, log, creative }),
-    executors: ({ notifier, log, creative = null }) => socialExecutors({ meta, linkedin, settings, notifier, log, creative }),
+    executors: ({ notifier, log, creative = null, store = null, publicOrigin = null }) => socialExecutors({ meta, linkedin, settings, notifier, log, creative, store, publicOrigin }),
   };
 }

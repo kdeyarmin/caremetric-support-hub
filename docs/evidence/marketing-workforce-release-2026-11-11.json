@@ -1,0 +1,232 @@
+{
+  "projectId": "xgauehtwksmnoqhgqegm",
+  "sourceCommit": "ecf617e32ecf4135a35e4e6a5f3e7ef349058982",
+  "observedAt": "2026-11-11 03:19:46.901214+00",
+  "operation": "Applied six existing merged migrations in source order with Supabase apply_migration, without changing their SQL.",
+  "migrationHistory": "The tool assigned current timestamps; each resulting row was reconciled to its original source version only after exact stored SQL SHA256, name, unique-row, and target-version checks.",
+  "release": {
+    "features": [
+      "content.public-articles.v1",
+      "platform.settings.v1",
+      "platform.agents.creative.v1"
+    ],
+    "brand_kits": 2,
+    "migrations": [
+      {
+        "name": "public_articles",
+        "sha256": "623bbf50cd6edc0fef4ca6543a12732d635fb34f6cfd4e394d41fdcb77d7a4db",
+        "version": "20261109130000"
+      },
+      {
+        "name": "public_articles_contract",
+        "sha256": "52724e5fab06fb0adef8b92859f2f1bd2ed4c3ad76b0e48793d48b114f03b98d",
+        "version": "20261109130100"
+      },
+      {
+        "name": "hub_settings",
+        "sha256": "6de78ff482edc094bf2ed4e24f34dcf4037cd72a1967d7e1beff8845eb858f07",
+        "version": "20261109150000"
+      },
+      {
+        "name": "hub_settings_contract",
+        "sha256": "2e76309b60fdda198a3bf0422a24c7e4a2f63d5ae99686f0e19fdb188692bc7b",
+        "version": "20261109150100"
+      },
+      {
+        "name": "creative_director",
+        "sha256": "e2122337762c87307c809447e30452f5d203db9e4a2b85c6e08cf146b966479e",
+        "version": "20261109200000"
+      },
+      {
+        "name": "creative_director_contract",
+        "sha256": "97028322eced3e5a24862d30a1357c45990c5524392f90f7285482086333be44",
+        "version": "20261109200100"
+      }
+    ],
+    "creative_agent": {
+      "status": "paused",
+      "autonomy": "propose",
+      "daily_budget_cents": 300
+    },
+    "settings_count": 35,
+    "creative_schedules": 4,
+    "marketing_products": [
+      {
+        "product": "caremetric-intel",
+        "marketed": true
+      },
+      {
+        "product": "carebase",
+        "marketed": false
+      },
+      {
+        "product": "advisors",
+        "marketed": false
+      }
+    ],
+    "settings_with_values": 0,
+    "creative_autonomy_steps": 2
+  },
+  "boundary": {
+    "tables": [
+      {
+        "rls": true,
+        "relname": "brand_kits",
+        "policies": 0,
+        "no_direct_access": true
+      },
+      {
+        "rls": true,
+        "relname": "creative_assets",
+        "policies": 0,
+        "no_direct_access": true
+      },
+      {
+        "rls": true,
+        "relname": "creative_briefs",
+        "policies": 0,
+        "no_direct_access": true
+      },
+      {
+        "rls": true,
+        "relname": "creative_files",
+        "policies": 0,
+        "no_direct_access": true
+      },
+      {
+        "rls": true,
+        "relname": "creative_learnings",
+        "policies": 0,
+        "no_direct_access": true
+      },
+      {
+        "rls": true,
+        "relname": "hub_settings",
+        "policies": 0,
+        "no_direct_access": true
+      }
+    ],
+    "creative_assets": 0,
+    "server_operations": {
+      "count": 26,
+      "all_server_guarded": true,
+      "all_pinned_definers": true,
+      "all_closed_to_browser_and_service": true
+    },
+    "pending_creative_actions": 0
+  },
+  "securityAdvisors": [
+    {
+      "name": "rls_enabled_no_policy",
+      "level": "INFO",
+      "count": 105,
+      "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy"
+    },
+    {
+      "name": "auth_leaked_password_protection",
+      "level": "WARN",
+      "count": 1,
+      "remediation": "https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection"
+    },
+    {
+      "name": "auth_insufficient_mfa_options",
+      "level": "WARN",
+      "count": 1,
+      "remediation": "https://supabase.com/docs/guides/auth/auth-mfa"
+    }
+  ],
+  "securityInterpretation": "The six new private tables intentionally have RLS and no policies/direct grants; access is through guarded security definer functions. Auth advisories concern unrelated project-wide Auth configuration.",
+  "notChanged": [
+    "No credentials were configured.",
+    "No settings were enabled.",
+    "Creative Director remains paused in Propose.",
+    "Intel-only product marketing switches are unchanged.",
+    "No creative assets or creative actions were created.",
+    "No external marketing sends or publications were executed."
+  ],
+  "applicationChecks": {
+    "pullRequest": 167,
+    "headCommit": "ddd78e0bd8f1c94b726902baa5e8f8ee41f4c151",
+    "workflowRun": 42954570845,
+    "completedAt": "2026-11-11T03:49:48Z",
+    "runtimeImage": "success",
+    "verify": "success",
+    "database": "success",
+    "databaseIncludes": ["pgTAP contracts", "HTTP and database integrations", "data recovery drill", "private Storage recovery drill", "database advisors"],
+    "reviewThreads": 0
+  },
+  "postDeployment": {
+    "observedAt": "2026-11-11T03:52:32.619884+00:00",
+    "mergeCommit": "cfdbf773198331c567bdb70ed28c2c5502bdcc4a",
+    "railway": {
+      "deploymentId": "f98b1dd4-2510-455f-b05c-7e6acf966c80",
+      "status": "SUCCESS",
+      "updatedAt": "2026-11-11T03:52:13.310Z"
+    },
+    "features": [
+      "content.public-articles.v1",
+      "platform.settings.v1",
+      "platform.agents.creative.v1"
+    ],
+    "settings": {
+      "flags": {
+        "growth.send": true,
+        "support.chat": true,
+        "agents.enabled": true,
+        "creative.enabled": null,
+        "support.ai_automation": true,
+        "billing.intel_price_sync": null,
+        "agents.customer_text_to_ai": true,
+        "billing.customer_purchasing": true,
+        "learning.legacy_distribution_opt_in": null
+      },
+      "total": 35,
+      "imported": 11,
+      "configured": 11
+    },
+    "creativeAgent": {
+      "status": "paused",
+      "autonomy": "propose",
+      "dailyBudgetCents": 300
+    },
+    "creativeAssets": 0,
+    "marketingProducts": [
+      {
+        "product": "advisors",
+        "marketed": false
+      },
+      {
+        "product": "carebase",
+        "marketed": false
+      },
+      {
+        "product": "caremetric-intel",
+        "marketed": true
+      }
+    ],
+    "http": [
+      {
+        "path": "/api/health",
+        "status": 200,
+        "ok": true,
+        "product": null,
+        "articleCount": null,
+        "keys": [
+          "ok"
+        ]
+      },
+      {
+        "path": "/api/public/articles?product=caremetric-intel",
+        "status": 200,
+        "ok": null,
+        "product": "caremetric-intel",
+        "articleCount": 0,
+        "keys": [
+          "product",
+          "articles"
+        ]
+      }
+    ]
+  },
+  "remaining": "The existing database features and PR167 application changes are deployed. Creative stays off by its default setting and paused in Propose; the owner can turn on Settings > Creative > Turn on the Creative Director and activate it in AI team when ready. Social credentials/account setup and other new feature connections are separate work. Privileged UI paths were source-reviewed and covered by integration tests; no authenticated owner session was available for a live UI check."
+}

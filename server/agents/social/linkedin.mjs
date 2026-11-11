@@ -25,7 +25,10 @@ const api = 'https://api.linkedin.com/rest';
 const oauth = 'https://www.linkedin.com/oauth/v2/accessToken';
 const readLimit = 1_000_000;
 const imageLimit = 8_000_000;
+// The Hub's creative-file store caps assets at 60 MiB; do not buffer arbitrary provider-sized (500 MB) videos in the worker.
+const videoLimit = 60 * 1024 * 1024;
 const imageUrn = value => (typeof value === 'string' && /^urn:li:image:[A-Za-z0-9_-]{1,100}$/.test(value) ? value : null);
+export const linkedinVideo = value => (typeof value === 'string' && /^urn:li:video:[A-Za-z0-9_-]{1,100}$/.test(value) ? value : null);
 const linkedinHost = host => host === 'linkedin.com' || host.endsWith('.linkedin.com');
 const numeric = value => (typeof value === 'string' && /^\d{1,30}$/.test(value) ? value : null);
 const postUrn = /^urn:li:(?:share|ugcPost):\d{1,30}$/;
@@ -83,7 +86,11 @@ export function linkedinClient({
   const configured = { page: usable(pageAuth) && Boolean(org), ads: usable(adsAuth) && Boolean(account) };
 
   async function readBytes(response, limit) {
-    if (!response.body?.getReader) return Buffer.from(await response.arrayBuffer());
+    if (!response.body?.getReader) {
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (bytes.length > limit) throw failure('linkedin_response_too_large');
+      return bytes;
+    }
     const reader = response.body.getReader();
     const chunks = [];
     let bytes = 0;
@@ -133,7 +140,7 @@ export function linkedinClient({
         signal: timeout(signal),
       });
     } catch (error) {
-      if (signal?.aborted) throw error;
+      if (signal?.aborted && method === 'GET') throw error;
       throw failure(method === 'GET' ? 'linkedin_unavailable' : 'linkedin_unconfirmed', method === 'GET');
     }
     if (response.status === 401 && !retried && auth.refresh) {
@@ -142,7 +149,10 @@ export function linkedinClient({
       if (await renew(auth, signal)) return call(method, path, { query, body, headers, signal, retried: true, auth });
       throw failure('linkedin_token_invalid');
     }
-    const text = await bounded(response);
+    let text;
+    try { text = await bounded(response); }
+    catch (error) { if (method !== 'GET') throw failure('linkedin_unconfirmed'); throw error; }
+    if (method !== 'GET' && response.status >= 500) throw failure('linkedin_unconfirmed');
     if (!response.ok) throw codeFor(response.status);
     let data = {};
     try { data = text ? JSON.parse(text) : {}; } catch { data = {}; }
@@ -180,6 +190,83 @@ export function linkedinClient({
     }
   }
 
+  /**
+   * The Videos API's multipart upload, using the exact byte ranges LinkedIn returns. It prepares a private media asset only; the
+   * caller persists the returned URN and polls readVideo before a separate approved publish. Captions are already burned into Hub
+   * creative. See https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/videos-api?view=li-lms-2026-09.
+   */
+  async function prepareVideo({ videoUrl }, { signal } = {}) {
+    needPage();
+    let source;
+    try { source = new URL(videoUrl); } catch { throw failure('linkedin_invalid_video'); }
+    if (source.protocol !== 'https:' || source.username || source.password || source.port || source.hash || source.search
+      || !/^\/api\/creative\/a\/[0-9a-f]{64}\.mp4$/.test(source.pathname)) throw failure('linkedin_invalid_video');
+    let response;
+    try { response = await fetchImpl(source.toString(), { redirect: 'error', signal: timeout(signal) }); }
+    catch (error) { if (signal?.aborted) throw error; throw failure('linkedin_video_unavailable', true); }
+    const type = String(response.headers?.get?.('content-type') ?? '').split(';')[0].trim().toLowerCase();
+    const length = Number(response.headers?.get?.('content-length'));
+    if (!response.ok || type !== 'video/mp4' || length > videoLimit) {
+      await response.body?.cancel?.().catch(() => {});
+      throw failure('linkedin_invalid_video');
+    }
+    const bytes = await readBytes(response, videoLimit);
+    if (bytes.length < 75_000 || bytes.toString('ascii', 4, 8) !== 'ftyp') throw failure('linkedin_invalid_video');
+    const started = await call('POST', 'videos', { query: 'action=initializeUpload', signal,
+      body: { initializeUploadRequest: { owner: org, fileSizeBytes: bytes.length, uploadCaptions: false, uploadThumbnail: false } } });
+    const { video, uploadToken, uploadInstructions } = started.data?.value ?? {};
+    if (!linkedinVideo(video) || typeof uploadToken !== 'string' || uploadToken.length > 10_000
+      || !Array.isArray(uploadInstructions) || !uploadInstructions.length || uploadInstructions.length > 64) throw failure('linkedin_unconfirmed');
+    // Validate every destination and range before sending any bytes or credential. Parts must cover the entire file exactly once.
+    let nextByte = 0;
+    const parts = uploadInstructions.map(part => {
+      let target;
+      try { target = new URL(part.uploadUrl); } catch { throw failure('linkedin_invalid_upload'); }
+      if (target.protocol !== 'https:' || target.username || target.password || target.port || target.hash || !linkedinHost(target.hostname)
+        || !Number.isSafeInteger(part.firstByte) || !Number.isSafeInteger(part.lastByte) || part.firstByte !== nextByte
+        || part.lastByte < part.firstByte || part.lastByte >= bytes.length) throw failure('linkedin_invalid_upload');
+      nextByte = part.lastByte + 1;
+      return { url: target.toString(), first: part.firstByte, end: nextByte };
+    });
+    if (nextByte !== bytes.length) throw failure('linkedin_invalid_upload');
+    const uploadedPartIds = [];
+    for (const part of parts) {
+      signal?.throwIfAborted();
+      let put;
+      try { put = await fetchImpl(part.url, { method: 'PUT', redirect: 'error', headers: { Authorization: `Bearer ${pageAuth.current}`, 'Content-Type': 'application/octet-stream' }, body: bytes.subarray(part.first, part.end), signal: timeout(signal) }); }
+      catch { throw failure('linkedin_unconfirmed'); }
+      await put.body?.cancel?.().catch(() => {});
+      if (!put.ok) throw codeFor(put.status);
+      const etag = put.headers?.get?.('etag')?.replace(/^"(.*)"$/, '$1');
+      if (typeof etag !== 'string' || !etag.length || etag.length > 10_000 || /[\u0000-\u001f\u007f]/.test(etag)) throw failure('linkedin_unconfirmed');
+      uploadedPartIds.push(etag);
+    }
+    await call('POST', 'videos', { query: 'action=finalizeUpload', signal, body: { finalizeUploadRequest: { video, uploadToken, uploadedPartIds } } });
+    return { id: video };
+  }
+
+  async function readVideo(id, { signal } = {}) {
+    needPage();
+    if (!linkedinVideo(id)) throw failure('linkedin_invalid_video');
+    const data = await get(`videos/${enc(id)}`, '', { signal });
+    if ((data.id && data.id !== id) || (data.owner && data.owner !== org)) throw failure('linkedin_invalid_video');
+    return { ready: data.status === 'AVAILABLE', failed: data.status === 'PROCESSING_FAILED' };
+  }
+
+  async function publishVideo({ videoId, message }, { signal } = {}) {
+    needPage();
+    if (!linkedinVideo(videoId)) throw failure('linkedin_invalid_video');
+    // The durable executor waits for readVideo().ready, then records publishing intent before this one write. Do not introduce a
+    // second status read after that checkpoint: a failed read would leave a known-unsent post looking uncertain.
+    const result = await call('POST', 'posts', { signal, body: {
+      author: org, commentary: littleText(message), visibility: 'PUBLIC',
+      distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] },
+      lifecycleState: 'PUBLISHED', isReshareDisabledByAuthor: false, content: { media: { id: videoId } },
+    } });
+    if (!linkedinPost(result.id)) throw failure('linkedin_unconfirmed');
+    return { id: result.id };
+  }
+
   async function pagePosts(signal) {
     const data = await get('posts', `author=${enc(org)}&q=author&count=20&sortBy=LAST_MODIFIED`, { signal });
     return elements(data).filter(item => linkedinPost(item.id) && (item.lifecycleState ?? 'PUBLISHED') === 'PUBLISHED' && !item.adContext);
@@ -195,6 +282,7 @@ export function linkedinClient({
   return {
     configured,
     ids: { organization, account },
+    prepareVideo, readVideo, publishVideo,
 
     async recentPosts({ signal } = {}) {
       if (!configured.page) return [];

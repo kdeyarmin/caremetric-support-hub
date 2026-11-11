@@ -7,7 +7,8 @@
  * - its own counts (private.agent_scorecard_facts) for the week and the week before: county reports, trial sign-ups, first activations,
  *   outbound email outcomes, replies and the AI spend on agent runs;
  * - the morning brief's facts: proposals waiting for approval and products that are down;
- * - the Account Manager's billing snapshot: MRR with the Billing screen's maths, new paying customers and the accounts that need attention;
+ * - the Account Manager's billing snapshot: MRR with the Billing screen's maths and the accounts that need attention;
+ * - verified trial starts and positive paid billing events, when the app-growth capability and prospective coverage are available;
  * - the Sales Executive's pipeline (the growth snapshot): deals that need the owner;
  * - the Social Media Manager's ad accounts, when one is connected: ad spend and ads losing money;
  * - the SEO Analyst's crawl of the websites (urgent problems) and Search Console, when it is connected (organic clicks).
@@ -47,8 +48,9 @@ const shift = (date, days) => { const [year, month, day] = date.split('-').map(N
  * Registered only when the database declares platform.agents.scorecard.v1 (and the store has its read), so a Hub whose database lacks the
  * migration still starts and the schedule stays due. `growth` is the customer growth service (its pipeline snapshot), `ads` the Social
  * Media Manager's ad accounts (`{ sources: () => [{ name, client }], settings }`, or null), `searchConsole` replaces the reader in tests,
- * and `visitors` is a connected analytics source (`async ({ since, until, signal }) => { products: { [key]: { visitors, previous } } }`);
- * there is none today, so the email says "Not connected".
+ * and `visitors` is an analytics reader (`async ({ before, since, until, signal }) => { state, products }`). It receives the same
+ * Eastern boundaries as the Hub's own figures, including the prior week's boundary across daylight-saving changes. Missing
+ * configuration and failed reads remain distinct; an unread source never becomes a zero visitor count.
  */
 export function scorecardHandlers({
   store, notifier, publicOrigin = null, features = null, growth = null, ads = null, searchConsole = undefined, searchConsoleSites = undefined, env = process.env, fetchImpl = fetch,
@@ -142,7 +144,7 @@ export function scorecardHandlers({
       ads?.sources?.().length ? optional('ads', () => readAds({ moment, until }, signal), signal).then(value => value ?? { unavailable: true }) : null,
       optional('search_console', () => readSearch(moment, signal), signal),
       optional('websites', () => siteProblems(signal), signal),
-      visitors ? optional('visitors', () => visitors({ since, until, signal }), signal) : null,
+      visitors ? optional('visitors', () => visitors({ before, since, until, signal }), signal).then(value => value ?? { state: 'unavailable' }) : null,
     ]);
     // The scheduler may have stopped waiting while the figures were read: the scorecard is not sent after that.
     if (signal?.aborted) throw stopped();
@@ -151,12 +153,13 @@ export function scorecardHandlers({
     const review = pipeline ? composeReview({ items: pipeline, now: moment, publicOrigin }).result : null;
     const notes = [
       brief ? null : 'The approvals waiting and products down could not be read this morning.',
-      snapshot ? null : 'Billing could not be read this morning, so MRR, new paying customers and accounts needing attention are missing.',
+      snapshot ? null : 'Billing could not be read this morning, so MRR and accounts needing attention are missing.',
       growth?.store?.snapshot && !pipeline ? 'The pipeline could not be read this morning, so deals waiting on you are missing.' : null,
       urgent === null ? 'The websites could not be checked this morning.' : null,
     ].filter(Boolean);
     const card = composeScorecard({
-      week, facts: { current, previous }, billing: billingFigures(snapshot, { now: moment, until }), search, ads: adFigures, visitors: seen, publicOrigin, notes,
+      week, facts: { current, previous }, billing: billingFigures(snapshot, { now: moment }), search, ads: adFigures, visitors: seen, publicOrigin, notes,
+      verifiedLifecycle: features instanceof Set ? features.has('platform.agents.app-growth.v1') : Array.isArray(features) && features.includes('platform.agents.app-growth.v1'),
       needs: {
         incidents: Array.isArray(brief?.incidents) ? brief.incidents.length : 0, approvals: brief?.approvals ?? null,
         accounts: accounts?.needsYou ?? null, stuckDeals: review?.needsYou ?? null, failingAds: adFigures?.failing ?? null, siteProblems: urgent,

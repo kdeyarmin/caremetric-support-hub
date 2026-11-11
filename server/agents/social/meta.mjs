@@ -1,7 +1,7 @@
 /**
  * The Social Media Manager's only path to Meta: the Graph API for CareMetric's Facebook Page, its Instagram professional account and
  * its ad account. Server-only. The token (a system user token from the owner's Meta Business account, HUB_META_ACCESS_TOKEN) is sent
- * only to graph.facebook.com and never logged, stored or put in an error. Every read is bounded (15 seconds, 1 MB) and every call is
+ * only to graph.facebook.com or graph-video.facebook.com and never logged, stored or put in an error. Every read is bounded (15 seconds, 1 MB) and every call is
  * one HTTPS request to a fixed host; nothing a comment, a message or a model says can choose a host or a path.
  *
  * Comments and messages are read when they are handled and returned to the caller only: this module keeps nothing.
@@ -34,14 +34,15 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
   const configured = { pages: hasToken && Boolean(page), instagram: hasToken && Boolean(page) && Boolean(instagram), ads: hasToken && Boolean(account) };
   let pageToken = null;
 
-  async function request(method, path, params = {}, { as = 'system', signal } = {}) {
+  async function request(method, path, params = {}, { as = 'system', signal, videoUpload = false } = {}) {
     if (!hasToken) throw failure('meta_not_configured');
     if (!/^[A-Za-z0-9_/]+$/.test(path)) throw failure('meta_invalid_request');
     const credential = as === 'page' ? await tokenForPage(signal) : token;
     const values = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== null) values.set(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
     values.set('access_token', credential);
-    const url = method === 'GET' ? `${host}/${graph}/${path}?${values}` : `${host}/${graph}/${path}`;
+    const destination = videoUpload ? 'https://graph-video.facebook.com' : host;
+    const url = method === 'GET' ? `${destination}/${graph}/${path}?${values}` : `${destination}/${graph}/${path}`;
     let response;
     try {
       response = await fetchImpl(url, {
@@ -90,6 +91,13 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
   const post = (path, params, options) => request('POST', path, params, options);
   const list = data => (Array.isArray(data?.data) ? data.data : []);
   const at = value => { const time = Date.parse(value ?? ''); return Number.isFinite(time) ? new Date(time).toISOString() : null; };
+  // A video mutation can have reached Meta even if its response is unreadable or a server error. Never retry such a mutation.
+  const mutateVideo = async work => {
+    try { return await work(); } catch (error) {
+      if (error?.transient || ['meta_error', 'meta_response_too_large'].includes(error?.code) || !error?.code) throw failure('meta_unconfirmed');
+      throw error;
+    }
+  };
 
   return {
     configured,
@@ -175,6 +183,44 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
         return { id: String((await post(`${instagram}/media_publish`, { creation_id: created.id }, { signal })).id ?? '') };
       }
       throw failure('meta_invalid_request');
+    },
+
+    /** Stage an unpublished Page video or Instagram Reel container. Its id is persisted before any later processing check. */
+    async prepareVideo({ platform, videoUrl, message }, { signal } = {}) {
+      let url;
+      try { url = new URL(videoUrl); } catch { throw failure('meta_invalid_request'); }
+      if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || !/^\/api\/creative\/a\/[0-9a-f]{64}\.mp4$/.test(url.pathname)) throw failure('meta_invalid_request');
+      let created;
+      if (platform === 'facebook' && configured.pages) created = await mutateVideo(() => post(`${page}/videos`, { file_url: videoUrl, published: false, description: message }, { as: 'page', signal, videoUpload: true }));
+      else if (platform === 'instagram' && configured.instagram) created = await mutateVideo(() => post(`${instagram}/media`, { media_type: 'REELS', video_url: videoUrl, caption: message, share_to_feed: true }, { signal }));
+      else throw failure('meta_not_configured');
+      if (!metaId(created.id)) throw failure('meta_unconfirmed');
+      return { id: created.id };
+    },
+
+    async readVideo(id, { platform, signal } = {}) {
+      if (!metaId(id)) throw failure('meta_invalid_request');
+      if (platform === 'instagram') {
+        const state = (await get(id, { fields: 'status_code' }, { signal })).status_code;
+        return { ready: state === 'FINISHED', failed: ['ERROR', 'EXPIRED'].includes(state) };
+      }
+      if (platform !== 'facebook') throw failure('meta_invalid_request');
+      const state = (await get(id, { fields: 'status' }, { as: 'page', signal })).status?.video_status;
+      return { ready: state === 'ready', failed: ['error', 'expired', 'upload_failed'].includes(state) };
+    },
+
+    /** Called once only after a ready state and a durable publishing intent. */
+    async publishVideo({ platform, videoId, message }, { signal } = {}) {
+      if (!metaId(videoId)) throw failure('meta_invalid_request');
+      if (platform === 'instagram') {
+        const published = await mutateVideo(() => post(`${instagram}/media_publish`, { creation_id: videoId }, { signal }));
+        if (!metaId(published.id)) throw failure('meta_unconfirmed');
+        return { id: published.id };
+      }
+      if (platform !== 'facebook') throw failure('meta_invalid_request');
+      const published = await mutateVideo(() => post(videoId, { published: true, description: message }, { as: 'page', signal }));
+      if (published.success !== true && published.id !== videoId) throw failure('meta_unconfirmed');
+      return { id: videoId };
     },
 
     async reply({ platform, kind, id, recipient = null, message }, { signal } = {}) {

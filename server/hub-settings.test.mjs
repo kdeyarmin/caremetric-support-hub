@@ -93,6 +93,15 @@ describe('settings in the database', () => {
     return { settings, call, session, queries, state, log };
   }
 
+  it('defaults read-only Intel metrics on while respecting an explicit saved off setting', async () => {
+    const { settings, state } = harness();
+    await settings.refresh();
+    expect(settings.get('analytics.intel_visitors')).toBe(true);
+    state.values['analytics.intel_visitors'] = false;
+    await settings.refresh();
+    expect(settings.get('analytics.intel_visitors')).toBe(false);
+  });
+
   it('copies the usable Railway values in once, then answers from the database', async () => {
     const { settings, call, log } = harness({ env: { HUB_CHAT_ENABLED: 'true', HUB_OWNER_EMAIL: 'not an address', HUB_AI_DRAFT_TIER: 'quality', HUB_BULK_EMAIL_FROM: 'x@y.test' }, values: { 'support.ai_draft_tier': 'draft' } });
     await settings.start();

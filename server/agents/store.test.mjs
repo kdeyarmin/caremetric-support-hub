@@ -9,6 +9,19 @@ const harness = (result = null) => {
 const when = new Date('2026-11-02T13:00:00Z');
 
 describe('agent store', () => {
+  it('exposes durable video stages only when the database declares video publication', async () => {
+    expect(harness().store.socialVideoStage).toBeUndefined();
+    const calls = [];
+    const pool = { connect: async () => ({ query: async (sql, args) => { if (/^select/.test(sql)) { calls.push([sql, args]); return { rows: [{ result: { phase: 'processing' } }] }; } return { rows: [] }; }, release() {} }) };
+    const store = sqlAgentStore(pool, { socialVideo: true });
+    expect(await store.socialVideoStage('a1', 2)).toEqual({ phase: 'processing' });
+    await store.socialVideoStage('a1', 2, 'processing', 'provider-video');
+    expect(calls).toEqual([
+      ['select private.social_video_stage($1, $2, $3, $4) as result', ['a1', 2, 'read', null]],
+      ['select private.social_video_stage($1, $2, $3, $4) as result', ['a1', 2, 'processing', 'provider-video']],
+    ]);
+  });
+
   it('reads the Monday scorecard\'s setting and figures only when the database declares the scorecard', async () => {
     expect(harness().store.individualReports).toBeUndefined();
     expect(harness().store.scorecardFacts).toBeUndefined();

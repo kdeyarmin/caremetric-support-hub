@@ -185,6 +185,11 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           if(owner) throw new HttpError(403,privateHubMessage);
           return json(await selfService.issue(req.headers.authorization,await jsonBody(req,262144)));
         }
+        if(path==='/api/apps/growth') {
+          if(req.method!=='POST' || req.headers.origin || req.headers.cookie || url.search) throw new HttpError(403,'Forbidden.');
+          if(!growth?.appActivity) throw new HttpError(503,'Growth is unavailable.');
+          return json(await growth.appActivity(req.headers.authorization,await jsonBody(req,8192)));
+        }
         const appBilling=/^\/api\/apps\/(entitlements|facility-entitlements|usage|trials|portal|billing)$/.exec(path);
         if(appBilling) {
           if(req.method!=='POST' || req.headers.origin || req.headers.cookie || url.search) throw new HttpError(403,'Forbidden.');

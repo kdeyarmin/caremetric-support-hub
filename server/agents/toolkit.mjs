@@ -16,7 +16,7 @@ const schemaStep = name => `Release the ${name} database feature through the nor
 
 export function marketingToolkit({ features = null, growth = null, growthMail = null, model = null, customerTextToAi = false,
   communications = null, email = null, leadSecrets = {}, lifecycle = {}, social = null, socialWork = null, creativeWork = null,
-  searchConsoleCredentials = '', searchConsoleSites = [], marketed = defaultMarketed } = {}) {
+  searchConsoleCredentials = '', searchConsoleSites = [], visitorMetrics = null, marketed = defaultMarketed } = {}) {
   const tools = [];
   const add = (key, label, agents, detail, checks, settingsPath = '/admin/settings') => {
     const missing = checks.filter(([ok]) => !ok).map(([, action]) => action);
@@ -78,8 +78,12 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
       ], '/admin');
     if (product === 'advisors') continue;
     add(`product_events_${source[product]}`, `${labels[product]} trial and purchase tracking`, ['marketing_manager', 'sales_executive', 'account_manager'],
-      'Receives signed trial, activation and payment events for conversion and retention measurement. Verify real events in Customer growth; signing setup does not confirm native-app delivery.', [
-        growthFeature, [growthState.events?.[product] === true, `Set HUB_GROWTH_${keyNames[product]}_EVENT_KEY and connect signed activity events from the product.`],
+      product === 'caremetric-intel' && growthState.appEvents === true
+        ? 'Accepts activity through Intel’s existing authenticated billing connection. Verify real trial, first-value and paid events in Customer growth; an available endpoint does not confirm the native producer is delivering.'
+        : 'Receives signed trial, activation and payment events for conversion and retention measurement. Verify real events in Customer growth; signing setup does not confirm native-app delivery.', [
+        growthFeature, [growthState.events?.[product] === true || (product === 'caremetric-intel' && growthState.appEvents === true), product === 'caremetric-intel'
+          ? 'Release Intel’s authenticated activity endpoint and connect its existing billing client, or configure HUB_GROWTH_INTEL_EVENT_KEY for the legacy signed feed.'
+          : `Set HUB_GROWTH_${keyNames[product]}_EVENT_KEY and connect signed activity events from the product.`],
       ], '/admin/growth');
   }
   for (const [key, label, configured, setup] of [
@@ -92,6 +96,12 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
   add('social_images', 'Fallback images for social publishing', ['social_manager', 'creative_director'],
     'Optional when approved images are available on Creative. Instagram requires either an approved Creative image or a fallback image to publish.', [
       socialFeature, [(socialSettings.imageUrls?.length ?? 0) > 0, 'Add fallback images in Settings → Social media → Approved brand images if you are not supplying approved images through Creative.'],
+    ], '/admin/creative');
+  add('social_video', 'Approved video publishing', ['social_manager', 'creative_director'],
+    'Publishes approved Creative videos to connected Facebook and LinkedIn Pages, or vertical Instagram Reels. Upload and processing progress is saved across worker restarts. Provider permissions and action approvals still apply; paid video ads and YouTube are handled manually.', [
+      socialFeature, [has(features, 'platform.agents.social-video.v1'), schemaStep('video publishing')],
+      [has(features, 'platform.agents.creative.v1'), schemaStep('Creative Director')],
+      [meta.pages === true || meta.instagram === true || linkedin.page === true, 'Connect at least one Facebook, Instagram or LinkedIn Page and its publishing credentials in Settings → Social media.'],
     ], '/admin/creative');
   add('ad_optimization', 'Ad results and creative testing', ['social_manager', 'creative_director'],
     'Reviews existing Meta ad sets and LinkedIn campaigns, pauses losers and can reuse approved creative within their budgets. Fresh ad copy needs the AI model. Set Target cost per lead or sign-up in Settings → Social media for cost-based evaluation; without it, ads are compared with each other. Initial campaigns, audiences and conversion tracking are set up in the ad platform.', [
@@ -112,13 +122,17 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
     ]);
   const creative = creativeWork?.config?.() ?? {};
   add('creative_production', 'Ad image and video production', ['creative_director'],
-    `Produces branded assets for review. Videos use ${creative.videoProvider === 'heygen' ? 'HeyGen where a brand kit has an avatar and voice, otherwise the Hub renderer' : 'the Hub renderer'}. Approved static images can feed social posts and ads; generated videos require manual publishing.`, [
+    `Produces branded assets for review. Videos use ${creative.videoProvider === 'heygen' ? 'HeyGen where a brand kit has an avatar and voice, otherwise the Hub renderer' : 'the Hub renderer'}. Approved images can feed social posts and ads; approved videos can feed connected social channels once video publishing is configured.`, [
       [creativeWork?.declared === true, schemaStep('Creative Director')],
       [creativeWork?.enabled?.() === true, 'Turn on Settings → Creative → Turn on the Creative Director.'],
       [creative.dailyRenderCap > 0, 'Set Settings → Creative → Most renders a day above zero.'], [ai, modelStep],
     ], '/admin/creative');
-  tools.push({ key: 'visitor_conversion_analytics', label: 'Website visitor conversion analytics', agents: ['marketing_manager', 'chief_of_staff'],
-    configured: false, supported: false, missing: ['Implement and connect a website analytics reader before measuring visitor-to-trial conversion.'],
-    detail: 'The Hub has no website analytics provider reader wired to the team. A credential alone cannot enable this. Search clicks, ad-platform results and reported product events are separate measurements; website visitors and visitor conversion rates remain unavailable.' });
+  const visitors = visitorMetrics?.readiness?.() ?? {};
+  add('visitor_conversion_analytics', 'Intel website session measurement', ['marketing_manager', 'chief_of_staff'],
+    'Reads aggregate anonymous public-site browser-tab sessions from Intel for the Monday scorecard. A tab keeps its session across reloads; these are not unique people or standard 30-minute analytics sessions. Collection begins after native setup; weeks without full coverage remain unavailable. CareBase measurement and matched visitor-to-trial attribution are not included.', [
+      [visitors.declared === true, schemaStep('website session measurement')],
+      [visitors.enabled === true, 'Turn on Settings → Website analytics → Read Intel website sessions.'],
+      [visitors.signing === true, 'Set the same HUB_VISITOR_METRICS_KEY (at least 32 characters) on the Hub and Intel services, and release Intel’s measurement endpoint.'],
+    ]);
   return tools;
 }

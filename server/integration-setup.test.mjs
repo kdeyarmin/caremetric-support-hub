@@ -95,7 +95,7 @@ describe('integration setup report', () => {
     const key = JSON.stringify({ type: 'service_account', client_email: 'seo@project.iam.gserviceaccount.com', private_key: 'fixture-key-search-console-secret' });
     const report = await harness('platform_admin', { ...env, HUB_SEARCH_CONSOLE_CREDENTIALS: key, HUB_SEARCH_CONSOLE_SITES: 'sc-domain:cmcarebase.com' }).handle('token');
     const searchConsole = report.integrations.find((integration) => integration.id === 'search-console');
-    expect(searchConsole).toMatchObject({ ready: true, complete: true, docs: 'docs/AI_TEAM.md' });
+    expect(searchConsole).toMatchObject({ ready: true, complete: true, docs: 'docs/GOOGLE_SEARCH_CONSOLE_SETUP.md' });
     expect(searchConsole.variables.map((variable) => [variable.name, variable.secret, variable.set])).toEqual([['HUB_SEARCH_CONSOLE_CREDENTIALS', true, true]]);
     expect(searchConsole.variables[0]).not.toHaveProperty('value');
     expect(JSON.stringify(report)).not.toContain('search-console-secret');

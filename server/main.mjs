@@ -32,6 +32,7 @@ import { growthResearch } from './growth/research.mjs';
 import { growthContactFinder } from './growth/contacts.mjs';
 import { growthSender } from './growth/sender.mjs';
 import { socialConfig } from './agents/social/index.mjs';
+import { nativeVisitorReader } from './agents/scorecard/visitors.mjs';
 import { creativeConfig } from './agents/creative/index.mjs';
 import { creativeAdmin } from './agents/creative/admin.mjs';
 import { learningMediaImport, mediaImportFeature, mediaImportHosts } from './learning-media-import.mjs';
@@ -94,6 +95,7 @@ const team=agentTeam({pool,growth,growthMail,postalAddress,sms:textSender,email:
   // The Creative Director: Settings → Creative, with HeyGen's key from Railway.
   creative:()=>creativeConfig(process.env,settings.get),searchConsoleSites:setting('seo.search_console_sites'),
   searchConsoleCredentials:process.env.HUB_SEARCH_CONSOLE_CREDENTIALS,
+  visitorMetrics:nativeVisitorReader({features,enabled:setting('analytics.intel_visitors'),key:process.env.HUB_VISITOR_METRICS_KEY}),
   lifecycle:{mail:customerMail,get postalAddress(){return postalAddress().trim();}},
   // Offers from the owner's menu: platform billing (created below) makes them, so the call is deferred until an offer is approved.
   offerBilling:{agentOffer:input=>billing.agentOffer(input)}});

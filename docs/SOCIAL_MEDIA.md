@@ -23,10 +23,41 @@ comment asking about another product is left for the owner, and a losing ad for 
 | Daily ad review (`social.ads`) | Each morning at 09:10 Eastern | Judges every Meta ad and LinkedIn creative on the last seven days against the seven before, with the rules below. It proposes pausing losers and new copy where an ad set needs it, plus a budget increase only under the owner's cap. |
 | Weekly social report (`social.report`) | Each morning at 08:05 Eastern; sends once a week | Shows posts and engagement per platform, the top posts, and ad spend, impressions, click rate, results and cost per result per ad set. It also counts what is waiting for the owner. While the [Monday scorecard](MONDAY_SCORECARD.md) carries it ("Send the individual weekly reports" off), its scheduled run sends nothing; Run now still emails it. |
 
-Instagram posts need an image. They use the images listed in Settings → Social media → "Approved brand images" in turn; with none,
-the plan leaves Instagram out.
-LinkedIn posts use the same images, as the thumbnail of their link card: LinkedIn builds no preview for a post made through its API, so
-the image is uploaded with the post. New ad copy reuses the image of the ad set's (or LinkedIn campaign's) best ad.
+Instagram posts need an approved image or an approved vertical video. Images come first from the Creative Director, then from
+Settings → Social media → "Approved brand images"; with neither compatible images nor videos, the plan leaves Instagram out.
+LinkedIn image posts use the same fallback images as the thumbnail of their link card: LinkedIn builds no preview for a post made
+through its API, so the image is uploaded with the post. New ad copy reuses approved creative images or the image of the ad set's
+(or LinkedIn campaign's) best ad.
+
+## Approved video posts
+
+The weekly plan selects approved MP4 creative for the same product and platform when video publication is installed. Facebook accepts
+the Creative Director's square, portrait and vertical Meta video placements; Instagram uses only vertical video as a Reel; LinkedIn
+accepts its square, portrait and vertical placements. Each video appears in the post approval preview. Facebook and LinkedIn captions
+include the checked product link; Instagram captions retain the existing no-link rule. Paid video ads and YouTube uploads remain manual.
+
+Apply `20261111031736_social_video_publication.sql` and `20261111031738_social_video_publication_contract.sql`, then restart the Hub.
+Without that feature, the existing image and link posts continue. A public HTTPS Hub origin is required: publishers accept only the
+Hub's own approved creative URL, and the database checks that the selected asset is still approved or live before each stage.
+No arbitrary video URL can be uploaded by a post action. LinkedIn uploads are limited to 60 MiB; the Creative Director also checks
+the asset's platform limits before approval.
+
+Facebook uploads the video unpublished, checks its processing status, then publishes it. Instagram creates a Reels container, waits
+for `FINISHED`, then publishes that container. LinkedIn initializes and finalizes an upload, waits for `AVAILABLE`, then creates the
+Page post. The worker persists the provider ID and stage, checks again on later runs while processing, and gives up after one hour.
+The same post approval and schedule cover the whole sequence. Nothing changes the owner's existing approval or budget controls.
+
+If a write may have succeeded but the platform did not confirm it, or the worker stopped before recording confirmation, the action
+stops as `social_unconfirmed`. Inspect the Page and the provider's uploaded videos first. The saved upload/publication intent prevents
+an automatic repeat, including after a worker restart. Confirmed processing failure or timeout needs a fresh reviewed proposal.
+
+Video uses the existing Meta `pages_manage_posts` / `instagram_content_publish` permissions and LinkedIn's `w_organization_social`
+permission with approved Community Management API access. These permissions and the account's app review must be granted by the
+platform; connecting a token does not grant them. The implementation follows Meta's
+[Instagram publishing collection](https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api), Facebook's
+[Video API fields](https://github.com/facebook/facebook-python-business-sdk/blob/main/facebook_business/adobjects/advideo.py), and
+LinkedIn's [Videos API](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/videos-api?view=li-lms-2026-09)
+and [Posts API](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09).
 
 ## How it judges ads
 
@@ -89,8 +120,8 @@ A draft that fails is dropped. The run records only the check's name.
 - LinkedIn has no "hide" for a comment, only delete, which cannot be undone. A LinkedIn deletion therefore always waits for the owner's
   own approval: once replies are handed over, a LinkedIn comment that should go is left for the owner instead, and the executor refuses
   an automatically approved deletion.
-- The Meta token goes only to graph.facebook.com; the LinkedIn tokens go only to api.linkedin.com, to www.linkedin.com to renew them,
-  and to the image upload address LinkedIn returns on a linkedin.com host. No token is ever shown or logged. Brand images are fetched
+- The Meta token goes only to graph.facebook.com or graph-video.facebook.com; the LinkedIn tokens go only to api.linkedin.com, to www.linkedin.com to renew them,
+  and to the upload address LinkedIn returns on an allowed LinkedIn host. No token is ever shown or logged. Brand images and source videos are fetched
   without any credential.
 
 ## Setting it up
@@ -163,11 +194,12 @@ LinkedIn decides who may use its Page and advertising APIs. Approval is a review
 ## Verification
 
 - `npm test -- server/agents/social` runs the unit tests. They cover the Meta client against a fake Graph API, the LinkedIn client
-  against a fake REST API (headers, escaping, token renewal, image upload, ads), the ad rules, the checks and prompts, every task and
-  every executor on both platforms.
+  against a fake REST API (headers, escaping, token renewal, image/video upload, ads), the ad rules, the checks and prompts, every task and
+  every executor on both platforms, plus persisted video processing, restarts and uncertain-send handling.
 - `node server/agents-social-integration.mjs` (with `HUB_TEST_DATABASE_URL` on a local Supabase) checks the database rules through the
-  real server role: post holds, open targets, the budget refusal and agent ownership.
+  real server role: post holds, open targets, the budget refusal, agent ownership and fenced video stages, including asset retirement.
 - `supabase/tests/073_social_manager.test.sql` checks the seed, the schedules, the hand-over steps and the boundaries.
+- `supabase/tests/079_social_video.test.sql` checks the video feature and its database privileges.
 
 None of this was run against a live Meta or LinkedIn account. Connect a Page first and watch the first week in Propose before handing
 anything over.

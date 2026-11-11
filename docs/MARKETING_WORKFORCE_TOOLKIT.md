@@ -20,7 +20,7 @@ permissions, delivery, or results.
 | Social Media Manager | Facebook, Instagram, LinkedIn, comments, post scheduling, ad review and creative refresh | Paused; its four schedules have never run. Meta and LinkedIn credentials are absent. | Connect the chosen accounts and permissions, then resume in Propose and review the first plan. |
 | Creative Director | Brand assets, ad images, internal short-video rendering, optional HeyGen | Source is built; the production migration and agent registration are absent. | Release the existing Creative Director migrations, enable it in Settings → Creative, and resume the agent. Start with internal rendering. |
 | Growth Manager | Website lead alerts and follow-up reminders | Active; recurring tasks are running. | Verify each marketed product's lead path and response time. |
-| Account Manager | Trial activation, customer-success work, retention and approved offers | Active. No native product activity events have been received. | Connect Intel's signed trial, first-value, paid, and retention events so work can be timed to customer behavior. |
+| Account Manager | Trial activation, customer-success work, retention and approved offers | Active. No native product activity events have been received. | Release the canonical Intel activity feed and Hub billing lifecycle relay; verify first-value, trial, and payment receipts. |
 | Chief of Staff | Daily brief, Monday scorecard, approval coordination | Active. Billing is read; ad, Search Console, and visitor sources are missing. | Connect available measurement sources and use trials, activation, paid conversion, and revenue to choose the next work. |
 | Platform Engineer | Product health and lead-form probes | Active; recurring tasks are current. | Keep these checks running and resolve broken signup or lead paths before increasing traffic. |
 
@@ -51,10 +51,12 @@ create ad campaigns, or establish that a marketing channel is profitable.
    process. Follow [production rollout](PRODUCTION_ROLLOUT.md) and [Settings migration](SETTINGS.md#moving-off-the-railway-variables).
    Preserve current settings when moving them into the Hub. Publish source changes through the reviewed PR and normal Railway
    deployment; do not substitute an ad hoc deployment.
-2. **Connect the conversion events.** Configure the native Intel application's signing key and the matching Hub secret, then verify
-   trial started, first value, and paid events arrive without duplication. Event keys are currently absent, and the Hub has received
-   zero native activity events. Billing data alone cannot show activation or the complete trial funnel. Follow
-   [Customer growth](CUSTOMER_GROWTH.md), including its native product event integration.
+2. **Release and verify the conversion events.** Intel uses its existing server billing application key and canonical account binding
+   for `/api/apps/growth`; no additional event signing key or manual tenant matching is needed for this path. Its first real nonempty
+   provider list emits first value prospectively. The Hub emits trial starts from live billing trials and purchases only from positive
+   paid invoices, preserving checkout holds. Legacy explicitly mapped HMAC producers still work. Release both applications' migrations
+   and workers, then verify natural customer events arrive once. The scorecard reports verified measurement only for complete windows
+   after rollout; it does not infer past conversions or count old subscriptions as new buyers. Follow [Customer growth](CUSTOMER_GROWTH.md).
 3. **Connect the chosen social accounts.** Follow [Social media](SOCIAL_MEDIA.md#setting-it-up) and
    [Connecting LinkedIn](SOCIAL_MEDIA.md#connecting-linkedin). Put account ids, images, limits, and API versions in Settings → Social
    media; keep credentials in secret storage. LinkedIn API access needs LinkedIn's approval. Resume Social Media Manager in Propose
@@ -67,9 +69,10 @@ create ad campaigns, or establish that a marketing channel is profitable.
 5. **Activate creative production.** Use Settings → Creative and [Creative Director](CREATIVE_DIRECTOR.md). Internal image and video
    rendering does not require HeyGen. Add HeyGen only when presenter videos serve a specific campaign; it is optional. Review approved
    images through the social publishing path. Video creation does not imply automated video publishing to every listed platform.
-6. **Add visitor analytics only with a defined measurement need.** The scorecard has an extension point but no implemented visitor
-   analytics reader. This needs application integration, not just another API key. Until it exists, visitor-to-trial conversion must
-   remain unavailable rather than displaying a fabricated zero.
+6. **Connect first-party session measurement.** The [Intel reader](WEBSITE_SESSION_METRICS.md) adds anonymous public-site sessions to
+   the scorecard after the native endpoint, dedicated shared key and Hub setting are configured. It requires no analytics subscription.
+   Historical weeks before collection remain unknown. Sessions and product events are separate populations; matched visitor-to-trial
+   conversion is not claimed.
 
 ## Working rhythm and success measures
 

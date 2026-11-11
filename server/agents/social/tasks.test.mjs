@@ -24,10 +24,11 @@ const linkedinOf = (over = {}) => ({
   adsOverview: vi.fn(async () => ({ adsets: [], ads: [], current: [], previous: [] })),
   ...over,
 });
-const harness = ({ meta = metaOf(), linkedin = null, model = null, customerTextToAi = false, settings = {}, imageUrls = ['https://cdn.example.com/brand-1.jpg'], openTargets = [], marketed = null, creative = null } = {}) => {
+const harness = ({ meta = metaOf(), linkedin = null, model = null, customerTextToAi = false, settings = {}, imageUrls = ['https://cdn.example.com/brand-1.jpg'], openTargets = [], marketed = null, creative = null, videos = false } = {}) => {
   const sent = [];
   let next = 0;
   const store = {
+    ...(videos ? { socialVideoStage: vi.fn() } : {}),
     socialOpenTargets: vi.fn(async () => openTargets), socialSchedule: vi.fn(async () => true), notificationCount: vi.fn(async () => 0),
     proposeAction: vi.fn(async () => ({ id: `a${++next}`, status: 'proposed', created: true })), enqueue: vi.fn(async () => `task-${++next}`),
     startRun: vi.fn(async () => 'r'), finishRun: vi.fn(async () => undefined),
@@ -371,6 +372,29 @@ describe('approved creative from the Creative Director', () => {
     headline: 'Territory plans from public data', primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.',
     description: 'Free trial', cta: 'Start free trial', landingUrl: 'https://www.caremetricintel.com/?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=22222222-2222-4222-8222-222222222222', ...over });
   const planModel = () => modelReturning({ posts: [{ platform: 'instagram', product: 'caremetric-intel', pillar: 'tip', day: 2, text: 'Which county sends your agency the most referrals? Map it before you plan the week.', linkId: '', hashtags: ['homehealth'] }] });
+
+  it.each(['facebook', 'instagram', 'linkedin'])('proposes an approved %s video with its exact URL and captions', async platform => {
+    const asset = approvedAsset({ kind: 'video', contentType: 'video/mp4', placement: platform === 'linkedin' ? 'linkedin.video_square' : 'meta.video_vertical', platform: platform === 'linkedin' ? 'linkedin' : 'meta' });
+    const creative = { approved: vi.fn(async ({ platform: wanted }) => wanted === asset.platform ? [asset] : []) };
+    const model = modelReturning({ posts: [{ platform, product: 'caremetric-intel', pillar: 'capability', day: 2,
+      text: 'CareMetric Intel brings territory planning and outreach into one place for your team.', linkId: 'intel-home', hashtags: [] }] });
+    const h = harness({ creative, model, videos: true, imageUrls: [], linkedin: linkedinOf() });
+    await h.handlers['social.plan'](task('social.plan'), { now });
+    expect(h.store.proposeAction).toHaveBeenCalledTimes(1);
+    const post = h.store.proposeAction.mock.calls[0][0];
+    expect(post.input).toMatchObject({ videoUrl: `https://help.caremetric.ai/api/creative/a/${token}.mp4`, imageUrl: null, creativeAssetId: asset.id });
+    expect(post.preview).toContain('Video: approved creative');
+    if (platform !== 'instagram') expect(post.input.message).toContain('https://www.caremetricintel.com/');
+  });
+
+  it('does not select videos without the durable video feature or unsupported Instagram shapes', async () => {
+    const creative = { approved: vi.fn(async () => [approvedAsset({ kind: 'video', contentType: 'video/mp4', placement: 'meta.video_square' })]) };
+    for (const videos of [false, true]) {
+      const h = harness({ creative, videos, model: planModel(), imageUrls: [] });
+      await h.handlers['social.plan'](task('social.plan'), { now });
+      expect(h.store.proposeAction).not.toHaveBeenCalled();
+    }
+  });
 
   it('uses an approved image for an Instagram post, marks the post with the asset, and tells the Creative Director the plan was written', async () => {
     const creative = { approved: vi.fn(async ({ platform }) => (platform === 'meta' ? [approvedAsset()] : [])), planned: vi.fn(async () => 'task') };

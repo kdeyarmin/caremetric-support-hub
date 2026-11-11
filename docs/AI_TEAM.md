@@ -297,8 +297,8 @@ the five weekly reports (`accounts.weekly`, `growth.weekly`, `seo.weekly`, `sale
 - **Needs you**: at most three items, most urgent first, each with a button to the screen that handles it: products down, proposals
   waiting for approval, accounts that need attention, deals waiting on you, ads losing money and urgent website problems, as the brief and the
   five reports flag them.
-- **Six numbers per product** (CareBase and Intel), each beside last week's: website visitors (only from a connected source; none is
-  connected, so "Not connected", never an estimate), county reports and trial starts, activated trials (first `first_value` events),
+- **Six numbers per product** (CareBase and Intel), each beside last week's: website measurement (Intel’s
+  [anonymous session reader](WEBSITE_SESSION_METRICS.md) after setup; unavailable periods stay unknown), county reports and trial starts, activated trials (first `first_value` events),
   new paying customers and MRR (the Billing screen's maths), outbound email delivered, replies, bounces and complaints, and cost per
   trial (AI spend on agent runs, plus ad spend when an ad account is connected). Organic search clicks are added when Search Console
   is connected.

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { account, item, subscription } from '../accounts/fixtures.mjs';
-import { billingFigures, composeScorecard, payingAt, payingSince, rankNeeds, searchFigures, searchOpportunityBlocks } from './compose.mjs';
+import { billingFigures, composeScorecard, payingAt, rankNeeds, searchFigures, searchOpportunityBlocks } from './compose.mjs';
 import { scorecardFeature, scorecardHandlers } from './index.mjs';
 
 const origin = 'https://hub.example.test';
@@ -74,7 +74,7 @@ describe('the Monday scorecard task', () => {
     expect(sent).toMatchObject({ severity: 'warning', dedupeKey: 'scorecard:2026-11-02', agentKey: 'chief_of_staff', taskId: 't1', subject: 'Monday scorecard: 1 decision needs you' });
     expect(outcome.result).toMatchObject({ week: '2026-11-02', reported: '2026-10-26', delivery: ['email:sent'], needsYou: 1, needs: ['approvals'] });
     expect(outcome.result.products['caremetric-intel']).toEqual({
-      countyReports: [5, 2], trialStarts: [3, 1], activated: [1, 1], newPaying: [1, 0], delivered: [40, 30], replies: [4, 1], bounces: [1, 0], complaints: [0, 0],
+      countyReports: [5, 2], trialStarts: [3, 1], activated: [1, 1], delivered: [40, 30], replies: [4, 1], bounces: [1, 0], complaints: [0, 0],
     });
     expect(store.startRun).toHaveBeenCalledWith('t1', 'none', 'scorecard.1');
     expect(store.finishRun).toHaveBeenCalledWith('run-1', 'completed', {}, 'Sent the Monday scorecard: One decision needs you this week.', null);
@@ -110,7 +110,7 @@ describe('the Monday scorecard task', () => {
     expect(outcome.result).toMatchObject({ needsYou: 3, needs: ['site_down', 'approvals', 'stuck_deals'], moreNeeds: 2, sources: { ads: 'read' } });
     const { body, blocks } = notifier.send.mock.calls[0][0];
     expect(body).toContain('- 1 product down right now\n- 4 proposals waiting for your approval\n- 1 deal waiting on you in the pipeline');
-    expect(body).toContain('Trial starts: 3, up from 1.');
+    expect(body).toContain('Trial sign-ups: 3, up from 1.');
     expect(body).toContain('Replies: 4, up from 1.');
     expect(body).toContain('40 emails delivered, 4 replies, 1 bounce, 0 complaints.');
     // Activated trials did not move, so they are not in "What changed".
@@ -287,6 +287,53 @@ describe('the Monday scorecard task', () => {
   });
 });
 
+describe('verified billing lifecycle in the scorecard', () => {
+  const lifecycleFeature = 'platform.agents.app-growth.v1';
+  const completeFacts = ({ since, until }) => ({
+    ...facts({ verifiedPaid: 0, verifiedTrialStarts: 0 }, { verifiedPaid: 2, verifiedTrialStarts: 4, trialStarts: 99 }),
+    since: since.toISOString(), until: until.toISOString(), lifecycleStartedAt: '2026-10-01T00:00:00Z',
+  });
+
+  it('reads verified billing event counts independently of a failed MRR snapshot', async () => {
+    const { run, notifier } = fixture({ features: new Set([scorecardFeature, lifecycleFeature]), snapshot: new Error('offline'),
+      store: { scorecardFacts: vi.fn(async bounds => completeFacts(bounds)) } });
+    const result = (await run()).result;
+    expect(result.sources).toMatchObject({ billing: 'unavailable', lifecycle: 'read' });
+    expect(result.products['caremetric-intel']).toMatchObject({ newPaying: [2, 2], trialStarts: [4, 4] });
+    expect(result.products.carebase.newPaying).toEqual([0, 0]);
+    const { blocks, body } = notifier.send.mock.calls[0][0];
+    expect(body).toContain('2 verified new paying');
+    expect(JSON.stringify(blocks)).toContain('Trial starts (verified)');
+    expect(JSON.stringify(blocks)).not.toContain('99 (last week 99)');
+  });
+
+  it('keeps incomplete rollout weeks unknown, suppressing false changes and cost per trial', async () => {
+    const { run, notifier } = fixture({ features: new Set([scorecardFeature, lifecycleFeature]), store: { scorecardFacts: async bounds => ({
+      ...completeFacts(bounds), lifecycleStartedAt: '2026-10-28T12:00:00Z',
+    }) } });
+    const result = (await run()).result;
+    expect(result.sources.lifecycle).toBe('partial');
+    expect(result.products['caremetric-intel']).toMatchObject({ newPaying: [null, null], trialStarts: [null, null] });
+    const { body, blocks } = notifier.send.mock.calls[0][0];
+    expect(body).toContain('trial starts unavailable');
+    expect(body).not.toContain('New paying customers:');
+    expect(JSON.stringify(blocks)).toContain('Not available (trial count unavailable)');
+    expect(JSON.stringify(blocks)).not.toContain('No trials (');
+  });
+
+  it('needs the feature and valid coverage; missing or malformed verified counts never become zero', async () => {
+    const noFeature = fixture({ store: { scorecardFacts: async bounds => completeFacts(bounds) } });
+    expect((await noFeature.run()).result.products['caremetric-intel']).not.toHaveProperty('newPaying');
+    const { run } = fixture({ features: [scorecardFeature, lifecycleFeature], store: { scorecardFacts: async bounds => ({
+      ...completeFacts(bounds), lifecycleStartedAt: '2026-10-22T00:00:00Z',
+      products: [{ product: 'caremetric-intel', verifiedPaid: '2', verifiedTrialStarts: 0 }],
+    }) } });
+    const result = (await run()).result;
+    expect(result.products['caremetric-intel']).toMatchObject({ newPaying: [null, null], trialStarts: [0, null] });
+    expect(result.products.carebase.newPaying).toEqual([null, null]);
+  });
+});
+
 describe('the scorecard\'s figures', () => {
   it('counts a subscription as paying only from its trial\'s end until it ended', () => {
     const time = Date.parse('2026-11-01T00:00:00Z');
@@ -299,24 +346,19 @@ describe('the scorecard\'s figures', () => {
     expect(payingAt(subscription({ status: 'canceled', created: '2026-10-01T00:00:00Z', ended_at: '2026-10-20T00:00:00Z' }), time)).toBe(false);
   });
 
-  it('counts a customer once, when they first start paying: a quick cancel counts, a return after a gap does not', () => {
-    expect(payingSince(subscription({ created: '2026-10-01T00:00:00Z', trial_end: '2026-10-15T00:00:00Z' }))).toBe(Date.parse('2026-10-15T00:00:00Z'));
-    expect(payingSince(subscription({ status: 'canceled', created: '2026-10-01T00:00:00Z', trial_end: '2026-10-15T00:00:00Z', ended_at: '2026-10-10T00:00:00Z' }))).toBeNull();
-    expect(payingSince(subscription({ status: 'trialing', created: '2026-10-01T00:00:00Z' }))).toBeNull();
-    const until = new Date('2026-11-02T05:00:00Z');
-    const quick = account({ slug: 'quick', subscriptions: [subscription({ app: 'carebase', status: 'canceled', created: at(-10), trial_end: at(-5), ended_at: at(-2) })] });
-    const back = account({ slug: 'back', subscriptions: [
-      subscription({ app: 'carebase', status: 'canceled', created: at(-200), ended_at: at(-100) }), subscription({ app: 'carebase', created: at(-3) }),
-    ] });
-    const figures = billingFigures({ accounts: [quick, back], coupons: [] }, { now: monday, until });
-    expect(figures.products.carebase.newPaying).toBe(1);
-    expect(figures.products.carebase.previousNewPaying).toBe(0);
+  it('never infers confirmed new customers from subscription status or trial dates', () => {
+    const billing = billingFigures(book(), { now: monday });
+    expect(billing.products['caremetric-intel']).not.toHaveProperty('newPaying');
+    const card = composeScorecard({ week: '2026-10-26', facts: { current: thisWeek, previous: lastWeek }, billing });
+    expect(card.result.products['caremetric-intel']).not.toHaveProperty('newPaying');
+    expect(card.body).toContain('verified new paying unavailable');
+    expect(JSON.stringify(card.blocks)).toContain('subscription status is not used as evidence of a purchase');
   });
 
   it('gives MRR exactly as the Billing screen does, and last week\'s from the subscriptions paying then', () => {
     const figures = billingFigures(book(), { now: monday, until: new Date('2026-11-02T05:00:00Z') });
-    expect(figures.products['caremetric-intel']).toEqual({ mrrCents: 14800, previousMrrCents: 9900, newPaying: 1, previousNewPaying: 0 });
-    expect(figures.products.carebase).toEqual({ mrrCents: 0, previousMrrCents: 0, newPaying: 0, previousNewPaying: 0 });
+    expect(figures.products['caremetric-intel']).toEqual({ mrrCents: 14800, previousMrrCents: 9900 });
+    expect(figures.products.carebase).toEqual({ mrrCents: 0, previousMrrCents: 0 });
     expect(billingFigures(null, { now: monday, until: monday })).toBeNull();
   });
 
@@ -347,5 +389,73 @@ describe('the scorecard\'s figures', () => {
     const none = composeScorecard({ week: '2026-10-26', facts: { current: thisWeek, previous: thisWeek } });
     expect(none.body).toContain('Nothing needs you this week.');
     expect(none.subject).toBe('Monday scorecard: nothing needs you');
+  });
+
+  describe('visitor analytics availability', () => {
+    const compose = visitors => composeScorecard({ week: '2026-10-26', facts: { current: thisWeek, previous: lastWeek }, visitors });
+    const source = (carebase, intel = { state: 'not_configured' }, state = 'partial') => ({ state, products: { carebase, 'caremetric-intel': intel } });
+    const visitorRows = card => card.blocks.flatMap(block => block.rows ?? []).filter(([label]) => label === 'Website visitors').map(([, text]) => text);
+
+    it('reports observed zero visitors as zero, with read status for each product', () => {
+      const card = compose(source({ state: 'read', visitors: 0, previous: 0 }, { state: 'read', visitors: 30, previous: 20 }, 'read'));
+      expect(visitorRows(card)).toEqual(['0 (last week 0)', '30 (last week 20)']);
+      expect(card.result.products.carebase.visitors).toEqual([0, 0]);
+      expect(card.result.sources).toMatchObject({ visitors: 'read', visitorProducts: { carebase: 'read', 'caremetric-intel': 'read' } });
+    });
+
+    it.each([
+      [{ state: 'partial', visitors: 300, previous: null }, '300 (last week unavailable)', [300, null]],
+      [{ state: 'partial', visitors: null, previous: 250 }, 'Unavailable (last week 250)', [null, 250]],
+      [{ state: 'partial', visitors: 300, previous: 250 }, '300 (last week 250); partial data', [300, 250]],
+    ])('preserves known periods while identifying incomplete analytics: %j', (entry, text, values) => {
+      const card = compose(source(entry));
+      expect(visitorRows(card)).toEqual([text, 'Not connected']);
+      expect(card.result.products.carebase.visitors).toEqual(values);
+      expect(card.result.sources).toMatchObject({ visitors: 'partial', visitorProducts: { carebase: 'partial', 'caremetric-intel': 'not_configured' } });
+      expect(JSON.stringify(card.blocks)).toContain('Website visitor analytics are incomplete');
+    });
+
+    it.each([undefined, null, '', '0', '300', -1, 2.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])('does not turn an invalid current count into zero: %j', visitors => {
+      const card = compose(source({ state: 'read', visitors, previous: 20 }));
+      expect(visitorRows(card)[0]).toBe('Unavailable (last week 20)');
+      expect(card.result.products.carebase.visitors).toEqual([null, 20]);
+      expect(card.result.sources.visitorProducts.carebase).toBe('partial');
+    });
+
+    it('distinguishes an unread integration, missing product configuration and an omitted response', () => {
+      const card = compose(source({ state: 'unavailable', visitors: 0, previous: 0 }));
+      expect(visitorRows(card)).toEqual(['Could not be read', 'Not connected']);
+      expect(card.result.products.carebase).not.toHaveProperty('visitors');
+      expect(card.result.sources).toMatchObject({ visitors: 'unavailable', visitorProducts: { carebase: 'unavailable', 'caremetric-intel': 'not_configured' } });
+      const omitted = compose({ state: 'read', products: { carebase: { state: 'read', visitors: 300, previous: 250 } } });
+      expect(visitorRows(omitted)).toEqual(['300 (last week 250)', 'Could not be read']);
+      expect(omitted.result.sources.visitors).toBe('partial');
+    });
+
+    it.each([{ state: 'unavailable' }, { unavailable: true }, {}, { state: 'surprise', products: { carebase: { visitors: 0, previous: 0 } } }])('keeps reader failures or malformed responses unavailable: %j', visitors => {
+      const card = compose(visitors);
+      expect(visitorRows(card)).toEqual(['Could not be read', 'Could not be read']);
+      expect(card.result.sources.visitors).toBe('unavailable');
+      expect(card.result.products.carebase).not.toHaveProperty('visitors');
+      expect(JSON.stringify(card.blocks)).toContain('Website visitor analytics could not be read');
+      expect(JSON.stringify(card.blocks)).not.toContain('No visitor analytics source is configured');
+    });
+
+    it('preserves explicit not-configured status and does not accept counts from failed or unconfigured reads', () => {
+      const stale = { carebase: { state: 'read', visitors: 300, previous: 250 } };
+      const missing = compose({ state: 'not_configured', products: stale });
+      expect(visitorRows(missing)).toEqual(['Not connected', 'Not connected']);
+      expect(missing.result.sources.visitors).toBe('not_configured');
+      const failed = compose({ state: 'unavailable', products: stale });
+      expect(visitorRows(failed)).toEqual(['Could not be read', 'Could not be read']);
+      expect(failed.result.sources.visitors).toBe('unavailable');
+    });
+
+    it('rejects malformed per-product states and invalid pairs without adding visitor totals', () => {
+      const card = compose(source({ state: 'surprise', visitors: 300, previous: 250 }, { state: 'read', visitors: null, previous: null }, 'read'));
+      expect(visitorRows(card)).toEqual(['Could not be read', 'Could not be read']);
+      expect(card.result.sources.visitors).toBe('unavailable');
+      for (const key of ['carebase', 'caremetric-intel']) expect(card.result.products[key]).not.toHaveProperty('visitors');
+    });
   });
 });

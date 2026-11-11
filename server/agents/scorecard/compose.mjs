@@ -46,37 +46,15 @@ export function payingAt(subscription, time) {
 }
 
 /**
- * When a subscription first became paying (the end of its trial, or its creation without one), or null if it never paid: one that is
- * trialing, unpaid, paused or incomplete, or was canceled before its trial ended.
- */
-export function payingSince(subscription) {
-  if (!['active', 'past_due', 'canceled'].includes(subscription?.status) || subscription.pause_behavior) return null;
-  const created = instant(subscription.created);
-  if (created === null) return null;
-  const start = Math.max(created, instant(subscription.trial_end) ?? created);
-  if (subscription.status !== 'canceled') return start;
-  const ended = instant(subscription.ended_at) ?? instant(subscription.canceled_at);
-  return ended !== null && ended > start ? start : null;
-}
-
-/**
  * Per product: MRR now (exactly the Billing screen's figure: monthlyTotals over the product's subscriptions) and a week earlier (the same
- * maths over the subscriptions that were paying then, at today's prices and discounts), and the customers who first became paying in the
- * week to `until` and in the week before: one who converts and cancels in the same week counts, and one who comes back after a gap does
- * not count again. `snapshot` is the Account Manager's billing snapshot; null or `{ unavailable: true }` gives null.
+ * maths over the subscriptions that were paying then, at today's prices and discounts). Subscription state cannot prove a purchase:
+ * verified new paying customers come separately from the billing event facts. Null or `{ unavailable: true }` gives null.
  */
-export function billingFigures(snapshot, { now, until }) {
+export function billingFigures(snapshot, { now }) {
   if (!snapshot || snapshot.unavailable === true) return null;
   const coupons = snapshot.coupons ?? [];
   const accounts = snapshot.accounts ?? [];
   const weekEarlier = now.getTime() - 7 * day;
-  const end = until.getTime();
-  const becamePaying = (subscriptions, from, to) => accounts.filter(account => {
-    const starts = (account.subscriptions ?? []).filter(item => subscriptions.includes(item)).map(payingSince).filter(start => start !== null);
-    if (!starts.length) return false;
-    const first = Math.min(...starts);
-    return first >= from && first < to;
-  }).length;
   return {
     mode: snapshot.mode ?? null,
     products: Object.fromEntries(products.map(({ key }) => {
@@ -85,8 +63,6 @@ export function billingFigures(snapshot, { now, until }) {
       return [key, {
         mrrCents: monthlyTotals(subscriptions, coupons).mrrCents,
         previousMrrCents: monthlyTotals(earlier, coupons).mrrCents,
-        newPaying: becamePaying(subscriptions, end - 7 * day, end),
-        previousNewPaying: becamePaying(subscriptions, end - 14 * day, end - 7 * day),
       }];
     })),
   };
@@ -144,8 +120,47 @@ const beside = (current, previous) => `${current} (last week ${previous})`;
 const changeWords = (name, current, previous) => (current === previous ? null
   : `${name}: ${current}, ${current > previous ? 'up' : 'down'} from ${previous}.`);
 
+const visitorStates = new Set(['read', 'partial', 'unavailable', 'not_configured']);
+const visitorCount = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
+
+/** A missing period is unknown, never zero. Explicit reader failures remain different from an unconfigured source. */
+function visitorFigures(source) {
+  const explicit = source !== null && source !== undefined && Object.hasOwn(source, 'state');
+  const sourceValid = !explicit || visitorStates.has(source.state);
+  const byProduct = Object.fromEntries(products.map(({ key }) => {
+    const item = source?.products?.[key];
+    // A reader with explicit states must account for each product. An omitted product in the old injection shape means unconfigured.
+    const absent = !source || (explicit && source.state === 'not_configured') || (!explicit && source?.products && !item);
+    if (absent || item?.state === 'not_configured') return [key, { state: 'not_configured', values: null }];
+    if (!sourceValid || source?.state === 'unavailable' || !item || item.state === 'unavailable' || (item.state !== undefined && !visitorStates.has(item.state))) {
+      return [key, { state: 'unavailable', values: null }];
+    }
+    const values = [visitorCount(item.visitors), visitorCount(item.previous)];
+    if (values.every(value => value === null)) return [key, { state: 'unavailable', values: null }];
+    const state = item.state === 'partial' || values.some(value => value === null) ? 'partial' : 'read';
+    return [key, { state, values }];
+  }));
+  const entries = Object.values(byProduct);
+  const anyRead = entries.some(entry => entry.values !== null);
+  const allRead = entries.every(entry => entry.state === 'read');
+  const allMissing = entries.every(entry => entry.state === 'not_configured');
+  const incomplete = entries.some(entry => ['partial', 'unavailable'].includes(entry.state));
+  const state = !source ? 'not_connected'
+    : !explicit ? anyRead ? incomplete ? 'partial' : 'connected' : source?.products && allMissing ? 'not_connected' : 'unavailable'
+    : allMissing ? 'not_configured' : allRead && source.state !== 'partial' ? 'read' : anyRead ? 'partial' : 'unavailable';
+  return { state, byProduct };
+}
+
+function visitorWords(entry) {
+  if (!entry.values) return entry.state === 'not_configured' ? 'Not connected' : 'Could not be read';
+  const [current, previous] = entry.values;
+  return `${current === null ? 'Unavailable' : current} (last week ${previous === null ? 'unavailable' : previous})`
+    + (entry.state === 'partial' && current !== null && previous !== null ? '; partial data' : '');
+}
+
 function costPerTrial(spendCents, trials) {
   if (spendCents === null) return 'Not available';
+  if (trials === null) return 'Not available (trial count unavailable)';
   return trials > 0 ? `${dollars(spendCents / trials)} (${dollars(spendCents)} over ${plural(trials, 'trial')})` : `No trials (${dollars(spendCents)} spent)`;
 }
 
@@ -169,31 +184,45 @@ export function rankNeeds({ incidents = 0, approvals = null, accounts = null, st
  * @param {object|null} input.billing billingFigures(...), or null when the billing snapshot could not be read
  * @param {object|null} input.search searchFigures(...), `{ state }` when Search Console is not connected, or null when it is not set up at all
  * @param {object|null} input.ads `{ spendCents, previousSpendCents, failing }`, `{ unavailable: true }`, or null when no ad account is connected
- * @param {object|null} input.visitors `{ products: { [key]: { visitors, previous } } }` from a connected source, or null: "Not connected"
+ * @param {object|null} input.visitors `{ state, products: { [key]: { state, visitors, previous } } }`, with read/partial/unavailable/not_configured
+ * states and nullable nonnegative integer counts. The legacy shape without states remains supported; null means no configured reader.
  * @param {object} input.needs the inputs of rankNeeds
  */
-export function composeScorecard({ week, facts, billing = null, search = null, ads = null, visitors = null, needs = {}, publicOrigin = null, notes = [] }) {
+export function composeScorecard({ week, facts, billing = null, search = null, ads = null, visitors = null, verifiedLifecycle = false, needs = {}, publicOrigin = null, notes = [] }) {
   const byProduct = list => Object.fromEntries((list ?? []).map(entry => [entry.product, entry]));
   const current = byProduct(facts?.current?.products);
   const previous = byProduct(facts?.previous?.products);
   const link = origin(publicOrigin);
   const searchOn = search?.state === 'connected';
+  const seen = visitorFigures(visitors);
+  // Coverage starts with the billing lifecycle release. A zero from an earlier week is not historical evidence.
+  const lifecycleCount = (period, item, name) => {
+    const start = instant(period?.lifecycleStartedAt);
+    const since = instant(period?.since);
+    return verifiedLifecycle && start !== null && since !== null && start <= since ? visitorCount(item[name]) : null;
+  };
+  const trialLabel = verifiedLifecycle ? 'Trial starts (verified)' : 'Trial sign-ups';
 
   const figures = Object.fromEntries(products.map(({ key }) => {
     const now = current[key] ?? {};
     const then = previous[key] ?? {};
     const pair = name => [count(now[name]), count(then[name])];
     return [key, {
-      countyReports: pair('countyReports'), trialStarts: pair('trialStarts'), activated: pair('activated'),
-      ...(billing ? { newPaying: [count(billing.products[key]?.newPaying), count(billing.products[key]?.previousNewPaying)] } : {}),
+      countyReports: pair('countyReports'),
+      trialStarts: verifiedLifecycle ? [lifecycleCount(facts?.current, now, 'verifiedTrialStarts'), lifecycleCount(facts?.previous, then, 'verifiedTrialStarts')] : pair('trialStarts'),
+      activated: pair('activated'),
+      ...(verifiedLifecycle ? { newPaying: [lifecycleCount(facts?.current, now, 'verifiedPaid'), lifecycleCount(facts?.previous, then, 'verifiedPaid')] } : {}),
       delivered: pair('delivered'), replies: pair('replies'), bounces: pair('bounces'), complaints: pair('complaints'),
       // Clicks only from a property that was read: a product with none configured has no row, and one whose properties all failed says so.
       ...(searchOn && search.products[key]?.properties > 0 ? { clicks: [count(search.products[key].clicks), count(search.products[key].previous)] } : {}),
-      ...(visitors?.products?.[key] ? { visitors: [count(visitors.products[key].visitors), count(visitors.products[key].previous)] } : {}),
+      ...(seen.byProduct[key].values ? { visitors: seen.byProduct[key].values } : {}),
     }];
   }));
   const total = (name, index) => products.reduce((sum, { key }) => sum + (figures[key][name]?.[index] ?? 0), 0);
-  const trials = [total('trialStarts', 0), total('trialStarts', 1)];
+  const knownTotal = (name, index) => products.every(({ key }) => Number.isSafeInteger(figures[key][name]?.[index])) ? total(name, index) : null;
+  const trials = [knownTotal('trialStarts', 0), knownTotal('trialStarts', 1)];
+  const paid = knownTotal('newPaying', 0);
+  const nullablePair = values => `${values[0] ?? 'Unavailable'} (last week ${values[1] ?? 'unavailable'})`;
   const adsRead = ads && ads.unavailable !== true;
   const spend = index => count(index === 0 ? facts?.current?.aiSpendCents : facts?.previous?.aiSpendCents)
     + (adsRead ? count(index === 0 ? ads.spendCents : ads.previousSpendCents) : 0);
@@ -202,18 +231,18 @@ export function composeScorecard({ week, facts, billing = null, search = null, a
   const headline = ranked.kept.length === 0 ? 'Nothing needs you this week.'
     : ranked.kept.length === 1 ? 'One decision needs you this week.' : `${ranked.kept.length} decisions need you this week.`;
   const changed = Object.keys(metricNames)
-    .filter(name => products.some(({ key }) => figures[key][name]))
-    .map(name => changeWords(metricNames[name], total(name, 0), total(name, 1))).filter(Boolean);
+    .filter(name => knownTotal(name, 0) !== null && knownTotal(name, 1) !== null)
+    .map(name => changeWords(name === 'trialStarts' ? trialLabel : metricNames[name], total(name, 0), total(name, 1))).filter(Boolean);
 
   const productBlocks = products.flatMap(({ key, label }) => {
     const f = figures[key];
     const money = billing?.products?.[key];
     const rows = [
-      ['Website visitors', f.visitors ? beside(...f.visitors) : 'Not connected'],
+      [visitors?.metric === 'anonymous_sessions' && key === 'caremetric-intel' ? 'Website sessions (anonymous tabs)' : 'Website visitors', visitorWords(seen.byProduct[key])],
       ['County reports', beside(...f.countyReports)],
-      ['Trial starts', beside(...f.trialStarts)],
+      [trialLabel, nullablePair(f.trialStarts)],
       ['Activated trials (first value)', beside(...f.activated)],
-      ['New paying customers', f.newPaying ? beside(...f.newPaying) : 'Billing could not be read'],
+      ['New paying customers (verified)', f.newPaying ? nullablePair(f.newPaying) : 'Unavailable: verified billing events not enabled'],
       ['MRR', money ? `${dollars(money.mrrCents)} (a week earlier ${dollars(money.previousMrrCents)})` : 'Billing could not be read'],
       ['Outbound email', `${f.delivered[0]} delivered, ${replies(f.replies[0])}, ${plural(f.bounces[0], 'bounce')}, ${plural(f.complaints[0], 'complaint')} `
         + `(last week ${f.delivered[1]} delivered, ${f.replies[1]} replies, ${f.bounces[1]} bounces, ${f.complaints[1]} complaints)`],
@@ -226,7 +255,12 @@ export function composeScorecard({ week, facts, billing = null, search = null, a
   const spendWords = index => `AI ${dollars(count(index === 0 ? facts?.current?.aiSpendCents : facts?.previous?.aiSpendCents))}`
     + (adsRead ? ` and ads ${dollars(count(index === 0 ? ads.spendCents : ads.previousSpendCents))}` : '');
   const sourceNotes = [
-    visitors ? null : 'Website visitors are shown only from a connected analytics source, never estimated. None is connected to the Hub yet.',
+    verifiedLifecycle ? 'Verified trial starts and new paying customers use processed billing events, one first event per organization and product. A paid event requires a confirmed positive invoice payment; subscription status alone is not a purchase. Measurement is prospective; periods before lifecycle coverage begins are unavailable, and renewals are not counted as new customers.'
+      : 'Trial sign-ups count website forms, not verified product trials. Verified new paying customers are unavailable until billing lifecycle measurement is enabled; subscription status is not used as evidence of a purchase.',
+    visitors?.metric === 'anonymous_sessions' ? 'Intel website sessions count anonymous browser-tab sessions on public marketing pages, not unique people or customer accounts. A tab keeps its session across reloads; this is not a standard 30-minute analytics session. Weeks before collection or outside retained coverage are unavailable. These counts do not establish matched visitor-to-trial conversion.' : null,
+    ['not_connected', 'not_configured'].includes(seen.state) ? 'Website visitors are shown only from a connected analytics source, never estimated. No visitor analytics source is configured for these products.' : null,
+    seen.state === 'unavailable' ? 'Website visitor analytics could not be read this week. Unavailable figures are not counted as zero.' : null,
+    seen.state === 'partial' ? 'Website visitor analytics are incomplete. Each product shows the periods that could be read; unavailable figures are not counted as zero.' : null,
     ads === null ? 'No ad account is connected, so cost per trial is the AI spend alone.' : null,
     ads?.unavailable === true ? 'The ad accounts could not be read this week, so cost per trial is the AI spend alone.' : null,
     search && !searchOn ? 'Search Console is not connected, so there are no organic search clicks. The SEO Analyst\'s report says how to connect it.' : null,
@@ -246,7 +280,7 @@ export function composeScorecard({ week, facts, billing = null, search = null, a
     ...productBlocks,
     { type: 'paragraph', text: 'Both products' },
     { type: 'details', rows: [
-      ['Cost per trial', `${costPerTrial(spend(0), trials[0])}; last week ${costPerTrial(spend(1), trials[1])}`],
+      [verifiedLifecycle ? 'Cost per verified trial' : 'Cost per trial sign-up', `${costPerTrial(spend(0), trials[0])}; last week ${costPerTrial(spend(1), trials[1])}`],
       ['Spend counted', `${spendWords(0)}; last week ${spendWords(1)}`],
     ] },
     ...(changed.length ? [{ type: 'paragraph', text: 'What changed' }, ...changed.map(text => ({ type: 'paragraph', text }))] : [{ type: 'paragraph', text: 'Nothing changed from the week before.' }]),
@@ -257,8 +291,8 @@ export function composeScorecard({ week, facts, billing = null, search = null, a
   const body = [
     headline,
     ranked.kept.length ? `Needs you:\n${ranked.kept.map(item => `- ${item.text}`).join('\n')}` : null,
-    `Last week: ${plural(total('countyReports', 0), 'county report')}, ${plural(trials[0], 'trial start')}, ${total('activated', 0)} activated`
-      + `${billing ? `, ${total('newPaying', 0)} new paying` : ''}; ${total('delivered', 0)} emails delivered, ${replies(total('replies', 0))}, `
+    `Last week: ${plural(total('countyReports', 0), 'county report')}, ${trials[0] === null ? 'trial starts unavailable' : plural(trials[0], verifiedLifecycle ? 'verified trial start' : 'trial sign-up')}, ${total('activated', 0)} activated`
+      + `${paid !== null ? `, ${paid} verified new paying` : ', verified new paying unavailable'}; ${total('delivered', 0)} emails delivered, ${replies(total('replies', 0))}, `
       + `${plural(total('bounces', 0), 'bounce')}, ${plural(total('complaints', 0), 'complaint')}.`,
     changed.length ? `What changed:\n${changed.map(line => `- ${line}`).join('\n')}` : 'Nothing changed from the week before.',
   ].filter(Boolean).join('\n\n');
@@ -273,7 +307,8 @@ export function composeScorecard({ week, facts, billing = null, search = null, a
       needsYou: ranked.kept.length, needs: ranked.kept.map(item => item.key), moreNeeds: ranked.more,
       products: figures,
       sources: {
-        visitors: visitors ? 'connected' : 'not_connected', billing: billing ? 'read' : 'unavailable',
+        visitors: seen.state, visitorProducts: Object.fromEntries(products.map(({ key }) => [key, seen.byProduct[key].state])), billing: billing ? 'read' : 'unavailable',
+        lifecycle: !verifiedLifecycle ? 'not_configured' : ['trialStarts', 'newPaying'].every(name => [0, 1].every(index => knownTotal(name, index) !== null)) ? 'read' : 'partial',
         search: searchOn ? 'connected' : search?.state ?? 'not_configured', ads: ads === null ? 'not_connected' : adsRead ? 'read' : 'unavailable',
       },
     },

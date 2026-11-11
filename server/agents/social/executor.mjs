@@ -17,12 +17,13 @@
 import { checkSocialText } from './content.mjs';
 import { metaId } from './meta.mjs';
 import { linkedinComment, linkedinPost } from './linkedin.mjs';
+import { publishApprovedVideo } from './video.mjs';
 
 const failure = code => Object.assign(new Error('The social action was not carried out.'), { code });
 const deferred = () => Object.assign(new Error('The post waits for its time slot.'), { code: 'action_deferred' });
 const ctas = new Set(['LEARN_MORE', 'SIGN_UP']);
 
-export function socialExecutors({ meta, linkedin = null, settings = {}, notifier = null, now = () => new Date(), log = line => console.warn(line), creative = null }) {
+export function socialExecutors({ meta, linkedin = null, settings = {}, notifier = null, now = () => new Date(), log = line => console.warn(line), creative = null, store = null, publicOrigin = null }) {
   // A post or ad made from approved Creative Director creative marks the asset live; a failure to record that never fails the publish.
   const markLive = async (input, id) => {
     if (!creative?.live || !/^[0-9a-f-]{36}$/.test(input?.creativeAssetId ?? '')) return;
@@ -35,9 +36,9 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
     try {
       return await work();
     } catch (error) {
-      if (error?.code === 'meta_unconfirmed' || error?.code === 'linkedin_unconfirmed') {
+      if (['meta_unconfirmed', 'linkedin_unconfirmed', 'social_unconfirmed'].includes(error?.code)) {
         try {
-          await notifier?.send({ severity: 'warning', subject: `Check ${error.code === 'linkedin_unconfirmed' ? 'LinkedIn' : 'Meta'} before trying a social action again`,
+          await notifier?.send({ severity: 'warning', subject: `Check ${error.code === 'linkedin_unconfirmed' || execution.input?.platform === 'linkedin' ? 'LinkedIn' : 'Meta'} before trying a social action again`,
             body: 'Meta or LinkedIn did not confirm a post, reply or ad change the Social Media Manager made. It may or may not have happened: look at your Page, Instagram, LinkedIn or the ads manager before approving it again.',
             dedupeKey: `social:unconfirmed:${execution.id}`, agentKey: execution.agentKey, taskId: execution.taskId });
         } catch { log(JSON.stringify({ event: 'hub_agent_social_warning_unsent', action_id: execution.id })); }
@@ -58,10 +59,15 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
       if (Number.isFinite(due) && due - now().getTime() > 2 * 60_000) throw deferred();
       const checked = checkSocialText(input.message, { surface: input.platform, product: input.product ?? null });
       if (!checked.ok || checked.text !== input.message) throw failure('invalid_post');
-      if (input.platform === 'instagram' && !/^https:\/\//.test(input.imageUrl ?? '')) throw failure('image_missing');
+      if (input.platform === 'instagram' && !input.videoUrl && !/^https:\/\//.test(input.imageUrl ?? '')) throw failure('image_missing');
       // The link beside a post: one of the product's own pages, as written or with well-formed campaign tags (links.mjs), nothing else.
       if (input.link && (!/^https:\/\//.test(input.link) || !checkSocialText(`Start here: ${input.link}`, { surface: 'facebook', product: input.product ?? null }).ok)) throw failure('invalid_post');
       if (input.imageUrl && !/^https:\/\//.test(input.imageUrl)) throw failure('invalid_post');
+      if (input.videoUrl) {
+        const published = await careful(execution, () => publishApprovedVideo(execution, { store, publicOrigin, meta, linkedin: li, now }));
+        await markLive(input, published.id);
+        return { published: true, id: published.id, video: true };
+      }
       const published = await careful(execution, () => (onLinkedIn(input)
         ? li.publishPost({ message: input.message, link: input.link ?? null, linkTitle: input.linkLabel ?? null, imageUrl: input.imageUrl ?? null })
         : meta.publishPost({ platform: input.platform, message: input.message, link: input.link ?? null, imageUrl: input.imageUrl ?? null })));

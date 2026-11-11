@@ -27,20 +27,25 @@ When more than three apply, the email says how many smaller items are left.
 **The numbers**, for CareBase and CareMetric Intel, each beside last week's figure. The week is Monday to Sunday Eastern, the one
 before the week the scorecard is due in, against the week before that.
 
-1. **Website visitors**, only from a connected analytics source. None is connected to the Hub today, so the email says "Not
-   connected". It is never estimated.
-2. **County reports and trial starts**: website leads of those kinds (test leads left out), the same leads the growth report counts.
+1. **Website measurement**, only from a configured source. Intel’s [first-party reader](WEBSITE_SESSION_METRICS.md) reports
+   anonymous browser-tab sessions after setup; it does not count unique people. CareBase remains “Not connected.” Missing, failed and
+   incomplete periods stay unknown; only complete measured periods may report zero.
+2. **County reports**: website leads of that kind, excluding test leads. **Trial starts (verified)** count the first processed billing
+   trial event per organization and product after the app-growth lifecycle release. Before that capability is available, the row is
+   explicitly **Trial sign-ups**, counting website forms rather than claiming a product trial started.
 3. **Activated trials**: organizations whose first `first_value` product event fell in the week. A repeat event is not a new activation.
 4. **New paying customers and MRR**. MRR is the Billing screen's figure, from the same functions (`src/billing/billingMath.ts`).
    The figure a week earlier is the same calculation over the subscriptions that were paying then, read from each subscription's
-   own dates (created, trial end, ended) at today's prices and discounts. A new paying customer is an account whose first paying
-   subscription for the product started paying (its trial ended, or it began without one) in the week: one that converts and cancels
-   in the same week counts, and one that comes back after a gap is not counted again.
+   own dates (created, trial end, ended) at today's prices and discounts. **New paying customers (verified)** come separately from
+   processed billing events backed by a confirmed positive invoice payment, once per organization and product; subscription status
+   or an ended trial alone never proves a purchase. Renewals do not count as new customers. Trial and paid measurement is prospective:
+   windows beginning before the persisted lifecycle start timestamp remain unavailable, rather than displaying historical zeros.
 5. **Outbound email**: delivered, replies, bounces and complaints for the team's growth emails, by product, from the provider's
    delivery events and the reply events. Internal organizations are left out.
 6. **Cost per trial**, across both products: the AI spend recorded on agent runs in the week, plus the ad spend when an ad account
    is connected (the same Meta and LinkedIn figures the social report reads, for the same Monday-to-Sunday week, also on a run later in
-   the week), divided by the trial starts.
+   the week), divided by verified trial starts. It is unavailable when either product's trial count is unknown. Before lifecycle
+   measurement, this is explicitly **Cost per trial sign-up**, using website form submissions.
 
 With Search Console connected (`HUB_SEARCH_CONSOLE_CREDENTIALS` in Railway and the properties in Settings → Search, see the SEO Analyst), **organic
 search clicks** per product are added: the last seven days with final data against the seven before. A property's host decides its
@@ -53,7 +58,7 @@ last 28 days of final Google data; the date range is shown separately from the s
 not hide available click totals, and a failed totals read does not hide available opportunities. Partial property failures are
 reported. Queries that look personal are excluded by the same rules as the full SEO report.
 
-**What changed** lists every count that moved from the week before, totalled over both products.
+**What changed** lists counts that moved from the week before, totalled over both products only when both periods are known.
 
 A source that cannot be read (billing, the pipeline, the ad accounts, the websites, the brief's facts) is named in the email and
 the rest still goes out. Only the scorecard's own counts are required: if they cannot be read the task fails and is tried again.

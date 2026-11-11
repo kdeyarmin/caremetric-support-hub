@@ -50,6 +50,7 @@ export const settingGroups = Object.freeze([
   { id: 'social', label: 'Social media', description: 'The Facebook Page, Instagram account, LinkedIn Page and ad accounts the Social Media Manager works on, and its ad limits. The access tokens stay in Railway.' },
   { id: 'creative', label: 'Creative', description: 'The Creative Director: whether it works, how many images and videos it starts a day, and how videos are made. HeyGen\'s key stays in Railway.' },
   { id: 'seo', label: 'Search', description: 'The Search Console properties the SEO Analyst and the Monday scorecard read. The service account key stays in Railway.' },
+  { id: 'analytics', label: 'Website analytics', description: 'Read first-party measurements from the public marketing website. Signing keys stay in Railway.' },
   { id: 'learning', label: 'Course distribution', description: 'How shared courses reach CareBase.' },
 ]);
 
@@ -131,6 +132,8 @@ export const settingsCatalog = Object.freeze([
     label: 'How videos are made', help: 'HeyGen presenter videos need HUB_HEYGEN_API_KEY in Railway and an avatar and voice in the product\'s brand kit; without them, videos are made by the Hub.' },
   { key: 'seo.search_console_sites', group: 'seo', kind: 'list', input: 'lines', default: [], env: 'HUB_SEARCH_CONSOLE_SITES', fromEnv: fromSites, valid: listOf(searchConsoleSite, 10),
     label: 'Search Console properties', help: 'One per line, exactly as Search Console names them: sc-domain:cmcarebase.com for a domain property, https://www.caremetricintel.com/ (with its final /) for an address prefix. At most 10.' },
+  { key: 'analytics.intel_visitors', group: 'analytics', kind: 'flag', input: 'toggle', default: true, env: null,
+    label: 'Read Intel website sessions', help: 'Adds anonymous public-site session counts to the Monday scorecard. Requires the native Intel measurement endpoint and the same HUB_VISITOR_METRICS_KEY on both services. Counts begin when collection starts; missing historical weeks stay unavailable.' },
 ]);
 
 const byKey = new Map(settingsCatalog.map(entry => [entry.key, entry]));

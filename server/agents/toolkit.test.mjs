@@ -21,7 +21,8 @@ describe('marketing toolkit configuration', () => {
     expect(row(result, 'prospect_research').missing.join(' ')).toContain('HUB_GROWTH_SEARCH_API_KEY');
     expect(row(result, 'growth_email').missing.join(' ')).toContain('Mailing address in email footers');
     expect(row(result, 'content_publication').missing.join(' ')).toContain('public articles');
-    expect(row(result, 'visitor_conversion_analytics')).toMatchObject({ configured: false, supported: false });
+    expect(row(result, 'visitor_conversion_analytics')).toMatchObject({ configured: false });
+    expect(row(result, 'visitor_conversion_analytics').missing.join(' ')).toContain('HUB_VISITOR_METRICS_KEY');
     expect(row(result, 'website_leads_carebase')).toBeUndefined();
     expect(row(result, 'website_leads_intel').configured).toBe(false);
   });
@@ -51,6 +52,15 @@ describe('marketing toolkit configuration', () => {
     expect(invalid.readiness()).toMatchObject({ deliveryFeedback: false, events: { carebase: false, 'caremetric-intel': true } });
     expect(growthService({ webhookPublicKey: publicKey }).readiness().deliveryFeedback).toBe(true);
     expect(JSON.stringify(invalid.readiness())).not.toContain(secret);
+  });
+
+  it('recognizes the existing Intel billing activity endpoint without claiming producer delivery', () => {
+    const declared = new Set([...features, 'platform.agents.app-growth.v1']);
+    const growth = growthService({ features: declared });
+    const result = marketingToolkit({ features: declared, growth });
+    expect(row(result, 'product_events_intel').configured).toBe(true);
+    expect(row(result, 'product_events_intel').detail).toContain('does not confirm the native producer is delivering');
+    expect(row(result, 'product_events_intel').missing).toEqual([]);
   });
 
   it('reuses Meta and LinkedIn client validation, including refresh-only LinkedIn credentials and live settings', () => {
@@ -86,6 +96,14 @@ describe('marketing toolkit configuration', () => {
     expect(row(marketingToolkit(options), 'search_performance').configured).toBe(false);
     expect(row(marketingToolkit({ searchConsoleCredentials: '{bad', searchConsoleSites: ['sc-domain:example.test'] }), 'search_performance').configured).toBe(false);
     expect(JSON.stringify(marketingToolkit(options))).not.toContain(privateKey);
+  });
+
+  it('keeps video publishing unavailable until both its migration and a publishing account are configured', () => {
+    const socialWork = { meta: { configured: { pages: true } } };
+    expect(row(marketingToolkit({ features, socialWork }), 'social_video').configured).toBe(false);
+    const declared = new Set([...features, 'platform.agents.social-video.v1']);
+    expect(row(marketingToolkit({ features: declared, socialWork }), 'social_video').configured).toBe(true);
+    expect(row(marketingToolkit({ features: declared }), 'social_video').configured).toBe(false);
   });
 
   it('requires the model, customer-text switch and reply service for sales; creative switches and caps stay live', () => {

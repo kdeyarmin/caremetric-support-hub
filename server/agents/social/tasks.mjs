@@ -57,15 +57,20 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
   const draftingOn = () => live(customerTextToAi) === true && model?.configured === true;
   const open = async () => new Set(await store.socialOpenTargets());
   const effort = task => (['low', 'medium', 'high'].includes(task.agent?.config?.effort) ? task.agent.config.effort : 'medium');
-  // Approved Creative Director images, served from the Hub under each asset's public token (only while it is approved or live), so Meta and
+  // Approved Creative Director images and videos, served from the Hub under each asset's public token (only while it is approved or live), so Meta and
   // LinkedIn can fetch them. Without the Creative Director, or without an https public origin, nothing changes.
   const assetOrigin = /^https:\/\//i.test(publicOrigin ?? '') ? publicOrigin.replace(/\/+$/, '') : null;
   const imagePlacements = { meta: ['meta.feed_square', 'meta.feed_portrait'], linkedin: ['linkedin.single_image', 'linkedin.square'] };
-  async function approvedImages(product, platform) {
+  const videosOn = typeof store.socialVideoStage === 'function';
+  const videoPlacements = { facebook: ['meta.video_square', 'meta.video_portrait', 'meta.video_vertical'], instagram: ['meta.video_vertical'],
+    linkedin: ['linkedin.video_square', 'linkedin.video_portrait', 'linkedin.video_vertical'] };
+  async function approvedImages(product, platform, withVideos = false) {
     if (!creative?.approved || !assetOrigin) return [];
     try {
-      return (await creative.approved({ product, platform, limit: 10 })).filter(asset => asset.kind === 'static' && imagePlacements[platform].includes(asset.placement) && /^[0-9a-f]{64}$/.test(asset.token ?? ''))
-        .map(asset => ({ ...asset, url: `${assetOrigin}/api/creative/a/${asset.token}.png` }));
+      return (await creative.approved({ product, platform, limit: 20 })).filter(asset => /^[0-9a-f]{64}$/.test(asset.token ?? '') &&
+        ((asset.kind === 'static' && imagePlacements[platform].includes(asset.placement)) ||
+          (withVideos && videosOn && asset.kind === 'video' && asset.contentType === 'video/mp4' && (platform === 'meta' ? videoPlacements.facebook : videoPlacements.linkedin).includes(asset.placement))))
+        .map(asset => ({ ...asset, url: `${assetOrigin}/api/creative/a/${asset.token}.${asset.kind === 'video' ? 'mp4' : 'png'}` }));
     } catch (error) {
       if (error?.transient) throw error;
       log(JSON.stringify({ event: 'hub_social_creative_unread', code: /^[a-z][a-z_]{0,59}$/.test(error?.code ?? '') ? error.code : 'creative_error' }));
@@ -105,8 +110,8 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     if (!asked && await store.notificationCount({ prefix: key, channel: 'email', since: new Date(0) }) > 0) return { result: { skipped: 'already_planned', week } };
     // Approved creative, per product and platform, used once each in this plan before the approved brand images.
     const creativeImages = {};
-    for (const product of offered) for (const platform of ['meta', 'linkedin']) creativeImages[`${product}:${platform}`] = await approvedImages(product, platform);
-    const anyMetaCreative = offered.some(product => creativeImages[`${product}:meta`].length);
+    for (const product of offered) for (const platform of ['meta', 'linkedin']) creativeImages[`${product}:${platform}`] = await approvedImages(product, platform, true);
+    const anyMetaCreative = offered.some(product => creativeImages[`${product}:meta`].some(asset => asset.kind === 'static' || videoPlacements.instagram.includes(asset.placement)));
     const counts = { facebook: meta.configured.pages ? weekly.facebook : 0, instagram: meta.configured.instagram && (images().length || anyMetaCreative) ? weekly.instagram : 0, linkedin: weekly.linkedin };
     let posts = [];
     let performance = metaPosts() || li.configured.page ? 'read' : 'not_connected';
@@ -151,21 +156,28 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       const scheduledFor = slotFor({ week, day: draft.day, platform: draft.platform, index: used[draft.platform], now: moment });
       const targetId = `${draft.platform}:${week}:${used[draft.platform]}`;
       if (targets.has(`social.post:${targetId}`)) continue;
-      // Instagram needs an image; a LinkedIn post shows one beside its link (LinkedIn builds no preview for an API post). Approved creative
-      // comes first; then the approved brand images (Settings → Social media).
+      // Compatible approved videos come first. Other Instagram posts need an image; LinkedIn image posts attach a link thumbnail.
+      // Approved creative images precede the brand image list (Settings → Social media).
       const pictured = ['instagram', 'linkedin'].includes(draft.platform);
-      const approvedAsset = pictured ? creativeImages[`${draft.product}:${draft.platform === 'instagram' ? 'meta' : 'linkedin'}`]?.[0] ?? null : null;
+      const assetKey = `${draft.product}:${draft.platform === 'linkedin' ? 'linkedin' : 'meta'}`;
+      const availableAssets = creativeImages[assetKey] ?? [];
+      const approvedAsset = availableAssets.find(asset => asset.kind === 'video' && videoPlacements[draft.platform].includes(asset.placement))
+        ?? (pictured ? availableAssets.find(asset => asset.kind === 'static') ?? null : null);
       const brandImages = images();
       if (draft.platform === 'instagram' && !approvedAsset && !brandImages.length) continue;
-      const imageUrl = approvedAsset?.url ?? (pictured && brandImages.length ? brandImages[(Number(week.replaceAll('-', '')) + used[draft.platform]) % brandImages.length] : null);
+      const videoUrl = approvedAsset?.kind === 'video' ? approvedAsset.url : null;
+      const imageUrl = videoUrl ? null : approvedAsset?.url ?? (pictured && brandImages.length ? brandImages[(Number(week.replaceAll('-', '')) + used[draft.platform]) % brandImages.length] : null);
+      // Video posts have no separate link card: put the reviewed destination in their caption on Facebook and LinkedIn.
+      const message = videoUrl && link && !checked.text.includes(link) ? `${checked.text}\n\n${link}` : checked.text;
+      if (!checkSocialText(message, { surface: draft.platform, product: draft.product }).ok) { rejected.video_caption = (rejected.video_caption ?? 0) + 1; continue; }
       const proposal = await propose(task, {
         kind: 'social.post', targetKind: 'social_post', targetId,
-        preview: `${labels[draft.platform]} post about ${productNames[draft.product]} (${draft.pillar}), to publish ${when(scheduledFor)}:\n\n${checked.text}${link ? `\n\nLink: ${link}` : ''}${imageUrl ? `\n\nImage: ${approvedAsset ? `approved creative ${approvedAsset.id} (${imageUrl})` : imageUrl}` : ''}`,
-        input: { platform: draft.platform, product: draft.product, pillar: draft.pillar, message: checked.text, link, imageUrl, scheduledFor,
+        preview: `${labels[draft.platform]} post about ${productNames[draft.product]} (${draft.pillar}), to publish ${when(scheduledFor)}:\n\n${message}${link ? `\n\nLink: ${link}` : ''}${imageUrl ? `\n\nImage: ${approvedAsset ? `approved creative ${approvedAsset.id} (${imageUrl})` : imageUrl}` : ''}${videoUrl ? `\n\nVideo: approved creative ${approvedAsset.id} (${videoUrl})` : ''}`,
+        input: { platform: draft.platform, product: draft.product, pillar: draft.pillar, message, link, imageUrl, scheduledFor, ...(videoUrl ? { videoUrl } : {}),
           ...(draft.platform === 'linkedin' && link ? { linkLabel: page.label } : {}), ...(approvedAsset ? { creativeAssetId: approvedAsset.id } : {}) },
       });
       if (!proposal) break;
-      if (approvedAsset) creativeImages[`${draft.product}:${draft.platform === 'instagram' ? 'meta' : 'linkedin'}`].shift();
+      if (approvedAsset) creativeImages[assetKey] = availableAssets.filter(asset => asset.id !== approvedAsset.id);
       if (proposal.created !== false) { await store.socialSchedule(proposal.id, null); proposed += 1; }
     }
 

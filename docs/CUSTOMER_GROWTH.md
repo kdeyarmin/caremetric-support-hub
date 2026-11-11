@@ -181,6 +181,29 @@ conversation, a demo or call, and a time to meet are refused; declining a demo i
 Changing the playbook's wording changes what the models read: bump `playbookVersion`, run `npm test -- server/growth` and
 `npm run evaluate:growth`, and review the next drafts before widening any autonomy.
 
+## Canonical Intel activity and verified billing conversions
+
+With `platform.agents.app-growth.v1`, Intel posts server-only activity to `POST /api/apps/growth` using its existing billing application
+key. The payload contains its opaque 24-hex billing account, an immutable event UUID, `heartbeat`, `active` or `first_value`, the event
+time, and optional provider-list count. It cannot claim a trial or payment. The Hub authenticates the app, resolves exactly the same
+account-to-tenant link as billing, and associates the event with that canonical tenant. A missing link returns retryable 503; no name or
+email matching occurs. When no Growth organization is linked yet, the Hub creates a customer record with a reserved `.invalid`
+identity and Account Manager ownership; that identity is never a prospect website or a source of cold outreach.
+
+Intel migration `0150_hub_growth_accounts.sql` enrolls billing-confirmed nonlegacy customer workspaces automatically, while preserving
+explicit legacy mappings and their enabled switches. The first newly recorded provider list with a real provider member emits first
+value once; historical lists and `demo-seed` data do not. Events enter the existing durable outbox in the source transaction. The worker
+uses the existing billing configuration unless explicitly paused, preserves exact payload bytes on retry, and retains lease fencing.
+
+Live Hub billing changes enter a private lifecycle outbox: actual trial starts and the first positive paid invoice for a new buyer.
+Test mode, zero-dollar trial invoices, open/failed invoices, renewals and pre-rollout paid history do not count as purchases. An old
+subscription with unknown prior payment history remains uncounted unless it is a trial ending after rollout. Invoice/subscription
+webhook ordering is reconciled. Unverified checkout holds remain held; the existing growth maintenance worker drains eligible events,
+backs off individual failures and expires entries after 89 days. No subscription-status inference substitutes for a paid invoice.
+
+The scorecard's `verifiedPaid`, `verifiedTrialStarts` and `lifecycleStartedAt` distinguish these prospective receipts from form submissions
+and incomplete historical windows. The original HMAC event endpoint remains available for explicitly mapped producers.
+
 ## Native product event integration
 
 `server/growth/event-client.mjs` is a server-only adapter for native applications. Each application must emit from its transactional outbox with a **stable eventKey**; retries reuse the exact event, changing only the signature timestamp. Never put these keys in browser code. A product key cannot authenticate another product's feed.
