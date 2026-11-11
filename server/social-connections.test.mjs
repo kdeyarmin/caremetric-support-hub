@@ -134,6 +134,26 @@ it('rejects unknown fields and malformed credentials before saving', async () =>
   expect(state.rows.every(row => row.ciphertext === null)).toBe(true);
 });
 
+it.each([['meta','pageId'], ['linkedin','organizationId']])('rejects %s sign-in email before storing a supplied secret', async (provider, field) => {
+  const { service, state, fetchImpl } = harness();
+  const values = fields(provider); values[field].value = 'owner@example.test';
+  await expect(service.save('owner', { action: 'save', provider, revision: state.rows.find(row => row.provider === provider).revision,
+    fields: values, secrets: { token: 'synthetic-login-password-not-a-token' },
+  })).rejects.toMatchObject({ status: 400, message: expect.stringContaining('That looks like an email address') });
+  expect(state.rows.every(row => row.ciphertext === null)).toBe(true);
+  expect(fetchImpl).not.toHaveBeenCalled();
+});
+
+it('describes a rejected LinkedIn credential without claiming it was necessarily expired', async () => {
+  const { service, fetchImpl } = harness({ environment: { HUB_LINKEDIN_ACCESS_TOKEN: token } });
+  fetchImpl.mockResolvedValue(new Response(JSON.stringify({ message: 'Invalid access token', status: 401 }), { status: 401 }));
+  const result = await service.check('owner', 'linkedin');
+  expect(result).toEqual({ ok: false, message: expect.stringContaining('LinkedIn rejected the access token') });
+  expect(result.message).toContain('invalid, expired or revoked');
+  expect(result.message).toContain('Your sign-in password cannot be used');
+  expect(result.message).not.toContain(token);
+});
+
 it('checks with read-only API calls and returns reviewed, credential-free failures', async () => {
   const { service, fetchImpl } = harness({ environment: { HUB_META_ACCESS_TOKEN: token, HUB_LINKEDIN_ACCESS_TOKEN: token } });
   expect(await service.check('owner', 'meta')).toMatchObject({ ok: true });

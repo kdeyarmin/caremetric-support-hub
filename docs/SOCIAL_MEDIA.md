@@ -126,70 +126,102 @@ A draft that fails is dropped. The run records only the check's name.
 
 ## Setting it up
 
-The owner enters credentials in **Settings → Social media**, using the Meta and LinkedIn cards. Each card has a link to the
-provider’s setup, guidance beside each field, masked token entry and **Save and check**. A blank token preserves the saved value;
-the explicit removal checkbox clears it. Saved secrets are never returned to the browser. A check reads the Page and any configured
-Instagram/ad account; it does not publish, message anyone, change budgets or prove write permissions. Provider app approval still
-applies. Signing in to a provider alone does not connect its API. A stale form is rejected rather than overwriting another edit.
+Open **Settings → Social media**. Each provider has a five-step guide with Previous/Next controls, exact permission names,
+copyable addresses and a shortcut to the connection fields. The guide is instructions, not an authorization flow: advancing a
+step never saves a credential or proves that a provider step succeeded. Open provider sites in your normal browser, especially
+if an embedded window shows a login error. The sign-in help explains accessibility options for human verification; the Hub
+cannot complete those checks.
 
-1. **In Meta Business Settings**, make sure CareMetric's Business owns the Facebook Page, the Instagram professional account (linked to
-   the Page) and the ad account.
-2. **Create a Meta app and a system user.** Create an app of the Business type and add it to the Business. Create a system user (Admin)
-   and assign it the Page, the Instagram account and the ad account with full control. Generate a token for the app with:
-   - pages: `pages_show_list`, `pages_read_engagement`, `pages_read_user_content`, `pages_manage_posts`, `pages_manage_engagement`,
-     `pages_messaging`;
-   - Instagram: `instagram_basic`, `instagram_content_publish`, `instagram_manage_comments`;
-   - ads: `ads_read`, `ads_management`;
-   - `business_management`.
+A **Page ID** identifies the business Page. An **access token** is the secret code issued for the app's approved access. Neither
+is a login email or password. Email-shaped Page IDs are rejected before saving, both in the browser and on the server. Autofill
+hints discourage password managers but cannot guarantee they will comply.
 
-   Meta may ask for app review of some permissions before they work outside development mode.
-3. **Open Settings → Social media → Meta.** Paste the **Facebook Page ID or profile link** and **Meta access token**, then choose
-   **Save and check**. A numeric Page ID or `https://www.facebook.com/profile.php?id=…` link works. Under **Advanced**, optionally add
-   the **Instagram professional account ID** and **Meta ad account ID**. The numeric Instagram ID is different from its @username.
-   Below the cards, set **Approved brand images**, **Target cost per lead or sign-up** and **Most any ad may spend per day** as needed.
+A blank token retains the saved value; the explicit removal checkbox clears it. Tokens are encrypted and never returned to the
+browser. **Access token saved · connection not checked** reports storage only. **Read access verified** appears after a successful
+check and clears on edits. Checks read Page posts and any configured Instagram/ad account, without publishing or proving write
+permissions. Authentication rejection can mean invalid, expired or revoked; the Hub does not infer which from a generic response.
+Saved changes apply to agents within a minute without a restart. Signing in to Meta or LinkedIn alone does not connect the Hub.
 
-   To draft replies, Settings → AI team → "Let agents send customer messages to the AI" must be on and the Anthropic key set too.
-   The ids, images and ad limits used to be Railway variables (`HUB_META_PAGE_ID` and the others); the Hub copies them into Settings
-   once on its first start after the settings migration, and they can then be deleted. [Settings](SETTINGS.md) lists every setting.
-4. Once the connection check succeeds, resume the Social Media Manager on **AI team**, in **Propose**, and press **Run now** on
-   "Weekly social plan" to prepare drafts for review. Connecting accounts does not resume the agent or enable automatic approval.
-5. **Review a few weeks** of posts, replies and ad changes. Then hand work over one kind at a time under "Work the team does on its
-   own". Each step runs a supervised week, then switches automatically:
-   - **Social posts** (`social.post`);
-   - **Social replies** (`social.reply` and hiding spam, `social.moderate`);
-   - **Ad tuning** (`social.ad_pause` and `social.ad_create`).
+## Connecting Meta
 
-   **Keep approving** takes a step back at any time, and **Pause** stops the agent.
+The guide uses a **system user access token** for assets in your own business portfolio.
 
-A request Meta or LinkedIn may have received but did not confirm is never retried. It fails as `social_unconfirmed` and the owner is
-asked to look at the Page, Ads Manager or Campaign Manager first. A token Meta or LinkedIn refuses (expired or missing a permission) is
-reported to the owner once a day.
+1. In **Meta Business Suite → Settings → Accounts → Pages**, select the correct portfolio and Page; copy the Page ID.
+2. In [Meta's app dashboard](https://developers.facebook.com/apps/), create or select the app associated with that portfolio.
+   The Pages use case is **Manage everything on your Page**. Complete the permission, review and verification requirements Meta
+   displays; system-user access is not available to every business.
+3. In **Business Suite → Settings → Users → System users**, create a regular/employee system user and assign both the Page's
+   required tasks and the app. Do not use an admin system user for routine asset access. App and system user must belong to the
+   same portfolio.
+4. Choose **Generate new token**, select the app, expiration and permissions, then **Generate token**. Page posts/comments need
+   `business_management`, `pages_show_list`, `pages_read_engagement`, `pages_read_user_content`, `pages_manage_posts` and
+   `pages_manage_engagement`. Add `pages_messaging` for Messenger. Missing choices require resolving app assignment or permission
+   access first. Note the expiry; the Hub does not automatically renew Meta tokens.
+5. Enter **Facebook Page ID** and **Meta system user access token** in the Hub and choose **Save and check**. Start with optional
+   accounts blank. A numeric Page ID or a Page's `https://www.facebook.com/profile.php?id=…` address is accepted, not a personal
+   profile or a vanity-name Page URL.
+
+**Optional: add Instagram** explains linking a professional account to the Page, assigning it to the system user, and requesting
+`instagram_basic`, `instagram_content_publish` and `instagram_manage_comments`. In Meta's Graph API Explorer, a GET of
+`YOUR_PAGE_ID?fields=instagram_business_account` returns the linked account's numeric `id`. Enter that under **Instagram
+professional account ID**, not an @username. This integration uses Instagram through Facebook Login, not Instagram Login.
+
+**Optional: add Meta advertising** requires assigning the ad account and adding `ads_read` and `ads_management` to the token.
+Enter **Meta ad account ID**. Configure **Target cost per lead or sign-up** and **Most any ad may spend per day** separately.
+
+Official sources checked November 11, 2026: [Pages app setup](https://developers.facebook.com/documentation/pages-api/create-an-app),
+[system user setup](https://www.facebook.com/business/help/503306463479099),
+[system user requirements](https://developers.facebook.com/docs/business-management-apis/system-users/overview),
+[token permissions and expiry](https://developers.facebook.com/docs/business-management-apis/system-users/install-apps-and-generate-tokens).
+Provider menus and eligibility can vary; these sources describe the public requirements, not the owner's current app approval.
 
 ## Connecting LinkedIn
 
-LinkedIn decides who may use its Page and advertising APIs. Approval is a review of CareMetric's use case and can take days to weeks.
+1. Sign in to LinkedIn in your normal browser, then open [the developer site](https://developer.linkedin.com/) in that browser
+   and choose **My apps**.
+2. Select the app for your Company Page, or **Create app** with the Page, app name, logo and published privacy policy. In the app's
+   **Settings → Verify → Generate URL**, create the verification address and have the Page super admin approve its association.
+3. In **Products → Community Management API → Request access**, submit the business details and wait for approval. This requires
+   a business email and legal organization information. Sign In with LinkedIn or Share on LinkedIn alone is insufficient. If
+   another product blocks the application, LinkedIn directs applicants to use a new Community Management app. Development tier
+   allows testing, but the Hub's engagement reporting uses batch requests excluded from that tier: Standard approval is needed
+   for the full workflow.
+4. Open the separate [OAuth Token Tools](https://www.linkedin.com/developers/tools/oauth), select the approved app and **3-legged
+   OAuth**, and authorize as the Page administrator. Request `r_organization_social`, `w_organization_social`,
+   `r_organization_social_feed` and `w_organization_social_feed` for posts/comments. Choose **Copy token** and note its expiry.
+   Missing permissions mean app access still needs attention. This tool is not an app's Tools tab.
+5. Copy the number from the Page's admin address into **LinkedIn Company Page ID**, and the generated value into **LinkedIn access
+   token**. Choose **Save and check**. Numeric IDs, `urn:li:organization:…` and numeric `/company/123456/admin/` addresses work;
+   vanity-name URLs do not. A saved number alone does not verify which Page it belongs to.
 
-1. **Be a super admin of CareMetric's LinkedIn Page**, and an account manager of the ad account in Campaign Manager.
-2. **Create a developer app** at developer.linkedin.com for CareMetric, and have the Page verify it (Settings → Verify).
-3. **Request the Community Management API** product for the app (posts, comments and engagement on the Page). LinkedIn reviews the
-   request. LinkedIn may require this product to be the only one on its app.
-4. **Request the Advertising API** product if you want ads: on the same app if LinkedIn allows, otherwise on a second app. The separate
-   app’s token, client ID, client secret and refresh token go under **Advanced** in the LinkedIn card.
-5. **Generate the tokens** (OAuth 2.0 authorization code flow, or the developer portal's token generator), signed in as the Page's admin:
-   - Page app: `r_organization_social`, `w_organization_social` and `rw_organization_admin`, plus any comment scopes LinkedIn adds to
-     the product (such as `r_organization_social_feed` and `w_organization_social_feed`);
-   - ads app: `r_ads`, `rw_ads`, `r_ads_reporting`, `r_organization_social` and `w_organization_social` (sponsored-only posts carry each
-     new ad's copy).
+**Optional: renew LinkedIn tokens automatically** needs a refresh token issued by LinkedIn plus the same app's client ID and
+secret from **Auth**. Eligibility is controlled by LinkedIn; an app secret alone does not enable renewal. Otherwise replace the
+access token before its stated expiry.
 
-   An access token lasts 60 days. If LinkedIn also issues a refresh token, set it with the app's client id and secret and the Hub
-   renews the access token by itself. Otherwise, renew the token before it expires; the Hub warns once a day when LinkedIn refuses it.
-6. **Open Settings → Social media → LinkedIn.** Paste the **LinkedIn Company Page ID or admin link** and **LinkedIn access token**, then
-   choose **Save and check**. A numeric ID, `urn:li:organization:…` or numeric `/company/123456/admin/` link works; a public vanity-name
-   link does not. Renewal and advertising fields are under **Advanced**. The **LinkedIn API version** setting remains below the cards
-   (default `202609`; change it when LinkedIn retires that version).
-7. Saved connections apply within a minute without a restart. The same hand-over steps cover
-   LinkedIn: "Social posts", "Social replies" (except deletions, which always wait for you) and "Ad tuning". A LinkedIn budget change,
-   like Meta's, only ever happens on your own approval and under your cap.
+**Optional: add LinkedIn advertising** needs Advertising API approval and Campaign Manager account access. Development apps must
+also list the ad account under **Products → Advertising API → View settings**. Use `r_ads`, `rw_ads`, `r_ads_reporting`,
+`r_organization_social` and `w_organization_social` for the Hub's ad workflow. A separate app can supply the advertising token and
+renewal credentials. The **LinkedIn API version** setting remains below the cards (default `202609`).
+
+Official sources checked November 11, 2026: [create an app](https://www.linkedin.com/help/linkedin/answer/a1667239),
+[verify its Page association](https://www.linkedin.com/help/linkedin/answer/a1665329),
+[Community Management approval and tiers](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/community-management-api-migration-guide),
+[token generator](https://learn.microsoft.com/en-us/linkedin/shared/authentication/developer-portal-tools),
+[permission list](https://learn.microsoft.com/en-us/linkedin/marketing/increasing-access),
+[ad account access](https://learn.microsoft.com/en-us/linkedin/marketing/getting-started).
+
+## Start the Social Media Manager
+
+Connecting accounts does not resume the agent or change its approval settings. Once access is ready, resume the Social Media
+Manager on **AI team** in **Propose**, and use **Run now → Weekly social plan** to prepare drafts. Review posts, replies and ad
+changes before handing work over under **Work the team does on its own**. **Keep approving** steps back and **Pause** stops the
+agent. Budget increases always need approval and remain under your cap. LinkedIn comment deletions also always need approval.
+
+To draft replies, **Settings → AI team → Let agents send customer messages to the AI** must be on and the Anthropic credential
+configured. Set **Approved brand images** as needed. [Settings](SETTINGS.md) lists the other settings.
+
+Requests the provider may have received but did not confirm are not retried; the owner must check the Page or ad manager first.
+Refused tokens are reported to the owner once a day.
 
 ## Secure connection storage (deployment and recovery)
 
