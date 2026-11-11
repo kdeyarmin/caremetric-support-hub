@@ -132,6 +132,14 @@ the explicit removal checkbox clears it. Saved secrets are never returned to the
 Instagram/ad account; it does not publish, message anyone, change budgets or prove write permissions. Provider app approval still
 applies. Signing in to a provider alone does not connect its API. A stale form is rejected rather than overwriting another edit.
 
+Use a Company Page ID and a developer-app **API access token**. A sign-in email or password cannot connect a Page. The form flags an
+email in the Page ID field before sending credentials, and the server rejects it too. Autofill hints discourage password managers
+from treating these cards as login forms, but extensions may ignore those hints. If sign-in details appear, clear them and paste the
+Page details and generated API token. The LinkedIn card includes steps for app verification, Community Management API approval and
+token generation. **API credential saved · access not verified** means only that a credential is stored; **Read access verified**
+appears only after a successful check and clears when the form changes. An authentication rejection may mean an invalid, expired or
+revoked token; the Hub does not assume that every rejected credential was once valid.
+
 1. **In Meta Business Settings**, make sure CareMetric's Business owns the Facebook Page, the Instagram professional account (linked to
    the Page) and the ad account.
 2. **Create a Meta app and a system user.** Create an app of the Business type and add it to the Business. Create a system user (Admin)

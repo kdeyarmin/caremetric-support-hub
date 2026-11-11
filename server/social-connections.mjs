@@ -53,6 +53,11 @@ export function openConnection(provider, ciphertext, key) {
 export function connectionValue(provider, field, value) {
   if (typeof value !== 'string' || value.length > 1000) throw new HttpError(400, 'Enter an account ID or supported Page link.');
   let text = value.trim();
+  if (((provider === 'linkedin' && field === 'organizationId') || (provider === 'meta' && field === 'pageId')) && /^[^\s/@]+@[^\s/@]+$/.test(text)) {
+    throw new HttpError(400, provider === 'linkedin'
+      ? 'That looks like an email address. Enter the Company Page’s numeric ID or admin link. Your LinkedIn email and password are only for signing in to LinkedIn.'
+      : 'That looks like an email address. Enter the Facebook Page’s numeric ID or profile link. Your Facebook email and password are only for signing in to Facebook.');
+  }
   if (provider === 'linkedin' && field === 'organizationId') {
     text = text.replace(/^urn:li:organization:/, '');
     if (/^https:\/\//i.test(text)) {
@@ -70,7 +75,10 @@ export function connectionValue(provider, field, value) {
 }
 
 const failureMessage = code => {
-  if (/token_invalid$/.test(code)) return 'The access token expired or was revoked. Paste a new token and save again.';
+  if (/token_invalid$/.test(code)) {
+    const provider = code.startsWith('linkedin_') ? 'LinkedIn' : 'Meta';
+    return `${provider} rejected the API token. It may be invalid, expired or revoked. Generate a new API access token in ${provider === 'LinkedIn' ? 'your LinkedIn developer app' : 'Meta Business Settings'} and save it here. Your sign-in password cannot be used as an API token.`;
+  }
   if (/permission$/.test(code)) return 'The token lacks access. Confirm Page administrator access and the app’s required permissions; LinkedIn also requires Community Management API approval.';
   if (/rate_limited$/.test(code)) return 'The provider is limiting requests. Try the connection check again later.';
   if (/invalid_request$/.test(code)) return 'The provider could not read this account. Check the numeric account ID, app access and API version.';
