@@ -542,7 +542,13 @@ try {
     const proposed = (await rows('select * from private.agent_actions where task_id = $1', [draft]))[0];
     assert.deepEqual([proposed.status, (await task(draft)).status], ['proposed', 'awaiting_approval']);
     const overview = overviewSchema.parse(await team2.admin.overview(ownerToken, {}));
-    assert.deepEqual(overview.services, { enabled: true, handlers: ['brief.daily', 'concierge.communication', 'probe.incident', 'probe.recovery', 'probe.sweep', 'seo.weekly'], sms: true, email: true, ownerEmail: true, ai: false, customerTextToAi: false, externalEmail: false,
+    const { marketingTools, ...services } = overview.services;
+    assert.ok(Array.isArray(marketingTools) && marketingTools.length > 0, 'the owner sees the marketing toolkit even before its optional features are deployed');
+    assert.equal(new Set(marketingTools.map(tool => tool.key)).size, marketingTools.length, 'each marketing capability has one setup entry');
+    const discovery = marketingTools.find(tool => tool.key === 'prospect_research');
+    assert.equal(discovery?.configured, false, 'unconfigured research must not appear ready');
+    assert.ok(discovery.missing.length > 0, 'an unavailable capability explains its setup requirements');
+    assert.deepEqual(services, { enabled: true, handlers: ['brief.daily', 'concierge.communication', 'probe.incident', 'probe.recovery', 'probe.sweep', 'seo.weekly'], sms: true, email: true, ownerEmail: true, ai: false, customerTextToAi: false, externalEmail: false,
       // The Creative Director's status is always reported; this database does not declare it.
       creative: { declared: false, enabled: false, videoProvider: null, dailyRenderCap: 40 } });
     assert.equal(overview.team.approvals[0].id, proposed.id);
