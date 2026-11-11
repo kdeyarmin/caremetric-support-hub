@@ -56,7 +56,7 @@ export function connectionValue(provider, field, value) {
   if (((provider === 'linkedin' && field === 'organizationId') || (provider === 'meta' && field === 'pageId')) && /^[^\s/@]+@[^\s/@]+$/.test(text)) {
     throw new HttpError(400, provider === 'linkedin'
       ? 'That looks like an email address. Enter the Company Page’s numeric ID or admin link. Your LinkedIn email and password are only for signing in to LinkedIn.'
-      : 'That looks like an email address. Enter the Facebook Page’s numeric ID or profile link. Your Facebook email and password are only for signing in to Facebook.');
+      : 'That looks like an email address. Enter the Facebook Page’s numeric ID. Your Facebook email and password are only for signing in to Facebook.');
   }
   if (provider === 'linkedin' && field === 'organizationId') {
     text = text.replace(/^urn:li:organization:/, '');
@@ -77,9 +77,11 @@ export function connectionValue(provider, field, value) {
 const failureMessage = code => {
   if (/token_invalid$/.test(code)) {
     const provider = code.startsWith('linkedin_') ? 'LinkedIn' : 'Meta';
-    return `${provider} rejected the API token. It may be invalid, expired or revoked. Generate a new API access token in ${provider === 'LinkedIn' ? 'your LinkedIn developer app' : 'Meta Business Settings'} and save it here. Your sign-in password cannot be used as an API token.`;
+    return `${provider} rejected the access token. It may be invalid, expired or revoked. Follow step 4 of the ${provider} setup instructions to generate a replacement ${provider === 'LinkedIn' ? 'in OAuth Token Tools' : 'under Business Suite → Settings → Users → System users'}, then save it here. Your sign-in password cannot be used as an access token.`;
   }
-  if (/permission$/.test(code)) return 'The token lacks access. Confirm Page administrator access and the app’s required permissions; LinkedIn also requires Community Management API approval.';
+  if (/permission$/.test(code)) return code.startsWith('linkedin_')
+    ? 'LinkedIn denied access. Check your app’s Community Management API approval, the token’s permissions, and that the person who authorized it is an administrator of this Company Page. See setup steps 2–4.'
+    : 'Meta denied access. Check that the system user has both the Page and app assigned, and that the token includes the app’s approved Page permissions. See setup steps 2–4.';
   if (/rate_limited$/.test(code)) return 'The provider is limiting requests. Try the connection check again later.';
   if (/invalid_request$/.test(code)) return 'The provider could not read this account. Check the numeric account ID, app access and API version.';
   return 'The provider could not be reached or the check did not finish. Your saved details are unchanged; try again.';

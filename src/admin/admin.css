@@ -393,3 +393,20 @@
 .social-advanced { display: grid; gap: 1rem; }
 .social-advanced summary { cursor: pointer; font-weight: 600; padding: .5rem 0; }
 .social-advanced .social-connection-field { margin-top: 1rem; }
+.social-connection-details { margin: .5rem 0 0; }
+.social-setup-guide { padding: 1rem; border: 1px solid var(--line); border-radius: 8px; background: #f8fafc; min-width: 0; }
+.social-setup-guide summary { cursor: pointer; font-weight: 600; }
+.social-setup-content, .social-setup-step { display: grid; gap: .85rem; }
+.social-setup-content { margin-top: 1rem; }
+.social-setup-content p, .social-setup-content h4, .social-permissions { margin: 0; }
+.social-setup-content h4 { font-size: 1rem; }
+.social-setup-content h4:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+.social-setup-progress { font-size: .8rem; font-weight: 600; color: var(--brand); }
+.social-setup-address { display: grid; gap: .5rem; min-width: 0; }
+.social-setup-address a { display: inline-flex; align-items: center; gap: .3rem; }
+.social-setup-address code { user-select: all; font-size: .78rem; }
+.social-setup-guide code, .social-advanced code { overflow-wrap: anywhere; }
+.social-permissions { padding-left: 1.2rem; font-size: .85rem; }
+.social-permissions li + li { margin-top: .35rem; }
+.social-setup-trouble { border-top: 1px solid var(--line); padding-top: .8rem; font-size: .85rem; }
+.social-setup-trouble p { margin: .75rem 0; }

@@ -148,7 +148,7 @@ it('describes a rejected LinkedIn credential without claiming it was necessarily
   const { service, fetchImpl } = harness({ environment: { HUB_LINKEDIN_ACCESS_TOKEN: token } });
   fetchImpl.mockResolvedValue(new Response(JSON.stringify({ message: 'Invalid access token', status: 401 }), { status: 401 }));
   const result = await service.check('owner', 'linkedin');
-  expect(result).toEqual({ ok: false, message: expect.stringContaining('LinkedIn rejected the API token') });
+  expect(result).toEqual({ ok: false, message: expect.stringContaining('LinkedIn rejected the access token') });
   expect(result.message).toContain('invalid, expired or revoked');
   expect(result.message).toContain('Your sign-in password cannot be used');
   expect(result.message).not.toContain(token);
