@@ -49,6 +49,11 @@ const scorecardContract=await readFile(new URL('../supabase/migrations/202611091
 const publicArticlesContract=await readFile(new URL('../supabase/migrations/20261109130100_public_articles_contract.sql',import.meta.url),'utf8');
 const settingsContract=await readFile(new URL('../supabase/migrations/20261109150100_hub_settings_contract.sql',import.meta.url),'utf8');
 const creativeContract=await readFile(new URL('../supabase/migrations/20261109200100_creative_director_contract.sql',import.meta.url),'utf8');
+const marketingConnectionContracts=await Promise.all([
+  ['platform.agents.social-video.v1','20261111031738_social_video_publication_contract.sql'],
+  ['platform.agents.app-growth.v1','20261111032205_growth_app_lifecycle_contract.sql'],
+  ['platform.agents.visitor-metrics.v1','20261111040100_visitor_metrics_contract.sql'],
+].map(async([feature,file])=>({feature,sql:await readFile(new URL(`../supabase/migrations/${file}`,import.meta.url),'utf8')})));
 const diagnosticSupportContract=diagnosticSupportMigration.slice(diagnosticSupportMigration.indexOf('do $$ declare contract'));
 assert.ok(selfServiceContract.startsWith('-- Contract publication is last:'),'Recognize the self-service contract declaration');
 const structureMigration=await readFile(new URL('../supabase/migrations/20260911202823_learning_structure_backend_contract.sql',import.meta.url),'utf8');
@@ -120,7 +125,9 @@ try {
   }
   await client.query('begin');
   try {
-    const latest=await readContract();
+    const deployed=await readContract();
+    // Historical replays stop at Creative before these newer gates add their features in migration order.
+    const latest={...deployed,features:deployed.features.filter(feature=>!marketingConnectionContracts.some(entry=>entry.feature===feature))};
     // Replay history without the newer workforce features, then replay their reviewed gates last, in order.
     const current={...latest,features:latest.features.filter(feature=>!['platform.agents.v1','platform.agents.probes.v1','platform.agents.brief.v1','platform.agents.seo.v1','platform.agents.concierge.v1','platform.agents.accounts.v1','platform.agents.hardening.v1','support.leads.v1','platform.agents.growth.v1','platform.agents.lifecycle.v1','platform.agents.content.v1','platform.agents.customer-growth.v1','platform.agents.autonomy.v1','platform.agents.external-email.v1','platform.agents.concierge-autosend.v1','platform.agents.content-autopublish.v1','platform.agents.offers.v1','platform.agents.growth-autonomy.v1','learning.media-import.v1','learning.select-all.v1','platform.agents.sales-executive.v1','platform.agents.social.v1','platform.agents.marketing.v1','platform.agents.scorecard.v1','content.public-articles.v1','platform.settings.v1','platform.agents.creative.v1'].includes(feature))};
     const latestBase={...latest,features:latest.features.filter(feature=>!['platform.agents.customer-growth.v1','platform.agents.autonomy.v1','platform.agents.external-email.v1','platform.agents.concierge-autosend.v1','platform.agents.content-autopublish.v1','platform.agents.offers.v1','platform.agents.growth-autonomy.v1','learning.media-import.v1','learning.select-all.v1','platform.agents.sales-executive.v1','platform.agents.social.v1','platform.agents.marketing.v1','platform.agents.scorecard.v1','content.public-articles.v1','platform.settings.v1','platform.agents.creative.v1'].includes(feature))};
@@ -321,9 +328,18 @@ try {
     await client.query(settingsContract);
     assert.deepEqual(await readContract(),beforeCreative,'The Hub settings declaration is idempotent');
     await client.query(creativeContract);
-    assert.deepEqual(await readContract(),latest,'The Creative Director declaration restores the exact current feature set');
+    assert.deepEqual(await readContract(),latest,'The Creative Director declaration restores its historical feature set');
     await client.query(creativeContract);
     assert.deepEqual(await readContract(),latest,'The Creative Director declaration is idempotent');
+    const expected={...latest,features:[...latest.features]};
+    for(const entry of marketingConnectionContracts) {
+      expected.features.push(entry.feature);
+      await client.query(entry.sql);
+      assert.deepEqual(await readContract(),expected,`${entry.feature} adds only its own feature`);
+      await client.query(entry.sql);
+      assert.deepEqual(await readContract(),expected,`${entry.feature} is idempotent`);
+    }
+    assert.deepEqual(await readContract(),deployed,'Replaying every reviewed gate restores the deployed contract');
     assertBackendContract(await readContract());
     assert.throws(()=>assertBackendContract({...latest,features:latest.features.filter(feature=>feature!=='billing.platform.v1')}),/incompatible/);
   } finally { await client.query('rollback'); }
