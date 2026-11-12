@@ -153,6 +153,14 @@ it('discovery records every result ten at a time, keeps what it found when a lat
  await expect(growthHandlers({growth:{store,research:{configured:true,search:failing}},marketed:['caremetric-intel']})['growth.discovery']({id:'t',agent:{autonomy:'propose'}})).rejects.toMatchObject({transient:true});
  expect(failing).toHaveBeenCalledTimes(1);
 });
+it('discovery reports what the search provider says the key may still use this month, when it says so',async()=>{
+ const store={discover:vi.fn(async()=>0)};
+ const research={configured:true,search:vi.fn(async()=>[]),allowance:()=>({limit:2000,left:1500,days:30})};
+ expect((await growthHandlers({growth:{store,research},marketed:['caremetric-intel']})['growth.discovery']({id:'t',agent:{autonomy:'propose'}})).result)
+  .toEqual({candidates:0,searches:discoveryQueriesPerDay,searchAllowance:{limit:2000,left:1500,days:30}});
+ research.allowance=()=>null;
+ expect((await growthHandlers({growth:{store,research},marketed:['caremetric-intel']})['growth.discovery']({id:'t',agent:{autonomy:'propose'}})).result).toEqual({candidates:0,searches:discoveryQueriesPerDay});
+});
 it('discovery waits the search provider\'s own pace between calls and stops searching once its time is spent',async()=>{
  vi.useFakeTimers();
  try {

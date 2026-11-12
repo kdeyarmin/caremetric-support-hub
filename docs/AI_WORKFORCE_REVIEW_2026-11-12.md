@@ -9,8 +9,7 @@ the creative and marketing agents now, because the company has no customers yet.
 
 **Answer in one paragraph.** All eleven agents are switched on and almost every kind of work is handed over, but the team is close
 to idle: it spent 87 cents on the model in seven days against about $20 a day of budget, and in four days of prospecting it found 23
-organizations, most of them directories, and sent one cold email. Nothing has replied, no real lead has come in, and no product
-events reach the Hub. Money and autonomy are not the constraint; the top of the funnel is. This change raises prospecting volume
+organizations, most of them directories, and sent one cold email. Nothing has replied and no real lead has come in. Money and autonomy are not the constraint; the top of the funnel is. This change raises prospecting volume
 roughly tenfold, lets fit be judged from each prospect's own website, fixes two faults that would have thrown away the first replies,
 and removes several stalls in content, social and ads. The cold-email cap (ten a day, in the database) and the missing inbound path
 are now the next limits; both need an owner decision.
@@ -27,7 +26,7 @@ are now the next limits; both need an owner decision.
 | Cold emails delivered | 1 (November 8) | The cap of 10 a day has never been reached |
 | Replies, trials from outreach | 0 | The Sales Executive has never run |
 | Real website leads | 3 county reports from one address | No inbound demand yet |
-| Product activity events | 0 | Activation and retention plays cannot see usage |
+| Product activity events | 0 | Intel's feed is wired and idle: no Intel trial or subscription is live, so there is nothing to report (see below) |
 | Billing mirror | 1 active subscription, 1 cancelled trial | No external paying customer |
 | Creative assets approved | 22 images, 6 videos (November 12) | Supply already exceeds the week's post slots |
 
@@ -57,15 +56,31 @@ qualification threshold of 75 and every claim check are unchanged.
    counted, that is three or four new businesses a day. Once the first week at ten shows bounces under 2% and no complaints, a
    migration should make the cap a Hub setting and raise it in steps (25, then 50). Confirm the separate growth sender
    (Settings → Email → "Growth email sender") is set first, so prospecting cannot harm the support address's reputation.
-2. **Check the search plan.** Discovery now makes up to 16 search calls a day (about 500 a month). Confirm the Brave plan behind
-   `HUB_GROWTH_SEARCH_API_KEY` allows it.
+2. **Check the search plan.** Discovery now makes up to 16 search calls a day (about 500 a month), one at a time and a second
+   apart. The key works (four daily runs succeeded), but its plan could not be read from this review. Each discovery run now records
+   what Brave's rate-limit headers say the key may still use that month (`searchAllowance` in the run's result on the AI team page),
+   when Brave sends them.
 3. **Connect an ad account and set a budget.** With no customers and no audience, organic posts will not produce trials soon. The
    28 approved creatives are ready; a small daily budget on LinkedIn and Meta pointed at the free county report is the fastest
    inbound path the team can already run.
-4. **Connect Intel's product events** (trial started, first value, paid). Without them nobody is told when a prospect starts a
-   trial, and the Account Manager cannot time a single play.
-5. **Read the first drafts.** Open Growth after the first full day and read what the Marketing Manager wrote. Persuasiveness cannot
+4. **Read the first drafts.** Open Growth after the first full day and read what the Marketing Manager wrote. Persuasiveness cannot
    be tested without real drafts.
+
+## Intel's product events: connected, and idle
+
+Checked on November 12. Nothing needs wiring.
+
+- **Hub:** the receiver (`POST /api/apps/growth`) is deployed and its feature (`platform.agents.app-growth.v1`) is declared in
+  production. Trial starts and payments come from the Hub's own billing mirror, not from Intel.
+- **Intel:** migration `0150_hub_growth_accounts` was applied on November 11 at 05:15 UTC, the maintenance fan-out that runs the
+  sender ticks every ten minutes with no worker reporting a problem, and the Hub answers Intel's entitlement checks with 200, which
+  are made with the same key and address the sender uses.
+- **Why nothing has arrived:** Intel reports only for an organization whose subscription the Hub has confirmed as active, trialing
+  or past due. The Hub holds one Intel subscription, a trial that was cancelled on November 8, so no organization is enrolled and
+  there is nothing to send. The only requests the Hub has ever had on that address are two deployment probes on November 11.
+- **Not verified:** whether Intel has the explicit pause set (`CAREMETRIC_GROWTH_ENABLED=false`), and a real end-to-end receipt.
+  Both show on the first trial: within a day of it, `private.customer_activity_events` should hold a heartbeat for that tenant.
+  Intel's own rollout notes forbid creating fake production activity to test this, and none was created.
 
 ## Findings not fixed here, in priority order
 
@@ -89,7 +104,7 @@ Each needs a database migration or an owner decision, so none is in this change.
 ## Verification and limits
 
 - `npm run check` passed with CI's settings (`VITE_DEMO_MODE=true`, `SUPPORT_HUB_ALLOW_DEMO_BUILD=true`): the docs check, types,
-  lint, 3,260 application tests in 286 files, 24 SDK tests, the SDK build and the app build. `npm run evaluate:growth` passed 29 cases
+  lint, 3,263 application tests in 286 files, 24 SDK tests, the SDK build and the app build. `npm run evaluate:growth` passed 29 cases
   per product. New and changed tests cover discovery volume, paging and pacing, the
   directory filter, the contact finder's home page summary, sweep limits and back-off, the opt-out wording and address, quoted
   replies, the article schedule and backlog, the ad review's status and LinkedIn ad lengths.
