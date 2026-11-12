@@ -41,6 +41,10 @@ does nothing. A setting you saved, or cleared back to its default, is never over
 | Email | Mailing address in email footers | `HUB_BULK_EMAIL_POSTAL_ADDRESS` |
 | Email | Growth email sender | `HUB_GROWTH_FROM_EMAIL` |
 | Email | Growth email display name | `HUB_GROWTH_FROM_NAME` |
+| Email | Email service (SendGrid or Amazon SES) | none: a setting from the start |
+| Email | Amazon SES region | none: a setting from the start |
+| Email | Amazon SES configuration set | none: a setting from the start |
+| Email | Amazon SES events topic | none: a setting from the start |
 | Text messages | Twilio Messaging Service SID | `HUB_TWILIO_MESSAGING_SERVICE_SID` |
 | Text messages | Twilio sending number | `HUB_TWILIO_FROM_NUMBER` |
 | Customer growth | Send growth email | `HUB_GROWTH_SEND_ENABLED` |
@@ -78,6 +82,7 @@ Secrets, which are never shown on screen or stored in the database:
 - `HUB_TELNYX_API_KEY`
 - `HUB_TWILIO_AUTH_TOKEN`, `HUB_TWILIO_ACCOUNT_SID`
 - `HUB_SENDGRID_API_KEY`, `HUB_SENDGRID_INBOUND_PUBLIC_KEY`, `HUB_SENDGRID_EVENT_PUBLIC_KEY`
+- `HUB_SES_ACCESS_KEY_ID`, `HUB_SES_SECRET_ACCESS_KEY` (Amazon SES sending key, [AMAZON_SES.md](AMAZON_SES.md))
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
 - `HUB_GROWTH_SIGNING_KEY`, `HUB_GROWTH_SEARCH_API_KEY`, `HUB_GROWTH_CAREBASE_EVENT_KEY`, `HUB_GROWTH_INTEL_EVENT_KEY`
 - `HUB_LEAD_SECRET_CAREBASE`, `HUB_LEAD_SECRET_INTEL`, `HUB_LEAD_SECRET_ADVISORS`

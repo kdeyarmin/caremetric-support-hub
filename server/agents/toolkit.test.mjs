@@ -43,7 +43,7 @@ describe('marketing toolkit configuration', () => {
     expect(row(marketingToolkit(options), 'growth_email').missing).toEqual(expect.arrayContaining([
       expect.stringContaining('Send growth email'), expect.stringContaining('Mailing address'),
     ]));
-    expect(row(marketingToolkit({ ...options, growthMail: { configured: false, send: vi.fn() } }), 'growth_email').missing.join(' ')).toContain('SendGrid');
+    expect(row(marketingToolkit({ ...options, growthMail: { configured: false, send: vi.fn() } }), 'growth_email').missing.join(' ')).toContain('Settings → Email → Email service');
   });
 
   it('does not confuse a present malformed feedback key or a short event key with a working verifier', () => {

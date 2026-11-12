@@ -26,6 +26,11 @@ export const integrationCatalog = Object.freeze([
       { name: 'HUB_SENDGRID_INBOUND_PUBLIC_KEY', secret: true, required: true, purpose: 'Verifies signed Inbound Parse posts.' },
       { name: 'HUB_SENDGRID_API_KEY', secret: true, required: false, purpose: 'Mail Send key for replies and bulk email.' },
     ] },
+  { id: 'amazon-ses', name: 'Email (Amazon SES)', purpose: 'Sends the Hub\'s email instead of SendGrid when Settings → Email → Email service is Amazon SES, and reports delivery, bounces and complaints through SNS. The region, configuration set and events topic are in Settings → Email.', docs: 'docs/AMAZON_SES.md',
+    variables: [
+      { name: 'HUB_SES_ACCESS_KEY_ID', secret: true, required: true, purpose: 'Access key id of an IAM user allowed only to send email through SES.' },
+      { name: 'HUB_SES_SECRET_ACCESS_KEY', secret: true, minLength: 20, required: true, purpose: 'That access key\'s secret. The Hub sends it nowhere: it only signs requests to email.<region>.amazonaws.com.' },
+    ] },
   { id: 'public-origin', name: 'Webhook origin', purpose: 'The exact origin Twilio and SendGrid call back; it must match the webhook URLs they hold.', docs: 'docs/UNIFIED_COMMUNICATIONS.md',
     variables: [{ name: 'HUB_PUBLIC_ORIGIN', secret: false, required: false, purpose: 'Defaults to https://support-hub-web-production.up.railway.app.' }] },
   { id: 'telnyx-signin', name: 'SMS sign-in (Telnyx)', purpose: 'Sends the six-digit sign-in codes for every Hub account. It stays in Railway so a wrong value can never lock you out of the Hub.', docs: 'docs/APP_SMS_SIGNIN.md',

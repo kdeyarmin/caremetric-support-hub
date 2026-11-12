@@ -151,10 +151,12 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           throw new HttpError(404,'Unavailable.');
         }
         const growthEvent=/^\/api\/growth\/events\/(carebase|caremetric-intel)$/.exec(path);
-        if(growthEvent || path==='/api/growth/delivery') {
+        if(growthEvent || path==='/api/growth/delivery' || path==='/api/growth/delivery/ses') {
           if(req.method!=='POST'||req.headers.origin||req.headers.cookie||url.search) throw new HttpError(403,'Forbidden.');
           if(!growth) throw new HttpError(503,'Growth is unavailable.');
           const raw=await rawBody(req,growthEvent?8192:262144);
+          // Amazon SES events arrive as SNS notifications (docs/AMAZON_SES.md); SendGrid's signed Event Webhook keeps its own address.
+          if(path==='/api/growth/delivery/ses') return json(await growth.sesDelivery(raw));
           return json(growthEvent?await growth.activity(growthEvent[1],raw,req.headers):await growth.delivery(raw,req.headers));
         }
         // `preferences` is the address new growth emails carry; `unsubscribe` stays for emails already sent (see growthOptOutPath in growth/worker.mjs).

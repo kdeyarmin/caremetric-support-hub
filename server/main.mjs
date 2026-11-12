@@ -17,6 +17,7 @@ import { integrationSetup } from './integration-setup.mjs';
 import { sqlAiUsageRecorder } from './ai-usage.mjs';
 import { communications, defaultPublicOrigin, sendgridMail, twilioMessaging } from './communications.mjs';
 import { bulkEmail, sendgridBulkMail } from './bulk-email.mjs';
+import { chosenMail, sesBulkMail, sesMail, snsReceiver, snsTopicPattern } from './ses.mjs';
 import { platformBilling } from './billing.mjs';
 import { selfService } from './self-service.mjs';
 import { agentTeam } from './agents/index.mjs';
@@ -74,22 +75,29 @@ const textSender=twilioMessaging({accountSid:process.env.HUB_TWILIO_ACCOUNT_SID,
 const supportFrom=setting('email.support_from');
 // Where customers' answers go: the address SendGrid Inbound Parse receives (Settings → Email → Reply-To), else the sender itself.
 const supportReplyTo=()=>settings.get('email.reply_to')??settings.get('email.support_from');
-const mailSender=sendgridMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:supportFrom,replyTo:supportReplyTo});
+// Which service sends it: SendGrid or Amazon SES (Settings → Email → Email service, docs/AMAZON_SES.md), read on each send. SES's access
+// key is a secret in Railway; its region, configuration set and events topic are settings.
+const emailService=setting('email.provider');
+const sesAccess={accessKeyId:process.env.HUB_SES_ACCESS_KEY_ID,secretAccessKey:process.env.HUB_SES_SECRET_ACCESS_KEY,region:setting('email.ses_region'),configurationSet:setting('email.ses_configuration_set')};
+const bulkSender=options=>chosenMail(emailService,{sendgrid:sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,...options}),ses:sesBulkMail({...sesAccess,...options})});
+const mailSender=chosenMail(emailService,{sendgrid:sendgridMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:supportFrom,replyTo:supportReplyTo}),
+  ses:sesMail({...sesAccess,from:supportFrom,replyTo:supportReplyTo})});
 // The mailing address in every marketing, growth and customer email footer (CAN-SPAM).
 const postalAddress=()=>settings.get('email.postal_address')??'';
 const messaging=communications({pool,delegations:capabilities,publicOrigin,
   twilioAuthToken:process.env.HUB_TWILIO_AUTH_TOKEN,sendgridInboundPublicKey:process.env.HUB_SENDGRID_INBOUND_PUBLIC_KEY,
   sms:textSender,email:mailSender,
   chatEnabled:setting('support.chat')});
-const growth=growthService({store:growthStore(pool),research:growthResearch({apiKey:process.env.HUB_GROWTH_SEARCH_API_KEY}),contacts:growthContactFinder(),features:new Set(contract.features),enabled:setting('growth.send'),signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,publicOrigin,postalAddress});
+const growth=growthService({store:growthStore(pool),research:growthResearch({apiKey:process.env.HUB_GROWTH_SEARCH_API_KEY}),contacts:growthContactFinder(),features:new Set(contract.features),enabled:setting('growth.send'),signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,
+  sesEvents:snsReceiver({topicArn:setting('email.ses_events_topic')}),sesEventsReady:()=>snsTopicPattern.test(settings.get('email.ses_events_topic')??''),publicOrigin,postalAddress});
 // Cold email and sales follow-ups may come from their own address (Settings → Email → Growth email sender, normally on a subdomain), so
 // prospecting can never hurt the support address's reputation. Replies still go to the support inbox. Unset: the support sender.
 const growthIdentity=()=>growthSender({HUB_GROWTH_FROM_EMAIL:settings.get('email.growth_from')??'',HUB_GROWTH_FROM_NAME:settings.get('email.growth_from_name')??''},
   {supportFrom:supportFrom(),supportReplyTo:supportReplyTo()});
 for(const warning of growthIdentity().warnings)console.warn(warning);
-const growthMail=sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:()=>growthIdentity().from,fromName:()=>growthIdentity().fromName,replyTo:()=>growthIdentity().replyTo});
+const growthMail=bulkSender({from:()=>growthIdentity().from,fromName:()=>growthIdentity().fromName,replyTo:()=>growthIdentity().replyTo});
 // The Account Manager's customer emails: from the support address, replies to it, one-click unsubscribe headers, and the postal address in every footer.
-const customerMail=sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:supportFrom,replyTo:supportReplyTo,category:'hub-lifecycle-email'});
+const customerMail=bulkSender({from:supportFrom,replyTo:supportReplyTo,category:'hub-lifecycle-email'});
 // The AI team: inert until "Run the AI team" is switched on in Settings, and every agent starts paused until the owner resumes it.
 const team=agentTeam({pool,growth,growthMail,postalAddress,sms:textSender,email:mailSender,ownerEmail:setting('agents.owner_email'),publicOrigin,enabled:setting('agents.enabled'),communications:messaging,features,anthropicApiKey:process.env.ANTHROPIC_API_KEY,record:sqlAiUsageRecorder(pool).record,guides:guideLibrary({load:()=>api.rpc('list_published_content',{}),loadProducts:()=>api.rows('products')}),customerTextToAi:setting('agents.customer_text_to_ai'),
   leadSecrets:leadSecrets(process.env),
@@ -103,7 +111,7 @@ const team=agentTeam({pool,growth,growthMail,postalAddress,sms:textSender,email:
   // Offers from the owner's menu: platform billing (created below) makes them, so the call is deferred until an offer is approved.
   offerBilling:{agentOffer:input=>billing.agentOffer(input)}});
 const announcements=bulkEmail({pool,delegations:capabilities,publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin,postalAddress,
-  mail:sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,from:supportFrom,replyTo:supportReplyTo})});
+  mail:bulkSender({from:supportFrom,replyTo:supportReplyTo})});
 // Platform billing: the Hub is the only Stripe client for every application's subscriptions.
 const customerSelfService=selfService({pool,provider});
 const billing=platformBilling({pool,secretKey:process.env.STRIPE_SECRET_KEY,authorizeCustomerBilling:customerSelfService.authorizeBilling,customerPurchasingEnabled:setting('billing.customer_purchasing'),
