@@ -20,7 +20,7 @@ import { selfServiceApps } from '../src/self-service/protocol.ts';
  * entitlement, usage and trial requests.
  */
 export const appKeyPattern = /^cmb_[A-Za-z0-9_-]{43}$/;
-const trialDays = { carebase: 30, breathe: 14, 'caremetric-emr': 14, 'caremetric-go': 14, 'caremetric-intel': 14 };
+const trialDays = { carebase: 30, breathe: 14, 'caremetric-emr': 14, 'caremetric-go': 14, 'caremetric-intel': 30 };
 export const entitlementCacheSeconds = 300;
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 // The CareMetric AI Assistant: the actor of every billing change the AI team makes (hub.profiles row seeded with the AI team).

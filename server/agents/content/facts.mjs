@@ -80,7 +80,7 @@ export function intelFactsFromCatalog(catalog) {
  * for flagging docs/GTM_FACTS.md when the catalog moves on.
  */
 export const intelReviewedFacts = deepFreeze({
-  trialDays: 14,
+  trialDays: 30,
   pricing: [
     'Starter: $349 per month, or $290 per month billed annually ($3,480 per year). One office. 3 marketer seats + 1 manager, 1 branch, home health or hospice, up to 10 counties. Extra seats $59 per month ($590 per year on annual billing). Free onboarding.',
     'Growth: $899 per month, or $749 per month billed annually ($8,988 per year). The usual agency plan, with campaigns, manager tools and AI field help. 10 seats included, up to 3 branches, home health and hospice, 1 full state. Extra seats $49 per month ($490 per year on annual billing). Free onboarding.',
@@ -89,7 +89,7 @@ export const intelReviewedFacts = deepFreeze({
     'Extra branches are $99 per month each ($990 per year on annual billing) and extra states $199 per month each ($1,990 per year on annual billing). Annual billing saves about 17%.',
   ],
   offers: [
-    'A 14-day free trial with no credit card, covering 3 marketer seats + 1 manager, 1 branch, home health and hospice, 1 county, then request paid plan activation from CareMetric.',
+    'A 30-day free trial with no credit card, covering 3 marketer seats + 1 manager, 1 branch, home health and hospice, 1 county, then request paid plan activation from CareMetric.',
     foundersSaleTerms,
     'Eligible Intel products: Starter, Growth and Pro. Intel Starter is $174.50 per organization per month during the introductory year, or $1,740 for the first annual payment, then the regular rate. Onboarding is free on every plan.',
   ],

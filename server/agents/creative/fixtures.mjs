@@ -5,7 +5,7 @@ export const kit = { primaryColor: '#0B5394', backgroundColor: '#FFFFFF', textCo
 export const content = {
   headline: 'See which counties send your organization the most referrals', primaryText: 'CareMetric Intel turns public data into a territory plan.', description: 'Targeted marketing.',
   cta: 'Start free trial', altText: 'A headline',
-  overlay: { kicker: 'For healthcare marketing teams', stat: '14 days', statLabel: 'free trial', statSource: 'CareMetric fact sheet', quote: 'Spend the week with referral sources.', quoteSource: 'CareMetric',
+  overlay: { kicker: 'For healthcare marketing teams', stat: '30 days', statLabel: 'free trial', statSource: 'CareMetric fact sheet', quote: 'Spend the week with referral sources.', quoteSource: 'CareMetric',
     offerLine: '50% off your first 12 months', checklist: ['Territory analysis', 'A marketing CRM', 'Referrals in one place'], screenshotId: 's1', beats: ['Public healthcare data', 'One plan your team can work'] },
 };
 
