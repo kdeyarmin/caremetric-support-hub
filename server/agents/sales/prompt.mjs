@@ -11,7 +11,7 @@ import { factSheetText } from '../content/facts.mjs';
 import { catalogGuidance } from '../content/features.mjs';
 import { playbookText } from '../../growth/playbook.mjs';
 
-export const salesPromptVersion = 'sales.3';
+export const salesPromptVersion = 'sales.4';
 
 export const intents = ['interested', 'question', 'pricing', 'objection', 'not_now', 'not_interested', 'unsubscribe', 'wrong_person', 'support', 'other'];
 export const nextSteps = ['start_trial', 'activate_paid', 'answer_only', 'pick_time', 'follow_up_later', 'none'];

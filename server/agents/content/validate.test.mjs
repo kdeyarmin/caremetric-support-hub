@@ -3,7 +3,7 @@ import { legalDisclaimer, officialSources } from './facts.mjs';
 import { featuresText } from './features.mjs';
 import { fireDrillDraft, referralDraft } from './fixtures.mjs';
 import { topics } from './topics.mjs';
-import { allowedNumbers, allowedUrl, checkArticle, checkDraft, limits, markupProblems, normalizeTerms, numbersIn, previewOf, textProblems } from './validate.mjs';
+import { allowedNumbers, allowedUrl, checkArticle, checkDraft, limits, markupProblems, normalizeTerms, numbersIn, previewOf, textProblems, unclearCopy } from './validate.mjs';
 
 const topic = key => topics.find(item => item.key === key);
 const fire = topic('pa-fire-drill-requirements');
@@ -246,5 +246,21 @@ describe('the last check before publishing', () => {
     expect(checkArticle({ ...stored, product: 'pennsync' })).toEqual(['product_unknown']);
     expect(checkArticle({ ...stored, slug: 'Not A Slug' })).toEqual(['slug_format']);
     expect(checkArticle(null)).toEqual(expect.arrayContaining(['slug_format', 'product_unknown', 'title_length', 'body_length']));
+  });
+});
+
+describe('plain language (owner direction 2026-11-12)', () => {
+  it('passes plain, concrete copy, checklists and video beats', () => {
+    expect(unclearCopy('Plan the week\'s visits around the accounts that need them. Start a free trial.')).toEqual([]);
+    expect(unclearCopy('Territory map\nVisit log\nReferral funnel')).toEqual([]);
+    expect(unclearCopy('Free trial. No card.')).toEqual([]);
+    expect(unclearCopy('Counties with elevated readmissions are on the map. See https://www.caremetricintel.com/a.b.c')).toEqual([]);
+  });
+
+  it('refuses empty buzzwords, strings of fragments and overlong sentences', () => {
+    expect(unclearCopy('Unlock smarter referral outreach.')).toEqual(['empty_words']);
+    expect(unclearCopy('A seamless solution for your team.')).toEqual(['empty_words']);
+    expect(unclearCopy('Territory. Clarity. Growth.')).toEqual(['fragments']);
+    expect(unclearCopy(`${Array.from({ length: 31 }, () => 'word').join(' ')}.`)).toEqual(['long_sentence']);
   });
 });

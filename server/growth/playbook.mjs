@@ -8,7 +8,7 @@
  * buying triggers here are hypotheses to ask about, never statements about a particular prospect. Changing anything a model reads
  * here means changing `playbookVersion`.
  */
-import { products as facts, productPages } from '../agents/content/facts.mjs';
+import { founder, products as facts, productPages } from '../agents/content/facts.mjs';
 
 export const playbookVersion = 'sales-playbook.2';
 
@@ -168,8 +168,9 @@ export const salesPlaybook = deepFreeze({
     valuePoints: [
       'Targeted marketing, marketing analysis and territory analysis from public healthcare and demographic data.',
       'A marketing CRM that keeps outreach, follow-up and the referrals the organization records in one place.',
+      'One workspace for the whole marketing job: territory research, focused referral lists, account relationships, planned visits, expenses and recorded results. Email campaigns are one part of it, never the point (fact sheet, "How to present it").',
       'Plans from Starter (3 marketer seats + 1 manager) to Pro, with annual billing saving about 17%.',
-      'A 14-day free trial with no credit card.',
+      `A ${facts.intel.trialDays}-day free trial with no credit card.`,
     ],
     nextStep: { label: 'Start a CareMetric Intel free trial', url: pageUrl('intel-home') },
     pages: ['intel-home', 'intel-how-it-works', 'intel-county-report', 'intel-pricing', 'intel-resources', 'intel-targeted-marketing', 'intel-territory-analysis', 'intel-referral-measurement', 'intel-manager-playbook'],
@@ -182,11 +183,11 @@ export const salesPlaybook = deepFreeze({
     ],
     objections: [
       { key: 'price', when: 'Cost or budget.', answer: 'Quote only the fact sheet: Starter, Growth and Pro with seats and counties, annual billing saving about 17%, and the Founders Sale (50% off eligible subscription charges for the first 12 months of paid service). Never promise more referrals or revenue.' },
-      { key: 'timing', when: 'Not now or busy.', answer: 'Acknowledge it, mention the 14-day free trial needs no credit card, and ask when to check back. Record a dated follow-up.' },
+      { key: 'timing', when: 'Not now or busy.', answer: `Acknowledge it, mention the ${facts.intel.trialDays}-day free trial needs no credit card, and ask when to check back. Record a dated follow-up.` },
       { key: 'current_system', when: 'They already use a CRM, a spreadsheet or another data tool.', answer: 'Ask what it leaves out (territory analysis, focused lists, recorded referrals in one place). Never name or criticize another product.' },
       { key: 'data_trust', when: 'They ask whether the data shows real referrals.', answer: 'Be precise: public Medicare and Census figures are research signals; referrals are what the organization records in Intel.' },
       { key: 'authority', when: 'They must ask an owner or a corporate office.', answer: 'Offer a short summary they can forward and ask who else should see it.' },
-      { key: 'demo', when: 'They ask for a demo, a call or a meeting.', answer: 'CareMetric does not do live demos or sales calls. Offer the written walkthrough instead: the resource or guide that shows what they want to see, the 14-day free trial (no credit card) on one county, and answers to any question by email.' },
+      { key: 'demo', when: 'They ask for a demo, a call or a meeting.', answer: `CareMetric does not do live demos or sales calls. Offer the written walkthrough instead: the resource or guide that shows what they want to see, the ${facts.intel.trialDays}-day free trial (no credit card) on one county, and answers to any question by email.` },
       { key: 'results', when: 'They ask for proof of results or case studies.', answer: 'There are no approved customer results to share. Suggest the free trial on one county so they can judge it on their own market.' },
     ],
   },
@@ -200,7 +201,7 @@ export const playbookFor = product => salesPlaybook[product] ?? null;
  * Touch 1 opens on a likely problem; touch 2 brings a new angle (a useful resource or the current offer); touch 3 closes the loop.
  */
 export const sequencePlan = deepFreeze([
-  { touch: 1, angle: 'Open with one likely problem for this kind of organization, phrased as a question, then one sentence on how the product helps, and the free trial as the next step. No price.' },
+  { touch: 1, angle: 'Introduce yourself: for CareMetric Intel, the founder\'s story in one or two sentences, as written on the fact sheet. Then one likely problem for this kind of organization, phrased as a question, one sentence on how the product helps, and the free trial as the next step. No price.' },
   { touch: 2, angle: 'Bring a different angle from touch 1: one useful free resource page or one concrete capability, and the current Founders Sale terms if relevant. Do not repeat touch 1\'s opening. Ask one qualifying question.' },
   { touch: 3, angle: 'A short, polite close-the-loop note: ask whether the topic is a priority this year or whether someone else handles it. Make it easy to say "not now". No new pitch.' },
 ]);
@@ -220,12 +221,16 @@ export const lifecyclePlays = deepFreeze({
 });
 export const lifecyclePlay = kind => lifecyclePlays[kind] ?? lifecyclePlays.outreach;
 
-/** Who a message about `product` comes from: the product team's sign-off and the product's website. */
-export function senderFor(product) {
+/**
+ * Who a message about `product` comes from: the product team's sign-off and the product's website. Prospect outreach (`purpose`
+ * 'marketing') is the founder's own letter (owner direction 2026-11-12), so it is signed with the founder's name and title instead.
+ */
+export function senderFor(product, purpose = null) {
   const book = salesPlaybook[product];
   const fact = book ? facts[book.factsKey] : null;
-  if (!fact) return { team: 'The CareMetric team', site: null };
-  return { team: `The ${fact.name} team`, site: { label: fact.site.replace(/^https:\/\/(?:www\.)?/, '').replace(/\/$/, ''), url: fact.site } };
+  const signer = purpose === 'marketing' ? founder.signOff : null;
+  if (!fact) return { team: 'The CareMetric team', ...(signer ? { signer } : {}), site: null };
+  return { team: `The ${fact.name} team`, ...(signer ? { signer } : {}), site: { label: fact.site.replace(/^https:\/\/(?:www\.)?/, '').replace(/\/$/, ''), url: fact.site } };
 }
 
 /** The pages a message about `product` may link to (that product's own pages from the fact sheet), plus nothing else. */

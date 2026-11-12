@@ -61,7 +61,7 @@ describe('the weekly social plan', () => {
     const h = harness({ model });
     const outcome = await h.handlers['social.plan'](task('social.plan'), { now });
     const request = model.run.mock.calls[0][1];
-    expect(request.promptVersion).toBe('social-plan.4');
+    expect(request.promptVersion).toBe('social-plan.5');
     // Each marketed product's published catalog follows the prompt (content/features.mjs).
     expect(request.system.slice(1)).toEqual(catalogBlocks(JSON.parse(request.user).products));
     expect(request.system.length).toBeGreaterThan(1);

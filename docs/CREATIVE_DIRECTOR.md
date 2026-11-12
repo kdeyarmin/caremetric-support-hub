@@ -47,7 +47,7 @@ A brief names the product, a goal, an audience (organizations and roles, never a
 platforms, images and/or videos with their lengths, an optional angle and an optional offer code. The model is given the brief, the
 product's own pages (by id), the brand kit's voice, banned phrases and required disclaimers, the owner's screenshots (by id and label), the
 product's learnings and its recent headlines (not to repeat), and, for a revision, the asset it replaces and the owner's note. Its system
-prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.5` and `creative-variants.5`) carry the fact sheet and the sales
+prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.6` and `creative-variants.6`) carry the fact sheet and the sales
 playbook (the Sales Executive's fact source) and are cached. The answers are closed JSON schemas.
 
 **What each product does** (`server/agents/content/features.mjs`, data in `intel-features.json` and `carebase-features.json`). Each brief's
@@ -70,7 +70,10 @@ model calls carry its product's published catalog as a second cached block after
 The model is told to sell one feature per asset by the decision it helps make or the work it saves, to vary features across variants, to
 respect plan and module labels, and never to imply that public data confirms referrals, that a tool makes anyone compliant or survey-ready,
 or that a readiness score predicts a survey. Planned briefs each lead with a different pillar (the one the plan post is about, else the
-next in turn). A catalog's numbers are allowed in copy about its own product only ("up to 2,000 accounts" for Intel, "16 hours of annual
+next in turn), except Intel's email campaigns pillar, which never leads a brief: on 2026-11-12 the owner directed that sending emails to
+referral sources is not the point of Intel and never the whole focus (`focusFor` in `server/agents/content/features.mjs`; the fact sheet's
+"How to present it"). Copy is clear before clever: a headline that makes sense on its own and complete sentences that say who it is for and
+what the product does (the fact sheet's "How everything must read"), and the `plain_language` rule below refuses the worst of it. A catalog's numbers are allowed in copy about its own product only ("up to 2,000 accounts" for Intel, "16 hours of annual
 training" for CareBase); a catalog vouches for no claim, and its percentages are not allowed. The Content Marketer, the Sales Executive and
 the Social Media Manager use the same catalogs (docs/AI_TEAM.md, "What each product does"). Refresh them with `npm run refresh:features`
 when a product's pages change (`npm run refresh:features -- --check` says whether they have). Other products' names are written
@@ -177,6 +180,7 @@ be approved automatically (the database refuses one).
 | `offer_mismatch` | Only billing's live offers (`offers.mjs`, read from the Founders Sale coupon: FOUNDERS50, 50% for the first 12 months, CareBase and Intel only), with their own percentage and length; no code to type (the Founders Sale applies itself); no invented deadline or scarcity; only this product's listed prices | block |
 | `brand_name` | "CareMetric" is one word, exactly so; CareBase, CareMetric Intel, Intel exactly | block |
 | `banned_phrase`, `required_disclaimer` | The brand kit's lists | block |
+| `plain_language` | Easy to read and makes sense on the first pass (owner direction 2026-11-12): no empty buzzword (unlock, empower, leverage, seamless, solution and the like), no string of one- or two-word fragments ("Territory. Clarity. Growth."), no sentence over 30 words (`unclearCopy` in `server/agents/content/validate.mjs`; `creative-compliance.2`) | block |
 | `fact_sheet` | Every other fact-sheet rule the Content Marketer and Sales Executive follow: unlisted numbers, competitors, testimonials, voice AI, a call or demo as a step, "prove" about CareBase, the fixed vocabulary, contact details, mentions of AI, and any offer of a call, meeting, demo or time to talk (`offersMeeting`, the check the Social Media Manager runs on every post and ad: CareMetric does no personal demos) | block |
 | `brand_colors` | Every color the asset paints (text, fills, borders, in every video frame) is one of the product's brand colors: its theme's or one the owner set in the brand kit. A render that does not report its colors is blocked | block |
 | `contrast` | WCAG AA for every text run (4.5:1, or 3:1 for large text, judged at the size a feed shows it). The layouts keep a color only where it passes and otherwise use the theme's own darkest or lightest color | block |

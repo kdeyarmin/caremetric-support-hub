@@ -18,6 +18,9 @@ describe('checking social text', () => {
     expect(fb('Better than Yardi.')).toMatchObject({ ok: false, reason: 'competitor_named' });
     expect(fb('Book a demo today.')).toMatchObject({ ok: false, reason: 'call_offer' });
     expect(fb('Our happy customers love it.')).toMatchObject({ ok: false, reason: 'testimonial' });
+    // Copy that is hard to read or says nothing (owner direction 2026-11-12).
+    expect(fb('Unlock your referral potential with CareMetric Intel.')).toMatchObject({ ok: false, reason: 'empty_words' });
+    expect(fb('Territory. Clarity. Growth.')).toMatchObject({ ok: false, reason: 'fragments' });
     expect(fb('This post was written by an AI assistant.')).toMatchObject({ ok: false });
   });
 

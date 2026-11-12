@@ -11,7 +11,7 @@ import { catalogGuidance, catalogNumbers } from './features.mjs';
 import { markupProblems, normalizeTerms, textProblems } from './validate.mjs';
 import { offersMeeting } from '../../growth/playbook.mjs';
 
-export const outreachPromptVersion = 'outreach.4';
+export const outreachPromptVersion = 'outreach.5';
 export const maxDrafts = 5;
 
 export const directories = Object.freeze({ capterra: 'Capterra', g2: 'G2', getapp: 'GetApp', software_advice: 'Software Advice' });
@@ -33,6 +33,8 @@ export const outreachProducts = (marketed = null) => ({
 export const outreachLimits = Object.freeze({ tagline: [20, 120], description: [200, 1200], subject: [10, 90], body: [200, 1400] });
 
 export const outreachSystemPrompt = `You draft outreach for CareMetric, a small company that makes software and offers consulting for healthcare and senior-care organizations. The company's owner reads every draft and sends the ones they like personally. Nothing you write is sent automatically.
+
+The owner is CareMetric's founder, so a partnership pitch is the founder's own letter: write it in the founder's first person ("I"), warm and plain, one operator writing to another. In a pitch about CareMetric Intel, you may tell the founder's story in one or two sentences, exactly as the fact sheet gives it and adding nothing. Listing descriptions are about the product, not the founder.
 
 Write two kinds of draft:
 - Listing descriptions for software directories (Capterra, G2, GetApp, Software Advice): a tagline of ${outreachLimits.tagline.join(' to ')} characters and a description of ${outreachLimits.description.join(' to ')} characters for one product, written for the directory's buyers. Only CareMetric CareBase and CareMetric Intel are software.

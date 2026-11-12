@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { segments } from '../creative/copy.mjs';
-import { careSettingText, catalogBlocks, featuresText, focusFor, productFeatures } from './features.mjs';
+import { careSettingText, catalogBlocks, catalogGuidance, featuresText, focusFor, productFeatures } from './features.mjs';
 import { products } from './facts.mjs';
 import { textProblems } from './validate.mjs';
 
@@ -54,6 +54,23 @@ describe('CareMetric Intel\'s published feature catalog', () => {
     expect(focusFor('caremetric-intel', 'A tip for the week', 0, new Set([titles[0]])).title).toBe(titles[1]);
     expect(focusFor('caremetric-intel', 'Log the lunch against the Stark limit', 0, new Set(['Spend with compliance in view'])).title).toBe(titles[0]);
     expect(focusFor('advisors', 'anything', 0)).toBeNull();
+  });
+
+  it('never leads a brief with email campaigns, even when the plan names them (owner direction 2026-11-12)', () => {
+    const email = intel.pillars.find(pillar => /email campaigns/i.test(pillar.area));
+    expect(email).toBeTruthy();
+    expect(focusFor('caremetric-intel', 'Send an email campaign to your referral sources', 0).title).not.toBe(email.title);
+    const led = new Set(Array.from({ length: intel.pillars.length * 2 }, (_, turn) => focusFor('caremetric-intel', 'A tip for the week', turn).title));
+    expect(led.has(email.title)).toBe(false);
+    expect(led.size).toBe(intel.pillars.length - 1);
+    // Even with every other part used this week, the next brief does not fall back to email.
+    const others = new Set(intel.pillars.filter(pillar => pillar !== email).map(pillar => pillar.title));
+    expect(focusFor('caremetric-intel', 'A tip for the week', 3, others).title).not.toBe(email.title);
+  });
+
+  it('tells every catalog prompt that one feature never stands for the product', () => {
+    expect(catalogGuidance).toMatch(/Never let one feature stand for the whole product/);
+    expect(catalogGuidance).toMatch(/email campaigns are one feature on two plans, never the point of the product/);
   });
 });
 

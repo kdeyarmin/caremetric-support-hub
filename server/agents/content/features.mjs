@@ -120,7 +120,7 @@ const intelWords = [
  * How to use a product catalog, for any prompt that carries one (`catalogBlocks`). The catalog follows the prompt as its own cached
  * block, one per product the request is about.
  */
-export const catalogGuidance = `What each product does: when a product's own published catalog follows these instructions ("CareMetric Intel features and data" or "CareMetric CareBase capabilities"), use it to be specific. Name the feature or capability that answers the reader, and say why it matters in the catalog's own terms: the decision it helps make, the work it saves, the record it keeps. Stay inside what it says: a feature with a plan or role label is not on every plan, and a module may not be in every subscription. Never present public data as confirmed referrals, a tool as making anyone compliant or survey-ready, or a readiness score as a prediction of survey results; never promise savings. Quote none of its percentages, and repeat none of its questions as claims.`;
+export const catalogGuidance = `What each product does: when a product's own published catalog follows these instructions ("CareMetric Intel features and data" or "CareMetric CareBase capabilities"), use it to be specific. Name the feature or capability that answers the reader, and say why it matters in the catalog's own terms: the decision it helps make, the work it saves, the record it keeps. Stay inside what it says: a feature with a plan or role label is not on every plan, and a module may not be in every subscription. Never present public data as confirmed referrals, a tool as making anyone compliant or survey-ready, or a readiness score as a prediction of survey results; never promise savings. Quote none of its percentages, and repeat none of its questions as claims. Never let one feature stand for the whole product: across your work, show the range of what it does. For Intel, email campaigns are one feature on two plans, never the point of the product (the fact sheet's "How to present it"): do not lead with emailing referral sources or make email the whole subject; show it as one part of the workspace.`;
 
 /** The system-prompt blocks for these products' catalogs (cached; products without one are left out, each product once). */
 export function catalogBlocks(products = []) {
@@ -143,20 +143,29 @@ export function catalogNumbers(product) {
 }
 
 /**
+ * Pillars that are one part of the product and never what a brief leads with. Owner direction 2026-11-12: sending emails to referral
+ * sources is not the point of Intel and is never the whole focus (facts.mjs, `present`), so its email campaigns pillar is not a lead.
+ */
+const supportingAreas = { 'caremetric-intel': /\bemail campaigns\b/i };
+
+/**
  * The "why it matters" pillar a planned brief leads with: the one its plan text is about (the most specific match: a later pillar's words,
  * such as expenses or competitors, win over the general ones), else the next in turn this plan has not used, so a run of plans covers
- * everything the product does. Null for a product without a catalog.
+ * everything the product does. A supporting pillar (`supportingAreas`) never leads, even when the plan text names it. Null for a product
+ * without a catalog.
  */
 export function focusFor(product, text = '', turn = 0, used = new Set()) {
   const slug = slugOf(product);
   const pillars = productFeatures[slug]?.pillars ?? [];
-  if (!pillars.length) return null;
+  const supporting = supportingAreas[slug];
+  const leads = pillars.filter(pillar => !supporting?.test(pillar.area));
+  if (!leads.length) return null;
   const words = slug === 'carebase' ? carebaseWords : intelWords;
-  const matches = pillars.filter((pillar, index) => words[index]?.test(text));
+  const matches = pillars.filter((pillar, index) => words[index]?.test(text) && leads.includes(pillar));
   const named = matches.at(-1);
   if (named && !used.has(named.title)) return named;
-  const start = ((turn % pillars.length) + pillars.length) % pillars.length;
-  const order = [...pillars.slice(start), ...pillars.slice(0, start)];
+  const start = ((turn % leads.length) + leads.length) % leads.length;
+  const order = [...leads.slice(start), ...leads.slice(0, start)];
   return order.find(pillar => !used.has(pillar.title)) ?? order[0];
 }
 

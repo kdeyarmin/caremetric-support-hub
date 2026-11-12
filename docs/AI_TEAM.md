@@ -801,7 +801,8 @@ the Intel app's own emails), CareBase's in the CareBase app's email standard (Pe
 blue rule, the app's blue buttons, its footer with support@caremetric.ai). Each has an inbox
 preview line, a headline, "Hello,", numbered first steps
 with a button to the product's help, the Founders Sale terms in a highlighted box in the trial check-in, the consent
-terms in a highlighted box in the testimonial request, and a sign-off from the product's team with its website. Each
+terms in a highlighted box in the testimonial request, and a sign-off from the product's team with its website (prospect outreach is
+signed by the founder instead; see "What each product does"). Each
 has a plain-text part that says the same. They say nothing about AI, quote no price, promise no time or outcome, never
 mention a phone call or voicemail, and use the company's vocabulary for CareBase (Assisted Living Facility, ALF,
 surveyor). None offers a time to meet: help comes by reply and through the product's help (see
@@ -1169,8 +1170,25 @@ plan, ad copy and replies (a request about both products carries both). Each pro
 reader and why it matters, stay inside what the catalog says (plan and module labels), never present public data as confirmed referrals,
 a tool as making anyone compliant or survey-ready, or a readiness score as a prediction, never promise savings, and quote none of its
 percentages. Each agent's checks allow the numbers a catalog states for text about its own product only; a catalog vouches for no claim.
-Prompt versions: `content.3`, `outreach.4`, `sales.3`, `social-plan.4`, `social-ads.4`, `social-reply.3`, `creative-concept.5`,
-`creative-variants.5`.
+Prompt versions: `content.4`, `outreach.5`, `sales.4`, `social-plan.5`, `social-ads.5`, `social-reply.4`, `creative-concept.6`,
+`creative-variants.6`, and the growth writer's `growth.7`.
+
+**The bigger picture, the founder and plain words (owner direction 2026-11-12).** Every writer on the team reads the fact sheet, so the
+owner's direction lives there (`server/agents/content/facts.mjs`, docs/GTM_FACTS.md):
+
+- **CareMetric Intel is a whole marketing workspace, and email is never the point of it.** The fact sheet gives Intel's bigger picture,
+  everything it does in each of the eleven areas its features page publishes, who uses it and for what, and "How to present it": never
+  describe Intel as an email tool, never lead with emailing referral sources, never make email the whole subject of anything, and cover
+  the whole range across the team's work. The catalog guidance says the same, the Creative Director never leads a brief with the email
+  campaigns pillar, and the sales playbook's value points name the whole workspace.
+- **The founder's story.** The fact sheet carries the founder's story in the owner's own words. Prospect outreach (the Marketing Manager)
+  and the Content Marketer's partnership pitches are written in the founder's first person, touch 1 tells the story in one or two
+  sentences, and prospect outreach is signed with the founder's name and title. The story is told only about Intel, with no results,
+  agency name or numbers.
+- **How everything must read.** The fact sheet opens with plain-language rules: everyday words, concrete statements, complete short
+  sentences, no buzzwords, no strings of fragments, and headlines that make sense on their own. The Creative Director's `plain_language`
+  rule, the Social Media Manager's checks and the growth writer's checks refuse an empty buzzword, a string of one- or two-word fragments
+  or a sentence over 30 words (`unclearCopy` in `server/agents/content/validate.mjs`).
 
 `npm run refresh:features` rebuilds both catalogs from the live pages and `npm run refresh:features -- --check` says whether they have
 changed. Other products' names are written generically (the EMR vendors Intel names for its CSV imports), and the CareBase FAQ's sentences
