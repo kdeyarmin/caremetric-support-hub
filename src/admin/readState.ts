@@ -25,7 +25,7 @@ export function describeAdminReadError(error: unknown): AdminReadError {
   };
   if (code === "401" || code === "unauthenticated") return {
     title: "Sign-in required",
-    message: "Your administrator session could not be verified. Sign in again with an SMS code, then retry.",
+    message: "Your administrator session could not be verified. Sign in again, then retry.",
     retryable: true,
   };
   if (code === "403" || code === "forbidden") return {

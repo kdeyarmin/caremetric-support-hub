@@ -10,7 +10,9 @@ The browser submits a flat `{ product, operation, ...parameters }` request to th
 | --- | --- | --- | --- |
 | CareBase | `https://cmcarebase.com/api/platform-admin/read` | capabilities, organizations, profiles, billing summary/subscriptions | Native profiles; profile activity is not a claim about Auth eligibility |
 | Breathe | `https://cmbreathe.com/resupply-api/central-admin/read` | capabilities, overview, organizations, staff, billing summary/subscriptions | Active/inactive staff accounts with native `admin` or `agent` roles; customer/patient accounts are excluded |
-| EMR, PennSync, Intel, Go | Pending independently verified adapters | No calls forwarded | No records or totals invented |
+| CareMetric Intel | `https://www.caremetricintel.com/functions/centralAdminRead` | capabilities, overview, registered users ([connection](INTEL_ADMIN_CONNECTION.md)) | Registered application users; no organizations |
+| Healthcare Advisors | `https://caremetricadvisors.com/api/hub/admin-read` | capabilities, overview, consultation requests ([connection](ADVISORS_ADMIN_CONNECTION.md)) | No software accounts |
+| EMR, PennSync, Go | Not connected; these applications use their own support | No calls forwarded | No records or totals invented |
 
 Both billing views report the application's database snapshot and historical records. Provider status is the latest state recorded by that application, not a fresh payment-provider query. Nullable provider IDs and missing period dates remain explicit. No revenue, currencies, charges, refunds, or new subscription ownership are inferred from these records. CareBase excludes provider-placeholder rows; application subscription states retain their native semantics.
 

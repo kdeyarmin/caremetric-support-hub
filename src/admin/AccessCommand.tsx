@@ -13,7 +13,7 @@ function message(error: unknown) {
   const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
   if (code === "conflict") return "The underlying record changed. Close this review, refresh the records, and preview a new change.";
   if (code === "expired") return "This preview expired. Close it and request a new preview.";
-  if (code === "401" || code === "unauthenticated" || code === "403" || code === "forbidden") return "Current administrator access could not be verified. Sign in again with an SMS code and retry.";
+  if (code === "401" || code === "unauthenticated" || code === "403" || code === "forbidden") return "Current administrator access could not be verified. Sign in again and retry.";
   if (code === "invalid_request") return "Check the selected change and reason before retrying.";
   if (code === "unconfigured") return "Application access controls are not enabled for this connection.";
   return "The result could not be confirmed. Retry this same request to check its recorded outcome; do not create a replacement change.";

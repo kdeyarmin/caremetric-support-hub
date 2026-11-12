@@ -348,6 +348,20 @@ subscription pays in Stripe Checkout and returns to `return_url` with `?checkout
 - Every request is recorded as `billing.plan_change.app` with the application, account,
   administrator id, action, outcome and quote — never names or emails.
 
+### `POST /api/apps/portal`
+
+Opens the Stripe customer portal for one of the application's own linked accounts, so its administrator can
+update a payment method or download invoices without leaving the application. Same application key as the
+other application APIs.
+
+```json
+{ "account": "<the application's account id>", "return_url": "https://<the application's page to return to>" }
+```
+
+The answer is `{ "url": "<Stripe portal session address>" }`. Send the administrator to it straight away; a
+portal session is short-lived. The account must already be linked to a Hub billing customer, and
+`return_url` must be https. Each session is recorded as `billing.portal.app`.
+
 ### `POST /api/apps/trials`
 
 ```json

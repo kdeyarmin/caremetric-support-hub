@@ -146,7 +146,13 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
       if (!entry.endpoint || !['carebase','breathe','caremetric-emr','pennsync','caremetric-go','intel','advisors'].includes(request.product)) throw new HttpError(503,'This application has not connected its administrator session.','unconfigured');
       const operation=request.operation;
       const capability=await issue(sessionToken,request.product,operation);
-      const result=await callNativeAdmin(fetchImpl,entry.endpoint,entry.authorizationHeader ?? 'Authorization',capability,operation,value=>parsePortfolioEnvelope(value,request));
+      let result;
+      try { result=await callNativeAdmin(fetchImpl,entry.endpoint,entry.authorizationHeader ?? 'Authorization',capability,operation,value=>parsePortfolioEnvelope(value,request)); }
+      catch (error) {
+        // Capabilities and the overview name no record, so a 404 means the application's administration endpoint is not there.
+        if (error instanceof HttpError && error.status===404 && ['capabilities','overview'].includes(operation.operation)) throw new HttpError(503,'This application has not connected its administrator session.','unconfigured');
+        throw error;
+      }
       // A logout, revocation or role change while the native read was in flight
       // must prevent the response from reaching the browser.
       await withSession(pool,sessionToken,db=>authorize(db,request.product,operation));

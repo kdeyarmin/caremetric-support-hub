@@ -31,6 +31,8 @@ describe('AI assistance provider', () => {
     expect(init.headers['anthropic-version']).toBe('2023-06-01');
     const body = JSON.parse(init.body);
     expect(body.model).toBe(aiModels.fast);
+    // Room for the model's reasoning is added on top of the answer's own limit, so a short limit cannot be spent before the answer.
+    expect(body.max_tokens).toBe(700 + 4096);
     expect(body.messages[0].content).toContain('Export button spins forever');
     expect(logs).toHaveLength(1);
     const entry = JSON.parse(logs[0]);

@@ -2,12 +2,19 @@ import { createHash, randomUUID } from 'node:crypto';
 import { HttpError, withSession, transaction } from './sms-auth.mjs';
 import { live } from './live.mjs';
 import { customerBillingRequest, customerBillingWorkspace } from '../src/billing/customerBillingProtocol.ts';
-import { aggregateFacilityLines, planFacilityChange } from '../src/billing/facilityAllocations.ts';
+import { aggregateFacilityLines as aggregateLines, planFacilityChange } from '../src/billing/facilityAllocations.ts';
 import { assertPlanFits } from '../src/billing/planSize.ts';
 import { selfServiceApps } from '../src/self-service/protocol.ts';
 import { normalizers, StripeError, withAllSubscriptionItems } from './stripe.mjs';
 import { customerCheckoutService } from './customer-checkout.mjs';
 import { FOUNDERS_COUPON, foundersAmounts, foundersEligibility, foundersPrice, foundersWindow } from './founders-sale.mjs';
+
+// A subscription can hold a price the customer catalog does not sell (a tiered or quarterly price set by an administrator).
+// That is the customer's "refresh billing" answer, not a service failure.
+function aggregateFacilityLines(rows, catalog) {
+  try { return aggregateLines(rows, catalog); }
+  catch (error) { throw new HttpError(409, error.message); }
+}
 
 const rows = subscription => (subscription.items?.data ?? []).map(item => ({ price: item.price.id ?? item.price, quantity: item.quantity ?? 1 })).sort((a, b) => a.price.localeCompare(b.price));
 export const sameBillingLines = (a, b) => JSON.stringify([...a].sort((x, y) => x.price.localeCompare(y.price))) === JSON.stringify([...b].sort((x, y) => x.price.localeCompare(y.price)));

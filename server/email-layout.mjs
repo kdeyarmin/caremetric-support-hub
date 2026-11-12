@@ -83,7 +83,8 @@ function href(url) {
 // ---- Themes ------------------------------------------------------------------------------------------------------------------------
 
 /** CareMetric Intel's Emberline colors (kdeyarmin/intel src/lib/branding.ts, CAREMETRIC_COLORS), as its emails use them. */
-export const INTEL_SITE = 'https://caremetricintel.com';
+// The www host: the bare domain answers with a redirect, which not every mail client's image proxy follows.
+export const INTEL_SITE = 'https://www.caremetricintel.com';
 export const INTEL_TAGLINE = 'Set your marketing on FIRE!';
 export const intelPalette = Object.freeze({
   brand: '#ff7a45', brandDark: '#ff5a1f', onBrand: '#1a0700', heading: '#f4f4f6', body: '#b9bcc6', muted: '#8d919c',

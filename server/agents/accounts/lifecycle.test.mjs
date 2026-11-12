@@ -232,7 +232,7 @@ describe('the sent email', () => {
       expect(email.html).toContain(`${LAYOUT_MARKER}="branded"`);
       if (input.product === 'caremetric-intel') {
         expect(email.html).toContain('data-theme="intel"');
-        expect(email.html).toContain('https://caremetricintel.com/brand/emberline-fire.png');
+        expect(email.html).toContain('https://www.caremetricintel.com/brand/emberline-fire.png');
         expect(email.html).toContain('Set your marketing on FIRE!');
       } else {
         expect(email.html).toContain('data-theme="carebase"');

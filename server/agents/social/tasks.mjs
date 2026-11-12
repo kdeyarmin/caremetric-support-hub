@@ -41,7 +41,12 @@ const slots = { facebook: [10, 30], instagram: [12, 15], linkedin: [8, 45] };
 const modelAttempts = 3;
 const money = cents => `$${(cents / 100).toFixed(2)}`;
 const firstLine = text => String(text ?? '').split('\n')[0].slice(0, 90);
-const productOf = url => { try { const host = new URL(url).hostname.replace(/^www\./, ''); return host === 'cmcarebase.com' ? 'carebase' : host === 'caremetricintel.com' ? 'caremetric-intel' : null; } catch { return null; } };
+// Each product's sites, subdomains included (home.cmcarebase.com is CareBase's marketing site, caremetrictrain.com its older domain).
+const productHosts = { carebase: ['cmcarebase.com', 'caremetrictrain.com'], 'caremetric-intel': ['caremetricintel.com'] };
+const hostOf = url => { try { return new URL(url).hostname.toLowerCase(); } catch { return null; } };
+const productOf = url => { const host = hostOf(url); return host === null ? null : Object.keys(productHosts).find(product => productHosts[product].some(site => host === site || host.endsWith(`.${site}`))) ?? null; };
+// An ad whose link is readable and does not lead to a product the team is marketing (another product's site, or a site that is no product's).
+const leadsElsewhere = (url, marketedList) => hostOf(url) !== null && !(productOf(url) && markets(marketedList, productOf(url)));
 
 export function socialHandlers({ store, notifier, model = null, meta, linkedin = null, settings = {}, imageUrls: imageUrlsOption = [], customerTextToAi = false, publicOrigin = null, marketed = null, log = line => console.warn(line), creative = null }) {
   // The approved brand images (Settings → Social media) may be a function, read each time they are used.
@@ -348,7 +353,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
         } else if (rec.kind === 'budget') {
           if (targets.has(`social.ad_budget:${source.key(rec.adsetId)}`)) { counts.skipped += 1; continue; }
           // No more money for an ad set that sends people to a product the team is not marketing.
-          if (overview.ads.some(ad => ad.adsetId === rec.adsetId && productOf(ad.copy?.link) && !markets(marketedList, productOf(ad.copy?.link)))) { counts.skipped += 1; continue; }
+          if (overview.ads.some(ad => ad.adsetId === rec.adsetId && leadsElsewhere(ad.copy?.link, marketedList))) { counts.skipped += 1; continue; }
           if (await propose(task, { kind: 'social.ad_budget', targetKind: 'social_adset', targetId: source.key(rec.adsetId),
             preview: `Raise the daily budget of the ${source.name} ${where} "${rec.adsetName}" from ${money(rec.from)} to ${money(rec.to)}: ${rec.reason}. Your cap is ${money(settings.maxDailyBudgetCents)} a day. Only you can approve a budget change.`,
             input: { adsetId: rec.adsetId, from: rec.from, to: rec.to, reason: rec.reason, ...platform } })) counts.budget += 1;
