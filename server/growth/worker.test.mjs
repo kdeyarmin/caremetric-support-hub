@@ -1,5 +1,6 @@
 import {it,expect,vi} from 'vitest';
-import {growthDay,growthEmail,growthExecutors,growthHandlers} from './worker.mjs';
+import {assessLimit,assessRetryMs,contactSearchConcurrency,contactSearchLimit,growthDay,growthEmail,growthExecutors,growthHandlers,sweepContactLimit,workBudgetMs} from './worker.mjs';
+import {discoveryQueriesPerDay} from './playbook.mjs';
 const base={id:'opp',product:'carebase',stage:'qualified',owner_agent:'marketing_manager',internal:false,next_at:'2026-01-01T00:00:00Z',touches:0,work:[],events:[],eligibility:'review'};
 it('Observe inspects but creates no work or proposals',async()=>{
  const store={snapshot:vi.fn(async()=>({total:1,items:[base]})),plan:vi.fn(),propose:vi.fn()};
@@ -47,6 +48,23 @@ it('skips one opportunity whose model answer is cut off and drafts the rest; a r
  await expect((await sweep(account)).run).rejects.toMatchObject({code:'ai_auth_failed'});
  expect(account.run).toHaveBeenCalledTimes(1);
 });
+it('does not pay again, sweep after sweep, for a draft that failed its checks; a changed opportunity, contact or policy is drafted at once',async()=>{
+ const o={...base,version:4,contact_id:'contact',contact_version:7,eligibility:'permitted',policy:{version:9,approved_claim:'Discuss staff training.'},evidence:[{id:'source',source_url:'https://example.org',claim:'Care operator.',observed_at:new Date().toISOString()}]};
+ let at=5_000_000,item=o;
+ const store={snapshot:vi.fn(async()=>({total:1,items:[item]})),plan:vi.fn(async()=>'work'),draft:vi.fn(async()=>({id:'message',status:'draft'})),propose:vi.fn()};
+ // Cites a source that was never supplied, so the draft is refused by the code checks.
+ const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'A question',body:'Would a free trial help?',citations:['invented'],needsHuman:false}}))};
+ const handler=growthHandlers({growth:{store,signingReady:true,hash:x=>x,unsubscribeToken:()=>'token'},model,clock:()=>at})['growth.pipeline'];
+ const sweep=()=>handler({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'});
+ expect((await sweep()).result).toMatchObject({planned:1,drafted:0,undrafted:1});
+ expect((await sweep()).result).toEqual({inspected:1,planned:1,drafted:0});
+ expect(model.run).toHaveBeenCalledTimes(1);
+ item={...o,policy:{...o.policy,version:10}}; await sweep();
+ expect(model.run).toHaveBeenCalledTimes(2);
+ at+=assessRetryMs; await sweep();
+ expect(model.run).toHaveBeenCalledTimes(3);
+ expect(store.draft).not.toHaveBeenCalled();
+});
 it('does not pay for a new draft of work whose last message was cancelled under the same context, unless it was withdrawn or something changed',async()=>{
  const o={...base,version:4,contact_id:'contact',contact_version:7,eligibility:'permitted',policy:{version:9,approved_claim:'Discuss staff training.'},evidence:[{id:'source',source_url:'https://example.org',claim:'Care operator.',observed_at:new Date().toISOString()}]};
  const cancelled={trigger_key:'outreach:0',status:'open',message_id:'old',message_status:'cancelled',message_withdrawn:false,message_opportunity_version:4,message_contact_version:7,message_policy_version:9};
@@ -70,7 +88,7 @@ it('only sends a claimed message, distinguishes acceptance and never retries an 
  const store={claim:vi.fn(async()=>({send:true,to:'synthetic@example.org',id:'m',workId:'w',subject:'Hello',body:'Approved message'})),finish:vi.fn()};
  const growth={store,configured:()=>true,unsubscribeToken:()=> 'token'},mail={configured:true,send:vi.fn(async()=>({delivery:'sent',id:'provider'}))};
  const exec=growthExecutors({growth,mail,publicOrigin:'https://hub.example.org',postalAddress:'Synthetic address'})['growth.message'];
- expect(await exec({id:'a',input:{messageId:'m'}})).toEqual({delivery:'accepted'});expect(mail.send.mock.calls[0][0].text).toContain('/api/growth/unsubscribe/token');expect(store.finish).toHaveBeenCalledWith('m','accepted','provider');
+ expect(await exec({id:'a',input:{messageId:'m'}})).toEqual({delivery:'accepted'});expect(mail.send.mock.calls[0][0].text).toContain('/api/growth/preferences/token');expect(store.finish).toHaveBeenCalledWith('m','accepted','provider');
  store.claim.mockResolvedValue({send:false,status:'unknown'});await exec({id:'a',input:{messageId:'m'}});expect(mail.send).toHaveBeenCalledTimes(1);
 });
 it('transport exceptions record uncertainty and surface the failed action',async()=>{
@@ -95,13 +113,14 @@ it('discovery reads each new business\'s own site for one role address and recor
  const contacts={configured:true,find:vi.fn(async domain=>domain==='a.example'?{email:'info@a.example',sourceUrl:'https://a.example/contact'}:domain==='b.example'?{email:null,reason:'none'}:(()=>{throw new Error('unreachable');})())};
  const growth={store,research:{configured:true,search:vi.fn(async()=>[])},contacts};
  const outcome=await growthHandlers({growth,features:autonomy})['growth.discovery']({id:'t',agent:{autonomy:'propose'}});
- expect(outcome.result).toEqual({candidates:2,contacts:{searched:3,found:1,none:2},qualified:1});
+ expect(outcome.result).toEqual({candidates:0,searches:2*discoveryQueriesPerDay,contacts:{searched:3,found:1,none:2,described:0},qualified:1});
+ expect(store.contactCandidates).toHaveBeenCalledWith(contactSearchLimit);
  expect(store.recordContact.mock.calls).toEqual([['org-a','info@a.example','https://a.example/contact'],['org-b',null,null],['org-c',null,null]]);
  expect(JSON.stringify(outcome)).not.toContain('@');
  // A refused address (the database's own domain check) is recorded as nothing found.
  store.recordContact.mockReset().mockRejectedValueOnce(Object.assign(new Error('off domain'),{code:'22023'})).mockResolvedValue({found:false});
  store.contactCandidates.mockResolvedValue([{id:'org-a',domain:'a.example'}]);
- expect((await growthHandlers({growth,features:autonomy})['growth.discovery']({id:'t',agent:{autonomy:'propose'}})).result.contacts).toEqual({searched:1,found:0,none:1});
+ expect((await growthHandlers({growth,features:autonomy})['growth.discovery']({id:'t',agent:{autonomy:'propose'}})).result.contacts).toEqual({searched:1,found:0,none:1,described:0});
  expect(store.recordContact.mock.calls[1]).toEqual(['org-a',null,null]);
  // Without the feature, or in Observe, no website is read.
  contacts.find.mockClear();
@@ -109,15 +128,146 @@ it('discovery reads each new business\'s own site for one role address and recor
  await growthHandlers({growth,features:autonomy})['growth.discovery']({id:'t',agent:{autonomy:'observe'}});
  expect(contacts.find).not.toHaveBeenCalled();
 });
-it('discovery searches a new Pennsylvania place for CareBase each day instead of the same query',async()=>{
+it('discovery runs several new searches for each product every day, CareBase always in Pennsylvania, twenty results each',async()=>{
  const store={discover:vi.fn(async()=>0)};
  const search=vi.fn(async()=>[]);
  const handlers=growthHandlers({growth:{store,research:{configured:true,search}}});
- await handlers['growth.discovery']({id:'t',agent:{autonomy:'propose'}},{now:()=>new Date('2026-11-08T13:00:00Z')});
- await handlers['growth.discovery']({id:'t',agent:{autonomy:'propose'}},{now:()=>new Date('2026-11-09T13:00:00Z')});
+ await handlers['growth.discovery']({id:'t',agent:{autonomy:'propose'}},{now:()=>new Date('2026-11-12T13:00:00Z')});
+ await handlers['growth.discovery']({id:'t',agent:{autonomy:'propose'}},{now:()=>new Date('2026-11-13T13:00:00Z')});
  const queries=search.mock.calls.map(([product,options])=>[product,options.query]);
  expect(queries.filter(([product])=>product==='carebase').every(([,query])=>/ PA$/.test(query))).toBe(true);
- expect(new Set(queries.map(([,query])=>query)).size).toBe(4);
+ expect(new Set(queries.map(([,query])=>query)).size).toBe(2*2*discoveryQueriesPerDay);
+ expect(search.mock.calls.every(([,options])=>options.count===20&&options.offset===0)).toBe(true);
+});
+it('discovery records every result ten at a time, keeps what it found when a later search fails, and fails the run only when the first one does',async()=>{
+ const row=index=>({name:`Operator ${index}`,domain:`operator${index}.example`,url:`https://operator${index}.example/`,claim:'A home health agency.'});
+ const store={discover:vi.fn(async(_product,rows)=>rows.length)};
+ const unavailable=()=>Object.assign(new Error('Research unavailable'),{code:'research_unavailable',transient:true});
+ const search=vi.fn().mockResolvedValueOnce(Array.from({length:20},(_,index)=>row(index))).mockResolvedValueOnce(Array.from({length:3},(_,index)=>row(100+index))).mockRejectedValue(unavailable());
+ const outcome=await growthHandlers({growth:{store,research:{configured:true,search}},marketed:['caremetric-intel']})['growth.discovery']({id:'t',agent:{autonomy:'propose'}});
+ expect(outcome.result).toEqual({candidates:23,searches:2,stopped:'search_unavailable'});
+ expect(store.discover.mock.calls.map(([product,rows])=>[product,rows.length])).toEqual([['caremetric-intel',10],['caremetric-intel',10],['caremetric-intel',3]]);
+ expect(search).toHaveBeenCalledTimes(3);
+ // Nothing found yet: the scheduler retries the run.
+ const failing=vi.fn().mockRejectedValue(unavailable());
+ await expect(growthHandlers({growth:{store,research:{configured:true,search:failing}},marketed:['caremetric-intel']})['growth.discovery']({id:'t',agent:{autonomy:'propose'}})).rejects.toMatchObject({transient:true});
+ expect(failing).toHaveBeenCalledTimes(1);
+});
+it('a slow search provider cannot carry own-site research past the run\'s time: the searches not started wait for the next run',async()=>{
+ const uncertain=index=>({...base,id:`slow-${index}`,product:'caremetric-intel',stage:'researched',fit:60,domain:`slow${index}.example`,tenant_id:null});
+ const items=Array.from({length:10},(_,index)=>uncertain(index));
+ const store={snapshot:vi.fn(async()=>({total:items.length,items})),discover:vi.fn(async(_product,rows)=>rows.length)};
+ // Every answer arrives just inside the adapter's own fifteen-second limit.
+ let at=0;
+ const search=vi.fn(async(_product,options)=>{at+=14_500;return options.domain?[{name:'An operator',domain:options.domain,url:`https://${options.domain}/about`,claim:'Operates a hospice.'}]:[];});
+ const outcome=await growthHandlers({growth:{store,research:{configured:true,search}},marketed:['caremetric-intel'],clock:()=>at})['growth.discovery']({id:'t',agent:{autonomy:'propose'}});
+ // Six discovery searches (87 seconds), then own-site searches only until the 150 seconds are spent: five of the ten.
+ expect(outcome.result).toEqual({candidates:0,searches:discoveryQueriesPerDay,stopped:'time',enrichment:{searched:5,evidenceRows:5}});
+ expect(search).toHaveBeenCalledTimes(discoveryQueriesPerDay+5);
+ expect(at).toBeLessThan(240_000);
+});
+it('discovery reports what the search provider says the key may still use this month, when it says so',async()=>{
+ const store={discover:vi.fn(async()=>0)};
+ const research={configured:true,search:vi.fn(async()=>[]),allowance:()=>({limit:2000,left:1500,days:30})};
+ expect((await growthHandlers({growth:{store,research},marketed:['caremetric-intel']})['growth.discovery']({id:'t',agent:{autonomy:'propose'}})).result)
+  .toEqual({candidates:0,searches:discoveryQueriesPerDay,searchAllowance:{limit:2000,left:1500,days:30}});
+ research.allowance=()=>null;
+ expect((await growthHandlers({growth:{store,research},marketed:['caremetric-intel']})['growth.discovery']({id:'t',agent:{autonomy:'propose'}})).result).toEqual({candidates:0,searches:discoveryQueriesPerDay});
+});
+it('discovery waits the search provider\'s own pace between calls and stops searching once its time is spent',async()=>{
+ vi.useFakeTimers();
+ try {
+  const store={discover:vi.fn(async()=>0)};
+  const search=vi.fn(async()=>[]);
+  const run=growthHandlers({growth:{store,research:{configured:true,paceMs:1100,search}},marketed:['caremetric-intel']})['growth.discovery']({id:'t',agent:{autonomy:'propose'}});
+  await vi.advanceTimersByTimeAsync(1099);
+  expect(search).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(search).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(1100*discoveryQueriesPerDay);
+  expect((await run).result).toEqual({candidates:0,searches:discoveryQueriesPerDay});
+ } finally {vi.useRealTimers();}
+ let at=0;
+ const search=vi.fn(async()=>{at+=workBudgetMs;return [];});
+ const late=await growthHandlers({growth:{store:{discover:vi.fn(async()=>0)},research:{configured:true,search}},marketed:['caremetric-intel'],clock:()=>at})['growth.discovery']({id:'t',agent:{autonomy:'propose'}});
+ expect(late.result).toEqual({candidates:0,searches:1,stopped:'time'});
+});
+it('keeps what a business\'s home page says it is as evidence for the products it is a prospect of, and reads a few sites at a time',async()=>{
+ const targets=Array.from({length:6},(_,index)=>({id:`org-${index}`,domain:`site${index}.example`}));
+ const prospect=(domain,extra={})=>({...base,id:domain,product:'caremetric-intel',stage:'researched',domain,...extra});
+ const items=[prospect('site0.example'),prospect('site1.example'),prospect('site1.example',{product:'carebase'}),prospect('site2.example',{stage:'lost'}),prospect('site3.example',{owner_agent:'account_manager'})];
+ const store={snapshot:vi.fn(async()=>({total:items.length,items})),discover:vi.fn(async(_product,rows)=>rows.length),contactCandidates:vi.fn(async()=>targets),
+  recordContact:vi.fn(async(id,email)=>({found:Boolean(email)})),autoQualify:vi.fn(async()=>({qualified:0}))};
+ let open=0,most=0;
+ const contacts={configured:true,find:vi.fn(async domain=>{open++;most=Math.max(most,open);await Promise.resolve();open--;
+  return {email:domain==='site0.example'?'info@site0.example':null,sourceUrl:`https://${domain}/contact`,site:{url:`https://${domain}/`,claim:`The organization's own home page. Title: ${domain}`}};})};
+ const growth={store,research:{configured:true,search:vi.fn(async()=>[])},contacts};
+ const outcome=await growthHandlers({growth,features:autonomy,marketed:['caremetric-intel']})['growth.discovery']({id:'t',agent:{autonomy:'propose'}});
+ expect(outcome.result.contacts).toEqual({searched:6,found:1,none:5,described:2});
+ // Only a marketed product the business is still a prospect of gets the evidence: never CareBase in its pilot, a lost deal or a customer.
+ expect(store.discover.mock.calls).toEqual([
+  ['caremetric-intel',[{name:'site0.example',domain:'site0.example',url:'https://site0.example/',claim:'The organization\'s own home page. Title: site0.example'}]],
+  ['caremetric-intel',[{name:'site1.example',domain:'site1.example',url:'https://site1.example/',claim:'The organization\'s own home page. Title: site1.example'}]]]);
+ expect(store.recordContact.mock.calls.map(([id])=>id)).toEqual(targets.map(target=>target.id));
+ expect(most).toBe(contactSearchConcurrency);
+ expect(JSON.stringify(outcome)).not.toContain('example');
+ // A summary the database refuses is dropped; the contact is still recorded.
+ store.discover.mockRejectedValue(Object.assign(new Error('Invalid discovery'),{code:'22023'}));
+ expect((await growthHandlers({growth,features:autonomy,marketed:['caremetric-intel']})['growth.discovery']({id:'t',agent:{autonomy:'propose'}})).result.contacts).toEqual({searched:6,found:1,none:5,described:0});
+ // Out of time after the first group: the rest wait for the pipeline sweeps.
+ let at=0; contacts.find.mockImplementation(async()=>{at+=workBudgetMs;return {email:null};});
+ expect((await growthHandlers({growth,features:autonomy,marketed:['caremetric-intel'],clock:()=>at})['growth.discovery']({id:'t',agent:{autonomy:'propose'}})).result.contacts.searched).toBe(contactSearchConcurrency);
+});
+it('each pipeline sweep reads a few more discovered businesses\' websites, only with the feature, the finder and a level above Observe',async()=>{
+ const o={...base,id:'intel',product:'caremetric-intel',stage:'researched',domain:'site.example',assessed_at:'2026-11-01T00:00:00Z',evidence:[]};
+ const store={snapshot:vi.fn(async()=>({total:1,items:[o]})),plan:vi.fn(async()=>'work'),autoQualify:vi.fn(async()=>({qualified:0})),discover:vi.fn(async()=>1),
+  contactCandidates:vi.fn(async()=>[{id:'org',domain:'site.example'}]),recordContact:vi.fn(async(id,email)=>({found:Boolean(email)}))};
+ const contacts={configured:true,find:vi.fn(async()=>({email:'info@site.example',sourceUrl:'https://site.example/contact',site:{url:'https://site.example/',claim:'A hospice agency.'}}))};
+ const outcome=await growthHandlers({growth:{store,contacts},features:autonomy})['growth.pipeline']({id:'t',agent:{autonomy:'act'},kind:'growth.pipeline'});
+ expect(store.contactCandidates).toHaveBeenCalledWith(sweepContactLimit);
+ expect(outcome.result).toMatchObject({inspected:1,contacts:{searched:1,found:1,none:0,described:1}});
+ expect(store.recordContact).toHaveBeenCalledWith('org','info@site.example','https://site.example/contact');
+ expect(store.discover).toHaveBeenCalledWith('caremetric-intel',[expect.objectContaining({domain:'site.example',url:'https://site.example/',claim:'A hospice agency.'})]);
+ store.contactCandidates.mockClear();
+ await growthHandlers({growth:{store,contacts},features:autonomy})['growth.pipeline']({id:'t',agent:{autonomy:'observe'},kind:'growth.pipeline'});
+ await growthHandlers({growth:{store,contacts},features:autonomy})['growth.success']({id:'t',agent:{autonomy:'act'},kind:'growth.success'});
+ await growthHandlers({growth:{store,contacts}})['growth.pipeline']({id:'t',agent:{autonomy:'act'},kind:'growth.pipeline'});
+ await growthHandlers({growth:{store},features:autonomy})['growth.pipeline']({id:'t',agent:{autonomy:'act'},kind:'growth.pipeline'});
+ expect(store.contactCandidates).not.toHaveBeenCalled();
+ // Nothing to read: the sweep's result stays as it was.
+ store.contactCandidates.mockResolvedValue([]);
+ expect((await growthHandlers({growth:{store,contacts},features:autonomy})['growth.pipeline']({id:'t',agent:{autonomy:'act'},kind:'growth.pipeline'})).result).toEqual({inspected:1,planned:0,drafted:0});
+});
+it('assesses a bounded number of prospects per sweep and does not pay again for an assessment the model could not give',async()=>{
+ const evidence=[{id:'source',source_url:'https://example.org',claim:'A hospice agency.',observed_at:new Date().toISOString()}];
+ const fresh=index=>({...base,id:`new-${index}`,product:'caremetric-intel',stage:'identified',assessed_at:null,version:1,evidence});
+ const answer={outcome:'completed',output:{fit:80,rationale:'A hospice agency.',citations:['source'],nextAction:'Confirm the service area.'}};
+ const many=Array.from({length:assessLimit+5},(_,index)=>fresh(index));
+ const store={snapshot:vi.fn(async()=>({total:many.length,items:many})),plan:vi.fn(async()=>'work'),assess:vi.fn()};
+ const model={configured:true,run:vi.fn(async()=>answer)};
+ await growthHandlers({growth:{store},model})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'});
+ expect(model.run).toHaveBeenCalledTimes(assessLimit);
+ expect(store.assess).toHaveBeenCalledTimes(assessLimit);
+ // An answer that fails its checks is asked for once, then left for six hours; new evidence or a new version asks again at once.
+ let at=1_000_000;
+ const one={snapshot:vi.fn(async()=>({total:1,items:[fresh(0)]})),plan:vi.fn(async()=>'work'),assess:vi.fn()};
+ const unusable={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{...answer.output,citations:['invented']}}))};
+ const handler=growthHandlers({growth:{store:one},model:unusable,clock:()=>at})['growth.pipeline'];
+ const sweep=()=>handler({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'});
+ await sweep(); await sweep();
+ expect(unusable.run).toHaveBeenCalledTimes(1);
+ at+=assessRetryMs; await sweep();
+ expect(unusable.run).toHaveBeenCalledTimes(2);
+ one.snapshot.mockResolvedValue({total:1,items:[{...fresh(0),evidence:[...evidence,{...evidence[0],id:'second'}]}]}); await sweep();
+ expect(unusable.run).toHaveBeenCalledTimes(3);
+ expect(one.assess).not.toHaveBeenCalled();
+ // Out of time: no model call is started, and the work is still planned for the next sweep.
+ let now=0;
+ const o={...base,version:4,contact_id:'contact',contact_version:7,eligibility:'permitted',policy:{version:9,approved_claim:'Discuss staff training.'},evidence};
+ const late={snapshot:vi.fn(async()=>{now+=workBudgetMs;return {total:2,items:[o,fresh(1)]};}),plan:vi.fn(async()=>'work'),draft:vi.fn(),assess:vi.fn()};
+ const idle={configured:true,run:vi.fn(async()=>answer)};
+ expect((await growthHandlers({growth:{store:late,signingReady:true,hash:x=>x,unsubscribeToken:()=>'token'},model:idle,clock:()=>now})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'})).result).toMatchObject({inspected:2,planned:2,drafted:0});
+ expect(idle.run).not.toHaveBeenCalled();
 });
 it('dedupes growth notices on the Eastern day, including after UTC midnight',async()=>{
  expect(growthDay(new Date('2026-11-08T03:30:00Z'))).toBe('2026-11-07');
@@ -154,7 +304,7 @@ it('markets only the owner\'s products: a CareBase prospect gets no discovery, r
  const store={discover:vi.fn(async()=>0)};
  const intelOnly=['caremetric-intel'];
  await growthHandlers({growth:{store,research:{configured:true,search}},marketed:intelOnly})['growth.discovery']({id:'t',agent:{autonomy:'propose'}});
- expect(search.mock.calls.map(([product])=>product)).toEqual(['caremetric-intel']);
+ expect(search.mock.calls.map(([product])=>product)).toEqual(Array(discoveryQueriesPerDay).fill('caremetric-intel'));
  expect((await growthHandlers({growth:{store,research:{configured:true,search}},marketed:[]})['growth.discovery']({id:'t',agent:{autonomy:'propose'}})).result).toEqual({skipped:'no_marketed_product'});
  const intel={...base,id:'intel',product:'caremetric-intel'};
  const unassessed={...base,id:'carebase-new',stage:'identified',assessed_at:null};
@@ -177,15 +327,27 @@ it('markets only the owner\'s products: a CareBase prospect gets no discovery, r
 it('sends a growth message as a letter: Hello, the approved words, the product team\'s sign-off and website, a preview and the unsubscribe link',()=>{
  const body='Your agency covers three counties. How do your liaisons track which physicians they have reached?\n\nYou can try it with your own team:\nhttps://www.caremetricintel.com/';
  const email=growthEmail({product:'caremetric-intel',subject:'Physician outreach',body,postalAddress:'1 Main St, Altoona, PA',unsubscribeUrl:'https://hub.example.org/api/growth/unsubscribe/t'});
- expect(email.text).toBe(`Hello,\n\n${body}\n\nThe CareMetric Intel team\nhttps://www.caremetricintel.com\n\nCareMetric\n1 Main St, Altoona, PA\nUnsubscribe from these emails: https://hub.example.org/api/growth/unsubscribe/t`);
+ expect(email.text).toBe(`Hello,\n\n${body}\n\nThe CareMetric Intel team\nhttps://www.caremetricintel.com\n\nCareMetric\n1 Main St, Altoona, PA\nOpt out of these emails: https://hub.example.org/api/growth/unsubscribe/t`);
  expect(email.html).toContain('data-caremetric-email="letter"');
  expect(email.html).toContain('>Your agency covers three counties.&#847;');
  expect(email.html).toContain('<a href="https://www.caremetricintel.com/" target="_blank"');
  expect(email.html).toContain('<a href="https://hub.example.org/api/growth/unsubscribe/t" target="_blank"');
  // The company is named once when the postal address already begins with it.
- expect(growthEmail({product:'caremetric-intel',subject:'S',body:'B',postalAddress:'CareMetric, 1 Main St',unsubscribeUrl:'https://hub.example.org/u/t'}).text.endsWith('\n\nCareMetric, 1 Main St\nUnsubscribe from these emails: https://hub.example.org/u/t')).toBe(true);
+ expect(growthEmail({product:'caremetric-intel',subject:'S',body:'B',postalAddress:'CareMetric, 1 Main St',unsubscribeUrl:'https://hub.example.org/u/t'}).text.endsWith('\n\nCareMetric, 1 Main St\nOpt out of these emails: https://hub.example.org/u/t')).toBe(true);
  // A CareBase page in an Intel message is never made a link.
  expect(growthEmail({product:'caremetric-intel',subject:'S',body:'See https://cmcarebase.com/signup',postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'}).html).not.toContain('href="https://cmcarebase.com/signup"');
+});
+it('a growth email, quoted under a reply, never reads as a request to stop: no opt-out word the database matches is in it',async()=>{
+ // private.growth_inquiry opts a sender out on any of these words anywhere in the message, quoted text included.
+ const stopWords=/\b(unsubscribe|do not contact|stop emailing|remove me)\b/i;
+ const store={claim:vi.fn(async()=>({send:true,to:'info@operator.example',id:'m',workId:'w',product:'caremetric-intel',purpose:'marketing',subject:'A question',body:'Which counties does your team cover?'})),finish:vi.fn()};
+ const mail={configured:true,send:vi.fn(async()=>({delivery:'sent',id:'provider'}))};
+ await growthExecutors({growth:{store,configured:()=>true,unsubscribeToken:()=>'a'.repeat(64)},mail,publicOrigin:'https://hub.example.org',postalAddress:'CareMetric, 1 Main St, Altoona, PA'})['growth.message']({id:'a',input:{messageId:'m'}});
+ const sent=mail.send.mock.calls[0][0];
+ expect(sent.unsubscribeUrl).toBe(`https://hub.example.org/api/growth/preferences/${'a'.repeat(64)}`);
+ expect(sent.text).toContain(`Opt out of these emails: ${sent.unsubscribeUrl}`);
+ expect(stopWords.test(sent.text)).toBe(false);
+ expect(stopWords.test(sent.html.replace(/<[^>]+>/g,' '))).toBe(false);
 });
 it('signs prospect outreach with the founder\'s name and title, and a customer message with the product team (owner direction 2026-11-12)',()=>{
  const outreach=growthEmail({product:'caremetric-intel',purpose:'marketing',subject:'S',body:'I run a home health and hospice agency.',postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'});

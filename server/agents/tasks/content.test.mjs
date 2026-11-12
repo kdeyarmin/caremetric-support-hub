@@ -120,10 +120,14 @@ describe('the weekly help article', () => {
     expect(outage.store.proposeAction).not.toHaveBeenCalled();
   });
 
-  it('writes on Tuesdays (read from the task\'s due time) and on any day the owner asks', async () => {
+  it('writes on Tuesdays and Fridays (read from the task\'s due time) and on any day the owner asks', async () => {
     const monday = fixture({ state });
-    expect(await monday.handlers['content.weekly'](scheduled(new Date('2026-11-02T12:45:00Z')), { now: () => tuesday })).toEqual({ result: { skipped: 'not_tuesday' } });
+    expect(await monday.handlers['content.weekly'](scheduled(new Date('2026-11-02T12:45:00Z')), { now: () => tuesday })).toEqual({ result: { skipped: 'not_a_writing_day' } });
+    expect(await monday.handlers['content.weekly'](scheduled(new Date('2026-11-05T12:45:00Z')), { now: () => tuesday })).toEqual({ result: { skipped: 'not_a_writing_day' } });
     expect(monday.client.messages.create).not.toHaveBeenCalled();
+    // Friday is the week's second writing day, so a missed or failed Tuesday costs three days, not the week.
+    const friday = fixture({ state });
+    expect((await friday.handlers['content.weekly'](scheduled(new Date('2026-11-06T12:45:00Z')), { now: () => new Date('2026-11-06T12:45:00Z') })).status).toBe('awaiting_approval');
     // A Tuesday firing deferred to Wednesday by the budget still writes when it runs.
     const deferred = fixture({ state });
     expect((await deferred.handlers['content.weekly'](scheduled(new Date('2026-11-03T12:45:00Z')), { now: () => new Date('2026-11-04T10:00:00Z') })).status).toBe('awaiting_approval');

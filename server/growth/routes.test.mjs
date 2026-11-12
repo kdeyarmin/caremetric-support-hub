@@ -14,6 +14,10 @@ it('product feeds reject browser credentials and preserve exact signed bytes',as
 it('GET unsubscribe only previews while POST confirms',async()=>{
  const path='/api/growth/unsubscribe/'+'a'.repeat(64);await fetch(base+path);expect(growth.unsubscribe).toHaveBeenLastCalledWith('a'.repeat(64),false);await fetch(base+path,{method:'POST'});expect(growth.unsubscribe).toHaveBeenLastCalledWith('a'.repeat(64),true);
 });
+it('the opt-out address growth emails now carry reaches the same handler as the old one',async()=>{
+ const path='/api/growth/preferences/'+'b'.repeat(64);await fetch(base+path);expect(growth.unsubscribe).toHaveBeenLastCalledWith('b'.repeat(64),false);
+ await fetch(base+path,{method:'POST'});expect(growth.unsubscribe).toHaveBeenLastCalledWith('b'.repeat(64),true);
+});
 
 it('native application activity uses only server credentials and a bounded body',async()=>{
  const headers={Authorization:'Bearer cmb_'+'x'.repeat(43),'Content-Type':'application/json'};

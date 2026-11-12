@@ -157,7 +157,8 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           const raw=await rawBody(req,growthEvent?8192:262144);
           return json(growthEvent?await growth.activity(growthEvent[1],raw,req.headers):await growth.delivery(raw,req.headers));
         }
-        const growthUnsubscribe=/^\/api\/growth\/unsubscribe\/([a-f0-9]{64})$/.exec(path);
+        // `preferences` is the address new growth emails carry; `unsubscribe` stays for emails already sent (see growthOptOutPath in growth/worker.mjs).
+        const growthUnsubscribe=/^\/api\/growth\/(?:unsubscribe|preferences)\/([a-f0-9]{64})$/.exec(path);
         if(growthUnsubscribe) {
           if(!growth)throw new HttpError(503,'Growth is unavailable.');
           if(!['GET','POST'].includes(req.method))throw new HttpError(405,'Method not allowed.');

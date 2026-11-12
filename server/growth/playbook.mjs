@@ -55,13 +55,28 @@ const pennsylvania = [
   'Lehigh Valley PA', 'Cumberland County PA', 'Berks County PA', 'Luzerne County PA', 'Lackawanna County PA', 'Beaver County PA',
   'Centre County PA', 'Lebanon PA', 'Hazleton PA', 'Pottsville PA', 'New Castle PA', 'Indiana PA', 'Somerset PA',
 ];
-// Markets for Intel discovery: Pennsylvania and its neighbours first, then large home health and hospice markets.
+// Markets for Intel discovery: Pennsylvania and its neighbours first, then home health and hospice markets across the country.
+// Intel sells nationally, so the list is long: with several searches a day (discoveryQueriesPerDay) a short list repeats within
+// weeks and discovery stops finding anyone new.
 const intelMarkets = [
   'Pittsburgh', 'Philadelphia', 'Harrisburg Pennsylvania', 'Allentown Pennsylvania', 'Cleveland Ohio', 'Columbus Ohio', 'Cincinnati Ohio',
   'Baltimore Maryland', 'Newark New Jersey', 'Buffalo New York', 'Richmond Virginia', 'Wilmington Delaware', 'Charlotte North Carolina',
   'Raleigh North Carolina', 'Nashville Tennessee', 'Atlanta Georgia', 'Tampa Florida', 'Orlando Florida', 'Jacksonville Florida',
   'Detroit Michigan', 'Indianapolis Indiana', 'Louisville Kentucky', 'St. Louis Missouri', 'Dallas Texas', 'Houston Texas',
   'San Antonio Texas', 'Phoenix Arizona', 'Birmingham Alabama', 'Oklahoma City Oklahoma', 'Kansas City Missouri',
+  'Erie Pennsylvania', 'Scranton Pennsylvania', 'Lancaster Pennsylvania', 'Akron Ohio', 'Toledo Ohio', 'Dayton Ohio', 'Youngstown Ohio',
+  'Rochester New York', 'Syracuse New York', 'Albany New York', 'Trenton New Jersey', 'Morgantown West Virginia', 'Charleston West Virginia',
+  'Norfolk Virginia', 'Roanoke Virginia', 'Greensboro North Carolina', 'Columbia South Carolina', 'Greenville South Carolina',
+  'Charleston South Carolina', 'Savannah Georgia', 'Augusta Georgia', 'Miami Florida', 'Fort Myers Florida', 'Sarasota Florida',
+  'Pensacola Florida', 'Mobile Alabama', 'Huntsville Alabama', 'Jackson Mississippi', 'Memphis Tennessee', 'Knoxville Tennessee',
+  'Chattanooga Tennessee', 'Lexington Kentucky', 'Grand Rapids Michigan', 'Lansing Michigan', 'Fort Wayne Indiana', 'Chicago Illinois',
+  'Springfield Illinois', 'Milwaukee Wisconsin', 'Madison Wisconsin', 'Minneapolis Minnesota', 'Des Moines Iowa', 'Omaha Nebraska',
+  'Wichita Kansas', 'Tulsa Oklahoma', 'Little Rock Arkansas', 'New Orleans Louisiana', 'Baton Rouge Louisiana', 'Shreveport Louisiana',
+  'Austin Texas', 'Fort Worth Texas', 'El Paso Texas', 'McAllen Texas', 'Lubbock Texas', 'Albuquerque New Mexico', 'Tucson Arizona',
+  'Denver Colorado', 'Colorado Springs Colorado', 'Salt Lake City Utah', 'Las Vegas Nevada', 'Boise Idaho', 'Spokane Washington',
+  'Seattle Washington', 'Portland Oregon', 'Sacramento California', 'Fresno California', 'San Diego California', 'Riverside California',
+  'Los Angeles California', 'Hartford Connecticut', 'Providence Rhode Island', 'Boston Massachusetts', 'Worcester Massachusetts',
+  'Manchester New Hampshire', 'Portland Maine',
 ];
 
 const pageUrl = id => productPages.find(page => page.id === id)?.url ?? null;
@@ -241,27 +256,50 @@ export function linkablePages(product) {
 }
 
 /**
- * The search query for a product's discovery on a given day. It walks a product's segment-by-place grid one step a day, so daily
- * discovery keeps finding new organizations instead of rereading the same ten results. CareBase stays inside Pennsylvania.
+ * The search queries for a product's discovery on a given day. Each day takes the next `discoveryQueriesPerDay` steps of the product's
+ * segment-by-place grid, so discovery keeps finding new organizations instead of rereading the same results, and no query is repeated
+ * until the whole grid has been searched. Each time the grid has been walked once, the next pass reads the next page of every search
+ * (`offset`), so a second pass still finds organizations the first did not. CareBase stays inside Pennsylvania.
  */
 const discoveryGrid = deepFreeze({
   carebase: { segments: ['"personal care home"', '"assisted living facility"', '"personal care home" administrator', '"assisted living" personal care home'], places: pennsylvania },
-  'caremetric-intel': { segments: ['"home health agency"', '"hospice agency"', '"home health and hospice"', 'hospice "community liaison"'], places: intelMarkets },
+  'caremetric-intel': {
+    segments: ['"home health agency"', '"hospice agency"', '"home health and hospice"', 'hospice "community liaison"', '"home health" "service area" Medicare certified', 'hospice "serving" counties referrals'],
+    places: intelMarkets,
+  },
 });
+/** Searches per product per day. Each is one call to the search provider; the daily discovery run paces them a second apart. */
+export const discoveryQueriesPerDay = 6;
+/** Result pages a search provider serves for one query (the first and the four after it). */
+export const discoveryPages = 5;
+const discoveryStartDay = Math.floor(Date.parse('2026-11-12') / 86_400_000);
 const dayNumber = instant => Math.floor(Date.parse(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(instant)) / 86_400_000);
-export function discoveryQuery(product, instant = new Date()) {
-  const grid = discoveryGrid[product];
-  if (!grid) return null;
-  const size = grid.segments.length * grid.places.length;
-  const step = ((dayNumber(instant) % size) + size) % size;
-  // Places change every day; the segment moves on once every place has been searched with the current one.
-  return `${grid.segments[Math.floor(step / grid.places.length)]} ${grid.places[step % grid.places.length]}`;
-}
 export const discoveryQueryCount = product => (discoveryGrid[product] ? discoveryGrid[product].segments.length * discoveryGrid[product].places.length : 0);
+/** The day's searches for `product`: `{ query, offset }` each, `count` of them (never more than the grid holds). */
+export function discoveryQueries(product, instant = new Date(), count = discoveryQueriesPerDay) {
+  const grid = discoveryGrid[product];
+  if (!grid) return [];
+  const size = grid.segments.length * grid.places.length;
+  const each = Math.min(Math.max(Math.trunc(count) || 1, 1), size);
+  // Counted from the day several searches a day began, so the first pass over the grid reads the first page of results.
+  const first = (dayNumber(instant) - discoveryStartDay) * each;
+  return Array.from({ length: each }, (_, index) => {
+    const position = first + index;
+    const step = ((position % size) + size) % size;
+    const pass = Math.floor(position / size);
+    // Places change with every search; the segment moves on once every place has been searched with the current one.
+    return { query: `${grid.segments[Math.floor(step / grid.places.length)]} ${grid.places[step % grid.places.length]}`, offset: pass < 0 ? 0 : pass % discoveryPages };
+  });
+}
+/** The first search of the day (the guardrail check and older callers read one query a day). */
+export function discoveryQuery(product, instant = new Date()) {
+  return discoveryQueries(product, instant)[0]?.query ?? null;
+}
 
 /**
- * Hosts that are never an operator to sell to: directories, review and listing sites, social networks, job boards, encyclopedias and
- * government or school sites. Discovery drops them, so the contact finder never emails a directory's info@ address.
+ * Hosts that are never an operator to sell to: directories, review and listing sites, provider-number and company-data lookups, social
+ * networks, job boards, encyclopedias and government or school sites. Discovery drops them, so the contact finder never emails a
+ * directory's info@ address. A host whose own name says it is a directory or a listing is dropped as well.
  */
 const notOperators = [
   'aplaceformom.com', 'caring.com', 'seniorly.com', 'seniorliving.org', 'seniorhousingnet.com', 'senioradvisor.com', 'assistedliving.org',
@@ -269,10 +307,37 @@ const notOperators = [
   'yellowpages.com', 'facebook.com', 'linkedin.com', 'instagram.com', 'twitter.com', 'x.com', 'youtube.com', 'indeed.com', 'glassdoor.com',
   'ziprecruiter.com', 'monster.com', 'simplyhired.com', 'wikipedia.org', 'mapquest.com', 'bbb.org', 'healthgrades.com', 'usnews.com',
   'homehealthcareagencies.com', 'hospicedirectory.org', 'carecompare.com', 'nursinghomesite.com', 'zillow.com', 'reddit.com', 'quora.com',
+  // Seen in production discovery (2026-11-08 to 2026-11-11): each was recorded as a prospect and scored as a directory.
+  'causeiq.com', 'senioradvice.com', 'medicarelist.com', 'homecareatlas.com', 'newlifestyles.com',
+  // Senior-care and home-care marketplaces and listing sites.
+  'care.com', 'seniorcare.com', 'retirementliving.com', 'seniorguidance.org', 'seniorhomes.com', 'seniorlivingguide.com', 'seniorcareauthority.com',
+  'assistedlivingmagazine.com', 'assistedlivingnearme.net', 'homecare.com', 'homecarepulse.com', 'bestcompany.com', 'consumeraffairs.com',
+  'trustpilot.com', 'birdeye.com', 'angi.com', 'thumbtack.com', 'nextdoor.com', 'hospiceanalytics.com', 'nationalhospicelocator.com',
+  'homehealthcompare.com', 'medicare.org', 'medicareadvantage.com', 'healthcarecomps.com', 'definitivehc.com', 'hospicecompare.com',
+  // Provider-number (NPI) lookups and health-provider directories.
+  'npidb.org', 'npino.com', 'npiprofile.com', 'opennpi.com', 'npi.io', 'hipaaspace.com', 'healthcare4ppl.com', 'healthcare6.com', 'providerwire.com',
+  'doximity.com', 'vitals.com', 'webmd.com', 'zocdoc.com', 'sharecare.com', 'ratemds.com', 'wellness.com', 'findatopdoc.com', 'carepathways.com',
+  // Company-data, contact-data and nonprofit lookups.
+  'dnb.com', 'zoominfo.com', 'crunchbase.com', 'bloomberg.com', 'manta.com', 'chamberofcommerce.com', 'opencorporates.com', 'bizapedia.com',
+  'buzzfile.com', 'rocketreach.co', 'apollo.io', 'signalhire.com', 'lusha.com', 'leadiq.com', 'datanyze.com', 'owler.com', 'pitchbook.com',
+  'propublica.org', 'guidestar.org', 'candid.org', 'charitynavigator.org', 'greatnonprofits.org', 'cylex.us.com', 'hotfrog.com', 'superpages.com',
+  'whitepages.com', 'local.com', 'foursquare.com', 'tripadvisor.com',
+  // Trade associations and trade press: about providers, never one.
+  'nahc.org', 'nhpco.org', 'allianceforcareathome.org', 'leadingage.org', 'ahcancal.org', 'argentum.org', 'homehealthcarenews.com',
+  'hospicenews.com', 'mcknights.com', 'mcknightshomecare.com', 'mcknightsseniorliving.com', 'seniorhousingnews.com', 'skillednursingnews.com',
+  'beckershospitalreview.com', 'fiercehealthcare.com', 'modernhealthcare.com', 'kff.org', 'aarp.org',
+  // Social, search, app-store, recruiting and publishing platforms.
+  'tiktok.com', 'pinterest.com', 'threads.net', 'google.com', 'bing.com', 'apple.com', 'amazon.com', 'medium.com', 'substack.com', 'wordpress.com',
+  'blogspot.com', 'wixsite.com', 'careerbuilder.com', 'salary.com', 'snagajob.com', 'jooble.org', 'talent.com', 'lensa.com', 'vivian.com',
+  'myworkdayjobs.com', 'icims.com', 'greenhouse.io', 'lever.co', 'paylocity.com', 'adp.com', 'prnewswire.com', 'businesswire.com', 'globenewswire.com',
+  'issuu.com', 'scribd.com', 'slideshare.net', 'eventbrite.com', 'gofundme.com', 'legacy.com', 'dignitymemorial.com',
 ];
+// A host that names itself a directory, a listing, a review or a jobs site (seniorcaredirectory.example, hospicereviews.example).
+const directoryName = /(?:^|[.-])(?:directory|directories|listings?|reviews?|ratings|jobs|careers)(?:[.-]|$)|(?:directory|listings|reviews)\.[a-z]{2,}$/;
 export function operatorHost(host) {
   const value = String(host ?? '').toLowerCase().replace(/^www\./, '');
   if (!value || /\.(?:gov|edu|mil)$/.test(value) || /\.(?:gov|edu)\.[a-z]{2}$/.test(value) || /(?:^|\.)(?:pa\.us|state\.[a-z]{2}\.us)$/.test(value)) return false;
+  if (directoryName.test(value)) return false;
   return !notOperators.some(blocked => value === blocked || value.endsWith(`.${blocked}`));
 }
 

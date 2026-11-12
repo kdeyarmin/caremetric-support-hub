@@ -125,7 +125,10 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
       if (onLinkedIn(input)) readyLinkedIn('ads'); else ready('ads');
       const validSet = onLinkedIn(input) ? /^\d{1,30}$/.test(input.adsetId ?? '') : Boolean(metaId(input.adsetId));
       if (!validSet || !ctas.has(input.callToAction) || !/^https:\/\//.test(input.link ?? '')) throw failure('invalid_ad');
-      const parts = [['message', 'ad_message'], ['headline', 'ad_headline'], ['description', 'ad_description']].map(([field, surface]) => checkSocialText(input[field], { surface, product: input.product ?? null }));
+      // The same lengths the ad was proposed under: LinkedIn's for a LinkedIn ad, Meta's otherwise (content.mjs `limits`).
+      const adSurfaces = onLinkedIn(input) ? [['message', 'ad_message'], ['headline', 'ad_linkedin_headline'], ['description', 'ad_linkedin_description']]
+        : [['message', 'ad_message'], ['headline', 'ad_headline'], ['description', 'ad_description']];
+      const parts = adSurfaces.map(([field, surface]) => checkSocialText(input[field], { surface, product: input.product ?? null }));
       if (parts.some(part => !part.ok) || !checkSocialText(`Start here: ${input.link}`, { surface: 'facebook', product: input.product ?? null }).ok) throw failure('invalid_ad');
       const created = await careful(execution, () => (onLinkedIn(input) ? li : meta).createAd({ adsetId: input.adsetId, name: String(input.name ?? 'CareMetric ad'), message: input.message, headline: input.headline,
         description: input.description, link: input.link, imageHash: typeof input.imageHash === 'string' ? input.imageHash : null,

@@ -3,7 +3,8 @@
  * platform.agents.content.v1 and the model runtime has a key; otherwise their schedules stay due and nothing runs.
  *
  * `content.weekly` ("Weekly help article"): the schedule fires every morning at 07:45 Eastern and the work happens on Tuesdays
- * (a run the owner starts with Run now works on any day). It picks one topic from the curated backlog (topics.mjs), asks the
+ * and Fridays (`writingDays`; a run the owner starts with Run now works on any day), so a Tuesday that was missed, or whose draft
+ * failed its checks, costs three days instead of the week. It picks one topic from the curated backlog (topics.mjs), asks the
  * model for one structured article, checks it in code (validate.mjs) and, when it passes, proposes a `content.publish` action
  * whose preview is the whole article. A draft that fails the checks proposes nothing; the task's result and the run's summary
  * name the checks it failed. An agent in Observe never calls the model.
@@ -54,14 +55,17 @@ const nextBudgetDay = (task, moment) => {
 };
 const aborted = () => Object.assign(new Error('The agent task is no longer running.'), { code: 'task_cancelled' });
 
+/** The Eastern weekdays a scheduled article is written on: Tuesday and Friday. */
+export const writingDays = Object.freeze([2, 5]);
+
 export function contentHandlers({ store, notifier, model = null, features = null, topics: allTopics = backlog, marketed = null, log = line => console.warn(line) }) {
   // Articles and outreach only for the products the team markets (marketing.mjs: the owner's switches, read when each task starts).
   if (!contentDeclared(features) || model?.configured !== true) return {};
 
   async function weekly(task, { signal, now = () => new Date() } = {}) {
     const moment = now();
-    // The schedule fires every morning; only a Tuesday's firing (read from the task, so a deferred one keeps its day) writes.
-    if (task.sourceKind === 'schedule' && easternDate(dueMoment(task) ?? moment).weekday !== 2) return { result: { skipped: 'not_tuesday' } };
+    // The schedule fires every morning; only a Tuesday's or a Friday's firing (read from the task, so a deferred one keeps its day) writes.
+    if (task.sourceKind === 'schedule' && !writingDays.includes(easternDate(dueMoment(task) ?? moment).weekday)) return { result: { skipped: 'not_a_writing_day' } };
     // Observe reads and reports only: it could not propose the article, so it does not pay for one.
     if (task.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only' } };
 

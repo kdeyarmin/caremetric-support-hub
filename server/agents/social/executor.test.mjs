@@ -153,6 +153,10 @@ describe('carrying out social actions on LinkedIn', () => {
     await branded.promise;
     expect(branded.linkedin.createAd).toHaveBeenCalledWith(expect.objectContaining({ imageUrl: 'https://cdn.example.com/brand-1.jpg' }));
     await expect(run('social.ad_create', { ...ad, adsetId: 'act_1' }).promise).rejects.toMatchObject({ code: 'invalid_ad' });
+    // A headline at LinkedIn's length starts on LinkedIn and is still refused on Meta, whose feed cuts it off at 40 characters.
+    const longHeadline = 'Keep staff training and survey records in one place';
+    expect(await run('social.ad_create', { ...ad, headline: longHeadline }).promise).toEqual({ created: true, id: '820009' });
+    await expect(run('social.ad_create', { ...ad, platform: undefined, adsetId: '120200000000001', headline: longHeadline }).promise).rejects.toMatchObject({ code: 'invalid_ad' });
     const settings = { maxDailyBudgetCents: 3000 };
     const budget = run('social.ad_budget', { platform: 'linkedin', adsetId: '610001', from: 2000, to: 2400 }, { settings, linkedin: linkedinOf({ readAdset: vi.fn(async () => ({ dailyBudget: 2000, currency: 'CAD' })) }) });
     expect(await budget.promise).toEqual({ dailyBudget: 2400 });
