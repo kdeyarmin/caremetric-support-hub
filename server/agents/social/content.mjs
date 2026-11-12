@@ -27,7 +27,11 @@ export const replyPromptVersion = 'social-reply.4';
 export const platforms = ['facebook', 'instagram', 'linkedin'];
 export const socialProducts = ['carebase', 'caremetric-intel'];
 export const pillars = ['tip', 'capability', 'engagement', 'offer', 'resource'];
-export const limits = Object.freeze({ facebook: 900, instagram: 1200, linkedin: 1300, comment: 300, message: 600, ad_message: 400, ad_headline: 40, ad_description: 30 });
+// `ad_headline` and `ad_description` are Meta's (where the feed cuts them off). LinkedIn shows more, and the Creative Director writes
+// LinkedIn creative to LinkedIn's lengths (creative/specs.mjs `textLimits.linkedin`): the two `ad_linkedin_*` surfaces match them, so
+// an approved LinkedIn creative is not dropped as an ad for being longer than a Meta headline.
+export const limits = Object.freeze({ facebook: 900, instagram: 1200, linkedin: 1300, comment: 300, message: 600, ad_message: 400, ad_headline: 40, ad_description: 30,
+  ad_linkedin_headline: 70, ad_linkedin_description: 70 });
 
 const rules = `Rules for every word you write:
 - State facts about CareMetric only from the fact sheet below, exactly as written: what each product does and who it is for, prices, plans, trials and the Founders Sale. Never a number, statistic, price, discount or deadline that is not there. Quote prices as listed; never total them.

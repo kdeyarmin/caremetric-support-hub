@@ -36,7 +36,8 @@ import { live } from '../../live.mjs';
 const day = 86_400_000;
 const labels = { facebook: 'Facebook', instagram: 'Instagram', messenger: 'Messenger', linkedin: 'LinkedIn' };
 const productNames = { carebase: 'CareBase', 'caremetric-intel': 'CareMetric Intel' };
-const weekly = { facebook: 3, instagram: 2, linkedin: 3 };
+// Posts per platform per week. Four on the two pages buyers read at work, three on Instagram (each needs an image).
+const weekly = { facebook: 4, instagram: 3, linkedin: 4 };
 const slots = { facebook: [10, 30], instagram: [12, 15], linkedin: [8, 45] };
 const modelAttempts = 3;
 const money = cents => `$${(cents / 100).toFixed(2)}`;
@@ -133,7 +134,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       weakestRecent: ranked.length > 3 ? ranked.slice(-2).map(post => ({ platform: post.platform, engagement: post.engagement, text: post.text.slice(0, 160) })) : [],
       recentOpenings: posts.slice(0, 12).map(post => firstLine(post.text)),
     });
-    const result = await runModel(task, { promptVersion: planPromptVersion, system: [{ text: planSystem, cache: true }, ...catalogBlocks(offered)], user, schema: planSchema, maxTokens: 6000, effort: effort(task),
+    const result = await runModel(task, { promptVersion: planPromptVersion, system: [{ text: planSystem, cache: true }, ...catalogBlocks(offered)], user, schema: planSchema, maxTokens: 8000, effort: effort(task),
       describe: output => `Planned ${plural(output.posts.length, 'social post')} for the week of ${week}.` }, signal);
     if (result.outcome !== 'completed') return { result: { skipped: result.outcome, week, ...(result.code ? { code: result.code } : {}) } };
 
@@ -371,7 +372,10 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
         dedupeKey: task.sourceKind === 'owner' ? `social:ads:run:${task.id}` : `social:ads:${today}`, agentKey: task.agentKey, taskId: task.id });
     }
     await recordRun({ store, log }, task, { promptVersion: rulesVersion, summary: `Reviewed ${plural(adsetCount, 'ad set')}: ${plural(recommendationCount, 'recommendation')}, ${plural(proposed, 'change')} proposed.` });
-    return { status: proposed ? 'awaiting_approval' : 'done', result: { adsets: adsetCount, recommendations: recommendationCount, ...counts, ...(refused.length ? { refused } : {}) } };
+    // The review finishes once it has proposed: its proposals wait on the Team screen, and tomorrow's review is not held back by them.
+    // A budget change is never approved on its own, so a task that waited for it would stop the daily review, and with it the pausing
+    // of ads that are losing money, for up to seven days. What is already proposed is skipped above (`targets`), never proposed twice.
+    return { status: 'done', result: { adsets: adsetCount, recommendations: recommendationCount, ...counts, ...(refused.length ? { refused } : {}) } };
   }
 
   async function refresh(task, rec, overview, today, signal, counts, source, marketedList) {
@@ -421,8 +425,9 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     const adset = overview.adsets.find(item => item.id === rec.adsetId);
     const linkedinAd = source.platform === 'linkedin';
     for (const asset of assets) {
-      const parts = [checkSocialText(asset.primaryText, { surface: 'ad_message', product }), checkSocialText(asset.headline, { surface: 'ad_headline', product }),
-        checkSocialText(asset.description || asset.headline, { surface: 'ad_description', product })];
+      // Each platform's own lengths: LinkedIn creative is written longer than a Meta headline allows.
+      const parts = [checkSocialText(asset.primaryText, { surface: 'ad_message', product }), checkSocialText(asset.headline, { surface: linkedinAd ? 'ad_linkedin_headline' : 'ad_headline', product }),
+        checkSocialText(asset.description || asset.headline, { surface: linkedinAd ? 'ad_linkedin_description' : 'ad_description', product })];
       if (parts.some(part => !part.ok) || parts[0].text.length < 60 || !/^https:\/\//.test(asset.landingUrl ?? '') || !checkSocialText(`Start here: ${asset.landingUrl}`, { surface: 'facebook', product }).ok) continue;
       const [message, headline, description] = parts.map(part => part.text);
       const callToAction = /\b(?:trial|sign ?up|start)\b/i.test(asset.cta ?? '') ? 'SIGN_UP' : 'LEARN_MORE';

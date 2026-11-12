@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { enrichProspects, evidenceSearchLimit, evidenceTargets } from './enrichment.mjs';
 import { growthHandlers } from './worker.mjs';
+import { discoveryQueriesPerDay } from './playbook.mjs';
 
 const day = new Date('2026-11-11T13:00:00Z');
 const prospect = (domain, extra = {}) => ({ domain, product: 'caremetric-intel', owner_agent: 'marketing_manager', stage: 'researched',
@@ -10,17 +11,21 @@ const row = (domain, extra = {}) => ({ domain, name: 'An operator', url: `https:
 
 describe('daily prospect evidence enrichment', () => {
   it('prioritizes permitted contacts, rotates both pools without starvation and keeps a hard provider-call bound', () => {
-    const items = [...Array.from({ length: 8 }, (_, i) => prospect(`ready${i}.example`, permitted)),
-      ...Array.from({ length: 8 }, (_, i) => prospect(`other${i}.example`))];
+    const items = [...Array.from({ length: 24 }, (_, i) => prospect(`ready${i}.example`, permitted)),
+      ...Array.from({ length: 24 }, (_, i) => prospect(`other${i}.example`))];
     const seen = new Set();
-    for (let offset = 0; offset < 8; offset++) {
+    for (let offset = 0; offset < 24; offset++) {
       const selected = evidenceTargets(items, ['caremetric-intel'], new Date(day.getTime() + offset * 86_400_000));
       expect(selected).toHaveLength(evidenceSearchLimit);
-      expect(selected.filter(item => item.domain.startsWith('ready'))).toHaveLength(2);
-      expect(selected.filter(item => item.domain.startsWith('other'))).toHaveLength(1);
+      expect(new Set(selected.map(item => item.domain)).size).toBe(evidenceSearchLimit);
+      // Two contact-ready prospects for each of the others, in that order, so neither pool starves the other.
+      expect(selected.slice(0, 3).map(item => item.domain.slice(0, 5))).toEqual(['ready', 'ready', 'other']);
+      expect(selected.filter(item => item.domain.startsWith('other'))).toHaveLength(Math.floor(evidenceSearchLimit / 3));
       selected.forEach(item => seen.add(item.domain));
     }
-    expect(seen.size).toBe(16);
+    expect(seen.size).toBe(48);
+    // One pool alone fills every search.
+    expect(evidenceTargets(items.filter(item => item.domain.startsWith('other')), ['caremetric-intel'], day)).toHaveLength(evidenceSearchLimit);
     expect(evidenceTargets(items.toReversed(), ['caremetric-intel'], day)).toEqual(evidenceTargets(items, ['caremetric-intel'], day));
   });
 
@@ -45,9 +50,13 @@ describe('daily prospect evidence enrichment', () => {
       ...Array.from({ length: 15 }, (_, i) => row(`www.${domain}`, { url: `https://www.${domain}/${i}` }))]) };
     const result = await enrichProspects({ growth: { store, research }, marketed: ['caremetric-intel'], moment: day });
     expect(store.snapshot.mock.calls).toEqual([[0], [2]]);
-    expect(research.search).toHaveBeenCalledTimes(3);
-    expect(store.discover).toHaveBeenCalledTimes(3);
-    expect(result).toEqual({ searched: 3, evidenceRows: 30 });
+    expect(research.search).toHaveBeenCalledTimes(4);
+    expect(store.discover).toHaveBeenCalledTimes(4);
+    expect(result).toEqual({ searched: 4, evidenceRows: 40 });
+    // A pipeline the caller has already read is not read again.
+    store.snapshot.mockClear();
+    expect(await enrichProspects({ growth: { store, research }, marketed: ['caremetric-intel'], moment: day, items: items.slice(0, 1) })).toEqual({ searched: 1, evidenceRows: 10 });
+    expect(store.snapshot).not.toHaveBeenCalled();
     for (const [, rows] of store.discover.mock.calls) {
       expect(rows).toHaveLength(10);
       expect(rows.every(item => item.url.startsWith(`https://www.${item.domain}/`))).toBe(true);
@@ -55,6 +64,21 @@ describe('daily prospect evidence enrichment', () => {
     expect(store.assess).not.toHaveBeenCalled();
     expect(store.autoQualify).not.toHaveBeenCalled();
     expect(JSON.stringify(result)).not.toContain('.example');
+  });
+
+  it('starts no search once the run\'s time is spent, and leaves the rest for the next run', async () => {
+    const items = Array.from({ length: 6 }, (_, i) => prospect(`slow${i}.example`));
+    const store = { discover: vi.fn(async (_product, rows) => rows.length) };
+    let searches = 0;
+    const research = { search: vi.fn(async (_product, { domain }) => { searches += 1; return [row(domain)]; }) };
+    // Out of time after the second search.
+    const result = await enrichProspects({ growth: { store, research }, marketed: null, moment: day, items, spent: () => searches >= 2 });
+    expect(result).toEqual({ searched: 2, evidenceRows: 2 });
+    expect(research.search).toHaveBeenCalledTimes(2);
+    // Already out of time: nothing is searched.
+    research.search.mockClear();
+    expect(await enrichProspects({ growth: { store, research }, marketed: null, moment: day, items, spent: () => true })).toEqual({ searched: 0, evidenceRows: 0 });
+    expect(research.search).not.toHaveBeenCalled();
   });
 
   it('propagates provider failures and aborts before storing or searching the next organization', async () => {
@@ -83,8 +107,8 @@ describe('daily prospect evidence enrichment', () => {
     const search = vi.fn(async (_product, options) => options.domain ? [row(options.domain)] : []);
     const handlers = growthHandlers({ growth: { store, research: { configured: true, search } }, marketed: ['caremetric-intel'] });
     const result = await handlers['growth.discovery']({ agent: { autonomy: 'propose' } }, { now: () => day });
-    expect(result.result).toEqual({ candidates: 0, enrichment: { searched: 1, evidenceRows: 1 } });
-    expect(search).toHaveBeenCalledTimes(2);
+    expect(result.result).toEqual({ candidates: 0, searches: discoveryQueriesPerDay, enrichment: { searched: 1, evidenceRows: 1 } });
+    expect(search).toHaveBeenCalledTimes(discoveryQueriesPerDay + 1);
     search.mockClear();
     await handlers['growth.discovery']({ agent: { autonomy: 'observe' } }, { now: () => day });
     await handlers['growth.pipeline']({ kind: 'growth.pipeline', agent: { autonomy: 'propose' } }, { now: () => day });

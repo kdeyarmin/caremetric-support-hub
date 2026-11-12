@@ -35,11 +35,13 @@ try {
 
   // The Hub server reads the products switched on, and prospect discovery searches only those.
   assert.deepEqual(await store.marketedProducts(), ['caremetric-intel']);
-  const searched = [];
-  const growth = { store: { discover: async () => 0 }, research: { configured: true, search: async product => { searched.push(product); return []; } } };
+  // Discovery runs several searches a day for each marketed product: what matters here is which products were searched at all.
+  const searches = [];
+  const growth = { store: { discover: async () => 0 }, research: { configured: true, search: async product => { searches.push(product); return []; } } };
+  const searchedProducts = () => [...new Set(searches)].sort();
   const discover = growthHandlers({ growth, marketed: () => store.marketedProducts() })['growth.discovery'];
   await discover({ id: 't', agent: { autonomy: 'propose' } });
-  assert.deepEqual(searched, ['caremetric-intel']);
+  assert.deepEqual(searchedProducts(), ['caremetric-intel']);
 
   // A stale screen is refused; the current one switches CareBase on, audited, and the next run follows it.
   const carebase = shown.find(item => item.product === 'carebase');
@@ -51,15 +53,15 @@ try {
   const audit = (await admin.query("select actor_id, metadata from private.audit_events where action = 'agent.marketing' and actor_id = $1", [owner])).rows;
   assert.deepEqual(audit.map(row => row.metadata), [{ product: 'carebase', marketed: true }]);
   assert.deepEqual(await store.marketedProducts(), ['carebase', 'caremetric-intel']);
-  searched.length = 0;
+  searches.length = 0;
   await discover({ id: 't', agent: { autonomy: 'propose' } });
-  assert.deepEqual(searched.sort(), ['carebase', 'caremetric-intel']);
+  assert.deepEqual(searchedProducts(), ['carebase', 'caremetric-intel']);
 
   // Switching it off again applies to the following run.
   await owned('select hub.set_marketing_product($1, $2, $3) as r', ['carebase', false, switched.changedAt]);
-  searched.length = 0;
+  searches.length = 0;
   await discover({ id: 't', agent: { autonomy: 'propose' } });
-  assert.deepEqual(searched, ['caremetric-intel']);
+  assert.deepEqual(searchedProducts(), ['caremetric-intel']);
 
   // Browser roles get nothing: not the switches, not the server's read.
   const client = await admin.connect();

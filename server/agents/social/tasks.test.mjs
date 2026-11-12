@@ -65,7 +65,7 @@ describe('the weekly social plan', () => {
     // Each marketed product's published catalog follows the prompt (content/features.mjs).
     expect(request.system.slice(1)).toEqual(catalogBlocks(JSON.parse(request.user).products));
     expect(request.system.length).toBeGreaterThan(1);
-    expect(JSON.parse(request.user)).toMatchObject({ weekStarting: '2026-11-09', postsToWrite: { facebook: 3, instagram: 2, linkedin: 3 }, bestRecent: [{ platform: 'facebook', engagement: 28 }] });
+    expect(JSON.parse(request.user)).toMatchObject({ weekStarting: '2026-11-09', postsToWrite: { facebook: 4, instagram: 3, linkedin: 4 }, bestRecent: [{ platform: 'facebook', engagement: 28 }] });
     expect(h.store.proposeAction).toHaveBeenCalledTimes(2);
     const [facebook, instagram] = h.store.proposeAction.mock.calls.map(call => call[0]);
     expect(facebook).toMatchObject({ kind: 'social.post', targetKind: 'social_post', targetId: 'facebook:2026-11-09:1',
@@ -256,6 +256,8 @@ describe('the daily ad review', () => {
     expect(calls[1]).toMatchObject({ kind: 'social.ad_create', targetKind: 'social_adset', targetId: '40:2026-11-09:1',
       input: { adsetId: '40', imageHash: 'img1', link: 'https://cmcarebase.com/signup?utm_source=facebook&utm_medium=paid_social&utm_campaign=social-carebase&utm_content=ad', callToAction: 'SIGN_UP', product: 'carebase', basedOn: '50' } });
     expect(outcome.result).toMatchObject({ pause: 1, create: 1, rejected: 1, budget: 0 });
+    // Done, not waiting: an undecided proposal must never stop tomorrow's review from pausing a losing ad.
+    expect(outcome.status).toBe('done');
     expect(h.sent[0]).toMatchObject({ subject: 'Ad review: 2 changes to approve', dedupeKey: 'social:ads:2026-11-09' });
   });
 

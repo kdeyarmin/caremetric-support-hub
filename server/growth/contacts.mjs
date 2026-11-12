@@ -5,24 +5,52 @@
  *
  * - Only https pages on the business's own domain or its www. name are read, never a directory, search result or third-party page.
  * - robots.txt is honoured (for this finder's name and for every robot); a site that forbids it is left alone.
- * - At most four pages (the home page, contact, contact-us and about), 300 KB each, 10 seconds each; redirects only within the domain.
+ * - At most six pages (the home page, contact, contact-us, about, about-us and contactus), 300 KB each, 10 seconds each; redirects only
+ *   within the domain. Reading stops at the first page that shows a role address.
  * - A name that resolves to a private, loopback or link-local address, or an address literal, is never fetched. The connection itself
  *   resolves the name through the same check (pinnedFetch), so a name whose answer changes after the check cannot steer it elsewhere.
  * - A redirect is checked against the robots.txt of the host it leads to before it is followed.
  * - Only role local parts on the business's exact domain are kept; a personal address (jane.doe@, a name) is never kept, nor one on
  *   another domain, nor a phone number of any kind. An address is read whole: `jane!info@` is not taken for `info@`.
  *
- * Nothing it reads is stored except the one address and the page it was found on. Page text is never logged.
+ * Nothing it reads is stored except the one address, the page it was found on and a short summary of the home page (`siteSummary`:
+ * its title, its description and the start of its text), which the Marketing Manager keeps as dated evidence of what the business says
+ * it is, exactly as it keeps a search result's snippet. A summary that seems to hold a personal identifier is dropped. Page text is
+ * never logged.
  */
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { request as httpsRequest } from 'node:https';
 import { isIP } from 'node:net';
 import { Readable } from 'node:stream';
+import { analyzeHtml } from '../agents/seo/html.mjs';
+import { screenIdentifiers } from '../agents/concierge/screen.mjs';
 
 /** The role local parts the database admits for a found contact (growth_contacts_role_address_check), in order of preference. */
 export const roleLocalParts = Object.freeze(['info', 'contact', 'contactus', 'office', 'hello', 'inquiries', 'inquiry', 'enquiries', 'enquiry',
   'admissions', 'sales', 'reception', 'frontdesk', 'general', 'admin', 'administrator', 'mail', 'team']);
-export const contactPaths = Object.freeze(['/', '/contact', '/contact-us', '/about']);
+export const contactPaths = Object.freeze(['/', '/contact', '/contact-us', '/about', '/about-us', '/contactus']);
+/** The longest home page summary kept as evidence, and how much of the page's opening text it may quote. */
+export const siteSummaryLimit = 1200;
+const siteTextLimit = 700;
+const clip = (value, limit) => { const text = String(value ?? '').replace(/\s+/g, ' ').trim(); return text.length > limit ? `${text.slice(0, limit - 1).trimEnd()}…` : text; };
+
+/**
+ * What a business's own home page says it is, as one line of evidence: its title, its description and the start of its visible
+ * text. Null when the page says too little to judge by (an empty page or an app shell), or when the text seems to hold a personal
+ * identifier, so one page can never keep an organization from being assessed.
+ */
+export function siteSummary(html, url) {
+  let page;
+  try { page = analyzeHtml(html, url); } catch { return null; }
+  const parts = [
+    page.title ? `Title: ${clip(page.title, 200)}` : null,
+    page.description ? `Description: ${clip(page.description, 300)}` : null,
+    page.wordCount >= 20 ? `Opening text: ${clip(page.text, siteTextLimit)}` : null,
+  ].filter(Boolean);
+  if (!parts.length || (!page.description && page.wordCount < 20)) return null;
+  const claim = clip(`The organization's own home page. ${parts.join(' ')}`, siteSummaryLimit);
+  return screenIdentifiers(claim).flagged ? null : { url, claim };
+}
 export const finderAgent = 'CareMetricContactFinder';
 const pageBytes = 300_000;
 const robotsBytes = 100_000;
@@ -235,16 +263,19 @@ export function growthContactFinder({ fetchImpl = null, lookup = dnsLookup } = {
     const allowed = async target => robotsAllows(await robotsFor(target.hostname), `${target.pathname}${target.search}`);
     const robots = await robotsFor(host);
     let read = 0;
+    // The home page (the first path) also says what the business is: its summary is returned whether or not an address is found.
+    let site = null;
     for (const path of contactPaths) {
       signal?.throwIfAborted();
       if (!robotsAllows(robots, path)) continue;
       let page = null;
       try { page = await get(`https://${host}${path}`, hosts, pageBytes, signal, 'text/html', allowed); } catch (error) { if (signal?.aborted) throw error; }
       read += 1;
+      if (page && path === '/') site = siteSummary(page.text, page.url);
       const best = page ? roleAddresses(page.text, host)[0] : null;
-      if (best) return { email: best, sourceUrl: page.url };
+      if (best) return { email: best, sourceUrl: page.url, ...(site ? { site } : {}) };
     }
-    return { email: null, reason: read === 0 ? 'robots' : 'none' };
+    return { email: null, reason: read === 0 ? 'robots' : 'none', ...(site ? { site } : {}) };
   }
 
   return { configured: true, find };

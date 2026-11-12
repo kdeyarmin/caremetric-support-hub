@@ -50,6 +50,14 @@ describe('checking social text', () => {
 
   it('keeps lengths, hashtags and emoji in bounds and markup out', () => {
     expect(checkSocialText('A'.repeat(41), { surface: 'ad_headline', product: 'carebase' })).toMatchObject({ ok: false, reason: 'too_long' });
+    // LinkedIn shows a longer headline and description, and the Creative Director writes to them; every other ad rule still applies.
+    const longer = 'Plan referral outreach by county with public healthcare data';
+    expect(longer.length).toBeGreaterThan(40);
+    expect(checkSocialText(longer, { surface: 'ad_headline', product: 'caremetric-intel' })).toMatchObject({ ok: false, reason: 'too_long' });
+    expect(checkSocialText(longer, { surface: 'ad_linkedin_headline', product: 'caremetric-intel' })).toMatchObject({ ok: true });
+    expect(checkSocialText(longer, { surface: 'ad_linkedin_description', product: 'caremetric-intel' })).toMatchObject({ ok: true });
+    expect(checkSocialText('A'.repeat(71), { surface: 'ad_linkedin_headline', product: 'caremetric-intel' })).toMatchObject({ ok: false, reason: 'too_long' });
+    expect(checkSocialText('See https://www.caremetricintel.com/', { surface: 'ad_linkedin_headline', product: 'caremetric-intel' })).toMatchObject({ ok: false, reason: 'link' });
     expect(fb('Six tags #a1 #b1 #c1 #d1 #e1 #f1')).toMatchObject({ ok: false, reason: 'hashtags' });
     expect(checkSocialText('Thanks! #CareBase', { surface: 'comment', product: 'carebase' })).toMatchObject({ ok: false, reason: 'hashtags' });
     expect(fb('So good 🎉🎉🎉🎉')).toMatchObject({ ok: false, reason: 'emoji' });
