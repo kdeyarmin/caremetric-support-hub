@@ -27,8 +27,10 @@ export const generationOperationSchema = z.union([
 ]).refine(v => new TextEncoder().encode(JSON.stringify(v)).byteLength <= 200_000);
 export type GenerationOperation = z.infer<typeof generationOperationSchema>;
 
-// Provider catalog text is display-only; anything unexpected becomes null rather than failing the list.
-const label = (max: number) => z.unknown().transform(v => typeof v === "string" && v.length <= max && !/\p{Cc}/u.test(v) ? v : null);
+// Provider catalog text is display-only; anything unexpected becomes null rather than failing the list. That includes a field
+// that is missing altogether: CareBase copies HeyGen's name, gender and language as they come, so a look or voice without one
+// arrives with no key, and zod 4 rejects a missing key unless the schema is optional. That rejection turned a good list into a 503.
+const label = (max: number) => z.unknown().optional().transform(v => typeof v === "string" && v.length <= max && !/\p{Cc}/u.test(v) ? v : null);
 const avatar = z.object({ id: z.string().min(1).max(200), name: label(300), gender: label(50), is_ai_twin: z.boolean(), is_private: z.boolean(), default_voice_id: label(200) })
   .transform(({ id: avatarId, name, gender, is_ai_twin, is_private, default_voice_id }) => ({ id: avatarId, name, gender, aiTwin: is_ai_twin, private: is_private, defaultVoiceId: default_voice_id }));
 const voice = z.object({ voice_id: z.string().min(1).max(200), name: label(300), language: label(100), gender: label(50) })

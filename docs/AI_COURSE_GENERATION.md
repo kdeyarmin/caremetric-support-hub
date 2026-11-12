@@ -88,7 +88,18 @@ schedule.
   provider response is unresolved, no retry is offered: a person must reconcile it in
   CareBase before a new render.
 
+An avatar or voice that HeyGen lists without a name, gender or language is still offered,
+with that detail left blank. Until Nov 2026 a missing field failed the whole list, and the
+dialog could not load its choices even though CareBase had answered.
+
 CareBase writes its error messages for administrators, and the Hub shows them as
-written. The route needs no Hub migration. It is unavailable until CareBase sets
+written. Whenever the Hub answers a generation request with 503, its server log gets one
+`hub_learning_generation_unavailable` line with the operation, CareBase's status (when it
+answered) and the reason: `carebase_status` (CareBase answered with an error, and its
+error code), `invalid_result` (CareBase answered, but not in the shape the operation
+expects, and the first field that did not match), `response_too_large`,
+`carebase_unreachable`, `response_unreadable`, `delegation_failed` or
+`session_recheck_failed`. The line carries no message text, avatar or voice names, or
+scripts. The route needs no Hub migration. It is unavailable until CareBase sets
 `CAREMETRIC_ADMIN_ENABLED`, `CAREMETRIC_ADMIN_COMMANDS_ENABLED`,
 `CAREMETRIC_LEARNING_AUTHORING_ENABLED` and `CAREBASE_LEARNING_DELEGATION_TOKEN`.
