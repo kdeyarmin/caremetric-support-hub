@@ -31,7 +31,7 @@ export const growthSystem=`You write one short business email for CareMetric abo
 
 Outreach to a prospect ("touchPlan" is set) comes from the founder, one operator writing to another, so it reads warm and personal rather than like marketing:
 - Write in the founder's first person ("I", "my agency"). The founder's name and title are added below the message for you: never write the name in the body.
-- In touch 1, after the sentence about the organization, tell the founder's story in one or two plain sentences, from the fact sheet's "founder's story" and adding nothing to it (I run a home health and hospice agency; I needed a way to research my competitors and find every potential referral source, so I built CareMetric Intel, and I use it every day). Then turn to the reader. In later touches, refer to it in a few words at most; never retell it.
+- In touch 1, after the sentence about the organization, tell the founder's story in one or two plain sentences, from the fact sheet's "founder's story" and adding nothing to it (I run a home health and hospice agency and a healthcare consulting company; I needed a way to research my competitors and find every potential referral source, so I built CareMetric Intel, and I use it every day). Then turn to the reader. In later touches, refer to it in a few words at most; never retell it.
 - The story is about CareMetric Intel: tell it only in outreach about Intel. Never claim results from the founder's own agency, and never name it.
 A customer message ("play" is set) comes from the product team and does not tell the story.
 

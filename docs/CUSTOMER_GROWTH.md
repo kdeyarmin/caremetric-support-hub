@@ -174,7 +174,7 @@ terms (owner decision 2026-11-08).
 **Outreach from the founder, easy to read (owner direction 2026-11-12, `growth.7`).** Prospect outreach is written in the founder's
 first person and signed with the founder's name and title (`senderFor` in `server/growth/playbook.mjs`, from `founder` in
 `server/agents/content/facts.mjs`). Touch 1 tells the founder's story in one or two sentences, exactly as the fact sheet gives it: the
-founder runs a home health and hospice agency, needed a way to research competitors and find every potential referral source, and built
+founder runs a home health and hospice agency and a healthcare consulting company, needed a way to research competitors and find every potential referral source, and built
 CareMetric Intel, which the founder uses every day. The story carries no result, agency name or number, and is told only about Intel. For
 Intel, the email names the part of the whole workspace that answers the reader's problem, never email campaigns as the point. A draft
 with an empty buzzword, a string of fragments or a sentence over 30 words is refused as `unclear` (`unclearCopy`). Customer messages are

@@ -108,7 +108,7 @@ it('writes prospect outreach as the founder, with the founder\'s story in touch 
  expect(growthSystem).toMatch(/In touch 1, after the sentence about the organization, tell the founder's story/);
  expect(growthSystem).toContain('never write the name in the body');
  expect(growthSystem).toContain('never email campaigns as the point');
- expect(growthSystem).toContain('I run a home health and hospice agency.');
+ expect(growthSystem).toContain('I run a home health and hospice agency and a healthcare consulting company.');
  const answer=body=>({subject:'Referral sources in your county',body,citations:['s'],needsHuman:false});
  const sources=[{id:'s'}];
  expect(draftProblem(answer('I run a home health and hospice agency. Which referral sources does your team visit each week?'),{product:'caremetric-intel',sources,outreach:true})).toBeNull();
