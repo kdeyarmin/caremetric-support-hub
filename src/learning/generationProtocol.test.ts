@@ -48,6 +48,26 @@ describe("generation results", () => {
     expect(projectGenerationResult({ operation: "video.status", result: { success: true, status: "completed", video_url: "https://cdn.invalid/v.mp4" } }, status)).toEqual({ status: "completed", error: null });
     expect(projectGenerationResult({ operation: "video.status", result: { success: true, status: "failed", error: "Avatar unavailable" } }, status)).toEqual({ status: "failed", error: "Avatar unavailable" });
   });
+  it("keeps an avatar or voice that HeyGen sent without a name, gender or language", () => {
+    // CareBase's list-heygen-options copies these fields from HeyGen as they come; one HeyGen leaves out is undefined there, so the
+    // JSON it sends has no key at all. A missing key used to fail the whole list, and the Hub answered 503 to a good response.
+    const look = { id: "look-1", status: "completed", avatar_type: "instant_avatar", default_voice_id: "v1" };
+    const voice = { voice_id: "v2", gender: "female" };
+    const asCareBaseSendsIt = JSON.parse(JSON.stringify({ operation: "video.options", result: { success: true,
+      avatars: [{ id: look.id, name: undefined, preview_image_url: undefined, gender: undefined, avatar_type: look.avatar_type, group_name: null,
+        is_ai_twin: true, is_private: true, default_voice_id: look.default_voice_id }],
+      voices: [{ voice_id: voice.voice_id, name: undefined, language: undefined, gender: voice.gender, preview_audio_url: undefined }] } }));
+    expect(Object.keys(asCareBaseSendsIt.result.avatars[0])).not.toContain("gender");
+    const options = { operation: "video.options" as const, request: {} };
+    expect(projectGenerationResult(asCareBaseSendsIt, options)).toEqual({
+      avatars: [{ id: "look-1", name: null, gender: null, aiTwin: true, private: true, defaultVoiceId: "v1" }],
+      voices: [{ id: "v2", name: null, language: null, gender: "female" }],
+    });
+    // An avatar with no default voice is still offered; one with no id cannot be chosen and still fails the list.
+    const noDefault = { operation: "video.options", result: { success: true, avatars: [{ id: "look-2", is_ai_twin: false, is_private: false }], voices: [] } };
+    expect(projectGenerationResult(noDefault, options).avatars[0]).toEqual({ id: "look-2", name: null, gender: null, aiTwin: false, private: false, defaultVoiceId: null });
+    expect(() => projectGenerationResult({ operation: "video.options", result: { success: true, avatars: [{ name: "No id", is_ai_twin: false, is_private: false }], voices: [] } }, options)).toThrow();
+  });
   it("shows only bounded administrator messages", () => {
     expect(generationMessage("AI course generation is currently disabled by the platform administrator.")).toBe("AI course generation is currently disabled by the platform administrator.");
     for (const value of [undefined, 7, "", "x".repeat(1001), "bad\u0007bell"]) expect(generationMessage(value)).toBeNull();
