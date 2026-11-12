@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { categorize } from './rules.mjs';
+import { categorize, ownWords } from './rules.mjs';
 
 const category = (text, subject = null) => categorize({ text, subject }).category;
 
@@ -102,5 +102,34 @@ describe('message categories by word matching', () => {
     const started = performance.now();
     for (const text of ['down '.repeat(4000), `everyone ${'can\'t '.repeat(3000)}`, `cancel ${'x'.repeat(19_000)}`, `someone ${'a '.repeat(9000)}`, 'billing '.repeat(2500)]) categorize({ text });
     expect(performance.now() - started).toBeLessThan(1500);
+  });
+});
+
+describe('a reply with the original email quoted under it', () => {
+  const outreach = 'I run a home health and hospice agency. You can try CareMetric Intel free for 14 days, no credit card needed.\n\nOpt out of these emails: https://hub.example.org/api/growth/preferences/abc';
+  const quoted = outreach.split('\n').map(line => `> ${line}`).join('\n');
+  it('is judged for billing and cancellation by the sender\'s own words, so a prospect\'s answer reaches sales', () => {
+    for (const reply of [
+      `Yes, tell me more about the free trial.\n\nOn Tue, Nov 10, 2026 at 3:14 PM Kevin Deyarmin <growth@example.org> wrote:\n${quoted}`,
+      `Yes, tell me more about the free trial.\n\nOn Tue, Nov 10, 2026 at 3:14 PM Kevin Deyarmin\n<growth@example.org> wrote:\n${quoted}`,
+      `Yes, tell me more about the free trial.\n\n-----Original Message-----\nFrom: Kevin Deyarmin\nSent: Tuesday\n\n${outreach}`,
+      `Yes, tell me more about the free trial.\n\nFrom: Kevin Deyarmin <growth@example.org>\nSent: Tuesday, November 10, 2026 3:14 PM\nTo: Info\nSubject: A question\n\n${outreach}`,
+      `Yes, tell me more about the free trial.\n\n${quoted}`,
+    ]) {
+      expect(categorize({ text: outreach }).category, 'the email itself mentions a credit card').toBe('billing');
+      expect(categorize({ text: reply, subject: 'Re: A question' }), reply.slice(40, 90)).toMatchObject({ category: 'sales' });
+    }
+  });
+  it('still reads the sender\'s own billing or cancellation words, and every urgent kind in the quote', () => {
+    expect(categorize({ text: `Please refund my last invoice.\n\nOn Tue, Nov 10, 2026 Kevin wrote:\n${quoted}` }).category).toBe('billing');
+    expect(categorize({ text: `We need to cancel our subscription.\n\n${quoted}` }).category).toBe('cancellation');
+    expect(categorize({ text: `See below.\n\nOn Tue, Nov 10, 2026 Kevin wrote:\n> Our account was hacked last night.` }).category).toBe('security');
+  });
+  it('keeps a reply written below its quote, or one with no words of its own, whole', () => {
+    expect(ownWords(`${quoted}\n\nPlease refund my invoice.`)).toBe('Please refund my invoice.');
+    expect(ownWords(quoted)).toBe(quoted);
+    expect(ownWords(`On Tue, Nov 10, 2026 Kevin wrote:\n${quoted}`)).toContain('credit card');
+    expect(categorize({ text: `On Tue, Nov 10, 2026 Kevin wrote:\n${quoted}\n` }).category).toBe('billing');
+    expect(ownWords('On Monday we will start. Our invoice is attached.')).toBe('On Monday we will start. Our invoice is attached.');
   });
 });

@@ -70,18 +70,46 @@ const categories = [
   ]],
 ];
 
+// Where a mail program starts the message being answered: "On <date>, <name> wrote:" (the name may wrap onto the next line), an
+// "Original Message" rule, or a "From:" line followed closely by "Sent:" or "Date:".
+const quoteOpeners = [
+  /^On\s.{4,200}\bwrote:\s*$/i,
+  /^-{2,}\s*(?:Original|Forwarded) Message\s*-{2,}\s*$/i,
+  /^_{10,}\s*$/,
+];
+/**
+ * A message without the earlier message quoted under it: the lines before the first quote opener, less any line that starts with
+ * ">". A reply written below its quote, or one this cannot tell apart, is returned whole, so nothing a person wrote is ever dropped.
+ * Used only to decide billing and cancellation, which the company's own emails mention ("no credit card", "cancel any time"): a
+ * prospect who answers one of those emails with the original quoted underneath has not raised a billing matter.
+ */
+export function ownWords(text) {
+  const lines = String(text ?? '').slice(0, limit).split(/\r?\n/);
+  let end = lines.length;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+    const wrapped = `${line} ${(lines[index + 1] ?? '').trim()}`;
+    const outlook = /^From:\s\S/i.test(line) && lines.slice(index + 1, index + 4).some(next => /^(?:Sent|Date):\s/i.test(next.trim()));
+    if (quoteOpeners.some(pattern => pattern.test(line)) || (/^On\s/i.test(line) && quoteOpeners[0].test(wrapped)) || outlook) { end = index; break; }
+  }
+  const own = lines.slice(0, end).filter(line => !/^\s*>/.test(line)).join('\n').trim();
+  return own || String(text ?? '').slice(0, limit);
+}
+
 /** { category, reasons } for a message; `subject` is only the subject of an email conversation. */
 export function categorize({ text, subject = null } = {}) {
   const body = String(text ?? '').slice(0, limit);
   const whole = `${subject ?? ''}\n${body}`.slice(0, limit);
-  const matching = ([category, rules]) => {
-    const reasons = rules.filter(([, pattern]) => pattern.test(whole)).map(([reason]) => `${category}.${reason}`);
+  // Billing and cancellation are read from the sender's own words; every urgent kind still reads the whole message, quote included.
+  const own = `${subject ?? ''}\n${ownWords(body)}`.slice(0, limit);
+  const matching = ([category, rules], words) => {
+    const reasons = rules.filter(([, pattern]) => pattern.test(words)).map(([reason]) => `${category}.${reason}`);
     return reasons.length ? { category, reasons } : null;
   };
-  const firstOf = kinds => {
+  const firstOf = (kinds, words = whole) => {
     for (const entry of categories) {
       if (!kinds.has(entry[0])) continue;
-      const hit = matching(entry);
+      const hit = matching(entry, words);
       if (hit) return hit;
     }
     return null;
@@ -95,7 +123,7 @@ export function categorize({ text, subject = null } = {}) {
   if (urgent) return urgent;
   if (opens(autoLabel)) return { category: 'auto_reply', reasons: ['auto_reply'] };
   if (opens(bounceLabel) || opens(machineSender)) return { category: 'auto_reply', reasons: ['bounce'] };
-  const business = firstOf(businessKinds);
+  const business = firstOf(businessKinds, own);
   if (business) return business;
   if (opens(autoSentence)) return { category: 'auto_reply', reasons: ['auto_reply'] };
   return firstOf(new Set(['sales'])) ?? { category: 'general', reasons: [] };

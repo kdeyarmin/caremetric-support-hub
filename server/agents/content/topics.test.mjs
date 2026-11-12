@@ -13,6 +13,8 @@ describe('the topic backlog', () => {
   it('is well formed: unique keys and slugs, known products, sources and pages', () => {
     expect(backlogProblems()).toEqual([]);
     expect(topics.length).toBeGreaterThanOrEqual(12);
+    // Intel is the one product the team markets: its backlog must last months at two articles a week, not three weeks.
+    expect(topics.filter(topic => topic.product === 'intel').length).toBeGreaterThanOrEqual(12);
     expect(new Set(topics.map(topic => topic.product))).toEqual(new Set(['carebase', 'intel', 'advisors']));
     expect(backlogProblems([...topics, { ...topics[0] }])).toEqual(expect.arrayContaining([`${topics[0].key}: duplicate key`, `${topics[0].key}: duplicate slug`]));
     expect(backlogProblems([{ ...topics[0], key: 'x-y', slug: 'x-y', sources: ['nowhere'], links: ['nowhere'] }])).toEqual(['x-y: unknown source nowhere', 'x-y: unknown page nowhere']);

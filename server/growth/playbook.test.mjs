@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { productPages } from '../agents/content/facts.mjs';
 import { allowedNumbers, textProblems } from '../agents/content/validate.mjs';
 import {
-  discoveryQuery, discoveryQueryCount, lifecyclePlay, linkablePages, offersMeeting, operatorHost, playbookText, playbookVersion, salesPlaybook, sequencePlan, touchAngle,
+  discoveryPages, discoveryQueries, discoveryQueriesPerDay, discoveryQuery, discoveryQueryCount, lifecyclePlay, linkablePages, offersMeeting, operatorHost, playbookText, playbookVersion, salesPlaybook, sequencePlan, touchAngle,
 } from './playbook.mjs';
 
 const day = 86_400_000;
@@ -27,14 +27,31 @@ describe('sales playbook', () => {
     expect(linkablePages('breathe')).toEqual([]);
   });
 
-  it('keeps CareBase discovery inside Pennsylvania and finds a new search every day', () => {
-    const start = new Date('2026-11-08T13:00:00Z');
-    const carebase = Array.from({ length: discoveryQueryCount('carebase') }, (_, index) => discoveryQuery('carebase', new Date(start.getTime() + index * day)));
-    expect(carebase.every(query => / PA$/.test(query))).toBe(true);
-    expect(new Set(carebase).size).toBe(carebase.length);
-    const intel = Array.from({ length: 30 }, (_, index) => discoveryQuery('caremetric-intel', new Date(start.getTime() + index * day)));
-    expect(new Set(intel).size).toBe(30);
-    expect(intel.every(query => /home health|hospice/.test(query))).toBe(true);
+  it('keeps CareBase discovery inside Pennsylvania and runs several new searches every day', () => {
+    const start = new Date('2026-11-12T13:00:00Z');
+    expect(discoveryQueriesPerDay).toBeGreaterThanOrEqual(4);
+    // One pass over the whole grid: every search once, none repeated, all on the first page of results.
+    const days = count => Array.from({ length: Math.ceil(count / discoveryQueriesPerDay) }, (_, index) => new Date(start.getTime() + index * day));
+    const carebase = days(discoveryQueryCount('carebase')).flatMap(instant => discoveryQueries('carebase', instant));
+    expect(carebase).toHaveLength(discoveryQueryCount('carebase'));
+    expect(carebase.every(search => / PA$/.test(search.query) && search.offset === 0)).toBe(true);
+    expect(new Set(carebase.map(search => search.query)).size).toBe(carebase.length);
+    const intel = days(discoveryQueryCount('caremetric-intel')).flatMap(instant => discoveryQueries('caremetric-intel', instant));
+    expect(new Set(intel.map(search => search.query)).size).toBe(discoveryQueryCount('caremetric-intel'));
+    expect(intel.every(search => /home health|hospice/.test(search.query))).toBe(true);
+    // Intel is sold nationally: a month of searches must not run out of new markets.
+    expect(discoveryQueryCount('caremetric-intel')).toBeGreaterThanOrEqual(discoveryQueriesPerDay * 60);
+    // The next pass over the grid asks for the next page of each search, then starts over after the last page.
+    const pass = product => Math.ceil(discoveryQueryCount(product) / discoveryQueriesPerDay) * day;
+    expect(discoveryQueries('carebase', new Date(start.getTime() + pass('carebase')))[0]).toEqual({ query: carebase[0].query, offset: 1 });
+    expect(discoveryQueries('carebase', new Date(start.getTime() + discoveryPages * pass('carebase')))[0]).toEqual(carebase[0]);
+    // A day before several searches a day began reads the first page.
+    expect(discoveryQueries('carebase', new Date('2026-11-01T13:00:00Z')).every(search => search.offset === 0)).toBe(true);
+    // The first search of the day is what one-query callers get, and it changes every day.
+    expect(discoveryQuery('carebase', start)).toBe(carebase[0].query);
+    expect(discoveryQuery('carebase', start)).not.toBe(discoveryQuery('carebase', new Date(start.getTime() + day)));
+    expect(discoveryQueries('carebase', start, 2)).toHaveLength(2);
+    expect(discoveryQueries('breathe', start)).toEqual([]);
     expect(discoveryQuery('breathe', start)).toBeNull();
   });
 
@@ -46,7 +63,13 @@ describe('sales playbook', () => {
   it('drops directories, social networks, job boards and government sites from discovery', () => {
     for (const host of ['www.aplaceformom.com', 'caring.com', 'pa.gov', 'www.dhs.pa.gov', 'medicare.gov', 'www.indeed.com', 'en.wikipedia.org', 'facebook.com', 'psu.edu', 'county.pa.us'])
       expect(operatorHost(host), host).toBe(false);
-    for (const host of ['maplegrovepch.com', 'www.sunrise-care.org', 'example-hospice.net']) expect(operatorHost(host), host).toBe(true);
+    // Directories that reached the pipeline in production, provider-number and company lookups, trade press, and hosts that name
+    // themselves a directory, a listing, a review or a jobs site.
+    for (const host of ['causeiq.com', 'www.senioradvice.com', 'medicarelist.com', 'homecareatlas.com', 'newlifestyles.com', 'npidb.org', 'www.zoominfo.com',
+      'hospicenews.com', 'seniorcaredirectory.com', 'hospice-reviews.org', 'jobs.examplehomehealth.com', 'local.listings.example.com'])
+      expect(operatorHost(host), host).toBe(false);
+    for (const host of ['maplegrovepch.com', 'www.sunrise-care.org', 'example-hospice.net', 'directcarehospice.com', 'careersourcehomehealth.com'])
+      expect(operatorHost(host), host).toBe(true);
   });
 
   it('gives each outreach touch a different job and caps the touch number', () => {

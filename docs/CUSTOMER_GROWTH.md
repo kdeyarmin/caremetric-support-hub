@@ -54,13 +54,20 @@ the owner, model-written or not.
   product's app: an Intel letter is the Intel app's own dark Emberline letter, with the ember accent on its links. It opens with "Hello,", then
   the approved words (the product's own pages are clickable links, nothing else is), then the sign-off with the product's
   website: prospect outreach is the founder's own letter, signed "Dr. Kevin C. Deyarmin, Founder, CareMetric" (owner direction
-  2026-11-12), and a customer message is signed by the product's team ("The CareMetric Intel team"), and a small footer with the company, its postal address and the unsubscribe
-  link. The inbox preview is the message's first sentence. The writing rules (`growth.5`) ask for a specific, true opening
+  2026-11-12), and a customer message is signed by the product's team ("The CareMetric Intel team"), and a small footer with the company, its postal address and the opt-out
+  link ("Opt out of these emails", at `/api/growth/preferences/<token>`; the footer and the address avoid the word "unsubscribe" because
+  the database reads that word anywhere in a reply, quoted text included, as a request to stop, so a prospect who replied with the
+  original quoted underneath was opted out by their own quote. The old `/api/growth/unsubscribe/<token>` address still works). The inbox preview is the message's first sentence. The writing rules (`growth.5`) ask for a specific, true opening
   about the organization from its public sources, one likely problem as a question, one concrete way the product helps, and
   one easy next step with its link, in short paragraphs.
 - **Contact finder.** After the daily discovery search, the finder reads each new business's own website: https only, its
   domain or `www.` name only (redirects included), robots.txt honoured, never an address literal or a name that resolves to a
-  private address, at most four pages (`/`, `/contact`, `/contact-us`, `/about`) of 300 KB each (`server/growth/contacts.mjs`).
+  private address, at most six pages (`/`, `/contact`, `/contact-us`, `/about`, `/about-us`, `/contactus`) of 300 KB each, stopping at the
+  first that shows a role address (`server/growth/contacts.mjs`). The daily run reads up to 20 businesses, four at a time, and each
+  fifteen-minute pipeline sweep reads four more, so a day's discoveries are all read the same day. The finder also keeps a short
+  summary of each home page (its title, its description and the start of its text, at most 1,200 characters, dropped if it seems to
+  hold a personal identifier) as dated evidence of what the business says it is, so fit is judged from the business's own words and
+  not only from a search snippet.
   It keeps one **role address** on that exact domain (`info@`, `contact@`, `office@`, `hello@`, `inquiries@`, `admissions@`,
   `sales@` and a few more); the database admits nothing else as a found contact (`growth_contacts.source_kind = 'role_address'`)
   and refuses one on another domain, one found off the business's site, or one that unsubscribed. A personal address is never
@@ -135,10 +142,17 @@ likely problems and buying triggers to ask about, what may be said, the next ste
 objection; a three-touch outreach plan; and a play for each customer moment. It holds method only: every price, trial, offer and
 claim still comes from the fact sheet (`server/agents/content/facts.mjs`, the copy of [GTM facts](GTM_FACTS.md)).
 
-- **Discovery** searches a different segment and place every Eastern day instead of the same query (four segments by 36
-  Pennsylvania places for CareBase, so it never leaves Pennsylvania; four segments by 30 markets for Intel), and drops directories,
-  listing and review sites, social networks, job boards and government or school sites, so the contact finder never writes to a
+- **Discovery** runs six different segment-and-place searches per marketed product every Eastern day, twenty results each
+  (`discoveryQueriesPerDay`; four segments by 36 Pennsylvania places for CareBase, so it never leaves Pennsylvania; six segments by
+  104 markets across the country for Intel). No search repeats until the whole grid has been searched; the next pass reads the next
+  page of each search. Calls to the search provider are paced a second apart. If a later search fails, the day's searching stops and
+  what was found is kept; only a failure of the first search fails the run. Discovery drops directories, listing and review sites,
+  provider-number and company-data lookups, trade associations and trade press, social networks, job boards and government or school
+  sites, and any host that names itself a directory, a listing, a review or a jobs site, so the contact finder never writes to a
   directory's info@ address. A domain search for one organization is unchanged.
+- **Pipeline sweep limits.** A sweep assesses at most 20 prospects, stops starting model calls and website reads 150 seconds after
+  it began, and does not ask again for six hours for an assessment or a draft the model could not give or that failed its checks
+  (unless the opportunity, its evidence, its contact or the policy changed). The sweep's result counts those drafts as `undrafted`.
 - **Fit assessment** (`growth-fit.2`) scores with a written rubric whose bands line up with qualification (`qualify.1`, fit 75 or
   more): only an operator in the product's segment and territory, shown by its own sources, can reach 75; a directory, a vendor or an
   out-of-territory organization stays below 30.
@@ -260,7 +274,7 @@ Temporarily blocked messages receive a persisted 15-minute retry time; both the 
 
 Pause the agent, disable the product policy, or switch off Settings → Customer growth → "Send growth email" to stop new sends. An already accepted provider request cannot be recalled. The system rechecks the latest contact, policy, opportunity and suppression status immediately before reserving a send; short database mutations serialize independently of model, search and mail calls.
 
-The daily discovery run also researches up to three existing prospects whose fit is still uncertain (unknown or 30–74), using the same Brave provider and only each organization's own domain. It prefers two prospects with verified, permitted contacts and reserves one place for another prospect, rotating both groups each Eastern day. Only marketed products and Marketing Manager prospects are eligible; customers, internal organizations, opted-out contacts and clear non-fits are excluded. New sources enter the existing dated-evidence history and the next pipeline sweep reassesses them. Duplicate snippets do not trigger another assessment. This does not lower the fit threshold, permit a contact or send anything. Task results show only the number searched and evidence rows returned, including duplicates. The bound is per discovery invocation; owner-requested runs and retries may repeat these searches.
+The daily discovery run also researches up to ten existing prospects whose fit is still uncertain (unknown or 30–74), using the same Brave provider and only each organization's own domain. It takes two prospects with verified, permitted contacts for each one of the others, rotating both groups each Eastern day. Only marketed products and Marketing Manager prospects are eligible; customers, internal organizations, opted-out contacts and clear non-fits are excluded. New sources enter the existing dated-evidence history and the next pipeline sweep reassesses them. Duplicate snippets do not trigger another assessment. This does not lower the fit threshold, permit a contact or send anything. Task results show only the number searched and evidence rows returned, including duplicates. The bound is per discovery invocation; owner-requested runs and retries may repeat these searches.
 
 Pipeline and customer-success work run every 15 minutes; discovery searches run daily at 08:00 Eastern. The SEO Analyst can propose a weekly content brief at its 08:30 daily catch-up, when in Propose mode. Review and approve that brief in Team, use it in the existing publishing workflow, and preserve its campaign identifier in landing-page signup events. Publishing and actual search traffic require the native website/analytics integration. Product cohort counts exclude internal organizations. Experiment assignment is stable per organization and enabled explicitly; there is no automatic winner selection from a tiny sample. Use rejection notes, observed objections and loss reasons to revise approved claims and prompts, rerun evaluation, and review the next cohort.
 

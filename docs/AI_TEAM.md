@@ -494,6 +494,10 @@ many times each side has written). It then:
    notice they forward after a note of their own proves nothing. An urgent kind always wins over that guess ("our account was
    hacked while I was out of the office" is a security report), and so does a cancellation or a billing matter
    when only an opening sentence suggests an automatic reply.
+   Billing and cancellation are read from the sender's own words: the earlier message a mail program quotes under a reply (after
+   "On ... wrote:", an "Original Message" rule or a "From:/Sent:" block, and every line that starts with ">") is left out, because the
+   company's own emails say "no credit card" and a prospect who answers one has not raised a billing matter. The urgent kinds still
+   read the whole message, quote included, and a reply with no words of its own above the quote is read whole (`ownWords`).
    Only the first 4,000 characters of a message are read. A message that fills them is never quieter than a
    warning, the alert says the rest was not screened, and nothing is offered to the customer or sent to the
    model for it: it is yours to read. That holds even for a long message that opens like an automatic reply.
@@ -1121,8 +1125,9 @@ listing's website field, a pitch's link). The ones that pass go to the owner in
 one email, word for word, to adjust and send personally. Nothing is sent to anyone else. The stored copy of the alert (shown on
 the Team screen) holds counts only; the drafts travel only in the email.
 
-**When it runs.** `content.weekly` ("Weekly help article") fires every morning at 07:45 Eastern and writes on Tuesdays (read from
-the task's due time, so a Tuesday's work put off by the budget still runs the next day). `content.outreach` fires every morning at
+**When it runs.** `content.weekly` ("Weekly help article") fires every morning at 07:45 Eastern and writes on Tuesdays and Fridays
+(read from the task's due time, so a Tuesday's work put off by the budget still runs the next day; a Tuesday that was missed, or
+whose draft failed its checks, costs three days instead of the week). The backlog holds 13 CareMetric Intel topics. `content.outreach` fires every morning at
 08:05 Eastern and writes once a month, from the first Wednesday on, under the month's alert key, so a server that was down that
 day writes on its next run and a month is sent once (a delivery that failed is tried again on a later day, up to the notifier's
 three tries). **Run now** works on any day and always writes. While an article waits for the owner, the weekly schedule waits too.
