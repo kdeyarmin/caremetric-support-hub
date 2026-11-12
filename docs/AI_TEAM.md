@@ -200,6 +200,15 @@ bare domain redirects to `www`, so the `www` address is the one checked). Breath
 until it has a confirmed health route. A page is read for at most 4 KB and thrown away; only a
 status code, a latency and one fixed failure word (timeout, network, status or redirect) are kept.
 
+A 429 ("too many requests") is not a failure. It means the product, or something in front of it,
+turned the probe away for asking too often, not that the product is down: on Nov 10 every product
+answered 429 at once while the Hub served normal traffic, and the owner got six urgent texts. A
+rate-limited check is not recorded at all, so it neither counts toward an incident nor closes one,
+and the product is simply checked again at the next sweep. The sweep's run on the Team screen
+says which products were rate-limited ("CareBase was rate-limited (429) and was not counted"). A
+product that only ever answers 429 is therefore never reported down; the run shows it every five
+minutes until it answers normally.
+
 The database decides what a check means (`private.agent_probe_record`, one row-locked statement
 per product, so two overlapping sweeps can never open the same incident twice):
 
