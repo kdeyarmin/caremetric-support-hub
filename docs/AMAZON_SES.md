@@ -1,7 +1,9 @@
 # Amazon SES
 
-The Hub can send its email through Amazon SES instead of SendGrid. One setting moves every send: staff replies,
-the AI team's alerts and answers, customer lifecycle email, bulk email and growth email. **Settings → Email → Email
+The Hub can send its email through Amazon SES instead of SendGrid. One setting moves staff replies, the AI team's
+alerts and answers, customer lifecycle email and bulk email. Growth email (cold email and sales follow-ups) has its own
+switch, **Settings → Email → Growth email service**, which stays SendGrid by default: SES does not allow unsolicited
+email, and a suspension would stop every message the Hub sends. **Settings → Email → Email
 service** is SendGrid until the owner chooses Amazon SES, and a change applies within a minute with nothing to redeploy.
 If the chosen service is not set up, the Hub keeps sending through the other one, so a half-finished switch never stops
 email.
@@ -32,18 +34,15 @@ posts to `/api/channels/email/inbound`. Moving inbound mail to SES receiving is 
    They sit beside the SendGrid records; nothing existing changes.
 2. **Production access.** A new SES account sends only to verified addresses (200 a day). Request production access in
    the SES console for transactional email. Prospecting (cold) email is not part of that request: AWS's acceptable use
-   policy does not allow unsolicited bulk email, so keep growth email's first-contact messages on another provider or
-   off until that is decided.
-3. **Sending key.** Create an IAM user for the Hub with only this policy, and an access key for it:
-
-   ```json
-   { "Version": "2012-10-17", "Statement": [{ "Effect": "Allow", "Action": ["ses:SendEmail", "ses:SendRawEmail"], "Resource": "*" }] }
-   ```
-
-   Set `HUB_SES_ACCESS_KEY_ID` and `HUB_SES_SECRET_ACCESS_KEY` on the **support-hub-web** Railway service. They are
-   secrets: Integration setup on the Control center shows only whether they are set.
-4. **Events.** Create an SNS topic (for example `caremetric-hub-email-events`) and a configuration set (for example
-   `caremetric-hub`) whose event destination publishes Delivery, Bounce, Complaint and Reject to that topic. Enter the set's
+   policy does not allow unsolicited bulk email, so leave **Growth email service** on SendGrid.
+3. **Sending key.** The IAM user `ses-sender-hub` exists with one inline policy: `ses:SendEmail` and
+   `ses:SendRawEmail` only, only for the `caremetric.ai` and `caremetricadvisors.com` identities and the
+   `caremetric-hub` configuration set. In the IAM console open that user, **Security credentials → Create access key**
+   (application running outside AWS), and set `HUB_SES_ACCESS_KEY_ID` and `HUB_SES_SECRET_ACCESS_KEY` on the
+   **support-hub-web** Railway service. They are secrets: Integration setup on the Control center shows only whether
+   they are set.
+4. **Events.** Create an SNS topic (`caremetric-hub-email-events`) and a configuration set (`caremetric-hub`, TLS
+   required, account suppression for bounces and complaints) whose event destination publishes Delivery, Bounce, Complaint and Reject to that topic. Enter the set's
    name in **Settings → Email → Amazon SES configuration set** and the topic's ARN in **Settings → Email → Amazon SES
    events topic**, then subscribe `<HUB_PUBLIC_ORIGIN>/api/growth/delivery/ses` to the topic (HTTPS, raw message delivery
    off). The Hub confirms the subscription by itself; the subscription shows Confirmed in the SNS console.

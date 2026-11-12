@@ -42,6 +42,7 @@ does nothing. A setting you saved, or cleared back to its default, is never over
 | Email | Growth email sender | `HUB_GROWTH_FROM_EMAIL` |
 | Email | Growth email display name | `HUB_GROWTH_FROM_NAME` |
 | Email | Email service (SendGrid or Amazon SES) | none: a setting from the start |
+| Email | Growth email service | none: a setting from the start |
 | Email | Amazon SES region | none: a setting from the start |
 | Email | Amazon SES configuration set | none: a setting from the start |
 | Email | Amazon SES events topic | none: a setting from the start |
