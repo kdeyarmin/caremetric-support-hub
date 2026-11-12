@@ -11,7 +11,7 @@ import { factSheetText, legalDisclaimer, officialSources, productPage, productPa
 import { catalogGuidance } from './features.mjs';
 import { limits } from './validate.mjs';
 
-export const promptVersion = 'content.3';
+export const promptVersion = 'content.4';
 
 const range = ([min, max]) => `${min} to ${max}`;
 

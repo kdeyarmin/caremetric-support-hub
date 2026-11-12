@@ -15,14 +15,14 @@ import { echoCandidates, quotesCustomer, wordsOf } from '../concierge/draft.mjs'
 import { screenIdentifiers } from '../concierge/screen.mjs';
 import { factSheetText, factsRevision } from '../content/facts.mjs';
 import { catalogGuidance, catalogNumbers, featuresTexts } from '../content/features.mjs';
-import { allowedNumbers, normalizeTerms, textProblems } from '../content/validate.mjs';
+import { allowedNumbers, normalizeTerms, textProblems, unclearCopy } from '../content/validate.mjs';
 import { productAmounts } from '../../growth/draft.mjs';
 import { linkablePages, offersMeeting, playbookFor, playbookText } from '../../growth/playbook.mjs';
 import { linkTags, tagLinks, untagLinks } from '../links.mjs';
 
-export const planPromptVersion = 'social-plan.4';
-export const adPromptVersion = 'social-ads.4';
-export const replyPromptVersion = 'social-reply.3';
+export const planPromptVersion = 'social-plan.5';
+export const adPromptVersion = 'social-ads.5';
+export const replyPromptVersion = 'social-reply.4';
 
 export const platforms = ['facebook', 'instagram', 'linkedin'];
 export const socialProducts = ['carebase', 'caremetric-intel'];
@@ -46,6 +46,7 @@ Who reads them:
 
 What makes a post work:
 - The first line is the hook: a specific question, a practical tip, or a plain fact from the fact sheet. People decide in one line whether to read on.
+- Easy to read and makes sense on the first pass: plain words, complete sentences, nothing a reader would have to puzzle over (the fact sheet's "How everything must read").
 - One idea per post, short paragraphs, useful before promotional, and one clear call to action at the end: answer in a comment, read the linked page, or start the free trial.
 - Mix the week: about two in five practical tips (from the playbook's likely problems, written as tips or questions, never as claims about readers), one in five product capability (the playbook's "what we may say"), one in five engagement (a question the audience can answer in a comment), one in five at most an offer (the free trial or the Founders Sale, exactly as written), or a resource (one of the product's own guide pages).
 - Platform style: Facebook is conversational, 40 to 120 words, and may carry one link. Instagram is visual and warm, 50 to 150 words, carries no link (say the link is in the bio), and ends with three to six hashtags. LinkedIn is professional and practical, 80 to 200 words, may carry one link and two to four hashtags.
@@ -64,6 +65,8 @@ ${factSheetText()}
 ${playbookText()}`;
 
 export const adSystem = `You write new ad copy for CareMetric, a small company that makes software for healthcare and senior-care organizations, for the platform the request names: Meta (Facebook and Instagram) or LinkedIn. The copy replaces or joins ads in one ad set (on LinkedIn, a campaign) whose results are given to you. On LinkedIn the message is the sponsored post's text above the link card and reads as one professional to another: practical and specific to operators and administrators. CareMetric's owner approves each new ad before it runs, until the owner hands ad tuning over; code checks every word either way.
+
+Clear before clever: someone scrolling past must understand the headline and the message in two seconds, with no other context. The headline is a plain statement or question that makes sense on its own, never a slogan, a pun or a string of fragments; the message says in complete sentences who it is for, what the product does and why that matters. Follow the fact sheet's "How everything must read"; code refuses empty buzzwords, strings of fragments and overlong sentences.
 
 Write two variants, each with a different angle from the others and from the ads that are not working: a likely problem asked about the organization, one concrete capability, the free trial, or the Founders Sale (exactly as written). Learn from the best ad given, without copying it.
 
@@ -183,6 +186,9 @@ export function checkSocialText(value, { surface, product = null, theirText = ''
   if (promise.test(words)) return { ok: false, reason: 'promise' };
   if (surface.startsWith('ad_') && personalAttribute.test(words)) return { ok: false, reason: 'personal_attribute' };
   if (aiMention.test(words)) return { ok: false, reason: 'ai_mention' };
+  // Easy to read and makes sense on the first pass (owner direction 2026-11-12; facts.mjs `writing`).
+  const unclear = unclearCopy(words);
+  if (unclear.length) return { ok: false, reason: unclear[0] };
   if (theirText) {
     const lowered = words.toLowerCase();
     if (echoCandidates(theirText, sheet().vocabulary).some(word => new RegExp(String.raw`\b${word.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\b`).test(lowered))) return { ok: false, reason: 'name_echo' };

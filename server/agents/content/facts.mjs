@@ -6,11 +6,12 @@
  *
  * Every value was read from the live code of the product it describes (the source is named beside it). A change to a price
  * or a trial is made in the product first, then here and in docs/GTM_FACTS.md; facts.test.mjs keeps the two copies together.
- * The owner confirmed every fact and claim here on 2026-11-08. The owner requested the Founders Sale on 2026-11-08;
+ * The owner confirmed every fact and claim here on 2026-11-08, and on 2026-11-12 directed how Intel is presented (`present`: a whole
+ * marketing workspace, never an email tool). The owner requested the Founders Sale on 2026-11-08;
  * its coupon, duration and product scope were verified in the live CareMetric billing account.
  */
 
-export const factsVersion = '2026-11-08';
+export const factsVersion = '2026-11-12';
 
 /**
  * Where public help articles live. An article's help-center address is `${helpCenterOrigin}/help/articles/<slug>`; that is its
@@ -127,6 +128,29 @@ export const products = deepFreeze({
     source: 'kdeyarmin/intel@f50b3eb src/lib/planCatalog.ts, read live from https://www.caremetricintel.com/api/billing/catalog (reviewed copy: intelReviewedFacts)',
     forWhom: 'Home health agencies, hospice agencies, hospitals, nursing homes and personal care homes that want more targeted marketing.',
     does: 'Targeted marketing, marketing analysis and territory analysis from public healthcare and demographic data, plus a marketing CRM that keeps outreach, follow-up and the referrals the organization records in one place.',
+    // Owner direction 2026-11-12 (docs/GTM_FACTS.md, "CareMetric Intel: the bigger picture"): every agent sees the whole product, and
+    // email is never the point of it. Written from Intel's own published /features page and home page (intel-features.json), in words
+    // only: a number here would become one every draft may state (validate.mjs allowedNumbers).
+    bigPicture: 'CareMetric Intel runs a healthcare organization\'s whole marketing program in one workspace, from deciding where to focus to reviewing what came of it. It helps a team understand the market and the territory, build a focused list of referral sources with a clear reason behind each name, keep every relationship moving in a CRM built for healthcare marketing, give every call and visit a purpose, keep marketing spend in view of its policy and the Stark limit, connect the team\'s effort to the referrals and admissions it records, know the competition, and give managers what they need to set priorities and coach the team. Owners, managers and marketers each work in their own scope of the same shared record.',
+    capabilities: [
+      'Market and territory research: a territory map of providers ranked by lead score; county intelligence on the older-adult population, income and adults living alone, the hospitals residents use and where post-discharge spending goes, the post-acute providers located there and the county\'s top referral sources; county Medicare enrollment and Medicare Advantage share, home health, hospice and skilled nursing use and supply, spending, readmissions and each agency\'s market share; facility profiles with ownership, cost-report figures, star ratings and public quality scores; ready-made market briefs for expansion, acquisition, hospital relationships and referral development; and the data release behind every figure.',
+      'Prospecting and targeting: a directory of providers, practices and facilities by name, NPI, specialty and place; Target Builder and saved lead lists worked by status; referral-source rankings for a county built on public Medicare data; physicians newly listed in the area; referral discovery, which compares public volume with the referrals the team has logged to find under-worked hospitals and physicians and counties with high need and little local supply; physician share; and opportunity scores that show what went into them.',
+      'Healthcare marketing CRM: a marketing book of hospitals, nursing homes, personal care and assisted living homes, physician practices, agencies and other referral sources; home health and hospice worked as separate lines of business; relationship stages from Target to Active source and Preferred, with the reason when an account is At risk or Lost; contacts by healthcare role, from discharge planner and case manager to director of nursing; each account\'s full history beside its market position; a month-end view; duplicate merging and book hygiene; accounts going quiet; side-by-side comparison; handing a whole book to a teammate; and parent organizations.',
+      'Daily field work: a Today page with tasks, progress on goals and the accounts to visit this week, each with a reason; a weekly schedule and call plan; a suggested route built from due follow-ups, slipping sources and key accounts not visited lately; a visit log built for a phone, with check-in, visit templates and a dated next step; a pre-visit card; business card scanning; county call sheets; follow-up emails that book the next visit; calendar sync; and a weekly digest for each marketer.',
+      'Expenses, mileage and reimbursement: spend logged against the referral source it was for, receipt capture, per-person value for shared meals, each physician\'s running total against the Stark nonmonetary-compensation limit, policy totals for discharge planners and other non-physician sources, policy checks and flags, an approval workflow, reimbursement tracking, budgets, register, compliance and payroll exports, and a mileage log built from visit check-ins. These tools support the organization\'s compliance program; they are not legal advice.',
+      'Referral and admission tracking: referrals logged on the account they came from, with the service, payer and outcome; response time from arrival to first answer and decision; referral and admission reports imported from EMR exports as CSV files, with patient-identifying columns dropped; a referral funnel by account and marketer; drop-off alerts when a top source slips; a quarterly outcomes packet to share with a hospital or facility; lost reasons; an admissions forecast [Pro]; and dated confirmations of what new referrals the agency can take.',
+      'Competitor intelligence: the home health agencies and hospices in the territory ranked by Medicare share, with star ratings; a watchlist with alerts when a rating, owner or service area changes or a new provider opens nearby; side-by-side comparison and trends; a county roll-up and a scheduled leadership brief; and a plain-language card on how the agency compares with the largest in its county.',
+      'Manager and team tools: monthly visit and referral goals with a leaderboard [setting targets: Growth and Pro]; a review of each marketer\'s week; activity reports and a weekly email; ride-along notes and coaching; branches [Growth and Pro]; book balance across marketers [Pro]; account briefs and decision briefs; Ask the book for supported questions about the book; and a materials library that shows who opened each file.',
+      'Reports and analytics: results reports (performance scorecard, field activity, follow-up, mileage, referrals and admissions, top sources, why referrals were not admitted, payer mix, source pipeline, account coverage and goal attainment), filtered and grouped by person, location, line of business, county, payer or period, each person seeing their own scope, downloaded as PDF, Excel or CSV, and a custom report builder with scheduled email.',
+      'Email campaigns [Growth and Pro]: campaigns to a lead list or the contacts on the book, with delivery tracking, sender settings and automatic unsubscribe handling. One part of the workspace, never the point of it.',
+      'Administration, security and data: roles and seats, text-message sign-in codes for managers, a record of sign-ins, changes and exports, billing and territory, guided setup and user guides, public data from CMS, NPPES, the U.S. Census Bureau and state licensing files with each release shown, and patient privacy by design: the research uses no patient-level data, and imports, briefs and exports carry no patient names.',
+    ],
+    whoUses: [
+      'Owners and administrators: where to focus a small marketing team and its budget, how the market and the competition are moving, and what the team\'s work led to in recorded referrals and admissions.',
+      'Directors of business development and marketing managers: territory plans, goals, account ownership across branches, a review of each marketer\'s week, coaching, expense approval and the reports they bring to leadership.',
+      'Marketers and community liaisons: a planned day and route, a focused visit list with a reason for each stop, notes, follow-ups and expenses logged from a phone, and the history of every account they own.',
+    ],
+    present: 'Owner direction: show the bigger picture. Intel runs the whole marketing program, and sending emails to referral sources is not the point of it. Email campaigns are one feature, on the Growth and Pro plans. Never describe Intel as an email tool, never lead with emailing referral sources, and never make email the whole subject of a message, post, ad, article or answer: when email comes up, show it as one part of the workspace, beside the research, relationships, visits, spend and recorded results it serves. Across your work, cover the whole range above rather than one feature again and again, and pick the part that answers the reader. What a feature needs (a plan in brackets) still applies.',
     // Prices, the trial and Intel's offers come from Intel's own catalog once the Hub has read it.
     get trialDays() { return intelFacts().trialDays; },
     get pricing() { return intelFacts().pricing; },
@@ -252,6 +276,24 @@ export const allowedHost = host => {
   return citationHosts.some(allowed => value === allowed || value.endsWith(`.${allowed}`));
 };
 
+/**
+ * CareMetric's founder, and why Intel exists, in the owner's own words (owner direction 2026-11-12: make cold outreach warmer with the
+ * owner's name and story). Prospect outreach is written in the founder's first person and signed `signOff` (growth/worker.mjs). The story
+ * carries no result, no agency name and no number, and nothing may be added to it.
+ */
+export const founder = deepFreeze({
+  name: 'Dr. Kevin C. Deyarmin',
+  credentials: 'ND, MSW, CHPCA, NCG',
+  signOff: ['Dr. Kevin C. Deyarmin', 'Founder, CareMetric'],
+  story: [
+    'I run a home health and hospice agency.',
+    'I needed a way to do business intelligence research on my competitors and to find every potential referral source in my market.',
+    'So I built CareMetric Intel. It was custom built by someone who uses it every day, and I still do.',
+  ],
+  storyAbout: 'CareMetric Intel was custom built by someone who uses it every day: its founder, who runs a home health and hospice agency and needed a way to research competitors and find every potential referral source in the market.',
+  rules: 'Tell the story only as written: the founder\'s own agency, competitor research and finding referral sources, built for that need and used every day. Add nothing to it: no results from the founder\'s agency (referrals, admissions, census, revenue or growth), no agency name, no number, no years and no superlative. It is about Intel, so tell it only in text about Intel.',
+});
+
 /** The fixed line every article about a regulation ends with. */
 export const legalDisclaimer = 'This article is general information about Pennsylvania regulations, not legal advice. Read the current regulation and check with your regional licensing office or an attorney before you rely on it.';
 
@@ -287,6 +329,20 @@ export const vocabulary = deepFreeze({
     'Name the products CareMetric CareBase (or CareBase), CareMetric Intel (or Intel) and CareMetric Healthcare Advisors.',
   ],
 });
+
+/**
+ * How every word the AI team writes must read (owner direction 2026-11-12: some ad copy was hard to understand or did not make sense).
+ * Shown first on the fact sheet, so every writer reads it; the Creative Director's and the Social Media Manager's checks refuse the
+ * worst of it in code (creative/compliance.mjs and social/content.mjs, `unclearCopy`).
+ */
+export const writing = deepFreeze([
+  'Plain, everyday words that a busy owner or administrator understands on the first read, with no other context. Write the way you would say it out loud to them.',
+  'Say something concrete: who it is for, what they can do, see or stop doing. "Plan the week\'s visits around the accounts that need them" beats "Unlock smarter outreach".',
+  'Complete, short sentences, one idea each. No strings of one-word fragments ("Territory. Clarity. Growth."), no stacked nouns ("referral intelligence workflow platform") and no clever wordplay or puns that need explaining.',
+  'No buzzwords or empty words: unlock, empower, leverage, synergy, seamless, robust, revolutionize, supercharge, game-changer, next-level, cutting-edge, elevate, transform, solution, journey.',
+  'A headline must make sense on its own, and every line must make sense to someone who has never heard of CareMetric.',
+  'Before you answer, reread each line as that reader would. If it could confuse them, or it would sound odd said out loud, rewrite it in plainer words.',
+]);
 
 const sheetLines = () => Object.values(products).flatMap(product => [...product.pricing, ...product.offers]);
 const amountsIn = lines => [...new Set(lines.flatMap(line => line.match(/\$\d{1,3}(?:,\d{3})*(?:\.\d+)?(?!\d)/g) ?? []))].sort();
@@ -339,8 +395,16 @@ export function resetAppCatalogFacts() {
 export function factSheetText() {
   const version = intelLiveVersion ? `${factsVersion}, Intel catalog ${intelLiveVersion}` : factsVersion;
   const lines = [`CareMetric fact sheet (version ${version}). These are the only facts about CareMetric you may state.`];
+  lines.push('', 'How everything must read:', ...writing.map(line => `- ${line}`));
+  lines.push('', `CareMetric's founder: ${founder.name} (${founder.credentials}).`,
+    'The founder\'s story, in the founder\'s own words (when you write as the founder, tell it in the first person like this):',
+    ...founder.story.map(line => `- ${line}`), `Told about the founder (an ad, a post or an article): ${founder.storyAbout}`, `Rules for the story: ${founder.rules}`);
   for (const product of Object.values(products)) {
     lines.push('', `${product.name} (${product.site})`, `Who it is for: ${product.forWhom}`, `What it does: ${product.does}`);
+    if (product.bigPicture) lines.push(`The bigger picture: ${product.bigPicture}`);
+    if (product.capabilities?.length) lines.push('Everything it does, by area (from its own published features page; a plan in brackets is needed for that part):', ...product.capabilities.map(line => `- ${line}`));
+    if (product.whoUses?.length) lines.push('Who uses it, and for what:', ...product.whoUses.map(line => `- ${line}`));
+    if (product.present) lines.push(`How to present it: ${product.present}`);
     if (product.trialDays) lines.push(`Free trial: ${product.trialDays} days.`);
     lines.push('Pricing:', ...product.pricing.map(line => `- ${line}`), 'Offers:', ...product.offers.map(line => `- ${line}`));
   }

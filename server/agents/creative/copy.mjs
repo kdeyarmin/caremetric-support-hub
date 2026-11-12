@@ -18,8 +18,8 @@ import { offerFor } from './offers.mjs';
 import { placementsFor, videoLengths, videoPlacement } from './specs.mjs';
 import { themeFor } from './themes.mjs';
 
-export const conceptPromptVersion = 'creative-concept.5';
-export const variantsPromptVersion = 'creative-variants.5';
+export const conceptPromptVersion = 'creative-concept.6';
+export const variantsPromptVersion = 'creative-variants.6';
 export const hooks = Object.freeze(['problem', 'proof', 'offer', 'curiosity', 'demo']);
 const labels = ['A', 'B', 'C', 'D', 'E'];
 
@@ -75,6 +75,7 @@ export function segmentFor(product, text = '', turn = 0, used = new Set()) {
 const lowerFirst = value => value.charAt(0).toLowerCase() + value.slice(1);
 
 const craft = `How good ad creative works here:
+- Clear before clever. A stranger scrolling past must understand the headline and the primary text in two seconds, with no other context and without the picture. The headline is a plain statement or question about the reader's work that makes sense on its own ("Plan the week's visits around the accounts that need them"), never a slogan, a pun, a string of fragments or a phrase that needs the image to explain it. The primary text says, in complete sentences, who it is for, what the product does and why that matters. Every line follows the fact sheet's "How everything must read"; code refuses empty buzzwords, strings of fragments and overlong sentences.
 - One idea per asset. The headline is the hook and must work alone in under two seconds; the primary text earns the click; the call to action is two or three words.
 - Hooks: "problem" names a likely problem of the organization as a question; "proof" shows one concrete capability or fact from the fact sheet; "offer" leads with the free trial or the Founders Sale exactly as written; "curiosity" opens a loop the landing page closes, without clickbait; "demo" shows what the product does on screen (pair it with the screenshot layout when a screenshot is available).
 - Layouts: headline (a strong line and a supporting line), stat (one number from the fact sheet, its label and its source), screenshot (a product screenshot in a window frame; only with a screenshot id from the request), quote (a short line attributed to CareMetric or the product), offer (the offer card; only when the request names an offer), checklist (three to five short capabilities), split (landscape placements: headline on a color block, support beside it).

@@ -52,8 +52,9 @@ the owner, model-written or not.
 - **How a growth email looks.** A letter, not a newsletter (`growthEmail` in `server/growth/worker.mjs`): left-aligned and
   without images, so it reads like an email a person typed and is not filed as a promotion. It is in the theme of the
   product's app: an Intel letter is the Intel app's own dark Emberline letter, with the ember accent on its links. It opens with "Hello,", then
-  the approved words (the product's own pages are clickable links, nothing else is), then a sign-off from the product's team
-  ("The CareMetric Intel team") with its website, and a small footer with the company, its postal address and the unsubscribe
+  the approved words (the product's own pages are clickable links, nothing else is), then the sign-off with the product's
+  website: prospect outreach is the founder's own letter, signed "Dr. Kevin C. Deyarmin, Founder, CareMetric" (owner direction
+  2026-11-12), and a customer message is signed by the product's team ("The CareMetric Intel team"), and a small footer with the company, its postal address and the unsubscribe
   link. The inbox preview is the message's first sentence. The writing rules (`growth.5`) ask for a specific, true opening
   about the organization from its public sources, one likely problem as a question, one concrete way the product helps, and
   one easy next step with its link, in short paragraphs.
@@ -169,6 +170,15 @@ conversation. The playbook has a "demo" objection for both products: send the wa
 **The Founders Sale in the trial check-in.** Billing applies the Founders coupon automatically at checkout and trial conversion (#152),
 so every agent says it applies on its own, with no code needed. The Account Manager's trial check-in email states it in its exact
 terms (owner decision 2026-11-08).
+
+**Outreach from the founder, easy to read (owner direction 2026-11-12, `growth.7`).** Prospect outreach is written in the founder's
+first person and signed with the founder's name and title (`senderFor` in `server/growth/playbook.mjs`, from `founder` in
+`server/agents/content/facts.mjs`). Touch 1 tells the founder's story in one or two sentences, exactly as the fact sheet gives it: the
+founder runs a home health and hospice agency, needed a way to research competitors and find every potential referral source, and built
+CareMetric Intel, which the founder uses every day. The story carries no result, agency name or number, and is told only about Intel. For
+Intel, the email names the part of the whole workspace that answers the reader's problem, never email campaigns as the point. A draft
+with an empty buzzword, a string of fragments or a sentence over 30 words is refused as `unclear` (`unclearCopy`). Customer messages are
+still signed by the product's team. To show your own name in the inbox as well, set Settings → Email → Growth email sender.
 
 **No personal demos with anyone (owner decision 2026-11-09, `growth.6`).** No message offers a booking page any more: drafts are
 never given one (the policy's old booking link is ignored, and the Growth screen no longer has the field), and the writer is told

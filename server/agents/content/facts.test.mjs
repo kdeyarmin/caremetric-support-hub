@@ -91,6 +91,45 @@ describe('the fact sheet', () => {
     }
   });
 
+  it('shows every agent Intel\'s bigger picture: everything it does by area, who uses it, and that email is never the point', () => {
+    const text = factSheetText();
+    const intel = products.intel;
+    expect(text).toContain(`The bigger picture: ${intel.bigPicture}`);
+    expect(text).toContain(`How to present it: ${intel.present}`);
+    // Every "why it matters" area Intel publishes on its /features page.
+    for (const area of ['Market and territory research', 'Prospecting and targeting', 'Healthcare marketing CRM', 'Daily field work', 'Expenses, mileage and reimbursement',
+      'Referral and admission tracking', 'Competitor intelligence', 'Manager and team tools', 'Reports and analytics', 'Email campaigns', 'Administration, security and data']) {
+      expect(intel.capabilities.some(line => line.startsWith(`${area}:`) || line.startsWith(`${area} [`)), area).toBe(true);
+    }
+    for (const line of [...intel.capabilities, ...intel.whoUses]) expect(text).toContain(`- ${line}`);
+    expect(intel.present).toMatch(/sending emails to referral sources is not the point/);
+    expect(intel.capabilities.find(line => line.startsWith('Email campaigns'))).toMatch(/never the point/);
+    // The new text states no number, so it lets no draft state one (validate.mjs allowedNumbers) and makes no claim.
+    const added = [intel.bigPicture, ...intel.capabilities, ...intel.whoUses, intel.present].join('\n');
+    expect(added).not.toMatch(/\d/);
+    expect(textProblems(added, { product: 'intel' }).filter(code => code !== 'personal_information')).toEqual([]);
+  });
+
+  it('gives the founder\'s story in the owner\'s own words, with nothing a draft could not repeat', () => {
+    const text = factSheetText();
+    expect(text).toContain(`CareMetric's founder: ${facts.founder.name}`);
+    for (const line of facts.founder.story) expect(text).toContain(`- ${line}`);
+    expect(facts.founder.story.join(' ')).toMatch(/home health and hospice agency.*competitors.*referral source.*every day/);
+    const story = [...facts.founder.story, facts.founder.storyAbout, facts.founder.rules].join('\n');
+    expect(story).not.toMatch(/\d/);
+    for (const line of [...facts.founder.story, facts.founder.storyAbout]) expect(textProblems(line, { product: 'intel' }), line).toEqual([]);
+    // A superlative is allowed in creative only when the fact source says it, so the sheet never spells one out, even as a "never".
+    expect(text.toLowerCase()).not.toMatch(/the best|the leading|number one|#1/);
+    expect(facts.founder.signOff).toEqual(['Dr. Kevin C. Deyarmin', 'Founder, CareMetric']);
+  });
+
+  it('opens with how everything must read: plain words, concrete, complete sentences', () => {
+    const text = factSheetText();
+    expect(text.indexOf('How everything must read:')).toBeLessThan(text.indexOf('CareMetric CareBase ('));
+    for (const line of facts.writing) expect(text).toContain(`- ${line}`);
+    expect(facts.writing.join(' ')).not.toMatch(/\d/);
+  });
+
   it('shows the model the vocabulary, the claims it may not make and the disclaimer wording', () => {
     const text = factSheetText();
     for (const words of ['Assisted Living Facility', 'surveyors', '"prove", "proof" or "evidence"', 'text only', 'You may never say:']) expect(text, words).toContain(words);

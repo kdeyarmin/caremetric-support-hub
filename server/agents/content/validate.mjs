@@ -188,6 +188,36 @@ export function textProblems(value, { product = null, numbers = null } = {}) {
   return [...reasons];
 }
 
+// ---- Plain language ---------------------------------------------------------------------------------------------------------------------
+
+// Empty marketing words the team never writes (facts.mjs `writing`): they sound like an ad and say nothing a reader can picture. None of
+// them appears in either product's published catalog. "Elevated" is left out: "elevated readmissions" is a plain fact about a county.
+const emptyWords = /\b(?:unlock(?:s|ed|ing)?|empower(?:s|ed|ing|ment)?|leverag(?:e|es|ed|ing)|synerg(?:y|ies|istic)|seamless(?:ly)?|robust|revolutioni[sz](?:e|es|ed|ing)|supercharg(?:e|es|ed|ing)|game[- ]?changers?|next[- ]level|cutting[- ]edge|elevat(?:e|es|ing)|transform(?:s|ed|ing|ative)?|solutions?|journeys?)\b/i;
+/** The most words a sentence of marketing copy may run to. */
+export const longestSentence = 30;
+
+/**
+ * Why marketing copy would be hard to read or understand (owner direction 2026-11-12: some ad copy did not make sense), as reason codes:
+ * `empty_words` (a buzzword from the list above), `fragments` (three or more one- or two-word sentences in a row, as in "Territory.
+ * Clarity. Growth.") and `long_sentence` (a sentence over `longestSentence` words). Links are ignored, and each line is read on its own,
+ * so a checklist's items or a video's beats are never run together.
+ */
+export function unclearCopy(value) {
+  const text = String(value ?? '').replace(/https?:\/\/\S+/g, ' ');
+  const reasons = new Set();
+  if (emptyWords.test(text)) reasons.add('empty_words');
+  for (const line of text.split(/\n+/)) {
+    let run = 0;
+    for (const sentence of line.split(/(?<=[.!?])\s+/).map(part => part.trim()).filter(Boolean)) {
+      const words = sentence.split(/\s+/).filter(word => /\w/.test(word));
+      run = words.length <= 2 && /[.!?]$/.test(sentence) ? run + 1 : 0;
+      if (run >= 3) reasons.add('fragments');
+      if (words.length > longestSentence) reasons.add('long_sentence');
+    }
+  }
+  return [...reasons];
+}
+
 // ---- Links and markup ----------------------------------------------------------------------------------------------------------------
 
 const curatedUrls = new Map([...Object.values(officialSources).map(source => [source.url, source.label]), ...productPages.map(page => [page.url, page.label])]);

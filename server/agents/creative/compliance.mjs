@@ -20,6 +20,8 @@
  * - banned_phrase and required_disclaimer: the brand kit's lists (block).
  * - fact_sheet: every other fact-sheet rule the Content Marketer and Sales Executive follow: unlisted numbers, named competitors,
  *   testimonials, voice AI, a call or demo as a step, "prove" about CareBase, the fixed vocabulary, contact details, mentions of AI (block).
+ * - plain_language: copy a busy owner could not understand on the first read (owner direction 2026-11-12): an empty buzzword, a string of
+ *   one- or two-word fragments, or an overlong sentence (content/validate.mjs `unclearCopy`; block).
  *
  * Visual rules (`checkVisual`): brand_colors (every color the asset paints is one of the product's brand colors: its theme's, from the app's
  * own code, or the owner's brand kit; block); contrast (WCAG AA for every text run, block); text_heavy (more than a fifth of the picture is
@@ -33,16 +35,16 @@
 import { screenIdentifiers } from '../concierge/screen.mjs';
 import { catalogNumbers } from '../content/features.mjs';
 import { factSheetText, factsRevision } from '../content/facts.mjs';
-import { allowedNumbers, normalizeTerms, textProblems } from '../content/validate.mjs';
+import { allowedNumbers, longestSentence, normalizeTerms, textProblems, unclearCopy } from '../content/validate.mjs';
 import { productAmounts } from '../../growth/draft.mjs';
 import { offersMeeting, playbookFor, playbookText } from '../../growth/playbook.mjs';
 import { contrastRatio, meetsAA } from './brand.mjs';
 import { liveOffers, offerFor } from './offers.mjs';
 import { textLimits, validateAsset } from './specs.mjs';
 
-export const complianceVersion = 'creative-compliance.1';
+export const complianceVersion = 'creative-compliance.2';
 export const rules = Object.freeze(['phi', 'personal_attributes', 'unsubstantiated_claim', 'government_endorsement', 'offer_mismatch', 'brand_name',
-  'banned_phrase', 'required_disclaimer', 'fact_sheet', 'brand_colors', 'logo_ground', 'contrast', 'text_heavy', 'images', 'brand_deviation', 'captions', 'platform']);
+  'banned_phrase', 'required_disclaimer', 'fact_sheet', 'plain_language', 'brand_colors', 'logo_ground', 'contrast', 'text_heavy', 'images', 'brand_deviation', 'captions', 'platform']);
 
 const block = (rule, message) => ({ rule, level: 'block', message });
 const warn = (rule, message) => ({ rule, level: 'warn', message });
@@ -208,6 +210,13 @@ export function checkCopy({ product, platform, copy = {}, offerCode = null, bran
     if (code === 'personal_information') { if (!findings.some(item => item.rule === 'phi')) findings.push(block('phi', 'It appears to carry personal information.')); continue; }
     findings.push(block('fact_sheet', `It ${factSheetCodes[code] ?? code.replaceAll('_', ' ')}.`));
   }
+  // Easy to read and makes sense on the first pass: the same check the Social Media Manager runs on every post and ad.
+  const plainWords = {
+    empty_words: 'It uses an empty marketing word (unlock, empower, leverage, seamless, solution and the like). Say plainly what the product does.',
+    fragments: 'It strings one- or two-word fragments together. Write a complete sentence that says who it is for and what it does.',
+    long_sentence: `It has a sentence over ${longestSentence} words. Break it into short, plain sentences.`,
+  };
+  for (const code of unclearCopy(text)) findings.push(block('plain_language', plainWords[code]));
   // CareMetric does no personal demos, calls or meetings: the same check the Social Media Manager runs on every post and ad.
   if (offersMeeting(text) && !findings.some(item => item.rule === 'fact_sheet' && item.message.includes(factSheetCodes.call_offer))) {
     findings.push(block('fact_sheet', 'It offers a call, a meeting, a demo or a time to talk; CareMetric does none, so the next step is the free trial or the product\'s own page.'));

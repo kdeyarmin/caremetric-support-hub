@@ -187,6 +187,14 @@ it('sends a growth message as a letter: Hello, the approved words, the product t
  // A CareBase page in an Intel message is never made a link.
  expect(growthEmail({product:'caremetric-intel',subject:'S',body:'See https://cmcarebase.com/signup',postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'}).html).not.toContain('href="https://cmcarebase.com/signup"');
 });
+it('signs prospect outreach with the founder\'s name and title, and a customer message with the product team (owner direction 2026-11-12)',()=>{
+ const outreach=growthEmail({product:'caremetric-intel',purpose:'marketing',subject:'S',body:'I run a home health and hospice agency.',postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'});
+ expect(outreach.text).toContain('I run a home health and hospice agency.\n\nDr. Kevin C. Deyarmin\nFounder, CareMetric\nhttps://www.caremetricintel.com');
+ expect(outreach.text).not.toContain('The CareMetric Intel team');
+ const customer=growthEmail({product:'caremetric-intel',purpose:'success',subject:'S',body:'B',postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'});
+ expect(customer.text).toContain('B\n\nThe CareMetric Intel team\n');
+ expect(customer.text).not.toContain('Deyarmin');
+});
 it('links a product page with well-formed campaign tags in a growth email, and never a tag that leads elsewhere',()=>{
  const tagged='https://www.caremetricintel.com/county-report?utm_source=caremetric&utm_medium=email&utm_campaign=growth-intel-touch1';
  const html=growthEmail({product:'caremetric-intel',subject:'S',body:`See your county:\n${tagged}`,postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'}).html;

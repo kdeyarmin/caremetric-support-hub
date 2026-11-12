@@ -8,6 +8,9 @@ Status: the owner confirmed every fact, claim and rule on this page on 2026-11-0
 They were read on 2026-11-03 from the product code, with sources named below.
 The Founders Sale was requested by the owner on 2026-11-08 and its coupon and product scope were verified in the live
 CareMetric Stripe account. Current regular prices were also checked against that account.
+On 2026-11-12 the owner directed how the team presents CareMetric Intel (the bigger picture: a whole marketing workspace, never an email
+tool), gave the founder's story for warmer outreach, and asked that everything the team writes be easy to read and make sense
+("How everything must read", "The founder's story" and "CareMetric Intel: the bigger picture" below).
 
 - The machine-readable copy is [`server/agents/content/facts.mjs`](../server/agents/content/facts.mjs). The Content Marketer (see
   [AI_TEAM.md](AI_TEAM.md#the-content-marketer)) shows the model that copy and checks every draft against it, so a price that is
@@ -33,12 +36,40 @@ What each product **does**, feature by feature, is read from the products' own p
 CareBase is a flat $499 per organization. That package is retired from sale (`BILLING_MODEL.md`). The live site and code say
 **CareBase Core is $199 per facility per month**, and that is what this page uses.
 
+## How everything must read
+
+Owner direction 2026-11-12: some ad copy was hard to understand or did not make sense. These rules open the fact sheet every writer on
+the AI team reads (`writing` in `facts.mjs`), and the Creative Director's, Social Media Manager's and growth writer's checks refuse an
+empty buzzword, a string of one- or two-word fragments or a sentence over 30 words (`unclearCopy` in `validate.mjs`).
+
+- Plain, everyday words that a busy owner or administrator understands on the first read, with no other context. Write the way you would
+  say it out loud to them.
+- Say something concrete: who it is for, what they can do, see or stop doing. "Plan the week's visits around the accounts that need them"
+  beats "Unlock smarter outreach".
+- Complete, short sentences, one idea each. No strings of one-word fragments ("Territory. Clarity. Growth."), no stacked nouns and no
+  clever wordplay or puns that need explaining.
+- No buzzwords or empty words: unlock, empower, leverage, synergy, seamless, robust, revolutionize, supercharge, game-changer, next-level,
+  cutting-edge, elevate, transform, solution, journey.
+- A headline must make sense on its own, and every line must make sense to someone who has never heard of CareMetric.
+- Reread each line as that reader would; if it could confuse them, or would sound odd said out loud, rewrite it in plainer words.
+
 ## The company
 
 - **CareMetric** makes software for healthcare and senior-care organizations and offers healthcare consulting. Source: Hub
   `README.md`, Advisors `site-content.mjs`.
 - Founder: **Dr. Kevin C. Deyarmin** (ND, MSW, CHPCA, NCG), founder and principal advisor of CareMetric Healthcare Advisors and
   the founder behind CareBase. Source: Advisors `site-content.mjs` (`brand.founder`), CareBase `About.tsx`.
+- **The founder's story** (owner's own words, 2026-11-12; `founder` in `facts.mjs`). Prospect outreach and the founder's partnership
+  pitches are written in the founder's first person and told like this:
+  - "I run a home health and hospice agency."
+  - "I needed a way to do business intelligence research on my competitors and to find every potential referral source in my market."
+  - "So I built CareMetric Intel. It was custom built by someone who uses it every day, and I still do."
+
+  Told about the founder (an ad, a post or an article): CareMetric Intel was custom built by someone who uses it every day: its founder,
+  who runs a home health and hospice agency and needed a way to research competitors and find every potential referral source in the
+  market. Rules: tell it only as written and only about Intel; no results from the founder's agency (referrals, admissions, census,
+  revenue or growth), no agency name, no number or years, no superlative. Prospect outreach is signed "Dr. Kevin C. Deyarmin, Founder,
+  CareMetric".
 - Public addresses: support@caremetric.ai and the central support line (877) 521-2890 (Hub `server/email-layout.mjs`);
   hello@caremetric.ai for founding partners (CareBase `About.tsx`). The help center is **https://help.caremetric.ai**; articles about
   CareMetric Intel live at **https://www.caremetricintel.com/resources/<address>** (`intelArticleOrigin`). AI-written articles carry no email address or phone number; they link to the product pages below.
@@ -89,6 +120,8 @@ Founders Sale below for new offers. Do not advertise lifetime pricing as part of
 - **What it does:** targeted marketing, marketing analysis and territory analysis from public healthcare and demographic data,
   plus a marketing CRM that keeps outreach, follow-up and the referrals the organization records in one place. Its AI features
   (briefs, supported reporting questions, drafted outreach) are text.
+- **The bigger picture** (owner direction 2026-11-12; `bigPicture`, `capabilities`, `whoUses` and `present` in `facts.mjs`, written
+  from Intel's own /features page and home page with no numbers): see "CareMetric Intel: the bigger picture" below.
 - **Trial:** a **14-day** free trial with no credit card, covering 3 marketer seats + 1 manager, 1 branch, home health and
   hospice, 1 county (`TRIAL_DAYS = 14`, the `trial` plan). It does not turn into a paid subscription by itself.
 
@@ -106,6 +139,32 @@ catalog moves on, the Hub logs and audits `billing.catalog.facts_stale` until th
 
 Extra branches are $99 per month each ($990 per year on annual billing) and extra states $199 per month each
 ($1,990 per year on annual billing).
+
+### CareMetric Intel: the bigger picture
+
+CareMetric Intel runs a healthcare organization's whole marketing program in one workspace, from deciding where to focus to reviewing what came of it. It helps a team understand the market and the territory, build a focused list of referral sources with a clear reason behind each name, keep every relationship moving in a CRM built for healthcare marketing, give every call and visit a purpose, keep marketing spend in view of its policy and the Stark limit, connect the team's effort to the referrals and admissions it records, know the competition, and give managers what they need to set priorities and coach the team. Owners, managers and marketers each work in their own scope of the same shared record.
+
+**Everything it does, by area** (from its own published features page; a plan in brackets is needed for that part):
+
+- Market and territory research: a territory map of providers ranked by lead score; county intelligence on the older-adult population, income and adults living alone, the hospitals residents use and where post-discharge spending goes, the post-acute providers located there and the county's top referral sources; county Medicare enrollment and Medicare Advantage share, home health, hospice and skilled nursing use and supply, spending, readmissions and each agency's market share; facility profiles with ownership, cost-report figures, star ratings and public quality scores; ready-made market briefs for expansion, acquisition, hospital relationships and referral development; and the data release behind every figure.
+- Prospecting and targeting: a directory of providers, practices and facilities by name, NPI, specialty and place; Target Builder and saved lead lists worked by status; referral-source rankings for a county built on public Medicare data; physicians newly listed in the area; referral discovery, which compares public volume with the referrals the team has logged to find under-worked hospitals and physicians and counties with high need and little local supply; physician share; and opportunity scores that show what went into them.
+- Healthcare marketing CRM: a marketing book of hospitals, nursing homes, personal care and assisted living homes, physician practices, agencies and other referral sources; home health and hospice worked as separate lines of business; relationship stages from Target to Active source and Preferred, with the reason when an account is At risk or Lost; contacts by healthcare role, from discharge planner and case manager to director of nursing; each account's full history beside its market position; a month-end view; duplicate merging and book hygiene; accounts going quiet; side-by-side comparison; handing a whole book to a teammate; and parent organizations.
+- Daily field work: a Today page with tasks, progress on goals and the accounts to visit this week, each with a reason; a weekly schedule and call plan; a suggested route built from due follow-ups, slipping sources and key accounts not visited lately; a visit log built for a phone, with check-in, visit templates and a dated next step; a pre-visit card; business card scanning; county call sheets; follow-up emails that book the next visit; calendar sync; and a weekly digest for each marketer.
+- Expenses, mileage and reimbursement: spend logged against the referral source it was for, receipt capture, per-person value for shared meals, each physician's running total against the Stark nonmonetary-compensation limit, policy totals for discharge planners and other non-physician sources, policy checks and flags, an approval workflow, reimbursement tracking, budgets, register, compliance and payroll exports, and a mileage log built from visit check-ins. These tools support the organization's compliance program; they are not legal advice.
+- Referral and admission tracking: referrals logged on the account they came from, with the service, payer and outcome; response time from arrival to first answer and decision; referral and admission reports imported from EMR exports as CSV files, with patient-identifying columns dropped; a referral funnel by account and marketer; drop-off alerts when a top source slips; a quarterly outcomes packet to share with a hospital or facility; lost reasons; an admissions forecast [Pro]; and dated confirmations of what new referrals the agency can take.
+- Competitor intelligence: the home health agencies and hospices in the territory ranked by Medicare share, with star ratings; a watchlist with alerts when a rating, owner or service area changes or a new provider opens nearby; side-by-side comparison and trends; a county roll-up and a scheduled leadership brief; and a plain-language card on how the agency compares with the largest in its county.
+- Manager and team tools: monthly visit and referral goals with a leaderboard [setting targets: Growth and Pro]; a review of each marketer's week; activity reports and a weekly email; ride-along notes and coaching; branches [Growth and Pro]; book balance across marketers [Pro]; account briefs and decision briefs; Ask the book for supported questions about the book; and a materials library that shows who opened each file.
+- Reports and analytics: results reports (performance scorecard, field activity, follow-up, mileage, referrals and admissions, top sources, why referrals were not admitted, payer mix, source pipeline, account coverage and goal attainment), filtered and grouped by person, location, line of business, county, payer or period, each person seeing their own scope, downloaded as PDF, Excel or CSV, and a custom report builder with scheduled email.
+- Email campaigns [Growth and Pro]: campaigns to a lead list or the contacts on the book, with delivery tracking, sender settings and automatic unsubscribe handling. One part of the workspace, never the point of it.
+- Administration, security and data: roles and seats, text-message sign-in codes for managers, a record of sign-ins, changes and exports, billing and territory, guided setup and user guides, public data from CMS, NPPES, the U.S. Census Bureau and state licensing files with each release shown, and patient privacy by design: the research uses no patient-level data, and imports, briefs and exports carry no patient names.
+
+**Who uses it, and for what:**
+
+- Owners and administrators: where to focus a small marketing team and its budget, how the market and the competition are moving, and what the team's work led to in recorded referrals and admissions.
+- Directors of business development and marketing managers: territory plans, goals, account ownership across branches, a review of each marketer's week, coaching, expense approval and the reports they bring to leadership.
+- Marketers and community liaisons: a planned day and route, a focused visit list with a reason for each stop, notes, follow-ups and expenses logged from a phone, and the history of every account they own.
+
+**How to present it.** Owner direction: show the bigger picture. Intel runs the whole marketing program, and sending emails to referral sources is not the point of it. Email campaigns are one feature, on the Growth and Pro plans. Never describe Intel as an email tool, never lead with emailing referral sources, and never make email the whole subject of a message, post, ad, article or answer: when email comes up, show it as one part of the workspace, beside the research, relationships, visits, spend and recorded results it serves. Across your work, cover the whole range above rather than one feature again and again, and pick the part that answers the reader. What a feature needs (a plan in brackets) still applies.
 
 ## Founders Sale — CareBase, Train and Intel
 
@@ -215,3 +274,7 @@ Confirmed by the owner on 2026-11-08 from the review copy of this sheet.
 - [x] The claims lists, including that SOC 2 and HIPAA wording stays on CareBase's security page only.
 - [x] cms.gov and census.gov as citation hosts for Intel's topics.
 - [x] CareBase's avoidance of "evidence" applies to articles and everything else the AI team writes, as well as the landing page.
+- [x] 2026-11-12: Intel's bigger picture and "How to present it" (sending emails to referral sources is never the point), the plain-language
+  rules, and outreach written and signed as the founder.
+- [ ] 2026-11-12: the founder's story wording. The request read "so I bought this. custom built by someone who uses it every day"; the
+  story says "built" and "I run" (present tense). Correct `founder.story` in `facts.mjs` and this page if either is wrong.

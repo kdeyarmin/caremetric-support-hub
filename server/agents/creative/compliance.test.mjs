@@ -19,6 +19,13 @@ describe('copy compliance', () => {
     expect(rules).toContain('government_endorsement');
   });
 
+  it('plain_language: blocks buzzwords and strings of fragments, and passes a plain headline', () => {
+    expect(rules).toContain('plain_language');
+    expect(rulesOf(intel({ headline: 'Unlock referral growth' }))).toContain('block:plain_language');
+    expect(rulesOf(intel({ primaryText: 'Territory. Clarity. Growth. Start a free trial.' }))).toContain('block:plain_language');
+    expect(rulesOf(intel({ headline: 'Plan visits around the accounts that need them' }))).not.toContain('block:plain_language');
+  });
+
   it('phi: blocks identifiers, named people and a person\'s health', () => {
     expect(rulesOf(intel({ primaryText: 'Member ID 4433221 and MRN 99887766 are on file.' }))).toContain('block:phi');
     expect(rulesOf(intel({ headline: 'Resident Mary Jones finished her training' }))).toContain('block:phi');
