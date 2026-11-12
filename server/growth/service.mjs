@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { HttpError } from '../sms-auth.mjs';
 import { live } from '../live.mjs';
 import { sendgridSignatureValid } from '../communications.mjs';
+import { sesGrowthEvents } from '../ses.mjs';
 import { activitySchema, appActivitySchema } from './protocol.mjs';
 import { products, stages } from './policy.mjs';
 const uuid=z.uuid(), text=(n)=>z.string().max(n), instant=z.iso.datetime({offset:true});
@@ -19,7 +20,7 @@ export const growthSchemas={
 export { activitySchema } from './protocol.mjs';
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const equal=(a,b)=>{const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length&&timingSafeEqual(x,y);};
-export function growthService({store,research,contacts=null,features,enabled=false,signingKey='',eventKeys={},webhookPublicKey='',publicOrigin,postalAddress=''}) {
+export function growthService({store,research,contacts=null,features,enabled=false,signingKey='',eventKeys={},webhookPublicKey='',sesEvents=null,sesEventsReady=()=>false,publicOrigin,postalAddress=''}) {
   // The sending switch and the footer's postal address are Hub settings; either may be a function, read on each use.
   const sending=()=>live(enabled)===true; const postal=()=>String(live(postalAddress)??'');
   const ready=()=>{if(!features?.has('platform.agents.customer-growth.v1'))throw new HttpError(503,'Apply the growth database migration first.');};
@@ -32,6 +33,8 @@ export function growthService({store,research,contacts=null,features,enabled=fal
     readiness() {
       let deliveryFeedback = false;
       try { createPublicKey(webhookPublicKey.includes('BEGIN') ? webhookPublicKey : { key: Buffer.from(webhookPublicKey, 'base64'), format: 'der', type: 'spki' }); deliveryFeedback = true; } catch { /* Missing or invalid key. */ }
+      // Amazon SES events (docs/AMAZON_SES.md) count too: either service's delivery feedback reaches the growth record.
+      if (sesEventsReady() === true) deliveryFeedback = true;
       return { sending: sending(), signing: signingKey.length >= 32, postalAddress: Boolean(postal().trim()), publicOrigin: /^https:\/\//.test(publicOrigin ?? ''),
         research: research?.configured === true, deliveryFeedback, appEvents: features?.has('platform.agents.app-growth.v1') === true,
         events: Object.fromEntries(products.map(product => [product, typeof eventKeys[product] === 'string' && eventKeys[product].length >= 32])) };
@@ -84,6 +87,18 @@ export function growthService({store,research,contacts=null,features,enabled=fal
       for(const row of rows) {if(!kinds[row.event]||!z.uuid().safeParse(row.growth_message_id).success||typeof row.sg_event_id!=='string'||row.sg_event_id.length>200||!Number.isFinite(row.timestamp))continue;
         await store.delivery(row.sg_event_id,row.growth_message_id,kinds[row.event],new Date(row.timestamp*1000).toISOString()); accepted++;
       }
+      return {accepted};
+    },
+    /**
+     * Amazon SES delivery, bounce and complaint events, as SNS notifications from the configuration set's event destination
+     * (docs/AMAZON_SES.md). `sesEvents` checks the SNS signature and the topic, and confirms the subscription when SNS asks.
+     */
+    async sesDelivery(raw) {
+      ready(); if(typeof sesEvents!=='function')throw new HttpError(503,'Amazon SES events are not configured.');
+      let result;try{result=await sesEvents(raw);}catch(error){throw new HttpError(error?.status??400,error?.message??'Invalid notification.');}
+      if(!result?.notification)return {accepted:0,...(result?.confirmed?{confirmed:true}:{})};
+      let accepted=0;
+      for(const event of sesGrowthEvents(result.notification)){if(!z.uuid().safeParse(event.messageId).success)continue; await store.delivery(event.id,event.messageId,event.kind,event.at); accepted++;}
       return {accepted};
     },
     async unsubscribe(token,confirm) {

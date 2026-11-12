@@ -105,7 +105,7 @@ export function bulkEmail({ pool, delegations, mail, publicOrigin, postalAddress
   const only = (input, keys) => { if (!input || Object.keys(input).some(key => !keys.includes(key))) throw new HttpError(400, 'Unsupported request.'); };
   const id = value => { if (typeof value !== 'string' || !uuid.test(value)) throw new HttpError(400, 'Choose an email.'); return value; };
   const version = value => { if (!Number.isSafeInteger(value) || value < 1) throw new HttpError(400, 'Refresh the email and try again.'); return value; };
-  const requireMail = () => { if (!mail?.configured) throw new HttpError(503, 'Email sending is not configured. Set the SendGrid key in the Hub service settings.'); };
+  const requireMail = () => { if (!mail?.configured) throw new HttpError(503, 'Email sending is not configured. Set up the email service in Settings → Email (its key stays in Railway).'); };
   const unsubscribeUrl = token => `${publicOrigin}/api/email/unsubscribe/${token}`;
   let sending = null;
 

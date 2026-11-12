@@ -40,21 +40,21 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
   add('growth_email', 'Prospect email and follow-ups', ['marketing_manager'],
     'Drafts outreach and sends eligible, reviewed messages. Campaign policy, contact eligibility, frequency limits and approvals still apply.', [
       growthFeature, [growthState.sending === true, 'Turn on Settings → Customer growth → Send growth email when ready to send.'],
-      [growthMail?.configured === true && typeof growthMail.send === 'function', 'Configure the SendGrid key and Settings → Email → Growth email sender (or support sender) and Reply-To.'],
+      [growthMail?.configured === true && typeof growthMail.send === 'function', 'Configure the email service (Settings → Email → Email service, with its key in Railway) and Settings → Email → Growth email sender (or support sender) and Reply-To.'],
       [growthState.signing === true, 'Set HUB_GROWTH_SIGNING_KEY to a stable secret of at least 32 characters.'],
       [growthState.postalAddress === true, 'Set Settings → Email → Mailing address in email footers.'],
       [growthState.publicOrigin === true, 'Configure an HTTPS public origin for unsubscribe links.'],
     ]);
   add('delivery_feedback', 'Email delivery and suppression feedback', ['marketing_manager', 'account_manager'],
-    'Receives signed SendGrid delivery, bounce, complaint and unsubscribe events. Confirm the event webhook in SendGrid; a configured key alone does not prove events are arriving.', [
-      growthFeature, [growthState.deliveryFeedback === true, 'Set a valid HUB_SENDGRID_EVENT_PUBLIC_KEY and connect SendGrid’s signed event webhook.'],
+    'Receives signed delivery, bounce, complaint and unsubscribe events from SendGrid or Amazon SES. Confirm the event webhook in SendGrid, or the SNS subscription for SES; configuration alone does not prove events are arriving.', [
+      growthFeature, [growthState.deliveryFeedback === true, 'Set a valid HUB_SENDGRID_EVENT_PUBLIC_KEY and connect SendGrid’s signed event webhook, or set Settings → Email → Amazon SES events topic and subscribe the Hub to it.'],
     ], '/admin');
   add('sales_answers', 'Prospect questions and sales answers', ['sales_executive'],
     'Answers eligible prospect questions using product facts, the sales playbook and published guides, with a self-service next step.', [
       [has(features, 'platform.agents.sales-executive.v1'), schemaStep('Sales Executive')],
       [ai, modelStep], [live(customerTextToAi) === true, 'Turn on Settings → AI team → Let agents send customer messages to the AI.'],
       [typeof communications?.reply === 'function', 'Connect the Communications reply service.'],
-      [email?.configured === true, 'Configure SendGrid and Settings → Email → Support sender and Reply-To to deliver sales answers by email.'],
+      [email?.configured === true, 'Configure the email service (Settings → Email → Email service) and Settings → Email → Support sender and Reply-To to deliver sales answers by email.'],
     ]);
   add('content_publication', 'Search content and article publishing', ['content_marketer'],
     'Creates product articles from supported facts and topics, checks claims and publishes approved articles. Verify the resulting public page and the product website’s article feed after publication.', [
@@ -62,7 +62,7 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
       [has(features, 'content.public-articles.v1'), schemaStep('public articles')], [ai, modelStep],
     ], '/admin');
   const customer = lifecycleReadiness(lifecycle);
-  const customerSteps = { mail: 'Configure SendGrid and the support email sender and Reply-To in Settings → Email.', postal_address: 'Set Settings → Email → Mailing address in email footers.', public_origin: 'Configure an HTTPS public origin for customer unsubscribe links.' };
+  const customerSteps = { mail: 'Configure the email service and the support email sender and Reply-To in Settings → Email.', postal_address: 'Set Settings → Email → Mailing address in email footers.', public_origin: 'Configure an HTTPS public origin for customer unsubscribe links.' };
   add('customer_email', 'Trial activation and customer follow-up', ['account_manager'],
     'Prepares onboarding, setup nudges and trial check-ins from customer records. Product activity must be reported to time the right message.', [
       [has(features, 'platform.agents.lifecycle.v1'), schemaStep('customer lifecycle')],

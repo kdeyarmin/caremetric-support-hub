@@ -147,6 +147,12 @@ accepting messages that may contain PHI.
    stops a growth sequence). Settings refuses a value that is not an email
    address; without one, answers go to the sender itself.
 
+### Amazon SES
+
+Outbound email can go through Amazon SES instead of SendGrid: **Settings → Email → Email service**. Replies, alerts,
+customer, bulk and growth email all follow the choice; inbound email still arrives through SendGrid Inbound Parse. See
+[Amazon SES](AMAZON_SES.md).
+
 ### One address
 
 Every email the Hub sends comes from **support@caremetric.ai** (the support sender in Settings → Email) and
