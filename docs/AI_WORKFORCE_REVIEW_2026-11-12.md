@@ -41,7 +41,7 @@ are now the next limits; both need an owner decision.
 | Marketing Manager | Own-site research raised from three to ten prospects a day, two contact-ready for each other | Prospects below the threshold waited days for more evidence |
 | Marketing Manager | A sweep assesses at most 20 prospects, stops model work after 150 seconds, and does not re-buy a failed assessment or draft for six hours | A failed draft was retried every 15 minutes at about 3 cents; one stuck prospect could spend the day's $3 and block all sending |
 | Marketing Manager | Growth emails say "Opt out of these emails" at `/api/growth/preferences/…` | The database reads "unsubscribe" anywhere in a reply as a request to stop: a prospect who replied with the original quoted was opted out and suppressed |
-| Support Concierge | Billing and cancellation are judged from the sender's own words, not the quoted original | Intel outreach says "no credit card"; a quoted reply was filed as billing and never reached the Sales Executive |
+| Support Concierge | Billing and cancellation ignore marked quotes (lines starting with ">") and the company's own trial phrase; everything else the sender wrote, above or below a quote, is still read | Intel outreach says "no credit card"; a quoted reply was filed as billing and never reached the Sales Executive |
 | Content Marketer | Ten more Intel topics (13 in all), written Tuesdays and Fridays | Three topics lasted three weeks, then the task skipped silently; a missed Tuesday lost the week |
 | Social Media Manager | 4 Facebook, 3 Instagram and 4 LinkedIn posts a week (was 3, 2, 3) | More reach on the two pages buyers read at work |
 | Social Media Manager | The daily ad review finishes once it has proposed | An undecided budget proposal stopped the review, and the pausing of losing ads, for up to seven days |
@@ -104,7 +104,7 @@ Each needs a database migration or an owner decision, so none is in this change.
 ## Verification and limits
 
 - `npm run check` passed with CI's settings (`VITE_DEMO_MODE=true`, `SUPPORT_HUB_ALLOW_DEMO_BUILD=true`): the docs check, types,
-  lint, 3,263 application tests in 286 files, 24 SDK tests, the SDK build and the app build. `npm run evaluate:growth` passed 29 cases
+  lint, 3,266 application tests in 286 files, 24 SDK tests, the SDK build and the app build. `npm run evaluate:growth` passed 29 cases
   per product. New and changed tests cover discovery volume, paging and pacing, the
   directory filter, the contact finder's home page summary, sweep limits and back-off, the opt-out wording and address, quoted
   replies, the article schedule and backlog, the ad review's status and LinkedIn ad lengths.

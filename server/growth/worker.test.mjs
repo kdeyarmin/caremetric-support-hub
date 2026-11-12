@@ -153,6 +153,19 @@ it('discovery records every result ten at a time, keeps what it found when a lat
  await expect(growthHandlers({growth:{store,research:{configured:true,search:failing}},marketed:['caremetric-intel']})['growth.discovery']({id:'t',agent:{autonomy:'propose'}})).rejects.toMatchObject({transient:true});
  expect(failing).toHaveBeenCalledTimes(1);
 });
+it('a slow search provider cannot carry own-site research past the run\'s time: the searches not started wait for the next run',async()=>{
+ const uncertain=index=>({...base,id:`slow-${index}`,product:'caremetric-intel',stage:'researched',fit:60,domain:`slow${index}.example`,tenant_id:null});
+ const items=Array.from({length:10},(_,index)=>uncertain(index));
+ const store={snapshot:vi.fn(async()=>({total:items.length,items})),discover:vi.fn(async(_product,rows)=>rows.length)};
+ // Every answer arrives just inside the adapter's own fifteen-second limit.
+ let at=0;
+ const search=vi.fn(async(_product,options)=>{at+=14_500;return options.domain?[{name:'An operator',domain:options.domain,url:`https://${options.domain}/about`,claim:'Operates a hospice.'}]:[];});
+ const outcome=await growthHandlers({growth:{store,research:{configured:true,search}},marketed:['caremetric-intel'],clock:()=>at})['growth.discovery']({id:'t',agent:{autonomy:'propose'}});
+ // Six discovery searches (87 seconds), then own-site searches only until the 150 seconds are spent: five of the ten.
+ expect(outcome.result).toEqual({candidates:0,searches:discoveryQueriesPerDay,stopped:'time',enrichment:{searched:5,evidenceRows:5}});
+ expect(search).toHaveBeenCalledTimes(discoveryQueriesPerDay+5);
+ expect(at).toBeLessThan(240_000);
+});
 it('discovery reports what the search provider says the key may still use this month, when it says so',async()=>{
  const store={discover:vi.fn(async()=>0)};
  const research={configured:true,search:vi.fn(async()=>[]),allowance:()=>({limit:2000,left:1500,days:30})};

@@ -202,8 +202,10 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     // next pipeline sweep reassess the prospect; it never lowers the qualification threshold or changes contact permissions.
     const items=await pipelineItems(growth,signal);
     let enrichment=null;
-    if(!stopped)try {enrichment=await enrichProspects({growth,marketed:marketedList,moment:now(),signal,items,pace});}
+    // The same time limit as the discovery searches: enrichment starts no search once the run's time is spent.
+    if(!stopped)try {enrichment=await enrichProspects({growth,marketed:marketedList,moment:now(),signal,items,pace,spent});}
     catch(error) {if(signal?.aborted)throw error; stopped='search_unavailable';}
+    if(!stopped&&spent())stopped='time';
     // What the search provider says the key may still use this month (research.mjs `searchAllowance`), so the run's result on the Team
     // screen shows whether the plan covers the day's searches. Absent when the provider does not say.
     const allowance=growth.research.allowance?.()??null;

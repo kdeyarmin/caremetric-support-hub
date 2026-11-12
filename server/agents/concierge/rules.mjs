@@ -70,38 +70,70 @@ const categories = [
   ]],
 ];
 
-// Where a mail program starts the message being answered: "On <date>, <name> wrote:" (the name may wrap onto the next line), an
-// "Original Message" rule, or a "From:" line followed closely by "Sent:" or "Date:".
-const quoteOpeners = [
-  /^On\s.{4,200}\bwrote:\s*$/i,
-  /^-{2,}\s*(?:Original|Forwarded) Message\s*-{2,}\s*$/i,
-  /^_{10,}\s*$/,
-];
+// The line a mail program writes above a quoted message: "On <date>, <name> wrote:" (the name may wrap onto the next line).
+const attribution = /^On\s.{4,200}\bwrote:\s*$/i;
+const quotedLine = line => /^\s*>/.test(line ?? '');
 /**
- * A message without the earlier message quoted under it: the lines before the first quote opener, less any line that starts with
- * ">". A reply written below its quote, or one this cannot tell apart, is returned whole, so nothing a person wrote is ever dropped.
- * Used only to decide billing and cancellation, which the company's own emails mention ("no credit card", "cancel any time"): a
- * prospect who answers one of those emails with the original quoted underneath has not raised a billing matter.
+ * A message without the lines a mail program marked as quoted (each starts with ">") and without the "On ... wrote:" line that
+ * introduces such a quote. Nothing else is dropped: what a person wrote above, between or below the quoted lines stays, and so does
+ * an earlier message quoted with no mark (as Outlook does, under "Original Message" or a "From:/Sent:" block), because an answer typed
+ * into or under it cannot be told apart from it. A message that is all quote is returned whole.
+ * Used only to decide billing and cancellation, so a prospect who answers one of the company's emails has not raised a billing
+ * matter because of the words quoted under the answer.
  */
 export function ownWords(text) {
-  const lines = String(text ?? '').slice(0, limit).split(/\r?\n/);
-  let end = lines.length;
+  const whole = String(text ?? '').slice(0, limit);
+  const lines = whole.split(/\r?\n/);
+  // The first line at or after `from` that is not blank.
+  const nextWritten = from => { let at = from; while (at < lines.length && !lines[at].trim()) at += 1; return lines[at]; };
+  const kept = [];
   for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index].trim();
-    const wrapped = `${line} ${(lines[index + 1] ?? '').trim()}`;
-    const outlook = /^From:\s\S/i.test(line) && lines.slice(index + 1, index + 4).some(next => /^(?:Sent|Date):\s/i.test(next.trim()));
-    if (quoteOpeners.some(pattern => pattern.test(line)) || (/^On\s/i.test(line) && quoteOpeners[0].test(wrapped)) || outlook) { end = index; break; }
+    const line = lines[index];
+    if (quotedLine(line)) continue;
+    const written = line.trim();
+    if (/^On\s/i.test(written)) {
+      // An attribution counts only when a marked quote follows it, so a sentence that merely starts with "On" is never dropped.
+      if (attribution.test(written) && quotedLine(nextWritten(index + 1))) continue;
+      if (attribution.test(`${written} ${(lines[index + 1] ?? '').trim()}`) && quotedLine(nextWritten(index + 2))) { index += 1; continue; }
+    }
+    kept.push(line);
   }
-  const own = lines.slice(0, end).filter(line => !/^\s*>/.test(line)).join('\n').trim();
-  return own || String(text ?? '').slice(0, limit);
+  return kept.join('\n').trim() || whole;
+}
+
+const trialPhrase = 'no credit card';
+/**
+ * `text` with the company's own words about its free trial ("a 30-day free trial with no credit card") made neutral. The fact sheet
+ * and the sales playbook say it in every outreach email, and a mail program that quotes the original with no mark puts it under the
+ * prospect's answer. Only that phrase, and only in a sentence about trying the product free, is set aside: "I have no credit card on
+ * file" and "please update our credit card" are still billing. Found with indexOf and judged on a bounded stretch of its own
+ * sentence, so a long message costs no more than its length.
+ */
+export function withoutTrialPhrase(text) {
+  const source = String(text ?? '');
+  const lower = source.toLowerCase();
+  let out = '';
+  let from = 0;
+  for (let at = lower.indexOf(trialPhrase); at !== -1; at = lower.indexOf(trialPhrase, from)) {
+    const before = lower.slice(Math.max(0, at - 100), at);
+    const after = lower.slice(at + trialPhrase.length, at + trialPhrase.length + 60);
+    const sentenceStart = Math.max(before.lastIndexOf('.'), before.lastIndexOf('!'), before.lastIndexOf('?'), before.lastIndexOf('\n'));
+    const sentenceEnd = after.search(/[.!?\n]/);
+    const sentence = `${before.slice(sentenceStart + 1)} ${sentenceEnd === -1 ? after : after.slice(0, sentenceEnd)}`;
+    const ours = /\b(?:trial|try|free)\b/.test(sentence);
+    out += source.slice(from, at) + (ours ? 'no card' : source.slice(at, at + trialPhrase.length));
+    from = at + trialPhrase.length;
+  }
+  return out + source.slice(from);
 }
 
 /** { category, reasons } for a message; `subject` is only the subject of an email conversation. */
 export function categorize({ text, subject = null } = {}) {
   const body = String(text ?? '').slice(0, limit);
   const whole = `${subject ?? ''}\n${body}`.slice(0, limit);
-  // Billing and cancellation are read from the sender's own words; every urgent kind still reads the whole message, quote included.
-  const own = `${subject ?? ''}\n${ownWords(body)}`.slice(0, limit);
+  // Billing and cancellation are read from the sender's own words, less the company's own trial phrase; every urgent kind still reads
+  // the whole message, quote included.
+  const own = withoutTrialPhrase(`${subject ?? ''}\n${ownWords(body)}`.slice(0, limit));
   const matching = ([category, rules], words) => {
     const reasons = rules.filter(([, pattern]) => pattern.test(words)).map(([reason]) => `${category}.${reason}`);
     return reasons.length ? { category, reasons } : null;

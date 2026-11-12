@@ -43,9 +43,11 @@ export function evidenceTargets(items, marketed, moment) {
 
 /**
  * Reuse the existing dated-evidence insert; duplicate URL/claim pairs stay unchanged and do not buy a new model assessment. The
- * caller may pass the pipeline it has already read (`items`) and the search provider's pacing between calls (`pace`, milliseconds).
+ * caller may pass the pipeline it has already read (`items`), the search provider's pacing between calls (`pace`, milliseconds) and
+ * `spent`, which says when the run's time is used up: no search is started after that, and the prospects not reached wait for the
+ * next run, so a slow provider cannot push the run past the scheduler's limit and have every search bought again by the retry.
  */
-export async function enrichProspects({ growth, marketed, moment, signal, items: known = null, pace = 0 }) {
+export async function enrichProspects({ growth, marketed, moment, signal, items: known = null, pace = 0, spent = null }) {
   let items = known;
   if (!items) {
     if (typeof growth.store.snapshot !== 'function') return null;
@@ -65,6 +67,7 @@ export async function enrichProspects({ growth, marketed, moment, signal, items:
   const counts = { searched: 0, evidenceRows: 0 };
   for (const target of evidenceTargets(items, marketed, moment)) {
     signal?.throwIfAborted();
+    if (spent?.()) break;
     await wait(pace, signal);
     const searchDomain = domainOf(target.domain);
     const rows = await growth.research.search(target.product, { domain: searchDomain, signal });

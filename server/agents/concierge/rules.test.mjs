@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { categorize, ownWords } from './rules.mjs';
+import { categorize, ownWords, withoutTrialPhrase } from './rules.mjs';
 
 const category = (text, subject = null) => categorize({ text, subject }).category;
 
@@ -106,30 +106,54 @@ describe('message categories by word matching', () => {
 });
 
 describe('a reply with the original email quoted under it', () => {
-  const outreach = 'I run a home health and hospice agency. You can try CareMetric Intel free for 14 days, no credit card needed.\n\nOpt out of these emails: https://hub.example.org/api/growth/preferences/abc';
+  const outreach = 'I run a home health and hospice agency. You can try CareMetric Intel free for 30 days, no credit card needed.\n\nOpt out of these emails: https://hub.example.org/api/growth/preferences/abc';
   const quoted = outreach.split('\n').map(line => `> ${line}`).join('\n');
-  it('is judged for billing and cancellation by the sender\'s own words, so a prospect\'s answer reaches sales', () => {
-    for (const reply of [
-      `Yes, tell me more about the free trial.\n\nOn Tue, Nov 10, 2026 at 3:14 PM Kevin Deyarmin <growth@example.org> wrote:\n${quoted}`,
-      `Yes, tell me more about the free trial.\n\nOn Tue, Nov 10, 2026 at 3:14 PM Kevin Deyarmin\n<growth@example.org> wrote:\n${quoted}`,
-      `Yes, tell me more about the free trial.\n\n-----Original Message-----\nFrom: Kevin Deyarmin\nSent: Tuesday\n\n${outreach}`,
-      `Yes, tell me more about the free trial.\n\nFrom: Kevin Deyarmin <growth@example.org>\nSent: Tuesday, November 10, 2026 3:14 PM\nTo: Info\nSubject: A question\n\n${outreach}`,
-      `Yes, tell me more about the free trial.\n\n${quoted}`,
-    ]) {
-      expect(categorize({ text: outreach }).category, 'the email itself mentions a credit card').toBe('billing');
-      expect(categorize({ text: reply, subject: 'Re: A question' }), reply.slice(40, 90)).toMatchObject({ category: 'sales' });
-    }
+  const replies = [
+    `Yes, tell me more about the free trial.\n\nOn Tue, Nov 10, 2026 at 3:14 PM Kevin Deyarmin <growth@example.org> wrote:\n${quoted}`,
+    `Yes, tell me more about the free trial.\n\nOn Tue, Nov 10, 2026 at 3:14 PM Kevin Deyarmin\n<growth@example.org> wrote:\n${quoted}`,
+    `Yes, tell me more about the free trial.\n\n-----Original Message-----\nFrom: Kevin Deyarmin\nSent: Tuesday\n\n${outreach}`,
+    `Yes, tell me more about the free trial.\n\nFrom: Kevin Deyarmin <growth@example.org>\nSent: Tuesday, November 10, 2026 3:14 PM\nTo: Info\nSubject: A question\n\n${outreach}`,
+    `Yes, tell me more about the free trial.\n\n${quoted}`,
+  ];
+  it('is not a billing matter because the company\'s own email is under it, so a prospect\'s answer reaches sales', () => {
+    for (const reply of replies) expect(categorize({ text: reply, subject: 'Re: A question' }), reply.slice(40, 90)).toMatchObject({ category: 'sales' });
+    // Nor is the company's own trial sentence, quoted with a mark, with none, or on its own.
+    for (const words of ['A 30-day free trial with no credit card.', 'The free trial needs no credit card.', outreach, quoted])
+      expect(categorize({ text: words }).category, words).not.toBe('billing');
   });
-  it('still reads the sender\'s own billing or cancellation words, and every urgent kind in the quote', () => {
+  it('still reads billing and cancellation wherever the sender wrote them, and every urgent kind in the quote', () => {
     expect(categorize({ text: `Please refund my last invoice.\n\nOn Tue, Nov 10, 2026 Kevin wrote:\n${quoted}` }).category).toBe('billing');
     expect(categorize({ text: `We need to cancel our subscription.\n\n${quoted}` }).category).toBe('cancellation');
-    expect(categorize({ text: `See below.\n\nOn Tue, Nov 10, 2026 Kevin wrote:\n> Our account was hacked last night.` }).category).toBe('security');
+    // An answer typed under the quote, after a line of introduction above it.
+    expect(categorize({ text: 'See my answer below.\n\nOn Tue, Nov 10, 2026 Kevin wrote:\n> Would you like to continue?\n\nPlease cancel our subscription.' }).category).toBe('cancellation');
+    expect(categorize({ text: `See below.\n\n${quoted}\n\nPlease refund my last invoice.` }).category).toBe('billing');
+    // An answer typed under an original quoted with no mark cannot be told from it, so nothing there is dropped.
+    expect(categorize({ text: 'See below.\n\n-----Original Message-----\nFrom: Kevin\nSent: Tuesday\n\nWould you like to continue?\n\nPlease cancel our subscription.' }).category).toBe('cancellation');
+    expect(categorize({ text: 'See below.\n\nFrom: Kevin <growth@example.org>\nSent: Tuesday\nSubject: A question\n\nWould you like to continue?\n\nWe were charged twice.' }).category).toBe('billing');
+    expect(categorize({ text: 'See below.\n\nOn Tue, Nov 10, 2026 Kevin wrote:\n> Our account was hacked last night.' }).category).toBe('security');
+    // A credit card that is the sender's own matter is billing, with or without the word "no".
+    for (const words of ['Please update the credit card on our account.', 'I have no credit card on file. How do I pay?', 'There is no credit card charge on my statement, but you sent a receipt.'])
+      expect(categorize({ text: words }).category, words).toBe('billing');
   });
-  it('keeps a reply written below its quote, or one with no words of its own, whole', () => {
+  it('drops only marked quotes and the line that introduces them', () => {
     expect(ownWords(`${quoted}\n\nPlease refund my invoice.`)).toBe('Please refund my invoice.');
+    expect(ownWords(`Above.\n\nOn Tue, Nov 10, 2026 Kevin wrote:\n${quoted}\n\nBelow.`)).toBe('Above.\n\n\nBelow.');
+    expect(ownWords(`Above.\n\nOn Tue, Nov 10, 2026 Kevin\n<growth@example.org> wrote:\n\n${quoted}`)).toBe('Above.');
+    // All quote, or a quote under an attribution with no words of the sender's: returned whole.
     expect(ownWords(quoted)).toBe(quoted);
     expect(ownWords(`On Tue, Nov 10, 2026 Kevin wrote:\n${quoted}`)).toContain('credit card');
-    expect(categorize({ text: `On Tue, Nov 10, 2026 Kevin wrote:\n${quoted}\n` }).category).toBe('billing');
+    // "On ..." that introduces no marked quote is the sender's own sentence, and an unmarked original is kept.
     expect(ownWords('On Monday we will start. Our invoice is attached.')).toBe('On Monday we will start. Our invoice is attached.');
+    expect(ownWords('On Tuesday my manager wrote:\nPlease cancel our subscription.')).toBe('On Tuesday my manager wrote:\nPlease cancel our subscription.');
+    expect(ownWords(`Yes.\n\n-----Original Message-----\n${outreach}`)).toContain('no credit card needed');
+  });
+  it('sets aside only the company\'s own trial phrase, in its own sentence', () => {
+    expect(withoutTrialPhrase('A 30-day free trial with no credit card.')).toBe('A 30-day free trial with no card.');
+    expect(withoutTrialPhrase('Try it free for 30 days, No Credit Card needed. Our credit card was charged twice.')).toBe('Try it free for 30 days, no card needed. Our credit card was charged twice.');
+    expect(withoutTrialPhrase('I have no credit card on file. Is the trial free?')).toBe('I have no credit card on file. Is the trial free?');
+    expect(withoutTrialPhrase('Nothing here.')).toBe('Nothing here.');
+    // A very long line with no sentence breaks is scanned once.
+    const long = `${'word '.repeat(4000)}no credit card`;
+    expect(withoutTrialPhrase(long)).toBe(long);
   });
 });

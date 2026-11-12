@@ -494,10 +494,12 @@ many times each side has written). It then:
    notice they forward after a note of their own proves nothing. An urgent kind always wins over that guess ("our account was
    hacked while I was out of the office" is a security report), and so does a cancellation or a billing matter
    when only an opening sentence suggests an automatic reply.
-   Billing and cancellation are read from the sender's own words: the earlier message a mail program quotes under a reply (after
-   "On ... wrote:", an "Original Message" rule or a "From:/Sent:" block, and every line that starts with ">") is left out, because the
-   company's own emails say "no credit card" and a prospect who answers one has not raised a billing matter. The urgent kinds still
-   read the whole message, quote included, and a reply with no words of its own above the quote is read whole (`ownWords`).
+   Billing and cancellation are read from the sender's own words, because the company's own emails say "no credit card" and a
+   prospect who answers one has not raised a billing matter. Two things are set aside, and nothing else: the lines a mail program
+   marked as quoted (each starts with ">") with the "On ... wrote:" line that introduces them (`ownWords`), and the company's own
+   trial phrase, "no credit card", in a sentence about trying the product free (`withoutTrialPhrase`). What a person wrote above,
+   between or below a quote stays, and so does an original quoted with no mark (as Outlook does), since an answer typed under it
+   cannot be told from it; "I have no credit card on file" is still billing. The urgent kinds read the whole message, quote included.
    Only the first 4,000 characters of a message are read. A message that fills them is never quieter than a
    warning, the alert says the rest was not screened, and nothing is offered to the customer or sent to the
    model for it: it is yours to read. That holds even for a long message that opens like an automatic reply.

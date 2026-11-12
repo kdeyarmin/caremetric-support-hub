@@ -66,6 +66,21 @@ describe('daily prospect evidence enrichment', () => {
     expect(JSON.stringify(result)).not.toContain('.example');
   });
 
+  it('starts no search once the run\'s time is spent, and leaves the rest for the next run', async () => {
+    const items = Array.from({ length: 6 }, (_, i) => prospect(`slow${i}.example`));
+    const store = { discover: vi.fn(async (_product, rows) => rows.length) };
+    let searches = 0;
+    const research = { search: vi.fn(async (_product, { domain }) => { searches += 1; return [row(domain)]; }) };
+    // Out of time after the second search.
+    const result = await enrichProspects({ growth: { store, research }, marketed: null, moment: day, items, spent: () => searches >= 2 });
+    expect(result).toEqual({ searched: 2, evidenceRows: 2 });
+    expect(research.search).toHaveBeenCalledTimes(2);
+    // Already out of time: nothing is searched.
+    research.search.mockClear();
+    expect(await enrichProspects({ growth: { store, research }, marketed: null, moment: day, items, spent: () => true })).toEqual({ searched: 0, evidenceRows: 0 });
+    expect(research.search).not.toHaveBeenCalled();
+  });
+
   it('propagates provider failures and aborts before storing or searching the next organization', async () => {
     const stop = new AbortController();
     const store = { snapshot: vi.fn(async () => ({ total: 2, items: [prospect('one.example'), prospect('two.example')] })), discover: vi.fn() };
