@@ -52,10 +52,12 @@ qualification threshold of 75 and every claim check are unchanged.
 
 ## What the owner needs to do
 
-1. **Decide the cold-email cap.** Ten a day across both products is written into `private.growth_claim_message`. With follow-ups
-   counted, that is three or four new businesses a day. Once the first week at ten shows bounces under 2% and no complaints, a
-   migration should make the cap a Hub setting and raise it in steps (25, then 50). Confirm the separate growth sender
-   (Settings → Email → "Growth email sender") is set first, so prospecting cannot harm the support address's reputation.
+1. **Decide the cold-email cap.** Ten a day across both products was written into `private.growth_claim_message`. With follow-ups
+   counted, that is three or four new businesses a day. It is now a setting (Settings → Customer growth → "Most cold emails a day",
+   1 to 100, ten until you save a number; `20261112120000_growth_cold_email_cap.sql`). Once the first week at ten shows bounces under
+   2% and no complaints, raise it in steps (25, then 50), and the product's daily limit on the Growth page to match. Confirm the
+   separate growth sender (Settings → Email → "Growth email sender") is set first, so prospecting cannot harm the support address's
+   reputation.
 2. **Check the search plan.** Discovery now makes up to 16 search calls a day (about 500 a month), one at a time and a second
    apart. The key works (four daily runs succeeded), but its plan could not be read from this review. Each discovery run now records
    what Brave's rate-limit headers say the key may still use that month (`searchAllowance` in the run's result on the AI team page),
