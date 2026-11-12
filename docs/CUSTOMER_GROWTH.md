@@ -74,7 +74,9 @@ the owner, model-written or not.
   message's class, and the send claim checks that again with the agent's row held, so Keep approving or a pause can never slip
   in between. A message nobody approved also needs a passing `growth.1` evaluation from the last 30 days; the
   `growth.evaluate` task records one for each product every morning at 06:40 Eastern and warns the owner if it fails.
-- **Cold email caps.** At most ten cold emails a day (Eastern) across both products, however each was approved; one business is
+- **Cold email caps.** A cap on cold emails per Eastern day across both products, however each was approved: ten, unless you set
+  Settings → Customer growth → "Most cold emails a day" (1 to 100; `20261112120000_growth_cold_email_cap.sql`). Follow-up touches
+  count toward it, and each product's own daily limit on the Growth page still applies beneath it. One business is
   contacted once (one contact, one opportunity, up to the policy's touch cap); a customer's organization is never cold-emailed;
   cold email never rides the product policy's template autonomy. Every email carries the unsubscribe link and the postal
   address, and the existing per-contact gap, suppression list, touch cap and per-product daily limit still apply.
@@ -119,7 +121,8 @@ What the owner must do before setting it (in this order; none of it is done by t
    directly reaches nothing unless the subdomain has an MX record to `mx.sendgrid.net` and an Inbound Parse host for it.
 4. **Warm the address up slowly.** A new subdomain has no reputation. Keep the cold email cap at ten a day for the first weeks,
    watch bounces, blocks and spam reports in SendGrid's statistics for the subdomain, and raise volume in small steps only
-   while they stay low. Raising the cap is a separate change.
+   while they stay low: Settings → Customer growth → "Most cold emails a day" (to 25, then 50), and the product's daily limit on
+   the Growth page to match. Bounces above 2% or any spam report mean going back down.
 5. Fill in "Growth email sender" (and, if wanted, "Growth email display name") in the Hub's Settings → Email and save; it
    applies within a minute, with no redeploy. Then send one approved message to an address you own to confirm the From, the
    Reply-To and the unsubscribe link.

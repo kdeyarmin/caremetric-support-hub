@@ -28,7 +28,7 @@ describe("AI team display", () => {
   it("names the Growth Manager's work and the lead form check", () => {
     expect(["growth.leads", "growth.followup", "growth.weekly", "probe.forms"].map(taskLabel)).toEqual(["Look for new leads", "Chase unanswered leads", "Weekly growth report", "Lead form check"]);
     expect(taskLabel("growth.evaluate")).toBe("Check the outreach guardrails");
-    expect(stepHelpText("cold_email")).toMatch(/role address on the business's own website.*at most 10 a day, each business once, never a text/);
+    expect(stepHelpText("cold_email")).toMatch(/role address on the business's own website.*at most 10 a day unless you change "Most cold emails a day" in Settings, each business once, never a text/);
     expect(stepHelpText("sales_followups")).toMatch(/unsubscribe link/);
     expect(stepHelpText("something_new")).toBe("");
   });

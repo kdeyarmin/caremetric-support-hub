@@ -91,6 +91,8 @@ export const settingsCatalog = Object.freeze([
     label: 'Twilio sending number', help: 'In +1… form. Used only when no Messaging Service SID is set.' },
   { key: 'growth.send', group: 'growth', kind: 'flag', input: 'toggle', default: false, env: 'HUB_GROWTH_SEND_ENABLED', fromEnv: fromFlag,
     label: 'Send growth email', help: 'Master switch for sending reviewed prospecting and follow-up email. Off: messages are drafted and reviewed but never sent.' },
+  { key: 'growth.cold_email_daily_cap', group: 'growth', kind: 'number', input: 'number', default: 10, min: 1, max: 100, unit: 'emails', env: null, valid: wholeNumber(1, 100),
+    label: 'Most cold emails a day', help: 'First-contact and follow-up emails to businesses that have not replied, per Eastern day, across every product (1 to 100). Raise it in steps (25, then 50) only while bounces stay under 2% and nobody marks the email as spam. Each product\'s own daily limit on the Growth page still applies beneath it.' },
   { key: 'billing.customer_purchasing', group: 'billing', kind: 'flag', input: 'toggle', default: false, env: 'HUB_CUSTOMER_PURCHASING_ENABLED', fromEnv: fromFlag,
     label: 'Customers can buy subscriptions', help: 'Lets a customer administrator start a new subscription from the Hub. Existing subscriptions and payment methods work either way.' },
   { key: 'billing.intel_price_sync', group: 'billing', kind: 'flag', input: 'toggle', default: true, env: 'HUB_APP_CATALOG_SYNC', fromEnv: raw => raw.trim() !== 'off',
