@@ -18,6 +18,10 @@ export const casePriorities = Object.freeze(['low', 'normal', 'high', 'urgent'])
 export const resolutionOutcomes = Object.freeze(['fixed', 'not_fixed', 'unclear']);
 
 const maxResponseCharacters = 262144;
+// The Claude 5.5 models reason before answering even when the request does not ask for it, and that reasoning is counted in
+// max_tokens. Each call's own limit is for its answer, so room for the reasoning is added on top: without it a short limit
+// (120 tokens to classify a reply) can be spent before any answer is written, and the call would fail.
+const reasoningHeadroomTokens = 4096;
 const staffRoles = new Set(['support_agent', 'support_manager', 'platform_admin']);
 
 export class AiNotConfiguredError extends Error {
@@ -115,7 +119,7 @@ export function aiAssistance({ apiKey, fetchImpl = fetch, log = (line) => consol
       response = await fetchImpl(`${apiOrigin}/v1/messages`, {
         method: 'POST',
         headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, max_tokens: maxTokens, system, messages: [{ role: 'user', content: prompt }] }),
+        body: JSON.stringify({ model, max_tokens: maxTokens + reasoningHeadroomTokens, system, messages: [{ role: 'user', content: prompt }] }),
         signal: AbortSignal.timeout(45000),
         redirect: 'error',
       });

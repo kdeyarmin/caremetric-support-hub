@@ -1,9 +1,9 @@
 import type {PortfolioCapabilities,PortfolioOperationName,PortfolioProduct} from '../../supabase/functions/_shared/portfolioProtocol';
 
-export type AdminView='overview'|'organizations'|'users'|'training'|'courses'|'jobs'|'releases'|'audit';
+export type AdminView='overview'|'organizations'|'users'|'inquiries'|'training'|'courses'|'jobs'|'releases'|'audit';
 export interface AdminFunction {
   id:string; title:string; description:string; view:AdminView;
-  requires:readonly PortfolioOperationName[]; carebaseOnly?:boolean;
+  requires:readonly PortfolioOperationName[]; carebaseOnly?:boolean; advisorsOnly?:boolean;
 }
 // Requirements mirror the actual workspace controls, including their parent view.
 // A connected read never implies permission to change its records.
@@ -11,6 +11,7 @@ export const adminFunctions:readonly AdminFunction[]=[
   {id:'overview',title:'Application overview',description:'Read current organization and account totals.',view:'overview',requires:['overview']},
   {id:'organizations',title:'Organization directory',description:'Find organizations and inspect their recorded status.',view:'organizations',requires:['organizations.list']},
   {id:'users',title:'User directory',description:'Find application accounts and inspect their current roles and status.',view:'users',requires:['users.list']},
+  {id:'inquiries',title:'Consultation requests',description:'Read Healthcare Advisors consultation requests, set their status and notes, or delete them.',view:'inquiries',requires:['inquiries.list'],advisorsOnly:true},
   {id:'org-access',title:'Organization access',description:'Select an organization, review suspension or restoration, then confirm the exact change.',view:'organizations',requires:['organizations.list','commands.preview','commands.apply'],carebaseOnly:true},
   {id:'user-access',title:'User access',description:'Select an eligible user and review activation or deactivation. Administrator accounts remain protected.',view:'users',requires:['users.list','commands.preview','commands.apply'],carebaseOnly:true},
   {id:'courses',title:'Native course catalog',description:'Inspect course versions, lessons and publication status before opening shared authoring.',view:'courses',requires:['courses.list','courses.get'],carebaseOnly:true},
@@ -23,7 +24,7 @@ export const adminFunctions:readonly AdminFunction[]=[
   {id:'audit',title:'Administrative audit records',description:'Read retained native administrative activity.',view:'audit',requires:['operations.audit.list'],carebaseOnly:true},
 ];
 export function functionAvailable(item:AdminFunction,product:PortfolioProduct,capabilities:PortfolioCapabilities|null){
-  return Boolean(capabilities&&(!item.carebaseOnly||product==='carebase')&&item.requires.every(operation=>capabilities.operations.includes(operation)));
+  return Boolean(capabilities&&(!item.carebaseOnly||product==='carebase')&&(!item.advisorsOnly||product==='advisors')&&item.requires.every(operation=>capabilities.operations.includes(operation)));
 }
 export function searchFunctions(query:string){
   const terms=query.trim().toLowerCase().split(/\s+/).filter(Boolean);

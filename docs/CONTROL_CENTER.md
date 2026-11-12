@@ -19,7 +19,7 @@ that still carry the old `/admin?product=…&view=…` query redirect there.
 | Hub services | The AI go-live readiness report, `hub.list_phone_numbers()` and `hub.get_support_readiness()` | `/admin/go-live-readiness`, `/phone-numbers`, `/integration` |
 | AI usage | `hub.get_ai_usage_summary(p_days)` (see below) | — |
 | Integration setup | `POST /api/admin/integration-setup` (see below) | Setup steps in this repository's docs |
-| Applications | Each connection's `capabilities`, `overview` and `billing.overview` reads (as the portfolio rollup), the Hub's support cases and published articles, one `communications/list` read per application, the support readiness summary and the AI usage summary | `/admin/apps?product=<id>&view=<organizations\|users\|billing\|inquiries>`, `/communications?product=<slug>`, `/cases?product=<slug>`, `/knowledge?product=<slug>`, `/integration` |
+| Applications | Each connection's `capabilities` and `overview` reads (as the portfolio rollup), the Hub's own billing summary, the Hub's support cases and published articles, one `communications/list` read per application, the support readiness summary and the AI usage summary | `/admin/apps?product=<id>&view=<organizations\|users\|inquiries>`, `/admin/billing`, `/communications?product=<slug>`, `/cases?product=<slug>`, `/knowledge?product=<slug>`, `/integration` |
 
 Every block loads independently, so one unavailable connection or service never
 hides the others. **Refresh everything** re-reads all of them.

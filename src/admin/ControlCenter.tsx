@@ -95,7 +95,8 @@ function ApplicationPanel({ card, communicationsLoading, intakeLoading, usageLoa
         {(directory.organizations || directory.users) && <div className="control-links">{directory.organizations && <Link to={links.organizations}>Organizations</Link>}{directory.users && <Link to={links.users}>Users</Link>}{directory.accessControls && <small>Suspension and activation access changes are reviewed in the workspace.</small>}</div>}
       </Row>
       <Row icon={Link2} label="Integration">
-        <div>Help SDK: <span className={`state-${integration.rollout.state}`}>{integration.rollout.stateLabel}</span> <small>{integration.rollout.integration}</small></div>
+        {card.product === "advisors" ? <div>Help SDK: <span className="control-muted">Not applicable</span> <small>Consulting site with no in-app help</small></div>
+          : <div>Help SDK: <span className={`state-${integration.rollout.state}`}>{integration.rollout.stateLabel}</span> <small>{integration.rollout.integration}</small></div>}
         <div>Administration connection: {integration.endpointHost ?? "not configured"} · <small>{connection === "verified" ? "verified now" : connection === "pending" ? "pending" : "not answering"}</small></div>
         {integration.sources.length > 0 && <div><small>Feeds the Hub inbox: {integration.sources.join(", ")}</small></div>}
         <div className="control-links"><Link to="/integration">App integration</Link></div>

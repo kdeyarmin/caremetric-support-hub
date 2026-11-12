@@ -65,18 +65,20 @@ connections, intake, delegated actions, and purchases for those apps are disable
   official-source competitor pricing, recommended models, and the live **FOUNDERS50** offer for eligible CareBase/Train
   and Intel subscriptions: 50% off the first 12 months of paid service, applied through CareMetric billing activation.
 
-What the Hub can show depends on what each application's administration
-connection provides. As documented for each connection today:
+Directories and application records come from each application's administration
+connection. Subscriptions and invoices come from the Hub's own billing (the
+CareMetric Stripe account), whatever the connection provides:
 
 | Application | Directory | Subscribers | Invoices & payments | Other |
 | --- | --- | --- | --- | --- |
-| CareBase (PennTrain) | Organizations, users | Subscriptions, status totals | Invoices, Stripe verification | Courses, facility training, jobs, releases, audit |
-| Breathe (PennFit) | Organizations, staff | Subscriptions, status totals | Not provided yet | Shared phone-line messages |
-| CareMetric Intel | Registered users only | Not provided yet | Not provided yet | |
+| CareBase (PennTrain) | Organizations, users, access controls | Hub billing: subscriptions and MRR | Hub billing: invoices, payment links, customer portal | Courses, facility training, jobs, releases, audit |
+| Breathe (PennFit) | Organizations, staff | Hub billing: subscriptions and MRR | Hub billing: invoices, payment links, customer portal | Shared phone-line messages |
+| CareMetric Intel | Registered users only | Hub billing: subscriptions and MRR | Hub billing: invoices, payment links, customer portal | Website leads, visitor sessions |
 | Healthcare Advisors | No software accounts | Not applicable (consulting practice) | Not applicable | Consultation requests: list, status, notes and delete ([connection](docs/ADVISORS_ADMIN_CONNECTION.md)) |
 
-"Not provided yet" items need a read added to that application's
-administration connection; the coverage matrix lists them live.
+A directory the connection does not provide (Intel's organizations) needs a
+read added to that application's administration connection; the coverage
+matrix lists such gaps live.
 
 Apply `20261021120000_ai_usage_ledger.sql` and
 `20261021120100_ai_usage_ledger_contract.sql` before deploying the control

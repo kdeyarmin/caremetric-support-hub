@@ -273,7 +273,7 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
       if (input.product !== undefined && input.product !== null && (typeof input.product !== 'string' || !/^[a-z0-9-]{2,40}$/.test(input.product))) throw new HttpError(400, 'Choose an application.');
       if (input.product && !isHubAdminApp(resolveProductSlug(input.product))) throw new HttpError(400, 'Use the application’s own support.');
       const chat = token();
-      const result = await server('select private.start_chat($1,$2,$3,$4,$5,$6) as result', [digest(chat), digest('chat:' + clientAddress), input.name, input.email, input.product ?? null, input.message]);
+      const result = await server('select private.start_chat($1,$2,$3,$4,$5,$6) as result', [digest(chat), digest('chat:' + clientAddress), input.name, input.email, input.product ? resolveProductSlug(input.product) : null, input.message]);
       return { reference: result.reference, token: chat };
     },
     async readChat(chat) {

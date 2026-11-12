@@ -184,4 +184,7 @@ const deliverEmail=async()=>{try{await announcements.tick();}catch{console.warn(
 const emailTimer=setInterval(()=>void deliverEmail(),60*1000);emailTimer.unref();void deliverEmail();
 server.requestTimeout=130000; server.headersTimeout=15000;
 server.listen(Number(process.env.PORT || 8080),'0.0.0.0');
-for(const signal of ['SIGTERM','SIGINT']) process.on(signal,() => { settings.stop(); connections.stop(); clearInterval(billingTimer); clearInterval(catalogTimer); clearInterval(cleanupTimer); clearInterval(courseTimer); clearInterval(aiTimer); clearInterval(agentTimer); clearInterval(emailTimer); server.close(() => { void pool.end(); }); });
+// A second signal while the first is still closing connections must not end the pool again: pg rejects that, and the
+// unhandled rejection would crash the shutdown it interrupts.
+let stopping=false;
+for(const signal of ['SIGTERM','SIGINT']) process.on(signal,() => { if(stopping)return; stopping=true; settings.stop(); connections.stop(); clearInterval(billingTimer); clearInterval(catalogTimer); clearInterval(cleanupTimer); clearInterval(courseTimer); clearInterval(aiTimer); clearInterval(agentTimer); clearInterval(emailTimer); server.close(() => { void pool.end(); }); });

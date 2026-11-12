@@ -44,7 +44,7 @@ function ManageRequest({ row, change, onDeleted }: { row: AdvisorInquiry; change
     <label>Notes<textarea value={notes} rows={3} maxLength={3000} disabled={busy} onChange={event => { setNotes(event.target.value); setResult(null); }} /></label>
     <div className="button-row">
       <button type="button" className="button button-primary button-small" disabled={busy || !edited}
-        onClick={() => void run({ operation: "inquiries.update", id: row.id, status, notes, expected: saved }, () => { setSaved({ status, notes }); setResult({ ok: true, text: "Saved in Advisors." }); })}>Save</button>
+        onClick={() => { const trimmed = notes.trim(); void run({ operation: "inquiries.update", id: row.id, status, notes: trimmed, expected: saved }, () => { setSaved({ status, notes: trimmed }); setNotes(trimmed); setResult({ ok: true, text: "Saved in Advisors." }); }); }}>Save</button>
       {!confirming
         ? <button type="button" className="button button-secondary button-small" disabled={busy} onClick={() => setConfirming(true)}>Delete</button>
         : <><span>Delete permanently?</span>

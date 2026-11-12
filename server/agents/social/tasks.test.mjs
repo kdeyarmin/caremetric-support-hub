@@ -335,6 +335,13 @@ describe('only the products the team markets', () => {
     const budget = harness({ marketed: intelOnly, settings: { targetCostCents: 2000, maxDailyBudgetCents: 3000 }, meta: metaOf({ adsOverview: vi.fn(async () => winning) }) });
     expect((await budget.handlers['social.ads'](task('social.ads'), { now })).result).toMatchObject({ budget: 0 });
     expect(budget.store.proposeAction).not.toHaveBeenCalled();
+    // The same holds when the ads send people to the product's other sites, or to a site that is no marketed product's.
+    for (const link of ['https://home.cmcarebase.com/pricing', 'https://caremetrictrain.com/', 'https://caremetricadvisors.com/contact']) {
+      const elsewhere = { ...winning, ads: winning.ads.map(ad => ({ ...ad, copy: { ...ad.copy, link } })) };
+      const held = harness({ marketed: intelOnly, settings: { targetCostCents: 2000, maxDailyBudgetCents: 3000 }, meta: metaOf({ adsOverview: vi.fn(async () => elsewhere) }) });
+      expect((await held.handlers['social.ads'](task('social.ads'), { now })).result, link).toMatchObject({ budget: 0 });
+      expect(held.store.proposeAction, link).not.toHaveBeenCalled();
+    }
   });
 });
 

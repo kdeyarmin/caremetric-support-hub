@@ -9,7 +9,7 @@ export { AdminApiError } from "./transport";
  */
 const variable = z.object({
   name: z.string().regex(/^[A-Z][A-Z0-9_]{1,79}$/), secret: z.boolean(), required: z.boolean(), purpose: z.string().max(300), set: z.boolean(),
-  /** A flag such as HUB_CHAT_ENABLED is satisfied only when it is exactly "true"; every other variable is satisfied when set. */
+  /** A flag variable is satisfied only when it is exactly "true"; every other variable is satisfied when set. */
   satisfied: z.boolean(),
   value: z.string().max(200).nullable().optional(),
 }).strict().refine(item => !item.secret || item.value === undefined, "Secret values never cross this protocol");

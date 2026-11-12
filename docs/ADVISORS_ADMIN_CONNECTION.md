@@ -46,7 +46,7 @@ Supabase JWT path never forwards to Advisors.
 The Advisors server redeems the capability once at
 `<Hub>/api/internal/admin/advisors/authorize`, then requires:
 
-- role `platform_admin` and SMS sign-in;
+- role `platform_admin` and an owner sign-in (SMS code or [email and password](OWNER_PASSWORD_LOGIN.md));
 - a Hub user ID listed in `HUB_ADMIN_USER_IDS` on the Advisors service;
 - the redeemed operation to match the request body exactly;
 - no browser `Origin` or `Cookie` header.

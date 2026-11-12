@@ -146,8 +146,8 @@ describe('product themes', () => {
       signature: ['The CareMetric Intel team'], footer });
     expect(email.html).toContain('data-theme="intel"');
     expect(email.html).toContain('<meta name="color-scheme" content="dark">');
-    expect(email.html).toContain('https://caremetricintel.com/brand/caremetric-logo-reverse.png');
-    expect(email.html).toContain('https://caremetricintel.com/brand/emberline-fire.png');
+    expect(email.html).toContain('https://www.caremetricintel.com/brand/caremetric-logo-reverse.png');
+    expect(email.html).toContain('https://www.caremetricintel.com/brand/emberline-fire.png');
     expect(email.html).toContain('>Set your marketing on FIRE!</p>');
     expect(email.html).toContain(`background-color:${intelPalette.canvas};`);
     expect(email.html).toContain(`background-color:${intelPalette.card};`);

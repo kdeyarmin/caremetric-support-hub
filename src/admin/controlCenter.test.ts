@@ -173,7 +173,7 @@ describe("control center model", () => {
     expect(checks).toEqual([
       { label: "Production migrations", done: false, detail: "1 of 2 applied" },
       { label: "Anthropic API key", done: true, detail: "Configured on the Hub service" },
-      { label: "AI automation", done: false, detail: "Off until enabled on the Hub service" },
+      { label: "AI automation", done: false, detail: "Off until switched on in Settings → Customer support → AI answers on new support cases" },
       { label: "help.caremetric.ai", done: true, detail: "Resolves to support-hub-web-production.up.railway.app" },
     ]);
   });

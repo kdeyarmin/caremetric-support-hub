@@ -238,7 +238,7 @@ export function goLiveChecks(report: GoLiveReadinessReport): ServiceCheck[] {
   return [
     { label: "Production migrations", done: report.migrations.complete, detail: `${applied} of ${report.migrations.items.length} applied` },
     { label: "Anthropic API key", done: report.anthropicKey.present, detail: report.anthropicKey.present ? "Configured on the Hub service" : "Not configured on the Hub service" },
-    { label: "AI automation", done: report.aiAutomation.enabled, detail: report.aiAutomation.enabled ? "Customer auto-resolution loop is on" : "Off until enabled on the Hub service" },
+    { label: "AI automation", done: report.aiAutomation.enabled, detail: report.aiAutomation.enabled ? "Customer auto-resolution loop is on" : "Off until switched on in Settings → Customer support → AI answers on new support cases" },
     { label: report.helpDomain.hostname, done: report.helpDomain.resolves, detail: report.helpDomain.resolves ? `Resolves to ${report.helpDomain.targets.join(", ")}` : "DNS record not found yet" },
   ];
 }

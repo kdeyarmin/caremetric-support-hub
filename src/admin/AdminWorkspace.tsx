@@ -46,7 +46,9 @@ const formatNumber = new Intl.NumberFormat();
 
 export function AdminWorkspace({ client, actorId, portfolio = portfolioClient }: { client: AdminClient; actorId?: string; portfolio?: PortfolioClient }) {
   const [params, setParams] = useSearchParams();
-  const product = portfolioProducts.some(value => value === params.get("product")) ? params.get("product") as PortfolioProduct : "carebase";
+  // The rest of the Hub names Intel "caremetric-intel"; a link or bookmark using that name opens Intel, not the CareBase default.
+  const requested = params.get("product") === "caremetric-intel" ? "intel" : params.get("product");
+  const product = portfolioProducts.some(value => value === requested) ? requested as PortfolioProduct : "carebase";
   const [refresh, setRefresh] = useState(0);
   return <div className="admin-workspace">
     <div className="page-heading"><div><span className="eyebrow">CareMetric Admin</span><h1>Your apps, in one workspace</h1><p>Manage connected applications, facility training, courses and support with your Hub sign-in. Subscriptions and charges for every application are in Billing.</p></div><button className="button button-secondary" type="button" onClick={() => setRefresh(value => value + 1)}><RefreshCw size={15} aria-hidden="true" />Refresh connection</button></div>

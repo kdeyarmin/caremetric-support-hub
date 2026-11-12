@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { AdvisorCommand } from "../../supabase/functions/_shared/advisorsCommands";
 
 const requestAdmin = vi.fn<(functionName: string, body: unknown, signal: AbortSignal) => Promise<unknown>>();
-vi.mock("./transport", () => ({ requestAdmin }));
+vi.mock("./transport", async () => ({ ...await vi.importActual<typeof import("./transport")>("./transport"), requestAdmin }));
 const { changeAdvisorRequest } = await import("./advisorsClient");
 
 afterEach(() => requestAdmin.mockReset());
@@ -28,4 +28,10 @@ it("reports a delete as done only for the request that was named", async () => {
 it("refuses an answer that does not match the change that was sent", async () => {
   requestAdmin.mockResolvedValue({ item: { ...saved.item, notes: "Something else." } });
   await expect(changeAdvisorRequest(update, new AbortController().signal)).rejects.toThrow();
+});
+
+it("reports a change the Hub would refuse as a problem with the change, without calling the Hub", async () => {
+  const control: AdvisorCommand = { ...update, notes: "Pasted from a PDF\f" };
+  await expect(changeAdvisorRequest(control, new AbortController().signal)).rejects.toMatchObject({ code: "invalid_request" });
+  expect(requestAdmin).not.toHaveBeenCalled();
 });

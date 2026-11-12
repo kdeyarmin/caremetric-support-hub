@@ -22,6 +22,18 @@ describe('current administration function navigation',()=>{
     expect(functionAvailable(access,'carebase',capabilities([...access.requires]))).toBe(true);
     expect(functionAvailable(access,'breathe',capabilities([...access.requires]))).toBe(false);
   });
+  it('lists Healthcare Advisors consultation requests as a control, for Advisors only',()=>{
+    const requests=adminFunctions.find(item=>item.id==='inquiries')!;
+    expect(functionAvailable(requests,'advisors',capabilities(['capabilities','overview','inquiries.list']))).toBe(true);
+    expect(functionAvailable(requests,'carebase',capabilities(['capabilities','overview','inquiries.list']))).toBe(false);
+    const onNavigate=vi.fn();
+    render(<MemoryRouter><AdminFunctionCatalog product="advisors" capabilities={capabilities(['capabilities','overview','inquiries.list'])} onNavigate={onNavigate}/></MemoryRouter>);
+    fireEvent.click(screen.getByRole('button',{name:'Open Consultation requests'}));
+    expect(onNavigate).toHaveBeenCalledExactlyOnceWith('inquiries');
+    cleanup();
+    render(<MemoryRouter><AdminFunctionCatalog product="intel" capabilities={capabilities(['capabilities','overview','users.list'])} onNavigate={vi.fn()}/></MemoryRouter>);
+    expect(within(screen.getByText('Consultation requests').closest('li')!).getByText('Healthcare Advisors only')).toBeTruthy();
+  });
   it('distinguishes product scope from missing capabilities on a verified connection',()=>{
     render(<MemoryRouter><AdminFunctionCatalog product="breathe" capabilities={capabilities(['organizations.list'])} onNavigate={vi.fn()}/></MemoryRouter>);
     const scoped=screen.getByText('Job stop controls').closest('li')!;

@@ -6,7 +6,6 @@ The Hub exposes CareBase access controls only when the native adapter advertises
 | --- | --- | --- |
 | `users.setActive` | Activate/deactivate a native profile; native deactivation revokes its sessions | Existing profile update semantics, with self/platform-admin targets excluded |
 | `organizations.setSuspension` | Set/remove manual application suspension | Shared native organization and billing-account suspension rules |
-| `billing.setAccessOverride` | Set complimentary access (optional expiration) or restore provider-derived access | Existing native billing override rules; does not cancel, charge or alter a provider subscription |
 
 ## Security and retry behavior
 
