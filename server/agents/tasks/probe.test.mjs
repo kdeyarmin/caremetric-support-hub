@@ -32,6 +32,10 @@ describe('checking one product', () => {
     }
   });
 
+  it('marks a 429 as rate-limited rather than as an error status', async () => {
+    expect(await checkTarget(carebase, { fetchImpl: answer(429, 'Too Many Requests') })).toMatchObject({ ok: false, statusCode: 429, failure: 'rate_limited' });
+  });
+
   it('reports no answer at all as a network failure with status 0', async () => {
     const fetchImpl = vi.fn(async () => { throw new TypeError('fetch failed'); });
     expect(await checkTarget(carebase, { fetchImpl })).toMatchObject({ ok: false, statusCode: 0, failure: 'network' });
@@ -75,6 +79,10 @@ describe('summarizing a sweep', () => {
     expect(summarizeSweep([row(hub, {}), row(carebase, { ok: false, failure: 'status', statusCode: 503 })])).toBe('CareBase returned 503. 1 of 2 answered.');
     expect(summarizeSweep([row(hub, { ok: false, failure: 'timeout', statusCode: 0 }), row(carebase, { ok: false, failure: 'network', statusCode: 0 })]))
       .toBe('Support Hub timed out; CareBase could not be reached. 0 of 2 answered.');
+  });
+  it('says a rate-limited product was not counted', () => {
+    expect(summarizeSweep([row(hub, { ok: false, failure: 'rate_limited', statusCode: 429 }), row(carebase, {})]))
+      .toBe('Support Hub was rate-limited (429) and was not counted. 1 of 2 answered.');
   });
 });
 
@@ -160,6 +168,126 @@ describe('the health sweep', () => {
     controller.abort();
     await expect(pending).rejects.toMatchObject({ code: 'task_timeout', transient: true });
     expect(store.probeRecord).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The incident rule of private.agent_probe_record, in memory: `threshold` recorded failures in a row open one incident (a `probe.incident`
+ * task, which texts the owner), and the first healthy check closes it (a `probe.recovery` task).
+ */
+const database = ({ threshold = 2, clock }) => {
+  const products = new Map();
+  const tasks = [];
+  return {
+    tasks,
+    probeRecord: vi.fn(async ({ targetKey, ok, statusCode, failure }) => {
+      const row = products.get(targetKey) ?? { state: 'unknown', failures: 0, since: null, incident: 0 };
+      let transition = 'none';
+      if (ok) {
+        if (row.state === 'down') {
+          transition = 'recovered';
+          tasks.push({ kind: 'probe.recovery', payload: { target: targetKey, incident: row.incident, downSince: row.since, recoveredAt: clock() } });
+        }
+        Object.assign(row, { state: 'up', failures: 0, since: null });
+      } else {
+        row.failures += 1;
+        row.since ??= clock();
+        if (row.failures >= threshold && row.state !== 'down') {
+          transition = 'down';
+          row.state = 'down';
+          row.incident += 1;
+          tasks.push({ kind: 'probe.incident', payload: { target: targetKey, incident: row.incident, since: row.since, failures: row.failures, statusCode, failure, flapping: false } });
+        }
+      }
+      products.set(targetKey, row);
+      return { target: targetKey, state: row.state, transition, failures: row.failures, incident: row.incident, taskId: null };
+    }),
+    startRun: vi.fn(async () => 'run-1'),
+    finishRun: vi.fn(async () => undefined),
+    proposeAction: vi.fn(async () => ({ id: 'a1', status: 'auto_approved', requestKey: 'k', created: true })),
+  };
+};
+
+describe('a product that rate-limits the probe', () => {
+  const intel = { key: 'intel', label: 'CareMetric Intel', url: 'https://www.caremetricintel.com/api/ready' };
+  const advisors = { key: 'advisors', label: 'Healthcare Advisors', url: 'https://caremetricadvisors.com/health' };
+  const team = ({ targets, statuses }) => {
+    let now = '2026-11-10T14:00:00Z';
+    const store = database({ clock: () => now });
+    const notifier = { send: vi.fn(async ({ severity }) => (severity === 'urgent' ? [{ channel: 'sms', delivery: 'sent' }, { channel: 'email', delivery: 'sent' }] : [{ channel: 'email', delivery: 'sent' }])) };
+    // `statuses` is one entry per sweep: a status for every product, or a map from product key to status.
+    let sweep = 0;
+    const fetchImpl = vi.fn(async url => {
+      const step = statuses[sweep];
+      const status = typeof step === 'number' ? step : step[targets.find(target => target.url === url).key];
+      return new Response('x', { status });
+    });
+    const handlers = probeHandlers({ store, notifier, targets, fetchImpl, limitMs: 50, log: () => {} });
+    return {
+      store, notifier,
+      /** Every sweep five minutes apart, each followed by the alert and recovery tasks it queued, as the scheduler would run them. */
+      async run() {
+        const results = [];
+        for (sweep = 0; sweep < statuses.length; sweep += 1) {
+          now = new Date(Date.parse('2026-11-10T14:00:00Z') + sweep * 5 * 60_000).toISOString();
+          const queued = store.tasks.length;
+          results.push((await handlers['probe.sweep'](task(), at(now))).result);
+          for (const queuedTask of store.tasks.slice(queued)) await handlers[queuedTask.kind](task({ kind: queuedTask.kind, payload: queuedTask.payload }), at(now));
+        }
+        return results;
+      },
+      texts: () => notifier.send.mock.calls.filter(([call]) => call.severity === 'urgent').map(([call]) => call.subject),
+    };
+  };
+
+  it('opens no incident and sends no text when every product answers 429, sweep after sweep (Nov 10)', async () => {
+    const nov10 = team({ targets: [hub, carebase, intel, advisors], statuses: [429, 429, 429, 429, 429, 429] });
+    const results = await nov10.run();
+    for (const result of results) {
+      expect(result).toMatchObject({ checked: 4, answered: 0, failing: [], rateLimited: ['hub', 'carebase', 'intel', 'advisors'], transitions: [] });
+    }
+    expect(nov10.store.probeRecord).not.toHaveBeenCalled();
+    expect(nov10.store.tasks).toEqual([]);
+    expect(nov10.notifier.send).not.toHaveBeenCalled();
+    // The Team screen still shows each sweep, in plain words.
+    expect(nov10.store.finishRun).toHaveBeenLastCalledWith('run-1', 'completed', {},
+      'Support Hub was rate-limited (429) and was not counted; CareBase was rate-limited (429) and was not counted; '
+      + 'CareMetric Intel was rate-limited (429) and was not counted; Healthcare Advisors was rate-limited (429) and was not counted. 0 of 4 answered.', null);
+  });
+
+  it('would have texted about every product had they really been down, so the quiet above is the 429 rule and not the model', async () => {
+    const outage = team({ targets: [hub, carebase, intel, advisors], statuses: [503, 503, 503, 503, 503, 503] });
+    await outage.run();
+    expect(outage.texts()).toEqual(['Support Hub is down', 'CareBase is down', 'CareMetric Intel is down', 'Healthcare Advisors is down']);
+  });
+
+  it('records the other products as usual', async () => {
+    const mixed = team({ targets: [hub, carebase], statuses: [{ hub: 429, carebase: 503 }] });
+    const [result] = await mixed.run();
+    expect(mixed.store.probeRecord).toHaveBeenCalledTimes(1);
+    expect(mixed.store.probeRecord).toHaveBeenCalledWith(expect.objectContaining({ targetKey: 'carebase', ok: false, statusCode: 503, failure: 'status' }));
+    expect(result).toMatchObject({ answered: 0, failing: [{ target: 'carebase', failure: 'status', statusCode: 503 }], rateLimited: ['hub'] });
+  });
+
+  it('neither breaks nor extends a run of failures: the checks around it decide', async () => {
+    const relapse = team({ targets: [carebase], statuses: [503, 429, 503] });
+    await relapse.run();
+    expect(relapse.texts()).toEqual(['CareBase is down']);
+
+    const blip = team({ targets: [carebase], statuses: [503, 429, 429, 200] });
+    await blip.run();
+    expect(blip.notifier.send).not.toHaveBeenCalled();
+  });
+
+  it('does not count as a recovery for a product that is down', async () => {
+    const down = team({ targets: [carebase], statuses: [503, 503, 429, 429] });
+    await down.run();
+    expect(down.store.tasks.map(item => item.kind)).toEqual(['probe.incident']);
+    expect(down.notifier.send.mock.calls.map(([call]) => call.subject)).toEqual(['CareBase is down']);
+
+    const back = team({ targets: [carebase], statuses: [503, 503, 429, 200] });
+    await back.run();
+    expect(back.notifier.send.mock.calls.map(([call]) => call.subject)).toEqual(['CareBase is down', 'CareBase is answering again']);
   });
 });
 

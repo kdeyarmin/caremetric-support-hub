@@ -12,6 +12,12 @@
  * failure word. A response body is read for at most 4 KB so a slow or endless one cannot hold
  * the sweep, then thrown away. Redirects are never followed.
  *
+ * A 429 says the product (or something in front of it) turned the probe away for asking too
+ * often, not that the product is down: on Nov 10 every product answered the probe 429 at once
+ * while the Hub served normal traffic, and the owner got six urgent texts. A rate-limited check
+ * is therefore not reported to the database at all. It neither counts toward an incident nor
+ * closes one, and the product is simply checked again at the next sweep.
+ *
  * The lead forms are checked every six hours by `probe.forms` (in tasks/growth.mjs, because it needs the Growth
  * Manager's database feature) and recorded through the same operation, so their incidents and recoveries come here
  * too: `alertTargets` names them (they are never part of the five-minute sweep), and a form target says how often
@@ -41,7 +47,10 @@ const abortion = signal => new Promise((resolve, reject) => {
   else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
 });
 
-/** One check. Never throws: returns { ok, statusCode, latencyMs, failure } with statusCode 0 when nothing answered. */
+/**
+ * One check. Never throws: returns { ok, statusCode, latencyMs, failure } with statusCode 0 when nothing answered. A 429 is the
+ * failure `rate_limited`, which the sweep leaves unrecorded (see above).
+ */
 export async function checkTarget(target, { fetchImpl = fetch, signal, limitMs = timeoutMs, clock = () => performance.now() } = {}) {
   const started = clock();
   const limit = AbortSignal.timeout(limitMs);
@@ -63,13 +72,18 @@ export async function checkTarget(target, { fetchImpl = fetch, signal, limitMs =
     await reader?.cancel().catch(() => {});
   }
   if (statusCode >= 200 && statusCode < 300) return result(true, statusCode, null);
+  if (statusCode === 429) return result(false, statusCode, 'rate_limited');
   return result(false, statusCode, statusCode >= 300 && statusCode < 400 ? 'redirect' : 'status');
 }
+
+/** A check that says nothing about whether the product is up: it is not recorded, and the next sweep asks again. */
+export const rateLimited = check => check.failure === 'rate_limited';
 
 // The last three are a lead form's own failures: it answered, but not as a probe; it did not pass the test lead on; or it said it did and
 // the lead never reached the Hub.
 export const shortFailure = ({ failure, statusCode }) => ({
   timeout: 'timed out', network: 'could not be reached', redirect: `redirected (${statusCode})`, status: `returned ${statusCode}`,
+  rate_limited: 'was rate-limited (429) and was not counted',
   not_probe: 'did not recognise the probe', not_forwarded: 'did not forward the test lead', not_received: 'forwarded a test lead that never arrived',
 }[failure] ?? 'failed');
 export const longFailure = ({ failure, statusCode }, seconds = 8) => ({
@@ -104,7 +118,8 @@ export function probeHandlers({
     const rows = [];
     for (const { target, check } of checked) {
       if (signal?.aborted) throw Object.assign(new Error('The sweep was stopped.'), { code: 'task_timeout', transient: true });
-      const outcome = await store.probeRecord({
+      // A rate-limited check leaves the product's state exactly as it was: no failure streak, no incident, no recovery.
+      const outcome = rateLimited(check) ? { transition: 'none' } : await store.probeRecord({
         targetKey: target.key, ok: check.ok, statusCode: check.statusCode, latencyMs: check.latencyMs,
         failure: check.failure, threshold, agentKey: task.agentKey,
       });
@@ -118,7 +133,8 @@ export function probeHandlers({
     return {
       result: {
         checked: rows.length, answered: rows.filter(row => row.check.ok).length, summary,
-        failing: rows.filter(row => !row.check.ok).map(row => ({ target: row.target.key, failure: row.check.failure, statusCode: row.check.statusCode })),
+        failing: rows.filter(row => !row.check.ok && !rateLimited(row.check)).map(row => ({ target: row.target.key, failure: row.check.failure, statusCode: row.check.statusCode })),
+        rateLimited: rows.filter(row => rateLimited(row.check)).map(row => row.target.key),
         transitions: rows.filter(row => row.outcome.transition !== 'none').map(row => ({ target: row.target.key, transition: row.outcome.transition, incident: row.outcome.incident })),
       },
     };
