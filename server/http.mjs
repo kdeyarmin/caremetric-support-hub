@@ -54,7 +54,7 @@ function sendBytes(req,res,{contentType,bytes,fileName=null,disposition='inline'
   if(req.method==='HEAD') return res.end();
   return res.end(data.subarray(start,end+1));
 }
-const mime={'.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.webp':'image/webp','.woff2':'font/woff2','.html':'text/html'};
+const mime={'.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon','.woff2':'font/woff2','.html':'text/html'};
 const aiCaseActions=new Set(['summary','draft-reply','triage-suggestion']);
 const staffCommunicationActions=new Set(['list','get','update','note','reply','sync']);
 // Railway's edge appends the visitor address last; rate limits use it only as a hashed bucket.

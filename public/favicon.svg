@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <title>CareMetric Support Hub</title>
+  <!-- The header's brand mark (src/styles.css .brand-icon with lucide's circle-help), drawn larger and bolder to read at 16 px. -->
+  <defs>
+    <linearGradient id="tile" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#3557b0"/>
+      <stop offset="1" stop-color="#213a76"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="url(#tile)"/>
+  <g transform="translate(4 4)" fill="none" stroke="#fff" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+    <path d="M12 17h.01"/>
+  </g>
+</svg>
