@@ -781,7 +781,7 @@ it cannot use falls back to the default.
 
 ### Customer emails
 
-A trial that hears nothing leaks: CareBase (30 days) and Intel (14 days) trials start through the Hub's billing, and
+A trial that hears nothing leaks: CareBase and Intel trials (30 days each) start through the Hub's billing, and
 a CareBase trial without a card cancels silently. The Account Manager proposes four short, fixed emails to the
 billing contact of a trial or a new paying account (task `accounts.lifecycle`, every morning at 08:20 Eastern).
 They are written once, in `server/agents/accounts/lifecycle.mjs`, use no model, and go out only after the owner

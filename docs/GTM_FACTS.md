@@ -122,8 +122,8 @@ Founders Sale below for new offers. Do not advertise lifetime pricing as part of
   (briefs, supported reporting questions, drafted outreach) are text.
 - **The bigger picture** (owner direction 2026-11-12; `bigPicture`, `capabilities`, `whoUses` and `present` in `facts.mjs`, written
   from Intel's own /features page and home page with no numbers): see "CareMetric Intel: the bigger picture" below.
-- **Trial:** a **14-day** free trial with no credit card, covering 3 marketer seats + 1 manager, 1 branch, home health and
-  hospice, 1 county (`TRIAL_DAYS = 14`, the `trial` plan). It does not turn into a paid subscription by itself.
+- **Trial:** a **30-day** free trial with no credit card, covering 3 marketer seats + 1 manager, 1 branch, home health and
+  hospice, 1 county (`TRIAL_DAYS = 30`, the `trial` plan; owner decision 2026-11-12, it was 14 days). It does not turn into a paid subscription by itself.
 
 Plans (Intel's `src/lib/planCatalog.ts`). Annual billing saves about 17%. **Onboarding is free on every plan.**
 Intel publishes these figures at `https://www.caremetricintel.com/api/billing/catalog`; once the Hub has read it, the AI team
@@ -267,7 +267,7 @@ Confirmed by the owner on 2026-11-08 from the review copy of this sheet.
 
 - [x] CareBase prices, add-ons, Complete, Compliance Suite, Small Home and Train prices, and the 30-day trial.
 - [x] Intel plans, annual prices, seats, free onboarding, monthly and annual add-on prices, the Enterprise floor and the
-  14-day trial (read from Intel's catalog; reviewed 2026-11-09).
+  trial (read from Intel's catalog; reviewed 2026-11-09). The trial became 30 days on 2026-11-12 (owner decision; Intel's `TRIAL_DAYS`).
 - [x] The one-year Founders Sale was requested by the owner and configured in live billing; use the complete terms above.
 - [x] Legacy founding-partner agreements: confirm individual terms before referring to them; do not offer lifetime pricing to new prospects.
 - [x] Advisors has no published prices, and the consultation form is the first step.

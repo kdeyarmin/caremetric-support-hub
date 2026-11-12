@@ -18,8 +18,8 @@ describe('the fact sheet', () => {
     expect(allowedPercents).toEqual(['17%', '50%']);
     expect(products.carebase.trialDays).toBe(30);
     expect(doc).toContain('a **30-day** free trial');
-    expect(products.intel.trialDays).toBe(14);
-    expect(doc).toContain('a **14-day** free trial');
+    expect(products.intel.trialDays).toBe(30);
+    expect(doc).toContain('a **30-day** free trial');
     expect(products.advisors.trialDays).toBeNull();
   });
 

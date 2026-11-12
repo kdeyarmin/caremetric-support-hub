@@ -3,9 +3,9 @@
   "app": "caremetric-intel",
   "version": "ef09de6bc8bc97bd",
   "currency": "usd",
-  "trial_days": 14,
+  "trial_days": 30,
   "trial": {
-    "days": 14,
+    "days": 30,
     "includes": "3 marketer seats + 1 manager, 1 branch, home health and hospice, 1 county"
   },
   "annual_saving_percent": 17,

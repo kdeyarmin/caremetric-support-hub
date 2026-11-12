@@ -40,7 +40,7 @@ describe('CareMetric Intel\'s published feature catalog', () => {
     expect(problems).not.toContain('vocabulary');
     // The prompt carries the features, the data and its sources, and the site's own caveats.
     for (const phrase of ['Stark annual limit tracking', 'Competitor rankings', 'EMR report imports', 'County intelligence', 'NPPES', 'Care Compare', 'American Community Survey',
-      'not a promise of referrals', 'The 14-day free trial includes everything Pro does, in one county.']) expect(text).toContain(phrase);
+      'not a promise of referrals', 'The 30-day free trial includes everything Pro does, in one county.']) expect(text).toContain(phrase);
     expect(featuresText('intel')).toBe(text);
     expect(featuresText('advisors')).toBe('');
   });

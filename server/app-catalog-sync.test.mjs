@@ -64,7 +64,7 @@ afterEach(() => { followFoundersReplacements([]); resetAppCatalogFacts(); });
 describe('reading an application catalog', () => {
   it('accepts what Intel publishes and refuses anything else', () => {
     const catalog = parseAppCatalog(intelCatalog(), 'caremetric-intel');
-    expect(catalog).toMatchObject({ app: 'caremetric-intel', version: FIXTURE.version, trial_days: 14, annual_saving_percent: 17, free_onboarding: true,
+    expect(catalog).toMatchObject({ app: 'caremetric-intel', version: FIXTURE.version, trial_days: 30, annual_saving_percent: 17, free_onboarding: true,
       trial_includes: FIXTURE.trial.includes });
     expect(catalog.products.map(product => product.entitlement_key)).toEqual(['starter', 'growth', 'pro', 'enterprise', 'extra_seat', 'extra_branch', 'extra_state']);
     expect(catalog.products.find(product => product.entitlement_key === 'enterprise')).toMatchObject({ self_serve: false, prices: [], from_unit_amount: 350000 });
