@@ -5,8 +5,8 @@ alerts and answers, customer lifecycle email and bulk email. Growth email (cold 
 switch, **Settings → Email → Growth email service**, which stays SendGrid by default: SES does not allow unsolicited
 email, and a suspension would stop every message the Hub sends. **Settings → Email → Email
 service** is SendGrid until the owner chooses Amazon SES, and a change applies within a minute with nothing to redeploy.
-If the chosen service is not set up, the Hub keeps sending through the other one, so a half-finished switch never stops
-email.
+If SES is selected with incomplete sending credentials, the Hub can use configured SendGrid before dispatch.
+Selecting SendGrid requires SendGrid. An uncertain send is never repeated through the other service.
 
 Inbound support email is unchanged by this release: `caremetric.ai`'s MX still points at SendGrid Inbound Parse, which
 posts to `/api/channels/email/inbound`. Moving inbound mail to SES receiving is a separate change.
@@ -22,9 +22,9 @@ posts to `/api/channels/email/inbound`. Moving inbound mail to SES receiving is 
   Reject events to an SNS topic, and SNS posts them to the Hub. The Hub checks the SNS signature against the certificate
   SNS signs with (an https `.pem` on `sns.<region>.amazonaws.com`, fetched once and cached), accepts only the topic in
   **Settings → Email → Amazon SES events topic**, refuses messages older than six hours, and confirms the subscription
-  itself when SNS asks (only on SNS in that region). A delivery records `delivered`, a permanent bounce or a reject
-  `bounced`, and a complaint `complaint` on the growth message, once per SNS message. A transient bounce is SES still
-  trying and is not recorded. Bounces and complaints also land on SES's account suppression list for every message.
+  itself when SNS asks (only on SNS in that region). A delivery records `delivered`, any final bounce or reject records `bounced`, and a complaint records `complaint`, once per SNS message.
+  DeliveryDelay means SES is still trying. Only permanent bounces and complaints suppress the contact locally.
+  Apply the terminal-failure database function before deploying this mapper. The sender disables SES open and click tracking per request.
 
 ## Setting it up
 

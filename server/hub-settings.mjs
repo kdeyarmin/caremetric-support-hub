@@ -87,7 +87,7 @@ export const settingsCatalog = Object.freeze([
     label: 'Growth email display name', help: 'At most 64 characters, without quotes or angle brackets. Empty: "CareMetric".' },
   { key: 'email.provider', group: 'email', kind: 'text', input: 'choice', default: 'sendgrid', env: null,
     choices: [{ value: 'sendgrid', label: 'SendGrid' }, { value: 'ses', label: 'Amazon SES' }], valid: value => value === 'sendgrid' || value === 'ses',
-    label: 'Email service', help: 'Which service sends the Hub\'s email: staff replies, alerts, customer, bulk and growth email. Amazon SES needs its access key in Railway and each sender\'s domain verified in SES. If the chosen service is not set up, the other one keeps sending.' },
+    label: 'Email service', help: 'Which service sends the Hub\'s email: staff replies, alerts, customer and bulk email. Growth uses its own setting. Amazon SES needs its access key in Railway and each sender\'s domain verified in SES. If SES credentials are missing, configured SendGrid can handle the send.' },
   { key: 'email.growth_provider', group: 'email', kind: 'text', input: 'choice', default: 'sendgrid', env: null,
     choices: [{ value: 'sendgrid', label: 'SendGrid' }, { value: 'ses', label: 'Amazon SES' }], valid: value => value === 'sendgrid' || value === 'ses',
     label: 'Growth email service', help: 'Which service sends growth email (cold email and sales follow-ups). Keep SendGrid: Amazon SES does not allow unsolicited email, and an SES suspension would stop all of the Hub\'s email.' },

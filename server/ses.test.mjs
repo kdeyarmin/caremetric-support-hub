@@ -35,8 +35,9 @@ describe('the MIME message', () => {
       subject: 'Your café question\r\nBcc: attacker@example.org', text: 'Hello — thanks', html: '<p>Hello — thanks</p>', date: at, boundary: 'b1' });
     expect(raw).toContain('From: "CareMetric Support" <support@caremetric.ai>\r\nTo: <pat@example.org>\r\nReply-To: <support@caremetric.ai>\r\n');
     expect(raw).not.toMatch(/^Bcc:/m);
-    const subject = /^Subject: =\?UTF-8\?B\?([^?]+)\?=$/m.exec(raw);
-    expect(Buffer.from(subject[1], 'base64').toString('utf8')).toBe('Your café question Bcc: attacker@example.org');
+    const subject = /^Subject: ([^\r\n]*(?:\r\n [^\r\n]*)*)/m.exec(raw)[1];
+    const encoded = [...subject.matchAll(/=\?UTF-8\?B\?([^?]+)\?=/g)];
+    expect(encoded.map(word => Buffer.from(word[1], 'base64').toString('utf8')).join('')).toBe('Your café question Bcc: attacker@example.org');
     expect(raw).toContain('Content-Type: multipart/alternative; boundary="b1"');
     expect(partText(raw, 'text/plain')).toBe('Hello — thanks');
     expect(partText(raw, 'text/html')).toBe('<p>Hello — thanks</p>');
@@ -63,6 +64,7 @@ describe('sending through SES', () => {
     expect(request.headers.host).toBeUndefined();
     expect(body.Destination).toEqual({ ToAddresses: ['pat@example.org'] });
     expect(body.ConfigurationSetName).toBe('caremetric-hub');
+    expect(body.ConfigurationOverrides).toEqual({ Tracking: { ClickTrackingEnabled: "DISABLED", OpenTrackingEnabled: "DISABLED" } });
     expect(body.EmailTags).toEqual([{ Name: 'category', Value: 'hub-support' }]);
     expect(raw).toContain('Reply-To: <support@caremetric.ai>');
     expect(partText(raw, 'text/html')).toBe('<p>Answer</p>');
@@ -91,6 +93,7 @@ describe('sending through SES', () => {
     const { body, raw } = sentRequest(fetchImpl);
     expect(raw).toContain('From: "Kevin at CareMetric" <hello@go.caremetric.ai>');
     expect(raw).toContain('List-Unsubscribe: <https://help.caremetric.ai/api/growth/preferences/abc>\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click');
+    expect(body.ConfigurationOverrides).toEqual({ Tracking: { ClickTrackingEnabled: "DISABLED", OpenTrackingEnabled: "DISABLED" } });
     expect(body.EmailTags).toEqual([{ Name: 'category', Value: 'hub-bulk-email' }, { Name: 'growth_message_id', Value: '11111111-1111-4111-8111-111111111111' }]);
     expect(body.ConfigurationSetName).toBeUndefined();
   });
@@ -170,9 +173,12 @@ describe('Amazon SNS notifications', () => {
     const tags = { growth_message_id: ['11111111-1111-4111-8111-111111111111'] };
     expect(of(event)).toEqual([{ id: 'ses:n1', messageId: '11111111-1111-4111-8111-111111111111', kind: 'delivered', at: at.toISOString() }]);
     expect(of({ eventType: 'Bounce', mail: { tags }, bounce: { bounceType: 'Permanent', timestamp: at.toISOString() } })[0].kind).toBe('bounced');
-    expect(of({ eventType: 'Bounce', mail: { tags }, bounce: { bounceType: 'Transient' } })).toEqual([]);
+    for (const bounceType of ['Transient', 'Undetermined']) {
+      expect(of({ eventType: 'Bounce', mail: { tags }, bounce: { bounceType } })[0].kind).toBe('unsuppressed_bounce');
+    }
+    expect(of({ eventType: 'DeliveryDelay', mail: { tags } })).toEqual([]);
     expect(of({ eventType: 'Complaint', mail: { tags }, complaint: {} })[0].kind).toBe('complaint');
-    expect(of({ eventType: 'Reject', mail: { tags } })[0].kind).toBe('bounced');
+    expect(of({ eventType: 'Reject', mail: { tags } })[0].kind).toBe('unsuppressed_bounce');
     expect(of({ eventType: 'Delivery', mail: { tags: {} } })).toEqual([]);
     expect(sesGrowthEvents({ MessageId: 'n2', Message: 'not json' })).toEqual([]);
   });
@@ -187,4 +193,29 @@ describe('Amazon SNS notifications', () => {
     expect(service.readiness().deliveryFeedback).toBe(true);
     await expect(growthService({ store, features: new Set(['platform.agents.customer-growth.v1']) }).sesDelivery(body(notification()))).rejects.toMatchObject({ status: 503 });
   });
+});
+
+it("round-trips long subjects within MIME word and physical-line limits", () => {
+  for (const subject of ["😀".repeat(200), "é".repeat(400), "界".repeat(250), "x".repeat(1200), "a".repeat(41) + "😀 e\u0301 ".repeat(35) + "end"]) {
+    const raw = mimeMessage({ from: "from@example.test", to: "to@example.test", subject, text: "T", html: "<p>T</p>" });
+    const header = (/^Subject: [^\r\n]*(?:\r\n [^\r\n]*)*/m.exec(raw)?.[0] ?? "").split("\r\n");
+    expect(header.every(line => Buffer.byteLength(line) <= 76)).toBe(true);
+    const words = header.join(" ").match(/=\?UTF-8\?B\?[^?]+\?=/g) ?? [];
+    expect(words.length > 1 && words.every(word => word.length <= 75)).toBe(true);
+    const decoded = words.map(word => Buffer.from(word.slice(10, -2), "base64").toString("utf8")).join("");
+    expect(decoded).toBe(subject);
+  }
+});
+
+it("never selects SES implicitly or repeats an uncertain request through SendGrid", async () => {
+  const ses = { configured: true, send: vi.fn(async () => ({ delivery: "unknown", id: null })) };
+  const sendgrid = { configured: false, send: vi.fn() };
+  const mail = chosenMail("sendgrid", { ses, sendgrid });
+  expect(mail.configured).toBe(false);
+  await expect(mail.send("x@example.test", "Hi", "Body")).resolves.toEqual({ delivery: "failed", id: null });
+  expect(ses.send).not.toHaveBeenCalled();
+  sendgrid.configured = true;
+  await expect(chosenMail("ses", { ses, sendgrid }).send("x@example.test", "Hi", "Body")).resolves.toMatchObject({ delivery: "unknown" });
+  expect(ses.send).toHaveBeenCalledTimes(1);
+  expect(sendgrid.send).not.toHaveBeenCalled();
 });

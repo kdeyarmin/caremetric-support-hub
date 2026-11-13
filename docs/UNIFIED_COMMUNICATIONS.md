@@ -150,7 +150,7 @@ accepting messages that may contain PHI.
 ### Amazon SES
 
 Outbound email can go through Amazon SES instead of SendGrid: **Settings → Email → Email service**. Replies, alerts,
-customer, bulk and growth email all follow the choice; inbound email still arrives through SendGrid Inbound Parse. See
+customer and bulk email follow this choice. Growth uses its own setting. Inbound email arrives through SendGrid Inbound Parse. See
 [Amazon SES](AMAZON_SES.md).
 
 ### One address

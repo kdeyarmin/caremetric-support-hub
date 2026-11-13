@@ -511,6 +511,28 @@ try {
       finally { await client.query('rollback'); }
     }
   } finally { client.release(); }
+  // A terminal mailbox failure counts once without opting the contact out.
+  const soft = await regressionFixture();
+  const exhausted = await prepare(soft.id, "email-soft-bounce");
+  const stillEligible = await prepare(soft.id, "email-still-eligible");
+  const when = new Date().toISOString();
+  await admin.query("update private.growth_messages set status='accepted' where id=$1", [exhausted.id]);
+  const eventId = `ses:soft-${run}`;
+  assert.equal(await store.delivery(eventId, exhausted.id, 'unsuppressed_bounce', when), true);
+  assert.equal(await store.delivery(eventId, exhausted.id, 'unsuppressed_bounce', when), false);
+  assert.equal((await message(exhausted.id)).status, 'bounced');
+  assert.equal((await row('select kind from private.growth_delivery_events where event_id=$1',[eventId])).kind,'bounced');
+  assert.equal((await message(stillEligible.id)).status, 'proposed');
+  assert.equal((await row('select eligibility from private.growth_contacts where id=$1',[soft.contactId])).eligibility,'permitted');
+  const softHash = digest((await row('select email from private.growth_contacts where id=$1',[soft.contactId])).email);
+  regressionSuppressions.push(softHash);
+  assert.equal(await row('select 1 from private.email_suppressions where email_hash=$1',[softHash]), undefined);
+  await store.delivery(`ses:late-${run}`, exhausted.id, 'delivered', when);
+  assert.equal((await message(exhausted.id)).status, 'bounced');
+  await store.delivery(`ses:hard-${run}`, exhausted.id, 'bounced', when);
+  assert.ok(await row('select 1 from private.email_suppressions where email_hash=$1',[softHash]));
+  assert.equal((await message(stillEligible.id)).status, 'cancelled');
+
   console.log('Growth integration passed: session boundaries, unverified-chat exclusion, message chronology, event-based initialization, late milestones and draft preservation, tenant remapping, shared lifecycle/growth recipient claims, reply stop, inbox saved and opt-outs kept when growth capture fails or its lock is busy, send claims serialized behind a failed capture, stale proposal replacement, deferred queue fairness, opt-out, shared budgets, and fail-closed deployment gates. No email sent.');
 } finally {
   if (!organization) organization = (await row('select id from private.growth_organizations where domain=$1', [domain]))?.id;

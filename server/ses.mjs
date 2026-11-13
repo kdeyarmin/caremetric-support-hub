@@ -44,12 +44,42 @@ export function signV4({ method, url, region, service, accessKeyId, secretAccess
   return { ...all, authorization: `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${scope}, SignedHeaders=${names.join(';')}, Signature=${signature}` };
 }
 
-// Header values never carry a line break (header injection), and non-ASCII text is an RFC 2047 encoded word.
+// Strip caller-supplied line breaks before folding header text.
 const oneLine = value => String(value ?? '').replace(/[\r\n]+/g, ' ').trim();
-const encodedWord = value => (/^[\x20-\x7e]*$/.test(value) ? value : `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`);
+// Keep "Subject: " plus the first encoded word within 76 columns. Each
+// UTF-8 code point belongs to exactly one independently decodable word.
+function encodedWords(value) {
+  const words = [];
+  let chunk = "";
+  let bytes = 0;
+  for (const character of value) {
+    const size = Buffer.byteLength(character, "utf8");
+    if (bytes + size > 39) {
+      words.push(chunk);
+      chunk = "";
+      bytes = 0;
+    }
+    chunk += character;
+    bytes += size;
+  }
+  words.push(chunk);
+  return words.map(word => `=?UTF-8?B?${Buffer.from(word, "utf8").toString("base64")}?=`).join("\r\n ");
+}
+function displayMailbox(name, address) {
+  if (!name) return `<${address}>`;
+  const label = ascii(name) && name.length <= 60 ? `"${name}"` : encodedWords(name);
+  const lastLine = label.slice(label.lastIndexOf("\n") + 1);
+  const prefix = label.includes("\r\n") ? 0 : "From: ".length;
+  const separator = prefix + lastLine.length + address.length + 3 <= 76 ? " " : "\r\n ";
+  return `${label}${separator}<${address}>`;
+}
+function subjectHeader(value) {
+  return ascii(value) && value.length <= 69 ? value : encodedWords(value);
+}
+const ascii = value => /^[\x20-\x7e]*$/.test(value);
 const mailbox = (address, name) => {
   const display = oneLine(name).replace(/["\\]/g, '');
-  return display ? `${/^[\x20-\x7e]*$/.test(display) ? `"${display}"` : encodedWord(display)} <${address}>` : `<${address}>`;
+  return displayMailbox(display, address);
 };
 const base64Lines = text => Buffer.from(text, 'utf8').toString('base64').replace(/.{1,76}/g, line => `${line}\r\n`);
 const part = (type, text) => `Content-Type: ${type}; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${base64Lines(text)}`;
@@ -58,7 +88,7 @@ const part = (type, text) => `Content-Type: ${type}; charset=UTF-8\r\nContent-Tr
 export function mimeMessage({ from, fromName = '', to, replyTo = null, subject, text, html = null, headers = {}, date = new Date(), boundary = `cm-${randomBytes(12).toString('hex')}` }) {
   const lines = [
     `From: ${mailbox(from, fromName)}`, `To: <${to}>`, ...(replyTo ? [`Reply-To: <${replyTo}>`] : []),
-    `Subject: ${encodedWord(oneLine(subject))}`, `Date: ${date.toUTCString().replace('GMT', '+0000')}`, 'MIME-Version: 1.0',
+    `Subject: ${subjectHeader(oneLine(subject))}`, `Date: ${date.toUTCString().replace('GMT', '+0000')}`, 'MIME-Version: 1.0',
     ...Object.entries(headers).map(([name, value]) => `${name}: ${oneLine(value)}`),
   ];
   if (!html) return `${lines.join('\r\n')}\r\n${part('text/plain', text ?? '')}`;
@@ -79,6 +109,7 @@ function sesClient({ accessKeyId, secretAccessKey, sessionToken = null, region, 
       const host = `email.${regionNow()}.amazonaws.com`, url = `https://${host}/v2/email/outbound-emails`;
       const set = setNow();
       const body = JSON.stringify({ Destination: { ToAddresses: [to] }, Content: { Raw: { Data: Buffer.from(raw, 'utf8').toString('base64') } },
+        ConfigurationOverrides: { Tracking: { ClickTrackingEnabled: "DISABLED", OpenTrackingEnabled: "DISABLED" } },
         ...(tags.length ? { EmailTags: tags } : {}), ...(set ? { ConfigurationSetName: set } : {}) });
       let response;
       try {
@@ -128,19 +159,23 @@ export function sesBulkMail({ accessKeyId, secretAccessKey, sessionToken = null,
 
 /**
  * The sender the owner chose (Settings → Email → Email service), read on each send, so switching between SendGrid and Amazon SES
- * takes effect within a minute without a restart. A choice whose service is not configured falls back to the other one, so a
- * half-finished switch never stops the Hub's email.
+ * takes effect within a minute without a restart. SES can fall back to configured SendGrid before a request.
+ * Sending through SES always requires an explicit selection.
  */
 export function chosenMail(choice, providers) {
   const current = () => {
     const wanted = live(choice) === 'ses' ? 'ses' : 'sendgrid';
-    const other = wanted === 'ses' ? 'sendgrid' : 'ses';
-    return providers[wanted]?.configured ? providers[wanted] : providers[other]?.configured ? providers[other] : providers[wanted];
+    if (wanted === 'ses' && !providers.ses?.configured && providers.sendgrid?.configured) return providers.sendgrid;
+    return providers[wanted];
   };
   return {
     get configured() { return current()?.configured === true; },
     get provider() { const value = current(); return value === providers.ses ? 'ses' : 'sendgrid'; },
-    send(...args) { return current().send(...args); },
+    async send(...args) {
+      const sender = current();
+      if (!sender?.configured) return { delivery: 'failed', id: null };
+      return sender.send(...args);
+    },
   };
 }
 
@@ -206,8 +241,8 @@ export function snsReceiver({ topicArn, fetchImpl = fetch, now = () => Date.now(
 
 /**
  * The growth delivery events in one SES event notification (the configuration set's SNS event destination publishes one event per
- * notification). Only messages the Hub tagged with a growth message id count. Delivery → delivered; a permanent bounce or a reject →
- * bounced; a complaint → complaint. A transient bounce is SES still trying, so it is not recorded. Each event's id is the SNS message
+ * notification). Only messages the Hub tagged with a growth message id count. Delivery → delivered; all bounces and rejects count as terminal failures.
+ * Only a permanent bounce or complaint suppresses the contact. A DeliveryDelay is still in progress. Each event's id is the SNS message
  * id, so a notification SNS delivers twice is recorded once.
  */
 export function sesGrowthEvents(notification) {
@@ -218,8 +253,8 @@ export function sesGrowthEvents(notification) {
   const messageId = Array.isArray(tag) ? tag[0] : null;
   if (typeof messageId !== 'string') return [];
   const kind = type === 'Delivery' ? 'delivered'
-    : type === 'Bounce' ? (event.bounce?.bounceType === 'Permanent' ? 'bounced' : null)
-      : type === 'Reject' ? 'bounced' : type === 'Complaint' ? 'complaint' : null;
+    : type === 'Bounce' ? (event.bounce?.bounceType === 'Permanent' ? 'bounced' : 'unsuppressed_bounce')
+      : type === 'Reject' ? 'unsuppressed_bounce' : type === 'Complaint' ? 'complaint' : null;
   if (!kind) return [];
   const at = Date.parse(event.delivery?.timestamp ?? event.bounce?.timestamp ?? event.complaint?.timestamp ?? event.mail?.timestamp ?? notification.Timestamp);
   return [{ id: `ses:${notification.MessageId}`, messageId, kind, at: Number.isFinite(at) ? new Date(at).toISOString() : new Date().toISOString() }];
