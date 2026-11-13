@@ -25,6 +25,8 @@ revoke all on function private.growth_delivery_event(text,uuid,text,timestamptz,
 grant execute on function private.growth_delivery_event(text,uuid,text,timestamptz,boolean) to hub_app_server;
 
 create or replace function private.growth_delivery_event(p_event text,p_message uuid,p_kind text,p_at timestamptz) returns boolean
-language sql security definer set search_path='' as $$
- select private.growth_delivery_event(p_event,p_message,p_kind,p_at,true);
-$$;
+language plpgsql security definer set search_path='' as $$ begin
+ -- Keep the direct guard required by the existing customer-growth contract.
+ perform private.require_hub_app_server();
+ return private.growth_delivery_event(p_event,p_message,p_kind,p_at,true);
+end; $$;
