@@ -19,8 +19,9 @@ export function companyListCsv(rows:z.infer<typeof companiesSchema>['companies']
  return [header.join(','),...rows.map(row=>[row.name,row.domain?`https://${row.domain}`:'',row.domain??'',row.city,row.state,row.zip,'US'].map(csvCell).join(','))].join('\n');
 }
 export const peopleSchema=z.object({waiting:z.number(),creditsToday:z.number(),creditCap:z.number(),
- items:z.array(z.object({id:z.string(),name:z.string(),role:z.string(),email:z.string(),source:z.string(),organization:z.string(),domain:z.string(),foundAt:z.string().nullable()})),
- services:z.object({provider:z.string().nullable(),configured:z.boolean()})});
+ items:z.array(z.object({id:z.string(),name:z.string(),role:z.string(),email:z.string(),source:z.string(),found:z.string().nullable().default(null),sourceUrl:z.string().nullable().default(null),
+  organization:z.string(),domain:z.string(),foundAt:z.string().nullable()})),
+ services:z.object({finder:z.boolean().default(false),mode:z.enum(['none','published','verify']).default('none'),mailServer:z.string().default('unknown')})});
 export const learningSchema=z.object({memos:z.array(z.object({id:z.string(),product:z.enum(['carebase','caremetric-intel']),version:z.number(),memo:z.string(),status:z.string(),createdAt:z.string(),
  stats:z.object({sent:z.number().nullable().optional(),replied:z.number().nullable().optional()})})),services:z.object({enabled:z.boolean()})});
 /** A CSV of prospects as import rows: a header row naming name, domain and optionally product, email, contactName and role. */

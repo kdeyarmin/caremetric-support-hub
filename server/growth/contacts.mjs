@@ -10,13 +10,19 @@
  * - A name that resolves to a private, loopback or link-local address, or an address literal, is never fetched. The connection itself
  *   resolves the name through the same check (pinnedFetch), so a name whose answer changes after the check cannot steer it elsewhere.
  * - A redirect is checked against the robots.txt of the host it leads to before it is followed.
- * - Only role local parts on the business's exact domain are kept; a personal address (jane.doe@, a name) is never kept, nor one on
- *   another domain, nor a phone number of any kind. An address is read whole: `jane!info@` is not taken for `info@`.
+ * - Only role local parts on the business's exact domain are kept as its contact; a personal address (jane.doe@, a name) is never
+ *   the business's contact, nor one on another domain, nor a phone number of any kind. An address is read whole: `jane!info@` is not
+ *   taken for `info@`.
  *
  * Nothing it reads is stored except the one address, the page it was found on and a short summary of the home page (`siteSummary`:
  * its title, its description and the start of its text), which the Marketing Manager keeps as dated evidence of what the business says
  * it is, exactly as it keeps a search result's snippet. A summary that seems to hold a personal identifier is dropped. Page text is
  * never logged.
+ *
+ * `team` reads the same way, for the people step (server/growth/people.mjs; owner decision 2026-11-13, named people): the people the
+ * business's own pages name with a title that decides, and the personal addresses those pages publish on its exact domain. At most
+ * six pages: the home page, the pages it links to that name people (team, leadership, about), then the usual ones. A published
+ * address is kept only when it is one of the usual shapes of a named person's name, and then waits for the owner's review.
  */
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { request as httpsRequest } from 'node:https';
@@ -25,11 +31,15 @@ import { Readable } from 'node:stream';
 import { analyzeHtml } from '../agents/seo/html.mjs';
 import { screenIdentifiers } from '../agents/concierge/screen.mjs';
 import { phonesIn } from './roster.mjs';
+import { teamLinks, teamPeople } from './team.mjs';
 
 /** The role local parts the database admits for a found contact (growth_contacts_role_address_check), in order of preference. */
 export const roleLocalParts = Object.freeze(['info', 'contact', 'contactus', 'office', 'hello', 'inquiries', 'inquiry', 'enquiries', 'enquiry',
   'admissions', 'sales', 'reception', 'frontdesk', 'general', 'admin', 'administrator', 'mail', 'team']);
 export const contactPaths = Object.freeze(['/', '/contact', '/contact-us', '/about', '/about-us', '/contactus']);
+/** Where a business's site usually names its people, read after the pages its home page links to. */
+export const teamPaths = Object.freeze(['/about', '/about-us', '/our-team', '/team', '/leadership', '/contact', '/contact-us']);
+export const teamPageLimit = 6;
 /** The longest home page summary kept as evidence, and how much of the page's opening text it may quote. */
 export const siteSummaryLimit = 1200;
 const siteTextLimit = 700;
@@ -58,8 +68,8 @@ const robotsBytes = 100_000;
 const timeoutMs = 10_000;
 const domainPattern = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\.[a-z]{2,}$/;
 
-/** Every role address on exactly `domain` in a page's text, mailto links included, best first. */
-export function roleAddresses(text, domain) {
+/** Every address on exactly `domain` in a page's text, mailto links included, in the order the page shows them. */
+export function domainAddresses(text, domain) {
   const decoded = String(text ?? '')
     .replace(/&#(?:64|x40);/gi, '@').replace(/&commat;/gi, '@').replace(/&#(?:46|x2e);/gi, '.').replace(/%40/g, '@');
   const found = new Set();
@@ -67,9 +77,20 @@ export function roleAddresses(text, domain) {
   // address such as jane!info@ or john/sales@ is never read as the role address at its end; and it ends where its domain ends.
   for (const match of decoded.matchAll(/(?<![a-z0-9!#$%&'*+\/=?^_`{|}~.-])[a-z0-9._%+-]{1,64}@[a-z0-9.-]{1,253}\.[a-z]{2,24}(?![a-z0-9-])/gi)) {
     const [local, host] = match[0].toLowerCase().split('@');
-    if (host === domain && roleLocalParts.includes(local)) found.add(`${local}@${host}`);
+    if (host === domain) found.add(`${local}@${host}`);
   }
-  return [...found].sort((a, b) => roleLocalParts.indexOf(a.split('@')[0]) - roleLocalParts.indexOf(b.split('@')[0]));
+  return [...found];
+}
+
+/** Every role address on exactly `domain` in a page's text, mailto links included, best first. */
+export function roleAddresses(text, domain) {
+  return domainAddresses(text, domain).filter(address => roleLocalParts.includes(address.split('@')[0]))
+    .sort((a, b) => roleLocalParts.indexOf(a.split('@')[0]) - roleLocalParts.indexOf(b.split('@')[0]));
+}
+
+/** The addresses on exactly `domain` that are a person's rather than a role's (jdoe@, jane.doe@), in the order the page shows them. */
+export function personalAddresses(text, domain) {
+  return domainAddresses(text, domain).filter(address => !roleLocalParts.includes(address.split('@')[0]) && /^[a-z][a-z._-]{1,63}$/.test(address.split('@')[0]));
 }
 
 /**
@@ -238,14 +259,8 @@ export function growthContactFinder({ fetchImpl = null, lookup = dnsLookup } = {
     return result.outcome === 'ok' ? { url: result.url, text: result.text } : null;
   }
 
-  /**
-   * The one role address to record for `domain`, with the page it was on, or why there is none. With `phone` (an agency's ten-digit
-   * CMS telephone number), also whether that number is written on one of the pages read (`phoneSeen`): reading continues past the
-   * address until it is, or the pages run out. Only the yes or no is returned; no number read from a page is kept.
-   */
-  async function find(domain, { signal, phone = null } = {}) {
-    const host = String(domain ?? '').toLowerCase();
-    if (!domainPattern.test(host) || host.length > 253) return { email: null, reason: 'invalid_domain' };
+  // One business's site: its hosts, its robots.txt (read once per host) and a page reader that honours it.
+  function siteOf(host, signal) {
     const hosts = [host, `www.${host}`];
     // Each host's robots.txt, read once: the business's domain first, its www. name only if a redirect leads there. As RFC 9309
     // sets out, a robots.txt that answers 4xx means no rules, and one that cannot be read (a 5xx answer, a network error or
@@ -266,28 +281,80 @@ export function growthContactFinder({ fetchImpl = null, lookup = dnsLookup } = {
       return robotsByHost.get(name);
     };
     const allowed = async target => robotsAllows(await robotsFor(target.hostname), `${target.pathname}${target.search}`);
-    const robots = await robotsFor(host);
+    return {
+      hosts,
+      /** Whether robots.txt lets the finder read `path` on the business's domain. */
+      may: async path => robotsAllows(await robotsFor(host), path),
+      /** The page at `path` on the business's domain ({ url, text }), or null; a network error other than the caller's abort is null too. */
+      async read(path) {
+        try { return await get(`https://${host}${path}`, hosts, pageBytes, signal, 'text/html', allowed); }
+        catch (error) { if (signal?.aborted) throw error; return null; }
+      },
+    };
+  }
+
+  /**
+   * The one role address to record for `domain`, with the page it was on, or why there is none. With `phone` (an agency's ten-digit
+   * CMS telephone number), also whether that number is written on one of the pages read (`phoneSeen`): reading continues past the
+   * address until it is, or the pages run out. Only the yes or no is returned; no number read from a page is kept.
+   */
+  async function find(domain, { signal, phone = null } = {}) {
+    const host = String(domain ?? '').toLowerCase();
+    if (!domainPattern.test(host) || host.length > 253) return { email: null, reason: 'invalid_domain' };
+    const site = siteOf(host, signal);
     let read = 0;
     const wanted = /^\d{10}$/.test(String(phone ?? '')) ? String(phone) : null;
     let phoneSeen = false, email = null, sourceUrl = null;
     // The home page (the first path) also says what the business is: its summary is returned whether or not an address is found.
-    let site = null;
+    let summary = null;
     for (const path of contactPaths) {
       signal?.throwIfAborted();
-      if (!robotsAllows(robots, path)) continue;
-      let page = null;
-      try { page = await get(`https://${host}${path}`, hosts, pageBytes, signal, 'text/html', allowed); } catch (error) { if (signal?.aborted) throw error; }
+      if (!(await site.may(path))) continue;
+      const page = await site.read(path);
       read += 1;
-      if (page && path === '/') site = siteSummary(page.text, page.url);
+      if (page && path === '/') summary = siteSummary(page.text, page.url);
       if (page && wanted && !phoneSeen && phonesIn(page.text).has(wanted)) phoneSeen = true;
       const best = page ? roleAddresses(page.text, host)[0] : null;
       if (best && !email) { email = best; sourceUrl = page.url; }
       if (email && (!wanted || phoneSeen)) break;
     }
     const checked = wanted ? { phoneSeen } : {};
-    if (email) return { email, sourceUrl, ...(site ? { site } : {}), ...checked };
-    return { email: null, reason: read === 0 ? 'robots' : 'none', ...(site ? { site } : {}), ...checked };
+    if (email) return { email, sourceUrl, ...(summary ? { site: summary } : {}), ...checked };
+    return { email: null, reason: read === 0 ? 'robots' : 'none', ...(summary ? { site: summary } : {}), ...checked };
   }
 
-  return { configured: true, find };
+  /**
+   * Who leads the business, from its own site: the people its pages name with a title that decides ({ name, title, sourceUrl }) and
+   * the people's addresses its pages publish on its domain ({ email, sourceUrl }). The home page first, then the pages it links to
+   * that name people (team, leadership, about), then the usual ones; at most `teamPageLimit` pages, each allowed by robots.txt.
+   */
+  async function team(domain, { signal } = {}) {
+    const host = String(domain ?? '').toLowerCase();
+    if (!domainPattern.test(host) || host.length > 253) return { people: [], addresses: [] };
+    const site = siteOf(host, signal);
+    const people = new Map(), addresses = new Map();
+    const queue = ['/'];
+    const seen = new Set();
+    let read = 0;
+    while (queue.length && read < teamPageLimit) {
+      signal?.throwIfAborted();
+      const path = queue.shift();
+      if (seen.has(path)) continue;
+      seen.add(path);
+      if (!(await site.may(path))) continue;
+      const page = await site.read(path);
+      read += 1;
+      if (!page) continue;
+      for (const person of teamPeople(page.text)) if (!people.has(person.name.toLowerCase())) people.set(person.name.toLowerCase(), { ...person, sourceUrl: page.url });
+      for (const email of personalAddresses(page.text, host)) if (!addresses.has(email)) addresses.set(email, { email, sourceUrl: page.url });
+      if (path === '/') {
+        let links = [];
+        try { links = analyzeHtml(page.text, page.url).links; } catch { links = []; }
+        queue.push(...teamLinks(links, site.hosts), ...teamPaths);
+      }
+    }
+    return { people: [...people.values()].slice(0, 10), addresses: [...addresses.values()].slice(0, 20) };
+  }
+
+  return { configured: true, find, team };
 }

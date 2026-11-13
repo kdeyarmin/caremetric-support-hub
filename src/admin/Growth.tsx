@@ -58,6 +58,21 @@ function RosterPanel({revision}:{revision:number}) {
    <br/><small>Every roster agency in LinkedIn's company-list format. Upload it in Campaign Manager → Audiences to show LinkedIn ads to people who work there.</small></p>}
  </section>;
 }
+/** What the Hub does about people's addresses, as the owner chose on the Settings page. */
+function addressNote(data:z.infer<typeof peopleSchema>):string {
+ if(!data.services.finder)return 'Only the CMS owners file is read until the people finder\'s database update is released.';
+ if(data.services.mode==='none')return 'Names only: no address is looked for (Settings → Customer growth → Finding people\'s addresses).';
+ if(data.services.mode==='published')return 'Addresses are kept only when a business publishes them on its own website.';
+ return `Addresses a business publishes are kept, and others are checked with its mail server: ${data.creditsToday} of ${data.creditCap} checks used today.`;
+}
+/** How a waiting address was found, with the page that publishes it. */
+function foundHow(p:z.infer<typeof peopleSchema>['items'][number]) {
+ if(p.source==='imported')return 'Imported';
+ if(p.found==='published'&&p.sourceUrl?.startsWith('https://'))return <a href={p.sourceUrl} target="_blank" rel="noopener noreferrer">Published on its website</a>;
+ if(p.found==='mail_server')return 'Confirmed by its mail server';
+ if(p.found==='apollo')return 'Apollo';
+ return 'Found';
+}
 /** Decision-makers the team found or the owner imported, waiting for the owner before anything is sent to them. */
 function PeoplePanel({revision,onSave}:{revision:number;onSave:(op:string,data:unknown)=>Promise<void>}) {
  const [data,setData]=useState<z.infer<typeof peopleSchema>|null>(null),[failure,setFailure]=useState(''),[chosen,setChosen]=useState<string[]>([]),[csv,setCsv]=useState(''),[note,setNote]=useState('');
@@ -66,10 +81,11 @@ function PeoplePanel({revision,onSave}:{revision:number;onSave:(op:string,data:u
  const parsed=csv.trim()?importRows(csv):null;
  return <section className="panel" aria-labelledby="growth-people-title"><h2 id="growth-people-title">Decision-makers to review{data?` · ${data.waiting}`:''}</h2>
   {failure&&<p>{failure}</p>}{!data&&!failure&&<p role="status">Loading found people…</p>}
-  {data&&<><p>People the Marketing Manager found at its best prospects, or that you imported. Nothing is sent to anyone until you permit them. Contact lookups today: {data.creditsToday} of {data.creditCap}{data.services.provider?` (${data.services.provider}${data.services.configured?'':', key missing'})`:' (no contact-data service chosen)'}.</p>
+  {data&&<><p>People the Marketing Manager found at its best prospects (from the CMS owners file, the NPI registry and their own websites), or that you imported. Nothing is sent to anyone until you permit them. {addressNote(data)}</p>
+  {data.services.mode==='verify'&&data.services.mailServer==='unreachable'&&<p role="status">Businesses' mail servers cannot be reached from the Hub, so no address is being checked. Railway allows outbound mail connections (port 25) on its Pro plan only: upgrade the plan, or choose Settings → Customer growth → Finding people's addresses → Addresses businesses publish on their own websites.</p>}
   {data.items.length>0?<><table><thead><tr><th><span className="sr-only">Choose</span></th><th>Person</th><th>Business</th><th>Address</th><th>Source</th></tr></thead><tbody>{data.items.map(p=><tr key={p.id}>
    <td><input type="checkbox" aria-label={`Choose ${p.name}`} checked={chosen.includes(p.id)} onChange={e=>setChosen(e.target.checked?[...chosen,p.id]:chosen.filter(id=>id!==p.id))}/></td>
-   <td>{p.name}{p.role&&<><br/><small>{p.role}</small></>}</td><td>{p.organization}<br/><small>{p.domain}</small></td><td>{p.email}</td><td>{p.source==='enriched'?'Contact-data service':'Imported'}</td></tr>)}</tbody></table>
+   <td>{p.name}{p.role&&<><br/><small>{p.role}</small></>}</td><td>{p.organization}<br/><small>{p.domain}</small></td><td>{p.email}</td><td>{foundHow(p)}</td></tr>)}</tbody></table>
    <button className="button button-primary" disabled={!chosen.length} onClick={()=>decide('permit',chosen)}>Permit chosen</button>
    <button className="button" disabled={!chosen.length} onClick={()=>decide('refuse',chosen)}>Do not contact chosen</button>
    <button className="button" onClick={()=>decide('permit',data.items.map(p=>p.id))}>Permit all {data.items.length}</button></>:<p>Nobody is waiting for review.</p>}</>}

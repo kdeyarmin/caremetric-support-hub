@@ -120,11 +120,13 @@ export const settingsCatalog = Object.freeze([
     label: 'Follow up website leads by email', help: 'A county report, contact, savings model or newsletter request becomes a qualified prospect, and the Marketing Manager drafts a short follow-up to the person who asked (for your approval until you hand it over). A trial sign-up stops cold email to its business at once. Off: leads are counted and alerted as before.' },
   { key: 'growth.recontact_days', group: 'growth', kind: 'number', input: 'number', default: 90, min: 30, max: 365, unit: 'days', env: null, valid: wholeNumber(30, 365),
     label: 'Ask again after "not now"', help: 'Days before the Marketing Manager asks once more, briefly, a prospect who said not now or did not answer three emails (30 to 365). Sooner when the Medicare roster shows the agency changed ownership. Never after a no, an opt-out or a trial, and never twice.' },
-  { key: 'growth.enrichment_provider', group: 'growth', kind: 'text', input: 'choice', default: 'none', env: null,
-    choices: [{ value: 'none', label: 'None: public addresses and the CMS owners file only' }, { value: 'apollo', label: 'Apollo' }], valid: value => value === 'none' || value === 'apollo',
-    label: 'Contact-data service', help: 'Finds the owner, administrator or business development lead at your best prospects and their verified work address. Apollo needs HUB_APOLLO_API_KEY in Railway. Every address it finds waits for your review on the Growth page before anything is sent to it.' },
-  { key: 'growth.enrichment_daily_credits', group: 'growth', kind: 'number', input: 'number', default: 10, min: 0, max: 500, unit: 'lookups', env: null, valid: wholeNumber(0, 500),
-    label: 'Most contact lookups a day', help: 'Paid address lookups per Eastern day (0 to 500). Searching for people is free; each address costs one credit on your Apollo plan. 0 stops lookups.' },
+  // The key keeps its first name (it chose a contact-data service before the Hub found people itself); the page shows the label.
+  { key: 'growth.enrichment_provider', group: 'growth', kind: 'text', input: 'choice', default: 'verify', env: null,
+    choices: [{ value: 'none', label: 'Names only: never look for a person\'s own address' }, { value: 'published', label: 'Addresses businesses publish on their own websites' },
+      { value: 'verify', label: 'Also guess and check addresses with the business\'s mail server' }], valid: value => ['none', 'published', 'verify'].includes(value),
+    label: 'Finding people\'s addresses', help: 'Decision-makers are found free (CMS owners file, NPI registry, their websites). For a work address: keep one the business publishes, and optionally ask its mail server which usual shape (jane.doe@, jdoe@) is real, sending nothing; kept only if the server refuses a made-up one. Checking needs Railway\'s Pro plan (outbound port 25). Every address waits for your review on Growth.' },
+  { key: 'growth.enrichment_daily_credits', group: 'growth', kind: 'number', input: 'number', default: 10, min: 0, max: 500, unit: 'checks', env: null, valid: wholeNumber(0, 500),
+    label: 'Most address checks a day', help: 'Businesses whose mail server is asked about a person\'s address, per Eastern day (0 to 500). Each check asks about at most six addresses and sends nothing. Addresses a business publishes are not counted. 0 stops checks.' },
   { key: 'growth.deep_research', group: 'growth', kind: 'flag', input: 'toggle', default: false, env: null,
     label: 'Research prospects with web search', help: 'The Marketing Manager researches one prospect at a time with the model\'s web search and page reading (services, service area, hiring, expansion, referral partners) and keeps what it finds as evidence. Uses the Marketing Manager\'s daily model budget; searches cost about a cent each.' },
   { key: 'growth.deep_research_per_day', group: 'growth', kind: 'number', input: 'number', default: 5, min: 0, max: 50, unit: 'prospects', env: null, valid: wholeNumber(0, 50),
@@ -208,8 +210,9 @@ export const settingsCatalog = Object.freeze([
 
 const byKey = new Map(settingsCatalog.map(entry => [entry.key, entry]));
 // Variables nothing reads any more and no setting replaces. HUB_BOOKING_URL: CareMetric offers no demos, calls or meetings (owner
-// decision 2026-11-09), so no message carries a booking page.
-export const retiredVariables = Object.freeze(['HUB_BULK_EMAIL_FROM', 'HUB_BOOKING_URL']);
+// decision 2026-11-09), so no message carries a booking page. HUB_APOLLO_API_KEY: the Hub finds people and addresses itself (owner
+// decision 2026-11-13).
+export const retiredVariables = Object.freeze(['HUB_BULK_EMAIL_FROM', 'HUB_BOOKING_URL', 'HUB_APOLLO_API_KEY']);
 const usable = (entry, value) => {
   if (value === null || value === undefined) return false;
   if (entry.kind === 'flag') return typeof value === 'boolean';

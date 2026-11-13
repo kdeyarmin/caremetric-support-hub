@@ -39,7 +39,7 @@ describe('the settings catalog', () => {
     }
     // No secret ever becomes a setting: settings are shown on screen and copied into the database.
     for (const item of settingsCatalog) if (item.env) expect(item.env, item.key).not.toMatch(/(KEY|TOKEN|SECRET|PASSWORD|CREDENTIALS)$/);
-    expect(retiredVariables).toEqual(['HUB_BULK_EMAIL_FROM', 'HUB_BOOKING_URL']);
+    expect(retiredVariables).toEqual(['HUB_BULK_EMAIL_FROM', 'HUB_BOOKING_URL', 'HUB_APOLLO_API_KEY']);
   });
 });
 

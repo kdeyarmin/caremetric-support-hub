@@ -183,3 +183,25 @@ describe('the contact finder', () => {
     await expect(growthContactFinder({ fetchImpl, lookup: publicLookup }).find('example.org', { signal: AbortSignal.abort() })).rejects.toBeDefined();
   });
 });
+
+describe('the team reader', () => {
+  it('reads the home page, the pages it links to that name people, then the usual ones, within robots.txt and six pages', async () => {
+    const { fetchImpl, calls } = site({
+      'https://example.org/robots.txt': page('User-agent: *\nDisallow: /team', { type: 'text/plain' }),
+      'https://example.org/': page('<a href="/our-leadership">Leadership</a><a href="/team">Team</a><a href="https://other.org/staff">x</a><p>Welcome</p>'),
+      'https://example.org/our-leadership': page(`<h3>Jane Doe, RN</h3><p>Administrator</p><a href="mailto:jdoe@example.org">Email</a>
+        <a href="mailto:info@example.org">Office</a><a href="mailto:jane@gmail.com">Personal</a><p>Sam Lee – Director of Business Development</p>`),
+      'https://example.org/about': page('<p>Founded by Mary Major (Owner)</p><p>Mary Major (Owner)</p>'),
+    });
+    const team = await growthContactFinder({ fetchImpl, lookup: publicLookup }).team('example.org');
+    expect(team).toEqual({
+      people: [{ name: 'Jane Doe', title: 'Administrator', sourceUrl: 'https://example.org/our-leadership' },
+        { name: 'Sam Lee', title: 'Director of Business Development', sourceUrl: 'https://example.org/our-leadership' },
+        { name: 'Mary Major', title: 'Owner', sourceUrl: 'https://example.org/about' }],
+      addresses: [{ email: 'jdoe@example.org', sourceUrl: 'https://example.org/our-leadership' }],
+    });
+    const read = calls.map(call => new URL(call.url).pathname).filter(path => path !== '/robots.txt');
+    expect(read).toEqual(['/', '/our-leadership', '/about', '/about-us', '/our-team', '/leadership']);
+    expect(read).not.toContain('/team');
+  });
+});

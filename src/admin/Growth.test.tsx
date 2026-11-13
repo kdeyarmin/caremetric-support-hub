@@ -128,11 +128,17 @@ it('reads a CSV of prospects, quoted fields included, and refuses one without it
  expect(importRows('name,domain').error).toMatch(/at least one/);
 });
 it('lists found people for the owner to permit, once the people migration is live',async()=>{
- const people={waiting:1,creditsToday:3,creditCap:10,items:[{id:'c1',name:'Jane Doe',role:'Administrator',email:'jane@valleyhospice.org',source:'enriched',organization:'Valley Hospice',domain:'valleyhospice.org',foundAt:'2026-11-13T12:00:00Z'}],services:{provider:'apollo',configured:true}};
+ const people={waiting:2,creditsToday:3,creditCap:10,items:[
+  {id:'c1',name:'Jane Doe',role:'Administrator',email:'jdoe@valleyhospice.org',source:'enriched',found:'published',sourceUrl:'https://valleyhospice.org/team',organization:'Valley Hospice',domain:'valleyhospice.org',foundAt:'2026-11-13T12:00:00Z'},
+  {id:'c2',name:'Sam Lee',role:'Owner',email:'sam.lee@countycare.org',source:'enriched',found:'mail_server',sourceUrl:null,organization:'County Care',domain:'countycare.org',foundAt:'2026-11-13T12:05:00Z'}],
+  services:{finder:true,mode:'verify',mailServer:'unreachable'}};
  const request=vi.fn(async(_url:unknown,init:RequestInit)=>{const op=JSON.parse(String(init.body)).operation;return new Response(JSON.stringify(op==='people'?people:op==='peopleDecide'?{decided:1}:{...empty,services:{...empty.services,people:true}}));});
  vi.stubGlobal('fetch',request);render(<MemoryRouter><Growth/></MemoryRouter>);
- expect(await screen.findByText(/Decision-makers to review · 1/)).toBeTruthy();
- expect(screen.getByText(/Contact lookups today: 3 of 10 \(apollo\)/)).toBeTruthy();
+ expect(await screen.findByText(/Decision-makers to review · 2/)).toBeTruthy();
+ expect(screen.getByText(/3 of 10 checks used today/)).toBeTruthy();
+ expect(screen.getByRole('link',{name:'Published on its website'}).getAttribute('href')).toBe('https://valleyhospice.org/team');
+ expect(screen.getByText('Confirmed by its mail server')).toBeTruthy();
+ expect(screen.getByText(/Railway allows outbound mail connections \(port 25\) on its Pro plan only/)).toBeTruthy();
  fireEvent.click(screen.getByRole('checkbox',{name:'Choose Jane Doe'}));
  fireEvent.click(screen.getByRole('button',{name:'Permit chosen'}));
  await waitFor(()=>expect(request.mock.calls.some(([,init])=>JSON.parse(String(init.body)).operation==='peopleDecide')).toBe(true));

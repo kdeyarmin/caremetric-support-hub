@@ -9,6 +9,11 @@ replaces the November 4 role-address rule), drafts for the founder's personal Li
 Meta and Google search. Ground rules kept: every new capability ships off, nothing sends outside the approval path, no demos, calls or
 meetings, no cold SMS, automated calls or fax, and Intel shares only public CMS and Census data.
 
+Later the same day the owner chose to have the Hub find people and their addresses itself rather than pay a contact-data service:
+Apollo is removed, and the Hub reads the CMS owners file, the NPI registry and the agency's own website, keeps an address the agency
+publishes and, if the owner allows it, asks the agency's mail server which of the usual address shapes is real
+([CUSTOMER_GROWTH.md](CUSTOMER_GROWTH.md#finding-decision-makers-and-their-addresses)).
+
 ## What the team can do now
 
 | Area | What changed | Turn it on |
@@ -16,7 +21,7 @@ meetings, no cold SMS, automated calls or fax, and Intel shares only public CMS 
 | Prospects | The Marketing Manager reads Intel's roster of every Medicare-certified home health agency and hospice in your states, ranks them (newly certified, new owner, size), confirms each one's own website (its CMS telephone number on the page, or its name and place: its state, or its city on a page that names no other state) and adds it to the pipeline with dated public-record evidence | Customer growth → Find prospects from the Medicare roster, States to prospect in |
 | Replies and leads | Replies are read from the sender's own words (quoted text ignored, another mailbox at the agency counts, "no" read first); a trial links to the prospect it came from; county report, contact and savings-model leads get a two-email follow-up; a "not now" or a silent prospect is asked once more after 90 days, never after a no; before that re-ask the contact finder reads the agency's own site again, so its public address is re-verified and the evidence is current (a person's address verified more than 80 days earlier is not re-asked) | Customer growth → Follow up website leads by email, Days before asking again |
 | Draft quality | Numbers and percentages stated in the evidence are allowed in a sentence about the agency, never in one about CareMetric or in the first person ("we cover 12 counties"); a failed draft gets one repair pass, and why drafts fail is counted on each run | Always on |
-| Named people | Who CMS lists as owning the agency, and (with Apollo) the deciding person's verified work address on the agency's own domain; each waits for you on Growth. Lists can be imported as CSV or through the signed import endpoint | Customer growth → Contact-data service, Most contact lookups a day |
+| Named people | Who CMS lists as owning the agency, its NPI record's authorized official and the leaders its own website names, and the deciding person's work address on the agency's own domain: one the agency publishes, or one its mail server confirms; each waits for you on Growth. Lists can be imported as CSV or through the signed import endpoint | Customer growth → Finding people's addresses, Most address checks a day |
 | Research | One prospect at a time, researched with web search and page reading within a cost ceiling; only facts tied to an address the tools returned are kept | Customer growth → Research prospects with web search |
 | Learning | Each Monday a short memo, written by code from 90 days of counts (replies by message type, objections, checks drafts failed, your notes on drafts you turned down). Drafts use it only after you choose "Use this memo" on Growth. The Monday scorecard shows visits from each outreach email tag | Customer growth → Write from what is working |
 | Creative | County snapshots: one public Medicare or Census number for a county where your prospects are, printed by code with its source; the model writes only the words around it | Creative → County snapshots a week |
@@ -33,12 +38,12 @@ line per county figure; public website sessions record the outreach email tag th
 ## Owner checklist (nothing changes until these are done)
 
 1. **Railway secrets** on the Hub: `HUB_INTEL_FEED_SECRET` (the same value as Intel's `HUB_MARKETING_FEED_SECRET`, set on Intel too);
-   `HUB_APOLLO_API_KEY` if you use Apollo; `HUB_GROWTH_IMPORT_SECRET` if lists will be sent to the import endpoint; for Google search
+   `HUB_GROWTH_IMPORT_SECRET` if lists will be sent to the import endpoint; for Google search
    through the API, `HUB_GOOGLE_ADS_DEVELOPER_TOKEN`, `HUB_GOOGLE_ADS_CLIENT_SECRET` and `HUB_GOOGLE_ADS_REFRESH_TOKEN`.
 2. **Email sender**: set and warm the growth sender (Settings → Email → Growth email sender). Raise "Most cold emails a day" in steps,
    10, then 25, then 50, while bounces stay under 2% and there are no complaints.
 3. **Settings → Customer growth**, in this order: choose the roster states and turn on the roster; then website lead follow-up; then
-   the contact-data service; then research with web search. Keep cold email on approval for the first roster week and read the first
+   how far to go for people's addresses; then research with web search. Keep cold email on approval for the first roster week and read the first
    drafts on Growth. Turn on "Write from what is working" once a memo appears there.
 4. **Settings → Creative**: leave County snapshots a week at 3, or 0 to stop them.
 5. **Connections** (Settings → Social media): save your personal LinkedIn token on the LinkedIn card for founder posts; connect the
@@ -62,6 +67,6 @@ line per county figure; public website sessions record the outreach email tag th
 ## Connectors for your own Claude sessions
 
 These help you, not the Hub's server agents (which use the integrations above): connect Gmail and Google Calendar and reconnect
-Stripe; consider Apollo.io or Clay for building lists in chat (then import them on Growth), Windsor.ai or Supermetrics for one view of
+Stripe; consider Clay for building lists in chat (then import them on Growth), Windsor.ai or Supermetrics for one view of
 LinkedIn, Meta, Google Ads and Search Console, Canva for hand-finished creative, Ahrefs or Semrush for keywords, and Typefully only if
 X or Threads are wanted later.

@@ -44,6 +44,8 @@ export function growthStore(pool) {
     peopleRecord:(org,people)=>server('private.growth_people_record',[org,JSON.stringify(people)]),
     enrichmentReserve:credits=>server('private.growth_enrichment_reserve',[credits]),
     enrichedContact:(person,email,name)=>server('private.growth_enriched_contact',[person,email,name??null]),
+    // A found address and how: 'published' with its page on the business's own site, or 'mail_server' (20261113280000_growth_people_finder.sql).
+    personAddress:(person,email,name,found,sourceUrl)=>server('private.growth_person_address',[person,email,name??null,found,sourceUrl??null]),
     importServer:rows=>server('private.growth_import_server',[JSON.stringify(rows)]),
     // Deeper research with web tools (20261113190000_growth_research.sql).
     researchNext:daily=>server('private.growth_research_next',[daily]),

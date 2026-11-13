@@ -241,6 +241,34 @@ and list imports (`growth.people`), research with web search (`growth.research`)
 [AI_WORKFORCE_REVIEW_2026-11-13.md](AI_WORKFORCE_REVIEW_2026-11-13.md). Every draft records the experiment arms it was written under
 (`growth_messages.arms`, short codes only) and the memo version it used (`memo_version`), and links carry the arms in `utm_content`.
 
+## Finding decision-makers and their addresses
+
+The Hub finds the people who decide at its best prospects itself (`growth.people`, every half hour, a few businesses at a time;
+owner decision 2026-11-13, replacing Apollo). It needs no paid service and no key.
+
+- **Who**, from three free sources, recorded as people: who the CMS owners file lists as owning or managing the agency (Intel's
+  feed), the authorized official on the agency's NPI record (the public NPI registry, matched by the agency's ZIP code and its CMS
+  telephone number or name), and the leaders the agency's own website names with a title that decides (owner, administrator,
+  executive director, business development). The person written to is the one whose title decides most.
+- **Their address**, as far as Settings → Customer growth → Finding people's addresses allows:
+  - *Names only: never look for a person's own address*: no address is looked for; outreach goes to the business's public
+    address (info@).
+  - *Addresses businesses publish on their own websites*: an address on the agency's own domain that its own pages publish and
+    that is a usual shape of a named person's name (jdoe@ beside Jane Doe). Free.
+  - *Also guess and check addresses with the business's mail server* (the default): otherwise the usual shapes of the person's
+    name (jane.doe@, jdoe@, jane@ …, the shape the agency's own addresses follow first, at most six) are asked of the agency's own
+    mail server, the way a mail server is asked before a message is delivered, and the conversation ends before anything is sent.
+    An address is kept only when the server refuses a made-up mailbox and accepts the guess: a server that accepts everything,
+    refuses the Hub, or answers "try later" confirms nothing. Settings → Customer growth → Most address checks a day limits how
+    many agencies are checked (10 until you save a number).
+- **Every address waits for you** on Growth → Decision-makers to review, which shows how it was found (with the page that publishes
+  it) and nothing is sent to it until you permit it. Never a personal address on another domain, never a phone number, never an
+  unsubscribed address.
+
+Checking needs outbound connections to mail servers (port 25), which Railway allows on its Pro plan only. Elsewhere the check finds
+every server unreachable, rests for six hours, and the AI team page's "Named decision-makers" row and the Growth screen say so;
+choose "Addresses businesses publish on their own websites" to stop trying.
+
 ## Canonical Intel activity and verified billing conversions
 
 With `platform.agents.app-growth.v1`, Intel posts server-only activity to `POST /api/apps/growth` using its existing billing application
