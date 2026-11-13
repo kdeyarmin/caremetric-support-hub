@@ -37,5 +37,14 @@ export function growthStore(pool) {
     rosterNext:(limit,daily)=>server('private.growth_roster_next',[limit,daily]),
     rosterResolved:(ccn,data)=>server('private.growth_roster_resolved',[ccn,data]),
     roster:(token,offset=0)=>withSession(pool,token,db=>run(db,'hub.growth_roster',[offset])),
+    // Decision-makers and imported lists (20261113180000_growth_people.sql).
+    peopleCandidates:limit=>server('private.growth_people_candidates',[limit]),
+    peopleRecord:(org,people)=>server('private.growth_people_record',[org,JSON.stringify(people)]),
+    enrichmentReserve:credits=>server('private.growth_enrichment_reserve',[credits]),
+    enrichedContact:(person,email,name)=>server('private.growth_enriched_contact',[person,email,name??null]),
+    importServer:rows=>server('private.growth_import_server',[JSON.stringify(rows)]),
+    people:(token,offset=0)=>withSession(pool,token,db=>run(db,'hub.growth_people',[offset])),
+    peopleDecide:(token,ids,decision)=>withSession(pool,token,db=>run(db,'hub.growth_people_decide',[ids,decision])),
+    importList:(token,rows)=>withSession(pool,token,db=>run(db,'hub.growth_import',[JSON.stringify(rows)])),
   };
 }

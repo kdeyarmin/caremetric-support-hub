@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { growthPost, growthMutation, workspaceSchema, detailSchema, rosterSchema } from './growthClient';
+import { growthPost, growthMutation, workspaceSchema, detailSchema, rosterSchema, peopleSchema, importRows } from './growthClient';
 import type { GrowthOpportunity, GrowthPolicy } from './growthClient';
 import type { z } from 'zod';
 import './admin.css';
@@ -54,6 +54,30 @@ function RosterPanel({revision}:{revision:number}) {
   {data.total>50&&<><button disabled={!offset} onClick={()=>setOffset(Math.max(0,offset-50))}>Previous agencies</button><button disabled={offset+50>=data.total} onClick={()=>setOffset(offset+50)}>Next agencies</button></>}
  </section>;
 }
+/** Decision-makers the team found or the owner imported, waiting for the owner before anything is sent to them. */
+function PeoplePanel({revision,onSave}:{revision:number;onSave:(op:string,data:unknown)=>Promise<void>}) {
+ const [data,setData]=useState<z.infer<typeof peopleSchema>|null>(null),[failure,setFailure]=useState(''),[chosen,setChosen]=useState<string[]>([]),[csv,setCsv]=useState(''),[note,setNote]=useState('');
+ useEffect(()=>{const c=new AbortController();void growthPost('people',{offset:0},peopleSchema,c.signal).then(d=>{if(!c.signal.aborted){setData(d);setFailure('');setChosen([]);}}).catch(e=>{if(!c.signal.aborted)setFailure(e instanceof Error?e.message:'Found people could not be loaded.');});return()=>c.abort();},[revision]);
+ const decide=(decision:'permit'|'refuse',ids:string[])=>{if(ids.length)void onSave('peopleDecide',{ids,decision});};
+ const parsed=csv.trim()?importRows(csv):null;
+ return <section className="panel" aria-labelledby="growth-people-title"><h2 id="growth-people-title">Decision-makers to review{data?` · ${data.waiting}`:''}</h2>
+  {failure&&<p>{failure}</p>}{!data&&!failure&&<p role="status">Loading found people…</p>}
+  {data&&<><p>People the Marketing Manager found at its best prospects, or that you imported. Nothing is sent to anyone until you permit them. Contact lookups today: {data.creditsToday} of {data.creditCap}{data.services.provider?` (${data.services.provider}${data.services.configured?'':', key missing'})`:' (no contact-data service chosen)'}.</p>
+  {data.items.length>0?<><table><thead><tr><th><span className="sr-only">Choose</span></th><th>Person</th><th>Business</th><th>Address</th><th>Source</th></tr></thead><tbody>{data.items.map(p=><tr key={p.id}>
+   <td><input type="checkbox" aria-label={`Choose ${p.name}`} checked={chosen.includes(p.id)} onChange={e=>setChosen(e.target.checked?[...chosen,p.id]:chosen.filter(id=>id!==p.id))}/></td>
+   <td>{p.name}{p.role&&<><br/><small>{p.role}</small></>}</td><td>{p.organization}<br/><small>{p.domain}</small></td><td>{p.email}</td><td>{p.source==='enriched'?'Contact-data service':'Imported'}</td></tr>)}</tbody></table>
+   <button className="button button-primary" disabled={!chosen.length} onClick={()=>decide('permit',chosen)}>Permit chosen</button>
+   <button className="button" disabled={!chosen.length} onClick={()=>decide('refuse',chosen)}>Do not contact chosen</button>
+   <button className="button" onClick={()=>decide('permit',data.items.map(p=>p.id))}>Permit all {data.items.length}</button></>:<p>Nobody is waiting for review.</p>}</>}
+  <details><summary>Import a list of prospects</summary>
+   <p>A CSV with a header row: name and domain (the business's own website), and optionally product, email (a work address on that domain), contactName and role. Addresses wait for your review here; anyone who unsubscribed is skipped.</p>
+   <label htmlFor="growth-import-csv">Prospects (CSV)</label>
+   <textarea id="growth-import-csv" aria-labelledby="growth-import-csv" rows={6} value={csv} onChange={e=>setCsv(e.target.value)} placeholder={'name,domain,email,contactName,role\nValley Hospice,valleyhospice.org,jane@valleyhospice.org,Jane Doe,Administrator'}/>
+   {parsed?.error&&<p role="alert">{parsed.error}</p>}{note&&<p role="status">{note}</p>}
+   <button className="button" disabled={!parsed||Boolean(parsed.error)} onClick={()=>{if(parsed&&!parsed.error){void onSave('import',{rows:parsed.rows}).then(()=>{setNote(`Imported ${parsed.rows.length} rows.`);setCsv('');});}}}>Import {parsed&&!parsed.error?parsed.rows.length:''} prospects</button>
+  </details>
+ </section>;
+}
 export function Growth() {
  const [workspace,setWorkspace]=useState<{offset:number;data:z.infer<typeof workspaceSchema>}|null>(null),[offset,setOffset]=useState(0),[revision,setRevision]=useState(0),[error,setError]=useState(''),[busy,setBusy]=useState(false),[selected,setSelected]=useState<string|null>(null);
  const [detailEntry,setDetail]=useState<{id:string;revision:number;data:z.infer<typeof detailSchema>}|null>(null);
@@ -72,6 +96,7 @@ export function Growth() {
  <button className="button" onClick={()=>setRevision(n=>n+1)}>Refresh</button>
  {data&&<><section className="panel"><h2>Readiness</h2><p>Sending: {data.services.sending?'enabled':'disabled'} · Research: {data.services.research?'ready':'not configured'} · Unsubscribe signing: {data.services.signing?'ready':'not configured'} · Sender address: {data.services.postalAddress?'ready':'needed'}</p><p>Sending also requires an active agent, a reviewed policy and an eligible verified contact.</p></section>
  {data.services.roster&&<RosterPanel revision={revision}/>}
+ {data.services.people&&<PeoplePanel revision={revision} onSave={save}/>}
  <fieldset disabled={busy} style={{border:0,padding:0}}>
  <details className="panel"><summary>Add a prospect or customer</summary><form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void save('create',{name:value(f,'name'),domain:value(f,'domain').toLowerCase(),product:value(f,'product'),email:value(f,'email'),contactName:value(f,'contactName'),role:value(f,'role'),goal:value(f,'goal'),...(value(f,'tenantId')?{tenantId:value(f,'tenantId')}:{}),internal:f.has('internal')});}}>
  <label>Organization<input name="name" maxLength={200} required/></label><label>Business domain<input name="domain" placeholder="example.org" required/></label>

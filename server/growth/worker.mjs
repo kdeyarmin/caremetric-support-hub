@@ -362,7 +362,13 @@ export function messageLinks(product,words) {
   const tagged=(String(words??'').match(/https:\/\/[^\s<>"]+/g)??[]).map(url=>url.replace(linkTrailing,'')).filter(url=>pages.has(untaggedUrl(url)));
   return [...pages,...new Set(tagged)];
 }
-export function growthEmail({product,purpose=null,subject,body,postalAddress,unsubscribeUrl}) {
+/** The first name to greet a named contact by ("Jane" from "Jane Doe"), or null for a role address or a name that is not plainly one. */
+export function greetingName(name,sourceKind) {
+  if(!['enriched','imported','inbound','owner'].includes(sourceKind))return null;
+  const first=String(name??'').trim().split(/\s+/)[0]??'';
+  return /^[A-Za-z][A-Za-z'’-]{1,29}$/.test(first)?first[0].toUpperCase()+first.slice(1):null;
+}
+export function growthEmail({product,purpose=null,subject,body,postalAddress,unsubscribeUrl,greeting=null}) {
   const sender=senderFor(product,purpose);
   const words=String(body??'').trim();
   const preheader=(words.split(/\n/).find(line=>line.trim()&&!/^https:\/\//.test(line.trim()))??'').match(/^.*?[.?!](?=\s|$)/)?.[0]??'';
@@ -370,7 +376,7 @@ export function growthEmail({product,purpose=null,subject,body,postalAddress,uns
   // The company's name once: the postal address often begins with it.
   const footer=[...(/^caremetric\b/i.test(address)?[]:['CareMetric']),...(address?[address]:[]),{label:growthOptOutLabel,url:unsubscribeUrl}];
   return renderEmail({layout:'letter',theme:themeFor(product),title:subject,preheader:preheader.slice(0,150),
-    blocks:[{type:'message',text:`Hello,\n\n${words}`,links:messageLinks(product,words)}],
+    blocks:[{type:'message',text:`Hello${greeting?` ${greeting}`:''},\n\n${words}`,links:messageLinks(product,words)}],
     signature:[...(sender.signer??[sender.team]),...(sender.site?[sender.site]:[])],footer});
 }
 export function growthExecutors({growth,mail,publicOrigin,postalAddress}) {
@@ -387,7 +393,8 @@ export function growthExecutors({growth,mail,publicOrigin,postalAddress}) {
     const token=growth.unsubscribeToken(claimed.workId);
     if(claimed.unsubscribeHash && growth.hash(token)!==claimed.unsubscribeHash){await growth.store.finish(claimed.id,'failed',null);throw Object.assign(new Error('Regenerate the message after signing configuration changed'),{code:'unsubscribe_key_changed'});}
     const link=`${publicOrigin.replace(/\/+$/,'')}${growthOptOutPath}${token}`;
-    const email=growthEmail({product:claimed.product,purpose:claimed.purpose,subject:claimed.subject,body:claimed.body,postalAddress:live(postalAddress),unsubscribeUrl:link});
+    const email=growthEmail({product:claimed.product,purpose:claimed.purpose,subject:claimed.subject,body:claimed.body,postalAddress:live(postalAddress),unsubscribeUrl:link,
+      greeting:greetingName(claimed.contactName,claimed.sourceKind)});
     let outcome;
     try {outcome=await mail.send({to:claimed.to,subject:claimed.subject,text:email.text,html:email.html,unsubscribeUrl:link,messageId:claimed.id});}
     catch {outcome={delivery:'unknown',id:null};}

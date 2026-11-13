@@ -47,6 +47,13 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
       [feed.signing === true, 'Set HUB_INTEL_FEED_SECRET on the Hub to the same value as HUB_MARKETING_FEED_SECRET on Intel (at least 32 characters).'],
       [growth?.research?.configured === true, 'Set HUB_GROWTH_SEARCH_API_KEY on the Hub service.'],
     ], '/admin/growth');
+  const peopleSource = live(growth?.people?.provider) ?? null;
+  add('decision_makers', 'Named decision-makers', ['marketing_manager'],
+    'Finds who CMS lists as owning or managing your best prospects and, with a contact-data service, the owner, administrator or business development lead and a verified work address. Every address waits for your review on Growth.', [
+      [has(features, 'platform.agents.growth-people.v1'), schemaStep('decision-makers')],
+      [peopleSource !== null, 'Choose Settings → Customer growth → Contact-data service (Apollo).'],
+      [peopleSource?.configured === true || peopleSource === null, 'Set HUB_APOLLO_API_KEY on the Hub service.'],
+    ], '/admin/growth');
   add('growth_email', 'Prospect email and follow-ups', ['marketing_manager'],
     'Drafts outreach and sends eligible, reviewed messages. Campaign policy, contact eligibility, frequency limits and approvals still apply.', [
       growthFeature, [growthState.sending === true, 'Turn on Settings → Customer growth → Send growth email when ready to send.'],

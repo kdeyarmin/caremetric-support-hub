@@ -1,4 +1,5 @@
 import { growthHandlers, growthExecutors } from '../growth/worker.mjs';
+import { peopleHandlers } from '../growth/people.mjs';
 import { defaultMarketed, marketingFeature } from './marketing.mjs';
 import { sqlAgentStore } from './store.mjs';
 import { agentScheduler } from './scheduler.mjs';
@@ -86,7 +87,7 @@ export function agentTeam({
     ...(typeof executors === 'function' ? executors(shared) : executors),
   }, log });
   // The handlers every server ships with, then any the caller adds (a caller's handler for the same kind wins).
-  const registry = { ...growthHandlers({growth,model:runtime,notifier,features,marketed:marketedSource}),
+  const registry = { ...growthHandlers({growth,model:runtime,notifier,features,marketed:marketedSource}), ...peopleHandlers({growth,features,marketed:marketedSource}),
     ...salesHandlers({ store, notifier, model: runtime, growth, features, customerTextToAi, publicOrigin, guides, marketed: marketedSource, log }),
     ...socialWork.handlers({ store, notifier, model: runtime, customerTextToAi, publicOrigin, marketed: marketedSource, log, creative: creativeLink }),
     ...creativeWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, publicOrigin, marketed: marketedSource, log }),

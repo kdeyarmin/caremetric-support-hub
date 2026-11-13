@@ -37,6 +37,11 @@ const item = z.object({
 });
 const rosterSchema = z.object({ contract: z.literal(intelFeedContract), action: z.literal('roster'), period: z.string().regex(/^\d{4}Q[1-4]$/).nullable(),
   source_line: z.string().max(1000), items: z.array(item).max(500), next_cursor: z.string().regex(/^[0-9A-Z]{6,10}$/).nullable() });
+const owner = z.object({ name: z.string().min(1).max(200), kind: z.enum(['individual', 'organization']).nullable(), role: z.string().max(200).nullable(),
+  percentage: z.number().min(0).max(100).nullable(), data_year: z.string().max(10).nullable() });
+const factsSchema = z.object({ contract: z.literal(intelFeedContract), action: z.literal('agency_facts'), source_line: z.string().max(1000),
+  agencies: z.array(z.object({ ccn: z.string().regex(/^[0-9A-Z]{6}$/), owners: z.array(owner).max(20),
+    hhvbp: z.record(z.string(), z.unknown()).nullable(), hospice_care_index: z.record(z.string(), z.unknown()).nullable() })).max(25) });
 const figure = z.object({ key: z.string().max(80), label: z.string().max(200), value: z.number().finite(), unit: z.string().max(40),
   data_year: z.string().max(10).nullable(), period: z.string().max(80).nullable(), dataset: z.string().max(200), source_line: z.string().max(1000),
   short_source: z.string().max(200).optional() });
@@ -104,5 +109,7 @@ export function intelFeedReader({ features = null, enabled = false, key = '', fe
       call({ action: 'roster', states, ...(cursor ? { cursor } : {}), limit, include }, rosterSchema, { signal }),
     /** Headline figures for up to 50 counties, each with its unit, year and source line. */
     countyFigures: ({ countyFips, signal } = {}) => call({ action: 'county_figures', county_fips: countyFips }, countySchema, { signal }),
+    /** Up to 25 agencies' owners (CMS All Owners), HHVBP score and Hospice Care Index, for research only. */
+    agencyFacts: ({ ccns, signal } = {}) => call({ action: 'agency_facts', ccns }, factsSchema, { signal }),
   };
 }

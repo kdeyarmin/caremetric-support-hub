@@ -367,3 +367,14 @@ it('links a product page with well-formed campaign tags in a growth email, and n
  expect(refused).not.toContain('evil.example"');
  expect(refused).not.toMatch(/href="[^"]*evil\.example/);
 });
+it('greets a named contact by first name, never a role address',async()=>{
+ const {greetingName}=await import('./worker.mjs');
+ expect(greetingName('jane doe','enriched')).toBe('Jane');
+ expect(greetingName('Pat Reader','inbound')).toBe('Pat');
+ expect(greetingName('Jane D***','enriched')).toBe('Jane');
+ expect(greetingName('Public business address','role_address')).toBeNull();
+ expect(greetingName('','imported')).toBeNull();
+ expect(greetingName('Dr.','imported')).toBeNull();
+ const email=growthEmail({product:'caremetric-intel',purpose:'marketing',subject:'S',body:'Body.',postalAddress:'CareMetric, 1 Main St',unsubscribeUrl:'https://hub.example/x',greeting:'Jane'});
+ expect(email.text).toMatch(/^Hello Jane,/m);
+});

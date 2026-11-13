@@ -120,3 +120,22 @@ it('leaves the roster out until its migration is live',async()=>{
  expect(screen.queryByText(/Medicare roster/)).toBeNull();
  expect(request.mock.calls.every(([,init])=>JSON.parse(String(init.body)).operation!=='roster')).toBe(true);
 });
+it('reads a CSV of prospects, quoted fields included, and refuses one without its key columns',async()=>{
+ const {importRows}=await import('./growthClient');
+ expect(importRows('Name,Website,Email,Contact Name,Title\n"Valley Hospice, Inc.",valleyhospice.org,jane@valleyhospice.org,Jane Doe,Administrator\nCounty Care,countycare.org,,,\n')).toEqual({error:null,rows:[
+  {name:'Valley Hospice, Inc.',domain:'valleyhospice.org',email:'jane@valleyhospice.org',contactName:'Jane Doe',role:'Administrator'},{name:'County Care',domain:'countycare.org'}]});
+ expect(importRows('email\njane@x.org').error).toMatch(/name and domain/);
+ expect(importRows('name,domain').error).toMatch(/at least one/);
+});
+it('lists found people for the owner to permit, once the people migration is live',async()=>{
+ const people={waiting:1,creditsToday:3,creditCap:10,items:[{id:'c1',name:'Jane Doe',role:'Administrator',email:'jane@valleyhospice.org',source:'enriched',organization:'Valley Hospice',domain:'valleyhospice.org',foundAt:'2026-11-13T12:00:00Z'}],services:{provider:'apollo',configured:true}};
+ const request=vi.fn(async(_url:unknown,init:RequestInit)=>{const op=JSON.parse(String(init.body)).operation;return new Response(JSON.stringify(op==='people'?people:op==='peopleDecide'?{decided:1}:{...empty,services:{...empty.services,people:true}}));});
+ vi.stubGlobal('fetch',request);render(<MemoryRouter><Growth/></MemoryRouter>);
+ expect(await screen.findByText(/Decision-makers to review · 1/)).toBeTruthy();
+ expect(screen.getByText(/Contact lookups today: 3 of 10 \(apollo\)/)).toBeTruthy();
+ fireEvent.click(screen.getByRole('checkbox',{name:'Choose Jane Doe'}));
+ fireEvent.click(screen.getByRole('button',{name:'Permit chosen'}));
+ await waitFor(()=>expect(request.mock.calls.some(([,init])=>JSON.parse(String(init.body)).operation==='peopleDecide')).toBe(true));
+ const decided=request.mock.calls.map(([,init])=>JSON.parse(String(init.body))).find(body=>body.operation==='peopleDecide');
+ expect(decided.data).toEqual({ids:['c1'],decision:'permit'});
+});

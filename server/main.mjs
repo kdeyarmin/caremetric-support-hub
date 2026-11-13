@@ -32,6 +32,7 @@ import { growthService } from './growth/service.mjs';
 import { growthResearch } from './growth/research.mjs';
 import { growthContactFinder } from './growth/contacts.mjs';
 import { intelFeedReader } from './growth/intel-feed.mjs';
+import { peopleProvider } from './growth/people-provider.mjs';
 import { growthSender } from './growth/sender.mjs';
 import { socialConfig } from './agents/social/index.mjs';
 import { nativeVisitorReader } from './agents/scorecard/visitors.mjs';
@@ -92,7 +93,10 @@ const messaging=communications({pool,delegations:capabilities,publicOrigin,
 // The Medicare roster from Intel's signed marketing feed (Settings → Customer growth; the shared secret HUB_INTEL_FEED_SECRET in Railway).
 const roster={feed:intelFeedReader({features,enabled:setting('growth.roster'),key:process.env.HUB_INTEL_FEED_SECRET}),
   states:setting('growth.roster_states'),daily:setting('growth.roster_daily_resolutions')};
-const growth=growthService({store:growthStore(pool),research:growthResearch({apiKey:process.env.HUB_GROWTH_SEARCH_API_KEY}),contacts:growthContactFinder(),roster,features:new Set(contract.features),enabled:setting('growth.send'),signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,
+// The contact-data service that finds decision-makers' work addresses (Settings → Customer growth; HUB_APOLLO_API_KEY in Railway).
+let peopleChoice={choice:undefined,provider:null};
+const people={provider:()=>{const choice=settings.get('growth.enrichment_provider');if(choice!==peopleChoice.choice)peopleChoice={choice,provider:peopleProvider(choice,{apolloKey:process.env.HUB_APOLLO_API_KEY})};return peopleChoice.provider;}};
+const growth=growthService({store:growthStore(pool),research:growthResearch({apiKey:process.env.HUB_GROWTH_SEARCH_API_KEY}),contacts:growthContactFinder(),roster,people,importKey:process.env.HUB_GROWTH_IMPORT_SECRET,features:new Set(contract.features),enabled:setting('growth.send'),signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,
   sesEvents:snsReceiver({topicArn:setting('email.ses_events_topic')}),sesEventsReady:()=>snsTopicPattern.test(settings.get('email.ses_events_topic')??''),publicOrigin,postalAddress});
 // Cold email and sales follow-ups may come from their own address (Settings → Email → Growth email sender, normally on a subdomain), so
 // prospecting can never hurt the support address's reputation. Replies still go to the support inbox. Unset: the support sender.

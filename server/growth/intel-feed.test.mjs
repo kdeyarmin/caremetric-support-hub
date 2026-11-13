@@ -77,3 +77,13 @@ describe('Intel marketing feed reader', () => {
     expect(result.counties[0].figures[0]).toMatchObject({ key: 'medicare_beneficiaries', value: 250000 });
   });
 });
+
+describe('agency facts', () => {
+  it('asks for up to 25 agencies\' owners and scores', async () => {
+    const fetchImpl = answer({ contract: 'caremetric.marketing-feed.v1', action: 'agency_facts', source_line: 's', agencies: [{ ccn: '391501',
+      owners: [{ name: 'Jane Doe', kind: 'individual', role: 'Owner', percentage: 60, data_year: '2026' }], hhvbp: null, hospice_care_index: { score: 8 } }] });
+    const result = await reader(fetchImpl).agencyFacts({ ccns: ['391501'] });
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({ action: 'agency_facts', ccns: ['391501'] });
+    expect(result.agencies[0].owners[0]).toMatchObject({ name: 'Jane Doe', kind: 'individual' });
+  });
+});

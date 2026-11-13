@@ -151,6 +151,12 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           throw new HttpError(404,'Unavailable.');
         }
         const growthEvent=/^\/api\/growth\/events\/(carebase|caremetric-intel)$/.exec(path);
+        // A list built elsewhere, signed with HUB_GROWTH_IMPORT_SECRET like the lead forms (docs/CUSTOMER_GROWTH.md, "Importing a list").
+        if(path==='/api/growth/import') {
+          if(req.method!=='POST'||req.headers.origin||req.headers.cookie||url.search) throw new HttpError(403,'Forbidden.');
+          if(!growth) throw new HttpError(503,'Growth is unavailable.');
+          return json(await growth.importSigned(await rawBody(req,262144),req.headers));
+        }
         if(growthEvent || path==='/api/growth/delivery' || path==='/api/growth/delivery/ses') {
           if(req.method!=='POST'||req.headers.origin||req.headers.cookie||url.search) throw new HttpError(403,'Forbidden.');
           if(!growth) throw new HttpError(503,'Growth is unavailable.');
