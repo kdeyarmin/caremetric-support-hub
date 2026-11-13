@@ -149,8 +149,9 @@ export const minResearchRoundTokens = 1024;
 
 /**
  * What one research round may use so that the most it could cost (its prompt bound, every output token, every search it may make) fits
- * in `leftCents`: the full caps when they fit, otherwise fewer searches and then fewer output tokens, down to `minResearchRoundTokens`
- * and one search. Null when even that does not fit, so no round, the first included, can take the run past its ceiling.
+ * in `leftCents`: the full caps when they fit, otherwise fewer output tokens (down to `minResearchRoundTokens`), and fewer searches
+ * (down to one) only when that floor leaves too little for them. Null when even that does not fit, so no round, the first included, can
+ * take the run past its ceiling.
  */
 export function fitResearchRound(model, spec, inputTokens, leftCents) {
   const cached = spec.system.some(block => block.cache);
