@@ -197,8 +197,12 @@ try {
   const newsletter = await send('carebase', lead('carebase', 'newsletter', external('news')));
   const probeLead = await send('intel', lead('intel', 'demo_request', `probe-${run}`, { test: true, contact: { email: 'probe@caremetric.invalid' } }));
   for (const answer of [trial, demo, consultation, newsletter, probeLead]) assert.equal(answer.status, 202, JSON.stringify(answer.body));
-  assert.deepEqual([trial.body.conversation, newsletter.body.conversation, probeLead.body.conversation], [null, null, null]);
-  assert.match(demo.body.conversation, /^CM-\d+$/);
+  // A trial or newsletter sign-up opens a conversation too, so the Sales Executive follows up (20261113180000_lead_followup.sql);
+  // a test lead never does. Those two are closed here, so the reminders and counts below stay about the demo and the consultation.
+  assert.equal(probeLead.body.conversation, null);
+  for (const answer of [trial, newsletter, demo]) assert.match(answer.body.conversation, /^CM-\d+$/);
+  await admin.query('update private.communications set status = $2 where reference = any($1::bigint[])',
+    [[trial, newsletter].map(answer => Number(answer.body.conversation.slice(3))), 'closed']);
   // A lead's version to the microsecond, as the Leads screen hands it back.
   const versions = async () => Object.fromEntries((await rows('select id, updated_at::text as version from private.leads where id = any($1::uuid[])', [[...leadIds]])).map(entry => [entry.id, entry.version]));
   const versionsBefore = await versions();

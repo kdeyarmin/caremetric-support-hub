@@ -92,11 +92,12 @@ What the Hub does by kind:
 | `demo_request` | carebase, intel | yes, inquiry type `sales` | at once |
 | `consultation` | advisors | yes, inquiry type `advisors` | at once |
 | `contact` | any | yes, inquiry type `sales` | at once |
-| `trial_signup` | carebase, intel | no | at once |
-| `newsletter`, `savings_model`, `county_report` | carebase, intel | no | daily digest |
+| `trial_signup` | carebase, intel | yes, inquiry type `sales` | at once |
+| `newsletter`, `savings_model`, `county_report` | carebase, intel | yes, inquiry type `sales` | daily digest |
 
 The AI team's alerts follow this table ([AI_TEAM.md](AI_TEAM.md)): the Support Concierge alerts on each conversation as a
-sales inquiry and proposes a personal acknowledgment for the owner to approve; the Growth Manager emails each trial at once,
+sales inquiry and hands a CareBase or Intel one to the Sales Executive, which writes the follow-up (until 2026-11-13 a sign-up,
+a savings model or a report request opened no conversation, so nobody wrote back); the Growth Manager emails each trial at once,
 reminds the owner about a lead conversation nobody has answered, and puts the daily-digest kinds in the morning brief and its
 weekly report.
 
@@ -166,11 +167,14 @@ The Hub's Platform Engineer checks each product's main lead endpoint every few h
   privilege for any browser, service or server role. The Hub server records a lead only through
   `private.lead_intake(source, lead)`, which refuses every session user but `hub_app_server` and does its work in
   `private.lead_record` (executable by no role, so the database tests can exercise it directly).
-- **Conversations.** A `demo_request`, `consultation` or `contact` that is not a test opens a `web_form` conversation
-  whose source is `carebase.web`, `intel.web` or `advisors.web` ("CareBase website", "Intel website", "Advisors
-  website" in Communications), keyed by the externalId. Its subject is "Demo request: …", "Consultation request: …"
-  or "Contact request: …" with the organization, else the name, else the address. Its one inbound message is what the
-  visitor wrote, followed by the role and the facts as plain `Label: value` lines. An Advisors consultation that the
+- **Conversations.** Every lead that is not a test opens a `web_form` conversation whose source is `carebase.web`,
+  `intel.web` or `advisors.web` ("CareBase website", "Intel website", "Advisors website" in Communications), keyed by
+  the externalId. Its subject is "Demo request: …", "Consultation request: …", "Contact request: …", "County report
+  request: …", "Savings model: …", "Newsletter sign-up: …" or "Trial sign-up: …" with the organization, else the name,
+  else the address. Its one inbound message is what the visitor wrote, followed by the role and the facts as plain
+  `Label: value` lines; for a report request, a savings model, a newsletter or a trial sign-up it starts with one line
+  saying what the visitor did ("Requested the free county report.", "Used the savings model.", "Signed up for the
+  newsletter.", "Started a free trial."), which is what the Sales Executive's follow-up answers. An Advisors consultation that the
   owner already imported with **Import Advisors requests** is linked to that conversation, not copied, and a later
   import skips a request a lead already brought in: both use `advisors.web` and the `CM-` reference.
 - **Audit.** Each new lead writes one `lead.received` event whose metadata is the source, kind and test flag only;

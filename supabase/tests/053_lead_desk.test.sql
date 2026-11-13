@@ -195,12 +195,14 @@ select is((select count(*) from private.audit_events a join recorded r on r.labe
 select lives_ok($$select private.lead_record('intel', (select doc || '{"source": "intel"}' from lead_base))$$,
   'The same external id from another product is a different lead');
 
--- ---- Kinds without a conversation, and probes ------------------------------------------------------------------------
+-- ---- A sign-up gets a conversation too (the Sales Executive follows up), and probes never do --------------------------
 insert into recorded select 'newsletter', private.lead_record('intel', doc || '{"source": "intel", "kind": "newsletter", "externalId": "lead-desk-test-news"}') from lead_base;
-select is((select result -> 'conversation' from recorded where label = 'newsletter'), 'null'::jsonb, 'A newsletter sign-up opens no conversation');
-select ok((select l.communication_id is null and l.product_id = (select id from hub.products where slug = 'caremetric-intel')
-    from private.leads l join recorded r on r.label = 'newsletter' and l.id = (r.result ->> 'id')::uuid),
-  'It is still recorded, under CareMetric Intel');
+select ok((select result ->> 'conversation' ~ '^CM-[0-9]+$' from recorded where label = 'newsletter'), 'A newsletter sign-up opens a conversation');
+select is((select row(c.subject, c.inquiry_type, c.source_system, l.product_id = (select id from hub.products where slug = 'caremetric-intel'), left(m.body, 29))::text
+    from private.leads l join recorded r on r.label = 'newsletter' and l.id = (r.result ->> 'id')::uuid
+    join private.communications c on c.id = l.communication_id join private.communication_messages m on m.communication_id = c.id),
+  row('Newsletter sign-up: Sunrise Assisted Living Facility', 'sales', 'intel.web', true, 'Signed up for the newsletter.')::text,
+  'It is a sales conversation from the Intel website that says what the visitor did, under CareMetric Intel');
 
 insert into recorded select 'probe', private.lead_record('carebase', doc || '{"externalId": "probe-1762171200", "test": true, "contact": {"email": "probe@caremetric.invalid"}}') from lead_base;
 select is((select result -> 'conversation' from recorded where label = 'probe'), 'null'::jsonb, 'A test lead never opens a conversation, even for a demo request');
@@ -268,12 +270,12 @@ with import_attempt as (
   returning id)
 select is((select count(*) from import_attempt), 0::bigint, 'The import''s own insert then skips it');
 
--- Several leads above carried the canary, some with no name, role or organization and some of a kind without a conversation.
+-- Several leads above carried the canary, some with no name, role or organization, and one was linked to an imported request.
 select ok(not exists (select 1 from private.leads l where position('LEAD-DESK-CANARY' in to_jsonb(l)::text) > 0)
     and not exists (select 1 from private.communications c where position('LEAD-DESK-CANARY' in to_jsonb(c)::text) > 0)
     and not exists (select 1 from private.audit_events a where position('LEAD-DESK-CANARY' in to_jsonb(a)::text) > 0),
   'What a visitor wrote is in no lead, conversation field or audit event');
-select is((select count(*) from private.communication_messages where position('LEAD-DESK-CANARY' in body) > 0), 2::bigint,
+select is((select count(*) from private.communication_messages where position('LEAD-DESK-CANARY' in body) > 0), 4::bigint,
   'It is only in the inbound messages of the conversations that were opened');
 
 -- ---- The owner's view ------------------------------------------------------------------------------------------------

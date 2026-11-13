@@ -108,6 +108,9 @@ begin
   perform pg_temp.aged('old', interval '3 days');
   perform pg_temp.aged('trial', interval '1 hour');
 end $$;
+-- A trial or newsletter sign-up opens a conversation too (20261113180000_lead_followup.sql). These two are closed here, so the
+-- unanswered-lead checks below stay about the demo, contact and consultation fixtures they were written for.
+update private.communications set status = 'closed' where id in (select conversation from lead_ids where name in ('trial', 'newsletter'));
 -- The consultation was answered 45 minutes after it arrived.
 insert into private.communication_messages (communication_id, direction, body, delivery, delivery_channel, created_at)
   select conversation, 'outbound', 'Thanks, happy to help.', 'sent', 'email', now() - interval '75 minutes' from lead_ids where name = 'consult';
@@ -138,11 +141,11 @@ select is((select array_agg(e ->> 'kind' order by ord) from jsonb_array_elements
 -- One lead, as an alert may name it.
 -- ---------------------------------------------------------------------------------------
 create temp table one_trial as select private.agent_growth_lead_json(pg_temp.id('trial')) as j;
-select is((select j - 'id' - 'receivedAt' from one_trial),
-  '{"kind": "trial_signup", "source": "intel", "test": false, "productSlug": "caremetric-intel", "organization": "Trial Org", "reference": null,
+select is((select (j - 'id' - 'receivedAt' - 'reference') || jsonb_build_object('reference', j ->> 'reference' ~ '^CM-[0-9]+$') from one_trial),
+  '{"kind": "trial_signup", "source": "intel", "test": false, "productSlug": "caremetric-intel", "organization": "Trial Org", "reference": true,
     "details": {"a1": "x", "a2": "x", "a3": "x", "a4": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "facilityCount": 3, "plan": "complete"},
     "attribution": {"source": "news.example.com", "medium": null, "campaign": null, "landingPath": "/pricing"}}'::jsonb,
-  'A lead carries its kind, product, organization, the first six facts (clipped) and where the visitor came from');
+  'A lead carries its kind, product, organization, its conversation, the first six facts (clipped) and where the visitor came from');
 select ok((select j::text !~ 'canary|Canary|2025550123|CANARY' from one_trial) and (select j::text !~ 'canary|Canary|2025550123|CANARY' from (select private.agent_growth_lead_json(pg_temp.id('demo')) as j) d),
   'Never the contact''s name, address, phone number or role, nor the message');
 select is((select (j -> 'attribution' ->> 'source') || ' ' || (j ->> 'reference' ~ '^CM-[0-9]+$')::text from (select private.agent_growth_lead_json(pg_temp.id('demo')) as j) d),

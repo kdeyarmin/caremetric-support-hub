@@ -138,13 +138,19 @@ try {
   assert.equal(contactConversation.product_id, (await row("select id from hub.products where slug = 'caremetric-intel'")).id);
   assert.equal((await messagesOf(contactConversation.id))[0].body, 'No message was included with this request.');
 
-  // A message on a kind without a conversation is kept nowhere.
+  // A sign-up, a savings model or a report request opens a sales conversation too, so the Sales Executive follows up. Its
+  // message says what the visitor did, then anything they wrote and the facts.
+  const followed = { trial_signup: ['Trial sign-up', 'Started a free trial.'], newsletter: ['Newsletter sign-up', 'Signed up for the newsletter.'],
+    savings_model: ['Savings model', 'Used the savings model.'], county_report: ['County report request', 'Requested the free county report.'] };
   for (const [source, kind] of [['carebase', 'trial_signup'], ['intel', 'newsletter'], ['carebase', 'savings_model'], ['intel', 'county_report']]) {
     const answer = await send(source, lead(source, kind, external(kind), { details: { state: 'PA' }, message: `${canary} sent with a ${kind}` }));
-    assert.deepEqual([answer.status, answer.body.duplicate, answer.body.conversation], [202, false, null], `${kind} is recorded without a conversation`);
-    assert.equal((await row('select communication_id from private.leads where id = $1', [answer.body.id])).communication_id, null);
+    assert.deepEqual([answer.status, answer.body.duplicate], [202, false]);
+    assert.match(answer.body.conversation, /^CM-\d+$/, `${kind} opens a conversation`);
+    const opened = await conversationOf(answer.body.conversation);
+    assert.deepEqual([opened.channel, opened.source_system, opened.inquiry_type, opened.subject],
+      ['web_form', `${source}.web`, 'sales', `${followed[kind][0]}: Integration Assisted Living Facility`]);
+    assert.equal((await messagesOf(opened.id))[0].body, `${followed[kind][1]}\n\n${canary} sent with a ${kind}\n\nState: PA`);
   }
-  assert.equal(Number((await row('select count(*) from private.communications where source_key = any($1)', [['trial_signup', 'newsletter', 'savings_model', 'county_report'].map(external)])).count), 0);
 
   // ---- A repeat is a duplicate and changes nothing ----------------------------------------------------------------
   const repeat = await send('carebase', lead('carebase', 'demo_request', external('demo'), { message: 'A second copy' }));
@@ -246,7 +252,7 @@ try {
   assert.deepEqual([statusAudit.actor_id, statusAudit.metadata, statusAudit.changed_columns], [owner, { from: 'new', to: 'contacted' }, ['status']]);
 
   // ---- The canary: only the conversation holds what the visitor wrote ------------------------------------------------
-  assert.equal(Number((await row('select count(*) from private.communication_messages where strpos(body, $1) > 0', [canary])).count), 2, 'each message reached its own conversation, and only those two');
+  assert.equal(Number((await row('select count(*) from private.communication_messages where strpos(body, $1) > 0', [canary])).count), 6, 'each message reached its own conversation, and only those six');
   assert.equal((await messagesOf(consultationConversation.id))[0].body, `${canary} Please call about a review.\n\nSector: Hospice\nService: strategy`);
   assert.equal(Number((await row('select count(*) from private.leads l where strpos(to_jsonb(l)::text, $1) > 0', [canary])).count), 0, 'no lead row holds it');
   assert.equal(Number((await row('select count(*) from private.communications c where strpos(to_jsonb(c)::text, $1) > 0', [canary])).count), 0, 'no conversation field holds it');

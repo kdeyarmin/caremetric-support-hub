@@ -738,7 +738,9 @@ Hub whose database lacks the migration still starts and its schedules stay due.
   owner at once as a warning: "New CareBase trial: <organization>", with the product, the plan when the product sent one, the
   other facts (the plan always among them) and where the visitor came from, and a button to Leads, under `growth:trial:<lead id>`.
   A demo, consultation or contact request is left to the Support Concierge, which alerts on its conversation (see above). A
-  newsletter sign-up, savings model or county report waits for the morning brief and the weekly report. A trial alert the provider
+  newsletter sign-up, savings model or county report waits for the morning brief and the weekly report. Since 2026-11-13 each of
+  these, and each trial sign-up, also opens a conversation of its own (`20261113180000_lead_followup.sql`), so the Concierge hands
+  it to the Sales Executive for a personal follow-up and an unanswered one is chased like any other lead conversation. A trial alert the provider
   refused leaves that lead unseen and the task fails transiently once the others are handled, so the scheduler tries it again and
   only the refused channel is sent again; one that used up its tries is set aside (the brief still counts the lead). Marking a lead
   seen never changes its version, so the Leads screen never refuses the owner's change because of it. A run is recorded when
