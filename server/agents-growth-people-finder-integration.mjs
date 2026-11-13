@@ -95,7 +95,8 @@ try {
     for (const drift of [
       'grant execute on function private.growth_person_address(uuid,text,text,text,text) to authenticated',
       rewrite('private.growth_person_address(uuid,text,text,text,text)', "'review', now(), p_source_url, 'enriched'", "'permitted', now(), p_source_url, 'enriched'"),
-      "alter table private.growth_people drop constraint growth_people_source_check, add constraint growth_people_source_check check (source in ('cms_owners','owner','import','apollo'))",
+      // NOT VALID: the rows above stay, and the gate still reads the narrowed definition.
+      "alter table private.growth_people drop constraint growth_people_source_check, add constraint growth_people_source_check check (source in ('cms_owners','owner','import','apollo')) not valid",
       rewrite('hub.growth_people(integer)', 'perform hub.authorize_app_admin();', 'perform 1;'),
     ]) {
       await client.query('begin');
