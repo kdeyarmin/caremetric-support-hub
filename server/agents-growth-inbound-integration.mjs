@@ -200,8 +200,8 @@ try {
       [reengageGate, rewrite('private.growth_claim_message(uuid,uuid)', "'trial_started','signup')", "'trial_started')")],
       [reengageGate, rewrite('private.growth_message_class(text,text,text)', "('role_address','enriched','imported')", "('role_address')")],
       [reengageGate, 'grant execute on function private.growth_reengage(integer) to authenticated'],
-      [reaskGate, rewrite('private.growth_discover(text,jsonb)', " where v_stage in ('qualified','contacted')", '')],
-      [reaskGate, rewrite('private.growth_reengage(integer)', "c.source_kind = 'role_address' or ", '')],
+      [reaskGate, rewrite('private.growth_discover(text,jsonb)', " where v_stage in ('qualified','contacted')", ' where true')],
+      [reaskGate, rewrite('private.growth_reengage(integer)', "c.source_kind = 'role_address' or ", 'false or ')],
       [reaskGate, rewrite('private.growth_contact_candidates(integer)', "interval '7 days'", "interval '90 days'")],
       [reaskGate, 'grant execute on function private.growth_contact_candidates(integer) to authenticated'],
     ]) {
