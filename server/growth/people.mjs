@@ -71,12 +71,14 @@ export function peopleHandlers({ growth, features = null, marketed = null }) {
         try { found = await provider.search({ domain: org.domain, signal }); }
         catch (error) { if (signal?.aborted || error?.code === 'people_not_permitted') throw error; found = []; }
       }
+      const chosen = provider?.configured ? choosePerson(found, owners) : null;
+      // The credit first: recording marks the business searched for 60 days, so one whose person cannot be looked up today is left
+      // untouched and comes back once the day's credits do.
+      if (chosen && !(await growth.store.enrichmentReserve(1))) { counts.noCredit++; break; }
       const recorded = await growth.store.peopleRecord(org.id, [...owners,
         ...found.map(person => ({ name: [person.firstName, person.lastName].filter(Boolean).join(' ').slice(0, 200), title: person.title, source: 'apollo', providerRef: person.ref }))]);
       counts.searched++; counts.people += Array.isArray(recorded) ? recorded.length : 0;
-      const chosen = provider?.configured ? choosePerson(found, owners) : null;
       if (!chosen) continue;
-      if (!(await growth.store.enrichmentReserve(1))) { counts.noCredit++; break; }
       let address = null;
       try { address = await provider.enrich({ ref: chosen.ref, domain: org.domain, signal }); }
       catch (error) { if (signal?.aborted) throw error; }

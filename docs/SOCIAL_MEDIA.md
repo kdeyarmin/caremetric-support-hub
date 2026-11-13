@@ -41,7 +41,8 @@ through its API, so the image is uploaded with the post. New ad copy reuses appr
   as a photo story. A story shows for 24 hours.
 - **Your own LinkedIn profile** (Settings → Social media → Write posts for my LinkedIn profile): a few posts a week in your voice, each
   a `social.founder_post` you approve one by one; the database refuses an automatic approval. With your personal token on the LinkedIn
-  card (scopes `openid`, `profile`, `w_member_social`) an approved post publishes as you; without it the drafts are emailed to copy.
+  card (scopes `openid`, `profile`, `w_member_social`) an approved post publishes as you, at its time slot like a Page post (an
+  approved post waits for its slot, and one started early is handed back to wait); without it the drafts are emailed to copy.
   Nothing sends messages, connection requests or comments.
 - **New campaigns and lead reports**: see Settings → Paid ads and [AI_WORKFORCE_REVIEW_2026-11-13.md](AI_WORKFORCE_REVIEW_2026-11-13.md).
 

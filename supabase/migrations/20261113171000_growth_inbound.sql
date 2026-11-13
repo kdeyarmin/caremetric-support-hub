@@ -127,8 +127,11 @@ declare l private.leads%rowtype; v_product text; v_domain text; v_org uuid; g pr
  insert into private.growth_opportunities as o(organization_id, product, contact_id, stage, next_action, memory)
  values (v_org, v_product, v_contact, 'qualified', 'Follow up the website request', jsonb_build_object('lead', jsonb_strip_nulls(jsonb_build_object(
    'kind', l.kind, 'place', v_place, 'at', l.occurred_at))))
+ -- The person who asked becomes the contact until a conversation is under way, so the follow-up goes to them and not to a role address
+ -- found earlier; the version bump retires drafts written to the earlier contact.
  on conflict (organization_id, product) do update set
-   contact_id = coalesce(o.contact_id, excluded.contact_id),
+   contact_id = case when o.stage in ('identified', 'researched', 'nurture', 'qualified', 'contacted') then excluded.contact_id
+     else coalesce(o.contact_id, excluded.contact_id) end,
    stage = case when o.stage in ('identified', 'researched', 'nurture') then 'qualified' else o.stage end,
    memory = o.memory || excluded.memory, next_action = case when o.stage in ('identified', 'researched', 'nurture') then excluded.next_action else o.next_action end,
    next_at = now(), version = o.version + 1, updated_at = now()

@@ -144,6 +144,31 @@ function checkResearch(request, agent) {
   return { ...request, tools: [...new Set(tools)], maxSearches, maxFetches, maxRounds, maxTokens, effort, tier, ceilingCents };
 }
 
+// The fewest output tokens a research round is worth making with: below this the model cannot both search and write down what it found.
+export const minResearchRoundTokens = 1024;
+
+/**
+ * What one research round may use so that the most it could cost (its prompt bound, every output token, every search it may make) fits
+ * in `leftCents`: the full caps when they fit, otherwise fewer searches and then fewer output tokens, down to `minResearchRoundTokens`
+ * and one search. Null when even that does not fit, so no round, the first included, can take the run past its ceiling.
+ */
+export function fitResearchRound(model, spec, inputTokens, leftCents) {
+  const cached = spec.system.some(block => block.cache);
+  const searching = spec.tools.includes('web_search');
+  const worst = (maxTokens, searches) => worstCaseCents(model, { inputTokens, maxTokens, cached }) + searches * searchCents;
+  const wanted = searching ? spec.maxSearches : 0;
+  if (worst(spec.maxTokens, wanted) <= leftCents) return { maxTokens: spec.maxTokens, searches: wanted, worst: worst(spec.maxTokens, wanted) };
+  const floor = Math.min(spec.maxTokens, minResearchRoundTokens);
+  const searches = searching ? Math.min(wanted, Math.floor((leftCents - worst(floor, 0)) / searchCents)) : 0;
+  if ((searching && searches < 1) || worst(floor, searches) > leftCents) return null;
+  let low = floor, high = spec.maxTokens;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (worst(middle, searches) <= leftCents) low = middle; else high = middle - 1;
+  }
+  return { maxTokens: low, searches, worst: worst(low, searches) };
+}
+
 const serverCounts = message => {
   const used = message?.usage?.server_tool_use;
   return { searches: count(used?.web_search_requests), fetches: count(used?.web_fetch_requests) };
@@ -352,7 +377,8 @@ export function modelRunner({
 
   /**
    * One research run with server tools. Resolves with `{ outcome: 'completed', text, sources, searches, fetches, rounds, costCents }`,
-   * `{ outcome: 'stopped', ... }` when the rounds or the ceiling ran out before the model finished (what it found so far is kept),
+   * `{ outcome: 'stopped', ... }` when the rounds or the ceiling ran out before the model finished (the sources it found and the text it
+   * wrote so far are kept; a ceiling too small for even a trimmed first round makes no call), `text` being every response's text in order,
    * `{ outcome: 'refused' }`, or `{ outcome: 'budget_exhausted' }`. Rejects with a coded error otherwise, `tool_not_allowed` when the
    * agent's allowlist does not name a tool.
    *
@@ -369,7 +395,12 @@ export function modelRunner({
     const tools = serverTools(model, spec);
     const system = spec.system.map(block => ({ type: 'text', text: block.text, ...(block.cache ? { cache_control: { type: 'ephemeral' } } : {}) }));
     const messages = [{ role: 'user', content: spec.user }];
-    const bodyNow = () => ({ model, max_tokens: spec.maxTokens, system, messages, tools, output_config: { effort: spec.effort } });
+    // A round trimmed to fit the ceiling asks for fewer output tokens and searches; the full caps keep the cached tool definitions as they are.
+    const bodyNow = (fit = { maxTokens: spec.maxTokens, searches: spec.maxSearches }) => ({
+      model, max_tokens: fit.maxTokens, system, messages,
+      tools: fit.searches === spec.maxSearches ? tools : serverTools(model, { ...spec, maxSearches: Math.max(fit.searches, 1) }),
+      output_config: { effort: spec.effort },
+    });
     const reserve = Math.ceil(spec.ceilingCents);
     const admission = await exclusive(agentKey, async () => {
       await settleOwed(agentKey);
@@ -412,13 +443,15 @@ export function modelRunner({
       runId = await store.startRun(task.id, model, spec.promptVersion);
       const deadline = AbortSignal.timeout(callDeadlineMs);
       const startedAt = Date.now();
-      let outcome = 'stopped', text = '', stopped = 'rounds';
+      let outcome = 'stopped', stopped = 'rounds';
+      // The text of every response, paused ones included: a turn that pauses or stops at a limit keeps what it wrote so far.
+      const written = [];
       for (let round = 0; round < spec.maxRounds; round++) {
-        const body = bodyNow();
-        // The most this round could cost: its prompt bound, every output token, every search it may make.
-        const worst = worstCaseCents(model, { inputTokens: inputTokenBound(body), maxTokens: spec.maxTokens, cached: spec.system.some(block => block.cache) })
-          + spec.maxSearches * searchCents;
-        if (totals.cents + worst > spec.ceilingCents && round > 0) { stopped = 'ceiling'; break; }
+        // Every round, the first included, fits what the ceiling leaves (the bound of the untrimmed body is the larger one).
+        const fit = fitResearchRound(model, spec, inputTokenBound(bodyNow()), spec.ceilingCents - totals.cents);
+        if (!fit) { stopped = 'ceiling'; break; }
+        const body = bodyNow(fit);
+        const worst = fit.worst;
         let reply = null, failure = null;
         try { reply = await client.create(body, { signal: signal ? AbortSignal.any([signal, deadline]) : deadline, timeoutMs: 150_000 }); }
         catch (error) {
@@ -441,8 +474,9 @@ export function modelRunner({
         totals.cents += (usage.reported ? costCents(model, usage) : worst) + tools.searches * searchCents;
         for (const source of sourcesOf(reply.message?.content)) if (!sources.has(source.url)) sources.set(source.url, source);
         const stop = reply.message?.stop_reason;
+        if (stop === 'pause_turn' || stop === 'end_turn') { const part = textOf(reply.message).trim(); if (part) written.push(part); }
         if (stop === 'pause_turn') { messages.push({ role: 'assistant', content: reply.message.content }); continue; }
-        if (stop === 'end_turn') { outcome = 'completed'; text = textOf(reply.message); stopped = null; break; }
+        if (stop === 'end_turn') { outcome = 'completed'; stopped = null; break; }
         if (stop === 'refusal') { outcome = 'refused'; stopped = null; break; }
         outcome = 'no_result'; stopped = null;
         await finish('no_result', 'The research stopped before it finished.', stop === 'max_tokens' ? 'output_truncated' : 'output_invalid');
@@ -452,6 +486,7 @@ export function modelRunner({
       const summary = outcome === 'refused' ? 'The model declined to research.' : `${describe()}${stopped ? ` Stopped: ${stopped === 'ceiling' ? 'the cost ceiling' : 'the round limit'}.` : ''}`;
       await finish(outcome === 'stopped' ? 'completed' : outcome, summary, null);
       await afterwards({ task, model, outcome, usage: totals, latencyMs: Date.now() - startedAt, failure: null });
+      const text = outcome === 'refused' ? '' : written.join('\n\n');
       return { outcome, model, runId, text, sources: [...sources.values()], searches: totals.searches, fetches: totals.fetches, rounds: totals.rounds,
         costCents: Math.ceil(totals.cents * 10_000) / 10_000, ...(stopped ? { stopped } : {}) };
     } catch (error) {

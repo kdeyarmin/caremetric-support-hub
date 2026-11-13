@@ -1366,7 +1366,8 @@ The rules the check follows are under "The model runtime".
 ## The model runtime
 
 `server/agents/runtime/` is how an agent calls a model. Every agent that writes or reads with a model goes through it (`run` for one
-answer against a schema, `research` for web search and page reading within a cost ceiling):
+answer against a schema, `research` for web search and page reading within a cost ceiling; every research round, the first included,
+is trimmed to what the ceiling leaves, with fewer output tokens and searches, or not made, and the text of paused turns is kept):
 an agent's handler asks for it (`model.run(task, request, { signal })`), so the Concierge's drafted answers,
 the Account Manager and the Content Marketer can be built on one metered path. It adds the official
 Anthropic SDK (`@anthropic-ai/sdk`, pinned to an exact version) beside the Hub's older case assistant,

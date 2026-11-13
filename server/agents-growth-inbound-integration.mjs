@@ -102,6 +102,14 @@ try {
   assert.equal((await row("select private.growth_message_class('marketing_manager','marketing','inbound') as c")).c, 'growth.sales_followup', 'A person who asked is never cold email');
   assert.equal((await agents.growthLeadCapture(asked)).captured, true, 'Capturing again changes nothing');
   assert.equal((await row('select count(*)::int n from private.growth_evidence where opportunity_id=$1', [captured.opportunityId])).n, 1);
+  // A business already found through its role address: the person who asks becomes the contact, so the follow-up goes to them.
+  const known = await prospect('asks-later');
+  const knownVersion = (await row('select version from private.growth_opportunities where id=$1', [known.opportunity])).version;
+  const jane = await agents.growthLeadCapture(await lead('county_report', `jane@${known.domain}`));
+  assert.equal(jane.opportunityId, known.opportunity);
+  const janeOpp = await row('select o.version,c.email,c.source_kind from private.growth_opportunities o join private.growth_contacts c on c.id=o.contact_id where o.id=$1', [known.opportunity]);
+  assert.deepEqual([janeOpp.email, janeOpp.source_kind], [`jane@${known.domain}`, 'inbound'], 'The person who asked replaces the role address');
+  assert.ok(janeOpp.version > knownVersion, 'Drafts written to the role address go stale');
   // A free mail address is its own organization; a test or unknown kind is not captured.
   const free = await lead('newsletter', `pat.reader.${run}@gmail.com`);
   const freeCaptured = await agents.growthLeadCapture(free);

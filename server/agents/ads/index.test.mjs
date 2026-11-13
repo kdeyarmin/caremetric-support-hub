@@ -36,6 +36,10 @@ describe('the weekly paid ads plan', () => {
     expect(proposals[1].input).toMatchObject({ platform: 'meta', audienceId: '1234567' });
     expect(proposals[2].input.plan.headlines).toHaveLength(3);
     expect(proposals[1].preview).toContain('paused');
+    // A new campaign has no ads, and the proposal says so rather than promising the team will fill it.
+    expect(proposals[0].preview).toContain('It starts with no ads: add its first ad in LinkedIn Campaign Manager');
+    expect(proposals[1].preview).toContain('It starts with no ads: add its first ad in Meta Ads Manager');
+    expect(proposals[1].preview).not.toMatch(/proposes ads into it/);
     expect(done).toMatchObject({ status: 'awaiting_approval', result: { proposed: 3 } });
   });
 

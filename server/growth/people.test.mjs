@@ -47,8 +47,10 @@ describe('growth.people', () => {
 
   it('spends nothing past the owner\'s daily number, and records CMS owners without any contact-data service', async () => {
     const capped = setup({ provider, feed, reserve: false });
-    expect((await capped.run()).result).toMatchObject({ noCredit: 1, found: 0 });
+    expect((await capped.run()).result).toEqual({ searched: 0, people: 0, found: 0, noCredit: 1 });
     expect(capped.store.enrichedContact).not.toHaveBeenCalled();
+    // Nothing is recorded, so the business is not marked searched and is looked at again once credits return.
+    expect(capped.store.peopleRecord).not.toHaveBeenCalled();
     const ownersOnly = setup({ feed });
     expect((await ownersOnly.run()).result).toMatchObject({ searched: 1, people: 1, found: 0 });
     expect(ownersOnly.store.enrichmentReserve).not.toHaveBeenCalled();

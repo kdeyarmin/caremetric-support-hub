@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { aiModels } from '../../ai-assistance.mjs';
 import { anthropicClient } from './client.mjs';
-import { costCents, searchCents } from './pricing.mjs';
-import { modelRunner } from './run.mjs';
+import { costCents, searchCents, worstCaseCents } from './pricing.mjs';
+import { inputTokenBound, minResearchRoundTokens, modelRunner } from './run.mjs';
 import { serverTools, sourcesOf } from './tools.mjs';
 
 const usage = (over = {}) => ({ input_tokens: 2000, output_tokens: 300, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, server_tool_use: { web_search_requests: 2, web_fetch_requests: 1 }, ...over });
@@ -68,14 +68,46 @@ describe('a research run', () => {
     expect(f.seen[1].messages[1]).toEqual({ role: 'assistant', content: paused.content });
   });
 
-  it('stops at the round limit or before a round that could pass the ceiling, keeping what it found', async () => {
+  it('stops at the round limit or before a round that could pass the ceiling, keeping what it found and wrote', async () => {
     const paused = message({ stop_reason: 'pause_turn' });
     const rounds = fixture({ steps: [reply(paused)] });
-    expect(await rounds.runner.research(task(), request({ maxRounds: 2 }))).toMatchObject({ outcome: 'stopped', stopped: 'rounds', rounds: 2 });
+    const limited = await rounds.runner.research(task(), request({ maxRounds: 2 }));
+    expect(limited).toMatchObject({ outcome: 'stopped', stopped: 'rounds', rounds: 2 });
+    expect(limited.text).toContain('Valley Hospice serves Philadelphia.');
     const ceiling = fixture({ steps: [reply(paused)] });
     const capped = await ceiling.runner.research(task(), request({ ceilingCents: 6 }));
-    expect(capped).toMatchObject({ outcome: 'stopped', stopped: 'ceiling', rounds: 1 });
+    expect(capped).toMatchObject({ outcome: 'stopped', stopped: 'ceiling' });
     expect(capped.sources.length).toBeGreaterThan(0);
+    expect(capped.text).toContain('Philadelphia');
+    expect(capped.costCents).toBeLessThanOrEqual(6);
+  });
+
+  it('fits the first round into the ceiling too, with fewer output tokens and searches, and declines when not even that fits', async () => {
+    // The full caps could cost more than 6 cents (3,000 output tokens and four searches), so the first round asks for less.
+    const f = fixture();
+    expect(await f.runner.research(task(), request({ ceilingCents: 6 }))).toMatchObject({ outcome: 'completed', rounds: 1 });
+    const sent = f.seen[0];
+    const worst = worstCaseCents(aiModels.draft, { inputTokens: inputTokenBound(sent), maxTokens: sent.max_tokens, cached: true })
+      + sent.tools.find(tool => tool.name === 'web_search').max_uses * searchCents;
+    expect(worst).toBeLessThanOrEqual(6);
+    expect(sent.max_tokens).toBeLessThan(3000);
+    expect(sent.max_tokens).toBeGreaterThanOrEqual(minResearchRoundTokens);
+    // A ceiling that cannot cover one search and the fewest output tokens makes no call at all.
+    const tiny = fixture();
+    expect(await tiny.runner.research(task(), request({ ceilingCents: 1 }))).toMatchObject({ outcome: 'stopped', stopped: 'ceiling', rounds: 0, text: '', costCents: 0 });
+    expect(tiny.seen).toHaveLength(0);
+    // When the full caps fit, the tool definitions are sent exactly as configured.
+    const roomy = fixture();
+    await roomy.runner.research(task(), request());
+    expect(roomy.seen[0]).toMatchObject({ max_tokens: 3000, tools: serverTools(aiModels.draft, { tools: ['web_search', 'web_fetch'], maxSearches: 4, maxFetches: 3 }) });
+  });
+
+  it('keeps the text of a paused turn with the text that finishes it', async () => {
+    const paused = message({ stop_reason: 'pause_turn', content: [searchBlock, { type: 'text', text: 'Valley Hospice opened a Bucks County office.' }] });
+    const f = fixture({ steps: [reply(paused), reply(message())] });
+    const result = await f.runner.research(task(), request());
+    expect(result.outcome).toBe('completed');
+    expect(result.text).toBe('Valley Hospice opened a Bucks County office.\n\nValley Hospice serves Philadelphia. https://valleyhospice.org/services');
   });
 
   it('refuses a tool the agent\'s allowlist does not name, and spends nothing past the day\'s budget', async () => {
