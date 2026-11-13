@@ -74,8 +74,10 @@ const day=86400000;
 // A sentence about CareMetric or one of its products, however the model capitalized the name, or one in the first person ("we cover",
 // "our data", "I built"): the founder writes as CareMetric, so "I", "we" and "our" are the company too. Only a sentence about the
 // organization itself ("Your team serves 12 counties") may repeat its numbers. "US" (the country) and a lower-case "i" are not pronouns here.
-const productName=/\b(?:CareMetric|CareBase|Intel)\b/i, firstPerson=/\b(?:[Ww]e|[Oo]urs?|us|[Mm]y|I)\b/;
-const aboutProduct=sentence=>productName.test(sentence)||firstPerson.test(sentence);
+const productName=/\b(?:CareMetric|CareBase|Intel|(?:the|this) (?:platform|product|software))\b/i;
+const firstPerson=/\b(?:we|ours?|my|mine|myself|ourselves)\b/i;
+const personalCase=/\b(?:I|[Uu]s|[Mm]e)\b/;
+const aboutProduct=sentence=>productName.test(sentence)||firstPerson.test(sentence)||personalCase.test(sentence);
 const sentencesOf=text=>text.split(/\n+|(?<=[.!?])\s+/).filter(sentence=>sentence.trim());
 const trailing=/[.,;:!?)\]]+$/;
 // Dollar amounts compared as numbers ("$199.00" is the listed $199). The fact sheet allows an amount for some product; a message

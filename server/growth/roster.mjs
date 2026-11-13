@@ -171,6 +171,30 @@ export function scoreCandidate(target, row) {
   return { score, inDomain, inTitle };
 }
 
+// Check conflicting location evidence before a high-scoring namesake can win or tie.
+function wrongState(target, row) {
+  const text = [row.name, row.claim].filter(Boolean).join(' ');
+  const city = words(target.city).join(' ');
+  const agency = searchName(target.name);
+  const normalized = ' ' + words(text).join(' ') + ' ';
+  // A state within the agency's name says nothing about the location of this result.
+  const locations = agency ? normalized.replaceAll(new RegExp('(?<= )' + agency + '(?= )', 'g'), ' ') : normalized;
+  const named = statesNamed(locations);
+  // Indiana or Washington may be the target's city. A separate postal address still identifies the state.
+  for (const code of named) {
+    if (words(stateNames[code]).join(' ') === city) named.delete(code);
+  }
+  for (const match of text.matchAll(/\b([A-Z]{2})\s+\d{5}\b|,\s*([A-Z]{2})\b(?!-)/g)) {
+    const code = match[1] || match[2];
+    if (!Object.hasOwn(stateNames, code)) continue;
+    // MD, PA, MA and MS after a name can be credentials. Accept them following the target city or before a ZIP.
+    if (!match[1] && ['MD', 'PA', 'MA', 'MS'].includes(code)
+      && !(city && (' ' + words(text.slice(0, match.index)).join(' ')).endsWith(' ' + city))) continue;
+    named.add(code);
+  }
+  return named.size > 0 && !named.has(target.state);
+}
+
 /**
  * The search result that is the agency's own website, or null. The best domain must carry part of the agency's name (in its domain or
  * its page title), score at least 50, and beat a different domain by 10 points, so a common name never picks one of two lookalikes.
@@ -179,6 +203,7 @@ export function chooseSite(target, rows) {
   const best = new Map();
   for (const row of rows ?? []) {
     if (!row?.domain || !operatorHost(row.domain) || !/^https:\/\//.test(row.url ?? '')) continue;
+    if (wrongState(target, row)) continue;
     const scored = { ...scoreCandidate(target, row), domain: row.domain, url: row.url };
     if (!best.has(row.domain) || best.get(row.domain).score < scored.score) best.set(row.domain, scored);
   }
