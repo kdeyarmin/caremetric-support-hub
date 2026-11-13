@@ -21,6 +21,11 @@ export async function evaluateGrowth(now = new Date()) {
     check('initial outreach', planOpportunity(base, now).some(w => w.kind === 'outreach'));
     check('reply stops sequence', !planOpportunity({ ...base, events: [{ kind: 'reply', occurred_at: at }] }, now).some(w => w.kind === 'outreach'));
     check('touch cap', !planOpportunity({ ...base, touches: 3 }, now).some(w => w.kind === 'outreach'));
+    // A check-in is planned only when the database finds one due (private.growth_checkin_due), once per reason, never as outreach.
+    const checkins = over => planOpportunity({ ...base, ...over }, now).filter(w => w.kind === 'checkin');
+    check('not now is asked again once', checkins({ stage: 'nurture', touches: 1, checkin_due: 'not_now', last_reply_at: ago(100) }).length === 1);
+    check('no check-in unless due', checkins({ stage: 'nurture', touches: 1, checkin_due: null }).length === 0 && checkins({ touches: 3, checkin_due: null }).length === 0);
+    check('a check-in is not another touch', !planOpportunity({ ...base, touches: 3, checkin_due: 'no_reply' }, now).some(w => w.kind === 'outreach'));
     check('internal excluded', planOpportunity({ ...base, internal: true }, now).length === 0);
     check('Breathe excluded', planOpportunity({ ...base, product: 'breathe' }, now).length === 0);
     check('stale sources rejected', !qualify([{ ...evidence[0], observed_at: ago(31) }], now).canDraft);

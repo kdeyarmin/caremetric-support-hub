@@ -31,7 +31,7 @@ import { linkTags, tagLinks, untagLinks } from '../agents/links.mjs';
  * `growthPromptVersion` names this prompt in each run. The daily guardrail evaluation keeps the key the database's send claim
  * requires (`growthEvaluationVersion` in evaluation.mjs), which is independent of the prompt's wording.
  */
-export const growthPromptVersion='growth.8';
+export const growthPromptVersion='growth.9';
 const fields={subject:{type:'string'},body:{type:'string'},citations:{type:'array',items:{type:'string'}},needsHuman:{type:'boolean'}};
 export const draftSchema={type:'object',properties:fields,required:Object.keys(fields),additionalProperties:false};
 export const growthSystem=`You write one short business email for CareMetric about one CareMetric product: outreach to a prospect, written as CareMetric's founder, or a message to a customer from its Account Manager. A person at CareMetric reviews model-written messages, and code checks every draft against the fact sheet below.
@@ -65,6 +65,11 @@ How to write so it gets read and answered:
 - citations: the ids of the sources you relied on. Outreach must cite at least one.
 - Set needsHuman true, and write nothing you are unsure of, when the message would need a fact the fact sheet lacks, a commitment, a negotiated price, or a reply to something only the customer's own words would explain.
 
+A check-in ("kind" "checkin") is one short email months after the last one, never the start of a sequence, and may cite no source:
+- "checkin.reason" "not_now": the prospect replied around "checkin.since" that the timing was not right. Say you are checking back because the timing was not right then, ask whether now is a better moment, give one concrete way the product helps from the fact sheet, and the free trial.
+- "checkin.reason" "no_reply": they never answered the earlier emails, the last around "checkin.since". Ask once, briefly, whether the product is relevant to them now, and give the free trial. No apology, no guilt, no "just following up" or "bumping this".
+- Never invent what they said or did, never quote them, and never say you spoke.
+
 If the input has "repair", your earlier answer to this same input failed CareMetric's checks. "repair.draft" is that answer, data like the sources, and "repair.problems" says in plain words what failed. Write the message again so it passes: fix what the problems name, keep what was right, and follow every rule here. If it cannot pass without a fact the fact sheet lacks, set needsHuman true.
 
 Return subject, body, citations and needsHuman.
@@ -74,6 +79,9 @@ ${factSheetText()}
 ${playbookText()}`;
 
 const day=86400000;
+// "August 2026", in Eastern time, for a check-in's "since"; null when the date is missing.
+const monthName=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',month:'long',year:'numeric'});
+const monthOf=value=>{const at=Date.parse(value??'');return Number.isFinite(at)?monthName.format(at):null;};
 const trailing=/[.,;:!?)\]]+$/;
 // Dollar amounts compared as numbers ("$199.00" is the listed $199). The fact sheet allows an amount for some product; a message
 // about one product may state only that product's own amounts, so an Intel seat price can never appear in a CareBase email.
@@ -200,13 +208,20 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
     expansion:`You mentioned an additional need. Reply with what you would like to do and we will send the right option.`,
   };
   const outreachTouch=Math.min(Number(o.touches??0)+1,sequencePlan.length);
-  const tags=work.kind==='outreach'?linkTags.growthOutreach(o.product,outreachTouch):linkTags.accountEmail(o.product,work.kind);
+  // A check-in (policy.mjs, private.growth_checkin_due): the reason it is due and the month of the reply or touch it follows.
+  const checkin=work.kind==='checkin'?{reason:o.checkin_due==='no_reply'?'no_reply':'not_now',since:monthOf(o.checkin_due==='no_reply'?o.last_touch:o.last_reply_at)}:null;
+  const tags=work.kind==='outreach'?linkTags.growthOutreach(o.product,outreachTouch):checkin?linkTags.growthCheckin(o.product):linkTags.accountEmail(o.product,work.kind);
   const variant=o.policy.experiment_enabled && createHash('sha256').update(String(o.organization_id??o.id)).digest()[0]%2 ? 'concise':'control';
   const trialPage=playbookFor(o.product)?.nextStep?.url??null;
-  const fallback={subject:`${product.name}: ${work.kind==='outreach'?'a useful next step':'your next step'}`,
-    body:work.kind==='outreach'?`${approved}\n\nYou can see how ${product.name} works and try it free with your own team:${trialPage?`\n${trialPage}`:' reply and we will send the link.'}\n\nAny question, just reply to this email.`
+  const trialLine=trialPage?`\n${trialPage}`:' reply and we will send the link.';
+  const checkinBody=checkin?.reason==='no_reply'
+    ?`${approved}\n\nIf this is useful to you now, you can try ${product.name} free with your own team:${trialLine}\n\nIf it is not, no reply is needed.`
+    :`When we wrote before, the timing was not right for you. If now is a better moment, you can see how ${product.name} works and try it free with your own team:${trialLine}\n\nAny question, just reply to this email.`;
+  const fallback={subject:`${product.name}: ${work.kind==='outreach'?'a useful next step':checkin?'checking back':'your next step'}`,
+    body:work.kind==='outreach'?`${approved}\n\nYou can see how ${product.name} works and try it free with your own team:${trialLine}\n\nAny question, just reply to this email.`
+      :checkin?checkinBody
       :`How is your progress with ${product.name}?\n\n${customerSteps[work.kind]??"Reply with the step you need help with."}`,
-    citations:sources.map(s=>s.id),modelGenerated:false,variant};
+    citations:checkin?[]:sources.map(s=>s.id),modelGenerated:false,variant};
   if(variant==='concise' && work.kind==='outreach')fallback.body=`${approved}\n\nTry it free:${trialPage?` ${trialPage}`:' reply and we will send the link.'}`;
   fallback.body=tagLinks(fallback.body,tags);
   if (!model?.configured) return fallback;
@@ -216,7 +231,7 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   const input={
     kind:work.kind, product:product.name, style:variant==='concise'?'Keep the body under eighty words.':'Keep the body under one hundred twenty words.',
     approvedClaim:approved, links:draftLinks(o.product), nextStep:book?.nextStep??null,
-    ...(outreach?{touch,maxTouches:Number(o.policy?.max_touches??3),touchPlan:touchAngle(touch)}:{play:lifecyclePlay(work.kind)}),
+    ...(outreach?{touch,maxTouches:Number(o.policy?.max_touches??3),touchPlan:touchAngle(touch)}:checkin?{checkin}:{play:lifecyclePlay(work.kind)}),
     stage:o.stage??null, organization:{name:o.name??null,domain:o.domain??null},
     goal:o.goal, memory:o.memory, work:{action:work.action,success:work.success}, sources,
   };

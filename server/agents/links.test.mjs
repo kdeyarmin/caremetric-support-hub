@@ -102,3 +102,9 @@ describe('the tags each agent uses', () => {
     expect(() => tagValue('—')).toThrow();
   });
 });
+describe('check-in campaign',()=>{
+  it('tags the one check-in apart from the touches', () => {
+    expect(linkTags.growthCheckin('caremetric-intel')).toEqual({ source: 'caremetric', medium: 'email', campaign: 'growth-intel-checkin' });
+    expect(linkTags.growthCheckin('carebase')).toEqual({ source: 'caremetric', medium: 'email', campaign: 'growth-carebase-checkin' });
+  });
+});

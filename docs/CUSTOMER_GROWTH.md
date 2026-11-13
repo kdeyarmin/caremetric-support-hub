@@ -120,6 +120,26 @@ from the sender's own words only (`private.growth_reply_reading`, 2026-11-13):
 
 When capture fails, the inbox keeps the email and its fallback still honours a request to stop by the same reading.
 
+### Checking back months later
+
+Since 2026-11-13 (`20261113210000_growth_checkin.sql`, prompt `growth.9`), the Marketing Manager asks again, once, where it used to
+stop for good. `private.growth_checkin_due` decides; the planner (`server/growth/policy.mjs`) plans one `checkin` work item when it
+says one is due, and the send claim lets that one message through:
+
+- **"Not now."** The business's latest reply was "not now" (see [How replies are read](#how-replies-are-read)) at least 90 days ago,
+  nothing was emailed to anyone there for 90 days, and no check-in has gone to it since that reply: one short email says the timing
+  was not right then, asks whether now is better and gives the free trial. Another "not now" starts the 90 days again.
+- **No reply.** The business never answered the policy's touches and the last one was at least 90 days ago: one last short email asks
+  whether the product is relevant now and gives the free trial. Never a second one.
+- **Never** after a refusal ("no thank you", "not a good fit"), a question, a trial or a cancellation as the latest reply, to an
+  opted-out or suppressed address, to a customer or internal organization, or for an opportunity the Account Manager owns.
+
+A check-in may cite no source (it follows the conversation, not new research), goes past the touch limit and to an opportunity in
+nurture, and otherwise meets every rule a marketing email does: the agent's trust for its class (to a role address it is cold email,
+needs the "Cold email" step and counts against "Most cold emails a day"), a permitted and verified contact, the gap between
+messages and the daily limits. Its product links carry the campaign `growth-<product>-checkin`, so a reply or trial it brings is
+told apart from the touches.
+
 ## A separate sender for prospecting
 
 Cold email and sales follow-ups (every `growth.message`, whichever step approved it) can come from their own address, so that

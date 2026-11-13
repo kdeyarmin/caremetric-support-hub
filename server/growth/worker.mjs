@@ -142,7 +142,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
           signal?.throwIfAborted(); const existing=(o.work??[]).find(w=>w.trigger_key===work.key);
           if(existing?.status==='resolved'||existing?.status==='cancelled')continue;
           const id=await growth.store.plan(o.id,work);planned++;
-          if(!['outreach','onboarding','activation','trial','adoption','renewal','expansion','support','recovery'].includes(work.kind)||o.eligibility!=='permitted'||!growth.signingReady)continue;
+          if(!['outreach','checkin','onboarding','activation','trial','adoption','renewal','expansion','support','recovery'].includes(work.kind)||o.eligibility!=='permitted'||!growth.signingReady)continue;
           if(existing?.message_id && existing.message_status!=='cancelled') {if(existing.message_status==='draft')await growth.store.propose(task.id,existing.message_id);continue;}
           // Cancelled for a lasting reason (the contact unsubscribed, the business replied, the business was already contacted) with
           // nothing changed since: a new draft would pay for a model call and get that same cancelled message back, every sweep. Only a
@@ -161,7 +161,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
           signal?.throwIfAborted();
           let saved;
           try {
-            saved=await growth.store.draft(o.id,id,{...draft,version:o.version,contactVersion:o.contact_version,policyVersion:o.policy.version,purpose:work.kind==='outreach'?'marketing':'success',unsubscribeHash:growth.hash(growth.unsubscribeToken(id)),variant:draft.variant??'control'});
+            saved=await growth.store.draft(o.id,id,{...draft,version:o.version,contactVersion:o.contact_version,policyVersion:o.policy.version,purpose:['outreach','checkin'].includes(work.kind)?'marketing':'success',unsubscribeHash:growth.hash(growth.unsubscribeToken(id)),variant:draft.variant??'control'});
           } catch (error) {
             // An owner edit during drafting invalidates this output. The next sweep reads fresh context.
             if(error?.code==='40001')continue;

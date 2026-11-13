@@ -1178,7 +1178,7 @@ reader and why it matters, stay inside what the catalog says (plan and module la
 a tool as making anyone compliant or survey-ready, or a readiness score as a prediction, never promise savings, and quote none of its
 percentages. Each agent's checks allow the numbers a catalog states for text about its own product only; a catalog vouches for no claim.
 Prompt versions: `content.4`, `outreach.5`, `sales.4`, `social-plan.5`, `social-ads.5`, `social-reply.4`, `creative-concept.6`,
-`creative-variants.6`, and the growth writer's `growth.8`.
+`creative-variants.6`, and the growth writer's `growth.9`.
 
 **The bigger picture, the founder and plain words (owner direction 2026-11-12).** Every writer on the team reads the fact sheet, so the
 owner's direction lives there (`server/agents/content/facts.mjs`, docs/GTM_FACTS.md):

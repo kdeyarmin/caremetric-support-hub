@@ -32,7 +32,7 @@ it('tells the writer which touch it is writing, the playbook angle for it and th
  expect(input.links.map(link=>link.url)).not.toContain('https://www.caremetricintel.com/');
  expect(request.system[0].text).toContain('CareMetric fact sheet');
  expect(request.system[0].text).toContain('sales playbook');
- expect(request.promptVersion).toBe('growth.8');
+ expect(request.promptVersion).toBe('growth.9');
  // No booking page is ever offered to the writer (no personal demos with anyone, owner decision 2026-11-09).
  expect(input.bookingUrl).toBeUndefined();
  expect(input.links.map(link=>link.url)).not.toContain(opportunity.policy.booking_url);
@@ -214,5 +214,31 @@ describe('one repair for a draft that fails a check it can fix',()=>{
   expect(draft.repaired).toBeUndefined();
   expect(model.run).toHaveBeenCalledTimes(1);
   expect(onRejected).not.toHaveBeenCalled();
+ });
+});
+describe('a check-in months later',()=>{
+ const checkinWork={kind:'checkin',action:'Check back whether the timing is better now.',success:'A reply, a trial or an explicit disposition is recorded.'};
+ const nurtured={...opportunity,product:'caremetric-intel',policy:{approved_claim:'CareMetric Intel shows which providers send patients to post-acute care.'},evidence:[],
+  stage:'nurture',touches:1,checkin_due:'not_now',last_reply_at:'2026-08-14T15:00:00Z',last_touch:'2026-08-01T15:00:00Z'};
+ it('the template asks again, cites nothing and needs no fresh source',async()=>{
+  const draft=await draftMessage({opportunity:nurtured,work:checkinWork,task:{}});
+  expect(draft).toMatchObject({modelGenerated:false,citations:[],subject:'CareMetric Intel: checking back'});
+  expect(draft.body).toMatch(/^When we wrote before, the timing was not right for you\./);
+  expect(draft.body).toContain('utm_campaign=growth-intel-checkin');
+  const silent=await draftMessage({opportunity:{...nurtured,stage:'contacted',touches:3,checkin_due:'no_reply',last_reply_at:null},work:checkinWork,task:{}});
+  expect(silent.body.startsWith(nurtured.policy.approved_claim)).toBe(true);
+  expect(silent.body).toMatch(/If it is not, no reply is needed\.$/);
+ });
+ it('tells the writer why it is due and the month it follows, with no touch plan',async()=>{
+  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Checking back on referral data',body:'When we wrote in August, the timing was not right. Is now a better moment to see where your referrals come from?\n\nhttps://www.caremetricintel.com/',citations:[],needsHuman:false}}))};
+  const draft=await draftMessage({opportunity:nurtured,work:checkinWork,task:{},model});
+  const input=JSON.parse(model.run.mock.calls[0][1].user);
+  expect(input).toMatchObject({kind:'checkin',checkin:{reason:'not_now',since:'August 2026'}});
+  expect(input.touchPlan).toBeUndefined();
+  expect(input.play).toBeUndefined();
+  expect(model.run.mock.calls[0][1].system[0].text).toContain('A check-in ("kind" "checkin")');
+  expect(draft).toMatchObject({modelGenerated:true,citations:[]});
+  await draftMessage({opportunity:{...nurtured,checkin_due:'no_reply',last_touch:'2026-07-20T15:00:00Z'},work:checkinWork,task:{},model});
+  expect(JSON.parse(model.run.mock.calls.at(-1)[1].user).checkin).toEqual({reason:'no_reply',since:'July 2026'});
  });
 });

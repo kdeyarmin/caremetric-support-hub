@@ -112,6 +112,8 @@ export const campaignProduct = product => ({ carebase: 'carebase', 'caremetric-i
  */
 export const linkTags = Object.freeze({
   growthOutreach: (product, touch) => ({ source: 'caremetric', medium: 'email', campaign: tagValue('growth', campaignProduct(product), `touch${Number(touch) || 1}`) }),
+  // The one check-in months later (private.growth_checkin_due): its own campaign, so a reply or trial it brings is told apart.
+  growthCheckin: product => ({ source: 'caremetric', medium: 'email', campaign: tagValue('growth', campaignProduct(product), 'checkin') }),
   accountEmail: (product, moment) => ({ source: 'caremetric', medium: 'email', campaign: tagValue('account', campaignProduct(product), moment) }),
   sales: (product, route) => ({ source: 'caremetric', medium: ['email', 'chat', 'sms'].includes(route) ? route : 'email', campaign: tagValue('sales', campaignProduct(product)) }),
   social: (platform, product, content, { paid = false } = {}) => ({
