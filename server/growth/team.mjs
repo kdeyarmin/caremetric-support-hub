@@ -118,24 +118,30 @@ export function decidingTitle(text) {
 
 /**
  * The people a page names with a title that decides: [{ name, title }], at most ten, the same name once. A name and its title on one
- * line ("Jane Doe, RN – Administrator", "Administrator: Jane Doe", "Jane Doe (Owner)"), or a name on its own line with the title on
- * the line below (or, failing that, the line above).
+ * line ("Jane Doe, RN – Administrator", "Administrator: Jane Doe", "Jane Doe (Owner)"), or a name on its own line with its title on
+ * the side the page puts titles: below the names, or above them when more of the page's names have a title above than below (cards
+ * that read "Administrator / Jane Doe / Owner / John Smith"). A title on the other side is used only when no other name claims it.
  */
 export function teamPeople(html) {
   const lines = pageLines(html);
   const found = new Map();
+  const names = lines.map(line => (line.length <= 140 ? personName(line) : null));
+  const titleAt = index => (index >= 0 && index < lines.length && !names[index] ? decidingTitle(lines[index]) : null);
+  let aboveCount = 0, belowCount = 0;
+  names.forEach((name, i) => { if (name) { if (titleAt(i - 1)) aboveCount += 1; if (titleAt(i + 1)) belowCount += 1; } });
+  const titlesAbove = aboveCount > belowCount;
   const add = (name, title) => { if (name && title && !found.has(name.toLowerCase()) && found.size < 10) found.set(name.toLowerCase(), { name, title }); };
   for (let i = 0; i < lines.length && found.size < 10; i += 1) {
     const line = lines[i];
     if (line.length > 140) continue;
     const bracket = /^(.+?)\s*\(([^()]{3,80})\)$/.exec(line);
     if (bracket && personName(bracket[1]) && decidingTitle(bracket[2])) { add(personName(bracket[1]), decidingTitle(bracket[2])); continue; }
-    const name = personName(line);
+    const name = names[i];
     if (name) {
-      const below = decidingTitle(lines[i + 1]);
-      // The line above is this person's title only when it is not the title of a name above it.
-      const above = i > 0 && !personName(lines[i - 1]) && !(i > 1 && personName(lines[i - 2])) ? decidingTitle(lines[i - 1]) : null;
-      add(name, below ?? above);
+      // The title on the page's side; failing that, the other side's, unless the next name over claims it.
+      const below = titleAt(i + 1), above = titleAt(i - 1);
+      const title = titlesAbove ? above ?? (names[i + 2] ? null : below) : below ?? (names[i - 2] ? null : above);
+      add(name, title);
       continue;
     }
     // One line: cut it where a name ends and a title begins. A name first takes the longest cut that is still a name, so the

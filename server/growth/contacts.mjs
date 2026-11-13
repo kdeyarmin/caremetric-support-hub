@@ -333,7 +333,8 @@ export function growthContactFinder({ fetchImpl = null, lookup = dnsLookup } = {
     if (!domainPattern.test(host) || host.length > 253) return { people: [], addresses: [] };
     const site = siteOf(host, signal);
     const people = new Map(), addresses = new Map();
-    const queue = ['/'];
+    // The usual pages are queued from the start, so a home page that robots.txt forbids or that fails still leaves them to read.
+    const queue = ['/', ...teamPaths];
     const seen = new Set();
     let read = 0;
     while (queue.length && read < teamPageLimit) {
@@ -350,7 +351,7 @@ export function growthContactFinder({ fetchImpl = null, lookup = dnsLookup } = {
       if (path === '/') {
         let links = [];
         try { links = analyzeHtml(page.text, page.url).links; } catch { links = []; }
-        queue.push(...teamLinks(links, site.hosts), ...teamPaths);
+        queue.unshift(...teamLinks(links, site.hosts));
       }
     }
     return { people: [...people.values()].slice(0, 10), addresses: [...addresses.values()].slice(0, 20) };

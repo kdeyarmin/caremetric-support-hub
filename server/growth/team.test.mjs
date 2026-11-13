@@ -39,6 +39,13 @@ describe('reading who leads a business from its own pages', () => {
     ]);
   });
 
+  it('reads titles above names when the page puts them there, never borrowing the next person\'s title', () => {
+    expect(teamPeople('<div><p>Administrator</p><h3>Jane Doe</h3></div><div><p>Owner</p><h3>John Smith</h3></div>')).toEqual([
+      { name: 'Jane Doe', title: 'Administrator' }, { name: 'John Smith', title: 'Owner' }]);
+    expect(teamPeople('<h3>Jane Doe</h3><p>Administrator</p><h3>John Smith</h3><p>Owner</p><h3>Pat Kim</h3>')).toEqual([
+      { name: 'Jane Doe', title: 'Administrator' }, { name: 'John Smith', title: 'Owner' }]);
+  });
+
   it('follows only links on the business\'s own hosts that lead to its people, team pages first', () => {
     const hosts = ['valleyhospice.org', 'www.valleyhospice.org'];
     expect(teamLinks(['https://www.valleyhospice.org/about-us/', 'https://valleyhospice.org/our-team', 'https://valleyhospice.org/blog/team-news',

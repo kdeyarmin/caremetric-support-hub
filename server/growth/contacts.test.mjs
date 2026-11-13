@@ -204,4 +204,14 @@ describe('the team reader', () => {
     expect(read).toEqual(['/', '/our-leadership', '/about', '/about-us', '/our-team', '/leadership']);
     expect(read).not.toContain('/team');
   });
+
+  it('still reads the usual pages when robots.txt forbids the home page or it fails', async () => {
+    const { fetchImpl, calls } = site({
+      'https://example.org/robots.txt': page('User-agent: *\nDisallow: /$', { type: 'text/plain' }),
+      'https://example.org/team': page('<h3>Jane Doe</h3><p>Administrator</p>'),
+    });
+    expect((await growthContactFinder({ fetchImpl, lookup: publicLookup }).team('example.org')).people).toEqual([
+      { name: 'Jane Doe', title: 'Administrator', sourceUrl: 'https://example.org/team' }]);
+    expect(calls.map(call => new URL(call.url).pathname)).not.toContain('/');
+  });
 });
