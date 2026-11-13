@@ -84,6 +84,20 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
       return { published: true, id: published.id };
     },
 
+    // A post on the founder's own LinkedIn profile: always approved by the owner (the database refuses an automatic approval).
+    'social.founder_post': async execution => {
+      const input = execution.input ?? {};
+      if (execution.autoApproved === true) throw failure('approval_required');
+      if (!li.configured?.member || typeof li.publishMemberPost !== 'function') throw failure('linkedin_not_configured');
+      const due = Date.parse(input.scheduledFor ?? '');
+      if (Number.isFinite(due) && due - now().getTime() > 2 * 60_000) throw deferred();
+      const extraLinks = String(input.message ?? '').match(/https:\/\/[^\s]+/g) ?? [];
+      const checked = checkSocialText(input.message, { surface: 'linkedin', product: input.product ?? null, extraLinks });
+      if (!checked.ok || checked.text !== input.message) throw failure('invalid_post');
+      const published = await careful(execution, () => li.publishMemberPost({ message: input.message }));
+      return { published: true, id: published.id, founder: true };
+    },
+
     'social.reply': async execution => {
       const input = execution.input ?? {};
       if (onLinkedIn(input)) readyLinkedIn('page'); else ready(input.platform === 'instagram' ? 'instagram' : 'pages');

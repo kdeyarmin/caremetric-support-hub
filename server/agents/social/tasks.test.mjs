@@ -61,7 +61,7 @@ describe('the weekly social plan', () => {
     const h = harness({ model });
     const outcome = await h.handlers['social.plan'](task('social.plan'), { now });
     const request = model.run.mock.calls[0][1];
-    expect(request.promptVersion).toBe('social-plan.6');
+    expect(request.promptVersion).toBe('social-plan.7');
     // Each marketed product's published catalog follows the prompt (content/features.mjs).
     expect(request.system.slice(1)).toEqual(catalogBlocks(JSON.parse(request.user).products));
     expect(request.system.length).toBeGreaterThan(1);
@@ -363,15 +363,15 @@ describe('registration', () => {
     const config = socialConfig({ HUB_META_ACCESS_TOKEN: 'EAAG-system-user-token-0123456789', HUB_META_PAGE_ID: '1111', HUB_SOCIAL_IMAGE_URLS: 'https://cdn.example.com/a.jpg, http://insecure.example.com/b.jpg,nope',
       HUB_SOCIAL_AD_MAX_DAILY_BUDGET_CENTS: '5000', HUB_SOCIAL_TARGET_COST_PER_RESULT_CENTS: 'abc' });
     expect(config.imageUrls).toEqual(['https://cdn.example.com/a.jpg']);
-    expect(config.settings).toEqual({ maxDailyBudgetCents: 5000, targetCostCents: null, eventPosts: false });
+    expect(config.settings).toEqual({ maxDailyBudgetCents: 5000, targetCostCents: null, eventPosts: false, founderPosts: false, founderPostsPerWeek: 3 });
     const team = socialTeam({ social: config, features: new Set(['platform.agents.social.v1']) });
     expect(team.meta.configured).toEqual({ pages: true, instagram: false, ads: false });
     expect(Object.keys(team.handlers({ store: {}, notifier: {} })).sort()).toEqual(['social.ads', 'social.inbox', 'social.interaction', 'social.plan', 'social.report']);
-    expect(Object.keys(team.executors({})).sort()).toEqual(['social.ad_budget', 'social.ad_create', 'social.ad_pause', 'social.moderate', 'social.post', 'social.reply']);
-    expect(team.linkedin.configured).toEqual({ page: false, ads: false });
+    expect(Object.keys(team.executors({})).sort()).toEqual(['social.ad_budget', 'social.ad_create', 'social.ad_pause', 'social.founder_post', 'social.moderate', 'social.post', 'social.reply']);
+    expect(team.linkedin.configured).toEqual({ page: false, ads: false, member: false });
     const withLinkedIn = socialConfig({ HUB_LINKEDIN_ACCESS_TOKEN: 'AQX-linkedin-member-token-0123456789', HUB_LINKEDIN_ORGANIZATION_ID: '5550001', HUB_LINKEDIN_AD_ACCOUNT_ID: '5080001' });
     expect(withLinkedIn.linkedin).toMatchObject({ organizationId: '5550001', adAccountId: '5080001', version: '202609' });
-    expect(socialTeam({ social: withLinkedIn, features: ['platform.agents.social.v1'] }).linkedin.configured).toEqual({ page: true, ads: true });
+    expect(socialTeam({ social: withLinkedIn, features: ['platform.agents.social.v1'] }).linkedin.configured).toEqual({ page: true, ads: true, member: false });
   });
 });
 
@@ -507,5 +507,39 @@ describe('event posts, article links and stories', () => {
     expect(stories[0].input).toMatchObject({ message: '', link: null, imageUrl: `https://help.caremetric.ai/api/creative/a/${token}.png`, creativeAssetId: storyAsset.id, product: 'caremetric-intel' });
     expect(done.result.stories).toBe(2);
     expect(h.sent[0].body).toContain('(2 stories)');
+  });
+});
+
+describe('posts for the founder\'s own profile', () => {
+  const founderDraft = (day, text) => ({ platform: 'founder', product: 'caremetric-intel', pillar: 'tip', day, text, linkId: '', hashtags: ['HomeHealth'] });
+  const texts = ['Most agencies I talk to plan visits from memory. Writing down which referral sources you saw last month, and which you did not, changes the week.',
+    'Building CareMetric taught me that a marketer needs one list for the day, not ten reports. That is what we keep trying to make simpler.',
+    'Public Medicare data shows where people live and who serves them. It does not show who refers, so record your own referrals as they come in.'];
+  const setup = ({ member = true, founderPosts = true, perWeek = 2 } = {}) => {
+    const model = modelReturning({ posts: texts.map((text, index) => founderDraft(index + 2, text)) });
+    const linkedin = linkedinOf({ configured: { page: true, ads: true, member } });
+    const h = harness({ model, linkedin, settings: { founderPosts, founderPostsPerWeek: perWeek }, marketed: ['caremetric-intel'] });
+    return { ...h, model };
+  };
+
+  it('asks for the week\'s number and proposes each as its own post to approve, never automatically', async () => {
+    const h = setup();
+    const done = await h.handlers['social.plan'](task('social.plan'), { now });
+    expect(JSON.parse(h.model.run.mock.calls[0][1].user).postsToWrite.founder).toBe(2);
+    const founder = h.store.proposeAction.mock.calls.map(([item]) => item).filter(item => item.kind === 'social.founder_post');
+    expect(founder.map(item => [item.targetKind, item.targetId])).toEqual([['social_item', 'founder:2026-11-09:1'], ['social_item', 'founder:2026-11-09:2']]);
+    expect(founder[0].input).toMatchObject({ product: 'caremetric-intel', message: `${texts[0]}\n\n#HomeHealth` });
+    expect(done.result.founder).toBe(2);
+  });
+
+  it('emails them to copy without the founder\'s own token, and writes none while the setting is off', async () => {
+    const h = setup({ member: false });
+    await h.handlers['social.plan'](task('social.plan'), { now });
+    expect(h.store.proposeAction.mock.calls.some(([item]) => item.kind === 'social.founder_post')).toBe(false);
+    expect(JSON.stringify(h.sent[0].blocks)).toContain('Posts for your own LinkedIn profile, to copy');
+    const off = setup({ founderPosts: false });
+    await off.handlers['social.plan'](task('social.plan'), { now });
+    expect(JSON.parse(off.model.run.mock.calls[0][1].user).postsToWrite.founder).toBeUndefined();
+    expect(off.store.proposeAction.mock.calls.some(([item]) => item.kind === 'social.founder_post')).toBe(false);
   });
 });

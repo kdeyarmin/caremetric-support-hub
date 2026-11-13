@@ -20,7 +20,7 @@ import { productAmounts } from '../../growth/draft.mjs';
 import { linkablePages, offersMeeting, playbookFor, playbookText } from '../../growth/playbook.mjs';
 import { linkTags, tagLinks, untagLinks } from '../links.mjs';
 
-export const planPromptVersion = 'social-plan.6';
+export const planPromptVersion = 'social-plan.7';
 export const adPromptVersion = 'social-ads.5';
 export const replyPromptVersion = 'social-reply.4';
 
@@ -54,6 +54,7 @@ What makes a post work:
 - One idea per post, short paragraphs, useful before promotional, and one clear call to action at the end: answer in a comment, read the linked page, or start the free trial.
 - Mix the week: about two in five practical tips (from the playbook's likely problems, written as tips or questions, never as claims about readers), one in five product capability (the playbook's "what we may say"), one in five engagement (a question the audience can answer in a comment), one in five at most an offer (the free trial or the Founders Sale, exactly as written), or a resource (one of the product's own guide pages).
 - Platform style: Facebook is conversational, 40 to 120 words, and may carry one link. Instagram is visual and warm, 50 to 150 words, carries no link (say the link is in the bio), and ends with three to six hashtags. LinkedIn is professional and practical, 80 to 200 words, may carry one link and two to four hashtags.
+- Founder posts (platform "founder", only when "postsToWrite" asks for them) are for the founder's own LinkedIn profile, written in the first person as CareMetric's founder: an observation about the home health, hospice or senior-care market drawn from the request's "events" or the fact sheet, a lesson from building CareMetric, or a new public data release. 80 to 200 words, professional and plain; useful first, the product mentioned at most once, near the end. Set product to the product it relates to. One link at most, two or three hashtags. Never invite a call, a meeting, a message or a connection.
 - Write only about the products listed in the request's "products"; the others are not marketed yet.
 - Learn from the performance data in the request: write more like the posts that earned engagement and less like those that did not, but never copy a post, and never repeat a recent post's opening.
 - Links: only by id, from the list in the request for that post's product. The list may include articles the team published recently (ids starting "article-"): link one when a post is about its topic. Hashtags: plain words without the # sign, no spaces.
@@ -119,7 +120,7 @@ ${playbookText()}`;
 export const planSchema = {
   type: 'object', additionalProperties: false, required: ['posts'],
   properties: { posts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['platform', 'product', 'pillar', 'day', 'text', 'linkId', 'hashtags'], properties: {
-    platform: { type: 'string', enum: platforms }, product: { type: 'string', enum: socialProducts }, pillar: { type: 'string', enum: pillars }, day: { type: 'integer' },
+    platform: { type: 'string', enum: [...platforms, 'founder'] }, product: { type: 'string', enum: socialProducts }, pillar: { type: 'string', enum: pillars }, day: { type: 'integer' },
     text: { type: 'string' }, linkId: { type: 'string' }, hashtags: { type: 'array', items: { type: 'string' } } } } } },
 };
 export const adSchema = {

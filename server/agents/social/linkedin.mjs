@@ -66,7 +66,7 @@ const money = amount => Math.round(Number(amount ?? 0) * 100);
 
 export function linkedinClient({
   token = '', refreshToken = '', clientId = '', clientSecret = '',
-  adsToken = '', adsRefreshToken = '', adsClientId = '', adsClientSecret = '',
+  adsToken = '', adsRefreshToken = '', adsClientId = '', adsClientSecret = '', memberToken = '',
   organizationId = '', adAccountId = '', version = '202609', fetchImpl = fetch, timeoutMs = 15_000,
 } = {}) {
   const organization = numeric(String(organizationId ?? '').replace(/^urn:li:organization:/, ''));
@@ -83,7 +83,10 @@ export function linkedinClient({
   const ownAds = credential(adsToken, adsRefreshToken, adsClientId || clientId, adsClientSecret || clientSecret);
   const adsAuth = ownAds.current || ownAds.refresh ? ownAds : pageAuth;
   const usable = auth => Boolean(auth.current || auth.refresh);
-  const configured = { page: usable(pageAuth) && Boolean(org), ads: usable(adsAuth) && Boolean(account) };
+  let memberUrn = null;
+  // The founder's own profile: a "Share on LinkedIn" token (scopes openid, profile, w_member_social), with no renewal.
+  const memberAuth = credential(memberToken, '', '', '');
+  const configured = { page: usable(pageAuth) && Boolean(org), ads: usable(adsAuth) && Boolean(account), member: usable(memberAuth) };
 
   async function readBytes(response, limit) {
     if (!response.body?.getReader) {
@@ -157,6 +160,24 @@ export function linkedinClient({
     let data = {};
     try { data = text ? JSON.parse(text) : {}; } catch { data = {}; }
     return { data, id: response.headers?.get?.('x-restli-id') ?? response.headers?.get?.('x-linkedin-id') ?? null };
+  }
+  async function memberOf(signal) {
+    if (!configured.member) throw failure('linkedin_not_configured');
+    if (memberUrn) return memberUrn;
+    let response;
+    try {
+      response = await fetchImpl('https://api.linkedin.com/v2/userinfo', { method: 'GET', redirect: 'error', signal: timeout(signal),
+        headers: { Authorization: `Bearer ${memberAuth.current}`, Accept: 'application/json' } });
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      throw failure('linkedin_unavailable', true);
+    }
+    if (!response.ok) { await response.body?.cancel?.().catch(() => {}); throw codeFor(response.status); }
+    let data = {};
+    try { data = JSON.parse(await bounded(response)); } catch { data = {}; }
+    if (typeof data?.sub !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(data.sub)) throw failure('linkedin_invalid_request');
+    memberUrn = `urn:li:person:${data.sub}`;
+    return memberUrn;
   }
   const get = (path, query, options = {}) => call('GET', path, { ...options, query }).then(result => result.data);
   const elements = data => (Array.isArray(data?.elements) ? data.elements : []);
@@ -342,6 +363,20 @@ export function linkedinClient({
         ...(content ? { content } : {}),
       } });
       return { id: String(result.id ?? ''), image: Boolean(image) };
+    },
+
+    /** The founder's member URN, from the OpenID userinfo the token's own profile answers (read once). */
+    member: ({ signal } = {}) => memberOf(signal),
+
+    /** A text post on the founder's own profile, published only after the owner approved its exact words. */
+    async publishMemberPost({ message }, { signal } = {}) {
+      const author = await memberOf(signal);
+      const result = await call('POST', 'posts', { signal, auth: memberAuth, body: {
+        author, commentary: littleText(message), visibility: 'PUBLIC',
+        distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] },
+        lifecycleState: 'PUBLISHED', isReshareDisabledByAuthor: false,
+      } });
+      return { id: String(result.id ?? '') };
     },
 
     /** A reply nested under the comment: posted on the comment, naming what the comment is on and the comment as its parent. */

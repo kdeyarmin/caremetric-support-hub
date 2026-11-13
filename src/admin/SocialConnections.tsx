@@ -30,6 +30,7 @@ const advanced: Record<SocialProvider, Field[]> = {
     { key: "adsClientId", label: "LinkedIn advertising client ID", hint: "Optional client ID for the separate advertising app." },
     { key: "adsClientSecret", label: "LinkedIn advertising client secret", hint: "Optional renewal secret for the advertising app.", secret: true },
     { key: "adsRefreshToken", label: "LinkedIn advertising refresh token", hint: "Optional refresh token for the advertising app.", secret: true },
+    { key: "memberToken", label: "Your personal LinkedIn access token", hint: "Optional. Lets the posts written for your own LinkedIn profile publish once you approve each one. Generate it in OAuth Token Tools for an app with the Share on LinkedIn and Sign In with LinkedIn using OpenID Connect products (scopes openid, profile and w_member_social). It lasts about 60 days; without it the posts are emailed for you to copy.", secret: true },
   ],
 };
 

@@ -188,3 +188,13 @@ describe('the social connection HTTP boundary', () => {
     expect((await fetch(base)).status).toBe(400);
   });
 });
+
+it('opens a LinkedIn connection saved before the personal token existed, reading that token as empty', () => {
+  const key = 'a'.repeat(64);
+  const older = { token: 't'.repeat(20), refreshToken: '', clientSecret: '', adsToken: '', adsRefreshToken: '', adsClientSecret: '' };
+  expect(openConnection('linkedin', sealConnection('linkedin', older, key), key)).toEqual({ ...older, memberToken: '' });
+  // Anything else missing, or a field no provider has, still refuses to open.
+  const { token: _token, ...noToken } = older;
+  expect(() => openConnection('linkedin', sealConnection('linkedin', noToken, key), key)).toThrow('Social connection storage is unavailable');
+  expect(() => openConnection('linkedin', sealConnection('linkedin', { ...older, extra: 'x' }, key), key)).toThrow('Social connection storage is unavailable');
+});

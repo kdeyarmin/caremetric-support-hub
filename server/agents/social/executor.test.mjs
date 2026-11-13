@@ -230,3 +230,19 @@ describe('stories and article links', () => {
     await expect(run('social.post', { ...input, product: 'carebase' }).promise).rejects.toMatchObject({ code: 'invalid_post' });
   });
 });
+
+describe('the founder\'s own posts', () => {
+  const message = 'Most agencies I talk to plan visits from memory. Writing down which referral sources you saw last month changes the week.';
+  const input = { product: 'caremetric-intel', pillar: 'tip', message, scheduledFor: now().toISOString() };
+  it('publishes on the founder\'s profile only when the owner approved it, with the exact checked words', async () => {
+    const linkedin = linkedinOf({ configured: { page: true, ads: true, member: true }, publishMemberPost: vi.fn(async () => ({ id: 'urn:li:share:7300000000000000001' })) });
+    const executors = socialExecutors({ meta: metaOf(), linkedin, settings: {}, now, log: () => {} });
+    const action = over => ({ id: 'a1', kind: 'social.founder_post', input, agentKey: 'social_manager', targetId: 'founder:2026-11-09:1', ...over });
+    expect(await executors['social.founder_post'](action())).toEqual({ published: true, id: 'urn:li:share:7300000000000000001', founder: true });
+    expect(linkedin.publishMemberPost).toHaveBeenCalledWith({ message });
+    await expect(executors['social.founder_post'](action({ autoApproved: true }))).rejects.toMatchObject({ code: 'approval_required' });
+    await expect(executors['social.founder_post'](action({ input: { ...input, message: 'Book a call with me today.' } }))).rejects.toMatchObject({ code: 'invalid_post' });
+    const unconnected = socialExecutors({ meta: metaOf(), linkedin: linkedinOf(), settings: {}, now, log: () => {} });
+    await expect(unconnected['social.founder_post'](action())).rejects.toMatchObject({ code: 'linkedin_not_configured' });
+  });
+});

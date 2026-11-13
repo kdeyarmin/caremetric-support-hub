@@ -39,7 +39,7 @@ const labels = { facebook: 'Facebook', instagram: 'Instagram', messenger: 'Messe
 const productNames = { carebase: 'CareBase', 'caremetric-intel': 'CareMetric Intel' };
 // Posts per platform per week. Four on the two pages buyers read at work, three on Instagram (each needs an image).
 const weekly = { facebook: 4, instagram: 3, linkedin: 4 };
-const slots = { facebook: [10, 30], instagram: [12, 15], linkedin: [8, 45] };
+const slots = { facebook: [10, 30], instagram: [12, 15], linkedin: [8, 45], founder: [7, 50] };
 const modelAttempts = 3;
 const money = cents => `$${(cents / 100).toFixed(2)}`;
 const firstLine = text => String(text ?? '').split('\n')[0].slice(0, 90);
@@ -161,7 +161,9 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     const creativeImages = {};
     for (const product of offered) for (const platform of ['meta', 'linkedin']) creativeImages[`${product}:${platform}`] = await approvedImages(product, platform, true);
     const anyMetaCreative = offered.some(product => creativeImages[`${product}:meta`].some(asset => asset.kind === 'static' || videoPlacements.instagram.includes(asset.placement)));
-    const counts = { facebook: meta.configured.pages ? weekly.facebook : 0, instagram: meta.configured.instagram && (images().length || anyMetaCreative) ? weekly.instagram : 0, linkedin: weekly.linkedin };
+    const counts = { facebook: meta.configured.pages ? weekly.facebook : 0, instagram: meta.configured.instagram && (images().length || anyMetaCreative) ? weekly.instagram : 0, linkedin: weekly.linkedin,
+      // Settings → Social media → Write posts for my LinkedIn profile: the founder's own posts, each approved by the owner (never automatically).
+      ...(settings.founderPosts === true && settings.founderPostsPerWeek > 0 ? { founder: Math.min(settings.founderPostsPerWeek, 5) } : {}) };
     let posts = [];
     let performance = metaPosts() || li.configured.page ? 'read' : 'not_connected';
     for (const [on, client] of [[metaPosts(), meta], [li.configured.page, li]]) {
@@ -189,10 +191,32 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     const used = { facebook: 0, instagram: 0, linkedin: 0 };
     const rejected = {};
     const linkedin = [];
-    let proposed = 0, dataPosts = 0;
+    const founder = [];
+    let proposed = 0, dataPosts = 0, founderPosts = 0;
     for (const draft of result.output.posts ?? []) {
       signal?.throwIfAborted();
       if (socialProducts.includes(draft.product) && !offered.includes(draft.product)) { rejected.not_marketed = (rejected.not_marketed ?? 0) + 1; continue; }
+      if (draft.platform === 'founder') {
+        if (!counts.founder || founderPosts >= counts.founder || !offered.includes(draft.product)) continue;
+        const founderPage = draft.linkId ? linkable(draft.product).find(link => link.id === draft.linkId) : null;
+        if (draft.linkId && !founderPage) { rejected.link = (rejected.link ?? 0) + 1; continue; }
+        const founderLink = tagSocialLink(founderPage?.url ?? null, { platform: 'linkedin', product: draft.product, content: 'post' });
+        const founderText = tagSocialText(withHashtags(founderLink ? `${draft.text.trim()}\n\n${founderLink}` : draft.text, draft.hashtags), { platform: 'linkedin', product: draft.product, content: 'post' });
+        const founderChecked = checkSocialText(founderText, { surface: 'linkedin', product: draft.product, extraLinks: articleUrls(draft.product) });
+        if (!founderChecked.ok) { rejected[founderChecked.reason] = (rejected[founderChecked.reason] ?? 0) + 1; continue; }
+        founderPosts += 1;
+        // Without the founder's own token the post is emailed to copy and post by hand.
+        if (!li.configured.member) { founder.push({ product: draft.product, text: founderChecked.text }); continue; }
+        const founderSlot = slotFor({ week, day: draft.day, platform: 'founder', index: founderPosts, now: moment });
+        const founderTarget = `founder:${week}:${founderPosts}`;
+        if (targets.has(`social.founder_post:${founderTarget}`)) continue;
+        const founderProposal = await propose(task, { kind: 'social.founder_post', targetKind: 'social_item', targetId: founderTarget,
+          preview: `Post for your own LinkedIn profile (${productNames[draft.product]}), to publish ${when(founderSlot)} once you approve it:\n\n${founderChecked.text}`,
+          input: { product: draft.product, pillar: draft.pillar, message: founderChecked.text, scheduledFor: founderSlot } });
+        if (!founderProposal) break;
+        if (founderProposal.created !== false) { await store.socialSchedule(founderProposal.id, null); proposed += 1; }
+        continue;
+      }
       if (!offered.includes(draft.product) || used[draft.platform] === undefined || used[draft.platform] >= counts[draft.platform]) continue;
       const page = draft.linkId ? linkable(draft.product).find(link => link.id === draft.linkId) : null;
       if (draft.linkId && !page) { rejected.link = (rejected.link ?? 0) + 1; continue; }
@@ -259,12 +283,14 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       }
     }
 
-    const body = `${plural(proposed, 'post')} proposed${stories ? ` (${stories === 1 ? '1 story' : `${stories} stories`})` : ''}${linkedin.length ? `, ${plural(linkedin.length, 'LinkedIn post')} to paste` : ''}.${Object.keys(rejected).length ? ` ${Object.values(rejected).reduce((a, b) => a + b, 0)} drafts failed the checks and were dropped.` : ''}`;
+    const body = `${plural(proposed, 'post')} proposed${stories ? ` (${stories === 1 ? '1 story' : `${stories} stories`})` : ''}${linkedin.length ? `, ${plural(linkedin.length, 'LinkedIn post')} to paste` : ''}${founder.length ? `, ${plural(founder.length, 'post')} for your profile to copy` : ''}.${Object.keys(rejected).length ? ` ${Object.values(rejected).reduce((a, b) => a + b, 0)} drafts failed the checks and were dropped.` : ''}`;
     const blocks = [
       { type: 'callout', tone: 'info', title: `Social plan for the week of ${week}.`, text: body },
       { type: 'paragraph', text: proposed ? 'Approve each post in the AI team. An approved post waits for its time slot.' : 'No post is waiting: the accounts are not connected, or no draft passed the checks.' },
       ...(performance === 'read' ? [] : [{ type: 'paragraph', text: performance === 'not_connected' ? 'No social account is connected, so this plan could not learn from past posts.' : `Some past posts could not be read (${performance.replaceAll('_', ' ')}).` }]),
       ...linkedin.flatMap((post, index) => [{ type: 'paragraph', text: `LinkedIn post ${index + 1} (${productNames[post.product]}, ${post.pillar})` }, { type: 'message', text: post.text }]),
+      ...(founder.length ? [{ type: 'paragraph', text: 'Posts for your own LinkedIn profile, to copy and post yourself (save your personal LinkedIn token on the connection card and they wait for your approval instead):' }] : []),
+      ...founder.flatMap((post, index) => [{ type: 'paragraph', text: `Your post ${index + 1} (${productNames[post.product]})` }, { type: 'message', text: post.text }]),
       ...(/^https:\/\//i.test(publicOrigin ?? '') && proposed ? [{ type: 'button', label: 'Open the AI team', url: `${publicOrigin.replace(/\/+$/, '')}/admin/team` }] : []),
     ];
     const results = await notifier.send({ severity: 'info', subject: `Social plan: ${plural(proposed, 'post')} to approve`, body, blocks, dedupeKey: asked ? `social:plan:run:${task.id}` : key, agentKey: task.agentKey, taskId: task.id });
@@ -273,7 +299,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       try { await creative.planned(week); } catch { log(JSON.stringify({ event: 'hub_social_creative_plan_unqueued', week })); }
     }
     return { status: proposed ? 'awaiting_approval' : 'done', result: { week, proposed, ...(stories ? { stories } : {}), ...(events ? { events: events.releases.length + events.observances.length } : {}),
-      linkedin: linkedin.length, rejected, performance, delivery: results.map(item => `${item.channel}:${item.delivery}`) } };
+      linkedin: linkedin.length, ...(founderPosts ? { founder: founderPosts } : {}), rejected, performance, delivery: results.map(item => `${item.channel}:${item.delivery}`) } };
   }
 
   // ---- The inbox ----------------------------------------------------------------------------------------------------------------------
