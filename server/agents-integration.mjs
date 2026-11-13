@@ -887,8 +887,12 @@ try {
     assert.deepEqual([briefRun.model, briefRun.outcome, Number(briefRun.cost_cents)], ['none', 'completed', 0]);
     assert.match(briefRun.summary, /^Sent the morning brief: \d+ things need you this morning\.$/);
 
-    // A retry of the same day's brief sends nothing more, and still counts as delivered.
-    await enqueue('chief_of_staff', 'brief.daily', `it:${run}:brief:retry`, { sourceKind: 'schedule' });
+    // A retry of the same day's brief sends nothing more, and still counts as delivered. The brief is keyed by the Eastern day it was
+    // due for, read from the task's schedule key, so the retry carries the first brief's due time: one enqueued as due now named the
+    // next Eastern day whenever this ran in the two minutes after midnight Eastern, and rightly sent that day's brief.
+    const firstBrief = await row("select request_key from private.agent_tasks where agent_key = 'chief_of_staff' and kind = 'brief.daily' and request_key like 'schedule:%' order by created_at desc limit 1");
+    const due = /:(\d{8}T\d{6}Z)$/.exec(firstBrief.request_key)[1];
+    await enqueue('chief_of_staff', 'brief.daily', `schedule:${randomUUID()}:${due}`, { sourceKind: 'schedule' });
     tick = await briefTeam.tick();
     assert.equal(tick.claimed, 1);
     assert.equal(mail.email.length, 1, 'the scheduled brief is sent once a day');
