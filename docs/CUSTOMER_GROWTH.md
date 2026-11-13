@@ -238,9 +238,32 @@ Changing the playbook's wording changes what the models read: bump `playbookVers
 With `platform.agents.app-growth.v1`, Intel posts server-only activity to `POST /api/apps/growth` using its existing billing application
 key. The payload contains its opaque 24-hex billing account, an immutable event UUID, `heartbeat`, `active` or `first_value`, the event
 time, and optional provider-list count. It cannot claim a trial or payment. The Hub authenticates the app, resolves exactly the same
-account-to-tenant link as billing, and associates the event with that canonical tenant. A missing link returns retryable 503; no name or
-email matching occurs. When no Growth organization is linked yet, the Hub creates a customer record with a reserved `.invalid`
-identity and Account Manager ownership; that identity is never a prospect website or a source of cold outreach.
+account-to-tenant link as billing, and associates the event with that canonical tenant. A missing link returns retryable 503; the
+activity itself carries no name or email. When no Growth organization is linked yet, the Hub first looks for the prospect this
+customer was (see [A prospect who starts a trial](#a-prospect-who-starts-a-trial)); only when there is none does it create a customer
+record with a reserved `.invalid` identity and Account Manager ownership, an identity that is never a prospect website or a source of
+cold outreach.
+
+### A prospect who starts a trial
+
+A customer used to get a Growth organization of its own even when the Marketing Manager had already found and written to that
+business, so cold follow-ups kept going to a business in a trial and the trial was never credited to the outreach. Since 2026-11-13
+(`private.growth_ensure_customer`), the first trial, payment or product signal for a tenant with no Growth organization reads the
+address on its live billing customer, which is the address the application's sign-up gave for the trial:
+
+- **The same address as a growth contact** links that contact's organization, and that contact becomes the product opportunity's
+  contact.
+- **Otherwise the same business domain** as a prospect organization links it. Personal mail domains (Gmail, Outlook, Yahoo, iCloud,
+  Comcast and the like) never do. The person who signed up joins as a contact for review and becomes the product opportunity's
+  contact, so customer email never goes to the person who was cold-emailed because a colleague signed up.
+
+Only a prospect that is not already a customer and not internal is linked; a test-mode billing customer never links, and a tenant that
+already has a Growth organization keeps it. The send claim refuses cold email to a customer's organization, and unsent marketing drafts
+there are cancelled when the link is made. The trial or payment then lands on the prospect's own opportunity, with its history. Each
+link is audited as `growth.customer_linked` with the tenant, the product and whether the address or the domain matched, never the
+address. The sign-up address is the applicant's claim (Intel starts the trial before confirming it), so a link only stops prospecting
+and credits the trial: it sends nothing to anyone new. A linked customer keeps the prospect's real domain, so discovery can find it again; it then adds no
+opportunity or evidence to a customer's (or an internal) organization, for either product.
 
 Intel migration `0150_hub_growth_accounts.sql` enrolls billing-confirmed nonlegacy customer workspaces automatically, while preserving
 explicit legacy mappings and their enabled switches. The first newly recorded provider list with a real provider member emits first
