@@ -48,9 +48,18 @@ export function signV4({ method, url, region, service, accessKeyId, secretAccess
 const oneLine = value => String(value ?? '').replace(/[\r\n]+/g, ' ').trim();
 // RFC 2047 words must stay <=75 characters. Split on Unicode code points,
 // not bytes; 42 UTF-8 bytes leave room for the Subject prefix on the first line.
-// Encode long ASCII too, preserving spaces without creating an oversized line.
+// Plain ASCII stays readable: it is folded before a space (RFC 5322), so no line passes 78 characters with the Subject prefix.
+// Only a run with no space to fold at that would pass the 998-character line limit is encoded.
 function encodedWord(value) {
-  if (/^[\x20-\x7e]*$/.test(value) && value.length <= 69) return value;
+  if (/^[\x20-\x7e]*$/.test(value)) {
+    const lines = [];
+    let line = '';
+    for (const token of value.split(/(?= )/)) {
+      if (line.trim() && line.length + token.length > 69) { lines.push(line); line = token; } else line += token;
+    }
+    lines.push(line);
+    if (lines.every(part => part.length <= 900)) return lines.join('\r\n');
+  }
   const chunks = [];
   let chunk = '';
   for (const character of value) {
@@ -145,15 +154,16 @@ export function sesBulkMail({ accessKeyId, secretAccessKey, sessionToken = null,
 
 /**
  * The sender the owner chose (Settings → Email → Email service), read on each send, so switching between SendGrid and Amazon SES
- * takes effect within a minute without a restart. An unconfigured SES choice falls back to SendGrid before any request.
- * A SendGrid choice never opts into SES implicitly (especially for prospecting).
+ * takes effect within a minute without a restart. A choice whose service is not configured falls back to the other one before any
+ * request, so a half-finished switch never stops the Hub's email. `intoSes: false` (growth email) never falls back into SES: missing
+ * SendGrid credentials must not move prospecting onto SES. A send is never retried through the other service.
  */
-export function chosenMail(choice, providers) {
+export function chosenMail(choice, providers, { intoSes = true } = {}) {
   const current = () => {
     const wanted = live(choice) === 'ses' ? 'ses' : 'sendgrid';
     const other = wanted === 'ses' ? 'sendgrid' : 'ses';
     return providers[wanted]?.configured ? providers[wanted]
-      : wanted === 'ses' && providers[other]?.configured ? providers[other] : providers[wanted];
+      : (other !== 'ses' || intoSes) && providers[other]?.configured ? providers[other] : providers[wanted];
   };
   return {
     get configured() { return current()?.configured === true; },
@@ -227,10 +237,10 @@ export function snsReceiver({ topicArn, fetchImpl = fetch, now = () => Date.now(
 
 /**
  * The growth delivery events in one SES event notification (the configuration set's SNS event destination publishes one event per
- * notification). Only messages the Hub tagged with a growth message id count. Delivery → delivered; a permanent bounce or a reject →
- * bounced; a complaint → complaint. Every Bounce is terminal; only DeliveryDelay means SES is still trying.
- * Transient bounces count as failures without permanently suppressing the address. Each event's id is the SNS message
- * id, so a notification SNS delivers twice is recorded once.
+ * notification). Only messages the Hub tagged with a growth message id count. Delivery → delivered; a bounce or a reject →
+ * bounced; a complaint → complaint. Every Bounce is terminal; only DeliveryDelay means SES is still trying. Only a permanent bounce
+ * (or a complaint) suppresses the address: a transient or undetermined bounce, and a reject (SES found a virus in our own message),
+ * count as failures with `suppress: false`. Each event's id is the SNS message id, so a notification SNS delivers twice is recorded once.
  */
 export function sesGrowthEvents(notification) {
   let event;
@@ -244,5 +254,6 @@ export function sesGrowthEvents(notification) {
       : type === 'Reject' ? 'bounced' : type === 'Complaint' ? 'complaint' : null;
   if (!kind) return [];
   const at = Date.parse(event.delivery?.timestamp ?? event.bounce?.timestamp ?? event.complaint?.timestamp ?? event.mail?.timestamp ?? notification.Timestamp);
-  return [{ id: `ses:${notification.MessageId}`, messageId, kind, ...(type === 'Bounce' && event.bounce?.bounceType === 'Transient' ? { suppress: false } : {}), at: Number.isFinite(at) ? new Date(at).toISOString() : new Date().toISOString() }];
+  const suppress = kind !== 'bounced' || (type === 'Bounce' && event.bounce?.bounceType === 'Permanent');
+  return [{ id: `ses:${notification.MessageId}`, messageId, kind, ...(suppress ? {} : { suppress: false }), at: Number.isFinite(at) ? new Date(at).toISOString() : new Date().toISOString() }];
 }

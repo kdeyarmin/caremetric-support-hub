@@ -5,9 +5,9 @@ alerts and answers, customer lifecycle email and bulk email. Growth email (cold 
 switch, **Settings → Email → Growth email service**, which stays SendGrid by default: SES does not allow unsolicited
 email, and a suspension would stop every message the Hub sends. **Settings → Email → Email
 service** is SendGrid until the owner chooses Amazon SES, and a change applies within a minute with nothing to redeploy.
-If SES is selected but not configured, the Hub falls back to configured SendGrid before making a request. A SendGrid
-selection never falls back to SES: missing SendGrid credentials must not move prospecting mail onto SES. Provider errors
-or unknown outcomes never trigger a second send through another provider.
+If the chosen service is not set up, support, customer and bulk email go through the other one before any request, so a
+half-finished switch never stops that email. Growth email never falls back into SES: missing SendGrid credentials must not
+move prospecting mail onto SES. Provider errors or unknown outcomes never trigger a second send through another provider.
 
 Inbound support email is unchanged by this release: `caremetric.ai`'s MX still points at SendGrid Inbound Parse, which
 posts to `/api/channels/email/inbound`. Moving inbound mail to SES receiving is a separate change.
@@ -25,11 +25,11 @@ posts to `/api/channels/email/inbound`. Moving inbound mail to SES receiving is 
   Reject events to an SNS topic, and SNS posts them to the Hub. The Hub checks the SNS signature against the certificate
   SNS signs with (an https `.pem` on `sns.<region>.amazonaws.com`, fetched once and cached), accepts only the topic in
   **Settings → Email → Amazon SES events topic**, refuses messages older than six hours, and confirms the subscription
-  itself when SNS asks (only on SNS in that region). A delivery records `delivered`, every terminal bounce or reject
-  `bounced`, and a complaint `complaint`, once per SNS message. A transient bounce means SES stopped trying; it counts
-  as a failure without permanently suppressing the contact. DeliveryDelay is nonterminal and does not count as a bounce.
-  Permanent bounces, rejects, complaints and unsubscribes retain the existing suppression policy. Account-level SES
-  suppression is separate and must be verified in AWS; do not assume transient bounces enter that list.
+  itself when SNS asks (only on SNS in that region). A delivery records `delivered`, every bounce or reject `bounced`,
+  and a complaint `complaint`, once per SNS message. Only a permanent bounce, a complaint or an unsubscribe suppresses
+  the contact. A transient bounce (SES stopped trying), an undetermined bounce and a reject (SES found a virus in our own
+  message) count as failures without suppressing it. DeliveryDelay is nonterminal and does not count as a bounce.
+  Account-level SES suppression is separate and must be verified in AWS; do not assume transient bounces enter that list.
 
 ## Setting it up
 
@@ -67,7 +67,9 @@ posts to `/api/channels/email/inbound`. Moving inbound mail to SES receiving is 
 
 ## Review follow-up deployment dependency
 
-Apply the additive `growth_soft_bounce_reporting` migration before deploying this handler. The old four-argument
-function remains compatible with SendGrid and older Hub releases. The new five-argument call is used only for SES
-transient bounces. No queued mail is replayed. Keep both provider credentials and all inbound SendGrid settings;
+`20261113280000_growth_soft_bounce_reporting.sql` adds the five-argument delivery event, and
+`20261113280100_growth_soft_bounce_contract.sql` declares `platform.agents.growth-soft-bounce.v1`. The Hub calls the
+five-argument form (for failures that must not suppress) only once that feature is declared; until then those events are not
+recorded, as before, so code and database can deploy in either order. The four-argument function remains compatible with
+SendGrid and older Hub releases. No queued mail is replayed. Keep both provider credentials and all inbound SendGrid settings;
 changing outbound service does not verify production access or DKIM, and simulator acceptance is not that verification.

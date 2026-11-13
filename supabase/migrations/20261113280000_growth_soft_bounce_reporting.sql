@@ -1,8 +1,7 @@
--- Proposal only: apply before deploying the SES soft-bounce handler.
--- Preserve bounced status/scorecard counts and deduplication while allowing
--- terminal transient bounces to leave address eligibility unchanged.
--- Complaints/unsubscribes always suppress. Legacy four-argument callers retain
--- their existing policy, including SendGrid; this does not replay old events.
+-- SES failures that are not the recipient's fault (a transient or undetermined bounce, a reject) are recorded as bounced without
+-- opting the contact out. Bounced status, scorecard counts and deduplication are kept. Complaints and unsubscribes always suppress.
+-- Legacy four-argument callers keep their existing policy, SendGrid included; old events are not replayed. The Hub uses the
+-- five-argument form only once 20261113280100_growth_soft_bounce_contract.sql declares platform.agents.growth-soft-bounce.v1.
 set local lock_timeout = '10s';
 
 create function private.growth_delivery_event(p_event text,p_message uuid,p_kind text,p_at timestamptz,p_suppress boolean) returns boolean
@@ -30,3 +29,22 @@ language plpgsql security definer set search_path='' as $$ begin
  perform private.require_hub_app_server();
  return private.growth_delivery_event(p_event,p_message,p_kind,p_at,true);
 end; $$;
+
+do $$
+declare r text; f text;
+begin
+  foreach f in array array['private.growth_delivery_event(text,uuid,text,timestamptz,boolean)', 'private.growth_delivery_event(text,uuid,text,timestamptz)'] loop
+    if not exists (select 1 from pg_proc where oid = f::regprocedure and prosecdef and proconfig @> array['search_path=""'] and prosrc like '%require_hub_app_server%')
+       or not has_function_privilege('hub_app_server', f, 'execute') then
+      raise exception '% must stay a guarded Hub server function', f using errcode = '55000';
+    end if;
+    foreach r in array array['anon', 'authenticated', 'service_role'] loop
+      if has_function_privilege(r, f, 'execute') then raise exception '% exposed to %', f, r using errcode = '55000'; end if;
+    end loop;
+  end loop;
+  if position('coalesce(p_suppress,true)' in pg_get_functiondef('private.growth_delivery_event(text,uuid,text,timestamptz,boolean)'::regprocedure)) = 0
+     or position('p_kind in (''complaint'',''unsubscribe'')' in pg_get_functiondef('private.growth_delivery_event(text,uuid,text,timestamptz,boolean)'::regprocedure)) = 0
+     or position('private.growth_delivery_event(p_event,p_message,p_kind,p_at,true)' in pg_get_functiondef('private.growth_delivery_event(text,uuid,text,timestamptz)'::regprocedure)) = 0 then
+    raise exception 'Complaints and unsubscribes must always suppress, and the four-argument form must keep suppressing bounces' using errcode = '55000';
+  end if;
+end $$;
