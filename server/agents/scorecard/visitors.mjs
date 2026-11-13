@@ -10,8 +10,10 @@ export const visitorMetricsFeature = 'platform.agents.visitor-metrics.v1';
 export const visitorMetricsUrl = 'https://www.caremetricintel.com/api/hub/visitor-metrics';
 const maxBytes = 16_384;
 const period = z.object({ count: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullable(), complete: z.boolean() }).strict();
+// Sessions that arrived from a link in the Hub's own outreach email, by its campaign tag (an arm code, links.mjs): anonymous counts only.
+const campaign = z.object({ campaign: z.string().regex(/^[a-z0-9-]{1,60}$/), sessions: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER) }).strict();
 const responseSchema = z.object({ version: z.literal(1), metric: z.literal('anonymous_sessions'),
-  collectionStartedAt: z.iso.datetime({ offset: true }).nullable(), current: period, previous: period }).strict();
+  collectionStartedAt: z.iso.datetime({ offset: true }).nullable(), current: period, previous: period, campaigns: z.array(campaign).max(30).optional() }).strict();
 const failure = code => Object.assign(new Error('Website session counts could not be read.'), { code });
 const validKey = key => typeof key === 'string' && key.length >= 32;
 
@@ -57,7 +59,8 @@ export function nativeVisitorReader({ features = null, enabled = false, key = ''
     if (!configured()) return result('not_configured');
     if (signal?.aborted) throw failure('visitor_aborted');
     const window = requestWindow({ before, since, until }, now());
-    const raw = JSON.stringify(window);
+    // Per-campaign counts are asked for; an Intel that predates them refuses the field (400), and is asked once more without it.
+    const bodies = [JSON.stringify({ ...window, campaigns: true }), JSON.stringify(window)];
     const timestamp = String(Math.floor(now() / 1000));
     const timeout = AbortSignal.timeout(timeoutMs);
     const bounded = signal ? AbortSignal.any([signal, timeout]) : timeout;
@@ -68,9 +71,11 @@ export function nativeVisitorReader({ features = null, enabled = false, key = ''
     });
     try {
       const work = async () => {
-        const response = await fetchImpl(visitorMetricsUrl, { method: 'POST', redirect: 'error', cache: 'no-store', signal: bounded,
+        const post = raw => fetchImpl(visitorMetricsUrl, { method: 'POST', redirect: 'error', cache: 'no-store', signal: bounded,
           headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CareMetric-Timestamp': timestamp,
             'X-CareMetric-Signature': visitorMetricsSignature(key, timestamp, raw) }, body: raw });
+        let response = await post(bodies[0]);
+        if (response.status === 400) { await response.body?.cancel?.().catch(() => {}); response = await post(bodies[1]); }
         if (!response.ok) throw failure(response.status === 401 || response.status === 403 ? 'visitor_not_permitted'
           : response.status === 404 || response.status === 503 ? 'visitor_not_ready' : 'visitor_unavailable');
         const parsed = responseSchema.safeParse(await readJson(response));
@@ -86,7 +91,7 @@ export function nativeVisitorReader({ features = null, enabled = false, key = ''
         const visitors = count(answer.current, since);
         const previous = count(answer.previous, before);
         const state = visitors !== null && previous !== null ? 'read' : visitors !== null || previous !== null ? 'partial' : 'unavailable';
-        return result(state, { state, visitors, previous });
+        return result(state, { state, visitors, previous, ...(answer.campaigns && visitors !== null ? { campaigns: answer.campaigns } : {}) });
       };
       return await Promise.race([work(), stopped]);
     } catch (error) {

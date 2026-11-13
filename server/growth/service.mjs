@@ -24,7 +24,7 @@ export const importSchema=z.object({rows:z.array(z.object({name:text(200).min(1)
   contactName:text(200).optional(),role:text(200).optional()}).strict()).min(1).max(500)}).strict();
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const equal=(a,b)=>{const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length&&timingSafeEqual(x,y);};
-export function growthService({store,research,contacts=null,roster=null,people=null,deepResearch=null,importKey='',features,enabled=false,signingKey='',eventKeys={},webhookPublicKey='',sesEvents=null,sesEventsReady=()=>false,publicOrigin,postalAddress=''}) {
+export function growthService({store,research,contacts=null,roster=null,people=null,deepResearch=null,learning=null,importKey='',features,enabled=false,signingKey='',eventKeys={},webhookPublicKey='',sesEvents=null,sesEventsReady=()=>false,publicOrigin,postalAddress=''}) {
   // The sending switch and the footer's postal address are Hub settings; either may be a function, read on each use.
   const sending=()=>live(enabled)===true; const postal=()=>String(live(postalAddress)??'');
   const ready=()=>{if(!features?.has('platform.agents.customer-growth.v1'))throw new HttpError(503,'Apply the growth database migration first.');};
@@ -32,7 +32,7 @@ export function growthService({store,research,contacts=null,roster=null,people=n
   const parse=(schema,input)=>{const parsed=schema.safeParse(input); if(!parsed.success)throw new HttpError(400,'Invalid growth request.');return parsed.data;};
   const unsubscribeToken=workId=>createHmac('sha256',signingKey).update(`growth:${workId}`).digest('hex');
   return {
-    ready, store, research, contacts, roster, people, deepResearch, get enabled(){return sending();}, unsubscribeToken, hash, signingReady:signingKey.length>=32,
+    ready, store, research, contacts, roster, people, deepResearch, learning, get enabled(){return sending();}, unsubscribeToken, hash, signingReady:signingKey.length>=32,
     // Configuration only: no provider request and no credential value leaves this service.
     readiness() {
       let deliveryFeedback = false;
@@ -46,7 +46,7 @@ export function growthService({store,research,contacts=null,roster=null,people=n
     configured:()=>sending()&&signingKey.length>=32&&postal().trim().length>0&&/^https:\/\//.test(publicOrigin??''),
     async admin(token,input) {
       ready(); const {operation,data}=parse(z.object({operation:z.string(),data:z.record(z.string(),z.unknown()).default({})}).strict(),input);
-      if(operation==='workspace') {const {offset}=parse(z.object({offset:z.number().int().min(0).default(0)}).strict(),data);return safe(async()=>({...await store.workspace(token,offset),services:{sending:sending(),signing:signingKey.length>=32,postalAddress:Boolean(postal().trim()),research:Boolean(research?.configured),roster:features?.has('platform.agents.growth-roster.v1')===true,people:features?.has('platform.agents.growth-people.v1')===true}}));}
+      if(operation==='workspace') {const {offset}=parse(z.object({offset:z.number().int().min(0).default(0)}).strict(),data);return safe(async()=>({...await store.workspace(token,offset),services:{sending:sending(),signing:signingKey.length>=32,postalAddress:Boolean(postal().trim()),research:Boolean(research?.configured),roster:features?.has('platform.agents.growth-roster.v1')===true,people:features?.has('platform.agents.growth-people.v1')===true,learning:features?.has('platform.agents.growth-learning.v1')===true}}));}
       if(operation==='roster') {
         // The Medicare roster's progress (Settings → Customer growth → Find prospects from the Medicare roster).
         if(!features?.has('platform.agents.growth-roster.v1'))throw new HttpError(503,'Apply the roster database migration first.');
@@ -60,6 +60,13 @@ export function growthService({store,research,contacts=null,roster=null,people=n
           services:{provider:live(people?.provider)?.provider??null,configured:live(people?.provider)?.configured===true}}));
         if(operation==='peopleDecide'){const parsed=parse(z.object({ids:z.array(uuid).min(1).max(200),decision:z.enum(['permit','refuse'])}).strict(),data);return safe(async()=>({decided:await store.peopleDecide(token,parsed.ids,parsed.decision)}));}
         return safe(()=>store.importList(token,parse(importSchema,data).rows));
+      }
+      if(['learning','learningDecide'].includes(operation)) {
+        // What is working: the weekly memos (Settings → Customer growth → Write from what is working).
+        if(!features?.has('platform.agents.growth-learning.v1'))throw new HttpError(503,'Apply the learning database migration first.');
+        if(operation==='learning'){parse(z.object({}).strict(),data);return safe(async()=>({memos:await store.learning(token),services:{enabled:live(learning?.enabled)===true}}));}
+        const parsed=parse(z.object({id:uuid,decision:z.enum(['activate','reject'])}).strict(),data);
+        return safe(()=>store.learningDecide(token,parsed.id,parsed.decision));
       }
       if(operation==='detail')return safe(()=>store.detail(token,parse(z.object({id:uuid}).strict(),data).id));
       if(operation==='research') {

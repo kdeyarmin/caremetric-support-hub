@@ -5,6 +5,7 @@ import { assessProspect } from './assessment.mjs';
 import { planOpportunity, products } from './policy.mjs';
 import { marketedNow, markets } from '../agents/marketing.mjs';
 import { draftMessage } from './draft.mjs';
+import { growthLearningFeature } from './learning.mjs';
 import { renderEmail, themeFor } from '../email-layout.mjs';
 import { evaluateGrowth } from './evaluation.mjs';
 import { enrichProspects } from './enrichment.mjs';
@@ -76,6 +77,9 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
   if(!growth)return {};
   const autonomy=declared(features);
   const reengaging=features instanceof Set?features.has(growthReengageFeature):Array.isArray(features)&&features.includes(growthReengageFeature);
+  // The owner-approved learning memo (learning.mjs), while Settings → Customer growth → "Write from what is working" is on.
+  const learning=(features instanceof Set?features.has(growthLearningFeature):Array.isArray(features)&&features.includes(growthLearningFeature))
+    &&typeof growth.store.learningActive==='function';
   // Assessments and drafts the model could not give, by opportunity and what it was asked about, and when: kept in this process
   // only, so a restart asks once more. Without it every fifteen-minute sweep would pay for the same unanswerable request again.
   const unanswered=new Map();
@@ -117,6 +121,13 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     const owner=task.kind==='growth.success'?'account_manager':'marketing_manager'; let inspected=0,planned=0,drafted=0,offset=0,total=1,assessed=0,undrafted=0,reengaged=0;
     // Why drafts were not kept, by check (draft.mjs codes), so the run shows which rule throws good openings away.
     const rejected={};
+    // Each product's active memo, read once a sweep.
+    const memos=new Map();
+    const memoFor=async product=>{
+      if(!learning||live(growth.learning?.enabled)!==true)return null;
+      if(!memos.has(product))memos.set(product,await growth.store.learningActive(product)??null);
+      return memos.get(product);
+    };
     const marketedList=owner==='marketing_manager'?await marketedNow(marketed):null;
     const prospecting=autonomy&&owner==='marketing_manager'&&task.agent?.autonomy!=='observe';
     const productsByDomain=new Map();
@@ -159,7 +170,8 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
           // for again for six hours. One such prospect, retried every sweep, would otherwise spend the day's whole budget.
           const wanted=`draft:${o.id}:${work.key}:${o.version??''}:${o.contact_version??''}:${o.policy?.version??''}`;
           if(clock()-(unanswered.get(wanted)??-Infinity)<assessRetryMs)continue;
-          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,onReject:code=>{rejected[code]=(rejected[code]??0)+1;}}),signal);
+          const memo=work.kind==='outreach'?await memoFor(o.product):null;
+          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,memo,onReject:code=>{rejected[code]=(rejected[code]??0)+1;}}),signal);
           if(!draft){if(model?.configured){unanswered.set(wanted,clock());undrafted++;}continue;}
           signal?.throwIfAborted();
           let saved;

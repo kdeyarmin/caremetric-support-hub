@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { growthPost, growthMutation, workspaceSchema, detailSchema, rosterSchema, peopleSchema, importRows } from './growthClient';
+import { growthPost, growthMutation, workspaceSchema, detailSchema, rosterSchema, peopleSchema, learningSchema, importRows } from './growthClient';
 import type { GrowthOpportunity, GrowthPolicy } from './growthClient';
 import type { z } from 'zod';
 import './admin.css';
@@ -78,6 +78,23 @@ function PeoplePanel({revision,onSave}:{revision:number;onSave:(op:string,data:u
   </details>
  </section>;
 }
+const memoStatus:Record<string,string>={proposed:'Waiting for you',active:'In use',retired:'Replaced',rejected:'Turned down'};
+/** The weekly "what is working" memos: written by code from the team's own counts, used in drafts only after the owner chooses one. */
+function LearningPanel({revision,onSave}:{revision:number;onSave:(op:string,data:unknown)=>Promise<void>}) {
+ const [data,setData]=useState<z.infer<typeof learningSchema>|null>(null),[failure,setFailure]=useState('');
+ useEffect(()=>{const c=new AbortController();void growthPost('learning',{},learningSchema,c.signal).then(d=>{if(!c.signal.aborted){setData(d);setFailure('');}}).catch(e=>{if(!c.signal.aborted)setFailure(e instanceof Error?e.message:'The memos could not be loaded.');});return()=>c.abort();},[revision]);
+ return <section className="panel" aria-labelledby="growth-learning-title"><h2 id="growth-learning-title">What is working</h2>
+  {failure&&<p>{failure}</p>}{!data&&!failure&&<p role="status">Loading the memos…</p>}
+  {data&&<><p>Each Monday the Marketing Manager writes a short memo from 90 days of its own counts: replies by message type, the objections replies raised, the checks drafts failed and your notes on drafts you turned down. A memo shapes new outreach drafts only after you choose to use it.</p>
+  {!data.services.enabled&&<p role="status">To start: turn on Settings → Customer growth → Write from what is working.</p>}
+  {data.memos.length?data.memos.map(m=><article key={m.id}><h3>{names[m.product]} · memo {m.version} · {memoStatus[m.status]??m.status}</h3>
+   <p><small>Written {new Date(m.createdAt).toLocaleDateString()} from {m.stats.sent??0} emails and {m.stats.replied??0} replies</small></p>
+   <pre style={{whiteSpace:'pre-wrap'}}>{m.memo}</pre>
+   {m.status==='proposed'&&<><button className="button button-primary" onClick={()=>void onSave('learningDecide',{id:m.id,decision:'activate'})}>Use this memo</button>
+    <button className="button" onClick={()=>void onSave('learningDecide',{id:m.id,decision:'reject'})}>Turn down</button></>}
+  </article>):<p>No memo yet. One is written when there is something worth saying: at least 20 emails of each kind compared, an objection raised three times, or a note on a draft you turned down.</p>}</>}
+ </section>;
+}
 export function Growth() {
  const [workspace,setWorkspace]=useState<{offset:number;data:z.infer<typeof workspaceSchema>}|null>(null),[offset,setOffset]=useState(0),[revision,setRevision]=useState(0),[error,setError]=useState(''),[busy,setBusy]=useState(false),[selected,setSelected]=useState<string|null>(null);
  const [detailEntry,setDetail]=useState<{id:string;revision:number;data:z.infer<typeof detailSchema>}|null>(null);
@@ -97,6 +114,7 @@ export function Growth() {
  {data&&<><section className="panel"><h2>Readiness</h2><p>Sending: {data.services.sending?'enabled':'disabled'} · Research: {data.services.research?'ready':'not configured'} · Unsubscribe signing: {data.services.signing?'ready':'not configured'} · Sender address: {data.services.postalAddress?'ready':'needed'}</p><p>Sending also requires an active agent, a reviewed policy and an eligible verified contact.</p></section>
  {data.services.roster&&<RosterPanel revision={revision}/>}
  {data.services.people&&<PeoplePanel revision={revision} onSave={save}/>}
+ {data.services.learning&&<LearningPanel revision={revision} onSave={save}/>}
  <fieldset disabled={busy} style={{border:0,padding:0}}>
  <details className="panel"><summary>Add a prospect or customer</summary><form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void save('create',{name:value(f,'name'),domain:value(f,'domain').toLowerCase(),product:value(f,'product'),email:value(f,'email'),contactName:value(f,'contactName'),role:value(f,'role'),goal:value(f,'goal'),...(value(f,'tenantId')?{tenantId:value(f,'tenantId')}:{}),internal:f.has('internal')});}}>
  <label>Organization<input name="name" maxLength={200} required/></label><label>Business domain<input name="domain" placeholder="example.org" required/></label>

@@ -155,3 +155,24 @@ it('records the arms a message was written under and follows a website lead or a
  expect(asked).toMatchObject({reask:true,maxTouches:1,touch:1});
  expect(asked.touchPlan).toMatch(/One brief, friendly check-in/);
 });
+it('writes outreach with the owner-approved memo as a second cached block, and records its version',async()=>{
+ const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Staff training records',body:'How do you track annual training hours today?\n\nhttps://cmcarebase.com/signup',citations:['source-1'],needsHuman:false}}))};
+ const memo={version:3,memo:'- The owner turned down recent drafts with these notes: "Too long".'};
+ const draft=await draftMessage({opportunity,work,task:{},model,memo});
+ const request=model.run.mock.calls[0][1];
+ expect(request.system).toHaveLength(2);
+ expect(request.system.every(block=>block.cache)).toBe(true);
+ expect(request.system[0].text).toBe(growthSystem);
+ expect(request.system[1].text).toContain('memo 3');
+ expect(request.system[1].text).toContain('Too long');
+ expect(request.promptVersion).toBe('growth.8-m3');
+ expect(draft.memoVersion).toBe(3);
+ // A customer's message and an unusable memo are written without it.
+ model.run.mockClear();
+ const customer=await draftMessage({opportunity,work:{kind:'onboarding',action:'Help',success:'Set up'},task:{},model,memo});
+ expect(model.run.mock.calls[0][1].system).toHaveLength(1);
+ expect(customer?.memoVersion).toBeUndefined();
+ model.run.mockClear();
+ await draftMessage({opportunity,work,task:{},model,memo:{version:'3',memo:'x'}});
+ expect(model.run.mock.calls[0][1].promptVersion).toBe('growth.8');
+});

@@ -126,6 +126,8 @@ export const settingsCatalog = Object.freeze([
     label: 'Most prospects to research a day', help: 'Per Eastern day (0 to 50).' },
   { key: 'growth.deep_research_cents', group: 'growth', kind: 'number', input: 'cents', default: 30, min: 5, max: 200, env: null, valid: wholeNumber(5, 200),
     label: 'Most to spend researching one prospect', help: 'A ceiling for one prospect\'s research, searches included (5 to 200 cents). Research stops before a round that could pass it.' },
+  { key: 'growth.learning_memo', group: 'growth', kind: 'flag', input: 'toggle', default: false, env: null,
+    label: 'Write from what is working', help: 'Each Monday the Marketing Manager writes a short memo from 90 days of replies, objections and your notes on drafts you turned down. Drafts use a memo only after you choose "Use this memo" on Growth.' },
   { key: 'billing.customer_purchasing', group: 'billing', kind: 'flag', input: 'toggle', default: false, env: 'HUB_CUSTOMER_PURCHASING_ENABLED', fromEnv: fromFlag,
     label: 'Customers can buy subscriptions', help: 'Lets a customer administrator start a new subscription from the Hub. Existing subscriptions and payment methods work either way.' },
   { key: 'billing.intel_price_sync', group: 'billing', kind: 'flag', input: 'toggle', default: true, env: 'HUB_APP_CATALOG_SYNC', fromEnv: raw => raw.trim() !== 'off',

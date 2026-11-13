@@ -1,6 +1,7 @@
 import {it,expect,vi} from 'vitest';
 import {assessLimit,assessRetryMs,contactSearchConcurrency,contactSearchLimit,growthDay,growthEmail,growthExecutors,growthHandlers,sweepContactLimit,workBudgetMs} from './worker.mjs';
 import {discoveryQueriesPerDay} from './playbook.mjs';
+import {growthLearningFeature} from './learning.mjs';
 const base={id:'opp',product:'carebase',stage:'qualified',owner_agent:'marketing_manager',internal:false,next_at:'2026-01-01T00:00:00Z',touches:0,work:[],events:[],eligibility:'review'};
 it('Observe inspects but creates no work or proposals',async()=>{
  const store={snapshot:vi.fn(async()=>({total:1,items:[base]})),plan:vi.fn(),propose:vi.fn()};
@@ -377,4 +378,25 @@ it('greets a named contact by first name, never a role address',async()=>{
  expect(greetingName('Dr.','imported')).toBeNull();
  const email=growthEmail({product:'caremetric-intel',purpose:'marketing',subject:'S',body:'Body.',postalAddress:'CareMetric, 1 Main St',unsubscribeUrl:'https://hub.example/x',greeting:'Jane'});
  expect(email.text).toMatch(/^Hello Jane,/m);
+});
+it('drafts outreach with the active memo while the owner\'s setting is on, reading it once a sweep, and stores its version',async()=>{
+ const o={...base,product:'caremetric-intel',version:4,contact_id:'contact',contact_version:7,eligibility:'permitted',policy:{version:9,approved_claim:'Intel shows referral sources.'},evidence:[{id:'source',source_url:'https://example.org',claim:'A hospice.',observed_at:new Date().toISOString()}]};
+ const sweep=async(enabled)=>{
+  const store={snapshot:vi.fn(async()=>({total:2,items:[o,{...o,id:'next',organization_id:'org2'}]})),plan:vi.fn(async()=> 'work'),draft:vi.fn(async()=>({id:'message',status:'draft'})),propose:vi.fn(),
+   learningActive:vi.fn(async()=>({version:5,memo:'- Shorter emails drew more replies.'}))};
+  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Referral sources',body:'Which hospitals send your agency the most patients? Reply to this email and we will send the steps.',citations:['source'],needsHuman:false}}))};
+  const growth={store,signingReady:true,hash:x=>x,unsubscribeToken:()=> 'token',learning:{enabled}};
+  const outcome=await growthHandlers({growth,model,features:new Set([growthLearningFeature])})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'});
+  expect(outcome.result.rejected).toBeUndefined();
+  return {store,model};
+ };
+ const on=await sweep(true);
+ expect(on.store.learningActive).toHaveBeenCalledTimes(1);
+ expect(on.store.learningActive).toHaveBeenCalledWith('caremetric-intel');
+ expect(on.model.run.mock.calls[0][1].promptVersion).toBe('growth.8-m5');
+ expect(on.store.draft).toHaveBeenCalledWith('opp','work',expect.objectContaining({memoVersion:5}));
+ const off=await sweep(false);
+ expect(off.store.learningActive).not.toHaveBeenCalled();
+ expect(off.model.run.mock.calls[0][1].promptVersion).toBe('growth.8');
+ expect(off.store.draft.mock.calls[0][2].memoVersion).toBeUndefined();
 });

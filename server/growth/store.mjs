@@ -45,6 +45,12 @@ export function growthStore(pool) {
     importServer:rows=>server('private.growth_import_server',[JSON.stringify(rows)]),
     // Deeper research with web tools (20261113190000_growth_research.sql).
     researchNext:daily=>server('private.growth_research_next',[daily]),
+    // What is working (20261113200000_growth_learning.sql).
+    learningFacts:(product,days)=>server('private.growth_learning_facts',[product,days]),
+    learningPropose:(product,memo,stats)=>server('private.growth_learning_propose',[product,memo,JSON.stringify(stats)]),
+    learningActive:product=>server('private.growth_learning_active',[product]),
+    learning:token=>withSession(pool,token,db=>run(db,'hub.growth_learning',[6])),
+    learningDecide:(token,id,decision)=>withSession(pool,token,db=>run(db,'hub.growth_learning_decide',[id,decision])),
     people:(token,offset=0)=>withSession(pool,token,db=>run(db,'hub.growth_people',[offset])),
     peopleDecide:(token,ids,decision)=>withSession(pool,token,db=>run(db,'hub.growth_people_decide',[ids,decision])),
     importList:(token,rows)=>withSession(pool,token,db=>run(db,'hub.growth_import',[JSON.stringify(rows)])),

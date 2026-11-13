@@ -143,7 +143,14 @@ export function messageArms(o, sources) {
   return {length,trigger,...(experiment&&angles.length?{angle:angles[hash[1]%angles.length],subject:hash[2]%2?'question':'plain'}:{})};
 }
 
-export async function draftMessage({ opportunity:o, work, task, model, signal, onReject=null }) {
+/**
+ * The block an owner-approved learning memo (learning.mjs) adds after the drafting instructions: cached too, so the instructions stay one
+ * cache entry and the memo another. Outreach only; a draft written with it carries the memo's version in its prompt version and record.
+ */
+export const memoBlock=memo=>`Notes from CareMetric's own results (memo ${memo.version}):\n${memo.memo}`;
+const usableMemo=memo=>memo&&Number.isInteger(memo.version)&&memo.version>0&&typeof memo.memo==='string'&&memo.memo.trim()?memo:null;
+
+export async function draftMessage({ opportunity:o, work, task, model, signal, onReject=null, memo=null }) {
   const rejected=code=>{try{onReject?.(code);}catch{/* reporting never stops a draft */}return null;};
   const approved=o.policy?.approved_claim?.trim();
   if (!approved || screenIdentifiers(approved).flagged || !o.contact_id || !qualify(o.evidence).canDraft && work.kind==='outreach') return null;
@@ -194,19 +201,22 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   // Structured business context only; free-form customer conversation is not included here.
   if (screenIdentifiers(JSON.stringify({...input,sources:[],links:[],nextStep:null})).flagged || sources.some(s=>screenIdentifiers(`${s.claim} ${s.source_url}`).flagged)) return null;
   const checks={product:o.product,sources,outreach,organization:o.name??null};
+  const learned=outreach?usableMemo(memo):null;
+  const system=[{text:growthSystem,cache:true},...(learned?[{text:memoBlock(learned),cache:true}]:[])];
+  const promptVersion=learned?`${growthPromptVersion}-m${learned.version}`:growthPromptVersion;
   const write=async(user,version,what)=>{
-    const result=await model.run(task,{promptVersion:version,system:[{text:growthSystem,cache:true}],user,schema:draftSchema,maxTokens:2000,effort:'medium',describe:()=>`${what} a ${work.kind}${touch?` (touch ${touch})`:''} message with source references.`},{signal});
+    const result=await model.run(task,{promptVersion:version,system,user,schema:draftSchema,maxTokens:2000,effort:'medium',describe:()=>`${what} a ${work.kind}${touch?` (touch ${touch})`:''} message with source references.`},{signal});
     if (result.outcome!=='completed' || !result.output) return {problem:'no_answer'};
     const normalized={...result.output,subject:normalizeTerms(result.output.subject),body:normalizeTerms(result.output.body)};
     if (normalized.subject.ambiguous || normalized.body.ambiguous) return {problem:'vocabulary'};
     const answer={...result.output,subject:normalized.subject.text,body:normalized.body.text};
     return {answer,problem:draftProblem(answer,checks)};
   };
-  let draft=await write(JSON.stringify(input),growthPromptVersion,'Drafted');
+  let draft=await write(JSON.stringify(input),promptVersion,'Drafted');
   // One repair pass: the same cached instructions, the draft and what to fix. A draft that asks for a person (needsHuman) is not repaired.
   if (draft.problem && draft.answer && draft.problem!=='needs_human' && problemHints[draft.problem]) {
     const first=draft.problem;
-    draft=await write(JSON.stringify({...input,previousDraft:{subject:draft.answer.subject,body:draft.answer.body,citations:draft.answer.citations},fix:problemHints[first]}),`${growthPromptVersion}-r`,'Repaired');
+    draft=await write(JSON.stringify({...input,previousDraft:{subject:draft.answer.subject,body:draft.answer.body,citations:draft.answer.citations},fix:problemHints[first]}),`${promptVersion}-r`,'Repaired');
     if (draft.problem) return rejected(`${first}_then_${draft.problem}`);
   }
   if (draft.problem) return rejected(draft.problem);
@@ -214,5 +224,5 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   // The tagged body is checked again, so the message that is stored is one the checks accept.
   const after=draftProblem(tagged,checks);
   if (after) return rejected(`tagged_${after}`);
-  return {...tagged,modelGenerated:true,variant,arms};
+  return {...tagged,modelGenerated:true,variant,arms,...(learned?{memoVersion:learned.version}:{})};
 }

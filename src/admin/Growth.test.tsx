@@ -139,3 +139,15 @@ it('lists found people for the owner to permit, once the people migration is liv
  const decided=request.mock.calls.map(([,init])=>JSON.parse(String(init.body))).find(body=>body.operation==='peopleDecide');
  expect(decided.data).toEqual({ids:['c1'],decision:'permit'});
 });
+it('shows the weekly memos and uses one only when the owner chooses it, once the learning migration is live',async()=>{
+ const learning={memos:[{id:'m1',product:'caremetric-intel',version:2,memo:'What the last 90 days show.\n- The owner turned down recent drafts with these notes: "Too long".',status:'proposed',createdAt:'2026-11-16T12:00:00Z',stats:{sent:40,replied:5}}],services:{enabled:false}};
+ const request=vi.fn(async(_url:unknown,init:RequestInit)=>{const op=JSON.parse(String(init.body)).operation;return new Response(JSON.stringify(op==='learning'?learning:op==='learningDecide'?{status:'active',version:2}:{...empty,services:{...empty.services,learning:true}}));});
+ vi.stubGlobal('fetch',request);render(<MemoryRouter><Growth/></MemoryRouter>);
+ expect(await screen.findByText(/CareMetric Intel · memo 2 · Waiting for you/)).toBeTruthy();
+ expect(screen.getByText(/from 40 emails and 5 replies/)).toBeTruthy();
+ expect(screen.getByText(/turn on Settings → Customer growth → Write from what is working/)).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Use this memo'}));
+ await waitFor(()=>expect(request.mock.calls.some(([,init])=>JSON.parse(String(init.body)).operation==='learningDecide')).toBe(true));
+ const decided=request.mock.calls.map(([,init])=>JSON.parse(String(init.body))).find(body=>body.operation==='learningDecide');
+ expect(decided.data).toEqual({id:'m1',decision:'activate'});
+});
