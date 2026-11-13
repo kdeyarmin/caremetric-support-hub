@@ -72,8 +72,9 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
   const assetOrigin = /^https:\/\//i.test(publicOrigin ?? '') ? publicOrigin.replace(/\/+$/, '') : null;
   const imagePlacements = { meta: ['meta.feed_square', 'meta.feed_portrait'], linkedin: ['linkedin.single_image', 'linkedin.square'] };
   const videosOn = typeof store.socialVideoStage === 'function';
-  const videoPlacements = { facebook: ['meta.video_square', 'meta.video_portrait', 'meta.video_vertical'], instagram: ['meta.video_vertical'],
-    linkedin: ['linkedin.video_square', 'linkedin.video_portrait', 'linkedin.video_vertical'] };
+  // 16:9 comes only from the owner's own finished videos (Creative → Add a finished video); Instagram takes Reels, so vertical only.
+  const videoPlacements = { facebook: ['meta.video_square', 'meta.video_portrait', 'meta.video_vertical', 'meta.video_landscape'], instagram: ['meta.video_vertical'],
+    linkedin: ['linkedin.video_square', 'linkedin.video_portrait', 'linkedin.video_vertical', 'linkedin.video_landscape'] };
   async function approvedImages(product, platform, withVideos = false) {
     if (!creative?.approved || !assetOrigin) return [];
     try {

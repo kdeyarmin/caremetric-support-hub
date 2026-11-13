@@ -20,6 +20,7 @@ meetings, no cold SMS, automated calls or fax, and Intel shares only public CMS 
 | Research | One prospect at a time, researched with web search and page reading within a cost ceiling; only facts tied to an address the tools returned are kept | Customer growth → Research prospects with web search |
 | Learning | Each Monday a short memo, written by code from 90 days of counts (replies by message type, objections, checks drafts failed, your notes on drafts you turned down). Drafts use it only after you choose "Use this memo" on Growth. The Monday scorecard shows visits from each outreach email tag | Customer growth → Write from what is working |
 | Creative | County snapshots: one public Medicare or Census number for a county where your prospects are, printed by code with its source; the model writes only the words around it | Creative → County snapshots a week |
+| Your videos | A finished video you upload (an intro, a commercial) becomes approved creative for each placement it fits, 16:9 included for Facebook and LinkedIn; the Social Media Manager uses it in its next weekly plan, and each post still waits for you | Creative → Add a finished video |
 | Social | One post a week may be about a CMS release Intel just loaded or an observance starting soon; posts may link to articles published in the last 45 days; up to two approved story images a week are proposed for Instagram or the Facebook Page | Social media → Post about new CMS data and observances (stories and article links need nothing) |
 | Founder | A few posts a week in your voice for your own LinkedIn profile. You approve each one and none is ever automatic; without your personal token they are emailed to copy | Social media → Write posts for my LinkedIn profile |
 | Paid ads | Once a month per product: a LinkedIn campaign (draft), a Meta retargeting campaign (paused) and a Google search campaign (paused, or emailed as a Google Ads Editor file until the API is set up). Leads from a Meta or LinkedIn ad click can be reported back to that platform by a hashed work email. Growth's roster panel downloads the LinkedIn company-list file | Paid ads → Most to spend on new campaigns a month, Report leads to the ad platforms |
@@ -43,7 +44,9 @@ line per county figure; public website sessions record the outreach email tag th
 5. **Connections** (Settings → Social media): save your personal LinkedIn token on the LinkedIn card for founder posts; connect the
    LinkedIn and Meta ad accounts; in Ads Manager create a Custom Audience of website visitors and save its id under Paid ads; set the
    Meta Pixel id and Insight Tag on Intel; apply for Google Ads API access for your Google Cloud project.
-6. **Paid ads**: set "Most to spend on new campaigns a month" (and keep the daily ad-set limit under Social media). Turn on "Report
+6. **Your videos**: on Creative → Add a finished video, upload each cut of the CareMetric Intel intro and commercial (the social-sized
+   files, under 60 MB), tick where each may be used and attest that it shows no personal information.
+7. **Paid ads**: set "Most to spend on new campaigns a month" (and keep the daily ad-set limit under Social media). Turn on "Report
    leads to the ad platforms" only once your privacy notice says so (Intel's now does).
 
 ## Risks to watch

@@ -49,8 +49,10 @@ through its API, so the image is uploaded with the post. New ad copy reuses appr
 
 The weekly plan selects approved MP4 creative for the same product and platform when video publication is installed. Facebook accepts
 the Creative Director's square, portrait and vertical Meta video placements; Instagram uses only vertical video as a Reel; LinkedIn
-accepts its square, portrait and vertical placements. Each video appears in the post approval preview. Facebook and LinkedIn captions
-include the checked product link; Instagram captions retain the existing no-link rule. Paid video ads and YouTube uploads remain manual.
+accepts its square, portrait and vertical placements. The owner's own finished videos (Creative → Add a finished video) are approved
+creative too, and add 16:9 for Facebook and LinkedIn (`meta.video_landscape`, `linkedin.video_landscape`); Instagram never gets a 16:9 video.
+Each video appears in the post approval preview. Facebook and LinkedIn captions include the checked product link; Instagram captions retain
+the existing no-link rule. Paid video ads and YouTube uploads remain manual.
 
 Apply `20261111031736_social_video_publication.sql` and `20261111031738_social_video_publication_contract.sql`, then restart the Hub.
 Without that feature, the existing image and link posts continue. A public HTTPS Hub origin is required: publishers accept only the

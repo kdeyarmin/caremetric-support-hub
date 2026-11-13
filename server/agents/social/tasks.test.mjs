@@ -396,6 +396,23 @@ describe('approved creative from the Creative Director', () => {
     if (platform !== 'instagram') expect(post.input.message).toContain('https://www.caremetricintel.com/');
   });
 
+  it.each([['facebook', 'meta', 'meta.video_landscape'], ['linkedin', 'linkedin', 'linkedin.video_landscape']])('uses the owner\'s own 16:9 video for a %s post', async (platform, assetPlatform, placement) => {
+    const asset = approvedAsset({ kind: 'video', contentType: 'video/mp4', placement, platform: assetPlatform, width: 1920, height: 1080 });
+    const creative = { approved: vi.fn(async ({ platform: wanted }) => wanted === assetPlatform ? [asset] : []) };
+    const model = modelReturning({ posts: [{ platform, product: 'caremetric-intel', pillar: 'capability', day: 2,
+      text: 'CareMetric Intel brings territory planning and outreach into one place for your team.', linkId: 'intel-home', hashtags: [] }] });
+    const h = harness({ creative, model, videos: true, imageUrls: [], linkedin: linkedinOf() });
+    await h.handlers['social.plan'](task('social.plan'), { now });
+    expect(h.store.proposeAction.mock.calls[0][0].input).toMatchObject({ videoUrl: `https://help.caremetric.ai/api/creative/a/${token}.mp4`, creativeAssetId: asset.id });
+  });
+
+  it('never puts a 16:9 video on Instagram, which takes Reels', async () => {
+    const creative = { approved: vi.fn(async () => [approvedAsset({ kind: 'video', contentType: 'video/mp4', placement: 'meta.video_landscape' })]) };
+    const h = harness({ creative, videos: true, model: planModel(), imageUrls: [] });
+    await h.handlers['social.plan'](task('social.plan'), { now });
+    expect(h.store.proposeAction).not.toHaveBeenCalled();
+  });
+
   it('does not select videos without the durable video feature or unsupported Instagram shapes', async () => {
     const creative = { approved: vi.fn(async () => [approvedAsset({ kind: 'video', contentType: 'video/mp4', placement: 'meta.video_square' })]) };
     for (const videos of [false, true]) {

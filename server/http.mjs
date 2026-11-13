@@ -10,7 +10,7 @@ import { parsePackageUploadHeader } from './learning-packages.mjs';
 import { chatCookie } from './communications.mjs';
 import { bulkEmailActions } from './bulk-email.mjs';
 import { agentAdminActions } from './agents/admin.mjs';
-import { creativeAdminActions } from './agents/creative/admin.mjs';
+import { creativeAdminActions, videoUploadLimit } from './agents/creative/admin.mjs';
 
 export const securityHeaders = {
   'X-Content-Type-Options':'nosniff','X-Frame-Options':'SAMEORIGIN',
@@ -415,6 +415,16 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
             if([...url.searchParams.keys()].some(key=>key!=='download') || (download!==null && download!=='1')) throw new HttpError(400,'Creative query parameters are not supported.');
             const file=await creative.admin.file(session,fileRoute[1]);
             return sendBytes(req,res,{...file,disposition:download==='1'?'attachment':'inline'});
+          }
+          // The owner's own finished video, sent as the raw MP4 with its details in headers (Creative → Add a finished video).
+          if(path==='/api/admin/creative/video') {
+            if(req.method!=='POST' || url.search) throw new HttpError(400,'Use the Creative screen.');
+            if(req.headers['content-type']?.split(';')[0]!=='video/mp4') throw new HttpError(415,'Upload an MP4 video.');
+            const header=name=>{ const value=req.headers[name]; return typeof value==='string'?value:''; };
+            let label; try { label=decodeURIComponent(header('x-creative-label')); } catch { throw new HttpError(400,'Invalid video name.'); }
+            const bytes=await rawBody(req,videoUploadLimit);
+            return json(await creative.admin.video(session,{product:header('x-creative-product'),placements:header('x-creative-placements').split(',').filter(Boolean),
+              label,attested:header('x-creative-attested')==='true',requestKey:header('x-creative-request'),bytes}));
           }
           if(url.search) throw new HttpError(400,'Creative query parameters are not supported.');
           const action=path.slice('/api/admin/creative/'.length);

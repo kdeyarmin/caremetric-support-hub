@@ -32,11 +32,14 @@ export const placements = freeze({
   'meta.video_square': { platform: 'meta', kind: 'video', width: 1080, height: 1080, aspect: '1:1', label: 'Meta feed video, square', maxBytes: 4096 * mb, minSeconds: 1, maxSeconds: 241 * 60 },
   'meta.video_portrait': { platform: 'meta', kind: 'video', width: 1080, height: 1350, aspect: '4:5', label: 'Meta feed video, portrait', maxBytes: 4096 * mb, minSeconds: 1, maxSeconds: 241 * 60 },
   'meta.video_vertical': { platform: 'meta', kind: 'video', width: 1080, height: 1920, aspect: '9:16', label: 'Meta Stories and Reels video', maxBytes: 4096 * mb, minSeconds: 1, maxSeconds: 60 },
+  // 16:9 is for the owner's own finished videos (Creative → Add a finished video); the Creative Director does not render it.
+  'meta.video_landscape': { platform: 'meta', kind: 'video', width: 1920, height: 1080, aspect: '16:9', label: 'Meta feed video, landscape', maxBytes: 4096 * mb, minSeconds: 1, maxSeconds: 241 * 60, uploadOnly: true },
   'linkedin.single_image': { platform: 'linkedin', kind: 'static', width: 1200, height: 627, label: 'LinkedIn single image', maxBytes: 5 * mb },
   'linkedin.square': { platform: 'linkedin', kind: 'static', width: 1080, height: 1080, label: 'LinkedIn square image', maxBytes: 5 * mb },
   'linkedin.video_square': { platform: 'linkedin', kind: 'video', width: 1080, height: 1080, aspect: '1:1', label: 'LinkedIn video, square', maxBytes: 500 * mb, minSeconds: 3, maxSeconds: 30 * 60 },
   'linkedin.video_portrait': { platform: 'linkedin', kind: 'video', width: 1080, height: 1350, aspect: '4:5', label: 'LinkedIn video, portrait', maxBytes: 500 * mb, minSeconds: 3, maxSeconds: 30 * 60 },
   'linkedin.video_vertical': { platform: 'linkedin', kind: 'video', width: 1080, height: 1920, aspect: '9:16', label: 'LinkedIn video, vertical', maxBytes: 500 * mb, minSeconds: 3, maxSeconds: 30 * 60 },
+  'linkedin.video_landscape': { platform: 'linkedin', kind: 'video', width: 1920, height: 1080, aspect: '16:9', label: 'LinkedIn video, landscape', maxBytes: 500 * mb, minSeconds: 3, maxSeconds: 30 * 60, uploadOnly: true },
   'google.landscape': { platform: 'google', kind: 'static', width: 1200, height: 628, label: 'Google display, landscape', maxBytes: 5120 * kb },
   'google.square': { platform: 'google', kind: 'static', width: 1200, height: 1200, label: 'Google display, square', maxBytes: 5120 * kb },
   'google.rectangle': { platform: 'google', kind: 'static', width: 300, height: 250, label: 'Google display, 300 x 250', maxBytes: 150 * kb },
@@ -67,7 +70,10 @@ export const videoLengths = Object.freeze({
 export const aspects = Object.freeze(['1:1', '4:5', '9:16']);
 
 /** The placements of a platform, of one kind ("static" or "video"), in a fixed order. */
-export const placementsFor = (platform, kind) => Object.values(placements).filter(entry => entry.platform === platform && entry.kind === kind);
+export const placementsFor = (platform, kind) => Object.values(placements).filter(entry => entry.platform === platform && entry.kind === kind && !entry.uploadOnly);
+
+/** The video placements an owner's finished video may use (Creative → Add a finished video), including the 16:9 ones. */
+export const uploadPlacements = Object.freeze(Object.values(placements).filter(entry => entry.kind === 'video' && ['meta', 'linkedin'].includes(entry.platform)));
 
 /** The video placement of a platform for an aspect, or the platform's first video placement when it has none of that shape. */
 export function videoPlacement(platform, aspect) {

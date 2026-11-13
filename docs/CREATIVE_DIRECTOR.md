@@ -250,6 +250,25 @@ with a transparent background, which fits every layout) and product screenshots
 change needs a current command session, is audited (`creative.brand_kit`, `creative.brand_file`, `creative.brief`), and is refused from a
 stale screen.
 
+### Your own finished videos (Creative → Add a finished video)
+
+A video made outside the Hub (a product intro, a commercial) joins the library the team uses. The owner picks an MP4 of at most 60 MB and
+two minutes, names it, ticks where it may be used and attests that it shows no patient, resident or personal information. The server
+reads the length and picture size from the file itself (`server/agents/creative/mp4.mjs`) and checks each placement (`specs.mjs`):
+
+| Size | Placements |
+| --- | --- |
+| 1080 x 1920 (9:16) | Instagram Reels and Facebook (`meta.video_vertical`, at most 60 seconds); LinkedIn (`linkedin.video_vertical`) |
+| 1080 x 1080 (1:1) | Facebook feed (`meta.video_square`); LinkedIn (`linkedin.video_square`) |
+| 1080 x 1350 (4:5) | Facebook feed (`meta.video_portrait`); LinkedIn (`linkedin.video_portrait`) |
+| 1920 x 1080 (16:9) | Facebook feed (`meta.video_landscape`); LinkedIn (`linkedin.video_landscape`) |
+
+The 16:9 placements are for uploads only: the Creative Director does not render them. Adding the video approves it, one asset per
+placement (one per platform), each with its own public token, `provider` `owner` and an `upload` brief
+(`20261113250000_creative_uploads.sql`, `hub.add_creative_video`, audited as `creative.video_upload`; the same upload sent twice is stored
+once). Nothing is published by the upload: the Social Media Manager uses the video in its next weekly plan, once per placement, and each post
+still waits for the owner's approval. Retire it like any approved asset.
+
 ## Autonomy steps (both off)
 
 | Step | Hands over | Never |

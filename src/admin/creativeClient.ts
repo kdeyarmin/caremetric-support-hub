@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { config } from "../lib/config";
 import { sessionEvent } from "../lib/appSession";
-import { brandKitSchema, briefSchema, studioSchema } from "./creativeProtocol";
-import type { BrandKit, CreativeBrief, CreativePlatform, CreativeProduct, CreativeStatus, CreativeStudio } from "./creativeProtocol";
+import { brandKitSchema, briefSchema, studioSchema, uploadResultSchema } from "./creativeProtocol";
+import type { BrandKit, CreativeBrief, CreativePlatform, CreativeProduct, CreativeStatus, CreativeStudio, UploadResult } from "./creativeProtocol";
 import { TeamApiError, teamClient } from "./teamClient";
 import type { Decision } from "./teamProtocol";
 
@@ -39,6 +39,10 @@ export interface CreativeClient {
   createBrief(input: NewBrief): Promise<CreativeBrief>;
   /** Approve, reject or ask for changes (a rejection with a note), through the AI team's own decide route. */
   decide(input: { actionId: string; decision: "approve" | "reject"; note?: string }): Promise<Decision>;
+  /** The owner's own finished video, sent as the raw MP4; it becomes approved creative for each chosen placement. */
+  uploadVideo(input: { product: CreativeProduct; placements: string[]; label: string; attested: boolean; requestKey: string; file: File }): Promise<UploadResult>;
+  /** A picked video's size and length, as the browser reads them (the server reads them again from the file). */
+  videoInfo(file: File): Promise<{ width: number; height: number; durationSeconds: number }>;
 }
 
 export const creativeClient: CreativeClient = {
@@ -48,6 +52,31 @@ export const creativeClient: CreativeClient = {
   removeBrandFile: input => post("removeBrandFile", input, brandKitSchema),
   createBrief: ({ offerCode, ...input }) => post("brief", offerCode ? { ...input, offerCode } : input, briefSchema),
   decide: input => teamClient.decide(input),
+  uploadVideo: async ({ product, placements, label, attested, requestKey, file }) => {
+    if (config.demoMode) throw new TeamApiError(503, "The Creative Director is not available in the preview.");
+    const response = await fetch("/api/admin/creative/video", {
+      method: "POST", credentials: "same-origin", cache: "no-store", redirect: "error",
+      headers: { "Content-Type": "video/mp4", "X-Creative-Product": product, "X-Creative-Placements": placements.join(","), "X-Creative-Label": encodeURIComponent(label),
+        "X-Creative-Attested": attested ? "true" : "false", "X-Creative-Request": requestKey },
+      body: file, signal: AbortSignal.timeout(600000),
+    });
+    const data: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      if (response.status === 401) window.dispatchEvent(new Event(sessionEvent));
+      const message = data && typeof data === "object" && "error" in data && typeof data.error === "string" ? data.error : "The video could not be added.";
+      throw new TeamApiError(response.status, message);
+    }
+    return uploadResultSchema.parse(data);
+  },
+  videoInfo: file => new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    const done = () => { URL.revokeObjectURL(url); video.removeAttribute("src"); };
+    video.preload = "metadata";
+    video.onloadedmetadata = () => { const info = { width: video.videoWidth, height: video.videoHeight, durationSeconds: Math.round(video.duration * 100) / 100 }; done(); resolve(info); };
+    video.onerror = () => { done(); reject(new TeamApiError(400, "This file could not be read as a video.")); };
+    video.src = url;
+  }),
 };
 
 /** A file the owner picked, as base64 for the JSON body. */
