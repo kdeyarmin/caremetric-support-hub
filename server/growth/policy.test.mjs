@@ -35,3 +35,14 @@ it('starts activation timing at signup and keeps an expired trial actionable',()
  expect(planOpportunity(recent,now).some(w=>w.kind==='activation')).toBe(false);
  expect(planOpportunity({...base,trial_end:days(-1)},now).some(w=>w.key.endsWith(':expired'))).toBe(true);
 });
+it('plans one check-in when the database finds one due, and none otherwise',()=>{
+ const prospect={...base,owner_agent:'marketing_manager',stage:'nurture',touches:3,checkin_due:'not_now',last_reply_at:'2026-08-01T12:00:00.000Z'};
+ const checkins=plans=>plans.filter(w=>w.kind==='checkin');
+ expect(checkins(planOpportunity(prospect,now))).toEqual([expect.objectContaining({key:'checkin:not_now:2026-08-01T12:00:00.000Z',owner:'marketing_manager'})]);
+ expect(checkins(planOpportunity({...prospect,stage:'contacted',checkin_due:'no_reply',last_reply_at:null},now))).toEqual([expect.objectContaining({key:'checkin:no_reply:none'})]);
+ expect(checkins(planOpportunity({...prospect,checkin_due:null},now))).toEqual([]);
+ expect(checkins(planOpportunity({...prospect,checkin_due:'something_else'},now))).toEqual([]);
+ // A check-in is never a reason to send more outreach touches, and the Account Manager's customers never get one.
+ expect(planOpportunity({...prospect,stage:'contacted',checkin_due:'no_reply'},now).some(w=>w.kind==='outreach')).toBe(false);
+ expect(checkins(planOpportunity({...prospect,owner_agent:'account_manager',stage:'trial'},now))).toEqual([]);
+});

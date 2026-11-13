@@ -24,6 +24,11 @@ export function planOpportunity(o, now = new Date()) {
       if (!replied) add(`outreach:${o.touches ?? 0}`,'outreach','Offer one relevant next step based on verified product fit.','A qualified reply, trial or explicit disposition is recorded.');
     }
     if (['engaged','demo'].includes(o.stage) && time(o.next_at)<=at) add(`followup:${o.version}`,'reply','Answer the prospect\'s question in writing and agree a dated next step.','Trial, nurture or loss reason confirmed.');
+    // One check-in, months later, when the database finds it due (private.growth_checkin_due): a "not now" asked again once per
+    // "not now", or a business that never answered the touches asked once more. The key keeps each to one work item.
+    if (o.checkin_due==='not_now'||o.checkin_due==='no_reply') add(`checkin:${o.checkin_due}:${o.last_reply_at??'none'}`,'checkin',
+      o.checkin_due==='not_now'?'Check back, as the prospect asked, whether the timing is better now.':'Ask once more, briefly, whether the product is relevant to them now.',
+      'A reply, a trial or an explicit disposition is recorded.');
     return plans;
   }
   const milestone = playbooks[o.product].milestone;
