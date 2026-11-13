@@ -1,4 +1,4 @@
-// The Medicare roster through the real roles (20261113150000_growth_roster.sql): pages saved and ranked, the day's best agencies
+// The Medicare roster through the real roles (20261113170500_growth_roster.sql): pages saved and ranked, the day's best agencies
 // handed out within the owner's daily number, a confirmed website graduating into the existing pipeline with the public record as
 // high-confidence evidence (observed again on each read), the contact finder's address recorded on it, back-off for agencies that
 // could not be resolved, a host that collects agencies refused without a telephone match, the owner's read, and the gate's drift
@@ -26,7 +26,7 @@ const domains = [];
 const domainOf = label => { const value = `${label}-${run.toLowerCase()}.example.org`; domains.push(value); return value; };
 const row = async (sql, values = []) => (await admin.query(sql, values)).rows[0];
 const refused = code => error => error?.code === code;
-const gate = await readFile(new URL('../supabase/migrations/20261113150100_growth_roster_contract.sql', import.meta.url), 'utf8');
+const gate = await readFile(new URL('../supabase/migrations/20261113170600_growth_roster_contract.sql', import.meta.url), 'utf8');
 const seedSync = await row('select * from private.growth_roster_sync');
 const now = new Date();
 const item = (n, extra = {}) => ({ ccn: ccn(n), name: `SYNTHETIC HOSPICE ${n}`, setting: 'hospice', city: 'Pittsburgh', state: 'PA', zip: '15213',

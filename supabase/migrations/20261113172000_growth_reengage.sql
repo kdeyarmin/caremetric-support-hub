@@ -7,7 +7,7 @@
 --    opt-out, a trial or a sign-up, and never twice. The memory records when and why, and how many touches came before.
 -- 2. private.growth_claim_message reads replies and touches since that re-ask, so the re-ask may be sent and only one: a negative
 --    reply, a trial, a sign-up or a meeting still stops it whenever it happened. A sign-up from a website lead now stops cold email
---    too (20261113160000). Everything else in the claim is unchanged, including the owner's cold-email cap.
+--    too (20261113171000). Everything else in the claim is unchanged, including the owner's cold-email cap.
 -- 3. Cold email is outreach to an address the team found (a role address, a contact-data service's address, or an imported one),
 --    never to a person who asked: private.growth_message_class, the claim's daily cold count and its once-per-business rule all read
 --    the same class, so a found person's address can never escape the cold caps.

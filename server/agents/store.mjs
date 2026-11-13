@@ -206,7 +206,7 @@ export function sqlAgentStore(pool, { fenced = false, growth = false, social = f
     growthLead: id => call('private.agent_growth_lead', [id]),
     /** Marks leads as looked at, so each is handled once. Returns how many were newly marked. */
     growthMarkSeen: ids => call('private.agent_growth_mark_seen', [ids]),
-    /** One website lead into growth (20261113160000_growth_inbound.sql): what it did, never the person's details. */
+    /** One website lead into growth (20261113171000_growth_inbound.sql): what it did, never the person's details. */
     growthLeadCapture: id => call('private.growth_lead_capture', [id]),
     /** The Sales Executive's reading of one inbound message, which corrects the keyword reading of the same message. */
     growthReplyDisposition: (messageId, intent, objection = null) => call('private.growth_reply_disposition', [messageId, intent, objection]),

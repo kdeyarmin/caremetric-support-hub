@@ -1,5 +1,5 @@
 -- Learning what works (AI workforce review 2026-11-12, P2: "nothing learns from outcomes"). Each week the Marketing Manager reads
--- what happened to its emails, by the arms they were written under (20261113170000), and writes a short memo the owner approves:
+-- what happened to its emails, by the arms they were written under (20261113172000), and writes a short memo the owner approves:
 --
 -- - private.growth_learning_facts: counts only. Per product, the last 90 days of sent outreach by each arm value (sent, replied,
 --   positive, negative, not now, bounced), reply kinds, the playbook objections the Sales Executive recorded, and the owner's own notes

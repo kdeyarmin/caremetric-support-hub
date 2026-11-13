@@ -15,7 +15,7 @@
 --   in the database before each paid lookup, so two servers can never spend past it.
 -- - hub.growth_import: the owner's list (a CSV on the Growth screen, or the signed import endpoint for lists built elsewhere) joins the
 --   same path: organizations by domain, contacts as "imported" and "review", suppressed addresses refused.
--- - Every found address (role, enriched, imported) is cold email under the owner's cold-email cap (20261113170000).
+-- - Every found address (role, enriched, imported) is cold email under the owner's cold-email cap (20261113172000).
 set local lock_timeout = '10s';
 
 insert into private.hub_settings (key, kind) values

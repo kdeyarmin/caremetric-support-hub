@@ -30,7 +30,7 @@ async function pipelineItems(growth,signal) {
 }
 /** Sales follow-ups and capped cold email (20261105150000_growth_autonomy.sql): the contact finder, qualification and the daily evaluation. */
 export const growthAutonomyFeature='platform.agents.growth-autonomy.v1';
-/** One re-ask and the experiment arms (20261113170000_growth_reengage.sql). */
+/** One re-ask and the experiment arms (20261113172000_growth_reengage.sql). */
 export const growthReengageFeature='platform.agents.growth-reengage.v1';
 // Businesses the contact finder reads per discovery run (the most the database hands out at once), how many it reads at the same
 // time (each is a different business's website), how many more it reads on each fifteen-minute pipeline sweep so a day's
@@ -240,7 +240,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     return {result:{candidates,contacts,qualified,...researched}};
   }
   /**
-   * The Medicare roster (Intel's marketing feed; 20261113150000_growth_roster.sql). Each run reads up to eight pages of the roster when
+   * The Medicare roster (Intel's marketing feed; 20261113170500_growth_roster.sql). Each run reads up to eight pages of the roster when
    * a read is due (a new set of states, an unfinished read, or a week since the last complete one), then looks up the best-ranked
    * agencies' own websites, within the owner's daily number: one search for the agency, the contact finder on the chosen site (which
    * also checks for the agency's CMS telephone number), and the agency graduates into the pipeline only when the site is confirmed

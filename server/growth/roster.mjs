@@ -1,5 +1,5 @@
 /**
- * The Medicare roster as prospects (supabase/migrations/20261113150000_growth_roster.sql). Pure functions only:
+ * The Medicare roster as prospects (supabase/migrations/20261113170500_growth_roster.sql). Pure functions only:
  *
  * - `rosterRow`: one agency from Intel's feed as a target: its public record as a dated claim, its size and market position as a
  *   research-only line (fit and ranking; never quoted to the agency), and a deterministic rank with its reasons;

@@ -1,6 +1,6 @@
--- Declares platform.agents.growth-inbound.v1 once replies are read from the sender's own words, negatives first, a trial finds
--- the prospect it was before creating a customer record, only the Hub server may capture a lead or record the Sales Executive's
--- reading, and the follow-up switch exists.
+-- Declares platform.agents.growth-inbound.v1 once main's own reply reading (20261113150000) and trial link (20261113170000) are still
+-- what capture and billing run, only the Hub server may capture a lead or record the Sales Executive's reading, and the follow-up
+-- switch exists.
 do $$
 declare
   contract jsonb := hub.get_backend_contract();
@@ -15,17 +15,12 @@ begin
   if not exists (select 1 from private.hub_settings where key = 'growth.inbound_followup' and kind = 'flag') then
     raise exception 'The website lead follow-up setting is missing' using errcode = '55000';
   end if;
-  if position('v_text:=private.growth_reply_text(m.body);' in inquiry) = 0 or position('v_reply:=private.growth_reply_kind(v_text);' in inquiry) = 0
-    or position('if v_text ~* ''\m(unsubscribe|' in inquiry) = 0 then
+  -- Main's reviewed fixes stay what capture and billing run; this migration only builds on them.
+  if position('private.growth_reply_reading(v_body)' in inquiry) = 0
+    or position('growth_reply_reading' in pg_get_functiondef('private.growth_inbound_trigger()'::regprocedure)) = 0 then
     raise exception 'Replies must be read from the sender''s own words' using errcode = '55000';
   end if;
-  if private.growth_reply_kind('Thanks, but we are not really interested.') <> 'negative_reply'
-    or private.growth_reply_kind('I am interested. Can we book a demo?') <> 'positive_reply'
-    or private.growth_reply_kind(private.growth_reply_text('Yes, tell me more.' || chr(10) || chr(10) || 'On Tue, Nov 12, 2026 at 9:00 AM Kevin wrote:' || chr(10) || '> Opt out of these emails')) <> 'positive_reply'
-    or private.growth_reply_text('Sounds good.' || chr(10) || '> unsubscribe here') ~* 'unsubscribe' then
-    raise exception 'Reply reading does not behave as reviewed' using errcode = '55000';
-  end if;
-  if position('from private.billing_customers where tenant_id=p_tenant' in customer) = 0 or position('''customer-''||p_tenant::text||''.invalid''' in customer) = 0 then
+  if position('growth.customer_linked' in customer) = 0 or position('''customer-''||p_tenant::text||''.invalid''' in customer) = 0 then
     raise exception 'A trial must look for the prospect before creating a customer record' using errcode = '55000';
   end if;
   foreach fn in array array['private.growth_reply_disposition(uuid,text,text)', 'private.growth_lead_capture(uuid)'] loop

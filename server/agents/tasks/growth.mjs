@@ -26,7 +26,7 @@ import { shortFailure } from './probe.mjs';
 import { dueMoment, heldForScorecard, heldResult, mustHaveReached, plural, recordRun } from './shared.mjs';
 
 export const growthFeature = 'platform.agents.growth.v1';
-/** Website leads followed up through the growth pipeline (20261113160000_growth_inbound.sql). */
+/** Website leads followed up through the growth pipeline (20261113171000_growth_inbound.sql). */
 export const growthInboundFeature = 'platform.agents.growth-inbound.v1';
 /** The lead kinds the growth pipeline follows up, and the trial sign-up that stops cold email to its business. */
 export const capturedLeadKinds = Object.freeze(['county_report', 'savings_model', 'contact', 'newsletter', 'trial_signup']);

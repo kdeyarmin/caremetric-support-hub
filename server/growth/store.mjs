@@ -16,7 +16,7 @@ export function growthStore(pool) {
     contactCandidates:limit=>server('private.growth_contact_candidates',[limit]),
     recordContact:(id,email,sourceUrl)=>server('private.growth_record_contact',[id,email,sourceUrl]),
     autoQualify:limit=>server('private.growth_auto_qualify',[limit]),
-    // One re-ask after not now or a silent sequence (20261113170000_growth_reengage.sql).
+    // One re-ask after not now or a silent sequence (20261113172000_growth_reengage.sql).
     reengage:limit=>server('private.growth_reengage',[limit]),
     manage:(token,operation,data)=>withSession(pool,token,db=>run(db,'hub.growth_manage',[operation,data])),
     snapshot:(offset=0)=>server('private.growth_snapshot',[offset]),
@@ -30,7 +30,7 @@ export function growthStore(pool) {
     delivery:(event,id,kind,at)=>server('private.growth_delivery_event',[event,id,kind,at]),
     unsubscribe:hash=>server('private.growth_unsubscribe',[hash]),
     inquiry:(messageId)=>server('private.growth_inquiry',[messageId]),
-    // The Medicare roster (20261113150000_growth_roster.sql).
+    // The Medicare roster (20261113170500_growth_roster.sql).
     rosterSyncState:()=>server('private.growth_roster_sync_state'),
     rosterSyncSave:data=>server('private.growth_roster_sync_save',[data]),
     rosterUpsert:(period,rows)=>server('private.growth_roster_upsert',[period,JSON.stringify(rows)]),

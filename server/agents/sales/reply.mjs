@@ -171,7 +171,7 @@ export function salesReplyHandler({ store, notifier = null, drafting: draftingOp
     const marketedProduct = markets(await marketedNow(marketed), payload.product);
     const asked = flagged ? { state: 'phi' } : !marketedProduct ? { state: 'not_marketed' } : drafting ? await askModel({ task, snapshot, inbound, route, payload, signal, drafting }) : { state: 'off' };
     if (signal?.aborted) throw Object.assign(new Error('The task was stopped.'), { code: 'task_timeout', transient: true });
-    // The model's reading corrects the keyword reading of the same message in growth (20261113160000_growth_inbound.sql): a "not
+    // The model's reading corrects the keyword reading of the same message in growth (20261113171000_growth_inbound.sql): a "not
     // really interested" or a question is recorded as what it is, with the playbook objection it raised. A database without the
     // operation keeps the keyword reading.
     if (asked.intent && typeof store.growthReplyDisposition === 'function') {

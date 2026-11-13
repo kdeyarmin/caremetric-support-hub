@@ -1,8 +1,9 @@
-// Replies, trials, website leads and the one re-ask through the real roles (20261113160000_growth_inbound.sql,
-// 20261113170000_growth_reengage.sql): replies read from the sender's own words through real email ingestion (a quoted footer or a
-// quoted pitch decides nothing, negatives first, another mailbox at the same business counts), the Sales Executive's reading correcting
-// the keyword reading, a trial finding the prospect it was, website leads captured as qualified follow-ups and a trial sign-up stopping
-// cold email, one re-ask after the owner's wait and never after a no, and the gates' drift checks. Disposable loopback database only.
+// Replies, trials, website leads and the one re-ask through the real roles (20261113171000_growth_inbound.sql,
+// 20261113172000_growth_reengage.sql), on top of main's reply reading (20261113150000) and trial link (20261113170000): replies read
+// from the sender's own words through real email ingestion (a quoted footer or a quoted pitch decides nothing, another mailbox at the
+// same business joins it for review), the Sales Executive's reading correcting the keyword reading, a trial finding the prospect it
+// was, website leads captured as qualified follow-ups and a trial sign-up stopping cold email, one re-ask after the owner's wait and
+// never after a no, and the gates' drift checks. Disposable loopback database only.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -22,8 +23,8 @@ const run = randomUUID().slice(0, 8);
 const row = async (sql, values = []) => (await admin.query(sql, values)).rows[0];
 const call = async (fn, values = []) => (await pool.query(`select ${fn}(${values.map((_, i) => `$${i + 1}`).join(',')}) as r`, values)).rows[0].r;
 const refused = code => error => error?.code === code;
-const inboundGate = await readFile(new URL('../supabase/migrations/20261113160100_growth_inbound_contract.sql', import.meta.url), 'utf8');
-const reengageGate = await readFile(new URL('../supabase/migrations/20261113170100_growth_reengage_contract.sql', import.meta.url), 'utf8');
+const inboundGate = await readFile(new URL('../supabase/migrations/20261113171100_growth_inbound_contract.sql', import.meta.url), 'utf8');
+const reengageGate = await readFile(new URL('../supabase/migrations/20261113172100_growth_reengage_contract.sql', import.meta.url), 'utf8');
 const domains = [], communications = [], leads = [], tenants = [];
 const domainOf = label => { const value = `${label}-${run}.example.org`; domains.push(value); return value; };
 const ingest = async (key, body, email) => {
@@ -61,12 +62,16 @@ try {
   // ---- 1. Replies through real ingestion ----------------------------------------------------------------------------------------
   const a = await prospect('quoted-no');
   const aMessage = await queued(a);
+  // The email reached the business (main's reading links a colleague only to a business growth email has reached).
+  await admin.query("update private.growth_messages set status='delivered', attempted_at=now() where id=$1", [aMessage]);
   // Another mailbox at the same business, saying no above a quoted pitch that says "interested".
   const aReply = await ingest('a', 'Not really interested, thanks.\n\nOn Tue, Nov 12, 2026 at 9:00 AM Founder wrote:\n> Would you be interested in the free trial?\n> Opt out of these emails', `director@${a.domain}`);
   assert.equal((await row('select kind from private.customer_activity_events where event_key=$1', [`inquiry:${aReply}`])).kind, 'negative_reply');
   assert.equal((await row('select stage from private.growth_opportunities where id=$1', [a.opportunity])).stage, 'nurture');
-  assert.equal(await status(aMessage), 'cancelled', 'A reply from another mailbox stops outreach to the business');
-  assert.equal((await row('select organization_id from private.growth_contacts where email=$1', [`director@${a.domain}`])).organization_id, a.org);
+  // Main's reading (20261113150000): the colleague joins the business for review, and the reply counts as the business's reply, so the
+  // send claim refuses marketing still queued there.
+  const colleague = await row('select organization_id,eligibility from private.growth_contacts where email=$1', [`director@${a.domain}`]);
+  assert.deepEqual([colleague.organization_id, colleague.eligibility], [a.org, 'review'], 'Another mailbox at the business joins it for review');
   assert.equal((await row('select eligibility from private.growth_contacts where email=$1', [a.email])).eligibility, 'permitted', 'A quoted footer opts nobody out');
 
   const b = await prospect('quoted-yes');
@@ -156,9 +161,8 @@ try {
     execute replace(d, ${'$q$'}${from}${'$q$'}, ${'$q$'}${to}${'$q$'}); end $$`;
   try {
     for (const [gate, drift] of [
-      [inboundGate, rewrite('private.growth_inquiry(uuid)', 'v_text:=private.growth_reply_text(m.body);', 'v_text:=m.body;')],
-      [inboundGate, rewrite('private.growth_reply_kind(text)', "then 'negative_reply'", "then 'reply'")],
-      [inboundGate, rewrite('private.growth_ensure_customer(uuid,text)', 'from private.billing_customers where tenant_id=p_tenant', 'from private.billing_customers where false')],
+      [inboundGate, rewrite('private.growth_inquiry(uuid)', 'private.growth_reply_reading(v_body)', "jsonb_build_object('kind','reply','optOut',false,'sales',false)")],
+      [inboundGate, rewrite('private.growth_ensure_customer(uuid,text)', "'growth.customer_linked'", "'growth.customer_seen'")],
       [inboundGate, 'grant execute on function private.growth_lead_capture(uuid) to authenticated'],
       [reengageGate, rewrite('private.growth_claim_message(uuid,uuid)', "'trial_started','signup')", "'trial_started')")],
       [reengageGate, rewrite('private.growth_message_class(text,text,text)', "('role_address','enriched','imported')", "('role_address')")],
@@ -170,7 +174,7 @@ try {
     }
   } finally { client.release(); }
 
-  console.log('Replies, trials, leads and re-asks integration passed: replies read from the sender\'s own words through real ingestion (quoted footers and pitches decide nothing, negatives first, another mailbox counts), the Sales Executive\'s reading kept, a trial linked to the prospect it was, website leads captured as qualified follow-ups and a sign-up stopping cold email, one re-ask after the owner\'s wait and never after a no, arms kept as short codes, and gate drift. No email left the machine.');
+  console.log('Replies, trials, leads and re-asks integration passed: main\'s reply reading kept through real ingestion (quoted footers and pitches decide nothing, another mailbox joins for review), the Sales Executive\'s reading kept, main\'s trial link kept, website leads captured as qualified follow-ups and a sign-up stopping cold email, one re-ask after the owner\'s wait and never after a no, arms kept as short codes, and gate drift. No email left the machine.');
 } finally {
   for (const domain of domains) {
     const org = (await row('select id from private.growth_organizations where domain=$1', [domain]))?.id;
