@@ -23,7 +23,10 @@ export function planOpportunity(o, now = new Date()) {
     // trial, a sign-up or a meeting stops outreach whenever it happened.
     const since = time(o.memory?.reengagedAt);
     const touches = Math.max(0, Number(o.touches ?? 0) - (since !== null ? Number(o.memory?.touchesBefore ?? 0) : 0));
-    if (['qualified','contacted'].includes(o.stage) && time(o.next_at)<=at && touches<(since !== null ? 1 : (o.policy?.max_touches ?? 3))) {
+    // A re-ask waits until its address was verified in the last 80 days (the contact finder reads a role address's site again for
+    // it): drafted earlier, the send claim's 90-day rule would cancel it while it waited for approval, and it would never be redrafted.
+    const current = since === null || (time(o.verified_at) !== null && at - time(o.verified_at) <= 80 * day);
+    if (['qualified','contacted'].includes(o.stage) && current && time(o.next_at)<=at && touches<(since !== null ? 1 : (o.policy?.max_touches ?? 3))) {
       const replied = (o.events ?? []).some(e => ['negative_reply','meeting_booked','trial_started','signup'].includes(e.kind)
         || (['reply','positive_reply','not_now'].includes(e.kind) && (since === null || (time(e.occurred_at) ?? 0) > since)));
       if (!replied) add(`outreach:${o.touches ?? 0}`,'outreach','Offer one relevant next step based on verified product fit.','A qualified reply, trial or explicit disposition is recorded.');

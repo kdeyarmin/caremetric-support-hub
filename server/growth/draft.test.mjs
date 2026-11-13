@@ -32,7 +32,7 @@ it('tells the writer which touch it is writing, the playbook angle for it and th
  expect(input.links.map(link=>link.url)).not.toContain('https://www.caremetricintel.com/');
  expect(request.system[0].text).toContain('CareMetric fact sheet');
  expect(request.system[0].text).toContain('sales playbook');
- expect(request.promptVersion).toBe('growth.8');
+ expect(request.promptVersion).toBe('growth.9');
  // No booking page is ever offered to the writer (no personal demos with anyone, owner decision 2026-11-09).
  expect(input.bookingUrl).toBeUndefined();
  expect(input.links.map(link=>link.url)).not.toContain(opportunity.policy.booking_url);
@@ -122,6 +122,22 @@ it('lets a draft state the numbers and percentages its own cited sources state, 
  expect(draftProblem(answer('Hospice Solutions of Erie cares for families.'),{product:'caremetric-intel',sources,outreach:true})).toBe('unclear');
  expect(draftProblem(answer('Hospice Solutions of Erie cares for families.'),{product:'caremetric-intel',sources,outreach:true,organization:'Hospice Solutions of Erie'})).toBeNull();
 });
+it('keeps the organization\'s numbers in sentences about the organization, never in one about CareMetric or in the first person',()=>{
+ const sources=[{id:'s',claim:'The agency serves 12 counties and grew 15% last year.'}];
+ const answer=body=>({subject:'Your counties',body,citations:['s'],needsHuman:false});
+ const check=body=>draftProblem(answer(body),{product:'caremetric-intel',sources,outreach:true,organization:'Valley Hospice'});
+ expect(check('Your team serves 12 counties. Intel shows the referral sources in each one.')).toBeNull();
+ expect(check('Intel covers your 12 counties.')).toBe('claim');
+ expect(check('CAREMETRIC INTEL grew 15% last year.')).toBe('claim');
+ expect(check('We cover 12 counties for agencies like yours.')).toBe('claim');
+ expect(check('I see you serve 12 counties.')).toBe('claim');
+ expect(check('Our data covers 12 counties.')).toBe('claim');
+ // The country and a sentence with no number are not product claims.
+ expect(check('Your team serves 12 counties in the US.')).toBeNull();
+ expect(check('I built Intel to find every referral source.')).toBeNull();
+ // A number inside the organization's own name is part of the name.
+ expect(draftProblem(answer('I wrote to 24 Hour Home Care because Intel maps referral sources.'),{product:'caremetric-intel',sources,outreach:true,organization:'24 Hour Home Care'})).toBeNull();
+});
 it('repairs a draft once, telling the writer what to fix, and reports why one was refused',async()=>{
  const bad={outcome:'completed',output:{subject:'Training',body:'A seamless way to train staff.',citations:['source-1'],needsHuman:false}};
  const good={outcome:'completed',output:{subject:'Training',body:'How do you track training hours today?',citations:['source-1'],needsHuman:false}};
@@ -130,7 +146,7 @@ it('repairs a draft once, telling the writer what to fix, and reports why one wa
  const draft=await draftMessage({opportunity,work,task:{},model,onReject:code=>reasons.push(code)});
  expect(draft).toMatchObject({modelGenerated:true,body:'How do you track training hours today?'});
  const repair=model.run.mock.calls[1][1];
- expect(repair.promptVersion).toBe('growth.8-r');
+ expect(repair.promptVersion).toBe('growth.9-r');
  expect(repair.system[0].text).toBe(growthSystem);
  expect(JSON.parse(repair.user)).toMatchObject({previousDraft:{body:'A seamless way to train staff.'},fix:expect.stringMatching(/plain words/)});
  expect(reasons).toEqual([]);
@@ -165,7 +181,7 @@ it('writes outreach with the owner-approved memo as a second cached block, and r
  expect(request.system[0].text).toBe(growthSystem);
  expect(request.system[1].text).toContain('memo 3');
  expect(request.system[1].text).toContain('Too long');
- expect(request.promptVersion).toBe('growth.8-m3');
+ expect(request.promptVersion).toBe('growth.9-m3');
  expect(draft.memoVersion).toBe(3);
  // A customer's message and an unusable memo are written without it.
  model.run.mockClear();
@@ -174,5 +190,5 @@ it('writes outreach with the owner-approved memo as a second cached block, and r
  expect(customer?.memoVersion).toBeUndefined();
  model.run.mockClear();
  await draftMessage({opportunity,work,task:{},model,memo:{version:'3',memo:'x'}});
- expect(model.run.mock.calls[0][1].promptVersion).toBe('growth.8');
+ expect(model.run.mock.calls[0][1].promptVersion).toBe('growth.9');
 });

@@ -42,10 +42,19 @@ describe('one re-ask and stops',()=>{
   expect(planOpportunity({...prospect,touches:1,events:[{kind:'signup',occurred_at:days(-1)}]},now)).toEqual([]);
  });
  it('a re-ask is one message counted from when it began; an old not-now no longer stops it, a no always does',()=>{
-  const reask={...prospect,touches:3,memory:{reengagedAt:days(-1),touchesBefore:3,reengageReason:'not_now'},events:[{kind:'not_now',occurred_at:days(-100)}]};
+  const reask={...prospect,touches:3,verified_at:days(-2),memory:{reengagedAt:days(-1),touchesBefore:3,reengageReason:'not_now'},events:[{kind:'not_now',occurred_at:days(-100)}]};
   expect(planOpportunity(reask,now).map(t=>[t.kind,t.key])).toEqual([['outreach','outreach:3']]);
   expect(planOpportunity({...reask,touches:4},now)).toEqual([]);
   expect(planOpportunity({...reask,events:[...reask.events,{kind:'reply',occurred_at:days(0)}]},now)).toEqual([]);
   expect(planOpportunity({...reask,events:[{kind:'negative_reply',occurred_at:days(-200)}]},now)).toEqual([]);
+ });
+ it('a re-ask waits until its address was verified in the last 80 days, so the claim cannot cancel it for good',()=>{
+  const reask={...prospect,touches:3,memory:{reengagedAt:days(-1),touchesBefore:3,reengageReason:'silent'}};
+  expect(planOpportunity({...reask,verified_at:days(-120)},now)).toEqual([]);
+  expect(planOpportunity({...reask,verified_at:null},now)).toEqual([]);
+  expect(planOpportunity({...reask,verified_at:days(-81)},now)).toEqual([]);
+  expect(planOpportunity({...reask,verified_at:days(-79)},now).map(t=>t.kind)).toEqual(['outreach']);
+  // Ordinary outreach is unchanged: the claim alone judges its contact.
+  expect(planOpportunity({...prospect,touches:1,verified_at:days(-120)},now).map(t=>t.kind)).toEqual(['outreach']);
  });
 });

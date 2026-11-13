@@ -5,7 +5,8 @@
  *   research-only line (fit and ranking; never quoted to the agency), and a deterministic rank with its reasons;
  * - `resolutionQuery`, `chooseSite`: the web search that finds the agency's own website, and which result is it;
  * - `confirmsSite`: whether the site the contact finder read is that agency's (its CMS telephone number on the site, or its name and
- *   place in the home page), so a prospect is never an organization that merely shares a name.
+ *   place in the home page, never a page that places it in another state), so a prospect is never an organization that merely
+ *   shares a name.
  */
 import { operatorHost } from './playbook.mjs';
 
@@ -195,10 +196,32 @@ export function phonesIn(text) {
   return found;
 }
 
+// State names as page words, longest first, so "West Virginia" is never read as Virginia.
+const statePhrases = Object.entries(stateNames).map(([code, name]) => [code, words(name).join(' ')]).sort((a, b) => b[1].length - a[1].length)
+  .map(([code, phrase]) => [code, new RegExp(`(?<= )${phrase}(?= )`, 'g')]);
+/**
+ * The states a page names (`page`: its words, space-separated with a space at each end): in full, or as a two-letter code just before
+ * a ZIP code ("PA 19103"). A bare code is never read as a state: IN, OR, ME, OK, HI and OH are ordinary words.
+ */
+export function statesNamed(page) {
+  const found = new Set();
+  let rest = page;
+  for (const [code, phrase] of statePhrases) {
+    const next = rest.replace(phrase, '#');
+    if (next !== rest) { found.add(code); rest = next; }
+  }
+  for (const match of page.matchAll(/ ([a-z]{2}) \d{5}(?= )/g)) {
+    const code = match[1].toUpperCase();
+    if (Object.hasOwn(stateNames, code)) found.add(code);
+  }
+  return found;
+}
+
 /**
  * Whether the site the contact finder read is the agency's: 'phone' when its CMS telephone number is on the site, 'name' when the home
- * page names it (most of its distinctive words) and its place (city or state), or when the domain carries its whole distinctive name
- * and the page says its setting. Null otherwise: the agency stays unresolved rather than risk an email to a lookalike.
+ * page names it (most of its distinctive words) and its place, or when the domain carries its whole distinctive name and the page says
+ * its setting and its place. Its place is its state, or its city on a page that names no other state (a Columbus page that says Ohio
+ * is not a Columbus, Georgia agency's; a town named for a state is its city). Null otherwise: the agency stays unresolved rather than risk an email to a lookalike.
  */
 export function confirmsSite(target, found, choice = null) {
   if (found?.phoneSeen === true) return 'phone';
@@ -206,11 +229,14 @@ export function confirmsSite(target, found, choice = null) {
   if (page.trim() === '') return null;
   const distinct = distinctiveWords(target.name);
   const named = distinct.filter(word => page.includes(` ${word} `)).length / Math.max(distinct.length, 1);
-  const place = (target.city && page.includes(` ${words(target.city).join(' ')} `))
-    || page.includes(` ${String(target.state ?? '').toLowerCase()} `)
-    || (stateNames[target.state] && page.includes(` ${words(stateNames[target.state]).join(' ')} `));
+  const states = statesNamed(page);
+  const own = String(target.state ?? '').toUpperCase();
+  const city = words(target.city).join(' ');
+  // A town named for a state (Washington, Pennsylvania; Indiana, Pennsylvania) is its own city there, not another state.
+  const elsewhere = [...states].some(code => code !== own && words(stateNames[code]).join(' ') !== city);
+  const place = states.has(own) || (city !== '' && page.includes(` ${city} `) && !elsewhere);
   const setting = settingWords[target.setting].some(word => page.includes(` ${word} `));
   if (named >= 0.67 && place) return 'name';
-  if ((choice?.inDomain ?? 0) >= 1 && named >= 0.5 && setting) return 'name';
+  if ((choice?.inDomain ?? 0) >= 1 && named >= 0.5 && setting && place) return 'name';
   return null;
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { screenIdentifiers } from '../agents/concierge/screen.mjs';
 import {
   chooseSite, confirmsSite, displayName, distinctiveWords, phonesIn, rankTarget, researchOnlyPrefix, resolutionQuery, rosterClaim,
-  rosterRow, rosterStates,
+  rosterRow, rosterStates, statesNamed,
 } from './roster.mjs';
 
 const now = new Date('2026-11-13T12:00:00Z');
@@ -95,6 +95,31 @@ describe('confirming the site is the agency\'s', () => {
   it('accepts the agency\'s name and place on its home page', () => {
     const found = { phoneSeen: false, site: { url: 'https://valleyhospice.org/', claim: "The organization's own home page. Title: Valley Hospice. Opening text: Serving Philadelphia families since 2010." } };
     expect(confirmsSite(target(), found)).toBe('name');
+  });
+
+  it('reads a state in full or before a ZIP code, never a bare code that is also a word', () => {
+    const page = text => ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
+    expect(statesNamed(page('Care in West Virginia, OH 43215.'))).toEqual(new Set(['WV', 'OH']));
+    expect(statesNamed(page('West Virginia and West Virginia again'))).toEqual(new Set(['WV']));
+    expect(statesNamed(page('Come in or call me, oh hi, ok?'))).toEqual(new Set());
+    expect(statesNamed(page('9 Elm Road, Philadelphia, PA 19103-1234'))).toEqual(new Set(['PA']));
+  });
+
+  it('needs the agency\'s place on the domain path too, and never takes a page that places it in another state', () => {
+    const page = claim => ({ phoneSeen: false, site: { url: 'https://valleyhospice.org/', claim } });
+    const inDomain = { inDomain: 1 };
+    // The domain carries the name and the page says hospice, but nothing places it: a same-named hospice elsewhere could match.
+    expect(confirmsSite(target(), page('Title: Valley Hospice. Opening text: Compassionate hospice care.'), inDomain)).toBeNull();
+    expect(confirmsSite(target(), page('Title: Valley Hospice. Opening text: Hospice care across Pennsylvania.'), inDomain)).toBe('name');
+    // The city alone, on a page that names another state, is another town of that name.
+    const columbus = target({ city: 'Columbus', state: 'GA' });
+    expect(confirmsSite(columbus, page('Title: Valley Hospice. Opening text: Hospice care in Columbus, Ohio.'))).toBeNull();
+    expect(confirmsSite(columbus, page('Title: Valley Hospice. Opening text: Hospice care in Columbus.'))).toBe('name');
+    expect(confirmsSite(columbus, page('Title: Valley Hospice. Opening text: Hospice care in Columbus, Georgia and Phenix City, Alabama.'))).toBe('name');
+    // A bare state code that is an ordinary word places nothing ("in" is not Indiana).
+    expect(confirmsSite(target({ city: 'Muncie', state: 'IN' }), page('Title: Valley Hospice. Opening text: Hospice care in your home.'))).toBeNull();
+    // A town named for a state is the agency's city, not another state.
+    expect(confirmsSite(target({ city: 'Washington', state: 'PA' }), page('Title: Valley Hospice. Opening text: Hospice care in Washington.'))).toBe('name');
   });
 
   it('refuses a page about some other organization, or no page at all', () => {

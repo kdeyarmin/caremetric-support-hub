@@ -13,9 +13,9 @@ meetings, no cold SMS, automated calls or fax, and Intel shares only public CMS 
 
 | Area | What changed | Turn it on |
 | --- | --- | --- |
-| Prospects | The Marketing Manager reads Intel's roster of every Medicare-certified home health agency and hospice in your states, ranks them (newly certified, new owner, size), confirms each one's own website (its CMS telephone number on the page) and adds it to the pipeline with dated public-record evidence | Customer growth → Find prospects from the Medicare roster, States to prospect in |
-| Replies and leads | Replies are read from the sender's own words (quoted text ignored, another mailbox at the agency counts, "no" read first); a trial links to the prospect it came from; county report, contact and savings-model leads get a two-email follow-up; a "not now" or a silent prospect is asked once more after 90 days, never after a no | Customer growth → Follow up website leads by email, Days before asking again |
-| Draft quality | Numbers and percentages stated in the evidence are allowed, a failed draft gets one repair pass, and why drafts fail is counted on each run | Always on |
+| Prospects | The Marketing Manager reads Intel's roster of every Medicare-certified home health agency and hospice in your states, ranks them (newly certified, new owner, size), confirms each one's own website (its CMS telephone number on the page, or its name and place: its state, or its city on a page that names no other state) and adds it to the pipeline with dated public-record evidence | Customer growth → Find prospects from the Medicare roster, States to prospect in |
+| Replies and leads | Replies are read from the sender's own words (quoted text ignored, another mailbox at the agency counts, "no" read first); a trial links to the prospect it came from; county report, contact and savings-model leads get a two-email follow-up; a "not now" or a silent prospect is asked once more after 90 days, never after a no; before that re-ask the contact finder reads the agency's own site again, so its public address is re-verified and the evidence is current (a person's address verified more than 80 days earlier is not re-asked) | Customer growth → Follow up website leads by email, Days before asking again |
+| Draft quality | Numbers and percentages stated in the evidence are allowed in a sentence about the agency, never in one about CareMetric or in the first person ("we cover 12 counties"); a failed draft gets one repair pass, and why drafts fail is counted on each run | Always on |
 | Named people | Who CMS lists as owning the agency, and (with Apollo) the deciding person's verified work address on the agency's own domain; each waits for you on Growth. Lists can be imported as CSV or through the signed import endpoint | Customer growth → Contact-data service, Most contact lookups a day |
 | Research | One prospect at a time, researched with web search and page reading within a cost ceiling; only facts tied to an address the tools returned are kept | Customer growth → Research prospects with web search |
 | Learning | Each Monday a short memo, written by code from 90 days of counts (replies by message type, objections, checks drafts failed, your notes on drafts you turned down). Drafts use it only after you choose "Use this memo" on Growth. The Monday scorecard shows visits from each outreach email tag | Customer growth → Write from what is working |
@@ -51,7 +51,8 @@ line per county figure; public website sessions record the outreach email tag th
 
 ## Risks to watch
 
-- **Wrong-site matches** could email the wrong agency: the roster confirms by the CMS telephone number (or name and place), blocks a
+- **Wrong-site matches** could email the wrong agency: the roster confirms by the CMS telephone number (or name and place, never a
+  page that places it in another state, and never a bare state code such as IN or OR, which are ordinary words), blocks a
   host shared by unrelated agencies, and the assessment cross-checks; keep cold email on approval for the first week.
 - **Search quota**: roster look-ups add about 750 searches a month at 25 a day.
 - **LinkedIn and Google targeting** use public identifiers (United States, Hospitals and Health Care, manager level and up; Google's
