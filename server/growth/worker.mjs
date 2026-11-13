@@ -10,6 +10,7 @@ import { evaluateGrowth } from './evaluation.mjs';
 import { enrichProspects } from './enrichment.mjs';
 import { discoveryQueries, linkablePages, senderFor } from './playbook.mjs';
 import { searchResultLimit } from './research.mjs';
+import { rosterDiscovery } from './roster-discovery.mjs';
 import { untaggedUrl } from '../agents/links.mjs';
 const deferred=()=>Object.assign(new Error('Action is deferred'),{code:'action_deferred'});
 const easternDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'});
@@ -206,10 +207,14 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     if(!stopped)try {enrichment=await enrichProspects({growth,marketed:marketedList,moment:now(),signal,items,pace,spent});}
     catch(error) {if(signal?.aborted)throw error; stopped='search_unavailable';}
     if(!stopped&&spent())stopped='time';
+    // The second source: Medicare-certified agencies from the CMS roster that were newly certified or changed owners recently, a few
+    // website searches a day in the time left (roster-discovery.mjs). It never fails the run, and adds nothing to the result unless
+    // the roster is set up (its secret and Settings → Customer growth → Find prospects in the CMS roster).
+    const roster=stopped?null:await rosterDiscovery({growth,marketed:marketedList,moment:now(),signal,pace,spent});
     // What the search provider says the key may still use this month (research.mjs `searchAllowance`), so the run's result on the Team
     // screen shows whether the plan covers the day's searches. Absent when the provider does not say.
     const allowance=growth.research.allowance?.()??null;
-    const researched={searches,...(stopped?{stopped}:{}),...(enrichment?{enrichment}:{}),...(allowance?{searchAllowance:allowance}:{})};
+    const researched={searches,...(stopped?{stopped}:{}),...(enrichment?{enrichment}:{}),...(roster?{roster}:{}),...(allowance?{searchAllowance:allowance}:{})};
     if(!autonomy||!growth.contacts?.configured)return {result:{candidates,...researched}};
     // The contact finder reads each new business's own website for one public role address and for what its home page says it is; a
     // business with no address stays without a contact (and is not read again for 90 days). Only the counts are kept here: never an

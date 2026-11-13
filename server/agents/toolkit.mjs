@@ -37,6 +37,13 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
       growthFeature, [growth?.research?.configured === true, 'Set HUB_GROWTH_SEARCH_API_KEY on the Hub service.'],
       [ai, modelStep],
     ], '/admin/growth');
+  const roster = growth?.roster?.readiness?.() ?? {};
+  add('cms_roster', 'Prospects from the CMS roster', ['marketing_manager'],
+    'Each daily discovery run reads, from Intel, the Medicare-certified home health agencies and hospices in Intel\'s market states that CMS shows as newly certified or under new owners in the last 18 months, and searches for up to 10 of their own websites a day. An agency matched to its site becomes a CareMetric Intel prospect, with the public CMS facts as evidence.', [
+      growthFeature, [growth?.research?.configured === true, 'Set HUB_GROWTH_SEARCH_API_KEY on the Hub service.'],
+      [roster.enabled === true, 'Turn on Settings → Customer growth → Find prospects in the CMS roster.'],
+      [roster.signing === true, 'Set HUB_INTEL_MARKETING_FEED_SECRET on the Hub to the same value as HUB_MARKETING_FEED_SECRET on Intel (at least 32 characters).'],
+    ]);
   add('growth_email', 'Prospect email and follow-ups', ['marketing_manager'],
     'Drafts outreach and sends eligible, reviewed messages. Campaign policy, contact eligibility, frequency limits and approvals still apply.', [
       growthFeature, [growthState.sending === true, 'Turn on Settings → Customer growth → Send growth email when ready to send.'],

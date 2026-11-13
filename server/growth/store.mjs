@@ -16,6 +16,10 @@ export function growthStore(pool) {
     contactCandidates:limit=>server('private.growth_contact_candidates',[limit]),
     recordContact:(id,email,sourceUrl)=>server('private.growth_record_contact',[id,email,sourceUrl]),
     autoQualify:limit=>server('private.growth_auto_qualify',[limit]),
+    // The CMS roster's memory (20261113200000_growth_cms_roster.sql): which of these CCNs may be searched now and how many were searched
+    // this Eastern day, and the outcome of one search.
+    rosterPending:ccns=>server('private.growth_roster_pending',[ccns]),
+    rosterSearched:(ccn,matched)=>server('private.growth_roster_searched',[ccn,matched]),
     manage:(token,operation,data)=>withSession(pool,token,db=>run(db,'hub.growth_manage',[operation,data])),
     snapshot:(offset=0)=>server('private.growth_snapshot',[offset]),
     event:(product,data)=>server('private.growth_record_event',[product,data]),

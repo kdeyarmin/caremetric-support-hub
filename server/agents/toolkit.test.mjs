@@ -2,6 +2,7 @@ import { generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { marketingToolkit } from './toolkit.mjs';
 import { growthService } from '../growth/service.mjs';
+import { marketingFeed } from '../growth/roster.mjs';
 import { socialConfig, socialTeam } from './social/index.mjs';
 import { creativeConfig, creativeTeam } from './creative/index.mjs';
 import { agentTeam } from './index.mjs';
@@ -52,6 +53,22 @@ describe('marketing toolkit configuration', () => {
     expect(invalid.readiness()).toMatchObject({ deliveryFeedback: false, events: { carebase: false, 'caremetric-intel': true } });
     expect(growthService({ webhookPublicKey: publicKey }).readiness().deliveryFeedback).toBe(true);
     expect(JSON.stringify(invalid.readiness())).not.toContain(secret);
+  });
+
+  it('names the CMS roster\'s setting and its shared secret, by presence only', () => {
+    let enabled = true;
+    const roster = marketingFeed({ secret, enabled: () => enabled, fetchImpl: vi.fn() });
+    const ready = growthService({ features, research: { configured: true }, roster });
+    expect(row(marketingToolkit({ features, growth: ready }), 'cms_roster')).toMatchObject({ configured: true, missing: [], settingsPath: '/admin/settings' });
+    enabled = false;
+    expect(row(marketingToolkit({ features, growth: ready }), 'cms_roster').missing).toEqual(['Turn on Settings → Customer growth → Find prospects in the CMS roster.']);
+    const unsigned = growthService({ features, research: { configured: true }, roster: marketingFeed({ secret: 'short' }) });
+    const result = marketingToolkit({ features, growth: unsigned });
+    expect(row(result, 'cms_roster').missing.join(' ')).toContain('HUB_INTEL_MARKETING_FEED_SECRET');
+    expect(row(marketingToolkit({ features, growth: growthService({ features, research: { configured: true } }) }), 'cms_roster').configured).toBe(false);
+    expect(JSON.stringify(marketingToolkit({ features, growth: ready }))).not.toContain(secret);
+    expect(servicesSchema.safeParse({ enabled: true, handlers: [], sms: false, email: false, ownerEmail: false, ai: false, customerTextToAi: false,
+      marketingTools: marketingToolkit({ features, growth: ready }) }).success).toBe(true);
   });
 
   it('recognizes the existing Intel billing activity endpoint without claiming producer delivery', () => {

@@ -31,7 +31,7 @@ The existing Billing and weekly account report remain the source of MRR/ARR. The
 4. Choose the products the team markets under **Products we market** on the AI team page. Intel starts switched on and CareBase off
    while it is in its pilot (see "What the team markets" in [AI_TEAM.md](AI_TEAM.md)): discovery, scoring, plans and cold email skip
    every product switched off, from their next run, and customers' onboarding and support are unaffected.
-5. For automatic discovery, configure `HUB_GROWTH_SEARCH_API_KEY` for Brave Search. The adapter requests bounded public search results; snippets are unverified evidence. It does not invent emails. Owner-supplied source evidence works without this provider. Intel's tenant-owned provider lists and campaigns are not imported into CareMetric's sales audience.
+5. For automatic discovery, configure `HUB_GROWTH_SEARCH_API_KEY` for Brave Search. The adapter requests bounded public search results; snippets are unverified evidence. It does not invent emails. Owner-supplied source evidence works without this provider. Intel's tenant-owned provider lists and campaigns are not imported into CareMetric's sales audience. For the second source, Medicare-certified agencies from the CMS roster, set the shared secret described in [Prospects from the CMS roster](#prospects-from-the-cms-roster).
 6. Configure the signed SendGrid Event Webhook at `/api/growth/delivery` and set `HUB_SENDGRID_EVENT_PUBLIC_KEY`. Subscribe to delivery, bounce, dropped, spam report and unsubscribe events. Keep the existing signed Inbound Parse route for replies; the growth sender's Reply-To points to the configured support inbox.
 7. In Growth, map existing tenants to their organizations and classify internal accounts. Add the correct buyer/champion, verify its business source and outreach eligibility, record the goal, and qualify the opportunity. Review each product benefit in its policy (there is no booking link: CareMetric does no demos, calls or meetings). Policies start disabled.
 8. Resume Marketing Manager and Account Manager in **Propose** mode for the pilot. The scheduler also needs Settings → AI team → "Run the AI team" switched on. Switch on Settings → Customer growth → "Send growth email" only when the configured channel and reviewed cohort are ready. Approve exact messages in Team; changing policy, contact, or opportunity invalidates stale drafts.
@@ -178,6 +178,8 @@ claim still comes from the fact sheet (`server/agents/content/facts.mjs`, the co
   provider-number and company-data lookups, trade associations and trade press, social networks, job boards and government or school
   sites, and any host that names itself a directory, a listing, a review or a jobs site, so the contact finder never writes to a
   directory's info@ address. A domain search for one organization is unchanged.
+- **The CMS roster** is a second discovery source: recently certified and newly owned home health agencies and hospices, from
+  Intel's copy of CMS's Provider of Services file. See [Prospects from the CMS roster](#prospects-from-the-cms-roster).
 - **Pipeline sweep limits.** A sweep assesses at most 20 prospects, stops starting model calls and website reads 150 seconds after
   it began, and does not ask again for six hours for an assessment or a draft the model could not give or that failed its checks
   (unless the opportunity, its evidence, its contact or the policy changed). The sweep's result counts those drafts as `undrafted`.
@@ -232,6 +234,63 @@ conversation, a demo or call, and a time to meet are refused; declining a demo i
 
 Changing the playbook's wording changes what the models read: bump `playbookVersion`, run `npm test -- server/growth` and
 `npm run evaluate:growth`, and review the next drafts before widening any autonomy.
+
+## Prospects from the CMS roster
+
+Generic searches find whoever ranks for "home health agency Pittsburgh". Every Medicare-certified home health agency and hospice
+is listed in CMS's Provider of Services file, and Intel already serves that list to the Hub (the `roster` action of Intel's
+marketing feed, documented in Intel's `docs/HUB_MARKETING_FEED.md`). Each daily discovery run uses it as a second source
+(`server/growth/roster-discovery.mjs`, the client in `server/growth/roster.mjs`):
+
+- **Which agencies.** Home health agencies and hospices in the 43 states of Intel's market grid (`rosterPlan` in
+  `server/growth/playbook.mjs`, Pennsylvania and its neighbours first) that CMS shows as newly certified, or with a change of
+  ownership, in the last 18 months: new agencies and new owners are the ones choosing software and looking for referral data.
+  Terminated and closed agencies are left out. The most recent change comes first. The run reads the roster twice (changes of
+  ownership, then new certifications), at most four pages of 500 each.
+- **Which product.** CareMetric Intel only. The roster lists home health agencies and hospices, which are Intel's segment, and
+  CareBase's playbook names a home health agency as not a fit. Nothing is read while Intel is switched off under **Products we
+  market**.
+- **One search per agency.** The roster has no website, so for up to ten agencies an Eastern day one search looks for the agency's
+  own site, with its trading name (the part after "DBA"), its city and its state. These searches use the same Brave key, a second
+  apart, inside the run's 150 seconds, after the run's own searches and the evidence searches. They stop early when Brave says less
+  than a quarter of its allowance is left. A second run on the same day counts the first run's searches toward the ten. A name made
+  only of generic and place words ("Home Health Care of Erie") could never be checked against a website, so no search is spent on
+  it.
+- **Matching.** A result is the agency's site only when the host is not a directory, listing, review, government, social or job
+  site (the same filter as every discovery search), its domain carries the agency's name (one of the name's distinctive words of
+  four letters or more, or all of them run together), at least half of those words are in the domain or the page title, and the
+  host, title or snippet talks about care (hospice, home health, home care, nursing). The first result that passes is taken; a
+  page that only mentions the agency, such as a news story, is not.
+- **What is recorded.** The site becomes a CareMetric Intel prospect through the usual discovery path, with two dated sources: the
+  public CMS facts, for example "CMS lists Valley Hospice (CMS certification number 391501) as a Medicare-certified hospice in
+  Philadelphia, PA in its Provider of Services file for 2026Q3. CMS records a change of ownership on 2026-03-01. Its website was
+  matched to this listing by name and place.", sourced to the agency's Medicare Care Compare page
+  (`https://www.medicare.gov/care-compare/details/hospice/<CCN>` or `.../home-health/<CCN>`); and the search result from its own
+  site. From there it is a prospect like any other: the contact finder reads its site, the fit assessment scores it and the
+  qualification rules are unchanged. Nothing is sent because an agency came from the roster. A site that belongs to a customer
+  or an internal organization adds nothing.
+- **What is remembered.** `private.growth_roster_searches` keeps one row per CMS certification number searched: when, and whether a
+  site was matched (public CMS identifiers only, at most ten new rows a day). A matched agency is never searched again. One with no
+  site found is searched again after 180 days, because a new agency often has no website yet.
+- **The run's result** on the AI team page gains `roster`: the CMS quarter, and how many facilities were read, how many had a
+  recent change, how many were due a search, searched, matched and recorded. When the step ends early, `stopped` says why: `time`,
+  `search_allowance`, `search_unavailable`, `feed_` and Intel's error code (for example `feed_invalid_signature` for a secret that
+  does not match, `feed_expired_timestamp` for a clock more than five minutes off, `feed_not_configured` when Intel has no secret),
+  `feed_unavailable`, `database_not_ready` (the migration is not applied) or `roster_failed`. Counts only, never a name or an
+  address. A roster failure never fails the run: the day's other discovery is kept.
+
+To switch it on:
+
+1. Apply `20261113200000_growth_cms_roster.sql`. It adds the setting, the table and the two server-only functions; nothing else
+   changes.
+2. Generate one random secret of at least 32 characters (for example `openssl rand -hex 32`). Set it as `HUB_MARKETING_FEED_SECRET`
+   on Intel and as `HUB_INTEL_MARKETING_FEED_SECRET` on the Hub, in Railway. A shorter value counts as not set. To rotate it,
+   change both in the same deployment window.
+3. Settings → Customer growth → **Find prospects in the CMS roster** is on by default. Switch it off to stop the roster searches;
+   the change applies to the next run.
+
+Without the secret on the Hub, with the switch off or with Intel not marketed, discovery is exactly what it was. The AI team
+page's tool list shows **Prospects from the CMS roster** with whatever is still missing.
 
 ## Canonical Intel activity and verified billing conversions
 

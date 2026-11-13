@@ -50,6 +50,7 @@ does nothing. A setting you saved, or cleared back to its default, is never over
 | Text messages | Twilio sending number | `HUB_TWILIO_FROM_NUMBER` |
 | Customer growth | Send growth email | `HUB_GROWTH_SEND_ENABLED` |
 | Customer growth | Most cold emails a day | none: a setting from the start |
+| Customer growth | Find prospects in the CMS roster | none: a setting from the start |
 | Billing | Customers can buy subscriptions | `HUB_CUSTOMER_PURCHASING_ENABLED` |
 | Billing | Keep Stripe in step with Intel's prices | `HUB_APP_CATALOG_SYNC` (`off` meant switched off) |
 | Billing | Stripe customer portal configuration | `STRIPE_PORTAL_CONFIGURATION_ID` |
@@ -94,6 +95,8 @@ Secrets, which are never shown on screen or stored in the database:
   (legacy fallbacks until the LinkedIn card is first saved)
 - `HUB_SEARCH_CONSOLE_CREDENTIALS`
 - `HUB_VISITOR_METRICS_KEY` (dedicated shared key for Intel’s aggregate website session reports)
+- `HUB_INTEL_MARKETING_FEED_SECRET` (the same value as Intel’s `HUB_MARKETING_FEED_SECRET`: signs the Hub’s reads of the CMS
+  roster, [CUSTOMER_GROWTH.md](CUSTOMER_GROWTH.md#prospects-from-the-cms-roster))
 - `HUB_HEYGEN_API_KEY` (only for HeyGen presenter videos, Settings → Creative)
 - `CAREBASE_DISTRIBUTION_OBSERVER_TOKEN`
 

@@ -47,6 +47,7 @@ export const integrationCatalog = Object.freeze([
     variables: [
       { name: 'HUB_GROWTH_SIGNING_KEY', secret: true, minLength: 32, required: true, purpose: 'At least 32 characters; signs stable unsubscribe links. Keep it across releases.' },
       { name: 'HUB_GROWTH_SEARCH_API_KEY', secret: true, required: false, purpose: 'Brave Search API key for attributable organization discovery; manual evidence also works.' },
+      { name: 'HUB_INTEL_MARKETING_FEED_SECRET', secret: true, minLength: 32, required: false, purpose: 'Signs the Hub\'s reads of the CMS roster from Intel: the same value as Intel\'s HUB_MARKETING_FEED_SECRET, at least 32 characters. The switch is Settings → Customer growth → Find prospects in the CMS roster.' },
       { name: 'HUB_GROWTH_CAREBASE_EVENT_KEY', secret: true, minLength: 32, required: false, purpose: 'CareBase server-only activity signing key, at least 32 characters.' },
       { name: 'HUB_GROWTH_INTEL_EVENT_KEY', secret: true, minLength: 32, required: false, purpose: 'Intel server-only activity signing key, at least 32 characters.' },
       { name: 'HUB_SENDGRID_EVENT_PUBLIC_KEY', secret: true, required: false, purpose: 'Verifies delivery, bounce, complaint and unsubscribe webhooks.' },

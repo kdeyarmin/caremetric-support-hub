@@ -20,7 +20,7 @@ export const growthSchemas={
 export { activitySchema } from './protocol.mjs';
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const equal=(a,b)=>{const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length&&timingSafeEqual(x,y);};
-export function growthService({store,research,contacts=null,features,enabled=false,signingKey='',eventKeys={},webhookPublicKey='',sesEvents=null,sesEventsReady=()=>false,publicOrigin,postalAddress=''}) {
+export function growthService({store,research,contacts=null,roster=null,features,enabled=false,signingKey='',eventKeys={},webhookPublicKey='',sesEvents=null,sesEventsReady=()=>false,publicOrigin,postalAddress=''}) {
   // The sending switch and the footer's postal address are Hub settings; either may be a function, read on each use.
   const sending=()=>live(enabled)===true; const postal=()=>String(live(postalAddress)??'');
   const ready=()=>{if(!features?.has('platform.agents.customer-growth.v1'))throw new HttpError(503,'Apply the growth database migration first.');};
@@ -28,7 +28,7 @@ export function growthService({store,research,contacts=null,features,enabled=fal
   const parse=(schema,input)=>{const parsed=schema.safeParse(input); if(!parsed.success)throw new HttpError(400,'Invalid growth request.');return parsed.data;};
   const unsubscribeToken=workId=>createHmac('sha256',signingKey).update(`growth:${workId}`).digest('hex');
   return {
-    ready, store, research, contacts, get enabled(){return sending();}, unsubscribeToken, hash, signingReady:signingKey.length>=32,
+    ready, store, research, contacts, roster, get enabled(){return sending();}, unsubscribeToken, hash, signingReady:signingKey.length>=32,
     // Configuration only: no provider request and no credential value leaves this service.
     readiness() {
       let deliveryFeedback = false;

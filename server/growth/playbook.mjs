@@ -296,6 +296,33 @@ export function discoveryQuery(product, instant = new Date()) {
   return discoveryQueries(product, instant)[0]?.query ?? null;
 }
 
+// The states of the places Intel's market grid searches, by the name each place ends with (Pittsburgh and Philadelphia name none).
+const stateCodes = Object.freeze({
+  Pennsylvania: 'PA', Ohio: 'OH', Maryland: 'MD', 'New Jersey': 'NJ', 'New York': 'NY', Virginia: 'VA', 'West Virginia': 'WV',
+  Delaware: 'DE', 'North Carolina': 'NC', 'South Carolina': 'SC', Tennessee: 'TN', Georgia: 'GA', Florida: 'FL', Michigan: 'MI',
+  Indiana: 'IN', Kentucky: 'KY', Missouri: 'MO', Texas: 'TX', Arizona: 'AZ', Alabama: 'AL', Oklahoma: 'OK', Mississippi: 'MS',
+  Illinois: 'IL', Wisconsin: 'WI', Minnesota: 'MN', Iowa: 'IA', Nebraska: 'NE', Kansas: 'KS', Arkansas: 'AR', Louisiana: 'LA',
+  'New Mexico': 'NM', Colorado: 'CO', Utah: 'UT', Nevada: 'NV', Idaho: 'ID', Washington: 'WA', Oregon: 'OR', California: 'CA',
+  Connecticut: 'CT', 'Rhode Island': 'RI', Massachusetts: 'MA', 'New Hampshire': 'NH', Maine: 'ME',
+});
+const placeState = place => {
+  if (['Pittsburgh', 'Philadelphia'].includes(place)) return 'PA';
+  const name = Object.keys(stateCodes).filter(state => place.endsWith(` ${state}`)).sort((a, b) => b.length - a.length)[0];
+  return name ? stateCodes[name] : null;
+};
+/** The state's name for a two-letter code the roster reads, or null. */
+export const stateName = code => Object.keys(stateCodes).find(name => stateCodes[name] === code) ?? null;
+/**
+ * The CMS roster (Intel's marketing feed, roster.mjs) lists Medicare-certified home health agencies and hospices: Intel's segment, never
+ * CareBase's (its playbook names a home health agency as not a fit). It is read for the states of Intel's market grid, Pennsylvania
+ * and its neighbours first, so the roster stays inside the markets discovery already searches.
+ */
+const rosterGrid = deepFreeze({
+  'caremetric-intel': { settings: ['home_health', 'hospice'], states: [...new Set(intelMarkets.map(placeState))] },
+});
+/** `{ settings, states }` for a product the roster serves, or null. */
+export const rosterPlan = product => rosterGrid[product] ?? null;
+
 /**
  * Hosts that are never an operator to sell to: directories, review and listing sites, provider-number and company-data lookups, social
  * networks, job boards, encyclopedias and government or school sites. Discovery drops them, so the contact finder never emails a

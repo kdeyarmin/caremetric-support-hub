@@ -367,3 +367,41 @@ it('links a product page with well-formed campaign tags in a growth email, and n
  expect(refused).not.toContain('evil.example"');
  expect(refused).not.toMatch(/href="[^"]*evil\.example/);
 });
+it('discovery is exactly what it was while the CMS roster is not set up, and the feed is never read',async()=>{
+ const items=[{...base,id:'u',product:'caremetric-intel',stage:'researched',fit:60,domain:'uncertain.example',tenant_id:null}];
+ const outcome=async roster=>{
+  const store={snapshot:vi.fn(async()=>({total:items.length,items})),discover:vi.fn(async(_product,rows)=>rows.length),rosterPending:vi.fn(),rosterSearched:vi.fn()};
+  const search=vi.fn(async(_product,options)=>options.domain?[{name:'An operator',domain:options.domain,url:`https://${options.domain}/about`,claim:'Operates a hospice.'}]:[]);
+  const growth={store,research:{configured:true,search,allowance:()=>({limit:2000,left:1500,days:30})},...(roster===undefined?{}:{roster})};
+  const result=(await growthHandlers({growth,marketed:['caremetric-intel']})['growth.discovery']({id:'t',agent:{autonomy:'propose'}})).result;
+  return {result,searches:search.mock.calls,discovered:store.discover.mock.calls,memory:store.rosterPending.mock.calls.length+store.rosterSearched.mock.calls.length};
+ };
+ const before=await outcome(undefined);
+ expect(before.result).toEqual({candidates:0,searches:discoveryQueriesPerDay,enrichment:{searched:1,evidenceRows:1},searchAllowance:{limit:2000,left:1500,days:30}});
+ for(const unset of [null,{configured:false,roster:vi.fn()}]) {
+  expect(await outcome(unset)).toEqual(before);
+  if(unset)expect(unset.roster).not.toHaveBeenCalled();
+ }
+ expect(before.memory).toBe(0);
+});
+it('with the CMS roster set up, discovery searches for recently changed agencies\' sites after its own searches and reports only counts',async()=>{
+ const store={snapshot:vi.fn(async()=>({total:0,items:[]})),discover:vi.fn(async(_product,rows)=>rows.length),
+  rosterPending:vi.fn(async ccns=>({due:ccns,searchedToday:0})),rosterSearched:vi.fn(async()=>undefined)};
+ const agency={ccn:'391501',name:'VALLEY HOSPICE',setting:'hospice',city:'Philadelphia',state:'PA',certification_date:'2026-02-01',termination_date:null,change_of_ownership_date:null,signals:[]};
+ const roster={configured:true,roster:vi.fn(async({certifiedSince})=>({period:'2026Q3',items:certifiedSince?[agency]:[],nextCursor:null,skipped:0}))};
+ const search=vi.fn(async(_product,options)=>/Valley Hospice/.test(options.query??'')?[{name:'Valley Hospice',domain:'valleyhospice.org',url:'https://valleyhospice.org/',claim:'Hospice care in Philadelphia.'}]:[]);
+ const outcome=await growthHandlers({growth:{store,research:{configured:true,search},roster},marketed:['caremetric-intel']})['growth.discovery']({id:'t',agent:{autonomy:'propose'}},{now:()=>new Date('2026-11-13T13:00:00Z')});
+ expect(outcome.result).toEqual({candidates:0,searches:discoveryQueriesPerDay,enrichment:{searched:0,evidenceRows:0},
+  roster:{period:'2026Q3',facilities:1,recent:1,due:1,searched:1,matched:1,recorded:1}});
+ // The generic searches come first; the roster's one search is the last.
+ expect(search.mock.calls.at(-1)[1].query).toBe('Valley Hospice Philadelphia PA');
+ expect(store.discover).toHaveBeenLastCalledWith('caremetric-intel',[expect.objectContaining({domain:'valleyhospice.org',url:'https://www.medicare.gov/care-compare/details/hospice/391501'}),
+  expect.objectContaining({domain:'valleyhospice.org',url:'https://valleyhospice.org/'})]);
+ expect(JSON.stringify(outcome)).not.toMatch(/valley/i);
+ // A run whose own searches already stopped leaves the roster for the next day.
+ roster.roster.mockClear();
+ const failing=vi.fn().mockResolvedValueOnce([]).mockRejectedValue(Object.assign(new Error('Research unavailable'),{transient:true}));
+ const stopped=await growthHandlers({growth:{store,research:{configured:true,search:failing},roster},marketed:['caremetric-intel']})['growth.discovery']({id:'t',agent:{autonomy:'propose'}});
+ expect(stopped.result).toEqual({candidates:0,searches:1,stopped:'search_unavailable'});
+ expect(roster.roster).not.toHaveBeenCalled();
+});
