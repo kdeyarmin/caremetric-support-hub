@@ -108,6 +108,8 @@ const customerMail=bulkSender({from:supportFrom,replyTo:supportReplyTo,category:
 // The AI team: inert until "Run the AI team" is switched on in Settings, and every agent starts paused until the owner resumes it.
 const team=agentTeam({pool,growth,growthMail,postalAddress,sms:textSender,email:mailSender,ownerEmail:setting('agents.owner_email'),publicOrigin,enabled:setting('agents.enabled'),communications:messaging,features,anthropicApiKey:process.env.ANTHROPIC_API_KEY,record:sqlAiUsageRecorder(pool).record,guides:guideLibrary({load:()=>api.rpc('list_published_content',{}),loadProducts:()=>api.rows('products')}),customerTextToAi:setting('agents.customer_text_to_ai'),
   leadSecrets:leadSecrets(process.env),
+  // Website leads followed up by email (Settings → Customer growth → Follow up website leads by email).
+  inboundFollowup:setting('growth.inbound_followup'),
   // The social media tokens from Railway, with the page ids, ad accounts, images and ad limits from Settings → Social media.
   social:()=>socialConfig(connections.resolvedEnv(),connections.getSetting),
   // The Creative Director: Settings → Creative, with HeyGen's key from Railway.

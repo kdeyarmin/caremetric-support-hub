@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
-import { checkForm, growthFeature, growthHandlers, probeSignature } from './growth.mjs';
+import { checkForm, growthFeature, growthHandlers, growthInboundFeature, probeSignature } from './growth.mjs';
 
 const feature = new Set(['platform.agents.v1', growthFeature]);
 const origin = 'https://hub.example.test';
@@ -17,7 +17,7 @@ const trialLead = (id = ids.trial, overrides = {}) => ({
 });
 const sent = (results = ['email:sent']) => results.map(entry => { const [channel, delivery, original] = entry.split(':'); return { channel, delivery, ...(original ? { original } : {}) }; });
 
-const fixture = ({ pending = [], leads = {}, unanswered = [], facts = {}, seen = true, deliveries = {}, fetchImpl = vi.fn(), leadSecrets = secrets, features = feature } = {}) => {
+const fixture = ({ pending = [], leads = {}, unanswered = [], facts = {}, seen = true, deliveries = {}, fetchImpl = vi.fn(), leadSecrets = secrets, features = feature, inboundFollowup = false } = {}) => {
   const alerts = [];
   const logs = [];
   const store = {
@@ -30,9 +30,10 @@ const fixture = ({ pending = [], leads = {}, unanswered = [], facts = {}, seen =
     probeRecord: vi.fn(async ({ targetKey }) => ({ target: targetKey, state: 'up', transition: 'none', failures: 0, incident: 0, taskId: null })),
     startRun: vi.fn(async () => 'run-1'),
     finishRun: vi.fn(async () => undefined),
+    growthLeadCapture: vi.fn(async () => ({ captured: true })),
   };
   const notifier = { send: vi.fn(async input => { alerts.push(input); return sent(deliveries[input.dedupeKey] ?? ['email:sent']); }) };
-  const handlers = growthHandlers({ store, notifier, publicOrigin: origin, features, leadSecrets, formTargets: forms, fetchImpl, log: line => logs.push(line) });
+  const handlers = growthHandlers({ store, notifier, publicOrigin: origin, features, leadSecrets, formTargets: forms, fetchImpl, log: line => logs.push(line), inboundFollowup });
   return { store, notifier, alerts, logs, handlers };
 };
 const task = (kind, overrides = {}) => ({
@@ -422,5 +423,21 @@ describe('checking a lead form', () => {
     const harness = fixture({ fetchImpl: vi.fn(async () => { controller.abort(); return new Response(JSON.stringify({ probe: true, forwarded: true }), { status: 200 }); }) });
     await expect(harness.handlers['probe.forms'](task('probe.forms'), { now, signal: controller.signal })).rejects.toMatchObject({ code: 'task_timeout' });
     expect(harness.store.probeRecord).not.toHaveBeenCalled();
+  });
+});
+
+describe('following up website leads', () => {
+  const pending = [{ id: ids.demo, kind: 'demo_request', source: 'carebase' }, { id: ids.trial, kind: 'trial_signup', source: 'carebase' }, { id: ids.news, kind: 'newsletter', source: 'intel' }];
+  const inbound = new Set([...feature, growthInboundFeature]);
+  it('hands county reports, newsletters and the like to the growth pipeline, and a trial sign-up stops cold email, only when the owner turns it on', async () => {
+    const on = fixture({ pending, leads: { [ids.trial]: trialLead() }, features: inbound, inboundFollowup: () => true });
+    const outcome = await on.handlers['growth.leads'](task('growth.leads'), at('2026-11-03T14:31:00Z'));
+    expect(on.store.growthLeadCapture.mock.calls.map(([id]) => id)).toEqual([ids.trial, ids.news]);
+    expect(outcome.result).toMatchObject({ captured: 2, trials: 1 });
+    expect(on.store.finishRun.mock.calls[0][3]).toContain('2 leads handed to the Marketing Manager to follow up');
+    for (const off of [fixture({ pending, leads: { [ids.trial]: trialLead() }, features: inbound }), fixture({ pending, leads: { [ids.trial]: trialLead() }, inboundFollowup: true })]) {
+      await off.handlers['growth.leads'](task('growth.leads'), at('2026-11-03T14:31:00Z'));
+      expect(off.store.growthLeadCapture).not.toHaveBeenCalled();
+    }
   });
 });

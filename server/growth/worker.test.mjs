@@ -56,13 +56,14 @@ it('does not pay again, sweep after sweep, for a draft that failed its checks; a
  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'A question',body:'Would a free trial help?',citations:['invented'],needsHuman:false}}))};
  const handler=growthHandlers({growth:{store,signingReady:true,hash:x=>x,unsubscribeToken:()=>'token'},model,clock:()=>at})['growth.pipeline'];
  const sweep=()=>handler({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'});
- expect((await sweep()).result).toMatchObject({planned:1,drafted:0,undrafted:1});
+ // The draft and its one repair pass; the run says which check refused it.
+ expect((await sweep()).result).toMatchObject({planned:1,drafted:0,undrafted:1,rejected:{citation_then_citation:1}});
  expect((await sweep()).result).toEqual({inspected:1,planned:1,drafted:0});
- expect(model.run).toHaveBeenCalledTimes(1);
- item={...o,policy:{...o.policy,version:10}}; await sweep();
  expect(model.run).toHaveBeenCalledTimes(2);
+ item={...o,policy:{...o.policy,version:10}}; await sweep();
+ expect(model.run).toHaveBeenCalledTimes(4);
  at+=assessRetryMs; await sweep();
- expect(model.run).toHaveBeenCalledTimes(3);
+ expect(model.run).toHaveBeenCalledTimes(6);
  expect(store.draft).not.toHaveBeenCalled();
 });
 it('does not pay for a new draft of work whose last message was cancelled under the same context, unless it was withdrawn or something changed',async()=>{

@@ -116,6 +116,8 @@ const amountPattern = /\$\s?((?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?)/g;
 const percentPattern = /((?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?)\s?(?:%|percent\b)/gi;
 const amountsIn = value => [...String(value ?? '').matchAll(amountPattern)].map(match => numberOf(match[1]));
 const percentsIn = value => [...String(value ?? '').matchAll(percentPattern)].map(match => numberOf(match[1]));
+/** The percentages a text states, as numbers ("12.5%" and "12.5 percent" are 12.5). */
+export const percentsOf = value => new Set(percentsIn(value));
 let sheetCache = { revision: -1 };
 /** What the checks derive from the fact sheet, derived again when the facts change (Intel's catalog, useAppCatalogFacts). */
 const sheet = () => {
@@ -172,11 +174,11 @@ const companyEmail = /^(?:hello|support)@caremetric\.ai$/i;
  * Problems in text that would be published or sent. `product` is the product key it is about (carebase, intel, advisors);
  * `numbers` is the set of numbers-with-units it may state (null skips that check).
  */
-export function textProblems(value, { product = null, numbers = null } = {}) {
+export function textProblems(value, { product = null, numbers = null, percents = null } = {}) {
   const text = String(value ?? '');
   const reasons = new Set();
   if (amountsIn(text).some(amount => !sheet().amounts.has(amount))) reasons.add('unlisted_price');
-  if (percentsIn(text).some(percent => !sheet().percents.has(percent))) reasons.add('unlisted_number');
+  if (percentsIn(text).some(percent => !sheet().percents.has(percent) && !percents?.has(percent))) reasons.add('unlisted_number');
   if (numbers && numbersIn(text).some(pair => !numbers.has(pair))) reasons.add('unlisted_number');
   for (const [code, pattern] of claimRules) if (pattern.test(text)) reasons.add(code);
   if (competitorPattern.test(text)) reasons.add('competitor_named');

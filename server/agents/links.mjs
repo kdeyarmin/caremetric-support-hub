@@ -111,7 +111,8 @@ export const campaignProduct = product => ({ carebase: 'carebase', 'caremetric-i
  *                             outreach-<product>, content <partner kind>
  */
 export const linkTags = Object.freeze({
-  growthOutreach: (product, touch) => ({ source: 'caremetric', medium: 'email', campaign: tagValue('growth', campaignProduct(product), `touch${Number(touch) || 1}`) }),
+  growthOutreach: (product, touch, content = null) => ({ source: 'caremetric', medium: 'email', campaign: tagValue('growth', campaignProduct(product), `touch${Number(touch) || 1}`),
+    ...(content ? { content: tagValue(content) } : {}) }),
   accountEmail: (product, moment) => ({ source: 'caremetric', medium: 'email', campaign: tagValue('account', campaignProduct(product), moment) }),
   sales: (product, route) => ({ source: 'caremetric', medium: ['email', 'chat', 'sms'].includes(route) ? route : 'email', campaign: tagValue('sales', campaignProduct(product)) }),
   social: (platform, product, content, { paid = false } = {}) => ({

@@ -223,6 +223,21 @@ export const sequencePlan = deepFreeze([
 ]);
 export const touchAngle = touch => sequencePlan[Math.min(Math.max(Number(touch) || 1, 1), sequencePlan.length) - 1].angle;
 
+/** Follow-ups to a person who asked for something on the website (a county report, a savings model, a newsletter or a contact form). */
+export const inboundSequence = deepFreeze([
+  { touch: 1, angle: 'They asked for it: thank them in one sentence for requesting what "lead" names, say what one part of it usually means for an organization like theirs, and offer the free trial as the way to see the rest for their own territory. Warm and short. Do not tell the founder\'s story at length: one sentence at most.' },
+  { touch: 2, angle: 'A week later: one concrete thing they could do with the product that follows from what they asked for, and one useful page from "links". Ask one simple question about what they are working on.' },
+  { touch: 3, angle: 'A short, polite last note: ask whether this is a priority this year or whether someone else handles it. Make it easy to say "not now". No new pitch.' },
+]);
+export const inboundAngle = touch => inboundSequence[Math.min(Math.max(Number(touch) || 1, 1), inboundSequence.length) - 1].angle;
+/** The one re-ask (private.growth_reengage), months after "not now" or a silent sequence, or soon after an ownership change. */
+export const reaskAngle = 'One brief, friendly check-in, months after the last message. Acknowledge the time that has passed in a few words, mention one thing that is new or relevant (a change the sources show, or the free trial still being there), and ask whether now is a better time. Three or four sentences. Easy to ignore, no pressure, and never a reproach for not answering.';
+/** What a message may lead with when the product policy runs experiments (draft.mjs arms): one part of the product, chosen per organization. */
+export const experimentAngles = deepFreeze({
+  'caremetric-intel': ['referral_sources', 'territory', 'competitors'],
+  carebase: ['staff_training', 'survey_ready', 'daily_records'],
+});
+
 /** How the Account Manager and the Sales Executive handle each customer-success moment. */
 export const lifecyclePlays = deepFreeze({
   onboarding: 'Welcome them, ask what outcome would make the product worth keeping, and point to the guide for the single first setup step that leads to it.',

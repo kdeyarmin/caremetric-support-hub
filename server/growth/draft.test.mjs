@@ -72,11 +72,11 @@ it('never offers a call, a meeting or a demo: templates point to the free trial 
 it('tags the product links of a passing outreach draft with its touch',async()=>{
  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Staff training records',body:'How do you track annual training hours today?\n\nhttps://cmcarebase.com/signup',citations:['source-1'],needsHuman:false}}))};
  const draft=await draftMessage({opportunity:{...opportunity,touches:1},work,task:{},model});
- expect(draft.body).toBe('How do you track annual training hours today?\n\nhttps://cmcarebase.com/signup?utm_source=caremetric&utm_medium=email&utm_campaign=growth-carebase-touch2');
+ expect(draft.body).toBe('How do you track annual training hours today?\n\nhttps://cmcarebase.com/signup?utm_source=caremetric&utm_medium=email&utm_campaign=growth-carebase-touch2&utm_content=web');
 });
 it('accepts a draft whose product link already carries well-formed tags, and refuses a tag that leads elsewhere',async()=>{
  const run=body=>draftMessage({opportunity,work,task:{},model:{configured:true,run:async()=>({outcome:'completed',output:{subject:'Staff training records',body,citations:['source-1'],needsHuman:false}})}});
- expect((await run('Try it free:\nhttps://cmcarebase.com/signup?utm_source=x&utm_medium=y&utm_campaign=z'))?.body).toBe('Try it free:\nhttps://cmcarebase.com/signup?utm_source=caremetric&utm_medium=email&utm_campaign=growth-carebase-touch1');
+ expect((await run('Try it free:\nhttps://cmcarebase.com/signup?utm_source=x&utm_medium=y&utm_campaign=z'))?.body).toBe('Try it free:\nhttps://cmcarebase.com/signup?utm_source=caremetric&utm_medium=email&utm_campaign=growth-carebase-touch1&utm_content=web');
  expect(await run('Try it free:\nhttps://evil.example/?utm_source=x&utm_medium=y&utm_campaign=z')).toBeNull();
  expect(await run('Try it free:\nhttps://cmcarebase.com/signup?utm_source=x&utm_medium=y&utm_campaign=z&next=https://evil.example')).toBeNull();
 });
@@ -113,4 +113,45 @@ it('writes prospect outreach as the founder, with the founder\'s story in touch 
  const sources=[{id:'s'}];
  expect(draftProblem(answer('I run a home health and hospice agency. Which referral sources does your team visit each week?'),{product:'caremetric-intel',sources,outreach:true})).toBeNull();
  expect(draftProblem(answer('Unlock seamless referral growth for your agency.'),{product:'caremetric-intel',sources,outreach:true})).toBe('unclear');
+});
+it('lets a draft state the numbers and percentages its own cited sources state, and ignores the prospect\'s own name in the word checks',()=>{
+ const sources=[{id:'s',claim:'The agency serves 12 counties and grew 15% last year.'}];
+ const answer=body=>({subject:'Your counties',body,citations:['s'],needsHuman:false});
+ expect(draftProblem(answer('You serve 12 counties and grew 15% last year.'),{product:'caremetric-intel',sources,outreach:true})).toBeNull();
+ expect(draftProblem(answer('You serve 14 counties.'),{product:'caremetric-intel',sources,outreach:true})).toBe('claim');
+ expect(draftProblem(answer('Hospice Solutions of Erie cares for families.'),{product:'caremetric-intel',sources,outreach:true})).toBe('unclear');
+ expect(draftProblem(answer('Hospice Solutions of Erie cares for families.'),{product:'caremetric-intel',sources,outreach:true,organization:'Hospice Solutions of Erie'})).toBeNull();
+});
+it('repairs a draft once, telling the writer what to fix, and reports why one was refused',async()=>{
+ const bad={outcome:'completed',output:{subject:'Training',body:'A seamless way to train staff.',citations:['source-1'],needsHuman:false}};
+ const good={outcome:'completed',output:{subject:'Training',body:'How do you track training hours today?',citations:['source-1'],needsHuman:false}};
+ const model={configured:true,run:vi.fn().mockResolvedValueOnce(bad).mockResolvedValueOnce(good)};
+ const reasons=[];
+ const draft=await draftMessage({opportunity,work,task:{},model,onReject:code=>reasons.push(code)});
+ expect(draft).toMatchObject({modelGenerated:true,body:'How do you track training hours today?'});
+ const repair=model.run.mock.calls[1][1];
+ expect(repair.promptVersion).toBe('growth.8-r');
+ expect(repair.system[0].text).toBe(growthSystem);
+ expect(JSON.parse(repair.user)).toMatchObject({previousDraft:{body:'A seamless way to train staff.'},fix:expect.stringMatching(/plain words/)});
+ expect(reasons).toEqual([]);
+ const twice={configured:true,run:vi.fn(async()=>bad)};
+ expect(await draftMessage({opportunity,work,task:{},model:twice,onReject:code=>reasons.push(code)})).toBeNull();
+ expect(reasons).toEqual(['unclear_then_unclear']);
+ expect(twice.run).toHaveBeenCalledTimes(2);
+});
+it('records the arms a message was written under and follows a website lead or a re-ask with their own plan',async()=>{
+ const run=vi.fn(async()=>({outcome:'completed',output:{subject:'Your county report',body:'Thank you for asking for the report.',citations:['source-1'],needsHuman:false}}));
+ const model={configured:true,run};
+ const lead={...opportunity,product:'caremetric-intel',policy:{...opportunity.policy,experiment_enabled:true},memory:{lead:{kind:'county_report',place:'Allegheny, PA',at:now}}};
+ const draft=await draftMessage({opportunity:lead,work,task:{},model});
+ expect(draft.arms).toMatchObject({trigger:'inbound'});
+ expect(['referral_sources','territory','competitors']).toContain(draft.arms.angle);
+ const input=JSON.parse(run.mock.calls[0][1].user);
+ expect(input).toMatchObject({lead:{kind:'county_report',place:'Allegheny, PA'},focus:draft.arms.angle.replace(/_/g,' ')});
+ expect(input.touchPlan).toMatch(/They asked for it/);
+ const reask={...opportunity,touches:3,memory:{reengagedAt:now,touchesBefore:3,reengageReason:'not_now'}};
+ await draftMessage({opportunity:reask,work,task:{},model});
+ const asked=JSON.parse(run.mock.calls[1][1].user);
+ expect(asked).toMatchObject({reask:true,maxTouches:1,touch:1});
+ expect(asked.touchPlan).toMatch(/One brief, friendly check-in/);
 });

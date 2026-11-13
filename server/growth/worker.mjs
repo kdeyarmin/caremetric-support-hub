@@ -29,6 +29,8 @@ async function pipelineItems(growth,signal) {
 }
 /** Sales follow-ups and capped cold email (20261105150000_growth_autonomy.sql): the contact finder, qualification and the daily evaluation. */
 export const growthAutonomyFeature='platform.agents.growth-autonomy.v1';
+/** One re-ask and the experiment arms (20261113170000_growth_reengage.sql). */
+export const growthReengageFeature='platform.agents.growth-reengage.v1';
 // Businesses the contact finder reads per discovery run (the most the database hands out at once), how many it reads at the same
 // time (each is a different business's website), how many more it reads on each fifteen-minute pipeline sweep so a day's
 // discoveries are all read the same day, and opportunities qualified per pass.
@@ -73,6 +75,7 @@ async function oneAnswer(call,signal) {
 export function growthHandlers({growth,model,notifier,features=null,marketed=null,clock=()=>Date.now()}) {
   if(!growth)return {};
   const autonomy=declared(features);
+  const reengaging=features instanceof Set?features.has(growthReengageFeature):Array.isArray(features)&&features.includes(growthReengageFeature);
   // Assessments and drafts the model could not give, by opportunity and what it was asked about, and when: kept in this process
   // only, so a restart asks once more. Without it every fifteen-minute sweep would pay for the same unanswerable request again.
   const unanswered=new Map();
@@ -111,11 +114,14 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
   async function sweep(task,{signal,now=()=>new Date()}={}) {
     await growth.store.maintenance?.();
     const started=clock(),spent=()=>clock()-started>=workBudgetMs;
-    const owner=task.kind==='growth.success'?'account_manager':'marketing_manager'; let inspected=0,planned=0,drafted=0,offset=0,total=1,assessed=0,undrafted=0;
+    const owner=task.kind==='growth.success'?'account_manager':'marketing_manager'; let inspected=0,planned=0,drafted=0,offset=0,total=1,assessed=0,undrafted=0,reengaged=0;
+    // Why drafts were not kept, by check (draft.mjs codes), so the run shows which rule throws good openings away.
+    const rejected={};
     const marketedList=owner==='marketing_manager'?await marketedNow(marketed):null;
     const prospecting=autonomy&&owner==='marketing_manager'&&task.agent?.autonomy!=='observe';
     const productsByDomain=new Map();
     // Researched prospects that meet the qualification rules move to qualified before the pipeline is read (nothing is sent here).
+    if(prospecting&&reengaging&&typeof growth.store.reengage==='function')reengaged=(await growth.store.reengage(50))?.reengaged??0;
     if(prospecting)await growth.store.autoQualify(qualifyLimit);
     while(offset<total) {
       signal?.throwIfAborted(); const page=await growth.store.snapshot(offset);total=page.total;offset+=page.items.length;if(!page.items.length)break;
@@ -153,12 +159,12 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
           // for again for six hours. One such prospect, retried every sweep, would otherwise spend the day's whole budget.
           const wanted=`draft:${o.id}:${work.key}:${o.version??''}:${o.contact_version??''}:${o.policy?.version??''}`;
           if(clock()-(unanswered.get(wanted)??-Infinity)<assessRetryMs)continue;
-          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal}),signal);
+          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,onReject:code=>{rejected[code]=(rejected[code]??0)+1;}}),signal);
           if(!draft){if(model?.configured){unanswered.set(wanted,clock());undrafted++;}continue;}
           signal?.throwIfAborted();
           let saved;
           try {
-            saved=await growth.store.draft(o.id,id,{...draft,version:o.version,contactVersion:o.contact_version,policyVersion:o.policy.version,purpose:work.kind==='outreach'?'marketing':'success',unsubscribeHash:growth.hash(growth.unsubscribeToken(id)),variant:draft.variant??'control'});
+            saved=await growth.store.draft(o.id,id,{...draft,version:o.version,contactVersion:o.contact_version,policyVersion:o.policy.version,purpose:work.kind==='outreach'?'marketing':'success',unsubscribeHash:growth.hash(growth.unsubscribeToken(id)),variant:draft.variant??'control',arms:draft.arms??{}});
           } catch (error) {
             // An owner edit during drafting invalidates this output. The next sweep reads fresh context.
             if(error?.code==='40001')continue;
@@ -173,7 +179,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     let contacts=null;
     if(prospecting&&growth.contacts?.configured&&typeof growth.store.contactCandidates==='function'&&!spent())contacts=await findContacts(sweepContactLimit,productsByDomain,{signal,spent});
     if(planned && notifier)await notifier.send({severity:'info',subject:'Customer growth work is ready',body:`${planned} follow-up tasks reviewed; ${drafted} message drafts prepared. Open Growth to review next actions.`,dedupeKey:`growth:${owner}:${growthDay(now())}`,agentKey:owner,taskId:task.id});
-    return {result:{inspected,planned,drafted,...(undrafted?{undrafted}:{}),...(contacts?.searched?{contacts}:{})}};
+    return {result:{inspected,planned,drafted,...(undrafted?{undrafted}:{}),...(Object.keys(rejected).length?{rejected}:{}),...(reengaged?{reengaged}:{}),...(contacts?.searched?{contacts}:{})}};
   }
   async function discover(task,{signal,now=()=>new Date()}={}) {
     if(!growth.research?.configured)return {result:{skipped:'research_not_configured'}};

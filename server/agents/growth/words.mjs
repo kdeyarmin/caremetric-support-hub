@@ -74,6 +74,8 @@ export function sourceWords(attribution = {}) {
 const leadsLink = publicOrigin => (/^https:\/\//i.test(publicOrigin ?? '') ? `${publicOrigin.replace(/\/+$/, '')}/admin/leads` : null);
 
 /** The owner's alert for a new trial: { subject, body, blocks }. The organization is the only name in it. */
+/** What happens next for a new trial: cold email to the business has stopped; customer emails go through the Account Manager. */
+export const trialNext = 'Any cold email to their business has stopped. The Account Manager drafts the welcome and trial check-ins (for your approval until you hand them over). Open Leads for their details.';
 export function trialAlert(lead, { publicOrigin } = {}) {
   const product = leadProduct(lead);
   const organization = lead?.organization ? clip(lead.organization, 80) : null;
@@ -84,7 +86,7 @@ export function trialAlert(lead, { publicOrigin } = {}) {
   const body = [
     opening,
     [`Product: ${product}.`, plan ? `Plan: ${plan}.` : null, `Came from ${from}.`].filter(Boolean).join(' '),
-    'Nothing has been sent to them. Open Leads for their details and follow up while the trial is fresh.',
+    trialNext,
   ].join('\n\n');
   const link = leadsLink(publicOrigin);
   return {
@@ -92,7 +94,7 @@ export function trialAlert(lead, { publicOrigin } = {}) {
     blocks: [
       { type: 'callout', tone: 'warning', title: 'New trial.', text: opening },
       { type: 'details', rows: [['Product', product], ...(plan ? [['Plan', plan]] : []), ...detailRows(lead?.details).filter(([key]) => key !== 'Plan'), ['Came from', from]] },
-      { type: 'paragraph', text: 'Nothing has been sent to them. Open Leads for their details and follow up while the trial is fresh.' },
+      { type: 'paragraph', text: trialNext },
       ...(link ? [{ type: 'button', label: 'Open Leads', url: link }] : []),
     ],
   };

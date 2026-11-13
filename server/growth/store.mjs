@@ -16,6 +16,8 @@ export function growthStore(pool) {
     contactCandidates:limit=>server('private.growth_contact_candidates',[limit]),
     recordContact:(id,email,sourceUrl)=>server('private.growth_record_contact',[id,email,sourceUrl]),
     autoQualify:limit=>server('private.growth_auto_qualify',[limit]),
+    // One re-ask after not now or a silent sequence (20261113170000_growth_reengage.sql).
+    reengage:limit=>server('private.growth_reengage',[limit]),
     manage:(token,operation,data)=>withSession(pool,token,db=>run(db,'hub.growth_manage',[operation,data])),
     snapshot:(offset=0)=>server('private.growth_snapshot',[offset]),
     event:(product,data)=>server('private.growth_record_event',[product,data]),

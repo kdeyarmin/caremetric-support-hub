@@ -83,14 +83,15 @@ export function salesReplyHandler({ store, notifier = null, drafting: draftingOp
     if (result.outcome === 'budget_exhausted') return { state: 'budget' };
     if (result.outcome === 'refused') return { state: 'refused' };
     const reading = result.output;
-    if (reading.possiblePhi) return { state: 'phi', intent: reading.intent };
-    if (ownerOnly.has(reading.intent)) return { state: 'owner_only', intent: reading.intent };
-    if (reading.intent === 'support') return { state: 'support', intent: reading.intent };
-    if (reading.needsOwner || !reading.reply.trim()) return { state: 'needs_owner', intent: reading.intent };
+    const objection = reading.objection && reading.objection !== 'none' ? reading.objection : null;
+    if (reading.possiblePhi) return { state: 'phi', intent: reading.intent, objection };
+    if (ownerOnly.has(reading.intent)) return { state: 'owner_only', intent: reading.intent, objection };
+    if (reading.intent === 'support') return { state: 'support', intent: reading.intent, objection };
+    if (reading.needsOwner || !reading.reply.trim()) return { state: 'needs_owner', intent: reading.intent, objection };
     const checked = checkSalesReply({ reply: reading.reply, product: payload.product, route, guides, text: [text, ...history.map(message => message.text)].join('\n') });
-    if (!checked.ok) return { state: 'rejected', reason: checked.reason, intent: reading.intent };
+    if (!checked.ok) return { state: 'rejected', reason: checked.reason, intent: reading.intent, objection };
     const cited = guides.filter(guide => checked.reply.includes(guide.url)).map(guide => guide.label);
-    return { state: 'drafted', intent: reading.intent, nextStep: reading.nextStep, draft: checked, sources: ['CareMetric fact sheet', 'Sales playbook', ...cited].slice(0, 5) };
+    return { state: 'drafted', intent: reading.intent, objection, nextStep: reading.nextStep, draft: checked, sources: ['CareMetric fact sheet', 'Sales playbook', ...cited].slice(0, 5) };
   }
 
   async function propose({ task, snapshot, route, body, template, intent, payload, sources = [] }) {
@@ -170,6 +171,12 @@ export function salesReplyHandler({ store, notifier = null, drafting: draftingOp
     const marketedProduct = markets(await marketedNow(marketed), payload.product);
     const asked = flagged ? { state: 'phi' } : !marketedProduct ? { state: 'not_marketed' } : drafting ? await askModel({ task, snapshot, inbound, route, payload, signal, drafting }) : { state: 'off' };
     if (signal?.aborted) throw Object.assign(new Error('The task was stopped.'), { code: 'task_timeout', transient: true });
+    // The model's reading corrects the keyword reading of the same message in growth (20261113160000_growth_inbound.sql): a "not
+    // really interested" or a question is recorded as what it is, with the playbook objection it raised. A database without the
+    // operation keeps the keyword reading.
+    if (asked.intent && typeof store.growthReplyDisposition === 'function') {
+      try { await store.growthReplyDisposition(payload.messageId, asked.intent, asked.objection ?? null); } catch { /* the keyword reading stands */ }
+    }
 
     const first = (snapshot.outboundCount ?? 0) === 0;
     let outcome = 'owner_only';
