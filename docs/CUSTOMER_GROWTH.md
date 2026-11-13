@@ -243,10 +243,16 @@ marketing feed, documented in Intel's `docs/HUB_MARKETING_FEED.md`). Each daily 
 (`server/growth/roster-discovery.mjs`, the client in `server/growth/roster.mjs`):
 
 - **Which agencies.** Home health agencies and hospices in the 43 states of Intel's market grid (`rosterPlan` in
-  `server/growth/playbook.mjs`, Pennsylvania and its neighbours first) that CMS shows as newly certified, or with a change of
-  ownership, in the last 18 months: new agencies and new owners are the ones choosing software and looking for referral data.
-  Terminated and closed agencies are left out. The most recent change comes first. The run reads the roster twice (changes of
-  ownership, then new certifications), at most four pages of 500 each.
+  `server/growth/playbook.mjs`) that CMS shows as newly certified, or with a change of ownership, in the last 18 months: new
+  agencies and new owners are the ones choosing software and looking for referral data. Terminated and closed agencies are left
+  out.
+- **One state at a time, a different state first each day.** The roster is read state by state (two queries a state: changes of
+  ownership, then new certifications, at most four pages of 500 each, far more than any state's recent changes), so no query is
+  ever cut short by the whole country's size. Each Eastern day starts one state further along the list (Pennsylvania first on
+  November 12, 2026, Ohio the next day, and so on) and reads states until it holds enough agencies due a search for the day, or has
+  read 20 pages. Among the states read, the most recent change comes first. Every state is the first one read at least once every
+  43 days, so every recently changed agency is reached in time; a test walks a roster of 2,150 such agencies and searches every one,
+  ten a day.
 - **Which product.** CareMetric Intel only. The roster lists home health agencies and hospices, which are Intel's segment, and
   CareBase's playbook names a home health agency as not a fit. Nothing is read while Intel is switched off under **Products we
   market**.
@@ -258,9 +264,14 @@ marketing feed, documented in Intel's `docs/HUB_MARKETING_FEED.md`). Each daily 
   it.
 - **Matching.** A result is the agency's site only when the host is not a directory, listing, review, government, social or job
   site (the same filter as every discovery search), its domain carries the agency's name (one of the name's distinctive words of
-  four letters or more, or all of them run together), at least half of those words are in the domain or the page title, and the
-  host, title or snippet talks about care (hospice, home health, home care, nursing). The first result that passes is taken; a
-  page that only mentions the agency, such as a news story, is not.
+  four letters or more, or all of them run together), at least half of those words are in the domain or the page title, the
+  host, title or snippet talks about care (hospice, home health, home care, nursing), and the result places the agency where CMS
+  does. It must name the agency's city or its state (the state's name, its code in an address such as "Dayton, OH" or "OH 45402",
+  the code on its own where it is not an everyday word like "IN" or "OR", or a path such as `/pa/`), and it must not name another
+  state without naming the agency's own: "Valley Hospice | Ohio" is not the Valley Hospice CMS lists in Philadelphia, while a
+  site serving "Pennsylvania and Ohio" can be. "West Virginia" is never read as Virginia, a state name that is the agency's city
+  ("Indiana, PA") is read as the city, and a credential after a name ("Jane Doe, MD") is not a state. The first result that passes
+  is taken; a page that only mentions the agency, such as a news story, is not.
 - **What is recorded.** The site becomes a CareMetric Intel prospect through the usual discovery path, with two dated sources: the
   public CMS facts, for example "CMS lists Valley Hospice (CMS certification number 391501) as a Medicare-certified hospice in
   Philadelphia, PA in its Provider of Services file for 2026Q3. CMS records a change of ownership on 2026-03-01. Its website was
@@ -272,8 +283,10 @@ marketing feed, documented in Intel's `docs/HUB_MARKETING_FEED.md`). Each daily 
 - **What is remembered.** `private.growth_roster_searches` keeps one row per CMS certification number searched: when, and whether a
   site was matched (public CMS identifiers only, at most ten new rows a day). A matched agency is never searched again. One with no
   site found is searched again after 180 days, because a new agency often has no website yet.
-- **The run's result** on the AI team page gains `roster`: the CMS quarter, and how many facilities were read, how many had a
-  recent change, how many were due a search, searched, matched and recorded. When the step ends early, `stopped` says why: `time`,
+- **The run's result** on the AI team page gains `roster`: the CMS quarter, and how many states and facilities were read, how many
+  had a recent change, how many were due a search, searched, matched and recorded (`truncated` counts a state query that did not
+  end within its four pages, which should never happen). The contact finder that follows in the same run is told the new
+  prospects' domains, so it keeps what their home pages say; they are never in the result. When the step ends early, `stopped` says why: `time`,
   `search_allowance`, `search_unavailable`, `feed_` and Intel's error code (for example `feed_invalid_signature` for a secret that
   does not match, `feed_expired_timestamp` for a clock more than five minutes off, `feed_not_configured` when Intel has no secret),
   `feed_unavailable`, `database_not_ready` (the migration is not applied) or `roster_failed`. Counts only, never a name or an

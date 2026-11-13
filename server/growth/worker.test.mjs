@@ -388,11 +388,12 @@ it('with the CMS roster set up, discovery searches for recently changed agencies
  const store={snapshot:vi.fn(async()=>({total:0,items:[]})),discover:vi.fn(async(_product,rows)=>rows.length),
   rosterPending:vi.fn(async ccns=>({due:ccns,searchedToday:0})),rosterSearched:vi.fn(async()=>undefined)};
  const agency={ccn:'391501',name:'VALLEY HOSPICE',setting:'hospice',city:'Philadelphia',state:'PA',certification_date:'2026-02-01',termination_date:null,change_of_ownership_date:null,signals:[]};
- const roster={configured:true,roster:vi.fn(async({certifiedSince})=>({period:'2026Q3',items:certifiedSince?[agency]:[],nextCursor:null,skipped:0}))};
+ const roster={configured:true,roster:vi.fn(async({states,certifiedSince})=>({period:'2026Q3',items:certifiedSince&&states.includes(agency.state)?[agency]:[],nextCursor:null,skipped:0}))};
  const search=vi.fn(async(_product,options)=>/Valley Hospice/.test(options.query??'')?[{name:'Valley Hospice',domain:'valleyhospice.org',url:'https://valleyhospice.org/',claim:'Hospice care in Philadelphia.'}]:[]);
- const outcome=await growthHandlers({growth:{store,research:{configured:true,search},roster},marketed:['caremetric-intel']})['growth.discovery']({id:'t',agent:{autonomy:'propose'}},{now:()=>new Date('2026-11-13T13:00:00Z')});
+ const outcome=await growthHandlers({growth:{store,research:{configured:true,search},roster},marketed:['caremetric-intel']})['growth.discovery']({id:'t',agent:{autonomy:'propose'}},{now:()=>new Date('2026-11-12T13:00:00Z')});
+ // November 12 starts the roster's states at Pennsylvania; with one agency due it reads states until its pages are used.
  expect(outcome.result).toEqual({candidates:0,searches:discoveryQueriesPerDay,enrichment:{searched:0,evidenceRows:0},
-  roster:{period:'2026Q3',facilities:1,recent:1,due:1,searched:1,matched:1,recorded:1}});
+  roster:{period:'2026Q3',states:10,facilities:1,recent:1,due:1,searched:1,matched:1,recorded:1}});
  // The generic searches come first; the roster's one search is the last.
  expect(search.mock.calls.at(-1)[1].query).toBe('Valley Hospice Philadelphia PA');
  expect(store.discover).toHaveBeenLastCalledWith('caremetric-intel',[expect.objectContaining({domain:'valleyhospice.org',url:'https://www.medicare.gov/care-compare/details/hospice/391501'}),
@@ -404,4 +405,23 @@ it('with the CMS roster set up, discovery searches for recently changed agencies
  const stopped=await growthHandlers({growth:{store,research:{configured:true,search:failing},roster},marketed:['caremetric-intel']})['growth.discovery']({id:'t',agent:{autonomy:'propose'}});
  expect(stopped.result).toEqual({candidates:0,searches:1,stopped:'search_unavailable'});
  expect(roster.roster).not.toHaveBeenCalled();
+});
+it('the contact finder keeps the home page summary of a prospect the roster added in the same run',async()=>{
+ // The pipeline is read before the roster step, so the new prospect is not in it.
+ const store={snapshot:vi.fn(async()=>({total:0,items:[]})),discover:vi.fn(async(_product,rows)=>rows.length),
+  rosterPending:vi.fn(async ccns=>({due:ccns,searchedToday:0})),rosterSearched:vi.fn(async()=>undefined),
+  contactCandidates:vi.fn(async()=>[{id:'org-roster',domain:'valleyhospice.org'}]),recordContact:vi.fn(async(id,email)=>({found:Boolean(email)})),autoQualify:vi.fn(async()=>({qualified:0}))};
+ const agency={ccn:'391501',name:'VALLEY HOSPICE',setting:'hospice',city:'Philadelphia',state:'PA',certification_date:'2026-02-01',termination_date:null,change_of_ownership_date:null,signals:[]};
+ const roster={configured:true,roster:vi.fn(async({states,certifiedSince})=>({period:'2026Q3',items:certifiedSince&&states.includes('PA')?[agency]:[],nextCursor:null,skipped:0}))};
+ const search=vi.fn(async(_product,options)=>/Valley Hospice/.test(options.query??'')?[{name:'Valley Hospice',domain:'valleyhospice.org',url:'https://valleyhospice.org/',claim:'Hospice care in Philadelphia.'}]:[]);
+ const contacts={configured:true,find:vi.fn(async()=>({email:'info@valleyhospice.org',sourceUrl:'https://valleyhospice.org/contact',site:{url:'https://valleyhospice.org/',claim:'The organization\'s own home page. Title: Valley Hospice'}}))};
+ const run=growth=>growthHandlers({growth,features:autonomy,marketed:['caremetric-intel']})['growth.discovery']({id:'t',agent:{autonomy:'propose'}},{now:()=>new Date('2026-11-12T13:00:00Z')});
+ const outcome=await run({store,research:{configured:true,search},roster,contacts});
+ expect(outcome.result.contacts).toEqual({searched:1,found:1,none:0,described:1});
+ expect(store.discover).toHaveBeenLastCalledWith('caremetric-intel',[{name:'valleyhospice.org',domain:'valleyhospice.org',url:'https://valleyhospice.org/',claim:'The organization\'s own home page. Title: Valley Hospice'}]);
+ expect(JSON.stringify(outcome)).not.toMatch(/valley/i);
+ // Without the roster, a business the pipeline did not hold gets no summary, as before.
+ store.discover.mockClear();
+ expect((await run({store,research:{configured:true,search},contacts})).result.contacts).toEqual({searched:1,found:1,none:0,described:0});
+ expect(store.discover).not.toHaveBeenCalled();
 });

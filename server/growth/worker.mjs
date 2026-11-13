@@ -210,7 +210,9 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     // The second source: Medicare-certified agencies from the CMS roster that were newly certified or changed owners recently, a few
     // website searches a day in the time left (roster-discovery.mjs). It never fails the run, and adds nothing to the result unless
     // the roster is set up (its secret and Settings → Customer growth → Find prospects in the CMS roster).
-    const roster=stopped?null:await rosterDiscovery({growth,marketed:marketedList,moment:now(),signal,pace,spent});
+    // The domains of the prospects it adds go to the contact finder below (never into the result), which reads their home pages.
+    const rosterProspects=[];
+    const roster=stopped?null:await rosterDiscovery({growth,marketed:marketedList,moment:now(),signal,pace,spent,discovered:(domain,product)=>rosterProspects.push({domain,product})});
     // What the search provider says the key may still use this month (research.mjs `searchAllowance`), so the run's result on the Team
     // screen shows whether the plan covers the day's searches. Absent when the provider does not say.
     const allowance=growth.research.allowance?.()??null;
@@ -221,6 +223,8 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     // address. What this run does not reach, the pipeline sweeps read through the day.
     const productsByDomain=new Map();
     for(const o of items??[])if(o.owner_agent==='marketing_manager'&&markets(marketedList,o.product)&&['identified','researched','qualified'].includes(o.stage))productsOf(productsByDomain,o);
+    // The pipeline above was read before the roster step: a prospect it just added is not in it, but is a prospect of its product.
+    for(const prospect of rosterProspects)if(markets(marketedList,prospect.product))productsOf(productsByDomain,prospect);
     const contacts=await findContacts(contactSearchLimit,productsByDomain,{signal,spent});
     const qualified=(await growth.store.autoQualify(qualifyLimit))?.qualified??0;
     return {result:{candidates,contacts,qualified,...researched}};

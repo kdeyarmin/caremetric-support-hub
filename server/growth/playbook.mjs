@@ -296,22 +296,24 @@ export function discoveryQuery(product, instant = new Date()) {
   return discoveryQueries(product, instant)[0]?.query ?? null;
 }
 
-// The states of the places Intel's market grid searches, by the name each place ends with (Pittsburgh and Philadelphia name none).
-const stateCodes = Object.freeze({
-  Pennsylvania: 'PA', Ohio: 'OH', Maryland: 'MD', 'New Jersey': 'NJ', 'New York': 'NY', Virginia: 'VA', 'West Virginia': 'WV',
-  Delaware: 'DE', 'North Carolina': 'NC', 'South Carolina': 'SC', Tennessee: 'TN', Georgia: 'GA', Florida: 'FL', Michigan: 'MI',
-  Indiana: 'IN', Kentucky: 'KY', Missouri: 'MO', Texas: 'TX', Arizona: 'AZ', Alabama: 'AL', Oklahoma: 'OK', Mississippi: 'MS',
-  Illinois: 'IL', Wisconsin: 'WI', Minnesota: 'MN', Iowa: 'IA', Nebraska: 'NE', Kansas: 'KS', Arkansas: 'AR', Louisiana: 'LA',
-  'New Mexico': 'NM', Colorado: 'CO', Utah: 'UT', Nevada: 'NV', Idaho: 'ID', Washington: 'WA', Oregon: 'OR', California: 'CA',
-  Connecticut: 'CT', 'Rhode Island': 'RI', Massachusetts: 'MA', 'New Hampshire': 'NH', Maine: 'ME',
+/** Every state's name by its postal code (with the District of Columbia and Puerto Rico, which CMS lists too). */
+export const usStates = Object.freeze({
+  AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California', CO: 'Colorado', CT: 'Connecticut', DE: 'Delaware',
+  DC: 'District of Columbia', FL: 'Florida', GA: 'Georgia', HI: 'Hawaii', ID: 'Idaho', IL: 'Illinois', IN: 'Indiana', IA: 'Iowa',
+  KS: 'Kansas', KY: 'Kentucky', LA: 'Louisiana', ME: 'Maine', MD: 'Maryland', MA: 'Massachusetts', MI: 'Michigan', MN: 'Minnesota',
+  MS: 'Mississippi', MO: 'Missouri', MT: 'Montana', NE: 'Nebraska', NV: 'Nevada', NH: 'New Hampshire', NJ: 'New Jersey',
+  NM: 'New Mexico', NY: 'New York', NC: 'North Carolina', ND: 'North Dakota', OH: 'Ohio', OK: 'Oklahoma', OR: 'Oregon',
+  PA: 'Pennsylvania', PR: 'Puerto Rico', RI: 'Rhode Island', SC: 'South Carolina', SD: 'South Dakota', TN: 'Tennessee', TX: 'Texas',
+  UT: 'Utah', VT: 'Vermont', VA: 'Virginia', WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming',
 });
+// The state of a place in Intel's market grid, by the state name it ends with (Pittsburgh and Philadelphia name none).
 const placeState = place => {
   if (['Pittsburgh', 'Philadelphia'].includes(place)) return 'PA';
-  const name = Object.keys(stateCodes).filter(state => place.endsWith(` ${state}`)).sort((a, b) => b.length - a.length)[0];
-  return name ? stateCodes[name] : null;
+  const code = Object.keys(usStates).filter(key => place.endsWith(` ${usStates[key]}`)).sort((a, b) => usStates[b].length - usStates[a].length)[0];
+  return code ?? null;
 };
-/** The state's name for a two-letter code the roster reads, or null. */
-export const stateName = code => Object.keys(stateCodes).find(name => stateCodes[name] === code) ?? null;
+/** The state's name for a two-letter code, or null. */
+export const stateName = code => usStates[code] ?? null;
 /**
  * The CMS roster (Intel's marketing feed, roster.mjs) lists Medicare-certified home health agencies and hospices: Intel's segment, never
  * CareBase's (its playbook names a home health agency as not a fit). It is read for the states of Intel's market grid, Pennsylvania
