@@ -14,7 +14,8 @@
 -- - otherwise the same business domain as a prospect organization links it (never for a personal mail domain). The person who
 --   signed up joins it as a contact for review (eligibility 'review': nothing is sent to them until the owner or the contact
 --   finder permits it) and becomes the product opportunity's contact, so customer email never goes to the person we
---   cold-emailed on the strength of a colleague's sign-up.
+--   cold-emailed on the strength of a colleague's sign-up. The other product's opportunity gets the same contact when a later
+--   signal hands it to the Account Manager; a contact the owner sets afterwards is never reset.
 --
 -- Only an organization that is not a customer already and not internal is linked. Linking sets its tenant, so the send claim
 -- refuses cold email to it from then on, and unsent marketing drafts there are cancelled. The trial or payment then lands on the
@@ -35,7 +36,7 @@ set local lock_timeout = '10s';
 
 create or replace function private.growth_ensure_customer(p_tenant uuid,p_product text) returns uuid
 language plpgsql security definer set search_path='' as $$
-declare org uuid; v_email text; v_contact uuid; v_match text;
+declare org uuid; v_email text; v_contact uuid; v_match text; v_handed uuid;
  -- The same personal mail domains private.growth_inquiry never links to a business.
  v_personal constant text[]:=array['gmail.com','googlemail.com','outlook.com','hotmail.com','live.com','msn.com','yahoo.com','ymail.com','icloud.com','me.com','mac.com','aol.com','comcast.net','verizon.net','att.net','sbcglobal.net','protonmail.com','proton.me']; begin
  if p_product not in ('carebase','caremetric-intel') or not exists(select 1 from hub.tenants where id=p_tenant) then
@@ -75,6 +76,10 @@ declare org uuid; v_email text; v_contact uuid; v_match text;
   insert into private.growth_organizations(name,domain,tenant_id)
   select name,'customer-'||p_tenant::text||'.invalid',id from hub.tenants where id=p_tenant
   returning id into org;
+ elsif v_contact is null then
+  -- Already linked (by an earlier signal, perhaps for the other product): the person who signed up, if they are a contact there.
+  select c.id into v_contact from private.billing_customers b join private.growth_contacts c on c.email=lower(btrim(b.email)) and c.organization_id=org
+  where b.tenant_id=p_tenant and b.livemode and not b.deleted;
  end if;
  -- A linked customer whose first signal is a heartbeat must never enter the cold-prospect pipeline.
  insert into private.growth_opportunities as o(organization_id,product,stage,owner_agent,next_action)
@@ -82,11 +87,13 @@ declare org uuid; v_email text; v_contact uuid; v_match text;
  on conflict(organization_id,product) do update set owner_agent='account_manager',
   stage=case when o.stage in ('identified','researched','qualified','contacted','engaged','demo') then 'nurture' else o.stage end,
   version=o.version+1,updated_at=now()
- where o.owner_agent='marketing_manager';
- -- A linked prospect's customer email goes to the person who signed up, never to whoever was cold-emailed before.
- if v_contact is not null then
+ where o.owner_agent='marketing_manager'
+ returning id into v_handed;
+ -- A prospect's customer email goes to the person who signed up, never to whoever was cold-emailed before. Only when the
+ -- opportunity is created or handed to the Account Manager by this signal: a contact the owner chose later is never reset.
+ if v_contact is not null and v_handed is not null then
   update private.growth_opportunities set contact_id=v_contact,version=version+1,updated_at=now()
-  where organization_id=org and product=p_product and contact_id is distinct from v_contact;
+  where id=v_handed and contact_id is distinct from v_contact;
  end if;
  -- A first heartbeat can establish customer context before a trial signal; stale cold drafts must not survive that handoff.
  update private.growth_messages m set status='cancelled' from private.growth_opportunities o

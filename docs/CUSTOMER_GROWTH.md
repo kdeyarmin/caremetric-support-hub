@@ -255,7 +255,8 @@ address on its live billing customer, which is the address the application's sig
   contact.
 - **Otherwise the same business domain** as a prospect organization links it. Personal mail domains (Gmail, Outlook, Yahoo, iCloud,
   Comcast and the like) never do. The person who signed up joins as a contact for review and becomes the product opportunity's
-  contact, so customer email never goes to the person who was cold-emailed because a colleague signed up.
+  contact (and the other product's, when a later signal hands that one to the Account Manager), so customer email never goes to
+  the person who was cold-emailed because a colleague signed up. A contact the owner sets afterwards is never reset.
 
 Only a prospect that is not already a customer and not internal is linked; a test-mode billing customer never links, and a tenant that
 already has a Growth organization keeps it. The send claim refuses cold email to a customer's organization, and unsent marketing drafts
