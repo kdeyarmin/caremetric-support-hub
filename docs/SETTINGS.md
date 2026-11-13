@@ -72,6 +72,28 @@ does nothing. A setting you saved, or cleared back to its default, is never over
 | Creative | How videos are made | none: a setting from the start |
 | Course distribution | Allow legacy opt-in distribution | `HUB_LEGACY_DISTRIBUTION_OPT_IN` |
 
+Settings added with the AI workforce build-out (2026-11-13), all settings from the start and all off or empty until you choose
+([AI_WORKFORCE_REVIEW_2026-11-13.md](AI_WORKFORCE_REVIEW_2026-11-13.md) has the order to turn them on):
+
+| Settings group | Setting | What it does |
+| --- | --- | --- |
+| AI team | Tasks at once | How many agent tasks run side by side (default 3) |
+| AI team | Days before an idle agent is flagged | When the morning brief names a quiet agent (default 3) |
+| Customer growth | Find prospects from the Medicare roster; States to prospect in; Most roster agencies to look up a day | Prospecting from Intel's roster of home health agencies and hospices |
+| Customer growth | Follow up website leads by email | County report, contact and savings-model leads get a two-email follow-up, after your approval |
+| Customer growth | Days before asking again | When a "not now" or a silent prospect is asked once more (at least 30) |
+| Customer growth | Contact-data service; Most contact lookups a day | Named decision-makers (Apollo); every address waits for your review |
+| Customer growth | Research prospects with web search; Most prospects to research a day; Most to spend researching one prospect | Deeper research within a cost ceiling |
+| Customer growth | Write from what is working | Drafts use the weekly memo you approve on Growth |
+| Creative | County snapshots a week | Images of one public number for a county your prospects are in (0 turns them off) |
+| Social media | Post about new CMS data and observances | The weekly plan may write one post about a new release or an observance |
+| Social media | Write posts for my LinkedIn profile; Posts for my profile a week | Posts in your voice, each approved by you |
+| Paid ads | Most to spend on new campaigns a month | New LinkedIn, Meta and Google search campaigns are proposed only while it is set |
+| Paid ads | Meta retargeting audience; Meta Pixel (dataset) id; LinkedIn conversion rule id | Where new Meta campaigns aim and where leads are reported |
+| Paid ads | Report leads to the ad platforms | Hashed-email lead reports to the platform whose ad was clicked |
+| Paid ads | Google Ads customer id; Google Ads manager account id; Google Ads OAuth client id; Google Ads API version | The Google Ads API |
+| Paid ads | Bid on competitor names | Competitor names as search keywords only, never in ad text |
+
 `HUB_BULK_EMAIL_FROM` and `HUB_BOOKING_URL` are no longer used at all (CareMetric offers no demos, calls or meetings); the
 Hub warns at start while either is set. Delete them.
 
@@ -95,6 +117,12 @@ Secrets, which are never shown on screen or stored in the database:
 - `HUB_SEARCH_CONSOLE_CREDENTIALS`
 - `HUB_VISITOR_METRICS_KEY` (dedicated shared key for Intel’s aggregate website session reports)
 - `HUB_HEYGEN_API_KEY` (only for HeyGen presenter videos, Settings → Creative)
+- `HUB_INTEL_FEED_SECRET` (Intel's marketing feed: the same value as Intel's `HUB_MARKETING_FEED_SECRET`)
+- `HUB_APOLLO_API_KEY` (only when Settings → Customer growth → Contact-data service is Apollo)
+- `HUB_GROWTH_IMPORT_SECRET` (signs prospect lists sent to `/api/growth/import`)
+- `HUB_GOOGLE_ADS_DEVELOPER_TOKEN`, `HUB_GOOGLE_ADS_CLIENT_SECRET`, `HUB_GOOGLE_ADS_REFRESH_TOKEN` (only for creating Google
+  search campaigns through the API; without them approved campaigns are emailed as an import file)
+- Your personal LinkedIn token is not a Railway variable: save it on the LinkedIn connection card (Settings → Social media).
 - `CAREBASE_DISTRIBUTION_OBSERVER_TOKEN`
 
 The service's wiring, which has to be right before the Hub can start or sign you in:

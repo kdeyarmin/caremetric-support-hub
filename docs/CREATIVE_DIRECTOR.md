@@ -47,7 +47,7 @@ A brief names the product, a goal, an audience (organizations and roles, never a
 platforms, images and/or videos with their lengths, an optional angle and an optional offer code. The model is given the brief, the
 product's own pages (by id), the brand kit's voice, banned phrases and required disclaimers, the owner's screenshots (by id and label), the
 product's learnings and its recent headlines (not to repeat), and, for a revision, the asset it replaces and the owner's note. Its system
-prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.6` and `creative-variants.6`) carry the fact sheet and the sales
+prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.7` and `creative-variants.7`) carry the fact sheet and the sales
 playbook (the Sales Executive's fact source) and are cached. The answers are closed JSON schemas.
 
 **What each product does** (`server/agents/content/features.mjs`, data in `intel-features.json` and `carebase-features.json`). Each brief's
@@ -294,3 +294,13 @@ where id = '<id>';` (the weekly refresh also proposes retiring tired creative).
 Two model calls per brief: the concept and final copy on the quality tier (up to 4,000 output tokens) and the variants on the draft tier (up
 to 5,000). The seeded daily budget is $3.00; a used-up budget puts the brief off to the next Eastern day. Rendering uses no model. HeyGen
 renders are billed by HeyGen and logged in the AI usage ledger.
+
+## County snapshots (2026-11-13)
+
+With Settings → Creative → County snapshots a week above 0 (default 3), the daily plan opens briefs for counties where the Medicare
+roster's prospects are, most first and none pictured in the last eight weeks, each about one public figure from Intel's county figures
+(Medicare beneficiaries aged 85 and over, home health or hospice users, growth in residents aged 65 and over, Medicare Advantage
+share and others, in turn by week). Code fixes the figure, its label and its short source (`server/agents/creative/data.mjs`) and
+every variant is drawn with the stat layout; the model writes only the words around it. A draft that changes the figure, or writes a
+number of its own (the data's year aside), is blocked (`data_figure`, `data_number`), and any stat image now needs its source
+(`stat_source`). The figures are Medicare fee-for-service unless their label says otherwise.

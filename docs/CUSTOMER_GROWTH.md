@@ -156,7 +156,7 @@ claim still comes from the fact sheet (`server/agents/content/facts.mjs`, the co
 - **Pipeline sweep limits.** A sweep assesses at most 20 prospects, stops starting model calls and website reads 150 seconds after
   it began, and does not ask again for six hours for an assessment or a draft the model could not give or that failed its checks
   (unless the opportunity, its evidence, its contact or the policy changed). The sweep's result counts those drafts as `undrafted`.
-- **Fit assessment** (`growth-fit.2`) scores with a written rubric whose bands line up with qualification (`qualify.1`, fit 75 or
+- **Fit assessment** (`growth-fit.3`) scores with a written rubric whose bands line up with qualification (`qualify.1`, fit 75 or
   more): only an operator in the product's segment and territory, shown by its own sources, can reach 75; a directory, a vendor or an
   out-of-territory organization stays below 30.
 - **Drafting** (`growth.3`) gives the writer the fact sheet and the playbook in the cached system prompt, the touch it is writing
@@ -188,7 +188,7 @@ conversation. The playbook has a "demo" objection for both products: send the wa
 so every agent says it applies on its own, with no code needed. The Account Manager's trial check-in email states it in its exact
 terms (owner decision 2026-11-08).
 
-**Outreach from the founder, easy to read (owner direction 2026-11-12, `growth.7`).** Prospect outreach is written in the founder's
+**Outreach from the founder, easy to read (owner direction 2026-11-12, now `growth.8`).** Prospect outreach is written in the founder's
 first person and signed with the founder's name and title (`senderFor` in `server/growth/playbook.mjs`, from `founder` in
 `server/agents/content/facts.mjs`). Touch 1 tells the founder's story in one or two sentences, exactly as the fact sheet gives it: the
 founder runs a home health and hospice agency and a healthcare consulting company, needed a way to research competitors and find every potential referral source, and built
@@ -207,6 +207,14 @@ conversation, a demo or call, and a time to meet are refused; declining a demo i
 
 Changing the playbook's wording changes what the models read: bump `playbookVersion`, run `npm test -- server/growth` and
 `npm run evaluate:growth`, and review the next drafts before widening any autonomy.
+
+## The 2026-11-13 additions
+
+The Medicare roster (`growth.roster`), reply reading and website lead follow-up, one re-ask after "not now", named decision-makers
+and list imports (`growth.people`), research with web search (`growth.research`) and the weekly "what is working" memo
+(`growth.learn`) are described, with their settings and the order to turn them on, in
+[AI_WORKFORCE_REVIEW_2026-11-13.md](AI_WORKFORCE_REVIEW_2026-11-13.md). Every draft records the experiment arms it was written under
+(`growth_messages.arms`, short codes only) and the memo version it used (`memo_version`), and links carry the arms in `utm_content`.
 
 ## Canonical Intel activity and verified billing conversions
 
