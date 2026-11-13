@@ -25,7 +25,7 @@ import { researchOnlyPrefix } from './roster.mjs';
  * `growthPromptVersion` names this prompt in each run. The daily guardrail evaluation keeps the key the database's send claim
  * requires (`growthEvaluationVersion` in evaluation.mjs), which is independent of the prompt's wording.
  */
-export const growthPromptVersion='growth.8';
+export const growthPromptVersion='growth.9';
 const fields={subject:{type:'string'},body:{type:'string'},citations:{type:'array',items:{type:'string'}},needsHuman:{type:'boolean'}};
 export const draftSchema={type:'object',properties:fields,required:Object.keys(fields),additionalProperties:false};
 export const growthSystem=`You write one short business email for CareMetric about one CareMetric product: outreach to a prospect, written as CareMetric's founder, or a message to a customer from its Account Manager. A person at CareMetric reviews model-written messages, and code checks every draft against the fact sheet below.
@@ -43,6 +43,7 @@ A source that names the CMS Provider of Services file is the agency's public Med
 How to write so it gets read and answered:
 - Sound like a thoughtful person at a small healthcare software company writing to one organization: plain words, short sentences, no hype, no exclamation marks, no buzzwords, no flattery.
 - Open with one specific, true sentence about the organization, taken from the sources (what it does, whom it serves, where), so the reader sees why you wrote to them. Never guess and never praise. If the sources say too little, open with the reader's likely situation instead.
+- Numbers: write only a number the fact sheet states, or one the sources state about the organization (its counties, locations or years), exactly as stated, in a sentence about the organization itself ("Your team serves 12 counties."). Never put the organization's numbers in a sentence about CareMetric or the product, or in one written in the first person ("I", "we", "our").
 - Then make it about the reader: raise one likely problem as a question; never claim to know their problems, results or plans.
 - Then one concrete way the product helps, in plain words from the fact sheet ("what we may say"), tied to that problem. For CareMetric Intel, pick the part of the whole workspace that answers that problem (the fact sheet's "Everything it does"), never email campaigns as the point.
 - Write so it is easy to read and makes sense on the first pass (the fact sheet's "How everything must read").
@@ -70,6 +71,12 @@ ${factSheetText()}
 ${playbookText()}`;
 
 const day=86400000;
+// A sentence about CareMetric or one of its products, however the model capitalized the name, or one in the first person ("we cover",
+// "our data", "I built"): the founder writes as CareMetric, so "I", "we" and "our" are the company too. Only a sentence about the
+// organization itself ("Your team serves 12 counties") may repeat its numbers. "US" (the country) and a lower-case "i" are not pronouns here.
+const productName=/\b(?:CareMetric|CareBase|Intel)\b/i, firstPerson=/\b(?:[Ww]e|[Oo]urs?|us|[Mm]y|I)\b/;
+const aboutProduct=sentence=>productName.test(sentence)||firstPerson.test(sentence);
+const sentencesOf=text=>text.split(/\n+|(?<=[.!?])\s+/).filter(sentence=>sentence.trim());
 const trailing=/[.,;:!?)\]]+$/;
 // Dollar amounts compared as numbers ("$199.00" is the listed $199). The fact sheet allows an amount for some product; a message
 // about one product may state only that product's own amounts, so an Intel seat price can never appear in a CareBase email.
@@ -108,6 +115,10 @@ export function draftProblem(answer, { product, sources, outreach, organization 
   // Numbers and percentages a cited source states about the organization are its facts, not invented ones ("12 counties").
   const claims=(sources??[]).map(source=>String(source.claim??''));
   if (textProblems(plain,{product:book?.factsKey??null,numbers:allowedNumbers(claims),percents:percentsOf(claims.join('\n'))}).length) return 'claim';
+  // ...and they describe the organization: a sentence about CareMetric or the product, or in the first person, states only the fact
+  // sheet's numbers and percentages ("we cover 12 counties" would make the organization's figure a product claim).
+  const sheet=allowedNumbers([]);
+  if (sentencesOf(plain).some(sentence=>aboutProduct(sentence)&&textProblems(sentence,{product:book?.factsKey??null,numbers:sheet}).includes('unlisted_number'))) return 'claim';
   const own=productAmounts(book?.factsKey);
   if (amountsIn(words).some(amount=>!own.has(amount))) return 'other_product_price';
   return null;
@@ -123,7 +134,7 @@ export const problemHints=Object.freeze({
   identifier:'Remove any personal detail: no person\'s name, email address, phone number or identifier.',
   meeting_offer:'Do not offer or suggest a call, a meeting, a conversation or a demo. The next step is the free trial or a reply by email.',
   unclear:'Use plain words (no buzzwords such as solution, journey, seamless or transform), full sentences of at most 30 words, and no runs of one-word sentences.',
-  claim:'State only facts from the fact sheet or the cited sources, exactly as written: no other number, price or percentage, no promise or guarantee, no compliance claim, no competitor.',
+  claim:'State only facts from the fact sheet or the cited sources, exactly as written: no other number, price or percentage, no promise or guarantee, no compliance claim, no competitor. A number from the sources belongs only in a sentence about the organization, never in one about CareMetric or the product or written as I, we or our.',
   other_product_price:'Mention only this product\'s own prices, or none.',
 });
 /**

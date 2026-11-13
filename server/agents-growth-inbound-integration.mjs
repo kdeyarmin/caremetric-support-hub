@@ -25,6 +25,8 @@ const call = async (fn, values = []) => (await pool.query(`select ${fn}(${values
 const refused = code => error => error?.code === code;
 const inboundGate = await readFile(new URL('../supabase/migrations/20261113171100_growth_inbound_contract.sql', import.meta.url), 'utf8');
 const reengageGate = await readFile(new URL('../supabase/migrations/20261113172100_growth_reengage_contract.sql', import.meta.url), 'utf8');
+const reaskReady = await readFile(new URL('../supabase/migrations/20261113270000_growth_reask_ready.sql', import.meta.url), 'utf8');
+const reaskGate = reaskReady.slice(reaskReady.indexOf('\ndo $$'));
 const domains = [], communications = [], leads = [], tenants = [];
 const domainOf = label => { const value = `${label}-${run}.example.org`; domains.push(value); return value; };
 const ingest = async (key, body, email) => {
@@ -158,6 +160,29 @@ try {
   await store.reengage(200);
   assert.equal((await row('select stage from private.growth_opportunities where id=$1', [d.opportunity])).stage, 'nurture', 'Never twice');
   await assert.rejects(store.reengage(0), refused('22023'));
+  // The re-ask can pass the claim (20261113270000_growth_reask_ready.sql): a role address last seen 120 days ago and evidence 60 days
+  // old are read again from the business's own site; a person's address verified long ago is never re-asked.
+  const later = async (label, kind) => {
+    const p = await prospect(label);
+    await admin.query("update private.growth_opportunities set stage='nurture' where id=$1", [p.opportunity]);
+    await admin.query("update private.growth_contacts set source_kind=$2, verified_at=now()-interval '120 days' where organization_id=$1", [p.org, kind]);
+    await admin.query("update private.growth_organizations set contact_searched_at=now()-interval '30 days' where id=$1", [p.org]);
+    await admin.query("update private.growth_evidence set observed_at=now()-interval '60 days' where opportunity_id=$1", [p.opportunity]);
+    await admin.query("insert into private.customer_activity_events(product,organization_id,event_key,kind,occurred_at) values('caremetric-intel',$1,$2,'not_now',now()-interval '100 days')", [p.org, `inbound:${run}:${label}`]);
+    const w = await store.plan(p.opportunity, { key: `old:${run}:${label}`, kind: 'outreach', action: 'Old.', success: 'Old.', owner: 'marketing_manager', dueAt: new Date().toISOString() });
+    await admin.query("insert into private.growth_messages(opportunity_id,work_id,contact_id,purpose,subject,body,citations,opportunity_version,contact_version,policy_version,unsubscribe_hash,status,attempted_at) select o.id,$3,o.contact_id,'marketing','Old','Old.','[]',o.version,1,1,md5($2),'delivered',now()-interval '120 days' from private.growth_opportunities o where o.id=$1", [p.opportunity, `${run}:${label}`, w]);
+    return p;
+  };
+  const role = await later('reask-role', 'role_address'), person = await later('reask-person', 'enriched');
+  await store.reengage(200);
+  assert.equal((await row('select stage from private.growth_opportunities where id=$1', [role.opportunity])).stage, 'qualified');
+  assert.equal((await row('select stage from private.growth_opportunities where id=$1', [person.opportunity])).stage, 'nurture', 'A person\'s stale address is never re-asked');
+  assert.ok((await store.contactCandidates(20)).some(entry => entry.domain === role.domain), 'The re-ask\'s site is read again');
+  await store.recordContact(role.org, role.email, `https://${role.domain}/contact`);
+  await store.discover('caremetric-intel', [{ name: `Synthetic reask-role`, domain: role.domain, url: `https://${role.domain}/`, claim: 'A Medicare-certified home health agency.' }]);
+  const renewed = await row("select c.verified_at>now()-interval '1 minute' as verified, (select bool_and(e.observed_at>now()-interval '1 minute') from private.growth_evidence e where e.opportunity_id=o.id) as observed from private.growth_opportunities o join private.growth_contacts c on c.id=o.contact_id where o.id=$1", [role.opportunity]);
+  assert.deepEqual(renewed, { verified: true, observed: true }, 'The address is re-verified and the evidence seen again is dated now');
+  assert.ok(!(await store.contactCandidates(20)).some(entry => entry.domain === role.domain), 'Read again at most once a week');
   // The arms keep only short codes.
   const armed = await row("select arms from private.growth_messages where opportunity_id=$1 and arms<>'{}'::jsonb limit 1", [c.opportunity]);
   assert.deepEqual(armed.arms, { trigger: 'web', angle: 'territory' });
@@ -175,6 +200,10 @@ try {
       [reengageGate, rewrite('private.growth_claim_message(uuid,uuid)', "'trial_started','signup')", "'trial_started')")],
       [reengageGate, rewrite('private.growth_message_class(text,text,text)', "('role_address','enriched','imported')", "('role_address')")],
       [reengageGate, 'grant execute on function private.growth_reengage(integer) to authenticated'],
+      [reaskGate, rewrite('private.growth_discover(text,jsonb)', " where v_stage in ('qualified','contacted')", '')],
+      [reaskGate, rewrite('private.growth_reengage(integer)', "c.source_kind = 'role_address' or ", '')],
+      [reaskGate, rewrite('private.growth_contact_candidates(integer)', "interval '7 days'", "interval '90 days'")],
+      [reaskGate, 'grant execute on function private.growth_contact_candidates(integer) to authenticated'],
     ]) {
       await client.query('begin');
       try { await client.query(drift); await assert.rejects(client.query(gate), refused('55000'), drift); }
