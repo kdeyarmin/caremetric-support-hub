@@ -1,5 +1,5 @@
-import {it,expect,vi} from 'vitest';
-import {draftMessage,draftProblem,growthSystem} from './draft.mjs';
+import {describe,it,expect,vi} from 'vitest';
+import {draftMessage,draftProblem,growthPromptVersion,growthSystem,ownNames,repairableReasons} from './draft.mjs';
 import {assessProspect} from './assessment.mjs';
 const now=new Date().toISOString();
 const opportunity={id:'o',product:'carebase',version:1,contact_id:'c',goal:'Staff training',policy:{approved_claim:'CareBase supports facility training.',booking_url:'https://example.org/book'},evidence:[{id:'source-1',source_url:'https://example.org',observed_at:now,claim:'A personal-care facility',confidence:'high'}],events:[]};
@@ -32,7 +32,7 @@ it('tells the writer which touch it is writing, the playbook angle for it and th
  expect(input.links.map(link=>link.url)).not.toContain('https://www.caremetricintel.com/');
  expect(request.system[0].text).toContain('CareMetric fact sheet');
  expect(request.system[0].text).toContain('sales playbook');
- expect(request.promptVersion).toBe('growth.7');
+ expect(request.promptVersion).toBe('growth.8');
  // No booking page is ever offered to the writer (no personal demos with anyone, owner decision 2026-11-09).
  expect(input.bookingUrl).toBeUndefined();
  expect(input.links.map(link=>link.url)).not.toContain(opportunity.policy.booking_url);
@@ -113,4 +113,106 @@ it('writes prospect outreach as the founder, with the founder\'s story in touch 
  const sources=[{id:'s'}];
  expect(draftProblem(answer('I run a home health and hospice agency. Which referral sources does your team visit each week?'),{product:'caremetric-intel',sources,outreach:true})).toBeNull();
  expect(draftProblem(answer('Unlock seamless referral growth for your agency.'),{product:'caremetric-intel',sources,outreach:true})).toBe('unclear');
+});
+
+describe('specifics from the organization\'s own sources and name (review 2026-11-12)',()=>{
+ const answer=(body,subject='Referral sources in your area')=>({subject,body,citations:['s'],needsHuman:false});
+ const sources=[{id:'s',claim:'We serve 12 counties in western Pennsylvania from two locations, and have cared for families for 25 years.'}];
+ const check=(body,organization=null,subject)=>draftProblem(answer(body,subject),{product:'caremetric-intel',sources,outreach:true,organization});
+ it('lets a draft repeat a number its sources state, and still refuses a number it invents',()=>{
+  expect(check('Your team covers 12 counties from two locations. Which referral sources does it visit each week?')).toBeNull();
+  expect(check('Your agency has cared for families for 25 years. Which referral sources does your team visit each week?')).toBeNull();
+  expect(check('Your team covers 14 counties. Which referral sources does it visit each week?')).toBe('claim');
+  expect(check('Your team runs three locations. Which referral sources does it visit each week?')).toBe('claim');
+  // The same number in another organization's draft is not this one's specific.
+  expect(draftProblem(answer('Your team covers 12 counties. Which referral sources does it visit each week?'),{product:'caremetric-intel',sources:[{id:'s',claim:'A home health agency.'}],outreach:true})).toBe('claim');
+  // Percentages and prices stay the fact sheet's alone, whatever the sources say.
+  expect(draftProblem(answer('Your team cut readmissions by 12%. Which referral sources does it visit?'),{product:'caremetric-intel',sources:[{id:'s',claim:'We cut readmissions by 12%.'}],outreach:true})).toBe('claim');
+  expect(draftProblem(answer('You pay $40 a visit. Which referral sources does your team visit?'),{product:'caremetric-intel',sources:[{id:'s',claim:'Visits cost $40.'}],outreach:true})).toBe('claim');
+ });
+ it('never lets the organization\'s numbers describe CareMetric or the product',()=>{
+  expect(check('CareMetric Intel shows referral sources in all 12 counties. Which do you visit today?')).toBe('claim');
+  expect(draftProblem(answer('Intel works 24 hours a day. Which referral sources do you visit?'),{product:'caremetric-intel',sources:[{id:'s',claim:'Care 24 hours a day, 7 days a week.'}],outreach:true})).toBe('claim');
+  expect(check('Your team covers 12 counties. CareMetric Intel shows the referral sources in each one.')).toBeNull();
+ });
+ it('lets a draft name the organization, numbers and buzzwords in its own name included, and refuses the same words anywhere else',()=>{
+  const solutions={name:'Senior Care Solutions, LLC | Home care in Pittsburgh',domain:'seniorcaresolutions.com'};
+  expect(ownNames(solutions)).toEqual(expect.arrayContaining(['Senior Care Solutions','Home care in Pittsburgh','seniorcaresolutions.com']));
+  expect(check('Senior Care Solutions serves families across Pittsburgh. Which referral sources does your team visit each week?',solutions)).toBeNull();
+  expect(check('Which referral sources does Senior Care Solutions visit each week?',solutions,'A question for senior care solutions')).toBeNull();
+  expect(check('Senior Care Solutions serves families across Pittsburgh. Intel is the referral solution you need.',solutions)).toBe('unclear');
+  expect(check('Senior Care Solutions serves families across Pittsburgh. Which referral sources does your team visit each week?')).toBe('unclear');
+  const journey={name:'Journey Home Health',domain:'journeyhh.com'};
+  expect(check('Journey Home Health cares for families at home. Which referral sources does your team visit each week?',journey)).toBeNull();
+  expect(check('Journey Home Health cares for families at home. Where is your referral journey stuck?',journey)).toBe('unclear');
+  expect(check('Does 24 Hour Home Care track which hospitals send it patients?',{name:'24 Hour Home Care'})).toBeNull();
+  expect(check('Does your team track which hospitals send patients 48 hours later?',{name:'24 Hour Home Care'})).toBe('claim');
+ });
+});
+
+describe('one repair for a draft that fails a check it can fix',()=>{
+ const output=body=>({subject:'Staff training records',body,citations:['source-1'],needsHuman:false});
+ const bad=output('Your 14 locations train staff every month. How do you track annual training hours today?');
+ const good=output('How do you track annual training hours today?\n\nhttps://cmcarebase.com/signup');
+ const modelOf=(...answers)=>{const run=vi.fn();for(const answer of answers)run.mockResolvedValueOnce({outcome:'completed',output:answer});return {configured:true,run};};
+ it('sends the refused draft back once with what failed, and checks the second answer like the first',async()=>{
+  const model=modelOf(bad,good),onRejected=vi.fn();
+  const draft=await draftMessage({opportunity,work,task:{},model,onRejected});
+  expect(draft).toMatchObject({modelGenerated:true,repaired:true});
+  // The tagged body was checked again before it was offered.
+  expect(draft.body).toBe('How do you track annual training hours today?\n\nhttps://cmcarebase.com/signup?utm_source=caremetric&utm_medium=email&utm_campaign=growth-carebase-touch1');
+  expect(onRejected.mock.calls).toEqual([['claim']]);
+  expect(model.run).toHaveBeenCalledTimes(2);
+  const [first,second]=model.run.mock.calls.map(call=>call[1]);
+  const {repair,...input}=JSON.parse(second.user);
+  expect(input).toEqual(JSON.parse(first.user));
+  expect(repair.draft).toEqual({subject:bad.subject,body:bad.body,citations:bad.citations});
+  expect(repair.problems.join(' ')).toMatch(/neither the fact sheet nor the sources state/);
+  // The same prompt, budget and effort as the first call, as its own run.
+  expect(second).toMatchObject({promptVersion:growthPromptVersion,maxTokens:2000,effort:'medium',system:first.system,schema:first.schema});
+  expect(second.describe()).toBe('Repaired a outreach (touch 1) message that failed its checks (claim).');
+  expect(growthSystem).toContain('If the input has "repair"');
+ });
+ it('never calls a third time: a repair that fails again is dropped',async()=>{
+  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:bad}))},onRejected=vi.fn();
+  expect(await draftMessage({opportunity,work,task:{},model,onRejected})).toBeNull();
+  expect(model.run).toHaveBeenCalledTimes(2);
+  expect(onRejected.mock.calls).toEqual([['claim']]);
+  // A repair whose tagged body fails is dropped too: a link to another product's page.
+  const other=modelOf(bad,output('Try it free:\n\nhttps://www.caremetricintel.com/'));
+  expect(await draftMessage({opportunity,work,task:{},model:other})).toBeNull();
+  expect(other.run).toHaveBeenCalledTimes(2);
+ });
+ it('does not repair a draft that needs a person, carries an identifier or uses an ambiguous term, and still reports why',async()=>{
+  for(const [answer,reason] of [[{...good,needsHuman:true},'needs_human'],[output('Training records for 123-45-6789 are due.'),'identifier'],[output('Ready for your financial auditor?'),'ambiguous_term']]){
+   const model=modelOf(answer,good),onRejected=vi.fn();
+   expect(await draftMessage({opportunity,work,task:{},model,onRejected}),reason).toBeNull();
+   expect(model.run,reason).toHaveBeenCalledTimes(1);
+   expect(onRejected.mock.calls,reason).toEqual([[reason]]);
+  }
+  // A draft refused for a link before the identifier check is never sent back with the identifier in it.
+  const linked=modelOf(output('Records for 123-45-6789: https://evil.example'),good),onRejected=vi.fn();
+  expect(await draftMessage({opportunity,work,task:{},model:linked,onRejected})).toBeNull();
+  expect(linked.run).toHaveBeenCalledTimes(1);
+  expect(onRejected.mock.calls).toEqual([['link']]);
+  expect([...repairableReasons].sort()).toEqual(['body','citation','claim','link','markup','meeting_offer','other_product_price','subject','unclear']);
+ });
+ it('repairs only what the code found, never with the draft\'s own words as the problem',async()=>{
+  for(const [body,pattern] of [['Unlock seamless training for your team. How do you track hours?',/empty marketing word/],['Would a short call help?',/offers or suggests a call/],['Try https://example.org/x',/not one of the addresses in "links"/]]){
+   const model=modelOf(output(body),good);
+   expect(await draftMessage({opportunity,work,task:{},model}),body).toMatchObject({repaired:true});
+   const {problems}=JSON.parse(model.run.mock.calls[1][1].user).repair;
+   expect(problems.join(' '),body).toMatch(pattern);
+   expect(problems.join(' '),body).not.toContain(body);
+  }
+ });
+ it('a template draft and a first draft that passes make one call or none, and report nothing',async()=>{
+  const onRejected=vi.fn();
+  expect(await draftMessage({opportunity,work,task:{},onRejected})).toMatchObject({modelGenerated:false});
+  const model=modelOf(good);
+  const draft=await draftMessage({opportunity,work,task:{},model,onRejected});
+  expect(draft.repaired).toBeUndefined();
+  expect(model.run).toHaveBeenCalledTimes(1);
+  expect(onRejected).not.toHaveBeenCalled();
+ });
 });

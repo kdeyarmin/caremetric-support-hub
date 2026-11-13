@@ -195,15 +195,24 @@ export function textProblems(value, { product = null, numbers = null } = {}) {
 const emptyWords = /\b(?:unlock(?:s|ed|ing)?|empower(?:s|ed|ing|ment)?|leverag(?:e|es|ed|ing)|synerg(?:y|ies|istic)|seamless(?:ly)?|robust|revolutioni[sz](?:e|es|ed|ing)|supercharg(?:e|es|ed|ing)|game[- ]?changers?|next[- ]level|cutting[- ]edge|elevat(?:e|es|ing)|transform(?:s|ed|ing|ative)?|solutions?|journeys?)\b/i;
 /** The most words a sentence of marketing copy may run to. */
 export const longestSentence = 30;
+const literal = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
  * Why marketing copy would be hard to read or understand (owner direction 2026-11-12: some ad copy did not make sense), as reason codes:
  * `empty_words` (a buzzword from the list above), `fragments` (three or more one- or two-word sentences in a row, as in "Territory.
  * Clarity. Growth.") and `long_sentence` (a sentence over `longestSentence` words). Links are ignored, and each line is read on its own,
- * so a checklist's items or a video's beats are never run together.
+ * so a checklist's items or a video's beats are never run together. `names` are proper names the copy may contain, such as the
+ * organization an email is written to ("Journey Home Health", "Senior Care Solutions"): a buzzword inside one of them is part of the
+ * name, so it does not count. The same word anywhere else still does.
  */
-export function unclearCopy(value) {
-  const text = String(value ?? '').replace(/https?:\/\/\S+/g, ' ');
+export function unclearCopy(value, { names = [] } = {}) {
+  let text = String(value ?? '').replace(/https?:\/\/\S+/g, ' ');
+  const known = [...new Set(names.map(name => String(name ?? '').trim()).filter(name => name.length >= 4))].sort((a, b) => b.length - a.length);
+  if (known.length) {
+    const named = new RegExp(String.raw`(?<!\w)(?:${known.map(name => literal(name).replace(/\s+/g, String.raw`\s+`)).join('|')})(?!\w)`, 'gi');
+    const empty = new RegExp(emptyWords.source, 'gi');
+    text = text.replace(named, name => name.replace(empty, 'Name'));
+  }
   const reasons = new Set();
   if (emptyWords.test(text)) reasons.add('empty_words');
   for (const line of text.split(/\n+/)) {

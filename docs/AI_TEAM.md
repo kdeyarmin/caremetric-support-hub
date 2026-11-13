@@ -1178,7 +1178,7 @@ reader and why it matters, stay inside what the catalog says (plan and module la
 a tool as making anyone compliant or survey-ready, or a readiness score as a prediction, never promise savings, and quote none of its
 percentages. Each agent's checks allow the numbers a catalog states for text about its own product only; a catalog vouches for no claim.
 Prompt versions: `content.4`, `outreach.5`, `sales.4`, `social-plan.5`, `social-ads.5`, `social-reply.4`, `creative-concept.6`,
-`creative-variants.6`, and the growth writer's `growth.7`.
+`creative-variants.6`, and the growth writer's `growth.8`.
 
 **The bigger picture, the founder and plain words (owner direction 2026-11-12).** Every writer on the team reads the fact sheet, so the
 owner's direction lives there (`server/agents/content/facts.mjs`, docs/GTM_FACTS.md):
@@ -1195,7 +1195,9 @@ owner's direction lives there (`server/agents/content/facts.mjs`, docs/GTM_FACTS
 - **How everything must read.** The fact sheet opens with plain-language rules: everyday words, concrete statements, complete short
   sentences, no buzzwords, no strings of fragments, and headlines that make sense on their own. The Creative Director's `plain_language`
   rule, the Social Media Manager's checks and the growth writer's checks refuse an empty buzzword, a string of one- or two-word fragments
-  or a sentence over 30 words (`unclearCopy` in `server/agents/content/validate.mjs`).
+  or a sentence over 30 words (`unclearCopy` in `server/agents/content/validate.mjs`). A buzzword inside the name of the organization
+  an email is written to ("Senior Care Solutions") is part of the name, and the growth writer gets one repair for a draft that fails a
+  check it can fix (see [Customer growth](CUSTOMER_GROWTH.md)). The growth sweep's result counts the reasons drafts were refused.
 
 `npm run refresh:features` rebuilds both catalogs from the live pages and `npm run refresh:features -- --check` says whether they have
 changed. Other products' names are written generically (the EMR vendors Intel names for its CSV imports), and the CareBase FAQ's sentences

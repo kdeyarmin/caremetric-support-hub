@@ -259,6 +259,12 @@ describe('plain language (owner direction 2026-11-12)', () => {
 
   it('refuses empty buzzwords, strings of fragments and overlong sentences', () => {
     expect(unclearCopy('Unlock smarter referral outreach.')).toEqual(['empty_words']);
+    // A buzzword inside a proper name the copy is allowed to contain (the organization it is written to) is part of the name.
+    const names = ['Journey Home Health', 'Senior Care Solutions'];
+    expect(unclearCopy('Journey Home Health and senior care solutions serve Pittsburgh.', { names })).toEqual([]);
+    expect(unclearCopy('Journey Home Health serves Pittsburgh. Start your journey.', { names })).toEqual(['empty_words']);
+    expect(unclearCopy('Journey Home Health serves Pittsburgh.')).toEqual(['empty_words']);
+    expect(unclearCopy('Journey Homes serves Pittsburgh.', { names })).toEqual(['empty_words']);
     expect(unclearCopy('A seamless solution for your team.')).toEqual(['empty_words']);
     expect(unclearCopy('Territory. Clarity. Growth.')).toEqual(['fragments']);
     expect(unclearCopy(`${Array.from({ length: 31 }, () => 'word').join(' ')}.`)).toEqual(['long_sentence']);

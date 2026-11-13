@@ -110,7 +110,10 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
   async function sweep(task,{signal,now=()=>new Date()}={}) {
     await growth.store.maintenance?.();
     const started=clock(),spent=()=>clock()-started>=workBudgetMs;
-    const owner=task.kind==='growth.success'?'account_manager':'marketing_manager'; let inspected=0,planned=0,drafted=0,offset=0,total=1,assessed=0,undrafted=0;
+    const owner=task.kind==='growth.success'?'account_manager':'marketing_manager'; let inspected=0,planned=0,drafted=0,offset=0,total=1,assessed=0,undrafted=0,repaired=0;
+    // Why the model's first drafts were refused, by reason code only (draft.mjs `draftProblem`): never a word of the draft.
+    const rejected={};
+    const noteRejection=reason=>{rejected[reason]=(rejected[reason]??0)+1;};
     const marketedList=owner==='marketing_manager'?await marketedNow(marketed):null;
     const prospecting=autonomy&&owner==='marketing_manager'&&task.agent?.autonomy!=='observe';
     const productsByDomain=new Map();
@@ -148,11 +151,12 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
           if(unchangedSinceCancelled(existing,o))continue;
           // Out of time: the work is planned, and the next sweep writes its message.
           if(spent())continue;
-          // A draft the model could not give, or that failed its checks, under exactly this opportunity, contact and policy: not paid
-          // for again for six hours. One such prospect, retried every sweep, would otherwise spend the day's whole budget.
+          // A draft the model could not give, or that failed its checks after its one repair (draft.mjs), under exactly this
+          // opportunity, contact and policy: not paid for again for six hours. One such prospect, retried every sweep, would otherwise
+          // spend the day's whole budget.
           const wanted=`draft:${o.id}:${work.key}:${o.version??''}:${o.contact_version??''}:${o.policy?.version??''}`;
           if(clock()-(unanswered.get(wanted)??-Infinity)<assessRetryMs)continue;
-          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal}),signal);
+          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,onRejected:noteRejection}),signal);
           if(!draft){if(model?.configured){unanswered.set(wanted,clock());undrafted++;}continue;}
           signal?.throwIfAborted();
           let saved;
@@ -163,7 +167,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
             if(error?.code==='40001')continue;
             throw error;
           }
-          if(saved.status==='draft')await growth.store.propose(task.id,saved.id);drafted++;
+          if(saved.status==='draft')await growth.store.propose(task.id,saved.id);drafted++;if(draft.repaired)repaired++;
         }
       }
     }
@@ -172,7 +176,8 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     let contacts=null;
     if(prospecting&&growth.contacts?.configured&&typeof growth.store.contactCandidates==='function'&&!spent())contacts=await findContacts(sweepContactLimit,productsByDomain,{signal,spent});
     if(planned && notifier)await notifier.send({severity:'info',subject:'Customer growth work is ready',body:`${planned} follow-up tasks reviewed; ${drafted} message drafts prepared. Open Growth to review next actions.`,dedupeKey:`growth:${owner}:${growthDay(now())}`,agentKey:owner,taskId:task.id});
-    return {result:{inspected,planned,drafted,...(undrafted?{undrafted}:{}),...(contacts?.searched?{contacts}:{})}};
+    // `rejected` counts the model's first drafts its checks refused, by reason; `repaired`, the drafts saved that passed on their one repair.
+    return {result:{inspected,planned,drafted,...(undrafted?{undrafted}:{}),...(Object.keys(rejected).length?{rejected}:{}),...(repaired?{repaired}:{}),...(contacts?.searched?{contacts}:{})}};
   }
   async function discover(task,{signal,now=()=>new Date()}={}) {
     if(!growth.research?.configured)return {result:{skipped:'research_not_configured'}};
