@@ -75,8 +75,8 @@ const day=86400000;
 // "our data", "I built"): the founder writes as CareMetric, so "I", "we" and "our" are the company too. Only a sentence about the
 // organization itself ("Your team serves 12 counties") may repeat its numbers. "US" (the country) and a lower-case "i" are not pronouns here.
 const productName=/\b(?:CareMetric|CareBase|Intel|(?:the|this) (?:platform|product|software))\b/i;
-const firstPerson=/\b(?:we|ours?|my|mine|me|myself|ourselves)\b/i;
-const personalCase=/\b(?:I|[Uu]s)\b/;
+const firstPerson=/\b(?:we|ours?|my|mine|myself|ourselves)\b/i;
+const personalCase=/\b(?:I|[Uu]s|[Mm]e)\b/;
 const aboutProduct=sentence=>productName.test(sentence)||firstPerson.test(sentence)||personalCase.test(sentence);
 const sentencesOf=text=>text.split(/\n+|(?<=[.!?])\s+/).filter(sentence=>sentence.trim());
 const trailing=/[.,;:!?)\]]+$/;

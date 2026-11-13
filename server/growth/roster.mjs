@@ -175,7 +175,11 @@ export function scoreCandidate(target, row) {
 function wrongState(target, row) {
   const text = [row.name, row.claim].filter(Boolean).join(' ');
   const city = words(target.city).join(' ');
-  const named = statesNamed(' ' + words(text).join(' ') + ' ');
+  const agency = searchName(target.name);
+  const normalized = ' ' + words(text).join(' ') + ' ';
+  // A state within the agency's name says nothing about the location of this result.
+  const locations = agency ? normalized.replaceAll(new RegExp('(?<= )' + agency + '(?= )', 'g'), ' ') : normalized;
+  const named = statesNamed(locations);
   // Indiana or Washington may be the target's city. A separate postal address still identifies the state.
   for (const code of named) {
     if (words(stateNames[code]).join(' ') === city) named.delete(code);

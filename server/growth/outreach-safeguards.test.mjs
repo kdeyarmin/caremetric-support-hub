@@ -41,3 +41,16 @@ it('rejects a wrong-state search result before ranking matching names or choosin
   assert.ok(chooseSite(target, [row(right.domain, 'Serving Georgia and Alabama.')]));
   assert.ok(chooseSite({ ...target, city: 'Indiana', state: 'PA' }, [row(right.domain, 'Serving Indiana, PA.')]));
 });
+
+it('allows a supported county count in Maine and still rejects a personal claim', () => {
+  assert.equal(check('Your team serves 12 counties in ME.'), null);
+  assert.equal(check('Give me 12 counties to cover.'), 'claim');
+});
+
+it('distinguishes a state in the agency name from a state in its location', () => {
+  const target = { name: 'Washington Hospice, Inc.', city: 'Portland', state: 'OR', setting: 'hospice' };
+  const row = claim => ({ domain: 'washingtonhospice.org', url: 'https://washingtonhospice.org/',
+    name: 'Washington Hospice', claim });
+  assert.ok(chooseSite(target, [row('Washington Hospice provides care in Portland.')]));
+  assert.equal(chooseSite(target, [row('Washington Hospice provides care in Vancouver, Washington.')]), null);
+});
