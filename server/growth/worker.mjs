@@ -156,7 +156,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
           // spend the day's whole budget.
           const wanted=`draft:${o.id}:${work.key}:${o.version??''}:${o.contact_version??''}:${o.policy?.version??''}`;
           if(clock()-(unanswered.get(wanted)??-Infinity)<assessRetryMs)continue;
-          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,onRejected:noteRejection}),signal);
+          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,onRejected:noteRejection,spent}),signal);
           if(!draft){if(model?.configured){unanswered.set(wanted,clock());undrafted++;}continue;}
           signal?.throwIfAborted();
           let saved;

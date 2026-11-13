@@ -96,8 +96,17 @@ export function ownNames(organization) {
   const parts=[name,...name.split(titleSeparators)].map(part=>part.trim()).filter(Boolean);
   return [...new Set([...parts,...parts.map(part=>part.replace(legalForm,'').trim()),String(organization?.domain??'').trim()].filter(Boolean))];
 }
-// A sentence about CareMetric or one of its products. Each line is read on its own, as unclearCopy reads them.
-const aboutProduct=/\b(?:CareMetric|CareBase|Intel)\b/;
+// A sentence about CareMetric or one of its products, however the model capitalized it. Each line is read on its own, as unclearCopy
+// reads them.
+const aboutProduct=/\b(?:CareMetric|CareBase|Intel)\b/i;
+const literal=text=>text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+// The organization's own name, wherever the draft writes it, replaced by words with no number in them: a number inside the name
+// ("24 Hour Home Care") is part of the name there, and nowhere else.
+function withoutNames(text, names) {
+  const known=[...new Set(names.filter(name=>name.length>=3))].sort((a,b)=>b.length-a.length);
+  if (!known.length) return text;
+  return text.replace(new RegExp(`(?<!\\w)(?:${known.map(name=>literal(name).replace(/\s+/g,'\\s+')).join('|')})(?!\\w)`,'gi'),'the organization');
+}
 const sentencesOf=text=>text.split(/\n+|(?<=[.!?])\s+/).filter(sentence=>sentence.trim());
 
 /**
@@ -127,9 +136,10 @@ function draftFindings(answer, { product, sources, outreach, organization=null }
   // The fact sheet's numbers, and the ones the organization's own sources and name state ("12 counties", "two locations").
   const named=[organization?.name,organization?.domain];
   const claims=textProblems(words,{product:book?.factsKey??null,numbers:allowedNumbers([...sources.map(s=>s.claim),...named])});
-  // The organization's numbers describe the organization: a sentence about CareMetric or the product states only the fact sheet's.
-  const sheetAndName=allowedNumbers(named);
-  if (sentencesOf(words).some(sentence=>aboutProduct.test(sentence) && numbersIn(sentence).some(pair=>!sheetAndName.has(pair)))) claims.push('product_number');
+  // The organization's numbers describe the organization: a sentence about CareMetric or the product states only the fact sheet's,
+  // apart from a number inside the organization's own name where that name is written.
+  const sheet=allowedNumbers([]), names=ownNames(organization);
+  if (sentencesOf(words).some(sentence=>aboutProduct.test(sentence) && numbersIn(withoutNames(sentence,names)).some(pair=>!sheet.has(pair)))) claims.push('product_number');
   if (claims.length) return found('claim',[...new Set(claims)]);
   const own=productAmounts(book?.factsKey);
   if (amountsIn(words).some(amount=>!own.has(amount))) return found('other_product_price');
@@ -182,7 +192,7 @@ export const repairProblems=({reason,details=[]})=>[...new Set(details.length?de
  * ambiguous_term or a `draftProblem` code), before any repair is asked for; a draft that passes after its repair carries
  * `repaired: true`.
  */
-export async function draftMessage({ opportunity:o, work, task, model, signal, onRejected=null }) {
+export async function draftMessage({ opportunity:o, work, task, model, signal, onRejected=null, spent=null }) {
   const approved=o.policy?.approved_claim?.trim();
   if (!approved || screenIdentifiers(approved).flagged || !o.contact_id || !qualify(o.evidence).canDraft && work.kind==='outreach') return null;
   const product=playbooks[o.product];
@@ -245,7 +255,9 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   if (!first) return null;
   if (first.draft) return first.draft;
   onRejected?.(first.reason);
-  if (!repairableReasons.has(first.reason)) return null;
+  // No repair once the caller's time is used up (`spent`, the sweep's work budget): it could not finish before the scheduler's limit,
+  // and an aborted run would be paid for and then tried again.
+  if (!repairableReasons.has(first.reason) || spent?.()) return null;
   // One repair: the same input, the refused draft and what failed. The draft goes back only when it carries no identifier.
   const refused={subject:first.answer.subject,body:first.answer.body,citations:first.answer.citations};
   if (screenIdentifiers(`${refused.subject}\n${refused.body}`).flagged) return null;

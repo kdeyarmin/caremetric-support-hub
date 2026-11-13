@@ -216,3 +216,27 @@ describe('one repair for a draft that fails a check it can fix',()=>{
   expect(onRejected).not.toHaveBeenCalled();
  });
 });
+describe('review findings on the product-number guard and the repair (PR #187)',()=>{
+ const answer=body=>({subject:'Referral sources in your area',body,citations:['s'],needsHuman:false});
+ const day24=[{id:'s',claim:'Care 24 hours a day, 7 days a week.'}];
+ it('reads a product name however it is capitalized',()=>{
+  for(const name of ['carebase','CAREBASE','intel','caremetric intel'])
+   expect(draftProblem(answer(`${name} works 24 hours a day. Which referral sources do you visit?`),{product:'caremetric-intel',sources:day24,outreach:true})).toBe('claim');
+ });
+ it('lets a number in the organization\'s name stand only where the name is written',()=>{
+  const organization={name:'24 Hour Home Care',domain:'24hourhomecare.example'};
+  const own=body=>draftProblem(answer(body),{product:'caremetric-intel',sources:[{id:'s',claim:'A home care agency.'}],outreach:true,organization});
+  expect(own('CareBase works 24 hours a day. Which referral sources do you visit?')).toBe('claim');
+  expect(own('CareMetric Intel can show 24 Hour Home Care which hospitals send patients home. Which do you visit today?')).toBeNull();
+ });
+ it('starts no repair once the caller\'s time is used up',async()=>{
+  const refused={outcome:'completed',output:{subject:'Hello',body:'Visit https://unapproved.example',citations:['source-1'],needsHuman:false}};
+  const model={configured:true,run:vi.fn(async()=>refused)};
+  const reasons=[];
+  expect(await draftMessage({opportunity,work,task:{},model,onRejected:reason=>reasons.push(reason),spent:()=>true})).toBeNull();
+  expect(model.run).toHaveBeenCalledTimes(1);
+  expect(reasons).toEqual(['link']);
+  await draftMessage({opportunity,work,task:{},model,spent:()=>false});
+  expect(model.run).toHaveBeenCalledTimes(3);
+ });
+});
