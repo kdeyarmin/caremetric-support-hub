@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
+import { syntheticMp4 } from './agents/creative/fixtures.mjs';
 import { sqlAgentStore } from './agents/store.mjs';
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
@@ -158,6 +159,22 @@ try {
   assert.ok(Number.isInteger(facts.waiting) && Array.isArray(facts.learnings));
   assert.ok(Array.isArray(await store.creativePlanInputs(7)));
 
+  // The owner's own finished video (Creative → Add a finished video, once hub.add_creative_video has authorized the session): approved for
+  // each placement it fits, so the Social Media Manager lists it and serves its file; the server itself can never store one.
+  const mp4 = syntheticMp4({ width: 1920, height: 1080, seconds: 30 });
+  const upload = (await row(`select private.creative_video_store($1, 'caremetric-intel', array['meta.video_landscape', 'linkedin.video_landscape'], $2, $3, 30, 1920, 1080,
+    true, $4) as result`, [owner, `Intro ${run}`, mp4, randomUUID()])).result;
+  briefs.push(upload.briefId);
+  assert.equal(upload.assets.length, 2, 'A 16:9 video is approved for Facebook and LinkedIn');
+  const listed = (await store.creativeApproved({ product: 'caremetric-intel', platform: 'linkedin', limit: 20 })).find(asset => asset.id === upload.assets.find(item => item.platform === 'linkedin').id);
+  assert.equal(listed?.placement, 'linkedin.video_landscape', 'The Social Media Manager lists the owner\'s video');
+  assert.equal(listed.contentType, 'video/mp4');
+  const served = await store.creativePublicFile(listed.token);
+  assert.equal(served?.contentType ?? served?.content_type, 'video/mp4');
+  assert.equal(Buffer.compare(Buffer.from(served.bytes), mp4), 0, 'Its public address serves the uploaded file');
+  await assert.rejects(pool.query(`select private.creative_video_store($1, 'caremetric-intel', array['linkedin.video_landscape'], 'x', $2, 30, 1920, 1080, true, $3)`,
+    [owner, mp4, randomUUID()]), error => error.code === '42501', 'The Hub server cannot store an upload itself');
+
   // Any other session is refused every server operation.
   await assert.rejects(admin.query('select private.creative_open_targets()'), error => error.code === '42501');
   await assert.rejects(admin.query("select private.creative_public_file($1)", ['0'.repeat(64)]), error => error.code === '42501');
@@ -173,6 +190,7 @@ try {
   for (const kit of kits.kits) {
     await admin.query('update private.brand_kits set primary_color = $2, background_color = $3, text_color = $4 where product = $1', [kit.product, kit.primary_color, kit.background_color, kit.text_color]);
   }
+  await admin.query("delete from private.audit_events where action = 'creative.video_upload' and actor_id = $1", [owner]);
   await admin.query('delete from auth.users where id = $1', [owner]);
   await pool.end();
   await admin.end();

@@ -403,6 +403,16 @@ describe('the scorecard\'s figures', () => {
       expect(card.result.sources).toMatchObject({ visitors: 'read', visitorProducts: { carebase: 'read', 'caremetric-intel': 'read' } });
     });
 
+    it('shows the sessions outreach email links brought to Intel, by campaign tag, only beside a read count', () => {
+      const rows = card => card.blocks.flatMap(block => block.rows ?? []).filter(([label]) => label === 'Sessions from outreach email links').map(([, text]) => text);
+      const tags = [{ campaign: 'new-agency-territory-plain', sessions: 4 }, { campaign: 'web', sessions: 2 }, { campaign: 'Bad Tag', sessions: 9 }];
+      expect(rows(compose(source({ state: 'not_configured' }, { state: 'read', visitors: 30, previous: 20, campaigns: tags }, 'read'))))
+        .toEqual(['6 (new-agency-territory-plain 4, web 2)']);
+      expect(rows(compose(source({ state: 'not_configured' }, { state: 'read', visitors: 30, previous: 20, campaigns: [] }, 'read')))).toEqual(['None this week']);
+      expect(rows(compose(source({ state: 'not_configured' }, { state: 'read', visitors: 30, previous: 20 }, 'read')))).toEqual([]);
+      expect(rows(compose(source({ state: 'not_configured' }, { state: 'unavailable', campaigns: tags }, 'unavailable')))).toEqual([]);
+    });
+
     it.each([
       [{ state: 'partial', visitors: 300, previous: null }, '300 (last week unavailable)', [300, null]],
       [{ state: 'partial', visitors: null, previous: 250 }, 'Unavailable (last week 250)', [null, 250]],

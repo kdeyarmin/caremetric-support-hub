@@ -5,12 +5,14 @@ import { assessProspect } from './assessment.mjs';
 import { planOpportunity, products } from './policy.mjs';
 import { marketedNow, markets } from '../agents/marketing.mjs';
 import { draftMessage } from './draft.mjs';
+import { growthLearningFeature } from './learning.mjs';
 import { renderEmail, themeFor } from '../email-layout.mjs';
 import { evaluateGrowth } from './evaluation.mjs';
 import { enrichProspects } from './enrichment.mjs';
 import { discoveryQueries, linkablePages, senderFor } from './playbook.mjs';
 import { searchResultLimit } from './research.mjs';
 import { untaggedUrl } from '../agents/links.mjs';
+import { chooseSite, confirmsSite, resolutionQuery, rosterLookupsPerRun, rosterPagesPerRun, rosterRefreshMs, rosterRow, rosterStates } from './roster.mjs';
 const deferred=()=>Object.assign(new Error('Action is deferred'),{code:'action_deferred'});
 const easternDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'});
 /** The calendar day in America/New_York, matching every other send cap and notice. */
@@ -28,6 +30,8 @@ async function pipelineItems(growth,signal) {
 }
 /** Sales follow-ups and capped cold email (20261105150000_growth_autonomy.sql): the contact finder, qualification and the daily evaluation. */
 export const growthAutonomyFeature='platform.agents.growth-autonomy.v1';
+/** One re-ask and the experiment arms (20261113172000_growth_reengage.sql). */
+export const growthReengageFeature='platform.agents.growth-reengage.v1';
 // Businesses the contact finder reads per discovery run (the most the database hands out at once), how many it reads at the same
 // time (each is a different business's website), how many more it reads on each fifteen-minute pipeline sweep so a day's
 // discoveries are all read the same day, and opportunities qualified per pass.
@@ -72,6 +76,10 @@ async function oneAnswer(call,signal) {
 export function growthHandlers({growth,model,notifier,features=null,marketed=null,clock=()=>Date.now()}) {
   if(!growth)return {};
   const autonomy=declared(features);
+  const reengaging=features instanceof Set?features.has(growthReengageFeature):Array.isArray(features)&&features.includes(growthReengageFeature);
+  // The owner-approved learning memo (learning.mjs), while Settings → Customer growth → "Write from what is working" is on.
+  const learning=(features instanceof Set?features.has(growthLearningFeature):Array.isArray(features)&&features.includes(growthLearningFeature))
+    &&typeof growth.store.learningActive==='function';
   // Assessments and drafts the model could not give, by opportunity and what it was asked about, and when: kept in this process
   // only, so a restart asks once more. Without it every fifteen-minute sweep would pay for the same unanswerable request again.
   const unanswered=new Map();
@@ -110,11 +118,21 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
   async function sweep(task,{signal,now=()=>new Date()}={}) {
     await growth.store.maintenance?.();
     const started=clock(),spent=()=>clock()-started>=workBudgetMs;
-    const owner=task.kind==='growth.success'?'account_manager':'marketing_manager'; let inspected=0,planned=0,drafted=0,offset=0,total=1,assessed=0,undrafted=0;
+    const owner=task.kind==='growth.success'?'account_manager':'marketing_manager'; let inspected=0,planned=0,drafted=0,offset=0,total=1,assessed=0,undrafted=0,reengaged=0;
+    // Why drafts were not kept, by check (draft.mjs codes), so the run shows which rule throws good openings away.
+    const rejected={};
+    // Each product's active memo, read once a sweep.
+    const memos=new Map();
+    const memoFor=async product=>{
+      if(!learning||live(growth.learning?.enabled)!==true)return null;
+      if(!memos.has(product))memos.set(product,await growth.store.learningActive(product)??null);
+      return memos.get(product);
+    };
     const marketedList=owner==='marketing_manager'?await marketedNow(marketed):null;
     const prospecting=autonomy&&owner==='marketing_manager'&&task.agent?.autonomy!=='observe';
     const productsByDomain=new Map();
     // Researched prospects that meet the qualification rules move to qualified before the pipeline is read (nothing is sent here).
+    if(prospecting&&reengaging&&typeof growth.store.reengage==='function')reengaged=(await growth.store.reengage(50))?.reengaged??0;
     if(prospecting)await growth.store.autoQualify(qualifyLimit);
     while(offset<total) {
       signal?.throwIfAborted(); const page=await growth.store.snapshot(offset);total=page.total;offset+=page.items.length;if(!page.items.length)break;
@@ -152,12 +170,13 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
           // for again for six hours. One such prospect, retried every sweep, would otherwise spend the day's whole budget.
           const wanted=`draft:${o.id}:${work.key}:${o.version??''}:${o.contact_version??''}:${o.policy?.version??''}`;
           if(clock()-(unanswered.get(wanted)??-Infinity)<assessRetryMs)continue;
-          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal}),signal);
+          const memo=work.kind==='outreach'?await memoFor(o.product):null;
+          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,memo,onReject:code=>{rejected[code]=(rejected[code]??0)+1;}}),signal);
           if(!draft){if(model?.configured){unanswered.set(wanted,clock());undrafted++;}continue;}
           signal?.throwIfAborted();
           let saved;
           try {
-            saved=await growth.store.draft(o.id,id,{...draft,version:o.version,contactVersion:o.contact_version,policyVersion:o.policy.version,purpose:work.kind==='outreach'?'marketing':'success',unsubscribeHash:growth.hash(growth.unsubscribeToken(id)),variant:draft.variant??'control'});
+            saved=await growth.store.draft(o.id,id,{...draft,version:o.version,contactVersion:o.contact_version,policyVersion:o.policy.version,purpose:work.kind==='outreach'?'marketing':'success',unsubscribeHash:growth.hash(growth.unsubscribeToken(id)),variant:draft.variant??'control',arms:draft.arms??{}});
           } catch (error) {
             // An owner edit during drafting invalidates this output. The next sweep reads fresh context.
             if(error?.code==='40001')continue;
@@ -172,7 +191,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     let contacts=null;
     if(prospecting&&growth.contacts?.configured&&typeof growth.store.contactCandidates==='function'&&!spent())contacts=await findContacts(sweepContactLimit,productsByDomain,{signal,spent});
     if(planned && notifier)await notifier.send({severity:'info',subject:'Customer growth work is ready',body:`${planned} follow-up tasks reviewed; ${drafted} message drafts prepared. Open Growth to review next actions.`,dedupeKey:`growth:${owner}:${growthDay(now())}`,agentKey:owner,taskId:task.id});
-    return {result:{inspected,planned,drafted,...(undrafted?{undrafted}:{}),...(contacts?.searched?{contacts}:{})}};
+    return {result:{inspected,planned,drafted,...(undrafted?{undrafted}:{}),...(Object.keys(rejected).length?{rejected}:{}),...(reengaged?{reengaged}:{}),...(contacts?.searched?{contacts}:{})}};
   }
   async function discover(task,{signal,now=()=>new Date()}={}) {
     if(!growth.research?.configured)return {result:{skipped:'research_not_configured'}};
@@ -220,6 +239,92 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     const qualified=(await growth.store.autoQualify(qualifyLimit))?.qualified??0;
     return {result:{candidates,contacts,qualified,...researched}};
   }
+  /**
+   * The Medicare roster (Intel's marketing feed; 20261113170500_growth_roster.sql). Each run reads up to eight pages of the roster when
+   * a read is due (a new set of states, an unfinished read, or a week since the last complete one), then looks up the best-ranked
+   * agencies' own websites, within the owner's daily number: one search for the agency, the contact finder on the chosen site (which
+   * also checks for the agency's CMS telephone number), and the agency graduates into the pipeline only when the site is confirmed
+   * as its own. Everything after that (fit, qualification, drafting, approval, the send caps) is the existing pipeline's.
+   */
+  async function rosterRun(task,{signal,now=()=>new Date()}={}) {
+    const roster=growth.roster, feed=roster?.feed;
+    if(!feed?.configured||typeof growth.store.rosterSyncState!=='function')return {result:{skipped:'roster_not_configured'}};
+    if(task.agent?.autonomy==='observe')return {result:{skipped:'observe_only'}};
+    if(!markets(await marketedNow(marketed),'caremetric-intel'))return {result:{skipped:'not_marketed'}};
+    const states=rosterStates(live(roster.states));
+    if(!states.length)return {result:{skipped:'no_states'}};
+    const started=clock(),spent=()=>clock()-started>=workBudgetMs;
+    // 1. Read the roster when a read is due.
+    const state=await growth.store.rosterSyncState();
+    const sameStates=JSON.stringify([...(state?.states??[])].sort())===JSON.stringify([...states].sort());
+    const fresh=state?.complete&&state.syncedAt&&Date.parse(state.syncedAt)>now().getTime()-rosterRefreshMs;
+    const read={pages:0,rows:0};
+    let stopped=null,period=state?.period??null;
+    if(!(sameStates&&fresh)) {
+      let restart=!sameStates||Boolean(state?.complete), cursor=restart?null:state?.cursor??null;
+      for(let page=0;page<rosterPagesPerRun;page++) {
+        signal?.throwIfAborted(); if(spent()){stopped='time';break;}
+        if(page)await pause(feed.paceMs,signal);
+        let answer;
+        try {answer=await feed.roster({states,cursor,signal});}
+        catch(error) {if(signal?.aborted||(!error?.transient&&!read.pages))throw error; stopped=error?.code??'feed_unavailable';break;}
+        if(!answer.period){stopped='roster_not_loaded';break;}
+        // CMS published a new quarter part-way through a read: start the read again on it.
+        if(!restart&&period&&answer.period!==period&&cursor){restart=true;cursor=null;period=answer.period;continue;}
+        period=answer.period;
+        const rows=answer.items.filter(item=>item.state&&item.name).map(item=>rosterRow(item,answer.period,now()));
+        if(rows.length)await growth.store.rosterUpsert(answer.period,rows);
+        read.pages++;read.rows+=rows.length;
+        await growth.store.rosterSyncSave({period:answer.period,states,cursor:answer.next_cursor??'',complete:!answer.next_cursor,pages:1,rows:rows.length,restart});
+        restart=false;cursor=answer.next_cursor;
+        if(!cursor)break;
+      }
+    }
+    // 2. Look up the day's best agencies. Without a search provider nothing is claimed, so no agency waits a week for nothing.
+    const looked={looked:0,graduated:0,unresolved:0,contacts:0};
+    const daily=Number.isInteger(live(roster.daily))?live(roster.daily):25;
+    if(growth.research?.configured&&growth.contacts?.configured&&daily>0&&!stopped) {
+      for(let n=0;n<rosterLookupsPerRun;n++) {
+        signal?.throwIfAborted(); if(spent())break;
+        const [target]=await growth.store.rosterNext(1,daily);
+        if(!target)break;
+        looked.looked++;
+        const outcome=await lookUp(target,{signal});
+        if(outcome.graduated){looked.graduated++;if(outcome.contact)looked.contacts++;}else looked.unresolved++;
+        if(outcome.retry)break;
+        await pause(Number(growth.research.paceMs)||0,signal);
+      }
+    }
+    return {result:{period,states:states.length,...(read.pages?{read}:{}),...(stopped?{stopped}:{}),...looked}};
+  }
+  /** One roster agency: find its own website, confirm it, and graduate it into the pipeline with its public record as evidence. */
+  async function lookUp(target,{signal}) {
+    let rows;
+    try {rows=await growth.research.search('caremetric-intel',{query:resolutionQuery(target),count:10,signal});}
+    catch(error) {if(signal?.aborted)throw error; await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason:'retry'}); return {graduated:false,retry:true};}
+    const choice=chooseSite(target,rows);
+    if(!choice){await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason:'no_site'});return {graduated:false};}
+    let found;
+    try {found=await growth.contacts.find(choice.domain,{signal,phone:target.facts?.phone??null});}
+    catch(error) {if(signal?.aborted)throw error; await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason:'retry'}); return {graduated:false};}
+    const confirmation=confirmsSite(target,found,choice);
+    if(!confirmation){await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason:'not_confirmed'});return {graduated:false};}
+    const site=found.site;
+    const evidence=site?.claim&&/^https:\/\//.test(site.url??'')?[{url:String(site.url).slice(0,2000),claim:String(site.claim).slice(0,4000)}]:[];
+    let resolved;
+    try {resolved=await growth.store.rosterResolved(target.ccn,{outcome:'graduated',domain:choice.domain,confirmation,evidence});}
+    catch(error) {if(error?.code!=='22023')throw error; await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason:'invalid_site'}).catch(()=>{}); return {graduated:false};}
+    if(!resolved?.graduated)return {graduated:false};
+    let contact=false;
+    if(resolved.contactReady) {
+      // The address the finder read on the agency's own site becomes its one contact, exactly as for a business found by search.
+      let recorded=null;
+      try {recorded=await growth.store.recordContact(resolved.organizationId,found.email??null,found.email?found.sourceUrl:null);}
+      catch(error) {if(error?.code!=='22023')throw error; recorded=await growth.store.recordContact(resolved.organizationId,null,null);}
+      contact=Boolean(recorded?.found);
+    }
+    return {graduated:true,contact};
+  }
   // The guardrail check that messages nobody approved need (growth.1, within 30 days). Synthetic cases only: no model, no customer data.
   async function evaluate(task,{now=()=>new Date()}={}) {
     const reports=await evaluateGrowth(now());
@@ -245,7 +350,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     }
     return {status:proposals?'awaiting_approval':'done',result:{contentWeek:week,proposals}};
   }
-  return {'growth.pipeline':sweep,'growth.success':sweep,'growth.discovery':discover,'growth.content':content,...(autonomy?{'growth.evaluate':evaluate}:{})};
+  return {'growth.pipeline':sweep,'growth.success':sweep,'growth.discovery':discover,'growth.content':content,...(autonomy?{'growth.evaluate':evaluate,'growth.roster':rosterRun}:{})};
 }
 /**
  * A growth message as it is sent, in the theme of the product's app (Intel's Emberline for Intel): a letter (it reads like an email a
@@ -271,7 +376,13 @@ export function messageLinks(product,words) {
   const tagged=(String(words??'').match(/https:\/\/[^\s<>"]+/g)??[]).map(url=>url.replace(linkTrailing,'')).filter(url=>pages.has(untaggedUrl(url)));
   return [...pages,...new Set(tagged)];
 }
-export function growthEmail({product,purpose=null,subject,body,postalAddress,unsubscribeUrl}) {
+/** The first name to greet a named contact by ("Jane" from "Jane Doe"), or null for a role address or a name that is not plainly one. */
+export function greetingName(name,sourceKind) {
+  if(!['enriched','imported','inbound','owner'].includes(sourceKind))return null;
+  const first=String(name??'').trim().split(/\s+/)[0]??'';
+  return /^[A-Za-z][A-Za-z'’-]{1,29}$/.test(first)?first[0].toUpperCase()+first.slice(1):null;
+}
+export function growthEmail({product,purpose=null,subject,body,postalAddress,unsubscribeUrl,greeting=null}) {
   const sender=senderFor(product,purpose);
   const words=String(body??'').trim();
   const preheader=(words.split(/\n/).find(line=>line.trim()&&!/^https:\/\//.test(line.trim()))??'').match(/^.*?[.?!](?=\s|$)/)?.[0]??'';
@@ -279,7 +390,7 @@ export function growthEmail({product,purpose=null,subject,body,postalAddress,uns
   // The company's name once: the postal address often begins with it.
   const footer=[...(/^caremetric\b/i.test(address)?[]:['CareMetric']),...(address?[address]:[]),{label:growthOptOutLabel,url:unsubscribeUrl}];
   return renderEmail({layout:'letter',theme:themeFor(product),title:subject,preheader:preheader.slice(0,150),
-    blocks:[{type:'message',text:`Hello,\n\n${words}`,links:messageLinks(product,words)}],
+    blocks:[{type:'message',text:`Hello${greeting?` ${greeting}`:''},\n\n${words}`,links:messageLinks(product,words)}],
     signature:[...(sender.signer??[sender.team]),...(sender.site?[sender.site]:[])],footer});
 }
 export function growthExecutors({growth,mail,publicOrigin,postalAddress}) {
@@ -296,7 +407,8 @@ export function growthExecutors({growth,mail,publicOrigin,postalAddress}) {
     const token=growth.unsubscribeToken(claimed.workId);
     if(claimed.unsubscribeHash && growth.hash(token)!==claimed.unsubscribeHash){await growth.store.finish(claimed.id,'failed',null);throw Object.assign(new Error('Regenerate the message after signing configuration changed'),{code:'unsubscribe_key_changed'});}
     const link=`${publicOrigin.replace(/\/+$/,'')}${growthOptOutPath}${token}`;
-    const email=growthEmail({product:claimed.product,purpose:claimed.purpose,subject:claimed.subject,body:claimed.body,postalAddress:live(postalAddress),unsubscribeUrl:link});
+    const email=growthEmail({product:claimed.product,purpose:claimed.purpose,subject:claimed.subject,body:claimed.body,postalAddress:live(postalAddress),unsubscribeUrl:link,
+      greeting:greetingName(claimed.contactName,claimed.sourceKind)});
     let outcome;
     try {outcome=await mail.send({to:claimed.to,subject:claimed.subject,text:email.text,html:email.html,unsubscribeUrl:link,messageId:claimed.id});}
     catch {outcome={delivery:'unknown',id:null};}

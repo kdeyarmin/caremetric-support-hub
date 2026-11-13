@@ -41,7 +41,22 @@ export function autonomyHandlers({ store, notifier, publicOrigin, features = nul
     let undelivered = false;
     for (const step of first.due ?? []) {
       const outcome = await store.autonomyGraduate(step.category);
-      if (!outcome?.graduated) { waiting.push(`${step.category}:${outcome?.reason ?? 'unknown'}`); continue; }
+      if (!outcome?.graduated) {
+        waiting.push(`${step.category}:${outcome?.reason ?? 'unknown'}`);
+        // Evidence, not only a week (20261113240000_agent_watchdog.sql): the owner hears why a step did not switch.
+        const evidence = outcome?.evidence ?? {};
+        const decided = `${Number(evidence.reviewed ?? 0)} decision${Number(evidence.reviewed ?? 0) === 1 ? '' : 's'}`;
+        if (outcome?.reason === 'too_many_rejections') {
+          await notifier.send({ severity: 'warning', subject: `${step.label}: kept under your review`,
+            body: `You turned down ${Number(evidence.rejected ?? 0)} of ${decided} on ${step.label.toLowerCase()} during the supervised week, more than the step allows, so it stays under your review. Look at what you turned down, then start another supervised week ${page} when you are ready.`,
+            dedupeKey: `autonomy:held:${step.category}:${step.automaticAt}`, agentKey: task.agentKey, taskId: task.id });
+        } else if (outcome?.reason === 'not_enough_reviews') {
+          await notifier.send({ severity: 'info', subject: `${step.label}: one more supervised week`,
+            body: `Only ${decided} on ${step.label.toLowerCase()} came to you during the supervised week, too few to judge it, so it stays supervised for another week ${page}.`,
+            dedupeKey: `autonomy:extended:${step.category}:${outcome?.step?.automaticAt ?? step.automaticAt}`, agentKey: task.agentKey, taskId: task.id });
+        }
+        continue;
+      }
       graduated.push(step.category);
     }
     // The switches the owner has not been told about: the ones just made, and any whose email failed on an earlier run. Each stays pending

@@ -1,6 +1,7 @@
 import {it,expect,vi} from 'vitest';
 import {assessLimit,assessRetryMs,contactSearchConcurrency,contactSearchLimit,growthDay,growthEmail,growthExecutors,growthHandlers,sweepContactLimit,workBudgetMs} from './worker.mjs';
 import {discoveryQueriesPerDay} from './playbook.mjs';
+import {growthLearningFeature} from './learning.mjs';
 const base={id:'opp',product:'carebase',stage:'qualified',owner_agent:'marketing_manager',internal:false,next_at:'2026-01-01T00:00:00Z',touches:0,work:[],events:[],eligibility:'review'};
 it('Observe inspects but creates no work or proposals',async()=>{
  const store={snapshot:vi.fn(async()=>({total:1,items:[base]})),plan:vi.fn(),propose:vi.fn()};
@@ -56,13 +57,14 @@ it('does not pay again, sweep after sweep, for a draft that failed its checks; a
  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'A question',body:'Would a free trial help?',citations:['invented'],needsHuman:false}}))};
  const handler=growthHandlers({growth:{store,signingReady:true,hash:x=>x,unsubscribeToken:()=>'token'},model,clock:()=>at})['growth.pipeline'];
  const sweep=()=>handler({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'});
- expect((await sweep()).result).toMatchObject({planned:1,drafted:0,undrafted:1});
+ // The draft and its one repair pass; the run says which check refused it.
+ expect((await sweep()).result).toMatchObject({planned:1,drafted:0,undrafted:1,rejected:{citation_then_citation:1}});
  expect((await sweep()).result).toEqual({inspected:1,planned:1,drafted:0});
- expect(model.run).toHaveBeenCalledTimes(1);
- item={...o,policy:{...o.policy,version:10}}; await sweep();
  expect(model.run).toHaveBeenCalledTimes(2);
+ item={...o,policy:{...o.policy,version:10}}; await sweep();
+ expect(model.run).toHaveBeenCalledTimes(4);
  at+=assessRetryMs; await sweep();
- expect(model.run).toHaveBeenCalledTimes(3);
+ expect(model.run).toHaveBeenCalledTimes(6);
  expect(store.draft).not.toHaveBeenCalled();
 });
 it('does not pay for a new draft of work whose last message was cancelled under the same context, unless it was withdrawn or something changed',async()=>{
@@ -366,4 +368,36 @@ it('links a product page with well-formed campaign tags in a growth email, and n
  const refused=growthEmail({product:'caremetric-intel',subject:'S',body:`See:\n${smuggled}`,postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'}).html;
  expect(refused).not.toContain('evil.example"');
  expect(refused).not.toMatch(/href="[^"]*evil\.example/);
+});
+it('greets a named contact by first name, never a role address',async()=>{
+ const {greetingName}=await import('./worker.mjs');
+ expect(greetingName('jane doe','enriched')).toBe('Jane');
+ expect(greetingName('Pat Reader','inbound')).toBe('Pat');
+ expect(greetingName('Jane D***','enriched')).toBe('Jane');
+ expect(greetingName('Public business address','role_address')).toBeNull();
+ expect(greetingName('','imported')).toBeNull();
+ expect(greetingName('Dr.','imported')).toBeNull();
+ const email=growthEmail({product:'caremetric-intel',purpose:'marketing',subject:'S',body:'Body.',postalAddress:'CareMetric, 1 Main St',unsubscribeUrl:'https://hub.example/x',greeting:'Jane'});
+ expect(email.text).toMatch(/^Hello Jane,/m);
+});
+it('drafts outreach with the active memo while the owner\'s setting is on, reading it once a sweep, and stores its version',async()=>{
+ const o={...base,product:'caremetric-intel',version:4,contact_id:'contact',contact_version:7,eligibility:'permitted',policy:{version:9,approved_claim:'Intel shows referral sources.'},evidence:[{id:'source',source_url:'https://example.org',claim:'A hospice.',observed_at:new Date().toISOString()}]};
+ const sweep=async(enabled)=>{
+  const store={snapshot:vi.fn(async()=>({total:2,items:[o,{...o,id:'next',organization_id:'org2'}]})),plan:vi.fn(async()=> 'work'),draft:vi.fn(async()=>({id:'message',status:'draft'})),propose:vi.fn(),
+   learningActive:vi.fn(async()=>({version:5,memo:'- Shorter emails drew more replies.'}))};
+  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Referral sources',body:'Which hospitals send your agency the most patients? Reply to this email and we will send the steps.',citations:['source'],needsHuman:false}}))};
+  const growth={store,signingReady:true,hash:x=>x,unsubscribeToken:()=> 'token',learning:{enabled}};
+  const outcome=await growthHandlers({growth,model,features:new Set([growthLearningFeature])})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'});
+  expect(outcome.result.rejected).toBeUndefined();
+  return {store,model};
+ };
+ const on=await sweep(true);
+ expect(on.store.learningActive).toHaveBeenCalledTimes(1);
+ expect(on.store.learningActive).toHaveBeenCalledWith('caremetric-intel');
+ expect(on.model.run.mock.calls[0][1].promptVersion).toBe('growth.8-m5');
+ expect(on.store.draft).toHaveBeenCalledWith('opp','work',expect.objectContaining({memoVersion:5}));
+ const off=await sweep(false);
+ expect(off.store.learningActive).not.toHaveBeenCalled();
+ expect(off.model.run.mock.calls[0][1].promptVersion).toBe('growth.8');
+ expect(off.store.draft.mock.calls[0][2].memoVersion).toBeUndefined();
 });

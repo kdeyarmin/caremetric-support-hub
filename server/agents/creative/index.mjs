@@ -32,6 +32,7 @@ export function creativeConfig(env = {}, setting = null) {
   return {
     enabled: value('creative.enabled') === true,
     dailyRenderCap: Number.isInteger(cap) && cap >= 0 && cap <= 1000 ? cap : 40,
+    countySnapshotsPerWeek: (snapshots => (Number.isInteger(snapshots) && snapshots >= 0 && snapshots <= 7 ? snapshots : 3))(value('creative.county_snapshots_per_week')),
     videoProvider: value('creative.video_provider') === 'heygen' && heygenKey ? 'heygen' : 'internal',
     heygenKey,
   };
@@ -50,9 +51,10 @@ export function creativeTeam({ creative = null, features = null, fetchImpl = fet
   const enabled = () => config().enabled === true;
   return {
     declared: true, enabled, config, heygen,
-    handlers: ({ store, notifier, model, meta = null, linkedin = null, publicOrigin, marketed = null, log }) => {
-      const handlers = creativeHandlers({ store, notifier, model, meta, linkedin, heygen, publicOrigin, marketed, log,
-        settings: { get dailyRenderCap() { return config().dailyRenderCap; }, get videoProvider() { return config().videoProvider; } } });
+    handlers: ({ store, notifier, model, meta = null, linkedin = null, publicOrigin, marketed = null, log, feed = null }) => {
+      const handlers = creativeHandlers({ store, notifier, model, meta, linkedin, heygen, publicOrigin, marketed, log, feed,
+        settings: { get dailyRenderCap() { return config().dailyRenderCap; }, get videoProvider() { return config().videoProvider; },
+          get countySnapshotsPerWeek() { return config().countySnapshotsPerWeek; } } });
       // Off in Settings → Creative: a task is put aside without work, and nothing is rendered, proposed or sent.
       return Object.fromEntries(Object.entries(handlers).map(([kind, handler]) => [kind, (task, context) => (enabled() ? handler(task, context) : { result: { skipped: 'creative_off' } })]));
     },

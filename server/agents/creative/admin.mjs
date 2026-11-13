@@ -9,10 +9,13 @@ import { HttpError, withSession } from '../../sms-auth.mjs';
 import { reviewed } from '../admin.mjs';
 import { availableFonts } from './brand.mjs';
 import { offerCodes } from './offers.mjs';
-import { platforms } from './specs.mjs';
+import { mp4Info } from './mp4.mjs';
+import { placements as allPlacements, platforms, uploadPlacements, validateAsset } from './specs.mjs';
 import { themeSummaries } from './themes.mjs';
 
 export const creativeAdminActions = new Set(['studio', 'brandKit', 'brandFile', 'removeBrandFile', 'brief']);
+/** An uploaded video is stored in the database (private.creative_files), which keeps files of at most 60 MB. */
+export const videoUploadLimit = 62_914_560;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const products = ['carebase', 'caremetric-intel'];
 const statuses = ['draft', 'rendering', 'ready', 'proposed', 'approved', 'rejected', 'expired', 'live', 'retired', 'failed'];
@@ -106,6 +109,31 @@ export function creativeAdmin({ pool, kick = null, session = (token, work) => wi
       if (!contentType || bytes.length > (input.kind === 'logo' ? 1048576 : 5242880)) throw new HttpError(400, 'A logo must be a PNG or JPEG of at most 1 MB, and a screenshot at most 5 MB.');
       const label = input.label === undefined ? '' : line(input.label, 120, 'a label', { min: 0 });
       return query(token, 'hub.add_brand_file', [product, input.kind, contentType, bytes, label, input.attested]);
+    },
+
+    /**
+     * The owner's own finished video (Creative → Add a finished video), sent as the raw MP4. Its length and size are read from the file; it
+     * becomes approved creative for each chosen placement it fits, one per platform, for the Social Media Manager to use in posts that still
+     * wait for the owner's approval. The owner attests that it shows no patient, resident or personal information.
+     */
+    async video(token, input) {
+      exactly(input, ['product', 'placements', 'label', 'attested', 'requestKey', 'bytes']);
+      const product = list([input.product], products, 'a product')[0];
+      const chosen = list(input.placements, uploadPlacements.map(spec => spec.key), 'where the video may be used', { min: 1, max: 4 });
+      if (new Set(chosen.map(key => allPlacements[key].platform)).size !== chosen.length) throw new HttpError(400, 'Choose one placement per platform.');
+      const label = line(input.label, 120, 'a name for the video');
+      if (input.attested !== true) throw new HttpError(400, 'Confirm that the video shows no patient, resident or personal information.');
+      if (typeof input.requestKey !== 'string' || !uuid.test(input.requestKey)) throw new HttpError(400, 'Invalid request key.');
+      const bytes = input.bytes;
+      if (!Buffer.isBuffer(bytes) || bytes.length > videoUploadLimit) throw new HttpError(400, 'The video must be an MP4 file of at most 60 MB.');
+      const info = mp4Info(bytes);
+      if (!info) throw new HttpError(400, 'The file is not an MP4 video with a picture this screen can read.');
+      if (info.durationSeconds > 120) throw new HttpError(400, 'The video must be at most two minutes long.');
+      for (const key of chosen) {
+        const checked = validateAsset({ placement: key, width: info.width, height: info.height, bytes: bytes.length, contentType: 'video/mp4', durationSeconds: info.durationSeconds });
+        if (!checked.ok) throw new HttpError(400, checked.errors[0].message);
+      }
+      return query(token, 'hub.add_creative_video', [product, chosen, label, bytes, info.durationSeconds, info.width, info.height, true, input.requestKey]);
     },
 
     async removeBrandFile(token, input) {

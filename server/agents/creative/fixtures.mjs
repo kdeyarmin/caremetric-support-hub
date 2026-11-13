@@ -32,3 +32,25 @@ export const whiteBoxLogo = () => pngOf(64, 32, (x, y) => (inMark(x, y, 64, 32) 
 export const pictureLogo = () => pngOf(64, 32, (x, y) => (inMark(x, y, 64, 32) ? [15, 23, 42, 255] : [x * 4, 255 - y * 6, 128, 255]));
 /** A 64x32 JPEG of a dark mark on white, as most uploaded logos are. */
 export const whiteBoxJpeg = () => Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAAgAEADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD7Loor5G/4KMf8yJ/3EP8A22qoR5nYUnZXPrmivyMorf6v5mftPI/XOivyMoo+r+Ye08j9c6K+F/8Agn5/yWXV/wDsXpv/AEotq+6KxnHldi4u6uFfI3/BRj/mRP8AuIf+21fXNZHiPwv4Z8SeR/wkXh3SNZ+zbvI+32Udx5W7G7bvB252rnHXA9KUJcsrjkrqx+UdFfqL/wAKv+Gf/RO/CP8A4Jbf/wCIo/4Vf8M/+id+Ef8AwS2//wARXR9YXYz9mz8uqK/UX/hV/wAM/wDonfhH/wAEtv8A/EUf8Kv+Gf8A0Tvwj/4Jbf8A+Io+sLsHs2fIv/BPz/ksur/9i9N/6UW1fdFYXh/wb4Q8O3r3vh/wpoWkXTxmJ5rHT4oHZCQSpZFBIyoOOmQPSt2sKkuZ3LirKx//2Q==', 'base64');
+
+/**
+ * The smallest MP4 the MP4 reader accepts: an `ftyp`, then a `moov` with the movie header (its length) and, after an audio track, a video
+ * track whose header carries the picture size. `moovLast` puts the `moov` after the media data, as a file without fast start has it.
+ */
+export function syntheticMp4({ width = 1080, height = 1920, seconds = 30, version = 0, moovLast = false } = {}) {
+  const box = (type, ...parts) => { const body = Buffer.concat(parts); const head = Buffer.alloc(8); head.writeUInt32BE(body.length + 8); head.write(type, 4, 'latin1'); return Buffer.concat([head, body]); };
+  const u32 = value => { const out = Buffer.alloc(4); out.writeUInt32BE(value); return out; };
+  const u64 = value => { const out = Buffer.alloc(8); out.writeBigUInt64BE(BigInt(value)); return out; };
+  const mvhd = version === 1
+    ? box('mvhd', Buffer.from([1, 0, 0, 0]), u64(0), u64(0), u32(1000), u64(seconds * 1000), Buffer.alloc(80))
+    : box('mvhd', Buffer.from([0, 0, 0, 0]), u32(0), u32(0), u32(1000), u32(seconds * 1000), Buffer.alloc(80));
+  const tkhd = (w, h) => version === 1
+    ? box('tkhd', Buffer.from([1, 0, 0, 7]), Buffer.alloc(84), u32(w * 65536), u32(h * 65536))
+    : box('tkhd', Buffer.from([0, 0, 0, 7]), Buffer.alloc(72), u32(w * 65536), u32(h * 65536));
+  const hdlr = kind => box('hdlr', Buffer.alloc(8), Buffer.from(kind, 'latin1'), Buffer.alloc(13));
+  const trak = (kind, w, h) => box('trak', tkhd(w, h), box('mdia', box('mdhd', Buffer.alloc(24)), hdlr(kind)));
+  const moov = box('moov', mvhd, trak('soun', 0, 0), trak('vide', width, height));
+  const ftyp = box('ftyp', Buffer.from('isom', 'latin1'), u32(512), Buffer.from('isomiso2avc1mp41', 'latin1'));
+  const mdat = box('mdat', Buffer.alloc(2048));
+  return Buffer.concat(moovLast ? [ftyp, mdat, moov] : [ftyp, moov, mdat]);
+}

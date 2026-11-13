@@ -32,9 +32,11 @@ export function anthropicClient({ apiKey, client = null, fetchImpl = null, timeo
   return {
     configured: sdk !== null,
     /** One Messages API call. Resolves to the response and the provider's request id; rejects with the SDK's own error. */
-    async create(request, { signal } = {}) {
+    async create(request, { signal, timeoutMs: callTimeoutMs = null } = {}) {
       if (!sdk) throw aiError('ai_not_configured');
-      const message = await sdk.messages.create(request, signal ? { signal } : undefined);
+      // A research round (server tools searching and reading) may need longer than an ordinary call; nothing else changes the timeout.
+      const options = { ...(signal ? { signal } : {}), ...(callTimeoutMs ? { timeout: callTimeoutMs } : {}) };
+      const message = await sdk.messages.create(request, Object.keys(options).length ? options : undefined);
       return { message, requestId: typeof message?._request_id === 'string' ? message._request_id : null };
     },
   };

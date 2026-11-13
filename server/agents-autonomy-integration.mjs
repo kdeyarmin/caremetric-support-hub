@@ -77,6 +77,14 @@ try {
   const offers = await step('offers');
   await ownerCall('hub.set_agent_autonomy_step', ['offers', 'supervise', offers.changedAt]);
   await admin.query("update private.agent_autonomy_steps set supervised_since = now() - interval '8 days', automatic_at = now() - interval '1 minute' where category = 'offers'");
+  // Evidence, not only a week (20261113240000_agent_watchdog.sql): none of the owner's decisions yet, so one more supervised week.
+  const thin = (await handler(task)).result;
+  assert.deepEqual([thin.graduated, thin.waiting], [[], ['account_emails:not_enough_reviews', 'offers:code_missing']]);
+  assert.equal(sent.at(-1).subject, 'Account emails: one more supervised week');
+  assert.equal((await step('account_emails')).status, 'supervised');
+  assert.ok(Date.parse((await step('account_emails')).automaticAt) > Date.now() + 6 * 86_400_000, 'the next look is a week away');
+  // With the evidence the step asks for (none, here), the week's end switches it.
+  await admin.query("update private.agent_autonomy_steps set min_reviewed = 0, supervised_since = now() - interval '8 days', automatic_at = now() - interval '1 minute' where category = 'account_emails'");
   const graduated = (await handler(task)).result;
   assert.deepEqual([graduated.graduated, graduated.waiting], [['account_emails'], ['offers:code_missing']]);
   assert.equal(sent.at(-1).subject, 'Account emails: now on their own');
@@ -138,7 +146,7 @@ try {
   for (const message of sent) assert.doesNotMatch(`${message.subject} ${message.body}`, /@|\+1\d{10}/);
   console.log('Autonomy integration passed: closed table and owner-only changes, stale screen and session refusals, supervised week, one reminder, one switch, code-missing wait, hold that keeps other trust, early hand-over. No email sent.');
 } finally {
-  for (const s of seedSteps) await admin.query('update private.agent_autonomy_steps set status=$2, supervised_since=$3, automatic_at=$4, changed_at=$5, changed_by=$6, requires_feature=$7, announce_pending=$8 where category=$1', [s.category, s.status, s.supervised_since, s.automatic_at, s.changed_at, s.changed_by, s.requires_feature, s.announce_pending]);
+  for (const s of seedSteps) await admin.query('update private.agent_autonomy_steps set status=$2, supervised_since=$3, automatic_at=$4, changed_at=$5, changed_by=$6, requires_feature=$7, announce_pending=$8, min_reviewed=$9 where category=$1', [s.category, s.status, s.supervised_since, s.automatic_at, s.changed_at, s.changed_by, s.requires_feature, s.announce_pending, s.min_reviewed ?? 10]);
   for (const a of seedAgents) await admin.query('update private.agents set autonomy=$2, config=$3 where key=$1', [a.key, a.autonomy, a.config]);
   await admin.query("delete from private.audit_events where id > $1 and action = 'agent.autonomy_step'", [auditFloor]);
   await admin.query('delete from private.sms_sessions where user_id=$1', [owner]);

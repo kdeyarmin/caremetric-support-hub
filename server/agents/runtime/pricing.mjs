@@ -73,5 +73,8 @@ export function worstCaseCents(model, { inputTokens, maxTokens, cached = false }
   return costCents(model, { inputTokens: cached ? 0 : tokens, cacheWriteTokens: cached ? tokens : 0, outputTokens: maxTokens });
 }
 
+/** A web search's fee on top of tokens: $10 per 1,000 searches, one cent each. A web fetch costs only its tokens. */
+export const searchCents = 1;
+
 /** What a call whose outcome is unknown (a timeout, an abort, a dropped connection) is booked at: its input, as if it had been read. */
 export const inputOnlyCents = (model, inputTokens) => costCents(model, { inputTokens: count(inputTokens) });

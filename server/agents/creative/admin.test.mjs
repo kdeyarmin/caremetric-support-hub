@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { once } from 'node:events';
 import { appServer } from '../../http.mjs';
 import { creativeAdmin, imageKind } from './admin.mjs';
-import { syntheticPng } from './fixtures.mjs';
+import { syntheticMp4, syntheticPng } from './fixtures.mjs';
 
 const token = 'a'.repeat(43);
 // A fake session: records each operation and its arguments, as the hub.* operations would receive them.
@@ -63,11 +63,38 @@ describe('the Creative screen\'s operations', () => {
   });
 });
 
+describe('the owner\'s own finished videos', () => {
+  const requestKey = '44444444-4444-4444-8444-444444444444';
+  it('reads the size and length from the file and stores it for each placement it fits, one per platform', async () => {
+    const { admin, calls } = harness();
+    const bytes = syntheticMp4({ width: 1080, height: 1920, seconds: 30 });
+    await admin.video(token, { product: 'caremetric-intel', placements: ['meta.video_vertical', 'linkedin.video_vertical'], label: ' 30-second commercial ', attested: true, requestKey, bytes });
+    expect(calls[0].sql).toContain('hub.add_creative_video');
+    expect(calls[0].args).toEqual(['caremetric-intel', ['meta.video_vertical', 'linkedin.video_vertical'], '30-second commercial', bytes, 30, 1080, 1920, true, requestKey]);
+  });
+
+  it('refuses what a placement cannot take before the database sees it', async () => {
+    const { admin, calls } = harness();
+    const vertical = syntheticMp4({ width: 1080, height: 1920, seconds: 30 });
+    const input = { product: 'caremetric-intel', placements: ['linkedin.video_vertical'], label: 'Intro', attested: true, requestKey, bytes: vertical };
+    await expect(admin.video(token, { ...input, attested: false })).rejects.toMatchObject({ status: 400 });
+    await expect(admin.video(token, { ...input, placements: ['linkedin.video_landscape'] })).rejects.toMatchObject({ status: 400, message: expect.stringContaining('1920 x 1080') });
+    await expect(admin.video(token, { ...input, placements: ['linkedin.video_vertical', 'linkedin.video_square'] })).rejects.toMatchObject({ status: 400 });
+    await expect(admin.video(token, { ...input, placements: ['meta.feed_square'] })).rejects.toMatchObject({ status: 400 });
+    await expect(admin.video(token, { ...input, placements: ['meta.video_vertical'], bytes: syntheticMp4({ width: 1080, height: 1920, seconds: 93 }) })).rejects.toMatchObject({ status: 400 });
+    await expect(admin.video(token, { ...input, bytes: syntheticMp4({ width: 1920, height: 1080, seconds: 150 }) })).rejects.toMatchObject({ status: 400 });
+    await expect(admin.video(token, { ...input, bytes: Buffer.from('not a video file at all') })).rejects.toMatchObject({ status: 400 });
+    await expect(admin.video(token, { ...input, product: 'advisors' })).rejects.toMatchObject({ status: 400 });
+    expect(calls).toHaveLength(0);
+  });
+});
+
 describe('creative routes', () => {
   const origin = 'https://support-hub-web-production.up.railway.app';
   const token64 = 'b'.repeat(64);
   const creative = {
     admin: { studio: vi.fn(async () => ({ assets: [] })), brandKit: vi.fn(), brandFile: vi.fn(async () => ({ ok: true })), removeBrandFile: vi.fn(), brief: vi.fn(async () => ({ ok: true })),
+      video: vi.fn(async () => ({ briefId: '11111111-1111-4111-8111-111111111111', already: false, assets: [] })),
       file: vi.fn(async () => ({ contentType: 'video/mp4', bytes: Buffer.from('0123456789'), fileName: 'caremetric-video.mp4' })) },
     publicFile: vi.fn(async value => (value === token64 ? { contentType: 'image/png', bytes: Buffer.from('png') } : null)),
   };
@@ -95,6 +122,19 @@ describe('creative routes', () => {
     expect((await post('/api/admin/creative/brief', {}, { Origin: 'https://attacker.test' })).status).toBe(403);
     expect((await post('/api/admin/creative/approve', {})).status).toBe(404);
     expect((await post('/api/admin/creative/studio?x=1', {})).status).toBe(400);
+  });
+
+  it('takes an uploaded video as the raw MP4 with its details in headers', async () => {
+    const bytes = syntheticMp4();
+    const upload = (headers = {}) => fetch(`${base}/api/admin/creative/video`, { method: 'POST', body: bytes, headers: { 'Content-Type': 'video/mp4', Origin: origin, Cookie: `__Host-caremetric_session=${token}`,
+      'X-Creative-Product': 'caremetric-intel', 'X-Creative-Placements': 'meta.video_vertical,linkedin.video_vertical', 'X-Creative-Label': encodeURIComponent('Intro · 30 s'),
+      'X-Creative-Attested': 'true', 'X-Creative-Request': '44444444-4444-4444-8444-444444444444', ...headers } });
+    expect((await upload()).status).toBe(200);
+    expect(creative.admin.video).toHaveBeenCalledWith(token, { product: 'caremetric-intel', placements: ['meta.video_vertical', 'linkedin.video_vertical'], label: 'Intro · 30 s',
+      attested: true, requestKey: '44444444-4444-4444-8444-444444444444', bytes });
+    expect((await upload({ 'Content-Type': 'application/octet-stream' })).status).toBe(415);
+    expect((await upload({ Origin: 'https://attacker.test' })).status).toBe(403);
+    expect((await upload({ 'X-Creative-Label': '%E0%A4%A' })).status).toBe(400);
   });
 
   it('streams a file for preview with byte ranges, and as a download', async () => {

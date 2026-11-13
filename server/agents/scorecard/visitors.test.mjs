@@ -43,10 +43,21 @@ describe('native website session reader', () => {
     const [url, request] = fetchImpl.mock.calls[0];
     expect(url).toBe(visitorMetricsUrl);
     expect(request).toMatchObject({ method: 'POST', redirect: 'error', cache: 'no-store' });
-    expect(JSON.parse(request.body)).toEqual({ before: '2026-10-19T04:00:00.000Z', since: '2026-10-26T04:00:00.000Z', until: '2026-11-02T05:00:00.000Z' });
+    expect(JSON.parse(request.body)).toEqual({ before: '2026-10-19T04:00:00.000Z', since: '2026-10-26T04:00:00.000Z', until: '2026-11-02T05:00:00.000Z', campaigns: true });
     const timestamp = request.headers['X-CareMetric-Timestamp'];
     expect(request.headers['X-CareMetric-Signature']).toBe(createHmac('sha256', key).update(`${timestamp}.visitor-metrics.${request.body}`).digest('hex'));
     expect(JSON.stringify([result, reader.readiness(), request.headers])).not.toContain(key);
+  });
+
+  it('reads the sessions each outreach campaign tag brought, and asks an Intel that predates them once more without the field', async () => {
+    const tagged = vi.fn(async () => response(answer({ campaigns: [{ campaign: 'new-agency-territory-plain', sessions: 4 }] })));
+    expect(intel(await setup({ fetchImpl: tagged }).reader.read(window))).toEqual({ state: 'read', visitors: 100, previous: 80,
+      campaigns: [{ campaign: 'new-agency-territory-plain', sessions: 4 }] });
+    const older = vi.fn().mockResolvedValueOnce(new Response('{}', { status: 400 })).mockResolvedValueOnce(response(answer()));
+    expect(intel(await setup({ fetchImpl: older }).reader.read(window))).toEqual({ state: 'read', visitors: 100, previous: 80 });
+    expect(JSON.parse(older.mock.calls[1][1].body)).not.toHaveProperty('campaigns');
+    const bad = setup({ fetchImpl: async () => response(answer({ campaigns: [{ campaign: 'Not A Tag', sessions: 1 }] })) });
+    expect(await bad.reader.read(window)).toMatchObject({ state: 'unavailable', error: 'visitor_response_invalid' });
   });
 
   it('leaves pre-collection and partial periods unknown rather than inventing historical zeroes', async () => {

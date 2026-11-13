@@ -23,11 +23,15 @@ const databaseCode = /^[a-z][a-z_]{0,59}$/;
 const codeOf = error => (databaseCode.test(error?.code ?? '') ? error.code : error?.transient === true ? 'provider_outage' : 'handler_error');
 
 export function agentScheduler({
-  store, handlers = {}, actions = null, enabled = false, leaseSeconds = 600, claimLimit = 3, heartbeatMs = 60_000,
+  store, handlers = {}, actions = null, enabled = false, leaseSeconds = 600, claimLimit = 3, maxConcurrent = 10, heartbeatMs = 60_000,
   taskTimeoutMs = 4 * 60_000, retryDelayMs = 5 * 60_000, maxRetryDelayMs = 30 * 60_000, maxPermanentAttempts = 3,
   now = () => new Date(), log = line => console.warn(line),
 }) {
-  let running = false;
+  // Claiming is one at a time; running is not. Tasks a tick started keep running while the next ticks claim more, up to the number of
+  // tasks allowed at once (Settings → AI team → Tasks at once, `claimLimit`), so one slow task no longer holds up the whole team.
+  let claiming = false, draining = false;
+  const inFlight = new Set();
+  const capacity = () => { const value = Number(live(claimLimit)); return Number.isInteger(value) ? Math.min(Math.max(value, 1), maxConcurrent) : 3; };
   // "Run the AI team" (Settings → AI team); `enabled` may be a function, read on every tick.
   const active = () => live(enabled) === true;
   const kinds = () => Object.keys(handlers).filter(kind => typeof handlers[kind] === 'function').sort();
@@ -100,20 +104,38 @@ export function agentScheduler({
     }
   }
 
+  /** Approved actions, carried out by one caller at a time. */
+  async function drain() {
+    if (!actions || draining) return undefined;
+    draining = true;
+    try { return await guarded('actions', () => actions.executeReady()); } finally { draining = false; }
+  }
+
+  /**
+   * One tick: housekeeping, due schedules, and as many claimed tasks as there is room for beside those still running from earlier
+   * ticks. It settles when its own tasks have finished; a tick that starts meanwhile only claims what room is left.
+   */
   async function tick() {
-    if (running || !active()) return { skipped: true, fired: 0, claimed: 0, executedActions: 0 };
-    running = true;
+    if (claiming || !active()) return { skipped: true, fired: 0, claimed: 0, executedActions: 0 };
+    claiming = true;
+    let fired, tasks = [];
     try {
       await guarded('maintenance', () => store.maintenance());
-      const fired = await guarded('fire', () => store.fireSchedules(kinds()));
-      const tasks = (await guarded('claim', () => store.claim(claimLimit, leaseSeconds))) ?? [];
-      // An explicit arrow: map would pass the index as the context, and the tick never carries a session.
-      const results = await Promise.all(tasks.map(task => execute(task)));
-      const drained = actions ? await guarded('actions', () => actions.executeReady()) : undefined;
-      return { skipped: false, fired: fired?.length ?? 0, claimed: tasks.length, executedActions: drained?.executed ?? 0, results };
+      fired = await guarded('fire', () => store.fireSchedules(kinds()));
+      const room = capacity() - inFlight.size;
+      if (room > 0) tasks = (await guarded('claim', () => store.claim(room, leaseSeconds))) ?? [];
     } finally {
-      running = false;
+      claiming = false;
     }
+    // An explicit arrow: map would pass the index as the context, and the tick never carries a session.
+    const runs = tasks.map(task => {
+      const run = execute(task).catch(() => ({ id: task.id, status: 'unknown' })).finally(() => inFlight.delete(run));
+      inFlight.add(run);
+      return run;
+    });
+    const results = await Promise.all(runs);
+    const drained = await drain();
+    return { skipped: false, fired: fired?.length ?? 0, claimed: tasks.length, executedActions: drained?.executed ?? 0, results };
   }
 
   /**
@@ -145,5 +167,5 @@ export function agentScheduler({
     return { skipped: false, started: claimed.length, done };
   }
 
-  return { tick, active, kinds, runWaiting };
+  return { tick, active, kinds, runWaiting, get running() { return inFlight.size; } };
 }

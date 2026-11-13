@@ -93,6 +93,21 @@ describe('autonomy.graduate', () => {
     expect(store.startRun).not.toHaveBeenCalled();
   });
 
+  it('tells the owner when a step stays supervised for too few decisions, or is held for too many turned down', async () => {
+    const due = [step('cold_email', 'Cold email', '2026-11-11T22:00:00+00:00'), step('social_posts', 'Social posts', '2026-11-11T22:00:00+00:00')];
+    const { notifier, run } = fixture({ due, graduate: async category => (category === 'cold_email'
+      ? { graduated: false, reason: 'not_enough_reviews', evidence: { reviewed: 3, rejected: 0 }, step: { automaticAt: '2026-11-18T22:00:00+00:00' } }
+      : { graduated: false, reason: 'too_many_rejections', evidence: { reviewed: 10, rejected: 4 } }) });
+    expect((await run()).result.waiting).toEqual(['cold_email:not_enough_reviews', 'social_posts:too_many_rejections']);
+    const sent = notifier.send.mock.calls.map(([input]) => input);
+    expect(sent.map(input => [input.subject, input.severity, input.dedupeKey])).toEqual([
+      ['Cold email: one more supervised week', 'info', 'autonomy:extended:cold_email:2026-11-18T22:00:00+00:00'],
+      ['Social posts: kept under your review', 'warning', 'autonomy:held:social_posts:2026-11-11T22:00:00+00:00'],
+    ]);
+    expect(sent[0].body).toContain('Only 3 decisions on cold email came to you');
+    expect(sent[1].body).toContain('You turned down 4 of 10 decisions on social posts');
+  });
+
   it('reminds the owner the day before, keyed by the switch time so it goes once', async () => {
     const { notifier, run } = fixture({ soon: [step('offers', 'Offers', '2026-11-12T15:00:00+00:00')] });
     expect((await run()).result.reminded).toEqual(['offers']);

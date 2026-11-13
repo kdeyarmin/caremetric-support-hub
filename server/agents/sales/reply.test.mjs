@@ -15,7 +15,7 @@ const taskOf = (payload = {}, overrides = {}) => ({
   payload: { communicationId: ids.communication, messageId: ids.message, product: 'carebase', ...payload }, agent: { autonomy: 'propose', config: {} }, ...overrides,
 });
 const now = () => new Date('2026-11-08T15:00:00Z');
-const answer = (over = {}) => ({ outcome: 'completed', output: { intent: 'pricing', possiblePhi: false, needsOwner: false, nextStep: 'start_trial',
+const answer = (over = {}) => ({ outcome: 'completed', output: { intent: 'pricing', objection: 'price', possiblePhi: false, needsOwner: false, nextStep: 'start_trial',
   reply: 'CareBase Core is $199 per facility per month, with unlimited residents and staff.\n\nYou can start a 30-day free trial here:\nhttps://cmcarebase.com/signup', ...over } });
 
 const fixture = ({ snapshot = snapshotOf(`How much is CareBase? ${canary}`), model = null, bookingUrl = null, answers = false, guides = null, status = 'proposed', marketed = null } = {}) => {
@@ -26,6 +26,7 @@ const fixture = ({ snapshot = snapshotOf(`How much is CareBase? ${canary}`), mod
     startRun: vi.fn(async () => 'run-1'),
     finishRun: vi.fn(async () => undefined),
     proposeAction: vi.fn(async () => ({ id: 'action-1', status, requestKey: 'k1', created: true })),
+    growthReplyDisposition: vi.fn(async () => 1),
   };
   const notifier = { send: vi.fn(async input => { sent.push(input); return [{ channel: 'email', delivery: 'sent' }]; }) };
   const handler = salesReplyHandler({ store, notifier, drafting: model ? { model, guides } : null, bookingUrl, answers, marketed, log: () => {} });
@@ -60,7 +61,7 @@ describe('the Sales Executive answering a prospect', () => {
     const harness = fixture({ model });
     const outcome = await harness.run();
     const request = model.run.mock.calls[0][1];
-    expect(request.promptVersion).toBe('sales.4');
+    expect(request.promptVersion).toBe('sales.5');
     expect(request.user).toContain(`How much is CareBase? ${canary}`);
     expect(request.system[0].text).not.toContain(canary);
     // The prompt, then the product's own published catalog, each cached (content/features.mjs).
@@ -75,6 +76,15 @@ describe('the Sales Executive answering a prospect', () => {
     expect(harness.sent).toEqual([expect.objectContaining({ severity: 'info', subject: 'Reply drafted for CM-2048, a CareMetric CareBase prospect', dedupeKey: `sales:draft:${ids.message}`, communicationReference: 2048 })]);
     expect(outcome).toEqual({ status: 'awaiting_approval', result: { outcome: 'proposed', reference: 2048, product: 'carebase', reply: 'drafted', draft: 'drafted', intent: 'pricing', alert: 'email:sent' } });
     expect(kept(harness)).not.toContain(canary);
+    // The reading corrects growth's keyword reading of the same message, with the playbook objection it raised.
+    expect(harness.store.growthReplyDisposition).toHaveBeenCalledWith(ids.message, 'pricing', 'price');
+  });
+
+  it('keeps going when growth cannot record the reading', async () => {
+    const harness = fixture({ model: modelOf(answer({ objection: 'none' })) });
+    harness.store.growthReplyDisposition.mockRejectedValueOnce(Object.assign(new Error('missing'), { code: '42883' }));
+    expect((await harness.run()).result.outcome).toBe('proposed');
+    expect(harness.store.growthReplyDisposition).toHaveBeenCalledWith(ids.message, 'pricing', null);
   });
 
   it('tells the model the stage, whether CareMetric wrote first, the word limit and the allowed links', async () => {

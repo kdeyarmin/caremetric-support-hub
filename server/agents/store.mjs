@@ -14,7 +14,7 @@ import { transaction } from '../sms-auth.mjs';
  * work can be handed back. Against a database without those operations the calls keep their old shape
  * and the extras are ignored, so a server can be deployed before the migration is applied.
  */
-export function sqlAgentStore(pool, { fenced = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false } = {}) {
+export function sqlAgentStore(pool, { fenced = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false, creativeData = false, ads = false, watchdog = false } = {}) {
   const call = (operation, args = []) => transaction(pool, async client =>
     (await client.query(`select ${operation}(${args.map((_, index) => `$${index + 1}`).join(', ')}) as result`, args)).rows[0].result);
   return {
@@ -41,6 +41,19 @@ export function sqlAgentStore(pool, { fenced = false, growth = false, social = f
       /** Records a brief once per request key: `{ id, created, status }`. */
       creativeBriefCreate: brief => call('private.creative_brief_create', [JSON.stringify(brief)]),
       creativeBriefContext: id => call('private.creative_brief_context', [id]),
+      // County snapshots and article links (20261113210000_creative_data.sql); absent until the database declares them.
+      // The watchdog (20261113240000_agent_watchdog.sql).
+      ...(watchdog ? { watchdogFacts: () => call('private.agent_watchdog_facts') } : {}),
+      // Paid ads (20261113230000_ads_buildout.sql).
+      ...(ads ? {
+        adsConversionCandidates: (platform, limit) => call('private.ads_conversion_candidates', [platform, limit]),
+        adsConversionRecord: (lead, platform, status, code) => call('private.ads_conversion_record', [lead, platform, status, code]),
+        socialCampaignProposed: (kind, target) => call('private.social_campaign_proposed', [kind, target]),
+      } : {}),
+      ...(creativeData ? {
+        creativeDataCounties: (perWeek, weekStart) => call('private.creative_data_counties', [perWeek, weekStart]),
+        socialRecentArticles: days => call('private.social_recent_articles', [days]),
+      } : {}),
       creativeBriefFinish: (id, status, result = null) => call('private.creative_brief_finish', [id, status, result === null ? null : JSON.stringify(result)]),
       creativeDraftsSave: (briefId, taskId, assets) => call('private.creative_drafts_save', [briefId, taskId, JSON.stringify(assets)]),
       /** Claims drafts to render within the day's cap: `{ claimed, renderedToday, cap }`. */
@@ -193,6 +206,10 @@ export function sqlAgentStore(pool, { fenced = false, growth = false, social = f
     growthLead: id => call('private.agent_growth_lead', [id]),
     /** Marks leads as looked at, so each is handled once. Returns how many were newly marked. */
     growthMarkSeen: ids => call('private.agent_growth_mark_seen', [ids]),
+    /** One website lead into growth (20261113171000_growth_inbound.sql): what it did, never the person's details. */
+    growthLeadCapture: id => call('private.growth_lead_capture', [id]),
+    /** The Sales Executive's reading of one inbound message, which corrects the keyword reading of the same message. */
+    growthReplyDisposition: (messageId, intent, objection = null) => call('private.growth_reply_disposition', [messageId, intent, objection]),
     /**
      * Lead conversations to remind the owner about: waiting at least the smallest of `steps` (minutes) and less than `maxMinutes`, whose
      * current step has not been reminded yet, the most recent first, each with its step. Reminded steps are left out before the limit.

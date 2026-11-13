@@ -35,3 +35,17 @@ it('starts activation timing at signup and keeps an expired trial actionable',()
  expect(planOpportunity(recent,now).some(w=>w.kind==='activation')).toBe(false);
  expect(planOpportunity({...base,trial_end:days(-1)},now).some(w=>w.key.endsWith(':expired'))).toBe(true);
 });
+describe('one re-ask and stops',()=>{
+ const prospect={...base,product:'caremetric-intel',stage:'qualified',owner_agent:'marketing_manager',trial_end:null,policy:{max_touches:3}};
+ it('a sign-up stops outreach like a trial',()=>{
+  expect(planOpportunity({...prospect,touches:1},now).map(t=>t.kind)).toEqual(['outreach']);
+  expect(planOpportunity({...prospect,touches:1,events:[{kind:'signup',occurred_at:days(-1)}]},now)).toEqual([]);
+ });
+ it('a re-ask is one message counted from when it began; an old not-now no longer stops it, a no always does',()=>{
+  const reask={...prospect,touches:3,memory:{reengagedAt:days(-1),touchesBefore:3,reengageReason:'not_now'},events:[{kind:'not_now',occurred_at:days(-100)}]};
+  expect(planOpportunity(reask,now).map(t=>[t.kind,t.key])).toEqual([['outreach','outreach:3']]);
+  expect(planOpportunity({...reask,touches:4},now)).toEqual([]);
+  expect(planOpportunity({...reask,events:[...reask.events,{kind:'reply',occurred_at:days(0)}]},now)).toEqual([]);
+  expect(planOpportunity({...reask,events:[{kind:'negative_reply',occurred_at:days(-200)}]},now)).toEqual([]);
+ });
+});

@@ -40,11 +40,15 @@ export function socialConfig(env = {}, setting = null) {
     linkedin: {
       token: env.HUB_LINKEDIN_ACCESS_TOKEN ?? '', refreshToken: env.HUB_LINKEDIN_REFRESH_TOKEN ?? '', clientId: text('social.linkedin_client_id', 'HUB_LINKEDIN_CLIENT_ID'), clientSecret: env.HUB_LINKEDIN_CLIENT_SECRET ?? '',
       adsToken: env.HUB_LINKEDIN_ADS_ACCESS_TOKEN ?? '', adsRefreshToken: env.HUB_LINKEDIN_ADS_REFRESH_TOKEN ?? '', adsClientId: text('social.linkedin_ads_client_id', 'HUB_LINKEDIN_ADS_CLIENT_ID'), adsClientSecret: env.HUB_LINKEDIN_ADS_CLIENT_SECRET ?? '',
+      memberToken: env.HUB_LINKEDIN_MEMBER_ACCESS_TOKEN ?? '',
       organizationId: text('social.linkedin_organization_id', 'HUB_LINKEDIN_ORGANIZATION_ID'), adAccountId: text('social.linkedin_ad_account_id', 'HUB_LINKEDIN_AD_ACCOUNT_ID'),
       version: text('social.linkedin_api_version', 'HUB_LINKEDIN_API_VERSION') || '202609',
     },
     imageUrls,
-    settings: { maxDailyBudgetCents: cents(value('social.max_daily_budget_cents', 'HUB_SOCIAL_AD_MAX_DAILY_BUDGET_CENTS')) ?? 0, targetCostCents: cents(value('social.target_cost_cents', 'HUB_SOCIAL_TARGET_COST_PER_RESULT_CENTS')) || null },
+    settings: { maxDailyBudgetCents: cents(value('social.max_daily_budget_cents', 'HUB_SOCIAL_AD_MAX_DAILY_BUDGET_CENTS')) ?? 0, targetCostCents: cents(value('social.target_cost_cents', 'HUB_SOCIAL_TARGET_COST_PER_RESULT_CENTS')) || null,
+      eventPosts: setting ? setting('social.event_posts') === true : false,
+      founderPosts: setting ? setting('social.founder_posts') === true : false,
+      founderPostsPerWeek: (n => (Number.isInteger(n) && n >= 0 && n <= 5 ? n : 3))(setting ? setting('social.founder_posts_per_week') : null) },
   };
 }
 
@@ -55,7 +59,9 @@ export function socialTeam({ social = null, features = null, fetchImpl = fetch, 
   const config = () => live(social) ?? socialConfig({});
   const meta = givenMeta ?? rebuilt(() => config().meta, input => metaClient({ ...input, fetchImpl }));
   const linkedin = givenLinkedin ?? rebuilt(() => config().linkedin ?? {}, input => linkedinClient({ ...input, fetchImpl }));
-  const settings = { get maxDailyBudgetCents() { return config().settings?.maxDailyBudgetCents ?? 0; }, get targetCostCents() { return config().settings?.targetCostCents ?? null; } };
+  const settings = { get maxDailyBudgetCents() { return config().settings?.maxDailyBudgetCents ?? 0; }, get targetCostCents() { return config().settings?.targetCostCents ?? null; },
+    get eventPosts() { return config().settings?.eventPosts === true; },
+    get founderPosts() { return config().settings?.founderPosts === true; }, get founderPostsPerWeek() { return config().settings?.founderPostsPerWeek ?? 3; } };
   const imageUrls = () => config().imageUrls ?? [];
   return {
     meta, linkedin,
@@ -64,7 +70,7 @@ export function socialTeam({ social = null, features = null, fetchImpl = fetch, 
       settings,
       sources: () => [{ name: 'Meta', client: meta, on: meta.configured?.ads }, { name: 'LinkedIn', client: linkedin, on: linkedin.configured?.ads }].filter(source => source.on === true),
     },
-    handlers: ({ store, notifier, model, customerTextToAi, publicOrigin, marketed = null, log, creative = null }) => socialHandlers({ store, notifier, model, meta, linkedin, settings, imageUrls, customerTextToAi, publicOrigin, marketed, log, creative }),
+    handlers: ({ store, notifier, model, customerTextToAi, publicOrigin, marketed = null, log, creative = null, feed = null }) => socialHandlers({ store, notifier, model, meta, linkedin, settings, imageUrls, customerTextToAi, publicOrigin, marketed, log, creative, feed }),
     executors: ({ notifier, log, creative = null, store = null, publicOrigin = null }) => socialExecutors({ meta, linkedin, settings, notifier, log, creative, store, publicOrigin }),
   };
 }

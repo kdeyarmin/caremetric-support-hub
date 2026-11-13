@@ -66,7 +66,7 @@ const money = amount => Math.round(Number(amount ?? 0) * 100);
 
 export function linkedinClient({
   token = '', refreshToken = '', clientId = '', clientSecret = '',
-  adsToken = '', adsRefreshToken = '', adsClientId = '', adsClientSecret = '',
+  adsToken = '', adsRefreshToken = '', adsClientId = '', adsClientSecret = '', memberToken = '',
   organizationId = '', adAccountId = '', version = '202609', fetchImpl = fetch, timeoutMs = 15_000,
 } = {}) {
   const organization = numeric(String(organizationId ?? '').replace(/^urn:li:organization:/, ''));
@@ -83,7 +83,10 @@ export function linkedinClient({
   const ownAds = credential(adsToken, adsRefreshToken, adsClientId || clientId, adsClientSecret || clientSecret);
   const adsAuth = ownAds.current || ownAds.refresh ? ownAds : pageAuth;
   const usable = auth => Boolean(auth.current || auth.refresh);
-  const configured = { page: usable(pageAuth) && Boolean(org), ads: usable(adsAuth) && Boolean(account) };
+  let memberUrn = null;
+  // The founder's own profile: a "Share on LinkedIn" token (scopes openid, profile, w_member_social), with no renewal.
+  const memberAuth = credential(memberToken, '', '', '');
+  const configured = { page: usable(pageAuth) && Boolean(org), ads: usable(adsAuth) && Boolean(account), member: usable(memberAuth) };
 
   async function readBytes(response, limit) {
     if (!response.body?.getReader) {
@@ -157,6 +160,24 @@ export function linkedinClient({
     let data = {};
     try { data = text ? JSON.parse(text) : {}; } catch { data = {}; }
     return { data, id: response.headers?.get?.('x-restli-id') ?? response.headers?.get?.('x-linkedin-id') ?? null };
+  }
+  async function memberOf(signal) {
+    if (!configured.member) throw failure('linkedin_not_configured');
+    if (memberUrn) return memberUrn;
+    let response;
+    try {
+      response = await fetchImpl('https://api.linkedin.com/v2/userinfo', { method: 'GET', redirect: 'error', signal: timeout(signal),
+        headers: { Authorization: `Bearer ${memberAuth.current}`, Accept: 'application/json' } });
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      throw failure('linkedin_unavailable', true);
+    }
+    if (!response.ok) { await response.body?.cancel?.().catch(() => {}); throw codeFor(response.status); }
+    let data = {};
+    try { data = JSON.parse(await bounded(response)); } catch { data = {}; }
+    if (typeof data?.sub !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(data.sub)) throw failure('linkedin_invalid_request');
+    memberUrn = `urn:li:person:${data.sub}`;
+    return memberUrn;
   }
   const get = (path, query, options = {}) => call('GET', path, { ...options, query }).then(result => result.data);
   const elements = data => (Array.isArray(data?.elements) ? data.elements : []);
@@ -344,6 +365,20 @@ export function linkedinClient({
       return { id: String(result.id ?? ''), image: Boolean(image) };
     },
 
+    /** The founder's member URN, from the OpenID userinfo the token's own profile answers (read once). */
+    member: ({ signal } = {}) => memberOf(signal),
+
+    /** A text post on the founder's own profile, published only after the owner approved its exact words. */
+    async publishMemberPost({ message }, { signal } = {}) {
+      const author = await memberOf(signal);
+      const result = await call('POST', 'posts', { signal, auth: memberAuth, body: {
+        author, commentary: littleText(message), visibility: 'PUBLIC',
+        distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] },
+        lifecycleState: 'PUBLISHED', isReshareDisabledByAuthor: false,
+      } });
+      return { id: String(result.id ?? '') };
+    },
+
     /** A reply nested under the comment: posted on the comment, naming what the comment is on and the comment as its parent. */
     async reply({ id, parentId, message }, { signal } = {}) {
       needPage();
@@ -432,6 +467,43 @@ export function linkedinClient({
      * A new creative in a campaign: a sponsored-only post (not on the Page's feed) carrying the copy, the link and the image (the image
      * URN of the ad it is based on, or an approved brand image uploaded now), then the creative.
      */
+    /**
+     * A new campaign group and campaign, both DRAFT (not running): website visits, automated bidding, the approved daily budget, and the
+     * audience: people in the United States working in Hospitals and Health Care, at manager level or above. The owner reviews the
+     * targeting (a state, a matched company list) in Campaign Manager and starts it there.
+     */
+    async createCampaign({ name, dailyBudgetCents, currency = 'USD', startAt }, { signal } = {}) {
+      needAds();
+      if (!Number.isInteger(dailyBudgetCents) || dailyBudgetCents < 1000 || !/^[A-Z]{3}$/.test(currency)) throw failure('linkedin_invalid_request');
+      const start = Number.isFinite(Date.parse(startAt ?? '')) ? Date.parse(startAt) : Date.now() + 86_400_000;
+      const group = await call('POST', `adAccounts/${account}/adCampaignGroups`, { signal, auth: adsAuth, body: {
+        account: accountUrn, name: name.slice(0, 100), status: 'DRAFT', runSchedule: { start } } });
+      const groupId = bareId(group.id, /^urn:li:sponsoredCampaignGroup:/);
+      if (!groupId) throw failure('linkedin_unconfirmed');
+      const amount = (dailyBudgetCents / 100).toFixed(2);
+      const campaign = await call('POST', `adAccounts/${account}/adCampaigns`, { signal, auth: adsAuth, body: {
+        account: accountUrn, campaignGroup: `urn:li:sponsoredCampaignGroup:${groupId}`, name: name.slice(0, 100), status: 'DRAFT', type: 'SPONSORED_UPDATES',
+        objectiveType: 'WEBSITE_VISIT', costType: 'CPM', optimizationTargetType: 'MAX_CLICK', dailyBudget: { amount, currencyCode: currency },
+        locale: { country: 'US', language: 'en' }, offsiteDeliveryEnabled: false, runSchedule: { start },
+        targetingCriteria: { include: { and: [
+          { or: { 'urn:li:adTargetingFacet:locations': ['urn:li:geo:103644278'] } },
+          { or: { 'urn:li:adTargetingFacet:industries': ['urn:li:industry:14'] } },
+          { or: { 'urn:li:adTargetingFacet:seniorities': ['urn:li:seniority:5', 'urn:li:seniority:6', 'urn:li:seniority:7', 'urn:li:seniority:8', 'urn:li:seniority:9', 'urn:li:seniority:10'] } },
+        ] } },
+      } });
+      return { campaignGroupId: groupId, campaignId: bareId(campaign.id, /^urn:li:sponsoredCampaign:/) ?? '' };
+    },
+
+    /** One lead from a LinkedIn ad click, reported to the conversion rule by a hashed email and the click ID (Conversions API). */
+    async sendConversion({ conversionId, eventId, happenedAt, emailHash, liFatId }, { signal } = {}) {
+      if (!/^[0-9]{3,30}$/.test(String(conversionId ?? '')) || !/^[a-f0-9]{64}$/.test(emailHash ?? '')) throw failure('linkedin_invalid_request');
+      await call('POST', 'conversionEvents', { signal, auth: adsAuth, body: {
+        conversion: `urn:lla:llaPartnerConversion:${conversionId}`, conversionHappenedAt: happenedAt, eventId,
+        user: { userIds: [{ idType: 'SHA256_EMAIL', idValue: emailHash }, ...(liFatId ? [{ idType: 'LINKEDIN_FIRST_PARTY_ADS_TRACKING_UUID', idValue: liFatId }] : [])] },
+      } });
+      return { received: 1 };
+    },
+
     async createAd({ adsetId, message, headline, description, link, imageHash = null, imageUrl = null }, { signal } = {}) {
       needAds();
       if (!org) throw failure('linkedin_not_configured');
