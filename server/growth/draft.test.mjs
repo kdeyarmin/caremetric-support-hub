@@ -240,6 +240,8 @@ describe('a check-in months later',()=>{
   expect(draft).toMatchObject({modelGenerated:true,citations:[]});
   await draftMessage({opportunity:{...nurtured,checkin_due:'no_reply',last_touch:'2026-07-20T15:00:00Z'},work:checkinWork,task:{},model});
   expect(JSON.parse(model.run.mock.calls.at(-1)[1].user).checkin).toEqual({reason:'no_reply',since:'July 2026'});
+ });
+});
 describe('review findings on the product-number guard and the repair (PR #187)',()=>{
  const answer=body=>({subject:'Referral sources in your area',body,citations:['s'],needsHuman:false});
  const day24=[{id:'s',claim:'Care 24 hours a day, 7 days a week.'}];
