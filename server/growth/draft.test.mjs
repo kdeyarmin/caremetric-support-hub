@@ -220,6 +220,11 @@ describe('review findings on the product-number guard and the repair (PR #187)',
  const answer=body=>({subject:'Referral sources in your area',body,citations:['s'],needsHuman:false});
  const day24=[{id:'s',claim:'Care 24 hours a day, 7 days a week.'}];
  it('reads a product name however it is capitalized',()=>{
+  // In the first person, the founder writes as the company: "we" and "our" describe CareMetric's offering, never the recipient.
+  const counties=[{id:'s',claim:'The agency serves 12 counties.'}];
+  for(const body of ['Our referral database covers 12 counties. Would a free trial help?','We cover 12 counties with our referral database. Would a free trial help?'])
+   expect(draftProblem(answer(body),{product:'caremetric-intel',sources:counties,outreach:true})).toBe('claim');
+  expect(draftProblem(answer('Your team serves 12 counties. Which referral sources does it visit each week?'),{product:'caremetric-intel',sources:counties,outreach:true})).toBeNull();
   for(const name of ['carebase','CAREBASE','intel','caremetric intel'])
    expect(draftProblem(answer(`${name} works 24 hours a day. Which referral sources do you visit?`),{product:'caremetric-intel',sources:day24,outreach:true})).toBe('claim');
  });

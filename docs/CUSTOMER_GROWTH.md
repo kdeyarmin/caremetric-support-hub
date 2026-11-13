@@ -229,7 +229,8 @@ sheet does not state, and the words "solution" and "journey" anywhere, so the pe
 away, and nobody knew how often. Now a number the organization's own sources or its name state ("12 counties", "two locations", "for 25
 years") may be repeated in that organization's draft, and an empty word inside its own name ("Senior Care Solutions", "Journey Home
 Health") is part of the name. Everything else is as strict as before: a number that neither the fact sheet nor the sources state is
-refused, a sentence about CareMetric or the product may state only the fact sheet's numbers, and percentages, prices, guarantees,
+refused, a sentence about CareMetric or the product, or one in the first person ("I", "we", "our"), may state only the fact
+sheet's numbers, and percentages, prices, guarantees,
 compliance assurances and competitor names are checked exactly as before. A draft that fails a check the writer can fix (a claim,
 unclear copy, markup, a link, the subject, the body, a meeting offer, another product's price or a citation) is sent back once with the
 original input, the refused draft and fixed words for what failed. The repair is its own model run, with its own budget reservation and
