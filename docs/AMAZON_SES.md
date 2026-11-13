@@ -5,8 +5,9 @@ alerts and answers, customer lifecycle email and bulk email. Growth email (cold 
 switch, **Settings → Email → Growth email service**, which stays SendGrid by default: SES does not allow unsolicited
 email, and a suspension would stop every message the Hub sends. **Settings → Email → Email
 service** is SendGrid until the owner chooses Amazon SES, and a change applies within a minute with nothing to redeploy.
-If the chosen service is not set up, the Hub keeps sending through the other one, so a half-finished switch never stops
-email.
+If SES is selected but not configured, the Hub falls back to configured SendGrid before making a request. A SendGrid
+selection never falls back to SES: missing SendGrid credentials must not move prospecting mail onto SES. Provider errors
+or unknown outcomes never trigger a second send through another provider.
 
 Inbound support email is unchanged by this release: `caremetric.ai`'s MX still points at SendGrid Inbound Parse, which
 posts to `/api/channels/email/inbound`. Moving inbound mail to SES receiving is a separate change.
@@ -18,13 +19,17 @@ posts to `/api/channels/email/inbound`. Moving inbound mail to SES receiving is 
   carry `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`. Each message is tagged with its
   category; growth email also carries its growth message id as the `growth_message_id` tag. A 4xx from SES means the
   message was not sent (`failed`); a timeout or a 5xx is `unknown`, exactly as with SendGrid.
+- **Tracking:** every SES request explicitly disables open and click tracking, including when the account or configuration
+  set enables it. Support links remain direct and no tracking pixel is added.
 - **Delivery events** (`POST /api/growth/delivery/ses`): the configuration set publishes Delivery, Bounce, Complaint and
   Reject events to an SNS topic, and SNS posts them to the Hub. The Hub checks the SNS signature against the certificate
   SNS signs with (an https `.pem` on `sns.<region>.amazonaws.com`, fetched once and cached), accepts only the topic in
   **Settings → Email → Amazon SES events topic**, refuses messages older than six hours, and confirms the subscription
-  itself when SNS asks (only on SNS in that region). A delivery records `delivered`, a permanent bounce or a reject
-  `bounced`, and a complaint `complaint` on the growth message, once per SNS message. A transient bounce is SES still
-  trying and is not recorded. Bounces and complaints also land on SES's account suppression list for every message.
+  itself when SNS asks (only on SNS in that region). A delivery records `delivered`, every terminal bounce or reject
+  `bounced`, and a complaint `complaint`, once per SNS message. A transient bounce means SES stopped trying; it counts
+  as a failure without permanently suppressing the contact. DeliveryDelay is nonterminal and does not count as a bounce.
+  Permanent bounces, rejects, complaints and unsubscribes retain the existing suppression policy. Account-level SES
+  suppression is separate and must be verified in AWS; do not assume transient bounces enter that list.
 
 ## Setting it up
 
@@ -59,3 +64,10 @@ posts to `/api/channels/email/inbound`. Moving inbound mail to SES receiving is 
 - On November 12, 2026 the sender was run against the live SES API in us-east-2 with the owner's local AWS sign-in:
   a support reply and a bulk message to Amazon's mailbox simulator (`success@simulator.amazonses.com`) returned SES
   message ids, and an unverified recipient was refused while the account was in the sandbox (`failed`).
+
+## Review follow-up deployment dependency
+
+Apply the additive `growth_soft_bounce_reporting` migration before deploying this handler. The old four-argument
+function remains compatible with SendGrid and older Hub releases. The new five-argument call is used only for SES
+transient bounces. No queued mail is replayed. Keep both provider credentials and all inbound SendGrid settings;
+changing outbound service does not verify production access or DKIM, and simulator acceptance is not that verification.

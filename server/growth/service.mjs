@@ -98,7 +98,7 @@ export function growthService({store,research,contacts=null,features,enabled=fal
       let result;try{result=await sesEvents(raw);}catch(error){throw new HttpError(error?.status??400,error?.message??'Invalid notification.');}
       if(!result?.notification)return {accepted:0,...(result?.confirmed?{confirmed:true}:{})};
       let accepted=0;
-      for(const event of sesGrowthEvents(result.notification)){if(!z.uuid().safeParse(event.messageId).success)continue; await store.delivery(event.id,event.messageId,event.kind,event.at); accepted++;}
+      for(const event of sesGrowthEvents(result.notification)){if(!z.uuid().safeParse(event.messageId).success)continue; await store.delivery(event.id,event.messageId,event.kind,event.at,...(event.suppress === false ? [false] : [])); accepted++;}
       return {accepted};
     },
     async unsubscribe(token,confirm) {
