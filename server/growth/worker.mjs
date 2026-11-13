@@ -143,6 +143,9 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
           if(existing?.status==='resolved'||existing?.status==='cancelled')continue;
           const id=await growth.store.plan(o.id,work);planned++;
           if(!['outreach','checkin','onboarding','activation','trial','adoption','renewal','expansion','support','recovery'].includes(work.kind)||o.eligibility!=='permitted'||!growth.signingReady)continue;
+          // A check-in waits until its contact was seen on the business's site again in the last 90 days, the claim's rule: the contact
+          // finder looks again once one is due (private.growth_contact_candidates), so no draft is paid for that the claim would refuse.
+          if(work.kind==='checkin'&&!(Date.parse(o.verified_at??'')>now().getTime()-90*86400000))continue;
           if(existing?.message_id && existing.message_status!=='cancelled') {if(existing.message_status==='draft')await growth.store.propose(task.id,existing.message_id);continue;}
           // Cancelled for a lasting reason (the contact unsubscribed, the business replied, the business was already contacted) with
           // nothing changed since: a new draft would pay for a model call and get that same cancelled message back, every sweep. Only a

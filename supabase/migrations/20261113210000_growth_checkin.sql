@@ -24,6 +24,11 @@
 --   verified contact, no suppression, no customer or internal organization, the gap between messages, delivery checks and the
 --   daily limits.
 --
+-- - private.growth_contact_candidates is replaced with the same signature and grants: besides businesses with no contact, it now
+--   offers the contact finder a business whose check-in is due but whose finder contact (a public role address) was last seen on its
+--   site more than 80 days ago, at most once a week, so finding the same address again re-verifies it and the check-in can pass the
+--   claim's 90-day rule. The worker drafts no check-in until then.
+--
 -- No table, grant, setting or declared feature changes.
 set local lock_timeout = '10s';
 
@@ -155,6 +160,27 @@ begin
  return jsonb_build_object('send',true,'to',c.email,'subject',m.subject,'body',m.body,'purpose',m.purpose,'product',o.product,'id',m.id,'workId',m.work_id,'unsubscribeHash',m.unsubscribe_hash);
 end; $function$;
 
+-- The same as 20261105150000_growth_autonomy.sql, plus businesses whose check-in is due but whose finder contact was last seen on
+-- their own site more than 80 days ago: the claim sends only to a contact verified in the last 90 days, and a check-in is due at
+-- least 90 days after the last email, so the finder looks at the site again (at most once a week), and finding the same address
+-- re-verifies it (private.growth_record_contact). New businesses with no contact still come first.
+create or replace function private.growth_contact_candidates(p_limit integer) returns jsonb
+language plpgsql stable security definer set search_path='' as $$ begin
+ perform private.require_hub_app_server();
+ if p_limit is null or p_limit<1 or p_limit>20 then raise exception 'Invalid page' using errcode='22023'; end if;
+ return (select coalesce(jsonb_agg(jsonb_build_object('id',x.id,'domain',x.domain) order by x.reverify,x.discovered_at,x.id),'[]'::jsonb) from (
+  select g.id,g.domain,g.discovered_at,not y.missing as reverify from private.growth_organizations g
+  cross join lateral (select
+    (g.contact_searched_at is null or g.contact_searched_at<now()-interval '90 days')
+      and exists(select 1 from private.growth_opportunities o where o.organization_id=g.id and o.contact_id is null and o.stage in ('identified','researched','qualified')) as missing,
+    (g.contact_searched_at is null or g.contact_searched_at<now()-interval '7 days')
+      and exists(select 1 from private.growth_opportunities o join private.growth_contacts c on c.id=o.contact_id
+                 where o.organization_id=g.id and c.source_kind='role_address' and (c.verified_at is null or c.verified_at<now()-interval '80 days')
+                   and private.growth_checkin_due(o.id) is not null) as stale) y
+  where g.discovered_at is not null and not g.internal and g.tenant_id is null and (y.missing or y.stale)
+  order by not y.missing,g.discovered_at,g.id limit p_limit) x);
+end; $$;
+
 do $$
 declare r text;
 begin
@@ -163,6 +189,12 @@ begin
                    and prosrc like '%growth.workflow%' and prosrc like '%frequency_limited%' and prosrc like '%agent_lifecycle_emails%')
      or not has_function_privilege('hub_app_server', 'private.growth_claim_message(uuid,uuid)', 'execute') then
     raise exception 'The claim does not know check-ins' using errcode = '55000';
+  end if;
+  if not exists (select 1 from pg_proc where oid = 'private.growth_contact_candidates(integer)'::regprocedure and prosecdef
+                   and proconfig @> array['search_path=""'] and prosrc like '%require_hub_app_server%' and prosrc like '%growth_checkin_due%')
+     or not has_function_privilege('hub_app_server', 'private.growth_contact_candidates(integer)', 'execute')
+     or has_function_privilege('authenticated', 'private.growth_contact_candidates(integer)', 'execute') then
+    raise exception 'The contact finder does not re-verify contacts for check-ins' using errcode = '55000';
   end if;
   if not exists (select 1 from pg_proc where oid = 'private.growth_snapshot(integer)'::regprocedure and prosecdef
                    and prosrc like '%require_hub_app_server%' and prosrc like '%checkin_due%')

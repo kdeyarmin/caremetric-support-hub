@@ -384,3 +384,18 @@ it('links a product page with well-formed campaign tags in a growth email, and n
  expect(refused).not.toContain('evil.example"');
  expect(refused).not.toMatch(/href="[^"]*evil\.example/);
 });
+it('drafts a check-in as a marketing message only once its contact was seen on the business\'s site in the last 90 days',async()=>{
+ const due={...base,stage:'nurture',touches:1,version:4,contact_id:'contact',contact_version:7,eligibility:'permitted',checkin_due:'not_now',last_reply_at:'2026-08-01T12:00:00Z',
+  policy:{version:9,approved_claim:'Discuss staff training.',max_touches:3},evidence:[]};
+ const run=async verifiedAt=>{
+  const store={snapshot:vi.fn(async()=>({total:1,items:[{...due,verified_at:verifiedAt}]})),plan:vi.fn(async()=> 'work'),draft:vi.fn(async()=>({id:'message',status:'draft'})),propose:vi.fn()};
+  await growthHandlers({growth:{store,signingReady:true,hash:x=>x,unsubscribeToken:()=> 'token'}})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'});
+  return store;
+ };
+ const stale=await run(new Date(Date.now()-100*86400000).toISOString());
+ expect(stale.plan).toHaveBeenCalledWith('opp',expect.objectContaining({kind:'checkin'}));
+ expect(stale.draft).not.toHaveBeenCalled();
+ expect((await run(null)).draft).not.toHaveBeenCalled();
+ const fresh=await run(new Date(Date.now()-5*86400000).toISOString());
+ expect(fresh.draft).toHaveBeenCalledWith('opp','work',expect.objectContaining({purpose:'marketing',subject:'CareBase: checking back'}));
+});

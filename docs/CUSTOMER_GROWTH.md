@@ -138,7 +138,9 @@ A check-in may cite no source (it follows the conversation, not new research), g
 nurture, and otherwise meets every rule a marketing email does: the agent's trust for its class (to a role address it is cold email,
 needs the "Cold email" step and counts against "Most cold emails a day"), a permitted and verified contact, the gap between
 messages and the daily limits. Its product links carry the campaign `growth-<product>-checkin`, so a reply or trial it brings is
-told apart from the touches.
+told apart from the touches. The contact must still have been seen on the business's own site in the last 90 days, so when a check-in
+is due and the finder's address is older than that, the contact finder looks at the site again (at most once a week); finding the
+same address re-verifies it, and the check-in is drafted only after that. A person the owner added is re-verified by the owner.
 
 ## A separate sender for prospecting
 

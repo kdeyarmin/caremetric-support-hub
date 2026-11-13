@@ -1,5 +1,5 @@
 begin;
-select plan(12);
+select plan(13);
 
 select ok(not exists (select 1 from unnest(array['anon', 'authenticated', 'service_role', 'hub_app_server']) r
                       where has_function_privilege(r, 'private.growth_checkin_due(uuid)', 'execute')),
@@ -11,6 +11,10 @@ select ok(position('checkin_due' in pg_get_functiondef('private.growth_snapshot(
   and has_function_privilege('hub_app_server', 'private.growth_snapshot(integer)', 'execute')
   and not has_function_privilege('authenticated', 'private.growth_claim_message(uuid,uuid)', 'execute'),
   'The snapshot says when a check-in is due, and the grants are unchanged');
+select ok(position('growth_checkin_due' in pg_get_functiondef('private.growth_contact_candidates(integer)'::regprocedure)) > 0
+  and has_function_privilege('hub_app_server', 'private.growth_contact_candidates(integer)', 'execute')
+  and not has_function_privilege('authenticated', 'private.growth_contact_candidates(integer)', 'execute'),
+  'The contact finder looks again at a business whose check-in is due, so its contact can be re-verified');
 
 -- Fixtures: four prospects with one contact and one Intel opportunity each.
 insert into private.growth_organizations (id, name, domain) values
