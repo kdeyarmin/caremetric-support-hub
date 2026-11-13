@@ -90,7 +90,7 @@ Each needs a database migration or an owner decision, so none is in this change.
 
 | Priority | Finding | Effect |
 | --- | --- | --- |
-| P0 | `private.growth_inquiry` reads quoted text. The footer change above stops new emails from triggering it, but "not really interested" still reads as a positive reply, and a reply from another mailbox at the same business is not linked at all | Touches 2 and 3 keep going to a business that already answered |
+| P0 | `private.growth_inquiry` reads quoted text. The footer change above stops new emails from triggering it, but "not really interested" still reads as a positive reply, and a reply from another mailbox at the same business is not linked at all. **Fixed 2026-11-13** (`20261113150000_growth_reply_reading.sql`; see [How replies are read](CUSTOMER_GROWTH.md#how-replies-are-read)) | Touches 2 and 3 keep going to a business that already answered |
 | P0 | A prospect who starts a trial is not linked to its opportunity; billing creates a second organization | Cold follow-ups can reach someone already in a trial, and outreach can never be credited with a trial |
 | P1 | Inbound leads (county reports, newsletter sign-ups) are counted, never followed up; a trial sign-up gets an owner alert that says nothing was sent | The warmest contacts the company has get no email |
 | P1 | No follow-up after a reply or after touch 3; `nurture` is a dead end | "Not now" is never asked again |
