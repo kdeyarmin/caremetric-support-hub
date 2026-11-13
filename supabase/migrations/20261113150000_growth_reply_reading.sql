@@ -14,12 +14,13 @@
 -- So:
 --
 -- - a new private.growth_reply_reading(body) returns {kind, optOut, sales} from the sender's own words: lines quoted with '>' are
---   left out, and so are the "On <date>, <sender> wrote:" line, a growth email's opt-out line (either wording) and links and
+--   left out, and so are the "On <date>, <sender> wrote:" line, a growth email's opt-out line (either wording, with its link) and links and
 --   addresses. Reading stops where a mail program puts the original under a header without marking it (Outlook's "From: / Sent:",
 --   "-----Original Message-----", a forward) and at a "wrote:" line whose quote is not marked (an HTML-only email reduced to
 --   text). Answers written between '>' lines are kept. The kinds are those growth_inquiry already used, read in the same order:
 --   a cancellation, then a refusal ("not really interested", "no thank you", "not a good fit", "we'll pass"), then "not now"
---   ("not right now", "next quarter", "after the holidays", "circle back in"), then interest. A request to stop adds "opt out",
+--   ("not right now", "next quarter", "after the holidays", "circle back in"), then interest. A refusal negates interest itself
+--   ("we don't currently have a system and are interested" is interest). A request to stop adds "opt out",
 --   "take me off", "stop sending" and "do not email" to the words read before, and is not read from "I don't want to
 --   unsubscribe". It is pure and no role may execute it; growth_inquiry and the inbox trigger, which run as its owner, call it;
 -- - private.growth_inquiry is replaced with the same signature (grants are kept) and the same body, except that it uses that
@@ -27,7 +28,8 @@
 --   message accepted or delivered to one of its contacts), becomes a contact of that business for review (eligibility 'review':
 --   never written to until the owner or the contact finder permits it). The reply then counts as the business's reply, as a
 --   contact's reply always has: queued marketing to anyone there already stops at the claim, which refuses a business that has
---   replied. Personal mail domains never link a sender to a business, and the list of them is longer;
+--   replied. A sales inquiry from that colleague still opens an opportunity for the inbox's product, as it did before. Personal
+--   mail domains never link a sender to a business, and the list of them is longer;
 -- - private.growth_inbound_trigger is replaced with the same body, except that its fallback, when capture fails, honours a request
 --   to stop by the same reading.
 --
@@ -71,8 +73,10 @@ begin
       exit when v_i <= v_n and v_lines[v_i] !~ '^\s*>';
       continue;
     end if;
-    -- The opt-out line of a growth email, old wording or new, wherever a mail program left it unmarked.
-    if v_line !~* '^\W*(unsubscribe from|opt out of) these emails\s*($|[:<\[(]|https?://)' then
+    -- The opt-out line of a growth email, old wording or new, with its link, wherever a mail program left it unmarked. Without
+    -- the link the same words are the sender's own: a reply of just "Unsubscribe from these emails" is a request to stop.
+    if not (v_line ~* '^\W*(unsubscribe from|opt out of) these emails\s*:?\s*[<\[(]?\s*https?://'
+            or (v_line ~* '^\W*(unsubscribe from|opt out of) these emails\s*:?\s*$' and v_next ~* '^\s*[<\[(]?\s*https?://')) then
       v_words := v_words || v_line || E'\n';
     end if;
     v_i := v_i + 1;
@@ -87,7 +91,7 @@ begin
       then case when v_words ~ '\m(not|never|no need to|\w+n''t) (\w+ ){0,2}cancel\M' then null else 'cancel_requested' end
   end;
   v_kind := coalesce(v_kind, case
-    when v_words ~ '\m(not|no longer|never|nobody|no one|\w+n''t)\M((?!\m(but|though|although|however|yet)\M)[^.!?;,]){0,80}\minterested\M'
+    when v_words ~ '\m(not|no longer|never|nobody|no one|\w+n''t)(?: (?!(?:and|but|or|so|because|though|although|however|yet|while|if)\M)[\w'']+){0,5} interested\M'
       or v_words ~ '\m(no,? thanks|no,? thank you|not (a|the right|a good|the best) fit|not for us|not in the market|(we|i)(''ll| will) pass)\M'
       then 'negative_reply'
     when v_words ~ '\m(not (right )?now|not at (this|the) (time|moment|point)|not the right time|maybe later|later this year|next (quarter|year)|in the new year|after the (holidays|new year|first of the year)|(contact|reach out to|circle back with|check back with|follow up with) (me|us) (later|in|next|after)|(circle|check) back (later|in|next|after))\M'
@@ -105,7 +109,7 @@ revoke all on function private.growth_reply_reading(text) from public, anon, aut
 
 create or replace function private.growth_inquiry(p_id uuid) returns integer
 language plpgsql security definer set search_path='' as $$
-declare c private.communications%rowtype; m private.communication_messages%rowtype; v_product text; v_org uuid; v_contact uuid; v_opp uuid; v_message uuid; v_body text; v_reading jsonb; v_reply text; v_domain text; v_n integer:=0;
+declare c private.communications%rowtype; m private.communication_messages%rowtype; v_product text; v_org uuid; v_contact uuid; v_opp uuid; v_message uuid; v_body text; v_reading jsonb; v_reply text; v_domain text; v_linked boolean:=false; v_n integer:=0;
  v_personal constant text[]:=array['gmail.com','googlemail.com','outlook.com','hotmail.com','live.com','msn.com','yahoo.com','ymail.com','icloud.com','me.com','mac.com','aol.com','comcast.net','verizon.net','att.net','sbcglobal.net','protonmail.com','proton.me']; begin
  perform private.require_hub_app_server(); perform pg_advisory_xact_lock(hashtextextended('growth.workflow',0));
  select * into m from private.communication_messages where id=p_id and direction='inbound';
@@ -127,9 +131,12 @@ declare c private.communications%rowtype; m private.communication_messages%rowty
   if v_org is not null then
    insert into private.growth_contacts(organization_id,email,name) values(v_org,lower(btrim(c.contact_email)),left(coalesce(c.contact_name,''),200)) on conflict(email) do nothing;
    select id,organization_id into v_contact,v_org from private.growth_contacts where email=lower(btrim(c.contact_email));
+   v_linked:=v_org is not null;
   end if;
  end if;
- if v_org is null and v_product in ('carebase','caremetric-intel') and (c.inquiry_type='sales' or (v_reading->>'sales')::boolean) and v_domain<>all(v_personal) then
+ -- A sales inquiry from a new sender opens an opportunity for the inbox's product, also when the sender was just linked to a
+ -- business that growth email reached for the other product.
+ if (v_org is null or v_linked) and v_product in ('carebase','caremetric-intel') and (c.inquiry_type='sales' or (v_reading->>'sales')::boolean) and v_domain<>all(v_personal) then
   insert into private.growth_organizations(name,domain) values(coalesce(nullif(c.organization,''),'Inbound organization'),v_domain) on conflict(domain) do nothing;
   select id into v_org from private.growth_organizations where domain=v_domain;
   insert into private.growth_contacts(organization_id,email,name) values(v_org,lower(btrim(c.contact_email)),left(coalesce(c.contact_name,''),200)) on conflict(email) do nothing;

@@ -1,5 +1,5 @@
 begin;
-select plan(30);
+select plan(33);
 
 -- The reading is pure, closed to every role, and both reply capture and the inbox fallback use it.
 select ok((select provolatile = 'i' and not prosecdef from pg_proc where oid = 'private.growth_reply_reading(text)'::regprocedure),
@@ -36,6 +36,8 @@ select is((private.growth_reply_reading('Contact me at jane@agency.example or ht
 -- Refusals, "not now" and interest.
 select is(private.growth_reply_reading('Not really interested, thanks.')->>'kind', 'negative_reply', '"Not really interested" is a refusal');
 select is(private.growth_reply_reading('No longer interested.')->>'kind', 'negative_reply', '"No longer interested" is a refusal');
+select is(private.growth_reply_reading('We don''t currently have a system and are interested in a demo.')->>'kind', 'positive_reply',
+  'A negation of something else is not a refusal of interest');
 select is(private.growth_reply_reading(E'I don’t think we’d be interested.')->>'kind', 'negative_reply', 'A refusal with typographic apostrophes');
 select is(private.growth_reply_reading('No, thank you.')->>'kind', 'negative_reply', '"No, thank you" is a refusal');
 select is(private.growth_reply_reading('Not a good fit for us right now.')->>'kind', 'negative_reply', '"Not a good fit" is a refusal');
@@ -53,6 +55,10 @@ select is(private.growth_reply_reading('I don''t want to cancel my subscription,
 -- Requests to stop.
 select is((private.growth_reply_reading('Please opt me out.')->>'optOut')::boolean, true, '"Opt me out" is a request to stop');
 select is((private.growth_reply_reading('Take me off your list')->>'optOut')::boolean, true, '"Take me off" is a request to stop');
+select is((private.growth_reply_reading('Unsubscribe from these emails')->>'optOut')::boolean, true,
+  'The footer''s words written by the sender, without its link, are a request to stop');
+select is((private.growth_reply_reading('Opt out of these emails: I never signed up for this.')->>'optOut')::boolean, true,
+  'The footer''s words followed by the sender''s own are a request to stop');
 select is((private.growth_reply_reading('No, thank you. Please remove me from your list.')->>'optOut')::boolean, true, '"Remove me" is still a request to stop');
 select is((private.growth_reply_reading(E'I don’t want to unsubscribe, just send less often.')->>'optOut')::boolean, false,
   '"I don''t want to unsubscribe" is not a request to stop');

@@ -101,18 +101,21 @@ owner before enabling it. `npm run test:growth-autonomy:db` runs the integration
 An email that reaches the support inbox from a growth contact (`private.growth_inquiry`, run by the inbox's own trigger) is read
 from the sender's own words only (`private.growth_reply_reading`, 2026-11-13):
 
-- **Left out:** lines quoted with ">", the "On <date>, <sender> wrote:" line, a growth email's opt-out line (either wording), and
-  links and addresses. Reading stops where a mail program puts the original under a header without marking it (Outlook's
+- **Left out:** lines quoted with ">", the "On <date>, <sender> wrote:" line, a growth email's opt-out line with its link (either
+  wording; the same words without the link are the sender's own and a request to stop), and links
+  and addresses. Reading stops where a mail program puts the original under a header without marking it (Outlook's
   "From: / Sent:", "-----Original Message-----", a forward) and at a "wrote:" line whose quote is not marked (an HTML-only email).
   Answers written between quoted lines are read.
 - **Kinds,** in this order: a cancellation ("cancel my account", not "cancel tomorrow's call" or "I don't want to cancel"), a
   refusal ("not really interested", "no longer interested", "no thank you", "not a good fit", "we'll pass"), not now ("not right
   now", "next quarter", "after the holidays", "circle back in"), interest ("interested", a demo, pricing, "send me more"), else a
-  plain reply. A refusal or "not now" moves the business to nurture; any reply stops the cold sequence to everyone there.
+  plain reply. A refusal negates the interest itself: "we don't currently have a system and are interested" is interest. A
+  refusal or "not now" moves the business to nurture; any reply stops the cold sequence to everyone there.
 - **A request to stop** ("unsubscribe", "opt me out", "take me off", "stop sending", "do not email", "remove me") opts the sender
   out and adds the address to the suppression list; "I don't want to unsubscribe" is not one.
 - **A colleague** writing from the domain of a business growth email has reached (a message accepted or delivered to one of its
-  contacts) joins that business as a contact for review, and the reply counts as the business's reply. Personal mail domains
+  contacts) joins that business as a contact for review, and the reply counts as the business's reply; a sales inquiry from them
+  still opens an opportunity for the inbox's product. Personal mail domains
   (Gmail, Outlook, Yahoo, iCloud, Comcast and the like) never link a sender to a business.
 
 When capture fails, the inbox keeps the email and its fallback still honours a request to stop by the same reading.
