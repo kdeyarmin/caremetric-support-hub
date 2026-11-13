@@ -113,7 +113,7 @@ for(const warning of growthIdentity().warnings)console.warn(warning);
 // Growth email has its own switch (Settings → Email → Growth email service, SendGrid by default): Amazon SES does not allow unsolicited
 // email, so prospecting stays off SES unless the owner chooses otherwise.
 const growthOptions={from:()=>growthIdentity().from,fromName:()=>growthIdentity().fromName,replyTo:()=>growthIdentity().replyTo};
-const growthMail=chosenMail(setting('email.growth_provider'),{sendgrid:sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,...growthOptions}),ses:sesBulkMail({...sesAccess,...growthOptions})});
+const growthMail=chosenMail(setting('email.growth_provider'),{sendgrid:sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,...growthOptions}),ses:sesBulkMail({...sesAccess,...growthOptions})},{intoSes:false});
 // The Account Manager's customer emails: from the support address, replies to it, one-click unsubscribe headers, and the postal address in every footer.
 const customerMail=bulkSender({from:supportFrom,replyTo:supportReplyTo,category:'hub-lifecycle-email'});
 // The AI team: inert until "Run the AI team" is switched on in Settings, and every agent starts paused until the owner resumes it.

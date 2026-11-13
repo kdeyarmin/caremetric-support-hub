@@ -1,7 +1,7 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { chosenMail, mimeMessage, sesBulkMail, sesGrowthEvents, sesMail, signV4, snsReceiver, snsStringToSign } from './ses.mjs';
-import { growthService } from './growth/service.mjs';
+import { growthService, growthSoftBounceFeature } from './growth/service.mjs';
 
 const at = new Date('2026-11-12T17:00:00Z');
 const access = { accessKeyId: 'AKIAEXAMPLEEXAMPLE12', secretAccessKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY', now: () => at };
@@ -35,8 +35,8 @@ describe('the MIME message', () => {
       subject: 'Your café question\r\nBcc: attacker@example.org', text: 'Hello — thanks', html: '<p>Hello — thanks</p>', date: at, boundary: 'b1' });
     expect(raw).toContain('From: "CareMetric Support" <support@caremetric.ai>\r\nTo: <pat@example.org>\r\nReply-To: <support@caremetric.ai>\r\n');
     expect(raw).not.toMatch(/^Bcc:/m);
-    const subject = /^Subject: =\?UTF-8\?B\?([^?]+)\?=$/m.exec(raw);
-    expect(Buffer.from(subject[1], 'base64').toString('utf8')).toBe('Your café question Bcc: attacker@example.org');
+    const subject = raw.match(/Subject: ([\s\S]*?)\r\nDate:/)[1];
+    expect([...subject.matchAll(/=\?UTF-8\?B\?([^?]+)\?=/g)].map(word => Buffer.from(word[1], 'base64').toString('utf8')).join('')).toBe('Your café question Bcc: attacker@example.org');
     expect(raw).toContain('Content-Type: multipart/alternative; boundary="b1"');
     expect(partText(raw, 'text/plain')).toBe('Hello — thanks');
     expect(partText(raw, 'text/html')).toBe('<p>Hello — thanks</p>');
@@ -63,6 +63,7 @@ describe('sending through SES', () => {
     expect(request.headers.host).toBeUndefined();
     expect(body.Destination).toEqual({ ToAddresses: ['pat@example.org'] });
     expect(body.ConfigurationSetName).toBe('caremetric-hub');
+    expect(body.ConfigurationOverrides).toEqual({ Tracking: { ClickTrackingEnabled: 'DISABLED', OpenTrackingEnabled: 'DISABLED' } });
     expect(body.EmailTags).toEqual([{ Name: 'category', Value: 'hub-support' }]);
     expect(raw).toContain('Reply-To: <support@caremetric.ai>');
     expect(partText(raw, 'text/html')).toBe('<p>Answer</p>');
@@ -73,6 +74,7 @@ describe('sending through SES', () => {
     await expect(send(async () => ({ status: 400, json: async () => ({}) }))).resolves.toEqual({ delivery: 'failed', id: null });
     await expect(send(async () => ({ status: 503, json: async () => ({}) }))).resolves.toEqual({ delivery: 'unknown', id: null });
     await expect(send(async () => { throw new Error('timeout'); })).resolves.toEqual({ delivery: 'unknown', id: null });
+    await expect(send(async () => ok(null))).resolves.toEqual({ delivery: 'sent', id: null });
     await expect(send(async () => ok({ MessageId: 'bad id with spaces' }))).resolves.toEqual({ delivery: 'sent', id: null });
   });
 
@@ -91,6 +93,7 @@ describe('sending through SES', () => {
     const { body, raw } = sentRequest(fetchImpl);
     expect(raw).toContain('From: "Kevin at CareMetric" <hello@go.caremetric.ai>');
     expect(raw).toContain('List-Unsubscribe: <https://help.caremetric.ai/api/growth/preferences/abc>\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click');
+    expect(body.ConfigurationOverrides).toEqual({ Tracking: { ClickTrackingEnabled: 'DISABLED', OpenTrackingEnabled: 'DISABLED' } });
     expect(body.EmailTags).toEqual([{ Name: 'category', Value: 'hub-bulk-email' }, { Name: 'growth_message_id', Value: '11111111-1111-4111-8111-111111111111' }]);
     expect(body.ConfigurationSetName).toBeUndefined();
   });
@@ -169,10 +172,16 @@ describe('Amazon SNS notifications', () => {
     const of = (value, id = 'n1') => sesGrowthEvents({ MessageId: id, Timestamp: at.toISOString(), Message: JSON.stringify(value) });
     const tags = { growth_message_id: ['11111111-1111-4111-8111-111111111111'] };
     expect(of(event)).toEqual([{ id: 'ses:n1', messageId: '11111111-1111-4111-8111-111111111111', kind: 'delivered', at: at.toISOString() }]);
-    expect(of({ eventType: 'Bounce', mail: { tags }, bounce: { bounceType: 'Permanent', timestamp: at.toISOString() } })[0].kind).toBe('bounced');
-    expect(of({ eventType: 'Bounce', mail: { tags }, bounce: { bounceType: 'Transient' } })).toEqual([]);
+    expect(of({ eventType: 'Bounce', mail: { tags }, bounce: { bounceType: 'Permanent', timestamp: at.toISOString() } })[0]).not.toHaveProperty('suppress');
+    expect(of({ eventType: 'Bounce', mail: { tags }, bounce: { bounceType: 'Permanent' } })[0].kind).toBe('bounced');
+    expect(of({ eventType: 'Bounce', mail: { tags }, bounce: { bounceType: 'Transient' } })[0]).toMatchObject({ kind: 'bounced', suppress: false });
+    // SES could not tell why it bounced: a failure, never an opt-out.
+    expect(of({ eventType: 'Bounce', mail: { tags }, bounce: { bounceType: 'Undetermined' } })[0]).toMatchObject({ kind: 'bounced', suppress: false });
+    expect(of({ eventType: 'DeliveryDelay', mail: { tags } })).toEqual([]);
     expect(of({ eventType: 'Complaint', mail: { tags }, complaint: {} })[0].kind).toBe('complaint');
-    expect(of({ eventType: 'Reject', mail: { tags } })[0].kind).toBe('bounced');
+    // A reject is SES finding a virus in our own message: the recipient did nothing.
+    expect(of({ eventType: 'Reject', mail: { tags } })[0]).toMatchObject({ kind: 'bounced', suppress: false });
+    expect(of({ eventType: 'Complaint', mail: { tags }, complaint: {} })[0]).not.toHaveProperty('suppress');
     expect(of({ eventType: 'Delivery', mail: { tags: {} } })).toEqual([]);
     expect(sesGrowthEvents({ MessageId: 'n2', Message: 'not json' })).toEqual([]);
   });
@@ -182,9 +191,73 @@ describe('Amazon SNS notifications', () => {
     const { receive } = receiver();
     const service = growthService({ store, features: new Set(['platform.agents.customer-growth.v1']), sesEvents: receive, sesEventsReady: () => true });
     await expect(service.sesDelivery(body(notification()))).resolves.toEqual({ accepted: 1 });
-    expect(store.delivery).toHaveBeenCalledWith('ses:sns-1', '11111111-1111-4111-8111-111111111111', 'delivered', at.toISOString());
+    expect(store.delivery).toHaveBeenCalledWith('ses:sns-1', '11111111-1111-4111-8111-111111111111', 'delivered', at.toISOString(), true);
     await expect(service.sesDelivery(body(notification({ TopicArn: 'arn:aws:sns:us-east-2:111111111111:other' })))).rejects.toMatchObject({ status: 403 });
     expect(service.readiness().deliveryFeedback).toBe(true);
     await expect(growthService({ store, features: new Set(['platform.agents.customer-growth.v1']) }).sesDelivery(body(notification()))).rejects.toMatchObject({ status: 503 });
+  });
+});
+
+
+describe('long MIME subjects', () => {
+  for (const subject of ['é'.repeat(400), '😀'.repeat(200), '界'.repeat(250), 'x'.repeat(1200), 'é😀界'.repeat(150)]) {
+    it(`round-trips ${subject.length} characters without oversized words or lines`, () => {
+      const raw = mimeMessage({ from: 'a@example.test', to: 'b@example.test', subject, text: 'text', html: '<p>html</p>' });
+      const header = raw.match(/Subject: ([\s\S]*?)\r\nDate:/)[1];
+      const words = [...header.matchAll(/=\?UTF-8\?B\?([^?]+)\?=/g)];
+      expect(words.length).toBeGreaterThan(1);
+      expect(words.every(word => word[0].length <= 75)).toBe(true);
+      expect(words.map(word => Buffer.from(word[1], 'base64').toString('utf8')).join('')).toBe(subject);
+      expect(raw.split('\r\n').every(line => Buffer.byteLength(line) <= 998)).toBe(true);
+      expect(header.split('\r\n').slice(1).every(line => line.startsWith(' '))).toBe(true);
+    });
+  }
+
+  it('keeps plain ASCII readable: folded at spaces, never base64', () => {
+    for (const subject of ['Re: Question about the CareBase training report for our second location', 'one  two '.repeat(150).trim()]) {
+      const raw = mimeMessage({ from: 'a@example.test', to: 'b@example.test', subject, text: 'text', html: '<p>html</p>' });
+      const header = raw.match(/Subject: ([\s\S]*?)\r\nDate:/)[1];
+      expect(header).not.toContain('=?UTF-8?');
+      expect(header.replace(/\r\n/g, '')).toBe(subject);
+      expect(`Subject: ${header}`.split('\r\n').every(line => line.length <= 78 && line.trim() !== '')).toBe(true);
+    }
+    // A short subject is left exactly as it is.
+    expect(mimeMessage({ from: 'a@example.test', to: 'b@example.test', subject: 'Your referral sources', text: 't' })).toContain('\r\nSubject: Your referral sources\r\n');
+  });
+});
+
+
+describe('safe provider fallback', () => {
+  it('never moves growth email from a SendGrid choice onto SES', async () => {
+    const ses = { configured: true, send: vi.fn() };
+    const mail = chosenMail(() => 'sendgrid', { sendgrid: { configured: false, send: vi.fn() }, ses }, { intoSes: false });
+    expect(mail.configured).toBe(false);
+    await expect(mail.send('a@example.test', 's', 't')).resolves.toEqual({ delivery: 'failed', id: null });
+    expect(ses.send).not.toHaveBeenCalled();
+  });
+  it('keeps support and customer email going through SES while SendGrid is not set up', async () => {
+    const ses = { configured: true, send: vi.fn(async () => ({ delivery: 'sent', id: null })) };
+    const mail = chosenMail(() => 'sendgrid', { sendgrid: { configured: false, send: vi.fn() }, ses });
+    expect(mail.provider).toBe('ses');
+    await expect(mail.send('a@example.test', 's', 't')).resolves.toEqual({ delivery: 'sent', id: null });
+  });
+  it.each(['failed', 'unknown'])('never retries a %s SES result through SendGrid', async delivery => {
+    const sendgrid = { configured: true, send: vi.fn() };
+    const ses = { configured: true, send: vi.fn(async () => ({ delivery, id: null })) };
+    await expect(chosenMail(() => 'ses', { sendgrid, ses }).send('a@example.test', 's', 't')).resolves.toEqual({ delivery, id: null });
+    expect(ses.send).toHaveBeenCalledTimes(1);
+    expect(sendgrid.send).not.toHaveBeenCalled();
+  });
+  it('records a terminal soft bounce without opting the contact out', async () => {
+    const store = { delivery: vi.fn(async () => true) };
+    const notification = { MessageId: 'soft-1', Timestamp: at.toISOString(), Message: JSON.stringify({ eventType: 'Bounce', mail: { tags: { growth_message_id: ['11111111-1111-4111-8111-111111111111'] } }, bounce: { bounceType: 'Transient', bounceSubType: 'MailboxFull' } }) };
+    const service = growthService({ store, features: new Set(['platform.agents.customer-growth.v1', growthSoftBounceFeature]), sesEvents: async () => ({ notification }), sesEventsReady: () => true });
+    await expect(service.sesDelivery(Buffer.from('{}'))).resolves.toEqual({ accepted: 1 });
+    expect(store.delivery).toHaveBeenCalledWith('ses:soft-1', '11111111-1111-4111-8111-111111111111', 'bounced', at.toISOString(), false);
+    // Before the soft-bounce migration declares its feature, such an event is not recorded, as before, never sent to a missing function.
+    store.delivery.mockClear();
+    const before = growthService({ store, features: new Set(['platform.agents.customer-growth.v1']), sesEvents: async () => ({ notification }), sesEventsReady: () => true });
+    await expect(before.sesDelivery(Buffer.from('{}'))).resolves.toEqual({ accepted: 0 });
+    expect(store.delivery).not.toHaveBeenCalled();
   });
 });
