@@ -118,6 +118,8 @@ const team=agentTeam({pool,growth,growthMail,postalAddress,sms:textSender,email:
   leadSecrets:leadSecrets(process.env),
   // Website leads followed up by email (Settings → Customer growth → Follow up website leads by email).
   inboundFollowup:setting('growth.inbound_followup'),
+  // How many agent tasks may run side by side (Settings → AI team → Tasks at once).
+  concurrentTasks:setting('agents.concurrent_tasks'),
   // The social media tokens from Railway, with the page ids, ad accounts, images and ad limits from Settings → Social media.
   social:()=>socialConfig(connections.resolvedEnv(),connections.getSetting),
   // The Creative Director: Settings → Creative, with HeyGen's key from Railway.

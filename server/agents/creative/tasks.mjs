@@ -19,12 +19,13 @@
  *
  * Only products the team markets (marketing.mjs) get creative. Nothing another person wrote reaches the model or a stored record.
  */
-import { weekStart, easternDate } from '../accounts/week.mjs';
+import { weekStart, easternDate, easternMidnight } from '../accounts/week.mjs';
 import { marketedNow, markets } from '../marketing.mjs';
 import { delivered } from '../notify.mjs';
 import { dueMoment, permanent, plural, recordRun } from '../tasks/shared.mjs';
 import { catalogBlocks, focusFor } from '../content/features.mjs';
-import { badgeText, checkCopy, checkPlatform, checkText, checkVideo, checkVisual, verdictOf } from './compliance.mjs';
+import { badgeText, checkCopy, checkData, checkPlatform, checkText, checkVideo, checkVisual, verdictOf, withoutFigure } from './compliance.mjs';
+import { countyBrief, countySnapshot, withFacts } from './data.mjs';
 import {
   audienceFor, namedSegment, segmentFor,
   briefUserMessage, chooseVariants, conceptPromptVersion, conceptSchema, conceptSystem, landingFor, normalizeVariant, planPlacements, variantsPromptVersion,
@@ -48,6 +49,7 @@ const goals = {
   tip: 'Earn attention with a practical tip and send people to the product page', capability: 'Show one capability and drive free-trial starts',
   engagement: 'Build familiarity with the product among the people it is for', offer: 'Drive paid activations with the Founders Sale',
   resource: 'Send people to a useful resource page',
+  data: 'Share one piece of public Medicare data news and send people to the free county report',
 };
 const socialPlatform = { facebook: 'meta', instagram: 'meta', linkedin: 'linkedin' };
 // A used-up budget waits for the next Eastern day, which is when the budget starts again.
@@ -64,7 +66,9 @@ const aborted = () => Object.assign(new Error('The agent task is no longer runni
  * @param {object} [options.meta] @param {object} [options.linkedin] the Social Media Manager's clients, read for ad results
  */
 export function creativeHandlers({ store, notifier, model = null, meta = null, linkedin = null, heygen = null, settings = {}, publicOrigin = null, marketed = null,
-  renderBudgetMs = 150_000, log = line => console.warn(line) }) {
+  feed = null, renderBudgetMs = 150_000, log = line => console.warn(line) }) {
+  // County snapshots a week (Settings → Creative), from Intel's marketing feed (`feed`, growth/intel-feed.mjs); 0 or no feed, none.
+  const snapshotsNow = () => (Number.isInteger(settings.countySnapshotsPerWeek) && settings.countySnapshotsPerWeek >= 0 ? Math.min(settings.countySnapshotsPerWeek, 7) : 0);
   // Read on each run: the cap and the video provider are Hub settings (Settings → Creative) that change without a restart.
   const capNow = () => (Number.isInteger(settings.dailyRenderCap) && settings.dailyRenderCap >= 0 ? settings.dailyRenderCap : 40);
   const offeredNow = async () => { const list = await marketedNow(marketed); return creativeProducts.filter(product => markets(list, product)); };
@@ -112,7 +116,8 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     const offered = await offeredNow();
     if (!offered.length) return { result: { skipped: 'no_marketed_product' } };
     const week = weekStart(dueMoment(task) ?? now());
-    const inputs = (await store.creativePlanInputs(7)).filter(item => offered.includes(item.product));
+    // A story post reuses an approved story image: it is no plan for new creative.
+    const inputs = (await store.creativePlanInputs(7)).filter(item => offered.includes(item.product) && item.pillar !== 'story');
     const groups = new Map();
     for (const item of inputs) {
       const key = item.source === 'social.plan' ? `social:${item.product}:${item.pillar ?? 'tip'}:${week}` : `growth:${item.ref}`;
@@ -150,8 +155,34 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
         await store.enqueue(task.agentKey, 'creative.request', `creative:brief:${saved.id}`, { payload: { briefId: saved.id }, priority: 5, sourceKind: 'agent', sourceRef: 'creative.plan' });
       }
     }
-    await recordRun({ store, log }, task, { promptVersion: 'creative-plan.1', summary: `Read ${plural(inputs.length, 'plan item')} and opened ${plural(created, 'creative brief')}.` });
-    return { result: { week, inputs: inputs.length, briefs: created } };
+    const snapshots = offered.includes('caremetric-intel') ? await countySnapshots(task, week) : 0;
+    await recordRun({ store, log }, task, { promptVersion: 'creative-plan.1', summary: `Read ${plural(inputs.length, 'plan item')} and opened ${plural(created, 'creative brief')}${snapshots ? ` and ${plural(snapshots, 'county snapshot')}` : ''}.` });
+    return { result: { week, inputs: inputs.length, briefs: created, ...(snapshots ? { snapshots } : {}) } };
+  }
+
+  /**
+   * County snapshots (data.mjs): up to the week's number, each one public figure for a county where the roster's prospects are, the
+   * figure in turn by week. A feed that cannot answer leaves the week without them; the next day's plan tries again.
+   */
+  async function countySnapshots(task, week) {
+    const perWeek = snapshotsNow();
+    if (!perWeek || !feed?.configured || typeof feed.countyFigures !== 'function' || typeof store.creativeDataCounties !== 'function') return 0;
+    const counties = await store.creativeDataCounties(perWeek, easternMidnight(week).toISOString());
+    if (!Array.isArray(counties) || !counties.length) return 0;
+    let answer;
+    try { answer = await feed.countyFigures({ countyFips: counties.map(county => county.countyFips) }); }
+    catch (error) { log(JSON.stringify({ event: 'hub_creative_county_unread', code: /^[a-z][a-z_]{0,59}$/.test(error?.code ?? '') ? error.code : 'feed_error' })); return 0; }
+    const turn = Math.floor(Date.parse(week) / (7 * day));
+    let opened = 0;
+    for (const [index, county] of (answer?.counties ?? []).entries()) {
+      const snapshot = countySnapshot(county, turn + index);
+      if (!snapshot) continue;
+      const saved = await store.creativeBriefCreate(countyBrief(snapshot, week));
+      if (!saved?.created) continue;
+      opened += 1;
+      await store.enqueue(task.agentKey, 'creative.request', `creative:brief:${saved.id}`, { payload: { briefId: saved.id }, priority: 5, sourceKind: 'agent', sourceRef: 'creative.plan' });
+    }
+    return opened;
   }
 
   // ---- Request: one brief becomes checked drafts -------------------------------------------------------------------------------------
@@ -185,18 +216,23 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     if (concept.outcome === 'budget_exhausted') { await store.creativeBriefFinish(briefId, 'open', null); return { status: 'queued', retryAt: nextBudgetDay(task, moment), result: { deferred: 'budget', briefId } }; }
     if (concept.outcome !== 'completed') { await store.creativeBriefFinish(briefId, 'open', null); return { result: { skipped: concept.code ?? concept.outcome, briefId } }; }
     if (signal?.aborted) throw aborted();
-    const hero = { ...normalizeVariant(concept.output.hero, { screenshots, offer }), concept: String(concept.output.concept.bigIdea ?? '').slice(0, 500) };
+    // A county snapshot is drawn as its figure, whatever layout the model chose (data.mjs).
+    const facts = brief.facts?.stat ? brief.facts : null;
+    const hero = withFacts({ ...normalizeVariant(concept.output.hero, { screenshots, offer }), concept: String(concept.output.concept.bigIdea ?? '').slice(0, 500) }, facts);
     const more = await runModel(task, { promptVersion: variantsPromptVersion, tier: 'draft', system: [{ text: variantsSystem, cache: true }, ...catalogBlocks([brief.product])], schema: variantsSchema, maxTokens: 5000, effort: effort(task),
       user: JSON.stringify({ ...JSON.parse(user), concept: concept.output.concept, hero: concept.output.hero, variantsWanted: 4 }),
       describe: output => `Wrote ${plural(output.variants.length, 'variant')} of the concept.` }, signal);
     if (more.outcome === 'budget_exhausted') { await store.creativeBriefFinish(briefId, 'open', null); return { status: 'queued', retryAt: nextBudgetDay(task, moment), result: { deferred: 'budget', briefId } }; }
     if (signal?.aborted) throw aborted();
-    const others = more.outcome === 'completed' ? (more.output.variants ?? []).map(raw => ({ ...normalizeVariant(raw, { screenshots, offer }), concept: hero.concept })) : [];
+    const others = more.outcome === 'completed' ? (more.output.variants ?? []).map(raw => withFacts({ ...normalizeVariant(raw, { screenshots, offer }), concept: hero.concept }, facts)) : [];
     const chosen = chooseVariants(hero, others);
     const provider = brief.formats.includes('video') && useHeygen(kit) ? 'heygen' : 'internal';
     const rows = planPlacements({ brief, variants: chosen, landingBase: landingFor(brief.product, concept.output.concept.landingPageId), provider }).map(row => {
-      const copy = { headline: row.headline, primaryText: row.primaryText, description: row.description, cta: row.cta, altText: row.altText, overlay: row.overlay };
-      return { ...row, compliance: verdictOf([...checkCopy({ product: brief.product, platform: row.platform, copy, offerCode: brief.offerCode, brandKit: kit }), ...checkText(row.platform, copy)]) };
+      const copy = { layout: row.layout, headline: row.headline, primaryText: row.primaryText, description: row.description, cta: row.cta, altText: row.altText, overlay: row.overlay };
+      // A snapshot's figure is the data's, checked against it; the copy rules read the words around it.
+      const findings = facts ? [...checkCopy({ product: brief.product, platform: row.platform, copy: withoutFigure(copy), offerCode: brief.offerCode, brandKit: kit }), ...checkData({ copy, facts })]
+        : checkCopy({ product: brief.product, platform: row.platform, copy, offerCode: brief.offerCode, brandKit: kit });
+      return { ...row, compliance: verdictOf([...findings, ...checkText(row.platform, copy)]) };
     });
     const saved = rows.length ? await store.creativeDraftsSave(briefId, task.id, rows) : [];
     const blocked = rows.filter(row => row.compliance.verdict === 'block').length;

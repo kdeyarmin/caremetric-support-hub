@@ -61,7 +61,7 @@ describe('the weekly social plan', () => {
     const h = harness({ model });
     const outcome = await h.handlers['social.plan'](task('social.plan'), { now });
     const request = model.run.mock.calls[0][1];
-    expect(request.promptVersion).toBe('social-plan.5');
+    expect(request.promptVersion).toBe('social-plan.6');
     // Each marketed product's published catalog follows the prompt (content/features.mjs).
     expect(request.system.slice(1)).toEqual(catalogBlocks(JSON.parse(request.user).products));
     expect(request.system.length).toBeGreaterThan(1);
@@ -363,7 +363,7 @@ describe('registration', () => {
     const config = socialConfig({ HUB_META_ACCESS_TOKEN: 'EAAG-system-user-token-0123456789', HUB_META_PAGE_ID: '1111', HUB_SOCIAL_IMAGE_URLS: 'https://cdn.example.com/a.jpg, http://insecure.example.com/b.jpg,nope',
       HUB_SOCIAL_AD_MAX_DAILY_BUDGET_CENTS: '5000', HUB_SOCIAL_TARGET_COST_PER_RESULT_CENTS: 'abc' });
     expect(config.imageUrls).toEqual(['https://cdn.example.com/a.jpg']);
-    expect(config.settings).toEqual({ maxDailyBudgetCents: 5000, targetCostCents: null });
+    expect(config.settings).toEqual({ maxDailyBudgetCents: 5000, targetCostCents: null, eventPosts: false });
     const team = socialTeam({ social: config, features: new Set(['platform.agents.social.v1']) });
     expect(team.meta.configured).toEqual({ pages: true, instagram: false, ads: false });
     expect(Object.keys(team.handlers({ store: {}, notifier: {} })).sort()).toEqual(['social.ads', 'social.inbox', 'social.interaction', 'social.plan', 'social.report']);
@@ -452,5 +452,60 @@ describe('approved creative from the Creative Director', () => {
     expect(creative.approved).toHaveBeenCalled();
     expect(store.proposeAction).not.toHaveBeenCalled();
     expect(outcome.result).toMatchObject({ create: 0, skipped: 1 });
+  });
+});
+
+describe('event posts, article links and stories', () => {
+  const token = 'c'.repeat(64);
+  const storyAsset = { id: '33333333-3333-4333-8333-333333333333', token, product: 'caremetric-intel', platform: 'meta', placement: 'meta.story', kind: 'static' };
+  const feed = { configured: true,
+    releases: vi.fn(async () => ({ releases: [{ dataset: 'home_health_compare', title: 'Home Health Care Agencies', data_year: '2026', period_start: null, period_end: null, published: '2026-10-28', loaded: '2026-11-02' }] })),
+    observances: vi.fn(async () => ({ observances: [{ id: 'np-week', name: 'National Nurse Practitioner Week', category: 'people', audience: 'Nurse practitioners', sponsor: 'AANP', start: '2026-11-15', end: '2026-11-21', idea: 'x' }] })) };
+  const setup = ({ posts = [], eventPosts = true, articles = [], stories = [storyAsset] } = {}) => {
+    const model = modelReturning({ posts });
+    const creative = { approved: vi.fn(async ({ platform }) => (platform === 'meta' ? stories : [])) };
+    const sent = [];
+    let next = 0;
+    const store = { socialOpenTargets: vi.fn(async () => []), socialSchedule: vi.fn(async () => true), notificationCount: vi.fn(async () => 0),
+      proposeAction: vi.fn(async () => ({ id: `a${++next}`, status: 'proposed', created: true })), startRun: vi.fn(async () => 'r'), finishRun: vi.fn(async () => undefined),
+      socialRecentArticles: vi.fn(async () => articles) };
+    const meta = metaOf({ publishStory: vi.fn() });
+    const handlers = socialHandlers({ store, notifier: { send: vi.fn(async input => { sent.push(input); return [{ channel: 'email', delivery: 'sent' }]; }) }, model, meta, linkedin: null,
+      settings: { eventPosts }, imageUrls: [], publicOrigin: 'https://help.caremetric.ai', marketed: ['caremetric-intel'], log: () => {}, creative, feed });
+    return { handlers, store, model, sent };
+  };
+
+  it('offers the week\'s releases and observances only while the owner\'s setting is on, and keeps the data pillar to one post about them', async () => {
+    const data = (day, text) => ({ platform: 'facebook', product: 'caremetric-intel', pillar: 'data', day, text, linkId: '', hashtags: [] });
+    const on = setup({ posts: [data(2, 'National Nurse Practitioner Week starts November 15. Thank the nurse practitioners who refer to you.'), data(4, 'CMS released new home health agency data for 2026.')] });
+    const done = await on.handlers['social.plan'](task('social.plan'), { now });
+    expect(JSON.parse(on.model.run.mock.calls[0][1].user).events).toEqual({ releases: [{ title: 'Home Health Care Agencies', dataYear: '2026', published: '2026-10-28' }],
+      observances: [{ name: 'National Nurse Practitioner Week', honors: 'Nurse practitioners', start: '2026-11-15', end: '2026-11-21' }] });
+    const dataPosts = on.store.proposeAction.mock.calls.filter(([item]) => item.input.pillar === 'data');
+    expect(dataPosts).toHaveLength(1);
+    expect(done.result.rejected.data_pillar).toBe(1);
+    const off = setup({ eventPosts: false, posts: [data(2, 'National Nurse Practitioner Week starts November 15. Thank the nurse practitioners who refer to you.')] });
+    await off.handlers['social.plan'](task('social.plan'), { now });
+    expect(JSON.parse(off.model.run.mock.calls[0][1].user).events).toBeUndefined();
+    expect(off.store.proposeAction.mock.calls.some(([item]) => item.input.pillar === 'data')).toBe(false);
+  });
+
+  it('lets a post link to an article published lately, by id', async () => {
+    const articles = [{ slug: 'county-market-basics', product: 'caremetric-intel', title: 'County market basics' }];
+    const h = setup({ articles, posts: [{ platform: 'facebook', product: 'caremetric-intel', pillar: 'resource', day: 2, text: 'A short guide to reading your county\'s market.', linkId: 'article-county-market-basics', hashtags: [] }] });
+    await h.handlers['social.plan'](task('social.plan'), { now });
+    expect(JSON.parse(h.model.run.mock.calls[0][1].user).links['caremetric-intel']).toContainEqual({ id: 'article-county-market-basics', label: 'County market basics' });
+    const post = h.store.proposeAction.mock.calls.find(([item]) => item.input.pillar === 'resource')[0];
+    expect(post.input.link).toBe('https://www.caremetricintel.com/resources/county-market-basics');
+  });
+
+  it('proposes up to two approved story images a week, Instagram first, each to approve', async () => {
+    const h = setup({ stories: [storyAsset, { ...storyAsset, id: '44444444-4444-4444-8444-444444444444' }, { ...storyAsset, id: '55555555-5555-4555-8555-555555555555' }] });
+    const done = await h.handlers['social.plan'](task('social.plan'), { now });
+    const stories = h.store.proposeAction.mock.calls.map(([item]) => item).filter(item => item.input.format === 'story');
+    expect(stories.map(item => [item.input.platform, item.targetId])).toEqual([['instagram', 'instagram:2026-11-09:story1'], ['facebook', 'facebook:2026-11-09:story2']]);
+    expect(stories[0].input).toMatchObject({ message: '', link: null, imageUrl: `https://help.caremetric.ai/api/creative/a/${token}.png`, creativeAssetId: storyAsset.id, product: 'caremetric-intel' });
+    expect(done.result.stories).toBe(2);
+    expect(h.sent[0].body).toContain('(2 stories)');
   });
 });

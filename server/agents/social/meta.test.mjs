@@ -50,6 +50,20 @@ describe('the Meta client', () => {
     expect(metaClient({ token, pageId: '../me', adAccountId: 'act_x' }).configured).toEqual({ pages: false, instagram: false, ads: false });
   });
 
+  it('publishes a story: an Instagram STORIES container, or a Page photo uploaded unpublished and posted as a photo story', async () => {
+    const fetchImpl = route([
+      [/^GET \/v23\.0\/1111$/, { access_token: 'EAAG-page-token-abcdefghijklmnop' }],
+      [/^POST \/v23\.0\/2222\/media$/, (url, params) => json({ id: params.get('media_type') === 'STORIES' && params.get('image_url') ? 'c1' : 'wrong' })],
+      [/^POST \/v23\.0\/2222\/media_publish$/, (url, params) => json({ id: params.get('creation_id') === 'c1' ? '1790000' : 'wrong' })],
+      [/^POST \/v23\.0\/1111\/photos$/, (url, params) => json({ id: params.get('published') === 'false' && params.get('url') ? 'p1' : 'wrong' })],
+      [/^POST \/v23\.0\/1111\/photo_stories$/, (url, params) => json({ success: true, post_id: params.get('photo_id') === 'p1' ? '1111_55' : 'wrong' })],
+    ]);
+    const meta = client(fetchImpl);
+    expect(await meta.publishStory({ platform: 'instagram', imageUrl: 'https://help.caremetric.ai/api/creative/a/x.png' })).toEqual({ id: '1790000' });
+    expect(await meta.publishStory({ platform: 'facebook', imageUrl: 'https://help.caremetric.ai/api/creative/a/x.png' })).toEqual({ id: '1111_55' });
+    await expect(meta.publishStory({ platform: 'linkedin', imageUrl: 'https://x.test/a.png' })).rejects.toMatchObject({ code: 'meta_invalid_request' });
+  });
+
   it('calls only graph.facebook.com, posts with the Page\'s own token, and never puts a token in an error', async () => {
     const fetchImpl = route([
       [/^GET \/v23\.0\/1111$/, { access_token: 'EAAG-page-token-abcdefghijklmnop' }],

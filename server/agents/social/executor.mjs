@@ -57,11 +57,20 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
       if (onLinkedIn(input)) readyLinkedIn('page'); else ready(input.platform === 'instagram' ? 'instagram' : 'pages');
       const due = Date.parse(input.scheduledFor ?? '');
       if (Number.isFinite(due) && due - now().getTime() > 2 * 60_000) throw deferred();
-      const checked = checkSocialText(input.message, { surface: input.platform, product: input.product ?? null });
+      // A story: an approved image alone, no text and no link, on Instagram or the Facebook Page.
+      if (input.format === 'story') {
+        if (input.platform === 'linkedin' || input.message !== '' || input.link || !/^https:\/\//.test(input.imageUrl ?? '') || typeof meta?.publishStory !== 'function') throw failure('invalid_post');
+        const published = await careful(execution, () => meta.publishStory({ platform: input.platform, imageUrl: input.imageUrl }));
+        await markLive(input, published.id);
+        return { published: true, id: published.id, story: true };
+      }
+      // A link to one of the product's own published articles is allowed beside the product's pages.
+      const extraLinks = input.link ? [input.link] : [];
+      const checked = checkSocialText(input.message, { surface: input.platform, product: input.product ?? null, extraLinks });
       if (!checked.ok || checked.text !== input.message) throw failure('invalid_post');
       if (input.platform === 'instagram' && !input.videoUrl && !/^https:\/\//.test(input.imageUrl ?? '')) throw failure('image_missing');
       // The link beside a post: one of the product's own pages, as written or with well-formed campaign tags (links.mjs), nothing else.
-      if (input.link && (!/^https:\/\//.test(input.link) || !checkSocialText(`Start here: ${input.link}`, { surface: 'facebook', product: input.product ?? null }).ok)) throw failure('invalid_post');
+      if (input.link && (!/^https:\/\//.test(input.link) || !checkSocialText(`Start here: ${input.link}`, { surface: 'facebook', product: input.product ?? null, extraLinks }).ok)) throw failure('invalid_post');
       if (input.imageUrl && !/^https:\/\//.test(input.imageUrl)) throw failure('invalid_post');
       if (input.videoUrl) {
         const published = await careful(execution, () => publishApprovedVideo(execution, { store, publicOrigin, meta, linkedin: li, now }));

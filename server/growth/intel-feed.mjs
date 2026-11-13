@@ -45,6 +45,12 @@ const factsSchema = z.object({ contract: z.literal(intelFeedContract), action: z
 const figure = z.object({ key: z.string().max(80), label: z.string().max(200), value: z.number().finite(), unit: z.string().max(40),
   data_year: z.string().max(10).nullable(), period: z.string().max(80).nullable(), dataset: z.string().max(200), source_line: z.string().max(1000),
   short_source: z.string().max(200).optional() });
+const releasesSchema = z.object({ contract: z.literal(intelFeedContract), action: z.literal('releases'), source_line: z.string().max(1000),
+  releases: z.array(z.object({ dataset: z.string().regex(/^[a-z0-9_]{1,100}$/), title: z.string().min(1).max(300), data_year: z.string().max(10).nullable(),
+    period_start: date, period_end: date, published: date, loaded: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).max(25) });
+const observancesSchema = z.object({ contract: z.literal(intelFeedContract), action: z.literal('observances'), today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  observances: z.array(z.object({ id: z.string().regex(/^[a-z0-9-]{1,80}$/), name: z.string().min(1).max(200), category: z.string().max(40), audience: z.string().max(300),
+    sponsor: z.string().max(300), start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), idea: z.string().max(1000) })).max(40) });
 const countySchema = z.object({ contract: z.literal(intelFeedContract), action: z.literal('county_figures'), source_line: z.string().max(1000),
   counties: z.array(z.object({ county_fips: z.string().regex(/^\d{5}$/), county_name: z.string().max(200), state: z.string().max(2), figures: z.array(figure).max(40) })).max(50),
   not_found: z.array(z.string()).max(50) });
@@ -109,6 +115,10 @@ export function intelFeedReader({ features = null, enabled = false, key = '', fe
       call({ action: 'roster', states, ...(cursor ? { cursor } : {}), limit, include }, rosterSchema, { signal }),
     /** Headline figures for up to 50 counties, each with its unit, year and source line. */
     countyFigures: ({ countyFips, signal } = {}) => call({ action: 'county_figures', county_fips: countyFips }, countySchema, { signal }),
+    /** The CMS and Census datasets Intel loaded a new release of in the last `sinceDays` days (catalog metadata only). */
+    releases: ({ sinceDays = 30, signal } = {}) => call({ action: 'releases', since_days: sinceDays }, releasesSchema, { signal }),
+    /** Healthcare observances starting in the next `days` days, from Intel's fixed calendar. */
+    observances: ({ days = 45, signal } = {}) => call({ action: 'observances', days }, observancesSchema, { signal }),
     /** Up to 25 agencies' owners (CMS All Owners), HHVBP score and Hospice Care Index, for research only. */
     agencyFacts: ({ ccns, signal } = {}) => call({ action: 'agency_facts', ccns }, factsSchema, { signal }),
   };

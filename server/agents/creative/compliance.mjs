@@ -114,6 +114,31 @@ const factSheetCodes = {
 };
 
 /**
+ * A county snapshot (data.mjs): the figure, its label and its source are the data's, exactly, and nothing the model wrote carries a
+ * number of its own (the data's year aside). The fact sheet's number rules do not apply to the code-printed figure, so `checkCopy` reads
+ * a snapshot's copy without it (`withoutFigure`) and this check reads the figure.
+ * @returns {{ rule: string, level: 'warn'|'block', message: string }[]}
+ */
+export function checkData({ copy = {}, facts = null }) {
+  if (!facts?.stat) return [];
+  const findings = [];
+  const overlay = copy.overlay ?? {};
+  if (copy.layout !== 'stat' || overlay.stat !== facts.stat || overlay.statLabel !== facts.statLabel || overlay.statSource !== facts.statSource) {
+    findings.push(block('data_figure', 'The figure, its label or its source differs from the public data it came from.'));
+  }
+  const written = [copy.headline, copy.primaryText, copy.description, copy.cta, copy.altText, overlay.kicker, overlay.quote, overlay.quoteSource, overlay.offerLine,
+    ...(Array.isArray(overlay.checklist) ? overlay.checklist : []), ...(Array.isArray(overlay.beats) ? overlay.beats : [])]
+    .filter(value => typeof value === 'string').join('\n');
+  if ((written.match(/\d[\d,.]*/g) ?? []).some(number => number.replace(/[.,]$/, '') !== String(facts.dataYear ?? ''))) {
+    findings.push(block('data_number', 'Only the printed figure carries a number. The words around it state no other number, share or amount.'));
+  }
+  return findings;
+}
+
+/** A snapshot's copy without the code-printed figure, for the copy rules (checkData reads the figure). */
+export const withoutFigure = copy => ({ ...copy, overlay: { ...(copy.overlay ?? {}), stat: '', statLabel: '', statSource: '' } });
+
+/**
  * @param {object} input
  * @param {'carebase'|'caremetric-intel'} input.product
  * @param {'meta'|'linkedin'|'google'|'youtube'} input.platform
@@ -217,6 +242,11 @@ export function checkCopy({ product, platform, copy = {}, offerCode = null, bran
     long_sentence: `It has a sentence over ${longestSentence} words. Break it into short, plain sentences.`,
   };
   for (const code of unclearCopy(text)) findings.push(block('plain_language', plainWords[code]));
+  // A figure on the image carries its source on the image (the stat layout prints it beneath).
+  const overlay = copy.overlay ?? {};
+  if (copy.layout === 'stat' && String(overlay.stat ?? '').trim() && !String(overlay.statSource ?? '').trim()) {
+    findings.push(block('stat_source', 'It shows a figure without its source. A stat image names where the number comes from.'));
+  }
   // CareMetric does no personal demos, calls or meetings: the same check the Social Media Manager runs on every post and ad.
   if (offersMeeting(text) && !findings.some(item => item.rule === 'fact_sheet' && item.message.includes(factSheetCodes.call_offer))) {
     findings.push(block('fact_sheet', 'It offers a call, a meeting, a demo or a time to talk; CareMetric does none, so the next step is the free trial or the product\'s own page.'));

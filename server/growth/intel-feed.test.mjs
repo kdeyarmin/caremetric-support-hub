@@ -87,3 +87,18 @@ describe('agency facts', () => {
     expect(result.agencies[0].owners[0]).toMatchObject({ name: 'Jane Doe', kind: 'individual' });
   });
 });
+
+describe('releases and observances', () => {
+  it('reads the releases Intel loaded recently and the observances starting soon', async () => {
+    const releases = answer({ contract: 'caremetric.marketing-feed.v1', action: 'releases', source_line: 's', releases: [{ dataset: 'home_health_compare',
+      title: 'Home Health Care Agencies', data_year: '2026', period_start: '2026-01-01', period_end: '2026-09-30', published: '2026-10-28', loaded: '2026-11-02' }] });
+    expect((await reader(releases).releases({ sinceDays: 14 })).releases[0]).toMatchObject({ dataset: 'home_health_compare', loaded: '2026-11-02' });
+    expect(JSON.parse(releases.mock.calls[0][1].body)).toEqual({ action: 'releases', since_days: 14 });
+    const observances = answer({ contract: 'caremetric.marketing-feed.v1', action: 'observances', today: '2026-11-09', observances: [{ id: 'np-week',
+      name: 'National Nurse Practitioner Week', category: 'people', audience: 'Nurse practitioners', sponsor: 'AANP', start: '2026-11-08', end: '2026-11-14', idea: 'Thank the NPs.' }] });
+    expect((await reader(observances).observances()).observances[0].id).toBe('np-week');
+    expect(JSON.parse(observances.mock.calls[0][1].body)).toEqual({ action: 'observances', days: 45 });
+    await expect(reader(answer({ contract: 'caremetric.marketing-feed.v1', action: 'observances', today: 'x', observances: [] })).observances())
+      .rejects.toMatchObject({ code: 'feed_response_invalid' });
+  });
+});

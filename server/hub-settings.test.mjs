@@ -259,7 +259,7 @@ describe('the social media configuration', () => {
     const config = socialConfig({ HUB_META_ACCESS_TOKEN: 'token-'.repeat(5), HUB_META_PAGE_ID: '999' }, key => values[key] ?? null);
     expect(config.meta).toMatchObject({ token: 'token-'.repeat(5), pageId: '123', instagramId: '', version: 'v23.0' });
     expect(config.imageUrls).toEqual(['https://a.test/1.png']);
-    expect(config.settings).toEqual({ maxDailyBudgetCents: 0, targetCostCents: 2500 });
+    expect(config.settings).toEqual({ maxDailyBudgetCents: 0, targetCostCents: 2500, eventPosts: false });
     // Without settings (tests and older callers), the variables as before.
     expect(socialConfig({ HUB_META_PAGE_ID: '999', HUB_SOCIAL_IMAGE_URLS: 'https://a.test/2.png' }).meta.pageId).toBe('999');
   });

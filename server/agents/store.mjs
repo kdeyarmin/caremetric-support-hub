@@ -14,7 +14,7 @@ import { transaction } from '../sms-auth.mjs';
  * work can be handed back. Against a database without those operations the calls keep their old shape
  * and the extras are ignored, so a server can be deployed before the migration is applied.
  */
-export function sqlAgentStore(pool, { fenced = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false } = {}) {
+export function sqlAgentStore(pool, { fenced = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false, creativeData = false } = {}) {
   const call = (operation, args = []) => transaction(pool, async client =>
     (await client.query(`select ${operation}(${args.map((_, index) => `$${index + 1}`).join(', ')}) as result`, args)).rows[0].result);
   return {
@@ -41,6 +41,11 @@ export function sqlAgentStore(pool, { fenced = false, growth = false, social = f
       /** Records a brief once per request key: `{ id, created, status }`. */
       creativeBriefCreate: brief => call('private.creative_brief_create', [JSON.stringify(brief)]),
       creativeBriefContext: id => call('private.creative_brief_context', [id]),
+      // County snapshots and article links (20261113210000_creative_data.sql); absent until the database declares them.
+      ...(creativeData ? {
+        creativeDataCounties: (perWeek, weekStart) => call('private.creative_data_counties', [perWeek, weekStart]),
+        socialRecentArticles: days => call('private.social_recent_articles', [days]),
+      } : {}),
       creativeBriefFinish: (id, status, result = null) => call('private.creative_brief_finish', [id, status, result === null ? null : JSON.stringify(result)]),
       creativeDraftsSave: (briefId, taskId, assets) => call('private.creative_drafts_save', [briefId, taskId, JSON.stringify(assets)]),
       /** Claims drafts to render within the day's cap: `{ claimed, renderedToday, cap }`. */

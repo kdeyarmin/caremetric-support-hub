@@ -193,6 +193,23 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
       throw failure('meta_invalid_request');
     },
 
+    /**
+     * A story from an approved 1080×1920 image (shown for 24 hours): on Instagram a STORIES container published like a post; on the
+     * Facebook Page the photo uploaded unpublished, then posted as a photo story.
+     */
+    async publishStory({ platform, imageUrl }, { signal } = {}) {
+      if (platform === 'instagram') {
+        const created = await post(`${instagram}/media`, { image_url: imageUrl, media_type: 'STORIES' }, { signal });
+        return { id: String((await post(`${instagram}/media_publish`, { creation_id: created.id }, { signal })).id ?? '') };
+      }
+      if (platform === 'facebook') {
+        const photo = await post(`${page}/photos`, { url: imageUrl, published: false }, { as: 'page', signal });
+        const story = await post(`${page}/photo_stories`, { photo_id: photo.id }, { as: 'page', signal });
+        return { id: String(story.post_id ?? photo.id ?? '') };
+      }
+      throw failure('meta_invalid_request');
+    },
+
     /** Stage an unpublished Page video or Instagram Reel container. Its id is persisted before any later processing check. */
     async prepareVideo({ platform, videoUrl, message }, { signal } = {}) {
       let url;

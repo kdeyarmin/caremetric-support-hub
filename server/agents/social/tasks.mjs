@@ -21,6 +21,7 @@ import { weekStart, easternDate, easternMidnight } from '../accounts/week.mjs';
 import { delivered } from '../notify.mjs';
 import { redact } from '../concierge/redact.mjs';
 import { catalogBlocks } from '../content/features.mjs';
+import { articleHomeUrl } from '../content/facts.mjs';
 import { screenIdentifiers } from '../concierge/screen.mjs';
 import { dueMoment, heldForScorecard, heldResult, permanent, plural, recordRun, when } from '../tasks/shared.mjs';
 import { playbookFor } from '../../growth/playbook.mjs';
@@ -49,7 +50,10 @@ const productOf = url => { const host = hostOf(url); return host === null ? null
 // An ad whose link is readable and does not lead to a product the team is marketing (another product's site, or a site that is no product's).
 const leadsElsewhere = (url, marketedList) => hostOf(url) !== null && !(productOf(url) && markets(marketedList, productOf(url)));
 
-export function socialHandlers({ store, notifier, model = null, meta, linkedin = null, settings = {}, imageUrls: imageUrlsOption = [], customerTextToAi = false, publicOrigin = null, marketed = null, log = line => console.warn(line), creative = null }) {
+// Story images (the Creative Director's 1080×1920 meta.story placement) proposed a week, at most, across Instagram and Facebook.
+export const storiesPerWeek = 2;
+
+export function socialHandlers({ store, notifier, model = null, meta, linkedin = null, settings = {}, imageUrls: imageUrlsOption = [], customerTextToAi = false, publicOrigin = null, marketed = null, log = line => console.warn(line), creative = null, feed = null }) {
   // The approved brand images (Settings → Social media) may be a function, read each time they are used.
   const images = () => live(imageUrlsOption) ?? [];
   // Only the products the team markets (marketing.mjs, read when each task starts) get posts, reply links, new ads and budget increases.
@@ -82,6 +86,45 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       log(JSON.stringify({ event: 'hub_social_creative_unread', code: /^[a-z][a-z_]{0,59}$/.test(error?.code ?? '') ? error.code : 'creative_error' }));
       return [];
     }
+  }
+
+  // Approved story images, per product: shown for a day on Instagram or the Facebook Page, never in the feed.
+  async function storyImages(product) {
+    if (!creative?.approved || !assetOrigin) return [];
+    try {
+      return (await creative.approved({ product, platform: 'meta', limit: 20 })).filter(asset => asset.kind === 'static' && asset.placement === 'meta.story' && /^[0-9a-f]{64}$/.test(asset.token ?? ''))
+        .map(asset => ({ ...asset, url: `${assetOrigin}/api/creative/a/${asset.token}.png` }));
+    } catch (error) {
+      if (error?.transient) throw error;
+      return [];
+    }
+  }
+
+  // Articles the team published lately, linkable from that product's posts by id "article-<slug>".
+  async function recentArticles(offered) {
+    const byProduct = {};
+    if (typeof store.socialRecentArticles !== 'function') return byProduct;
+    try {
+      for (const item of (await store.socialRecentArticles(45)) ?? []) {
+        if (!offered.includes(item.product) || !/^[a-z0-9-]{1,120}$/.test(item.slug ?? '')) continue;
+        (byProduct[item.product] ??= []).push({ id: `article-${item.slug}`, label: String(item.title ?? '').slice(0, 200), url: articleHomeUrl(item.product, item.slug) });
+      }
+    } catch (error) {
+      if (error?.transient) throw error;
+    }
+    return byProduct;
+  }
+
+  // Settings → Social media → Post about new CMS data and observances: what Intel loaded in the last two weeks and what starts in three.
+  async function upcomingEvents(signal) {
+    if (settings.eventPosts !== true || !feed?.configured || typeof feed.releases !== 'function') return null;
+    const [releases, observances] = await Promise.all([feed.releases({ sinceDays: 14, signal }).catch(() => null), feed.observances({ days: 21, signal }).catch(() => null)]);
+    signal?.throwIfAborted();
+    const events = {
+      releases: (releases?.releases ?? []).slice(0, 5).map(item => ({ title: item.title, dataYear: item.data_year, published: item.published ?? item.loaded })),
+      observances: (observances?.observances ?? []).slice(0, 6).map(item => ({ name: item.name, honors: item.audience, start: item.start, end: item.end })),
+    };
+    return events.releases.length || events.observances.length ? events : null;
   }
 
   async function propose(task, { kind, targetKind, targetId, preview, input }) {
@@ -127,9 +170,13 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       catch (error) { if (signal?.aborted || error?.transient) throw error; performance = error?.code ?? 'social_error'; }
     }
     const ranked = rankPosts(posts, { now: moment });
-    const links = Object.fromEntries(offered.map(product => [product, socialLinks(product).map(({ id, label }) => ({ id, label }))]));
+    const articles = await recentArticles(offered);
+    const linkable = product => [...socialLinks(product), ...(articles[product] ?? [])];
+    const articleUrls = product => (articles[product] ?? []).map(item => item.url);
+    const links = Object.fromEntries(offered.map(product => [product, linkable(product).map(({ id, label }) => ({ id, label }))]));
+    const events = await upcomingEvents(signal);
     const user = JSON.stringify({
-      weekStarting: week, products: offered, postsToWrite: counts, links,
+      weekStarting: week, products: offered, postsToWrite: counts, links, ...(events ? { events } : {}),
       bestRecent: ranked.slice(0, 3).map(post => ({ platform: post.platform, engagement: post.engagement, text: post.text.slice(0, 240) })),
       weakestRecent: ranked.length > 3 ? ranked.slice(-2).map(post => ({ platform: post.platform, engagement: post.engagement, text: post.text.slice(0, 160) })) : [],
       recentOpenings: posts.slice(0, 12).map(post => firstLine(post.text)),
@@ -142,22 +189,25 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     const used = { facebook: 0, instagram: 0, linkedin: 0 };
     const rejected = {};
     const linkedin = [];
-    let proposed = 0;
+    let proposed = 0, dataPosts = 0;
     for (const draft of result.output.posts ?? []) {
       signal?.throwIfAborted();
       if (socialProducts.includes(draft.product) && !offered.includes(draft.product)) { rejected.not_marketed = (rejected.not_marketed ?? 0) + 1; continue; }
       if (!offered.includes(draft.product) || used[draft.platform] === undefined || used[draft.platform] >= counts[draft.platform]) continue;
-      const page = draft.linkId ? socialLinks(draft.product).find(link => link.id === draft.linkId) : null;
+      const page = draft.linkId ? linkable(draft.product).find(link => link.id === draft.linkId) : null;
       if (draft.linkId && !page) { rejected.link = (rejected.link ?? 0) + 1; continue; }
+      // The data pillar is for an event the request named, once a week.
+      if (draft.pillar === 'data' && (!events || dataPosts >= 1)) { rejected.data_pillar = (rejected.data_pillar ?? 0) + 1; continue; }
       // The page's address with campaign tags for this platform (links.mjs): social-<product>, utm_content post.
       const link = draft.platform === 'instagram' ? null : tagSocialLink(page?.url ?? null, { platform: draft.platform, product: draft.product, content: 'post' });
       // A Facebook or connected LinkedIn link travels beside the text (it renders as a card); LinkedIn copy pasted by hand carries it.
       const pasted = draft.platform === 'linkedin' && !li.configured.page;
       // A product link the model wrote into the text gets the same tags as the one beside it.
       const text = tagSocialText(withHashtags(pasted && link ? `${draft.text.trim()}\n\n${link}` : draft.text, draft.hashtags), { platform: draft.platform, product: draft.product, content: 'post' });
-      const checked = checkSocialText(text, { surface: draft.platform, product: draft.product });
+      const checked = checkSocialText(text, { surface: draft.platform, product: draft.product, extraLinks: articleUrls(draft.product) });
       if (!checked.ok) { rejected[checked.reason] = (rejected[checked.reason] ?? 0) + 1; continue; }
       used[draft.platform] += 1;
+      if (draft.pillar === 'data') dataPosts += 1;
       if (pasted) { linkedin.push({ product: draft.product, pillar: draft.pillar, text: checked.text }); continue; }
       const scheduledFor = slotFor({ week, day: draft.day, platform: draft.platform, index: used[draft.platform], now: moment });
       const targetId = `${draft.platform}:${week}:${used[draft.platform]}`;
@@ -175,7 +225,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       const imageUrl = videoUrl ? null : approvedAsset?.url ?? (pictured && brandImages.length ? brandImages[(Number(week.replaceAll('-', '')) + used[draft.platform]) % brandImages.length] : null);
       // Video posts have no separate link card: put the reviewed destination in their caption on Facebook and LinkedIn.
       const message = videoUrl && link && !checked.text.includes(link) ? `${checked.text}\n\n${link}` : checked.text;
-      if (!checkSocialText(message, { surface: draft.platform, product: draft.product }).ok) { rejected.video_caption = (rejected.video_caption ?? 0) + 1; continue; }
+      if (!checkSocialText(message, { surface: draft.platform, product: draft.product, extraLinks: articleUrls(draft.product) }).ok) { rejected.video_caption = (rejected.video_caption ?? 0) + 1; continue; }
       const proposal = await propose(task, {
         kind: 'social.post', targetKind: 'social_post', targetId,
         preview: `${labels[draft.platform]} post about ${productNames[draft.product]} (${draft.pillar}), to publish ${when(scheduledFor)}:\n\n${message}${link ? `\n\nLink: ${link}` : ''}${imageUrl ? `\n\nImage: ${approvedAsset ? `approved creative ${approvedAsset.id} (${imageUrl})` : imageUrl}` : ''}${videoUrl ? `\n\nVideo: approved creative ${approvedAsset.id} (${videoUrl})` : ''}`,
@@ -187,7 +237,29 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       if (proposal.created !== false) { await store.socialSchedule(proposal.id, null); proposed += 1; }
     }
 
-    const body = `${plural(proposed, 'post')} proposed${linkedin.length ? `, ${plural(linkedin.length, 'LinkedIn post')} to paste` : ''}.${Object.keys(rejected).length ? ` ${Object.values(rejected).reduce((a, b) => a + b, 0)} drafts failed the checks and were dropped.` : ''}`;
+    // Approved story images: up to two a week, Instagram first, each its own post to approve. A story shows for 24 hours.
+    let stories = 0;
+    const storyPlatforms = [meta.configured.instagram ? 'instagram' : null, meta.configured.pages ? 'facebook' : null].filter(Boolean);
+    if (storyPlatforms.length && typeof meta.publishStory === 'function') {
+      const pool = (await Promise.all(offered.map(async product => (await storyImages(product)).map(asset => ({ ...asset, product }))))).flat();
+      for (let n = 1; n <= storiesPerWeek && pool.length; n += 1) {
+        signal?.throwIfAborted();
+        const platform = storyPlatforms[(n - 1) % storyPlatforms.length];
+        const targetId = `${platform}:${week}:story${n}`;
+        if (targets.has(`social.post:${targetId}`)) continue;
+        const asset = pool.shift();
+        const scheduledFor = slotFor({ week, day: n === 1 ? 3 : 5, platform, index: n, now: moment });
+        const proposal = await propose(task, {
+          kind: 'social.post', targetKind: 'social_post', targetId,
+          preview: `${labels[platform]} story about ${productNames[asset.product] ?? 'CareMetric'}, to publish ${when(scheduledFor)}. A story shows for 24 hours.\n\nImage: approved creative ${asset.id} (${asset.url})`,
+          input: { platform, product: asset.product, pillar: 'story', format: 'story', message: '', link: null, imageUrl: asset.url, scheduledFor, creativeAssetId: asset.id },
+        });
+        if (!proposal) break;
+        if (proposal.created !== false) { await store.socialSchedule(proposal.id, null); proposed += 1; stories += 1; }
+      }
+    }
+
+    const body = `${plural(proposed, 'post')} proposed${stories ? ` (${stories === 1 ? '1 story' : `${stories} stories`})` : ''}${linkedin.length ? `, ${plural(linkedin.length, 'LinkedIn post')} to paste` : ''}.${Object.keys(rejected).length ? ` ${Object.values(rejected).reduce((a, b) => a + b, 0)} drafts failed the checks and were dropped.` : ''}`;
     const blocks = [
       { type: 'callout', tone: 'info', title: `Social plan for the week of ${week}.`, text: body },
       { type: 'paragraph', text: proposed ? 'Approve each post in the AI team. An approved post waits for its time slot.' : 'No post is waiting: the accounts are not connected, or no draft passed the checks.' },
@@ -200,7 +272,8 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     if (creative?.planned) {
       try { await creative.planned(week); } catch { log(JSON.stringify({ event: 'hub_social_creative_plan_unqueued', week })); }
     }
-    return { status: proposed ? 'awaiting_approval' : 'done', result: { week, proposed, linkedin: linkedin.length, rejected, performance, delivery: results.map(item => `${item.channel}:${item.delivery}`) } };
+    return { status: proposed ? 'awaiting_approval' : 'done', result: { week, proposed, ...(stories ? { stories } : {}), ...(events ? { events: events.releases.length + events.observances.length } : {}),
+      linkedin: linkedin.length, rejected, performance, delivery: results.map(item => `${item.channel}:${item.delivery}`) } };
   }
 
   // ---- The inbox ----------------------------------------------------------------------------------------------------------------------
