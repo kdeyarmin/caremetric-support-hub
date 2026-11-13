@@ -1,5 +1,5 @@
 /**
- * Decision-makers at the best prospects (20261113180000_growth_people.sql, 20261113280000_growth_people_finder.sql). `growth.people`,
+ * Decision-makers at the best prospects (20261113180000_growth_people.sql, 20261113290000_growth_people_finder.sql). `growth.people`,
  * every half hour, for a few businesses the database names (researched or qualified, fit 60 or more or a known CMS record, never yet
  * emailed, not searched for 60 days). The Hub does this itself, with public records and the business's own website and mail server
  * (owner decision 2026-11-13, replacing Apollo):

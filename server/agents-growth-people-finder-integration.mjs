@@ -1,4 +1,4 @@
-// The Hub's own people finder through the real roles (20261113280000_growth_people_finder.sql): candidates carry their roster agencies
+// The Hub's own people finder through the real roles (20261113290000_growth_people_finder.sql): candidates carry their roster agencies
 // for the NPI registry, people are recorded from the website and the registry, a found address records how it was found (published
 // with its page on the business's own site, or confirmed by its mail server with no page), waits for the owner, never on another
 // domain or after an unsubscribe, the owner sees how each was found, and the gate refuses drift. Disposable loopback database only.
@@ -20,7 +20,7 @@ const store = growthStore(pool);
 const run = randomUUID().slice(0, 8), owner = randomUUID(), token = `growth-finder-${randomUUID()}`;
 const row = async (sql, values = []) => (await admin.query(sql, values)).rows[0];
 const refused = code => error => error?.code === code;
-const gate = await readFile(new URL('../supabase/migrations/20261113280100_growth_people_finder_contract.sql', import.meta.url), 'utf8');
+const gate = await readFile(new URL('../supabase/migrations/20261113290100_growth_people_finder_contract.sql', import.meta.url), 'utf8');
 const domain = `finder-agency-${run}.example.org`, ccn = `F${run.slice(0, 5).toUpperCase().replace(/[^0-9A-Z]/g, '0')}`;
 const suppressed = [];
 let org = null;

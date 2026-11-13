@@ -65,7 +65,7 @@ const marketingConnectionContracts=await Promise.all([
   ['platform.agents.ads.v1','20261113230100_ads_buildout_contract.sql'],
   ['platform.agents.watchdog.v1','20261113240100_agent_watchdog_contract.sql'],
   ['platform.agents.creative-uploads.v1','20261113250100_creative_uploads_contract.sql'],
-  ['platform.agents.growth-people-finder.v1','20261113280100_growth_people_finder_contract.sql'],
+  ['platform.agents.growth-people-finder.v1','20261113290100_growth_people_finder_contract.sql'],
 ].map(async([feature,file])=>({feature,sql:await readFile(new URL(`../supabase/migrations/${file}`,import.meta.url),'utf8')})));
 const diagnosticSupportContract=diagnosticSupportMigration.slice(diagnosticSupportMigration.indexOf('do $$ declare contract'));
 assert.ok(selfServiceContract.startsWith('-- Contract publication is last:'),'Recognize the self-service contract declaration');
