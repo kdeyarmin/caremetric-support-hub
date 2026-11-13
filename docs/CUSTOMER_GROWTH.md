@@ -180,7 +180,8 @@ claim still comes from the fact sheet (`server/agents/content/facts.mjs`, the co
   directory's info@ address. A domain search for one organization is unchanged.
 - **Pipeline sweep limits.** A sweep assesses at most 20 prospects, stops starting model calls and website reads 150 seconds after
   it began, and does not ask again for six hours for an assessment or a draft the model could not give or that failed its checks
-  (unless the opportunity, its evidence, its contact or the policy changed). The sweep's result counts those drafts as `undrafted`.
+  after its one repair (unless the opportunity, its evidence, its contact or the policy changed). The sweep's result counts those
+  drafts as `undrafted`, the reasons the model's first drafts were refused as `rejected`, and the drafts a repair saved as `repaired`.
 - **Fit assessment** (`growth-fit.2`) scores with a written rubric whose bands line up with qualification (`qualify.1`, fit 75 or
   more): only an operator in the product's segment and territory, shown by its own sources, can reach 75; a directory, a vendor or an
   out-of-territory organization stays below 30.
@@ -190,7 +191,8 @@ claim still comes from the fact sheet (`server/agents/content/facts.mjs`, the co
   paid plan, with the Founders Sale applied automatically), the organization's name and domain, and the product's own pages it may link to. Every model draft must
   then pass the Content Marketer's claim rules (no unlisted price or number, guarantee, compliance assurance, certification,
   competitor, testimonial, call or demo as a step, "prove" about CareBase), may state only its own product's prices, may link only to
-  its product's pages, and has its vocabulary fixed (ALF, surveyor). A draft that fails is dropped. The template
+  its product's pages, and has its vocabulary fixed (ALF, surveyor). A draft that fails, and fails again after its one repair
+  (`growth.8`, below), is dropped. The template
   path used without a model, and every send rule, are unchanged.
 - **Campaign tags**: the product pages in every growth message, model-written or template, carry utm_source `caremetric`,
   utm_medium `email` and utm_campaign `growth-<product>-touch<n>` for outreach or `account-<product>-<moment>` for a customer play
@@ -221,6 +223,21 @@ CareMetric Intel, which the founder uses every day. The story carries no result,
 Intel, the email names the part of the whole workspace that answers the reader's problem, never email campaigns as the point. A draft
 with an empty buzzword, a string of fragments or a sentence over 30 words is refused as `unclear` (`unclearCopy`). Customer messages are
 still signed by the product's team. To show your own name in the inbox as well, set Settings → Email → Growth email sender.
+
+**Specifics from the prospect's own pages, and one repair (review 2026-11-12, `growth.8`).** The checks refused any number the fact
+sheet does not state, and the words "solution" and "journey" anywhere, so the personalized openings were the drafts most often thrown
+away, and nobody knew how often. Now a number the organization's own sources or its name state ("12 counties", "two locations", "for 25
+years") may be repeated in that organization's draft, and an empty word inside its own name ("Senior Care Solutions", "Journey Home
+Health") is part of the name. Everything else is as strict as before: a number that neither the fact sheet nor the sources state is
+refused, a sentence about CareMetric or the product may state only the fact sheet's numbers, and percentages, prices, guarantees,
+compliance assurances and competitor names are checked exactly as before. A draft that fails a check the writer can fix (a claim,
+unclear copy, markup, a link, the subject, the body, a meeting offer, another product's price or a citation) is sent back once with the
+original input, the refused draft and fixed words for what failed. The repair is its own model run, with its own budget reservation and
+cost; its answer goes through every check again, the tagged body included, and there is never a third call. A draft that needs a person,
+carries an identifier or uses an ambiguous term is not sent back. The sweep's result now says why drafts fail: `rejected` counts the
+model's first drafts the checks refused, by reason code, and `repaired` counts the drafts saved after their repair. No draft text is
+kept. The guardrail suite adds three cases: a number from the organization's sources is accepted, a number they do not state is refused,
+and the organization's number in a sentence about the product is refused.
 
 **No personal demos with anyone (owner decision 2026-11-09, `growth.6`).** No message offers a booking page any more: drafts are
 never given one (the policy's old booking link is ignored, and the Growth screen no longer has the field), and the writer is told

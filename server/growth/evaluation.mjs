@@ -45,6 +45,13 @@ export async function evaluateGrowth(now = new Date()) {
     check('declining a demo is not an offer', (await invoke({ ...draft, body: 'CareMetric does not do live demos. The free trial shows every step with your own team.' }))?.modelGenerated === true);
     check('model draft with a guarantee rejected', await invoke({ ...draft, body: 'We guarantee you will pass your next inspection.' }) === null);
     check('model draft naming a competitor rejected', await invoke({ ...draft, body: 'Unlike PointClickCare, we keep training in one place. Worth a look?' }) === null);
+    // A number the organization's own sources state may be repeated about it; one they do not state is refused, and a sentence about
+    // the product states only the fact sheet's numbers (review 2026-11-12).
+    const counted = { ...base, evidence: [{ ...evidence[0], claim: 'The organization serves 12 counties from two locations.' }] };
+    const invokeFor = (opportunity, output) => draftMessage({ opportunity, work, task: {}, model: model(output) });
+    check('number from the organization\'s sources allowed', (await invokeFor(counted, { ...draft, body: 'Your team covers 12 counties from two locations. Would a free trial help?' }))?.modelGenerated === true);
+    check('number the sources do not state rejected', await invokeFor(counted, { ...draft, body: 'Your team covers 14 counties. Would a free trial help?' }) === null);
+    check('organization number about the product rejected', await invokeFor(counted, { ...draft, body: `${product === 'carebase' ? 'CareBase' : 'CareMetric Intel'} covers all 12 counties. Would a free trial help?` }) === null);
     check('product page link allowed', (await invoke({ ...draft, body: `Would a free trial help?\n\n${product === 'carebase' ? 'https://cmcarebase.com/signup' : 'https://www.caremetricintel.com/'}` }))?.modelGenerated === true);
     check('other product page link rejected', await invoke({ ...draft, body: `Would a free trial help?\n\n${product === 'carebase' ? 'https://www.caremetricintel.com/' : 'https://cmcarebase.com/signup'}` }) === null);
     const page = product === 'carebase' ? 'https://cmcarebase.com/signup' : 'https://www.caremetricintel.com/';

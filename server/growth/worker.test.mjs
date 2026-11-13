@@ -56,14 +56,31 @@ it('does not pay again, sweep after sweep, for a draft that failed its checks; a
  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'A question',body:'Would a free trial help?',citations:['invented'],needsHuman:false}}))};
  const handler=growthHandlers({growth:{store,signingReady:true,hash:x=>x,unsubscribeToken:()=>'token'},model,clock:()=>at})['growth.pipeline'];
  const sweep=()=>handler({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'});
- expect((await sweep()).result).toMatchObject({planned:1,drafted:0,undrafted:1});
+ // Each attempt is the draft and its one repair: two model calls, then nothing until something changes or six hours pass.
+ expect((await sweep()).result).toMatchObject({planned:1,drafted:0,undrafted:1,rejected:{citation:1}});
  expect((await sweep()).result).toEqual({inspected:1,planned:1,drafted:0});
- expect(model.run).toHaveBeenCalledTimes(1);
- item={...o,policy:{...o.policy,version:10}}; await sweep();
  expect(model.run).toHaveBeenCalledTimes(2);
+ item={...o,policy:{...o.policy,version:10}}; await sweep();
+ expect(model.run).toHaveBeenCalledTimes(4);
  at+=assessRetryMs; await sweep();
- expect(model.run).toHaveBeenCalledTimes(3);
+ expect(model.run).toHaveBeenCalledTimes(6);
  expect(store.draft).not.toHaveBeenCalled();
+});
+it('records why the model\'s first drafts were refused, by reason code only, and counts the drafts a repair saved',async()=>{
+ const o={...base,version:4,contact_id:'contact',contact_version:7,eligibility:'permitted',policy:{version:9,approved_claim:'Discuss staff training.'},evidence:[{id:'source',source_url:'https://example.org',claim:'Care operator.',observed_at:new Date().toISOString()}]};
+ const store={snapshot:vi.fn(async()=>({total:3,items:[o,{...o,id:'second'},{...o,id:'third'}]})),plan:vi.fn(async()=>'work'),draft:vi.fn(async()=>({id:'message',status:'draft'})),propose:vi.fn()};
+ const output=body=>({outcome:'completed',output:{subject:'Staff training',body,citations:['source'],needsHuman:false}});
+ const invented='Your 14 locations train staff monthly. How do you track it?';
+ const model={configured:true,run:vi.fn()
+  .mockResolvedValueOnce(output(invented)).mockResolvedValueOnce(output('How do you track staff training today?'))
+  .mockResolvedValueOnce(output(invented)).mockResolvedValueOnce(output(invented))
+  .mockResolvedValueOnce({outcome:'completed',output:{subject:'Staff training',body:'x',citations:['source'],needsHuman:true}})};
+ const {result}=await growthHandlers({growth:{store,signingReady:true,hash:x=>x,unsubscribeToken:()=>'token'},model})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'});
+ expect(result).toMatchObject({inspected:3,drafted:1,undrafted:2,rejected:{claim:2,needs_human:1},repaired:1});
+ expect(model.run).toHaveBeenCalledTimes(5);
+ expect(store.draft).toHaveBeenCalledWith('opp','work',expect.objectContaining({body:'How do you track staff training today?',modelGenerated:true}));
+ // Reason codes and counts only: no word of a refused draft is kept.
+ expect(JSON.stringify(result)).not.toMatch(/locations|track/);
 });
 it('does not pay for a new draft of work whose last message was cancelled under the same context, unless it was withdrawn or something changed',async()=>{
  const o={...base,version:4,contact_id:'contact',contact_version:7,eligibility:'permitted',policy:{version:9,approved_claim:'Discuss staff training.'},evidence:[{id:'source',source_url:'https://example.org',claim:'Care operator.',observed_at:new Date().toISOString()}]};
