@@ -24,6 +24,9 @@ export const importSchema=z.object({rows:z.array(z.object({name:text(200).min(1)
   contactName:text(200).optional(),role:text(200).optional()}).strict()).min(1).max(500)}).strict();
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const equal=(a,b)=>{const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length&&timingSafeEqual(x,y);};
+// A failure that must not opt the contact out (a transient or undetermined bounce, a reject) needs the five-argument delivery event
+// (20261113280000_growth_soft_bounce_reporting.sql). Until its contract declares this feature such an event is not recorded, as before.
+export const growthSoftBounceFeature='platform.agents.growth-soft-bounce.v1';
 export function growthService({store,research,contacts=null,roster=null,people=null,deepResearch=null,learning=null,importKey='',features,enabled=false,signingKey='',eventKeys={},webhookPublicKey='',sesEvents=null,sesEventsReady=()=>false,publicOrigin,postalAddress=''}) {
   // The sending switch and the footer's postal address are Hub settings; either may be a function, read on each use.
   const sending=()=>live(enabled)===true; const postal=()=>String(live(postalAddress)??'');
@@ -140,7 +143,7 @@ export function growthService({store,research,contacts=null,roster=null,people=n
       let result;try{result=await sesEvents(raw);}catch(error){throw new HttpError(error?.status??400,error?.message??'Invalid notification.');}
       if(!result?.notification)return {accepted:0,...(result?.confirmed?{confirmed:true}:{})};
       let accepted=0;
-      for(const event of sesGrowthEvents(result.notification)){if(!z.uuid().safeParse(event.messageId).success)continue; await store.delivery(event.id,event.messageId,event.kind,event.at); accepted++;}
+      for(const event of sesGrowthEvents(result.notification)){if(!z.uuid().safeParse(event.messageId).success)continue; if(event.suppress===false&&!features?.has(growthSoftBounceFeature))continue; await store.delivery(event.id,event.messageId,event.kind,event.at,event.suppress??true); accepted++;}
       return {accepted};
     },
     async unsubscribe(token,confirm) {
