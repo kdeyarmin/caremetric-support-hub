@@ -370,6 +370,28 @@ try {
   assert.equal((await row('select eligibility from private.growth_contacts where id=$1',[busy.contactId])).eligibility,'opted_out');
   assert.ok(await row('select 1 from private.email_suppressions where email_hash=$1',[digest(busyEmail)]));
 
+  // A reply is read from the sender's own words: the old footer quoted under "Yes, tell me more" is not a request to stop, and a
+  // colleague answering for a business growth email has reached joins it as a contact for review.
+  const quotedOriginal='On Thu, Nov 12, 2026 at 9:14 AM CareMetric <hello@caremetric.ai> wrote:\n> If you are interested, we can book a demo.\n> Unsubscribe from these emails: https://hub.example.org/api/growth/unsubscribe/abc';
+  const quoting=await regressionFixture();
+  const quotingEmail=(await row('select email from private.growth_contacts where id=$1',[quoting.contactId])).email;
+  regressionSuppressions.push(digest(quotingEmail));
+  const reached=await prepare(quoting.id,'outreach:reached');
+  await admin.query("update private.growth_messages set status='delivered' where id=$1",[reached.id]);
+  regressionCommunications.push((await call('private.ingest_inbound_communication',['email',`quoting:${run}`,`quoting-first:${run}`,null,'carebase','Re: Product workflow',`Yes, tell me more.\n\n${quotedOriginal}`,'Buyer',quotingEmail,null])).id);
+  const quotingReply=await row('select id from private.communication_messages where provider_message_id=$1',[`email:quoting-first:${run}`]);
+  assert.equal((await row('select eligibility from private.growth_contacts where id=$1',[quoting.contactId])).eligibility,'permitted','the quoted footer does not opt the buyer out');
+  assert.equal(await row('select 1 from private.email_suppressions where email_hash=$1',[digest(quotingEmail)]),undefined);
+  assert.equal((await row('select kind from private.customer_activity_events where event_key=$1',[`inquiry:${quotingReply.id}`])).kind,'positive_reply');
+  const colleagueEmail=`office-${run}@${quotingEmail.split('@')[1]}`;
+  regressionSuppressions.push(digest(colleagueEmail));
+  regressionCommunications.push((await call('private.ingest_inbound_communication',['email',`colleague:${run}`,`colleague-first:${run}`,null,'carebase','Re: Product workflow',`The buyer has moved on; please send anything about this to me.\n\n${quotedOriginal}`,'Office',colleagueEmail,null])).id);
+  const colleague=await row('select organization_id,eligibility from private.growth_contacts where email=$1',[colleagueEmail]);
+  assert.deepEqual([colleague?.organization_id,colleague?.eligibility],[(await opportunity(quoting.id)).organization_id,'review'],'the colleague joins the business for review');
+  const colleagueReply=await row('select id from private.communication_messages where provider_message_id=$1',[`email:colleague-first:${run}`]);
+  assert.equal((await row('select kind from private.customer_activity_events where event_key=$1',[`inquiry:${colleagueReply.id}`])).kind,'reply');
+  assert.equal(await row('select 1 from private.email_suppressions where email_hash=$1',[digest(colleagueEmail)]),undefined);
+
   // Late signup/trial history that leaves current context unchanged must preserve an existing approval.
   const pendingCustomer=await regressionFixture();
   await report(pendingCustomer,'paid-before-history','paid',timeAgo(1));

@@ -362,9 +362,11 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
 const linkTrailing=/[.,;:!?)\]]+$/;
 /**
  * The opt-out line and address a growth email carries. Neither contains the word "unsubscribe": most mail programs quote the
- * original message under a reply, and the database reads that word anywhere in an inbound message as a request to stop
- * (private.growth_inquiry). With the old footer ("Unsubscribe from these emails: .../api/growth/unsubscribe/..."), a prospect who
- * simply replied "Yes, tell me more" was opted out and suppressed by their own quoted footer. The old address still works.
+ * original message under a reply, and the database read that word anywhere in an inbound message as a request to stop. With the
+ * old footer ("Unsubscribe from these emails: .../api/growth/unsubscribe/..."), a prospect who simply replied "Yes, tell me more"
+ * was opted out and suppressed by their own quoted footer. The database now reads only the sender's own words, leaving quoted
+ * lines and this footer line out (private.growth_reply_reading); the footer still avoids the words it reads as a request to stop,
+ * in case a mail program quotes it in a way the reading does not recognise. The old address still works.
  */
 export const growthOptOutLabel='Opt out of these emails';
 export const growthOptOutPath='/api/growth/preferences/';

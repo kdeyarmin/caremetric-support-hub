@@ -340,7 +340,8 @@ it('sends a growth message as a letter: Hello, the approved words, the product t
  expect(growthEmail({product:'caremetric-intel',subject:'S',body:'See https://cmcarebase.com/signup',postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'}).html).not.toContain('href="https://cmcarebase.com/signup"');
 });
 it('a growth email, quoted under a reply, never reads as a request to stop: no opt-out word the database matches is in it',async()=>{
- // private.growth_inquiry opts a sender out on any of these words anywhere in the message, quoted text included.
+ // private.growth_reply_reading leaves quoted lines and this footer out; the footer still avoids its stop words in case a mail
+ // program quotes it in a way the reading does not recognise.
  const stopWords=/\b(unsubscribe|do not contact|stop emailing|remove me)\b/i;
  const store={claim:vi.fn(async()=>({send:true,to:'info@operator.example',id:'m',workId:'w',product:'caremetric-intel',purpose:'marketing',subject:'A question',body:'Which counties does your team cover?'})),finish:vi.fn()};
  const mail={configured:true,send:vi.fn(async()=>({delivery:'sent',id:'provider'}))};

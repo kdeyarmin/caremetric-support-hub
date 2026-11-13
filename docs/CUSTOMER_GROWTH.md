@@ -56,8 +56,9 @@ the owner, model-written or not.
   website: prospect outreach is the founder's own letter, signed "Dr. Kevin C. Deyarmin, Founder, CareMetric" (owner direction
   2026-11-12), and a customer message is signed by the product's team ("The CareMetric Intel team"), and a small footer with the company, its postal address and the opt-out
   link ("Opt out of these emails", at `/api/growth/preferences/<token>`; the footer and the address avoid the word "unsubscribe" because
-  the database reads that word anywhere in a reply, quoted text included, as a request to stop, so a prospect who replied with the
-  original quoted underneath was opted out by their own quote. The old `/api/growth/unsubscribe/<token>` address still works). The inbox preview is the message's first sentence. The writing rules (`growth.5`) ask for a specific, true opening
+  until 2026-11-13 the database read that word anywhere in a reply, quoted text included, as a request to stop, so a prospect who
+  replied with the original quoted underneath was opted out by their own quote; replies are now read from the sender's own words,
+  see [How replies are read](#how-replies-are-read). The old `/api/growth/unsubscribe/<token>` address still works). The inbox preview is the message's first sentence. The writing rules (`growth.5`) ask for a specific, true opening
   about the organization from its public sources, one likely problem as a question, one concrete way the product helps, and
   one easy next step with its link, in short paragraphs.
 - **Contact finder.** After the daily discovery search, the finder reads each new business's own website: https only, its
@@ -94,6 +95,30 @@ Nothing is sent until "Send growth email" is on in Settings → Customer growth,
 policy is in place, and the finder
 runs only with `HUB_GROWTH_SEARCH_API_KEY`. A counsel check of cold email to businesses' public addresses was recommended to the
 owner before enabling it. `npm run test:growth-autonomy:db` runs the integration checks against a disposable local database.
+
+### How replies are read
+
+An email that reaches the support inbox from a growth contact (`private.growth_inquiry`, run by the inbox's own trigger) is read
+from the sender's own words only (`private.growth_reply_reading`, 2026-11-13):
+
+- **Left out:** lines quoted with ">", the "On <date>, <sender> wrote:" line, a growth email's opt-out line with its link (either
+  wording; the same words without the link are the sender's own and a request to stop), and links
+  and addresses. Reading stops where a mail program puts the original under a header without marking it (Outlook's
+  "From: / Sent:", "-----Original Message-----", a forward) and at a "wrote:" line whose quote is not marked (an HTML-only email).
+  Answers written between quoted lines are read.
+- **Kinds,** in this order: a cancellation ("cancel my account", not "cancel tomorrow's call" or "I don't want to cancel"), a
+  refusal ("not really interested", "no longer interested", "no thank you", "not a good fit", "we'll pass"), not now ("not right
+  now", "next quarter", "after the holidays", "circle back in"), interest ("interested", a demo, pricing, "send me more"), else a
+  plain reply. A refusal negates the interest itself: "we don't currently have a system and are interested" is interest. A
+  refusal or "not now" moves the business to nurture; any reply stops the cold sequence to everyone there.
+- **A request to stop** ("unsubscribe", "opt me out", "take me off", "stop sending", "do not email", "remove me") opts the sender
+  out and adds the address to the suppression list; "I don't want to unsubscribe" is not one.
+- **A colleague** writing from the domain of a business growth email has reached (a message accepted or delivered to one of its
+  contacts) joins that business as a contact for review, and the reply counts as the business's reply; a sales inquiry from them
+  still opens an opportunity for the inbox's product. Personal mail domains
+  (Gmail, Outlook, Yahoo, iCloud, Comcast and the like) never link a sender to a business.
+
+When capture fails, the inbox keeps the email and its fallback still honours a request to stop by the same reading.
 
 ## A separate sender for prospecting
 
@@ -221,9 +246,33 @@ and list imports (`growth.people`), research with web search (`growth.research`)
 With `platform.agents.app-growth.v1`, Intel posts server-only activity to `POST /api/apps/growth` using its existing billing application
 key. The payload contains its opaque 24-hex billing account, an immutable event UUID, `heartbeat`, `active` or `first_value`, the event
 time, and optional provider-list count. It cannot claim a trial or payment. The Hub authenticates the app, resolves exactly the same
-account-to-tenant link as billing, and associates the event with that canonical tenant. A missing link returns retryable 503; no name or
-email matching occurs. When no Growth organization is linked yet, the Hub creates a customer record with a reserved `.invalid`
-identity and Account Manager ownership; that identity is never a prospect website or a source of cold outreach.
+account-to-tenant link as billing, and associates the event with that canonical tenant. A missing link returns retryable 503; the
+activity itself carries no name or email. When no Growth organization is linked yet, the Hub first looks for the prospect this
+customer was (see [A prospect who starts a trial](#a-prospect-who-starts-a-trial)); only when there is none does it create a customer
+record with a reserved `.invalid` identity and Account Manager ownership, an identity that is never a prospect website or a source of
+cold outreach.
+
+### A prospect who starts a trial
+
+A customer used to get a Growth organization of its own even when the Marketing Manager had already found and written to that
+business, so cold follow-ups kept going to a business in a trial and the trial was never credited to the outreach. Since 2026-11-13
+(`private.growth_ensure_customer`), the first trial, payment or product signal for a tenant with no Growth organization reads the
+address on its live billing customer, which is the address the application's sign-up gave for the trial:
+
+- **The same address as a growth contact** links that contact's organization, and that contact becomes the product opportunity's
+  contact.
+- **Otherwise the same business domain** as a prospect organization links it. Personal mail domains (Gmail, Outlook, Yahoo, iCloud,
+  Comcast and the like) never do. The person who signed up joins as a contact for review and becomes the product opportunity's
+  contact (and the other product's, when a later signal hands that one to the Account Manager), so customer email never goes to
+  the person who was cold-emailed because a colleague signed up. A contact the owner sets afterwards is never reset.
+
+Only a prospect that is not already a customer and not internal is linked; a test-mode billing customer never links, and a tenant that
+already has a Growth organization keeps it. The send claim refuses cold email to a customer's organization, and unsent marketing drafts
+there are cancelled when the link is made. The trial or payment then lands on the prospect's own opportunity, with its history. Each
+link is audited as `growth.customer_linked` with the tenant, the product and whether the address or the domain matched, never the
+address. The sign-up address is the applicant's claim (Intel starts the trial before confirming it), so a link only stops prospecting
+and credits the trial: it sends nothing to anyone new. A linked customer keeps the prospect's real domain, so discovery can find it again; it then adds no
+opportunity or evidence to a customer's (or an internal) organization, for either product.
 
 Intel migration `0150_hub_growth_accounts.sql` enrolls billing-confirmed nonlegacy customer workspaces automatically, while preserving
 explicit legacy mappings and their enabled switches. The first newly recorded provider list with a real provider member emits first
