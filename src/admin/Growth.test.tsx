@@ -98,3 +98,25 @@ it('clears a load error after a successful refresh',async()=>{
  await screen.findByText(/Sending: disabled/);
  expect(screen.queryByRole('alert')).toBeNull();
 });
+
+it('shows the Medicare roster once its migration is live: what is missing, the read and the best-ranked agencies',async()=>{
+ const roster={sync:{period:'2026Q3',states:['PA'],complete:true,syncedAt:'2026-11-12T12:00:00Z',rows:2},counts:{new:1,graduated:1},total:2,
+  items:[{ccn:'391501',name:'Valley Hospice, Inc.',setting:'hospice',city:'Philadelphia',state:'PA',rank:75,reasons:['Change of ownership (2026-03-01)'],status:'graduated',reason:null,attempts:1,resolveAfter:null,confirmation:'phone',domain:'valleyhospice.org',organizationId:'org-1'},
+   {ccn:'397001',name:'County Home Health',setting:'home_health',city:'Pittsburgh',state:'PA',rank:40,reasons:[],status:'unresolved',reason:'no_site',attempts:1,resolveAfter:'2026-11-20T12:00:00Z',confirmation:null,domain:null,organizationId:null}],
+  services:{feed:{declared:true,enabled:true,signing:false},states:['PA'],daily:25,research:true}};
+ const request=vi.fn(async(_url:unknown,init:RequestInit)=>new Response(JSON.stringify(JSON.parse(String(init.body)).operation==='roster'?roster:{...empty,services:{...empty.services,roster:true}})));
+ vi.stubGlobal('fetch',request);render(<MemoryRouter><Growth/></MemoryRouter>);
+ expect(await screen.findByText(/Medicare roster · 2 agencies/)).toBeTruthy();
+ expect(screen.getByText(/set HUB_INTEL_FEED_SECRET/)).toBeTruthy();
+ expect(screen.getByText(/In the pipeline: 1/)).toBeTruthy();
+ expect(screen.getByText(/confirmed by its CMS telephone number/)).toBeTruthy();
+ expect(screen.getByText(/no website matched/)).toBeTruthy();
+ expect(screen.queryByRole('button',{name:'Next agencies'})).toBeNull();
+});
+it('leaves the roster out until its migration is live',async()=>{
+ const request=vi.fn<(url:unknown,init:RequestInit)=>Promise<Response>>(async()=>new Response(JSON.stringify(empty)));
+ vi.stubGlobal('fetch',request);render(<MemoryRouter><Growth/></MemoryRouter>);
+ await screen.findByText(/Sending: disabled/);
+ expect(screen.queryByText(/Medicare roster/)).toBeNull();
+ expect(request.mock.calls.every(([,init])=>JSON.parse(String(init.body)).operation!=='roster')).toBe(true);
+});

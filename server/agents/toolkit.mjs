@@ -37,6 +37,16 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
       growthFeature, [growth?.research?.configured === true, 'Set HUB_GROWTH_SEARCH_API_KEY on the Hub service.'],
       [ai, modelStep],
     ], '/admin/growth');
+  const feed = growth?.roster?.feed?.readiness?.() ?? {};
+  const rosterStates = live(growth?.roster?.states);
+  add('prospect_roster', 'Prospects from the Medicare roster', ['marketing_manager'],
+    'Reads every Medicare-certified home health agency and hospice in your states from Intel\'s marketing feed, ranks them, confirms each one\'s own website and adds it to Growth with its public CMS record as evidence.', [
+      [feed.declared === true, schemaStep('Medicare roster')],
+      [feed.enabled === true, 'Turn on Settings → Customer growth → Find prospects from the Medicare roster.'],
+      [Array.isArray(rosterStates) && rosterStates.length > 0, 'Choose Settings → Customer growth → States to prospect in.'],
+      [feed.signing === true, 'Set HUB_INTEL_FEED_SECRET on the Hub to the same value as HUB_MARKETING_FEED_SECRET on Intel (at least 32 characters).'],
+      [growth?.research?.configured === true, 'Set HUB_GROWTH_SEARCH_API_KEY on the Hub service.'],
+    ], '/admin/growth');
   add('growth_email', 'Prospect email and follow-ups', ['marketing_manager'],
     'Drafts outreach and sends eligible, reviewed messages. Campaign policy, contact eligibility, frequency limits and approvals still apply.', [
       growthFeature, [growthState.sending === true, 'Turn on Settings → Customer growth → Send growth email when ready to send.'],

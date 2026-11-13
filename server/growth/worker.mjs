@@ -11,6 +11,7 @@ import { enrichProspects } from './enrichment.mjs';
 import { discoveryQueries, linkablePages, senderFor } from './playbook.mjs';
 import { searchResultLimit } from './research.mjs';
 import { untaggedUrl } from '../agents/links.mjs';
+import { chooseSite, confirmsSite, resolutionQuery, rosterLookupsPerRun, rosterPagesPerRun, rosterRefreshMs, rosterRow, rosterStates } from './roster.mjs';
 const deferred=()=>Object.assign(new Error('Action is deferred'),{code:'action_deferred'});
 const easternDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'});
 /** The calendar day in America/New_York, matching every other send cap and notice. */
@@ -220,6 +221,92 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     const qualified=(await growth.store.autoQualify(qualifyLimit))?.qualified??0;
     return {result:{candidates,contacts,qualified,...researched}};
   }
+  /**
+   * The Medicare roster (Intel's marketing feed; 20261113150000_growth_roster.sql). Each run reads up to eight pages of the roster when
+   * a read is due (a new set of states, an unfinished read, or a week since the last complete one), then looks up the best-ranked
+   * agencies' own websites, within the owner's daily number: one search for the agency, the contact finder on the chosen site (which
+   * also checks for the agency's CMS telephone number), and the agency graduates into the pipeline only when the site is confirmed
+   * as its own. Everything after that (fit, qualification, drafting, approval, the send caps) is the existing pipeline's.
+   */
+  async function rosterRun(task,{signal,now=()=>new Date()}={}) {
+    const roster=growth.roster, feed=roster?.feed;
+    if(!feed?.configured||typeof growth.store.rosterSyncState!=='function')return {result:{skipped:'roster_not_configured'}};
+    if(task.agent?.autonomy==='observe')return {result:{skipped:'observe_only'}};
+    if(!markets(await marketedNow(marketed),'caremetric-intel'))return {result:{skipped:'not_marketed'}};
+    const states=rosterStates(live(roster.states));
+    if(!states.length)return {result:{skipped:'no_states'}};
+    const started=clock(),spent=()=>clock()-started>=workBudgetMs;
+    // 1. Read the roster when a read is due.
+    const state=await growth.store.rosterSyncState();
+    const sameStates=JSON.stringify([...(state?.states??[])].sort())===JSON.stringify([...states].sort());
+    const fresh=state?.complete&&state.syncedAt&&Date.parse(state.syncedAt)>now().getTime()-rosterRefreshMs;
+    const read={pages:0,rows:0};
+    let stopped=null,period=state?.period??null;
+    if(!(sameStates&&fresh)) {
+      let restart=!sameStates||Boolean(state?.complete), cursor=restart?null:state?.cursor??null;
+      for(let page=0;page<rosterPagesPerRun;page++) {
+        signal?.throwIfAborted(); if(spent()){stopped='time';break;}
+        if(page)await pause(feed.paceMs,signal);
+        let answer;
+        try {answer=await feed.roster({states,cursor,signal});}
+        catch(error) {if(signal?.aborted||(!error?.transient&&!read.pages))throw error; stopped=error?.code??'feed_unavailable';break;}
+        if(!answer.period){stopped='roster_not_loaded';break;}
+        // CMS published a new quarter part-way through a read: start the read again on it.
+        if(!restart&&period&&answer.period!==period&&cursor){restart=true;cursor=null;period=answer.period;continue;}
+        period=answer.period;
+        const rows=answer.items.filter(item=>item.state&&item.name).map(item=>rosterRow(item,answer.period,now()));
+        if(rows.length)await growth.store.rosterUpsert(answer.period,rows);
+        read.pages++;read.rows+=rows.length;
+        await growth.store.rosterSyncSave({period:answer.period,states,cursor:answer.next_cursor??'',complete:!answer.next_cursor,pages:1,rows:rows.length,restart});
+        restart=false;cursor=answer.next_cursor;
+        if(!cursor)break;
+      }
+    }
+    // 2. Look up the day's best agencies. Without a search provider nothing is claimed, so no agency waits a week for nothing.
+    const looked={looked:0,graduated:0,unresolved:0,contacts:0};
+    const daily=Number.isInteger(live(roster.daily))?live(roster.daily):25;
+    if(growth.research?.configured&&growth.contacts?.configured&&daily>0&&!stopped) {
+      for(let n=0;n<rosterLookupsPerRun;n++) {
+        signal?.throwIfAborted(); if(spent())break;
+        const [target]=await growth.store.rosterNext(1,daily);
+        if(!target)break;
+        looked.looked++;
+        const outcome=await lookUp(target,{signal});
+        if(outcome.graduated){looked.graduated++;if(outcome.contact)looked.contacts++;}else looked.unresolved++;
+        if(outcome.retry)break;
+        await pause(Number(growth.research.paceMs)||0,signal);
+      }
+    }
+    return {result:{period,states:states.length,...(read.pages?{read}:{}),...(stopped?{stopped}:{}),...looked}};
+  }
+  /** One roster agency: find its own website, confirm it, and graduate it into the pipeline with its public record as evidence. */
+  async function lookUp(target,{signal}) {
+    let rows;
+    try {rows=await growth.research.search('caremetric-intel',{query:resolutionQuery(target),count:10,signal});}
+    catch(error) {if(signal?.aborted)throw error; await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason:'retry'}); return {graduated:false,retry:true};}
+    const choice=chooseSite(target,rows);
+    if(!choice){await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason:'no_site'});return {graduated:false};}
+    let found;
+    try {found=await growth.contacts.find(choice.domain,{signal,phone:target.facts?.phone??null});}
+    catch(error) {if(signal?.aborted)throw error; await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason:'retry'}); return {graduated:false};}
+    const confirmation=confirmsSite(target,found,choice);
+    if(!confirmation){await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason:'not_confirmed'});return {graduated:false};}
+    const site=found.site;
+    const evidence=site?.claim&&/^https:\/\//.test(site.url??'')?[{url:String(site.url).slice(0,2000),claim:String(site.claim).slice(0,4000)}]:[];
+    let resolved;
+    try {resolved=await growth.store.rosterResolved(target.ccn,{outcome:'graduated',domain:choice.domain,confirmation,evidence});}
+    catch(error) {if(error?.code!=='22023')throw error; await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason:'invalid_site'}).catch(()=>{}); return {graduated:false};}
+    if(!resolved?.graduated)return {graduated:false};
+    let contact=false;
+    if(resolved.contactReady) {
+      // The address the finder read on the agency's own site becomes its one contact, exactly as for a business found by search.
+      let recorded=null;
+      try {recorded=await growth.store.recordContact(resolved.organizationId,found.email??null,found.email?found.sourceUrl:null);}
+      catch(error) {if(error?.code!=='22023')throw error; recorded=await growth.store.recordContact(resolved.organizationId,null,null);}
+      contact=Boolean(recorded?.found);
+    }
+    return {graduated:true,contact};
+  }
   // The guardrail check that messages nobody approved need (growth.1, within 30 days). Synthetic cases only: no model, no customer data.
   async function evaluate(task,{now=()=>new Date()}={}) {
     const reports=await evaluateGrowth(now());
@@ -245,7 +332,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     }
     return {status:proposals?'awaiting_approval':'done',result:{contentWeek:week,proposals}};
   }
-  return {'growth.pipeline':sweep,'growth.success':sweep,'growth.discovery':discover,'growth.content':content,...(autonomy?{'growth.evaluate':evaluate}:{})};
+  return {'growth.pipeline':sweep,'growth.success':sweep,'growth.discovery':discover,'growth.content':content,...(autonomy?{'growth.evaluate':evaluate,'growth.roster':rosterRun}:{})};
 }
 /**
  * A growth message as it is sent, in the theme of the product's app (Intel's Emberline for Intel): a letter (it reads like an email a

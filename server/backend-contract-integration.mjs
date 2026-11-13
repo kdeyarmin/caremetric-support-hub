@@ -54,6 +54,7 @@ const marketingConnectionContracts=await Promise.all([
   ['platform.agents.app-growth.v1','20261111032205_growth_app_lifecycle_contract.sql'],
   ['platform.agents.visitor-metrics.v1','20261111040100_visitor_metrics_contract.sql'],
   ['platform.social-connections.v1','20261111060001_social_connections_contract.sql'],
+  ['platform.agents.growth-roster.v1','20261113150100_growth_roster_contract.sql'],
 ].map(async([feature,file])=>({feature,sql:await readFile(new URL(`../supabase/migrations/${file}`,import.meta.url),'utf8')})));
 const diagnosticSupportContract=diagnosticSupportMigration.slice(diagnosticSupportMigration.indexOf('do $$ declare contract'));
 assert.ok(selfServiceContract.startsWith('-- Contract publication is last:'),'Recognize the self-service contract declaration');

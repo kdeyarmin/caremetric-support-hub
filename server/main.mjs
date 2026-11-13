@@ -31,6 +31,7 @@ import { growthStore } from './growth/store.mjs';
 import { growthService } from './growth/service.mjs';
 import { growthResearch } from './growth/research.mjs';
 import { growthContactFinder } from './growth/contacts.mjs';
+import { intelFeedReader } from './growth/intel-feed.mjs';
 import { growthSender } from './growth/sender.mjs';
 import { socialConfig } from './agents/social/index.mjs';
 import { nativeVisitorReader } from './agents/scorecard/visitors.mjs';
@@ -88,7 +89,10 @@ const messaging=communications({pool,delegations:capabilities,publicOrigin,
   twilioAuthToken:process.env.HUB_TWILIO_AUTH_TOKEN,sendgridInboundPublicKey:process.env.HUB_SENDGRID_INBOUND_PUBLIC_KEY,
   sms:textSender,email:mailSender,
   chatEnabled:setting('support.chat')});
-const growth=growthService({store:growthStore(pool),research:growthResearch({apiKey:process.env.HUB_GROWTH_SEARCH_API_KEY}),contacts:growthContactFinder(),features:new Set(contract.features),enabled:setting('growth.send'),signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,
+// The Medicare roster from Intel's signed marketing feed (Settings → Customer growth; the shared secret HUB_INTEL_FEED_SECRET in Railway).
+const roster={feed:intelFeedReader({features,enabled:setting('growth.roster'),key:process.env.HUB_INTEL_FEED_SECRET}),
+  states:setting('growth.roster_states'),daily:setting('growth.roster_daily_resolutions')};
+const growth=growthService({store:growthStore(pool),research:growthResearch({apiKey:process.env.HUB_GROWTH_SEARCH_API_KEY}),contacts:growthContactFinder(),roster,features:new Set(contract.features),enabled:setting('growth.send'),signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,
   sesEvents:snsReceiver({topicArn:setting('email.ses_events_topic')}),sesEventsReady:()=>snsTopicPattern.test(settings.get('email.ses_events_topic')??''),publicOrigin,postalAddress});
 // Cold email and sales follow-ups may come from their own address (Settings → Email → Growth email sender, normally on a subdomain), so
 // prospecting can never hurt the support address's reputation. Replies still go to the support inbox. Unset: the support sender.

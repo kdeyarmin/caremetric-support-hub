@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { growthPost, growthMutation, workspaceSchema, detailSchema } from './growthClient';
+import { growthPost, growthMutation, workspaceSchema, detailSchema, rosterSchema } from './growthClient';
 import type { GrowthOpportunity, GrowthPolicy } from './growthClient';
 import type { z } from 'zod';
 import './admin.css';
@@ -35,6 +35,25 @@ function PolicyEditor({policy,onSave}:{policy:GrowthPolicy;onSave:(op:string,dat
  <p>Model-written messages always need individual review. Changes invalidate older drafts.</p>
  <button className="button">Save policy</button></form></details>;
 }
+const rosterStatus:Record<string,string>={new:'Waiting',resolving:'Looking up',unresolved:'Not found yet',excluded:'Excluded',graduated:'In the pipeline'};
+const rosterReason:Record<string,string>={no_site:'no website matched',not_confirmed:'website not confirmed as theirs',retry:'search unavailable; retrying',shared_host:'website shared with other agencies',closed:'closed in the CMS roster',invalid_site:'website refused'};
+/** The Medicare roster from Intel's feed (Settings → Customer growth): where the read is, and the best-ranked agencies. */
+function RosterPanel({revision}:{revision:number}) {
+ const [entry,setEntry]=useState<{revision:number;offset:number;data:z.infer<typeof rosterSchema>}|null>(null),[failure,setFailure]=useState(''),[offset,setOffset]=useState(0);
+ useEffect(()=>{const c=new AbortController();void growthPost('roster',{offset},rosterSchema,c.signal).then(data=>{if(!c.signal.aborted){setEntry({revision,offset,data});setFailure('');}}).catch(e=>{if(!c.signal.aborted)setFailure(e instanceof Error?e.message:'The Medicare roster could not be loaded.');});return()=>c.abort();},[revision,offset]);
+ const data=entry?.data;
+ if(failure)return <section className="panel"><h2>Medicare roster</h2><p>{failure}</p></section>;
+ if(!data)return <section className="panel"><h2>Medicare roster</h2><p role="status">Loading the Medicare roster…</p></section>;
+ const feed=data.services.feed;
+ const missing=[!feed.declared&&'apply the roster database migration',!feed.enabled&&'turn on Settings → Customer growth → Find prospects from the Medicare roster',!data.services.states.length&&'choose Settings → Customer growth → States to prospect in',!feed.signing&&'set HUB_INTEL_FEED_SECRET in Railway to Intel\'s HUB_MARKETING_FEED_SECRET',!data.services.research&&'set the search key (HUB_GROWTH_SEARCH_API_KEY)'].filter(Boolean);
+ return <section className="panel" aria-labelledby="growth-roster-title"><h2 id="growth-roster-title">Medicare roster · {data.total} agencies</h2>
+  <p>Every Medicare-certified home health agency and hospice in {data.services.states.length?data.services.states.join(', '):'your chosen states'}, from Intel's marketing feed. The Marketing Manager looks up the best-ranked ones' own websites, up to {data.services.daily} a day, and adds those it confirms to the pipeline below.</p>
+  {missing.length>0&&<p role="status">To start: {missing.join('; ')}.</p>}
+  <p>Roster {data.sync.period??'not read yet'}{data.sync.syncedAt?` · read ${new Date(data.sync.syncedAt).toLocaleDateString()}`:''}{data.sync.period&&!data.sync.complete?' · reading':''} · {Object.entries(rosterStatus).map(([key,label])=>`${label}: ${data.counts[key]??0}`).join(' · ')}</p>
+  {data.items.length>0&&<table><thead><tr><th>Agency</th><th>Place</th><th>Rank</th><th>Status</th><th>Website</th></tr></thead><tbody>{data.items.map(t=><tr key={t.ccn}><td>{t.name}<br/><small>{t.setting==='hospice'?'Hospice':'Home health'} · CCN {t.ccn}</small></td><td>{[t.city,t.state].filter(Boolean).join(', ')}</td><td>{t.rank}{t.reasons.length>0&&<><br/><small>{t.reasons.join('; ')}</small></>}</td><td>{rosterStatus[t.status]??t.status}{t.reason&&<><br/><small>{rosterReason[t.reason]??t.reason}{t.resolveAfter?` · again ${new Date(t.resolveAfter).toLocaleDateString()}`:''}</small></>}</td><td>{t.domain??''}{t.confirmation&&<><br/><small>confirmed by {t.confirmation==='phone'?'its CMS telephone number':'its name and place'}</small></>}</td></tr>)}</tbody></table>}
+  {data.total>50&&<><button disabled={!offset} onClick={()=>setOffset(Math.max(0,offset-50))}>Previous agencies</button><button disabled={offset+50>=data.total} onClick={()=>setOffset(offset+50)}>Next agencies</button></>}
+ </section>;
+}
 export function Growth() {
  const [workspace,setWorkspace]=useState<{offset:number;data:z.infer<typeof workspaceSchema>}|null>(null),[offset,setOffset]=useState(0),[revision,setRevision]=useState(0),[error,setError]=useState(''),[busy,setBusy]=useState(false),[selected,setSelected]=useState<string|null>(null);
  const [detailEntry,setDetail]=useState<{id:string;revision:number;data:z.infer<typeof detailSchema>}|null>(null);
@@ -52,6 +71,7 @@ export function Growth() {
  {error&&<p role="alert">{error}</p>}{workspaceError&&<p role="alert">{workspaceError}</p>}{!data&&!workspaceError&&<p role="status">Loading customer growth…</p>}
  <button className="button" onClick={()=>setRevision(n=>n+1)}>Refresh</button>
  {data&&<><section className="panel"><h2>Readiness</h2><p>Sending: {data.services.sending?'enabled':'disabled'} · Research: {data.services.research?'ready':'not configured'} · Unsubscribe signing: {data.services.signing?'ready':'not configured'} · Sender address: {data.services.postalAddress?'ready':'needed'}</p><p>Sending also requires an active agent, a reviewed policy and an eligible verified contact.</p></section>
+ {data.services.roster&&<RosterPanel revision={revision}/>}
  <fieldset disabled={busy} style={{border:0,padding:0}}>
  <details className="panel"><summary>Add a prospect or customer</summary><form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void save('create',{name:value(f,'name'),domain:value(f,'domain').toLowerCase(),product:value(f,'product'),email:value(f,'email'),contactName:value(f,'contactName'),role:value(f,'role'),goal:value(f,'goal'),...(value(f,'tenantId')?{tenantId:value(f,'tenantId')}:{}),internal:f.has('internal')});}}>
  <label>Organization<input name="name" maxLength={200} required/></label><label>Business domain<input name="domain" placeholder="example.org" required/></label>

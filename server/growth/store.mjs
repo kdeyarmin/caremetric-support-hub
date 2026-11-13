@@ -28,5 +28,12 @@ export function growthStore(pool) {
     delivery:(event,id,kind,at)=>server('private.growth_delivery_event',[event,id,kind,at]),
     unsubscribe:hash=>server('private.growth_unsubscribe',[hash]),
     inquiry:(messageId)=>server('private.growth_inquiry',[messageId]),
+    // The Medicare roster (20261113150000_growth_roster.sql).
+    rosterSyncState:()=>server('private.growth_roster_sync_state'),
+    rosterSyncSave:data=>server('private.growth_roster_sync_save',[data]),
+    rosterUpsert:(period,rows)=>server('private.growth_roster_upsert',[period,JSON.stringify(rows)]),
+    rosterNext:(limit,daily)=>server('private.growth_roster_next',[limit,daily]),
+    rosterResolved:(ccn,data)=>server('private.growth_roster_resolved',[ccn,data]),
+    roster:(token,offset=0)=>withSession(pool,token,db=>run(db,'hub.growth_roster',[offset])),
   };
 }

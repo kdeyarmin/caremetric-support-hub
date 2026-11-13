@@ -10,7 +10,7 @@
  */
 import { founder, products as facts, productPages } from '../agents/content/facts.mjs';
 
-export const playbookVersion = 'sales-playbook.2';
+export const playbookVersion = 'sales-playbook.3';
 
 /**
  * How CareMetric sells (owner decision 2026-11-08): entirely self-serve. Nobody offers a demo, a sales call or a meeting. A prospect gets
@@ -161,6 +161,7 @@ export const salesPlaybook = deepFreeze({
         'It is hiring marketers, community liaisons or business development staff.',
         'It is opening a branch, entering a new county or expanding service lines.',
         'It mentions referral partners such as physicians, hospitals or facilities.',
+        'A public CMS record shows it was newly certified or changed ownership in the last year: new agencies and new owners build referral sources from scratch.',
       ],
       disqualifiers: [
         'A directory, listing or referral site, an association, a news article, a government page or a job board, rather than the provider itself.',
