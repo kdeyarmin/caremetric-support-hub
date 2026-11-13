@@ -53,6 +53,24 @@ try {
   assert.ok(['approved', 'auto_approved'].includes(back.status), 'back to its approved state');
   assert.ok(back.not_before.getTime() > Date.now() + 3_600_000, 'with its hold restored');
 
+  // A post for the founder's own profile waits for its slot the same way (20261113260000).
+  const founderDay = `2099-${String(1 + (parseInt(run.slice(0, 2), 16) % 12)).padStart(2, '0')}-${String(1 + (parseInt(run.slice(2, 4), 16) % 28)).padStart(2, '0')}`;
+  const founderPost = await store.proposeAction({ taskId: plan, kind: 'social.founder_post', targetKind: 'social_item', targetId: `founder:${founderDay}:1`, preview: 'A founder post',
+    input: { product: 'caremetric-intel', pillar: 'insight', message: 'A founder post', scheduledFor: later } });
+  assert.equal(founderPost.status, 'proposed');
+  assert.equal(await store.socialSchedule(founderPost.id, null), true, 'A founder post is held');
+  const founderHeld = await row('select not_before from private.agent_actions where id = $1', [founderPost.id]);
+  assert.ok(Math.abs(founderHeld.not_before.getTime() - Date.parse(later)) < 1000, 'until its time slot');
+  await admin.query("update private.agent_actions set status = 'approved', decided_at = now() where id = $1", [founderPost.id]);
+  assert.equal(await store.beginExecution(founderPost.id), null, 'An approved founder post does not publish before its slot');
+  await admin.query('update private.agent_actions set not_before = null where id = $1', [founderPost.id]);
+  const founderExecution = await store.beginExecution(founderPost.id);
+  assert.ok(founderExecution, 'It starts once nothing holds it');
+  assert.equal(await store.deferExecution(founderPost.id, founderExecution.execution, 'social.founder_post'), true, 'An early start is handed back');
+  const founderBack = await row('select status, not_before from private.agent_actions where id = $1', [founderPost.id]);
+  assert.equal(founderBack.status, 'approved');
+  assert.ok(founderBack.not_before.getTime() > Date.now() + 3_600_000, 'with its hold restored');
+
   // A budget change is never automatic, even for an agent on Act that lists it.
   await admin.query("update private.agents set autonomy = 'act', config = jsonb_set(config, '{auto_approve_kinds}', '[\"social.ad_budget\", \"social.ad_pause\"]') where key = 'social_manager'");
   const ads = await runningTask('social_manager', 'social.ads');

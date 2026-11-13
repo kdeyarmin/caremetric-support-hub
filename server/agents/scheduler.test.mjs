@@ -166,14 +166,36 @@ describe('agent scheduler', () => {
     }
   });
 
-  it('never runs two ticks at once', async () => {
+  it('lets the next tick run beside a slow task, claiming only the room left under the tasks allowed at once', async () => {
     let release;
     const gate = new Promise(resolve => { release = resolve; });
-    const { scheduler, store } = fixture({ tasks: [task()], handlers: { 'probe.sweep': () => gate } });
+    let limit = 3;
+    const { scheduler, store } = fixture({ tasks: [task()], handlers: { 'probe.sweep': () => gate }, claimLimit: () => limit });
+    const first = scheduler.tick();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(scheduler.running).toBe(1);
+    store.claim.mockResolvedValueOnce([]);
+    expect(await scheduler.tick()).toMatchObject({ skipped: false, claimed: 0 });
+    expect(store.claim).toHaveBeenLastCalledWith(2, 600);
+    // With one task allowed at once, a tick beside a running task claims nothing.
+    limit = 1;
+    const calls = store.claim.mock.calls.length;
+    expect(await scheduler.tick()).toMatchObject({ skipped: false, claimed: 0 });
+    expect(store.claim).toHaveBeenCalledTimes(calls);
+    release({});
+    await first;
+    expect(scheduler.running).toBe(0);
+  });
+
+  it('never claims in two ticks at once', async () => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const { scheduler, store } = fixture({ tasks: [task()] });
+    store.fireSchedules.mockImplementationOnce(() => gate);
     const first = scheduler.tick();
     await new Promise(resolve => setTimeout(resolve, 10));
     expect(await scheduler.tick()).toMatchObject({ skipped: true });
-    release({});
+    release([]);
     await first;
     expect(store.claim).toHaveBeenCalledTimes(1);
   });

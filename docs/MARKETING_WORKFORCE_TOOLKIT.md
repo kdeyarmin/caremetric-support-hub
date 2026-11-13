@@ -93,3 +93,11 @@ contact eligibility, product claims, and spending limits remain in effect. Keep 
 **Current commercial scope remains CareMetric Intel only.** CareBase stays in the owner-selected pilot; Advisors marketing stays
 off. The team sells through self-serve pages, trials, guides, and written answers. It does not offer calls, meetings, or demos. See
 [product marketing switches](AI_TEAM.md#what-the-team-markets) and [self-serve selling](AI_TEAM.md#no-demos-calls-or-meetings).
+
+## Added 2026-11-13
+
+New readiness rows on the AI team page: Medicare roster prospecting (`prospect_roster`), named decision-makers (`decision_makers`),
+prospect research with web search (`prospect_deep_research`), posts for your own LinkedIn profile (`founder_posts`), county snapshot
+images (`county_snapshots`), new paid campaigns (`paid_campaigns`) and leads reported to the ad platforms (`ad_conversions`). Each
+row names the setting or secret still missing. The morning brief's watchdog quotes the first missing step when an agent goes quiet.
+What each does and the order to turn them on: [AI_WORKFORCE_REVIEW_2026-11-13.md](AI_WORKFORCE_REVIEW_2026-11-13.md).

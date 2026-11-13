@@ -19,8 +19,16 @@ export function planOpportunity(o, now = new Date()) {
   const add = (key, kind, action, success, owner = o.owner_agent) => plans.push({ key, kind, action, success, owner, dueAt: now.toISOString() });
   if (o.owner_agent === 'marketing_manager') {
     if (o.stage === 'identified') add('research','research','Verify organization fit, business contact and source evidence.','Fit and intent documented with dated sources.');
-    if (['qualified','contacted'].includes(o.stage) && time(o.next_at)<=at && Number(o.touches ?? 0)<(o.policy?.max_touches ?? 3)) {
-      const replied = latest(o,['reply','positive_reply','negative_reply','not_now','meeting_booked','trial_started']);
+    // A re-ask (private.growth_reengage) is one message, counted from when it began; a reply before it does not stop it, but a no, a
+    // trial, a sign-up or a meeting stops outreach whenever it happened.
+    const since = time(o.memory?.reengagedAt);
+    const touches = Math.max(0, Number(o.touches ?? 0) - (since !== null ? Number(o.memory?.touchesBefore ?? 0) : 0));
+    // A re-ask waits until its address was verified in the last 80 days (the contact finder reads a role address's site again for
+    // it): drafted earlier, the send claim's 90-day rule would cancel it while it waited for approval, and it would never be redrafted.
+    const current = since === null || (time(o.verified_at) !== null && at - time(o.verified_at) <= 80 * day);
+    if (['qualified','contacted'].includes(o.stage) && current && time(o.next_at)<=at && touches<(since !== null ? 1 : (o.policy?.max_touches ?? 3))) {
+      const replied = (o.events ?? []).some(e => ['negative_reply','meeting_booked','trial_started','signup'].includes(e.kind)
+        || (['reply','positive_reply','not_now'].includes(e.kind) && (since === null || (time(e.occurred_at) ?? 0) > since)));
       if (!replied) add(`outreach:${o.touches ?? 0}`,'outreach','Offer one relevant next step based on verified product fit.','A qualified reply, trial or explicit disposition is recorded.');
     }
     if (['engaged','demo'].includes(o.stage) && time(o.next_at)<=at) add(`followup:${o.version}`,'reply','Answer the prospect\'s question in writing and agree a dated next step.','Trial, nurture or loss reason confirmed.');

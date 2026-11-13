@@ -38,6 +38,8 @@ const studio = (over: Partial<CreativeStudio> = {}): CreativeStudio => studioSch
 const clientOf = (data = studio()): CreativeClient & { [K in keyof CreativeClient]: ReturnType<typeof vi.fn> } => ({
   studio: vi.fn(async () => data), setBrandKit: vi.fn(async () => kit("carebase")), addBrandFile: vi.fn(async () => kit("carebase")), removeBrandFile: vi.fn(async () => kit("carebase")),
   createBrief: vi.fn(async () => ({ ...data.briefs[0] })), decide: vi.fn(async () => ({ id: "33333333-3333-4333-8333-333333333333", kind: "creative.asset", status: "executed", decided: true })),
+  uploadVideo: vi.fn(async () => ({ briefId: "11111111-1111-4111-8111-111111111111", already: false, assets: [] })),
+  videoInfo: vi.fn(async () => ({ width: 1080, height: 1920, durationSeconds: 30 })),
 }) as never;
 
 describe("the Creative screen", () => {
@@ -93,6 +95,38 @@ describe("the Creative screen", () => {
     fireEvent.change(screen.getByLabelText("Audience"), { target: { value: "Marketing leaders at hospitals and nursing homes" } });
     fireEvent.click(screen.getByRole("button", { name: "Start this brief" }));
     await waitFor(() => expect(client.createBrief).toHaveBeenCalledWith(expect.objectContaining({ product: "caremetric-intel", goal: "Drive free-trial starts", platforms: ["meta"], formats: ["static"], videoLengths: [] })));
+  });
+
+  it("adds the owner's own finished video for each placement it fits, once attested", async () => {
+    const client = clientOf();
+    render(<Creative client={client} />);
+    await screen.findAllByRole("article");
+    const panel = screen.getByRole("region", { name: /Add a finished video/ });
+    const file = new File([new Uint8Array(2048)], "caremetric-intel-commercial-9x16.mp4", { type: "video/mp4" });
+    fireEvent.change(within(panel).getByLabelText("Video file"), { target: { files: [file] } });
+    expect(await within(panel).findByText(/1080 x 1920, 30 seconds/)).toBeTruthy();
+    const reels = within(panel).getByRole("checkbox", { name: "Instagram Reels and Facebook (9:16)" }) as HTMLInputElement;
+    const linkedin = within(panel).getByRole("checkbox", { name: "LinkedIn (9:16)" }) as HTMLInputElement;
+    expect(reels.checked && linkedin.checked).toBe(true);
+    expect((within(panel).getByRole("textbox", { name: "Name" }) as HTMLInputElement).value).toBe("caremetric intel commercial 9x16");
+    fireEvent.click(within(panel).getByRole("button", { name: "Add to the library" }));
+    expect(await within(panel).findByRole("alert")).toBeTruthy();
+    expect(client.uploadVideo).not.toHaveBeenCalled();
+    fireEvent.click(within(panel).getByRole("checkbox", { name: /shows no patient, resident or personal information/ }));
+    fireEvent.click(within(panel).getByRole("button", { name: "Add to the library" }));
+    await waitFor(() => expect(client.uploadVideo).toHaveBeenCalledWith(expect.objectContaining({ product: "caremetric-intel", placements: ["meta.video_vertical", "linkedin.video_vertical"], attested: true, file })));
+    expect(await screen.findByText(/Added to the library, approved for Instagram Reels and Facebook \(9:16\) and LinkedIn \(9:16\)/)).toBeTruthy();
+  });
+
+  it("says when a video fits no placement", async () => {
+    const client = clientOf();
+    client.videoInfo.mockResolvedValueOnce({ width: 1280, height: 720, durationSeconds: 20 });
+    render(<Creative client={client} />);
+    await screen.findAllByRole("article");
+    const panel = screen.getByRole("region", { name: /Add a finished video/ });
+    fireEvent.change(within(panel).getByLabelText("Video file"), { target: { files: [new File([new Uint8Array(16)], "clip.mp4", { type: "video/mp4" })] } });
+    expect(await within(panel).findByText(/This video fits no placement/)).toBeTruthy();
+    expect((within(panel).getByRole("button", { name: "Add to the library" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("saves a brand kit with the version it was read at", async () => {

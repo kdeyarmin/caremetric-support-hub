@@ -1,3 +1,4 @@
+import { adsConfig } from './agents/ads/index.mjs';
 import pg from 'pg';
 import { smsProvider } from './sms-provider.mjs';
 import { smsAuth, ownerAccess } from './sms-auth.mjs';
@@ -31,6 +32,8 @@ import { growthStore } from './growth/store.mjs';
 import { growthService } from './growth/service.mjs';
 import { growthResearch } from './growth/research.mjs';
 import { growthContactFinder } from './growth/contacts.mjs';
+import { intelFeedReader } from './growth/intel-feed.mjs';
+import { peopleProvider } from './growth/people-provider.mjs';
 import { growthSender } from './growth/sender.mjs';
 import { socialConfig } from './agents/social/index.mjs';
 import { nativeVisitorReader } from './agents/scorecard/visitors.mjs';
@@ -88,7 +91,17 @@ const messaging=communications({pool,delegations:capabilities,publicOrigin,
   twilioAuthToken:process.env.HUB_TWILIO_AUTH_TOKEN,sendgridInboundPublicKey:process.env.HUB_SENDGRID_INBOUND_PUBLIC_KEY,
   sms:textSender,email:mailSender,
   chatEnabled:setting('support.chat')});
-const growth=growthService({store:growthStore(pool),research:growthResearch({apiKey:process.env.HUB_GROWTH_SEARCH_API_KEY}),contacts:growthContactFinder(),features:new Set(contract.features),enabled:setting('growth.send'),signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,
+// The Medicare roster from Intel's signed marketing feed (Settings → Customer growth; the shared secret HUB_INTEL_FEED_SECRET in Railway).
+const roster={feed:intelFeedReader({features,enabled:setting('growth.roster'),key:process.env.HUB_INTEL_FEED_SECRET}),
+  states:setting('growth.roster_states'),daily:setting('growth.roster_daily_resolutions')};
+// The contact-data service that finds decision-makers' work addresses (Settings → Customer growth; HUB_APOLLO_API_KEY in Railway).
+let peopleChoice={choice:undefined,provider:null};
+const people={provider:()=>{const choice=settings.get('growth.enrichment_provider');if(choice!==peopleChoice.choice)peopleChoice={choice,provider:peopleProvider(choice,{apolloKey:process.env.HUB_APOLLO_API_KEY})};return peopleChoice.provider;}};
+const growth=growthService({store:growthStore(pool),research:growthResearch({apiKey:process.env.HUB_GROWTH_SEARCH_API_KEY}),contacts:growthContactFinder(),roster,people,
+  // Deeper research with web tools (Settings → Customer growth → Research prospects with web search).
+  deepResearch:{enabled:setting('growth.deep_research'),perDay:setting('growth.deep_research_per_day'),cents:setting('growth.deep_research_cents')},
+  // The weekly "what is working" memo, used in drafts once the owner approves it (Settings → Customer growth → Write from what is working).
+  learning:{enabled:setting('growth.learning_memo')},importKey:process.env.HUB_GROWTH_IMPORT_SECRET,features:new Set(contract.features),enabled:setting('growth.send'),signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,
   sesEvents:snsReceiver({topicArn:setting('email.ses_events_topic')}),sesEventsReady:()=>snsTopicPattern.test(settings.get('email.ses_events_topic')??''),publicOrigin,postalAddress});
 // Cold email and sales follow-ups may come from their own address (Settings → Email → Growth email sender, normally on a subdomain), so
 // prospecting can never hurt the support address's reputation. Replies still go to the support inbox. Unset: the support sender.
@@ -104,6 +117,14 @@ const customerMail=bulkSender({from:supportFrom,replyTo:supportReplyTo,category:
 // The AI team: inert until "Run the AI team" is switched on in Settings, and every agent starts paused until the owner resumes it.
 const team=agentTeam({pool,growth,growthMail,postalAddress,sms:textSender,email:mailSender,ownerEmail:setting('agents.owner_email'),publicOrigin,enabled:setting('agents.enabled'),communications:messaging,features,anthropicApiKey:process.env.ANTHROPIC_API_KEY,record:sqlAiUsageRecorder(pool).record,guides:guideLibrary({load:()=>api.rpc('list_published_content',{}),loadProducts:()=>api.rows('products')}),customerTextToAi:setting('agents.customer_text_to_ai'),
   leadSecrets:leadSecrets(process.env),
+  // Website leads followed up by email (Settings → Customer growth → Follow up website leads by email).
+  inboundFollowup:setting('growth.inbound_followup'),
+  // How many agent tasks may run side by side (Settings → AI team → Tasks at once).
+  concurrentTasks:setting('agents.concurrent_tasks'),
+  // Paid ads: Settings → Paid ads, with the Google Ads secrets from Railway.
+  ads:()=>adsConfig(process.env,settings.get),
+  // Days before the watchdog flags an agent that has not run (Settings → AI team).
+  watchdogIdleDays:setting('agents.watchdog_idle_days'),
   // The social media tokens from Railway, with the page ids, ad accounts, images and ad limits from Settings → Social media.
   social:()=>socialConfig(connections.resolvedEnv(),connections.getSetting),
   // The Creative Director: Settings → Creative, with HeyGen's key from Railway.

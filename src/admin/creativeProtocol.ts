@@ -23,7 +23,7 @@ export const assetSchema = z.object({
   id: uuid, briefId: uuid, product: z.enum(creativeProducts), platform: z.enum(creativePlatforms), placement: z.string(), kind: z.enum(["static", "video"]), layout: z.string(),
   width: z.number().int(), height: z.number().int(), durationSeconds: z.number().nullable(), lengthKey: z.enum(videoLengthKeys).nullable(), variantLabel: z.string(),
   hookType: z.enum(["problem", "proof", "offer", "curiosity", "demo"]), concept: z.string(), headline: z.string(), primaryText: z.string(), description: z.string(), cta: z.string(),
-  landingUrl: z.string().nullable(), altText: z.string(), captions: z.string(), overlay: overlaySchema, provider: z.enum(["internal", "heygen"]), status: z.enum(creativeStatuses),
+  landingUrl: z.string().nullable(), altText: z.string(), captions: z.string(), overlay: overlaySchema, provider: z.enum(["internal", "heygen", "owner"]), status: z.enum(creativeStatuses),
   compliance: complianceSchema, performance: z.record(z.string(), z.unknown()), revisionNotes: z.string(), actionId: uuid.nullable(), actionStatus: z.string().nullable(),
   contentType: z.enum(["image/png", "video/mp4"]).nullable(), fileBytes: z.number().int().nullable(), renderError: z.string().nullable(), renderAttempts: z.number().int(),
   createdAt: instant, updatedAt: instant, renderedAt: instant.nullable(), approvedAt: instant.nullable(), liveAt: instant.nullable(), retiredAt: instant.nullable(),
@@ -31,7 +31,7 @@ export const assetSchema = z.object({
 export const briefSchema = z.object({
   id: uuid, product: z.enum(creativeProducts), goal: z.string(), audience: z.string(), offerCode: z.string().nullable(), platforms: z.array(z.enum(creativePlatforms)),
   formats: z.array(z.enum(["static", "video"])), videoLengths: z.array(z.enum(videoLengthKeys)), angle: z.string(),
-  source: z.enum(["social.plan", "growth.plan", "sweep", "owner", "refresh", "revision"]), status: z.enum(["open", "drafting", "done", "cancelled", "skipped"]),
+  source: z.enum(["social.plan", "growth.plan", "sweep", "owner", "refresh", "revision", "data.county", "data.release", "observance", "upload"]), status: z.enum(["open", "drafting", "done", "cancelled", "skipped"]),
   planRef: z.string().nullable(), parentAssetId: uuid.nullable(), revisionNote: z.string(), result: z.record(z.string(), z.unknown()), createdAt: instant, updatedAt: instant,
   created: z.boolean().optional(),
 });
@@ -76,7 +76,33 @@ export const statusLabels: Record<CreativeStatus, string> = {
 export const hookLabels = { problem: "Problem", proof: "Proof", offer: "Offer", curiosity: "Curiosity", demo: "Demo" } as const;
 export const sourceLabels: Record<CreativeBrief["source"], string> = {
   "social.plan": "Weekly social plan", "growth.plan": "Marketing content brief", sweep: "Daily sweep", owner: "Your brief", refresh: "Variants of a winner", revision: "Your changes",
+  "data.county": "County snapshot", "data.release": "New CMS data", observance: "Observance", upload: "Your video",
 };
+
+/**
+ * Where the owner's own finished video may be used (Creative → Add a finished video): the Meta and LinkedIn video placements, with the
+ * size a video must have and its longest length (server/agents/creative/specs.mjs and the database check the same).
+ */
+export const uploadPlacements = [
+  { key: "meta.video_vertical", platform: "meta", width: 1080, height: 1920, maxSeconds: 60, label: "Instagram Reels and Facebook (9:16)" },
+  { key: "meta.video_square", platform: "meta", width: 1080, height: 1080, maxSeconds: 120, label: "Facebook feed (1:1)" },
+  { key: "meta.video_portrait", platform: "meta", width: 1080, height: 1350, maxSeconds: 120, label: "Facebook feed (4:5)" },
+  { key: "meta.video_landscape", platform: "meta", width: 1920, height: 1080, maxSeconds: 120, label: "Facebook feed (16:9)" },
+  { key: "linkedin.video_vertical", platform: "linkedin", width: 1080, height: 1920, maxSeconds: 120, label: "LinkedIn (9:16)" },
+  { key: "linkedin.video_square", platform: "linkedin", width: 1080, height: 1080, maxSeconds: 120, label: "LinkedIn (1:1)" },
+  { key: "linkedin.video_portrait", platform: "linkedin", width: 1080, height: 1350, maxSeconds: 120, label: "LinkedIn (4:5)" },
+  { key: "linkedin.video_landscape", platform: "linkedin", width: 1920, height: 1080, maxSeconds: 120, label: "LinkedIn (16:9)" },
+] as const;
+export type UploadPlacement = typeof uploadPlacements[number];
+/** The placements a video of this size and length fits, at most one per platform. */
+export const fittingPlacements = (video: { width: number; height: number; durationSeconds: number }) =>
+  uploadPlacements.filter(item => item.width === video.width && item.height === video.height && video.durationSeconds <= item.maxSeconds
+    && video.durationSeconds >= (item.platform === "linkedin" ? 3 : 1));
+export const videoUploadLimit = 62_914_560;
+export const uploadResultSchema = z.object({
+  briefId: uuid, already: z.boolean(), assets: z.array(z.object({ id: uuid, platform: z.enum(creativePlatforms), placement: z.string() })),
+});
+export type UploadResult = z.infer<typeof uploadResultSchema>;
 const renderErrors: Record<string, string> = {
   renderer_unavailable: "The image renderer could not load on the server. It is tried again.",
   video_unavailable: "Video rendering is not available on the server (no ffmpeg). It is tried again.",

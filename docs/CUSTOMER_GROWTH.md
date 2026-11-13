@@ -181,7 +181,7 @@ claim still comes from the fact sheet (`server/agents/content/facts.mjs`, the co
 - **Pipeline sweep limits.** A sweep assesses at most 20 prospects, stops starting model calls and website reads 150 seconds after
   it began, and does not ask again for six hours for an assessment or a draft the model could not give or that failed its checks
   (unless the opportunity, its evidence, its contact or the policy changed). The sweep's result counts those drafts as `undrafted`.
-- **Fit assessment** (`growth-fit.2`) scores with a written rubric whose bands line up with qualification (`qualify.1`, fit 75 or
+- **Fit assessment** (`growth-fit.3`) scores with a written rubric whose bands line up with qualification (`qualify.1`, fit 75 or
   more): only an operator in the product's segment and territory, shown by its own sources, can reach 75; a directory, a vendor or an
   out-of-territory organization stays below 30.
 - **Drafting** (`growth.3`) gives the writer the fact sheet and the playbook in the cached system prompt, the touch it is writing
@@ -213,7 +213,7 @@ conversation. The playbook has a "demo" objection for both products: send the wa
 so every agent says it applies on its own, with no code needed. The Account Manager's trial check-in email states it in its exact
 terms (owner decision 2026-11-08).
 
-**Outreach from the founder, easy to read (owner direction 2026-11-12, `growth.7`).** Prospect outreach is written in the founder's
+**Outreach from the founder, easy to read (owner direction 2026-11-12, now `growth.8`).** Prospect outreach is written in the founder's
 first person and signed with the founder's name and title (`senderFor` in `server/growth/playbook.mjs`, from `founder` in
 `server/agents/content/facts.mjs`). Touch 1 tells the founder's story in one or two sentences, exactly as the fact sheet gives it: the
 founder runs a home health and hospice agency and a healthcare consulting company, needed a way to research competitors and find every potential referral source, and built
@@ -233,14 +233,46 @@ conversation, a demo or call, and a time to meet are refused; declining a demo i
 Changing the playbook's wording changes what the models read: bump `playbookVersion`, run `npm test -- server/growth` and
 `npm run evaluate:growth`, and review the next drafts before widening any autonomy.
 
+## The 2026-11-13 additions
+
+The Medicare roster (`growth.roster`), reply reading and website lead follow-up, one re-ask after "not now", named decision-makers
+and list imports (`growth.people`), research with web search (`growth.research`) and the weekly "what is working" memo
+(`growth.learn`) are described, with their settings and the order to turn them on, in
+[AI_WORKFORCE_REVIEW_2026-11-13.md](AI_WORKFORCE_REVIEW_2026-11-13.md). Every draft records the experiment arms it was written under
+(`growth_messages.arms`, short codes only) and the memo version it used (`memo_version`), and links carry the arms in `utm_content`.
+
 ## Canonical Intel activity and verified billing conversions
 
 With `platform.agents.app-growth.v1`, Intel posts server-only activity to `POST /api/apps/growth` using its existing billing application
 key. The payload contains its opaque 24-hex billing account, an immutable event UUID, `heartbeat`, `active` or `first_value`, the event
 time, and optional provider-list count. It cannot claim a trial or payment. The Hub authenticates the app, resolves exactly the same
-account-to-tenant link as billing, and associates the event with that canonical tenant. A missing link returns retryable 503; no name or
-email matching occurs. When no Growth organization is linked yet, the Hub creates a customer record with a reserved `.invalid`
-identity and Account Manager ownership; that identity is never a prospect website or a source of cold outreach.
+account-to-tenant link as billing, and associates the event with that canonical tenant. A missing link returns retryable 503; the
+activity itself carries no name or email. When no Growth organization is linked yet, the Hub first looks for the prospect this
+customer was (see [A prospect who starts a trial](#a-prospect-who-starts-a-trial)); only when there is none does it create a customer
+record with a reserved `.invalid` identity and Account Manager ownership, an identity that is never a prospect website or a source of
+cold outreach.
+
+### A prospect who starts a trial
+
+A customer used to get a Growth organization of its own even when the Marketing Manager had already found and written to that
+business, so cold follow-ups kept going to a business in a trial and the trial was never credited to the outreach. Since 2026-11-13
+(`private.growth_ensure_customer`), the first trial, payment or product signal for a tenant with no Growth organization reads the
+address on its live billing customer, which is the address the application's sign-up gave for the trial:
+
+- **The same address as a growth contact** links that contact's organization, and that contact becomes the product opportunity's
+  contact.
+- **Otherwise the same business domain** as a prospect organization links it. Personal mail domains (Gmail, Outlook, Yahoo, iCloud,
+  Comcast and the like) never do. The person who signed up joins as a contact for review and becomes the product opportunity's
+  contact (and the other product's, when a later signal hands that one to the Account Manager), so customer email never goes to
+  the person who was cold-emailed because a colleague signed up. A contact the owner sets afterwards is never reset.
+
+Only a prospect that is not already a customer and not internal is linked; a test-mode billing customer never links, and a tenant that
+already has a Growth organization keeps it. The send claim refuses cold email to a customer's organization, and unsent marketing drafts
+there are cancelled when the link is made. The trial or payment then lands on the prospect's own opportunity, with its history. Each
+link is audited as `growth.customer_linked` with the tenant, the product and whether the address or the domain matched, never the
+address. The sign-up address is the applicant's claim (Intel starts the trial before confirming it), so a link only stops prospecting
+and credits the trial: it sends nothing to anyone new. A linked customer keeps the prospect's real domain, so discovery can find it again; it then adds no
+opportunity or evidence to a customer's (or an internal) organization, for either product.
 
 Intel migration `0150_hub_growth_accounts.sql` enrolls billing-confirmed nonlegacy customer workspaces automatically, while preserving
 explicit legacy mappings and their enabled switches. The first newly recorded provider list with a real provider member emits first

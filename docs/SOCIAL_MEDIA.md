@@ -29,12 +29,31 @@ LinkedIn image posts use the same fallback images as the thumbnail of their link
 through its API, so the image is uploaded with the post. New ad copy reuses approved creative images or the image of the ad set's
 (or LinkedIn campaign's) best ad.
 
+## Events, stories, articles, your own profile and new campaigns (2026-11-13)
+
+- **Event posts** (Settings → Social media → Post about new CMS data and observances): the weekly plan sees the releases Intel loaded in
+  the last two weeks and the healthcare observances starting in the next three, and may write one post a week about one of them (the
+  `data` pillar). It states no statistic.
+- **Article links**: a post may link to an article the team published in the last 45 days (its canonical address on Intel's site or in
+  the help center), checked like a product page.
+- **Stories**: up to two approved 1080×1920 story images a week are proposed for Instagram (first) or the Facebook Page, each its own
+  post to approve, with no text or link. Instagram publishes a STORIES container; the Page uploads the photo unpublished and posts it
+  as a photo story. A story shows for 24 hours.
+- **Your own LinkedIn profile** (Settings → Social media → Write posts for my LinkedIn profile): a few posts a week in your voice, each
+  a `social.founder_post` you approve one by one; the database refuses an automatic approval. With your personal token on the LinkedIn
+  card (scopes `openid`, `profile`, `w_member_social`) an approved post publishes as you, at its time slot like a Page post (an
+  approved post waits for its slot, and one started early is handed back to wait); without it the drafts are emailed to copy.
+  Nothing sends messages, connection requests or comments.
+- **New campaigns and lead reports**: see Settings → Paid ads and [AI_WORKFORCE_REVIEW_2026-11-13.md](AI_WORKFORCE_REVIEW_2026-11-13.md).
+
 ## Approved video posts
 
 The weekly plan selects approved MP4 creative for the same product and platform when video publication is installed. Facebook accepts
 the Creative Director's square, portrait and vertical Meta video placements; Instagram uses only vertical video as a Reel; LinkedIn
-accepts its square, portrait and vertical placements. Each video appears in the post approval preview. Facebook and LinkedIn captions
-include the checked product link; Instagram captions retain the existing no-link rule. Paid video ads and YouTube uploads remain manual.
+accepts its square, portrait and vertical placements. The owner's own finished videos (Creative → Add a finished video) are approved
+creative too, and add 16:9 for Facebook and LinkedIn (`meta.video_landscape`, `linkedin.video_landscape`); Instagram never gets a 16:9 video.
+Each video appears in the post approval preview. Facebook and LinkedIn captions include the checked product link; Instagram captions retain
+the existing no-link rule. Paid video ads and YouTube uploads remain manual.
 
 Apply `20261111031736_social_video_publication.sql` and `20261111031738_social_video_publication_contract.sql`, then restart the Hub.
 Without that feature, the existing image and link posts continue. A public HTTPS Hub origin is required: publishers accept only the

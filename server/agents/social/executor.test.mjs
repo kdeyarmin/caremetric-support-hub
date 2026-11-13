@@ -197,3 +197,52 @@ describe('approved creative', () => {
     expect(creative.live).toHaveBeenCalled();
   });
 });
+
+describe('stories and article links', () => {
+  const image = `https://help.caremetric.ai/api/creative/a/${'e'.repeat(64)}.png`;
+  const story = (over = {}) => ({ platform: 'instagram', product: 'caremetric-intel', pillar: 'story', format: 'story', message: '', link: null, imageUrl: image,
+    scheduledFor: now().toISOString(), creativeAssetId: '22222222-2222-4222-8222-222222222222', ...over });
+
+  it('publishes an approved story image on Instagram or the Facebook Page, with no text or link', async () => {
+    const meta = metaOf({ publishStory: vi.fn(async () => ({ id: '1790000' })) });
+    const creative = { live: vi.fn(async () => true) };
+    const executors = socialExecutors({ meta, settings: {}, now, log: () => {}, creative });
+    expect(await executors['social.post']({ id: 'a1', kind: 'social.post', input: story(), agentKey: 'social_manager' })).toEqual({ published: true, id: '1790000', story: true });
+    expect(meta.publishStory).toHaveBeenCalledWith({ platform: 'instagram', imageUrl: image });
+    expect(meta.publishPost).not.toHaveBeenCalled();
+    expect(creative.live).toHaveBeenCalledWith('22222222-2222-4222-8222-222222222222', '1790000');
+    for (const bad of [story({ message: 'Text' }), story({ link: 'https://www.caremetricintel.com/' }), story({ imageUrl: 'http://x.test/a.png' })]) {
+      await expect(executors['social.post']({ id: 'a2', kind: 'social.post', input: bad, agentKey: 'social_manager' })).rejects.toMatchObject({ code: 'invalid_post' });
+    }
+    // LinkedIn has no stories.
+    await expect(socialExecutors({ meta, linkedin: { configured: { page: true } }, settings: {}, now, log: () => {} })['social.post']({ id: 'a3', kind: 'social.post', input: story({ platform: 'linkedin' }),
+      agentKey: 'social_manager' })).rejects.toMatchObject({ code: 'invalid_post' });
+    expect(meta.publishStory).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a post link to the product\'s own published article, and nothing else outside its pages', async () => {
+    const article = 'https://www.caremetricintel.com/resources/county-market-basics';
+    const input = { platform: 'facebook', product: 'caremetric-intel', message: 'A short guide to reading your county\'s market.', link: article, imageUrl: null, scheduledFor: now().toISOString() };
+    const { meta, promise } = run('social.post', input);
+    expect(await promise).toEqual({ published: true, id: '1111_99' });
+    expect(meta.publishPost).toHaveBeenCalledWith(expect.objectContaining({ link: article }));
+    await expect(run('social.post', { ...input, link: 'https://www.caremetricintel.com/elsewhere/county-market-basics' }).promise).rejects.toMatchObject({ code: 'invalid_post' });
+    await expect(run('social.post', { ...input, product: 'carebase' }).promise).rejects.toMatchObject({ code: 'invalid_post' });
+  });
+});
+
+describe('the founder\'s own posts', () => {
+  const message = 'Most agencies I talk to plan visits from memory. Writing down which referral sources you saw last month changes the week.';
+  const input = { product: 'caremetric-intel', pillar: 'tip', message, scheduledFor: now().toISOString() };
+  it('publishes on the founder\'s profile only when the owner approved it, with the exact checked words', async () => {
+    const linkedin = linkedinOf({ configured: { page: true, ads: true, member: true }, publishMemberPost: vi.fn(async () => ({ id: 'urn:li:share:7300000000000000001' })) });
+    const executors = socialExecutors({ meta: metaOf(), linkedin, settings: {}, now, log: () => {} });
+    const action = over => ({ id: 'a1', kind: 'social.founder_post', input, agentKey: 'social_manager', targetId: 'founder:2026-11-09:1', ...over });
+    expect(await executors['social.founder_post'](action())).toEqual({ published: true, id: 'urn:li:share:7300000000000000001', founder: true });
+    expect(linkedin.publishMemberPost).toHaveBeenCalledWith({ message });
+    await expect(executors['social.founder_post'](action({ autoApproved: true }))).rejects.toMatchObject({ code: 'approval_required' });
+    await expect(executors['social.founder_post'](action({ input: { ...input, message: 'Book a call with me today.' } }))).rejects.toMatchObject({ code: 'invalid_post' });
+    const unconnected = socialExecutors({ meta: metaOf(), linkedin: linkedinOf(), settings: {}, now, log: () => {} });
+    await expect(unconnected['social.founder_post'](action())).rejects.toMatchObject({ code: 'linkedin_not_configured' });
+  });
+});

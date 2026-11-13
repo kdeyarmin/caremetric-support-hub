@@ -149,12 +149,12 @@ describe('LinkedIn text and ids', () => {
 
 describe('the LinkedIn client', () => {
   it('knows what is connected, from valid ids and a token (or a way to renew one) only', () => {
-    expect(client(vi.fn()).configured).toEqual({ page: true, ads: true });
-    expect(linkedinClient({ token, organizationId: org }).configured).toEqual({ page: true, ads: false });
+    expect(client(vi.fn()).configured).toEqual({ page: true, ads: true, member: false });
+    expect(linkedinClient({ token, organizationId: org }).configured).toEqual({ page: true, ads: false, member: false });
     expect(linkedinClient({ token, organizationId: '5550001', adAccountId: 'urn:li:sponsoredAccount:5080001' }).ids).toEqual({ organization: '5550001', account: '5080001' });
-    expect(linkedinClient({ token: '', organizationId: '5550001', adAccountId: '5080001' }).configured).toEqual({ page: false, ads: false });
-    expect(linkedinClient({ refreshToken: 'AQX-refresh-token-0123456789', clientId: 'app', clientSecret: 'secret', organizationId: '5550001' }).configured).toEqual({ page: true, ads: false });
-    expect(linkedinClient({ token, organizationId: '../me', adAccountId: 'x' }).configured).toEqual({ page: false, ads: false });
+    expect(linkedinClient({ token: '', organizationId: '5550001', adAccountId: '5080001' }).configured).toEqual({ page: false, ads: false, member: false });
+    expect(linkedinClient({ refreshToken: 'AQX-refresh-token-0123456789', clientId: 'app', clientSecret: 'secret', organizationId: '5550001' }).configured).toEqual({ page: true, ads: false, member: false });
+    expect(linkedinClient({ token, organizationId: '../me', adAccountId: 'x' }).configured).toEqual({ page: false, ads: false, member: false });
   });
 
   it('calls only api.linkedin.com with the versioned Rest.li headers, and never puts a token in an error', async () => {
@@ -271,7 +271,7 @@ describe('the LinkedIn client', () => {
     expect(used[0]).toEqual(['posts', `Bearer ${token}`]);
     expect(used.slice(1).every(([, auth]) => auth === `Bearer ${adsToken}` || auth === `Bearer ${renewed}`)).toBe(true);
     expect(used.some(([, auth]) => auth === `Bearer ${renewed}`)).toBe(true);
-    expect(linkedinClient({ adsToken, adAccountId: '5080001' }).configured).toEqual({ page: false, ads: true });
+    expect(linkedinClient({ adsToken, adAccountId: '5080001' }).configured).toEqual({ page: false, ads: true, member: false });
   });
 
   it('reads the Page\'s recent posts with their engagement, leaving out sponsored-only posts', async () => {
@@ -388,5 +388,49 @@ describe('the LinkedIn client', () => {
     expect(bodyOf(fetchImpl.mock.calls[1])).toEqual({ campaign: 'urn:li:sponsoredCampaign:610001', content: { reference: dark }, intendedStatus: 'ACTIVE' });
     const unconfirmed = route([[/^POST \/rest\/posts$/, json({}, 201)]]);
     await expect(client(unconfirmed).createAd({ adsetId: '610001', message: 'x', headline: 'y', description: 'z', link: 'https://cmcarebase.com/signup' })).rejects.toMatchObject({ code: 'linkedin_unconfirmed' });
+  });
+});
+
+describe('the founder\'s own profile', () => {
+  it('reads the member from the token\'s own profile once, and posts as that member', async () => {
+    const calls = [];
+    const fetchImpl = vi.fn(async (url, init) => {
+      calls.push([url, init]);
+      if (url === 'https://api.linkedin.com/v2/userinfo') return new Response(JSON.stringify({ sub: 'AbC123_x' }), { status: 200 });
+      return new Response('{}', { status: 201, headers: { 'x-restli-id': 'urn:li:share:7300000000000000001' } });
+    });
+    const li = linkedinClient({ memberToken: 'AQV-member-token-0123456789', fetchImpl });
+    expect(li.configured).toEqual({ page: false, ads: false, member: true });
+    expect(await li.publishMemberPost({ message: 'A plain post.' })).toEqual({ id: 'urn:li:share:7300000000000000001' });
+    await li.publishMemberPost({ message: 'Another.' });
+    expect(calls.filter(([url]) => url.endsWith('/userinfo'))).toHaveLength(1);
+    const [url, init] = calls[1];
+    expect(url).toBe('https://api.linkedin.com/rest/posts');
+    expect(init.headers.Authorization).toBe('Bearer AQV-member-token-0123456789');
+    expect(JSON.parse(init.body)).toMatchObject({ author: 'urn:li:person:AbC123_x', commentary: 'A plain post.', visibility: 'PUBLIC', lifecycleState: 'PUBLISHED' });
+    await expect(linkedinClient({}).publishMemberPost({ message: 'x' })).rejects.toMatchObject({ code: 'linkedin_not_configured' });
+  });
+});
+
+describe('new campaigns and lead reports on LinkedIn', () => {
+  it('creates a draft campaign group and campaign with the health care audience, and reports a lead by hash and click ID', async () => {
+    const calls = [];
+    const fetchImpl = vi.fn(async (url, init) => {
+      calls.push([url, init]);
+      const id = url.endsWith('/adCampaignGroups') ? 'urn:li:sponsoredCampaignGroup:701' : url.endsWith('/adCampaigns') ? 'urn:li:sponsoredCampaign:702' : null;
+      return new Response('{}', { status: 201, headers: id ? { 'x-restli-id': id } : {} });
+    });
+    const li = linkedinClient({ adsToken: 'AQV-ads-token-0123456789abc', adAccountId: '5080001', fetchImpl });
+    expect(await li.createCampaign({ name: 'Intel prospecting', dailyBudgetCents: 3000, startAt: '2026-11-17T00:00:00Z' })).toEqual({ campaignGroupId: '701', campaignId: '702' });
+    expect(calls[0][0]).toBe('https://api.linkedin.com/rest/adAccounts/5080001/adCampaignGroups');
+    const campaign = JSON.parse(calls[1][1].body);
+    expect(campaign).toMatchObject({ campaignGroup: 'urn:li:sponsoredCampaignGroup:701', status: 'DRAFT', objectiveType: 'WEBSITE_VISIT', dailyBudget: { amount: '30.00', currencyCode: 'USD' } });
+    expect(JSON.stringify(campaign.targetingCriteria)).toContain('urn:li:geo:103644278');
+    await expect(li.createCampaign({ name: 'x', dailyBudgetCents: 500 })).rejects.toMatchObject({ code: 'linkedin_invalid_request' });
+    const hash = 'b'.repeat(64);
+    await li.sendConversion({ conversionId: '123456', eventId: 'l2', happenedAt: 1794225600000, emailHash: hash, liFatId: '0f1e2d3c-1234-4abc-8def-001122334455' });
+    expect(calls[2][0]).toBe('https://api.linkedin.com/rest/conversionEvents');
+    expect(JSON.parse(calls[2][1].body)).toEqual({ conversion: 'urn:lla:llaPartnerConversion:123456', conversionHappenedAt: 1794225600000, eventId: 'l2',
+      user: { userIds: [{ idType: 'SHA256_EMAIL', idValue: hash }, { idType: 'LINKEDIN_FIRST_PARTY_ADS_TRACKING_UUID', idValue: '0f1e2d3c-1234-4abc-8def-001122334455' }] } });
   });
 });

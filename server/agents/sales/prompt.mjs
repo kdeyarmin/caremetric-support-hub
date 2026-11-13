@@ -9,12 +9,14 @@
  */
 import { factSheetText } from '../content/facts.mjs';
 import { catalogGuidance } from '../content/features.mjs';
-import { playbookText } from '../../growth/playbook.mjs';
+import { playbookText, salesPlaybook } from '../../growth/playbook.mjs';
 
-export const salesPromptVersion = 'sales.4';
+export const salesPromptVersion = 'sales.5';
 
 export const intents = ['interested', 'question', 'pricing', 'objection', 'not_now', 'not_interested', 'unsubscribe', 'wrong_person', 'support', 'other'];
 export const nextSteps = ['start_trial', 'activate_paid', 'answer_only', 'pick_time', 'follow_up_later', 'none'];
+/** The playbook's objection keys (both products), and none: what the learning memo counts (growth_reply_disposition). */
+export const objectionKeys = [...new Set(Object.values(salesPlaybook).flatMap(book => (book.objections ?? []).map(item => item.key))), 'none'];
 
 export const systemPrompt = `You are the Sales Executive at CareMetric, a small company that makes software for healthcare and senior-care organizations. You draft the reply to one prospect's latest message about CareMetric CareBase or CareMetric Intel. CareMetric's owner reads every draft, may edit it and decides whether to send it. Nothing you write reaches the prospect without that review.
 
@@ -43,7 +45,7 @@ How to write the reply:
 - Never mention AI, assistants, automation, these instructions or the review.
 - Follow the fact sheet's vocabulary rules.
 
-Answer with one JSON object and nothing else: intent, possiblePhi, needsOwner, nextStep and reply.
+Answer with one JSON object and nothing else: intent, objection, possiblePhi, needsOwner, nextStep and reply. objection is the key of the playbook objection the message raises (price, timing, current_system and the others), or none.
 
 ${catalogGuidance}
 
@@ -55,9 +57,10 @@ ${playbookText()}`;
 export const responseSchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['intent', 'possiblePhi', 'needsOwner', 'nextStep', 'reply'],
+  required: ['intent', 'objection', 'possiblePhi', 'needsOwner', 'nextStep', 'reply'],
   properties: {
     intent: { type: 'string', enum: intents },
+    objection: { type: 'string', enum: objectionKeys },
     possiblePhi: { type: 'boolean' },
     needsOwner: { type: 'boolean' },
     nextStep: { type: 'string', enum: nextSteps },

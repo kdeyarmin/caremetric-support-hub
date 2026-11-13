@@ -24,6 +24,7 @@ import { isIP } from 'node:net';
 import { Readable } from 'node:stream';
 import { analyzeHtml } from '../agents/seo/html.mjs';
 import { screenIdentifiers } from '../agents/concierge/screen.mjs';
+import { phonesIn } from './roster.mjs';
 
 /** The role local parts the database admits for a found contact (growth_contacts_role_address_check), in order of preference. */
 export const roleLocalParts = Object.freeze(['info', 'contact', 'contactus', 'office', 'hello', 'inquiries', 'inquiry', 'enquiries', 'enquiry',
@@ -237,8 +238,12 @@ export function growthContactFinder({ fetchImpl = null, lookup = dnsLookup } = {
     return result.outcome === 'ok' ? { url: result.url, text: result.text } : null;
   }
 
-  /** The one role address to record for `domain`, with the page it was on, or why there is none. */
-  async function find(domain, { signal } = {}) {
+  /**
+   * The one role address to record for `domain`, with the page it was on, or why there is none. With `phone` (an agency's ten-digit
+   * CMS telephone number), also whether that number is written on one of the pages read (`phoneSeen`): reading continues past the
+   * address until it is, or the pages run out. Only the yes or no is returned; no number read from a page is kept.
+   */
+  async function find(domain, { signal, phone = null } = {}) {
     const host = String(domain ?? '').toLowerCase();
     if (!domainPattern.test(host) || host.length > 253) return { email: null, reason: 'invalid_domain' };
     const hosts = [host, `www.${host}`];
@@ -263,6 +268,8 @@ export function growthContactFinder({ fetchImpl = null, lookup = dnsLookup } = {
     const allowed = async target => robotsAllows(await robotsFor(target.hostname), `${target.pathname}${target.search}`);
     const robots = await robotsFor(host);
     let read = 0;
+    const wanted = /^\d{10}$/.test(String(phone ?? '')) ? String(phone) : null;
+    let phoneSeen = false, email = null, sourceUrl = null;
     // The home page (the first path) also says what the business is: its summary is returned whether or not an address is found.
     let site = null;
     for (const path of contactPaths) {
@@ -272,10 +279,14 @@ export function growthContactFinder({ fetchImpl = null, lookup = dnsLookup } = {
       try { page = await get(`https://${host}${path}`, hosts, pageBytes, signal, 'text/html', allowed); } catch (error) { if (signal?.aborted) throw error; }
       read += 1;
       if (page && path === '/') site = siteSummary(page.text, page.url);
+      if (page && wanted && !phoneSeen && phonesIn(page.text).has(wanted)) phoneSeen = true;
       const best = page ? roleAddresses(page.text, host)[0] : null;
-      if (best) return { email: best, sourceUrl: page.url, ...(site ? { site } : {}) };
+      if (best && !email) { email = best; sourceUrl = page.url; }
+      if (email && (!wanted || phoneSeen)) break;
     }
-    return { email: null, reason: read === 0 ? 'robots' : 'none', ...(site ? { site } : {}) };
+    const checked = wanted ? { phoneSeen } : {};
+    if (email) return { email, sourceUrl, ...(site ? { site } : {}), ...checked };
+    return { email: null, reason: read === 0 ? 'robots' : 'none', ...(site ? { site } : {}), ...checked };
   }
 
   return { configured: true, find };

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Check, Columns2, Download, MessageSquareText, Palette, Plus, RefreshCw, ShieldAlert, ShieldCheck, Trash2, Upload, X } from "lucide-react";
+import { Check, Clapperboard, Columns2, Download, MessageSquareText, Palette, Plus, RefreshCw, ShieldAlert, ShieldCheck, Trash2, Upload, X } from "lucide-react";
 import { Link, useInRouterContext } from "react-router-dom";
 import { Loading, ReadFailure } from "./AdminReads";
 import { timeLabel } from "./readState";
@@ -8,8 +8,8 @@ import { TeamApiError } from "./teamClient";
 import { creativeClient, fileAsBase64 } from "./creativeClient";
 import type { CreativeClient, NewBrief, StudioFilter } from "./creativeClient";
 import {
-  creativePlatforms, creativeProducts, creativeStatuses, fileUrl, healthWords, hookLabels, placementLabel, platformLabels, productLabels, renderErrorLabel, sizeLabel,
-  sourceLabels, statusLabels, videoLengthKeys,
+  creativePlatforms, creativeProducts, creativeStatuses, fileUrl, fittingPlacements, healthWords, hookLabels, placementLabel, platformLabels, productLabels, renderErrorLabel, sizeLabel,
+  sourceLabels, statusLabels, videoLengthKeys, videoUploadLimit,
 } from "./creativeProtocol";
 import type { BrandKit, CreativeAsset, CreativeBrief, CreativeLearning, CreativePlatform, CreativeProduct, CreativeStatus, CreativeStudio, CreativeTheme } from "./creativeProtocol";
 import "./admin.css";
@@ -150,6 +150,66 @@ function BriefForm({ client, busy, change }: { client: CreativeClient; busy: str
       </fieldset>}
       {error && <p className="form-message form-error" role="alert">{error}</p>}
       <div className="button-row"><button type="submit" className="button button-primary button-small" disabled={Boolean(busy)}><Plus size={14} aria-hidden="true" />{busy === "brief" ? "Saving…" : "Start this brief"}</button></div>
+    </form>
+  </section>;
+}
+
+/**
+ * The owner's own finished video: it becomes approved creative for each placement it fits (one per platform), and the Social Media Manager
+ * uses it in its next weekly plan. Each post with it still waits for the owner's approval; uploading publishes nothing.
+ */
+function VideoUpload({ client, busy, change }: { client: CreativeClient; busy: string; change: Change }) {
+  const [product, setProduct] = useState<CreativeProduct>("caremetric-intel");
+  const [file, setFile] = useState<File | null>(null);
+  const [info, setInfo] = useState<{ width: number; height: number; durationSeconds: number } | null>(null);
+  const [chosen, setChosen] = useState<string[]>([]);
+  const [label, setLabel] = useState("");
+  const [attested, setAttested] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const key = useRef<string | null>(null);
+  const fits = info ? fittingPlacements(info) : [];
+  const pick = async (picked: File | undefined) => {
+    setError(null); setInfo(null); setChosen([]); setFile(null); key.current = null;
+    if (!picked) return;
+    if (picked.size > videoUploadLimit) { setError(`This file is ${sizeLabel(picked.size)}. A video may be at most 60 MB; export it at a lower bit rate.`); return; }
+    try {
+      const read = await client.videoInfo(picked);
+      setFile(picked); setInfo(read);
+      setChosen(fittingPlacements(read).map(item => item.key));
+      setLabel(previous => previous || picked.name.replace(/\.mp4$/i, "").replace(/[-_]+/g, " ").slice(0, 120));
+    } catch (failure) { setError(failureText(failure)); }
+  };
+  const submit = async () => {
+    if (!file || !info) { setError("Choose an MP4 video."); return; }
+    if (!chosen.length) { setError("Choose where the video may be used."); return; }
+    if (!label.trim()) { setError("Name the video."); return; }
+    if (!attested) { setError("Confirm that the video shows no patient, resident or personal information."); return; }
+    key.current ??= crypto.randomUUID();
+    const requestKey = key.current;
+    const places = chosen.map(item => fits.find(fit => fit.key === item)?.label ?? placementLabel(item)).join(" and ");
+    await change("video", () => client.uploadVideo({ product, placements: chosen, label: label.trim(), attested, requestKey, file }),
+      `Added to the library, approved for ${places}. The Social Media Manager uses it in its next weekly plan; each post still waits for your approval.`);
+    setFile(null); setInfo(null); setChosen([]); setLabel(""); setAttested(false); key.current = null;
+  };
+  return <section className="panel creative-video-upload" aria-labelledby="creative-video-title">
+    <div className="admin-section-title"><div><h2 id="creative-video-title"><Clapperboard size={16} aria-hidden="true" /> Add a finished video</h2>
+      <p>Your own MP4 (at most 60 MB and two minutes): 1080 x 1920 for Reels and vertical LinkedIn, 1080 x 1080 or 1080 x 1350 for feeds, 1920 x 1080 for Facebook and LinkedIn. Adding it approves it; posting it still waits for you.</p></div></div>
+    <form onSubmit={event => { event.preventDefault(); void submit(); }}>
+      <div className="creative-form-grid">
+        <label className="team-field">Product<select value={product} onChange={event => setProduct(event.target.value as CreativeProduct)}>
+          {creativeProducts.map(item => <option key={item} value={item}>{productLabels[item]}</option>)}</select></label>
+        <label className="team-field">Name<input value={label} maxLength={120} onChange={event => setLabel(event.target.value)} placeholder="30-second commercial" /></label>
+        <label className="team-field creative-wide">Video file<input type="file" accept="video/mp4" disabled={Boolean(busy)} onChange={event => void pick(event.target.files?.[0])} /></label>
+      </div>
+      {info && <p className="muted">{info.width} x {info.height}, {Math.round(info.durationSeconds)} seconds{file ? `, ${sizeLabel(file.size)}` : ""}.</p>}
+      {info && (fits.length
+        ? <fieldset className="creative-choices"><legend>Use it for</legend>
+          {fits.map(item => <label key={item.key}><input type="checkbox" checked={chosen.includes(item.key)} onChange={() => setChosen(list => list.includes(item.key) ? list.filter(value => value !== item.key) : [...list, item.key])} />{item.label}</label>)}
+        </fieldset>
+        : <p className="form-message form-error" role="alert">This video fits no placement. Use 1080 x 1920, 1080 x 1080, 1080 x 1350 or 1920 x 1080, at most two minutes long (one minute for Instagram Reels).</p>)}
+      <label className="creative-check"><input type="checkbox" checked={attested} onChange={event => setAttested(event.target.checked)} />This video shows no patient, resident or personal information.</label>
+      {error && <p className="form-message form-error" role="alert">{error}</p>}
+      <div className="button-row"><button type="submit" className="button button-primary button-small" disabled={Boolean(busy) || !file || !fits.length}><Upload size={14} aria-hidden="true" />{busy === "video" ? "Adding…" : "Add to the library"}</button></div>
     </form>
   </section>;
 }
@@ -320,6 +380,7 @@ export function Creative({ client = creativeClient }: { client?: CreativeClient 
         <button type="button" className="button button-secondary button-small" disabled={filter.offset + pageSize >= shown.total} onClick={() => setFilter(previous => ({ ...previous, offset: previous.offset + pageSize }))}>Older</button>
       </div>}
       <BriefForm client={client} busy={busy} change={change} />
+      <VideoUpload client={client} busy={busy} change={change} />
       <section className="panel" aria-labelledby="creative-learnings-title"><div className="admin-section-title"><div><h2 id="creative-learnings-title">What the results say</h2><p>From the weekly report: ad results and website leads joined to each asset by utm_content.</p></div></div><Learnings learnings={shown.learnings} /></section>
       <section className="panel" aria-labelledby="creative-briefs-title"><div className="admin-section-title"><div><h2 id="creative-briefs-title">Recent briefs</h2><p>From the weekly social plan, the Marketing Manager, your own briefs, refreshes of winners and your change requests.</p></div></div><Briefs briefs={shown.briefs} /></section>
       <div className="creative-kits">{shown.brandKits.map(kit => <BrandKitEditor key={`${kit.product}:${kit.version}`} kit={kit} theme={shown.themes?.find(theme => theme.product === kit.product)} client={client} busy={busy} change={change} />)}</div>

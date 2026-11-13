@@ -10,7 +10,7 @@ import { parsePackageUploadHeader } from './learning-packages.mjs';
 import { chatCookie } from './communications.mjs';
 import { bulkEmailActions } from './bulk-email.mjs';
 import { agentAdminActions } from './agents/admin.mjs';
-import { creativeAdminActions } from './agents/creative/admin.mjs';
+import { creativeAdminActions, videoUploadLimit } from './agents/creative/admin.mjs';
 
 export const securityHeaders = {
   'X-Content-Type-Options':'nosniff','X-Frame-Options':'SAMEORIGIN',
@@ -151,6 +151,12 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           throw new HttpError(404,'Unavailable.');
         }
         const growthEvent=/^\/api\/growth\/events\/(carebase|caremetric-intel)$/.exec(path);
+        // A list built elsewhere, signed with HUB_GROWTH_IMPORT_SECRET like the lead forms (docs/CUSTOMER_GROWTH.md, "Importing a list").
+        if(path==='/api/growth/import') {
+          if(req.method!=='POST'||req.headers.origin||req.headers.cookie||url.search) throw new HttpError(403,'Forbidden.');
+          if(!growth) throw new HttpError(503,'Growth is unavailable.');
+          return json(await growth.importSigned(await rawBody(req,262144),req.headers));
+        }
         if(growthEvent || path==='/api/growth/delivery' || path==='/api/growth/delivery/ses') {
           if(req.method!=='POST'||req.headers.origin||req.headers.cookie||url.search) throw new HttpError(403,'Forbidden.');
           if(!growth) throw new HttpError(503,'Growth is unavailable.');
@@ -409,6 +415,16 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
             if([...url.searchParams.keys()].some(key=>key!=='download') || (download!==null && download!=='1')) throw new HttpError(400,'Creative query parameters are not supported.');
             const file=await creative.admin.file(session,fileRoute[1]);
             return sendBytes(req,res,{...file,disposition:download==='1'?'attachment':'inline'});
+          }
+          // The owner's own finished video, sent as the raw MP4 with its details in headers (Creative → Add a finished video).
+          if(path==='/api/admin/creative/video') {
+            if(req.method!=='POST' || url.search) throw new HttpError(400,'Use the Creative screen.');
+            if(req.headers['content-type']?.split(';')[0]!=='video/mp4') throw new HttpError(415,'Upload an MP4 video.');
+            const header=name=>{ const value=req.headers[name]; return typeof value==='string'?value:''; };
+            let label; try { label=decodeURIComponent(header('x-creative-label')); } catch { throw new HttpError(400,'Invalid video name.'); }
+            const bytes=await rawBody(req,videoUploadLimit);
+            return json(await creative.admin.video(session,{product:header('x-creative-product'),placements:header('x-creative-placements').split(',').filter(Boolean),
+              label,attested:header('x-creative-attested')==='true',requestKey:header('x-creative-request'),bytes}));
           }
           if(url.search) throw new HttpError(400,'Creative query parameters are not supported.');
           const action=path.slice('/api/admin/creative/'.length);

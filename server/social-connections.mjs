@@ -13,8 +13,12 @@ export const connectionFields = {
 const secretFields = {
   meta: { token: 'HUB_META_ACCESS_TOKEN' },
   linkedin: { token: 'HUB_LINKEDIN_ACCESS_TOKEN', refreshToken: 'HUB_LINKEDIN_REFRESH_TOKEN', clientSecret: 'HUB_LINKEDIN_CLIENT_SECRET',
-    adsToken: 'HUB_LINKEDIN_ADS_ACCESS_TOKEN', adsRefreshToken: 'HUB_LINKEDIN_ADS_REFRESH_TOKEN', adsClientSecret: 'HUB_LINKEDIN_ADS_CLIENT_SECRET' },
+    adsToken: 'HUB_LINKEDIN_ADS_ACCESS_TOKEN', adsRefreshToken: 'HUB_LINKEDIN_ADS_REFRESH_TOKEN', adsClientSecret: 'HUB_LINKEDIN_ADS_CLIENT_SECRET',
+    // The founder's own profile ("Share on LinkedIn"): posts the owner approves one by one (20261113220000_founder_posts.sql).
+    memberToken: 'HUB_LINKEDIN_MEMBER_ACCESS_TOKEN' },
 };
+// Secrets added after a connection may have been saved: a stored set without them still opens, and reads them as empty.
+const laterSecrets = { meta: [], linkedin: ['memberToken'] };
 const providers = Object.keys(connectionFields);
 const accountSettings = new Set(Object.values(connectionFields).flatMap(Object.values));
 const variables = Object.values(secretFields).flatMap(Object.values);
@@ -44,8 +48,10 @@ export function openConnection(provider, ciphertext, key) {
     const cipher = createDecipheriv('aes-256-gcm', keyBytes(key), nonce);
     cipher.setAAD(Buffer.from(`caremetric-social:v1:${provider}`)); cipher.setAuthTag(tag);
     const value = JSON.parse(Buffer.concat([cipher.update(data), cipher.final()]).toString('utf8'));
-    if (!exact(value, Object.keys(secretFields[provider])) || Object.values(value).some(item => typeof item !== 'string' || item.length > 8192)) throw unavailable();
-    return value;
+    const keys = Object.keys(secretFields[provider]);
+    if (!object(value) || Object.keys(value).some(key => !keys.includes(key)) || keys.some(key => !Object.hasOwn(value, key) && !laterSecrets[provider].includes(key))
+      || Object.values(value).some(item => typeof item !== 'string' || item.length > 8192)) throw unavailable();
+    return Object.fromEntries(keys.map(key => [key, value[key] ?? '']));
   } catch { throw unavailable(); }
 }
 

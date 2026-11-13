@@ -4,10 +4,17 @@
  * matters is enforced here in code; the model only ever returns one structured object, and the
  * calling handler decides what that is allowed to cause.
  *
- * There is one call per run and no tools. A model that stops to ask for a tool, or for any reason
- * other than finishing, has produced no usable result. (The loop is written by hand rather than
- * handed to the SDK's tool runner because the Hub keeps its own budget, deadline and accounting
- * between calls; the first agent that needs tools adds rounds here.)
+ * `run` makes one call per run and offers no tools. A model that stops to ask for a tool, or for any
+ * reason other than finishing, has produced no usable result.
+ *
+ * `research` is the one run with tools: Anthropic's server-side web search and web fetch (tools.mjs),
+ * only those the agent's own tool allowlist names. It reserves the caller's ceiling for the whole run,
+ * continues a turn the server paused (`pause_turn`) by sending it back unchanged, up to a number of
+ * rounds, and starts no round whose worst case would pass the ceiling. Its answer is free text and the
+ * addresses the tools returned; a caller that needs a structured answer makes an ordinary `run` from
+ * them. One run row is booked with the real rounds, tool calls, tokens and search fees. (The loop is
+ * written by hand rather than handed to the SDK's tool runner because the Hub keeps its own budget,
+ * deadline and accounting between calls.)
  *
  * Budget: a call is allowed only if the agent's remaining cents for the Eastern day, less what
  * other calls in this process have reserved and not yet booked, cover the worst case of this one
@@ -28,7 +35,8 @@
  */
 import { aiModels } from '../../ai-assistance.mjs';
 import { aiError, classify, permanentCodes, transientCodes } from './errors.mjs';
-import { costCents, inputOnlyCents, prices, worstCaseCents } from './pricing.mjs';
+import { costCents, inputOnlyCents, prices, searchCents, worstCaseCents } from './pricing.mjs';
+import { researchToolNames, serverTools, sourcesOf } from './tools.mjs';
 import { schemaDefects, schemaProblems } from './schema.mjs';
 
 const versionPattern = /^[a-z0-9.-]{1,20}$/;
@@ -118,6 +126,54 @@ function interpret(message, spec) {
   } catch { /* the default summary stands */ }
   return { outcome: 'completed', output, summary };
 }
+
+/** A research request, checked: only the tools the agent's allowlist names, and caps on every tool, round and cent. */
+function checkResearch(request, agent) {
+  const reject = () => { throw aiError('request_rejected'); };
+  const { promptVersion, system, user, tools, maxSearches = 5, maxFetches = 3, maxRounds = 3, maxTokens = 4000, effort = 'medium', tier = null, ceilingCents } = request ?? {};
+  if (typeof promptVersion !== 'string' || !versionPattern.test(promptVersion)) reject();
+  if (!Array.isArray(system) || system.length === 0 || system.length > 4 || system.some(block => typeof block?.text !== 'string' || !block.text)) reject();
+  if (typeof user !== 'string' || !user) reject();
+  if (!Array.isArray(tools) || !tools.length || tools.some(name => !researchToolNames.includes(name))) reject();
+  const allowed = Array.isArray(agent?.toolAllowlist) ? agent.toolAllowlist : [];
+  if (tools.some(name => !allowed.includes(name))) throw aiError('tool_not_allowed');
+  if (![maxSearches, maxFetches, maxRounds, maxTokens].every(Number.isInteger) || maxSearches < 1 || maxSearches > 10 || maxFetches < 0 || maxFetches > 10
+    || maxRounds < 1 || maxRounds > 5 || maxTokens < 1 || maxTokens > maxTokensCeiling) reject();
+  if (!Number.isFinite(ceilingCents) || ceilingCents <= 0 || ceilingCents > 500) reject();
+  if (!efforts.has(effort) || (tier !== null && !tiers.has(tier))) reject();
+  return { ...request, tools: [...new Set(tools)], maxSearches, maxFetches, maxRounds, maxTokens, effort, tier, ceilingCents };
+}
+
+// The fewest output tokens a research round is worth making with: below this the model cannot both search and write down what it found.
+export const minResearchRoundTokens = 1024;
+
+/**
+ * What one research round may use so that the most it could cost (its prompt bound, every output token, every search it may make) fits
+ * in `leftCents`: the full caps when they fit, otherwise fewer output tokens (down to `minResearchRoundTokens`), and fewer searches
+ * (down to one) only when that floor leaves too little for them. Null when even that does not fit, so no round, the first included, can
+ * take the run past its ceiling.
+ */
+export function fitResearchRound(model, spec, inputTokens, leftCents) {
+  const cached = spec.system.some(block => block.cache);
+  const searching = spec.tools.includes('web_search');
+  const worst = (maxTokens, searches) => worstCaseCents(model, { inputTokens, maxTokens, cached }) + searches * searchCents;
+  const wanted = searching ? spec.maxSearches : 0;
+  if (worst(spec.maxTokens, wanted) <= leftCents) return { maxTokens: spec.maxTokens, searches: wanted, worst: worst(spec.maxTokens, wanted) };
+  const floor = Math.min(spec.maxTokens, minResearchRoundTokens);
+  const searches = searching ? Math.min(wanted, Math.floor((leftCents - worst(floor, 0)) / searchCents)) : 0;
+  if ((searching && searches < 1) || worst(floor, searches) > leftCents) return null;
+  let low = floor, high = spec.maxTokens;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (worst(middle, searches) <= leftCents) low = middle; else high = middle - 1;
+  }
+  return { maxTokens: low, searches, worst: worst(low, searches) };
+}
+
+const serverCounts = message => {
+  const used = message?.usage?.server_tool_use;
+  return { searches: count(used?.web_search_requests), fetches: count(used?.web_fetch_requests) };
+};
 
 export function modelRunner({
   client, store, record = null, notifier = null, models = aiModels, log = line => console.warn(line), now = () => new Date(), callDeadlineMs = 200_000,
@@ -320,5 +376,133 @@ export function modelRunner({
     }
   }
 
-  return { run, reserved: heldFor, owing: owedFor, configured: client.configured };
+  /**
+   * One research run with server tools. Resolves with `{ outcome: 'completed', text, sources, searches, fetches, rounds, costCents }`,
+   * `{ outcome: 'stopped', ... }` when the rounds or the ceiling ran out before the model finished (the sources it found and the text it
+   * wrote so far are kept; a ceiling too small for even a trimmed first round makes no call), `text` being every response's text in order,
+   * `{ outcome: 'refused' }`, or `{ outcome: 'budget_exhausted' }`. Rejects with a coded error otherwise, `tool_not_allowed` when the
+   * agent's allowlist does not name a tool.
+   *
+   * request: { promptVersion, system: [{ text, cache? }], user, tools: ['web_search', 'web_fetch'], maxSearches?, maxFetches?, maxRounds?,
+   *   maxTokens?, effort?, tier?, ceilingCents, describe? } — `describe({ searches, fetches, sources })` returns the summary (counts only).
+   */
+  async function research(task, request, { signal } = {}) {
+    const agentKey = task.agentKey;
+    const spec = checkResearch(request, task.agent);
+    const model = models[spec.tier ?? task.agent?.modelTier];
+    if (!model || !prices[model]) throw aiError('unknown_model');
+    if (!client.configured) throw aiError('ai_not_configured');
+    if (signal?.aborted) throw aiError('run_aborted', true);
+    const tools = serverTools(model, spec);
+    const system = spec.system.map(block => ({ type: 'text', text: block.text, ...(block.cache ? { cache_control: { type: 'ephemeral' } } : {}) }));
+    const messages = [{ role: 'user', content: spec.user }];
+    // A round trimmed to fit the ceiling asks for fewer output tokens and searches; the full caps keep the cached tool definitions as they are.
+    const bodyNow = (fit = { maxTokens: spec.maxTokens, searches: spec.maxSearches }) => ({
+      model, max_tokens: fit.maxTokens, system, messages,
+      tools: fit.searches === spec.maxSearches ? tools : serverTools(model, { ...spec, maxSearches: Math.max(fit.searches, 1) }),
+      output_config: { effort: spec.effort },
+    });
+    const reserve = Math.ceil(spec.ceilingCents);
+    const admission = await exclusive(agentKey, async () => {
+      await settleOwed(agentKey);
+      const budget = await store.budget(agentKey);
+      const left = Number(budget?.remainingCents ?? 0) - heldFor(agentKey) - owedFor(agentKey);
+      return left >= reserve ? { admitted: true, release: hold(agentKey, reserve) } : { admitted: false, remaining: left };
+    });
+    if (!admission.admitted) {
+      try {
+        const runId = await store.startRun(task.id, model, spec.promptVersion);
+        await store.finishRun(runId, 'budget_exhausted', {}, 'Today\'s budget does not cover this research, so it was not started.', null);
+      } catch { log(JSON.stringify({ event: 'hub_agent_run_unrecorded', agent: agentKey, kind: task.kind })); }
+      return { outcome: 'budget_exhausted', neededCents: reserve, remainingCents: Math.max(admission.remaining, 0) };
+    }
+    let reservation = null;
+    if (store.reserveBudget) {
+      try { reservation = await store.reserveBudget(task.id, reserve); }
+      catch (error) { await admission.release(); throw error; }
+      if (!reservation) { await admission.release(); return { outcome: 'budget_exhausted', neededCents: reserve, remainingCents: 0 }; }
+    }
+    const totals = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, searches: 0, fetches: 0, rounds: 0, cents: 0 };
+    const sources = new Map();
+    let runId = null, booked = false, finished = false;
+    const budgetDay = today();
+    const finish = async (outcome, summary, errorCode = null) => {
+      if (finished || runId === null) return;
+      finished = true;
+      const usage = { rounds: Math.max(totals.rounds, 1), toolCalls: totals.searches + totals.fetches, inputTokens: totals.inputTokens, outputTokens: totals.outputTokens,
+        cacheReadTokens: totals.cacheReadTokens, cacheWriteTokens: totals.cacheWriteTokens, costCents: Math.ceil(totals.cents * 10_000) / 10_000 };
+      try { await store.finishRun(runId, outcome, usage, summary, errorCode); booked = true; } catch {
+        owed.set(agentKey, [...(owed.get(agentKey) ?? []), { runId, outcome, usage, summary, errorCode, day: budgetDay, tries: 0, reservation, booked: false }]);
+        log(JSON.stringify({ event: 'hub_agent_run_unrecorded', agent: agentKey, kind: task.kind }));
+      }
+    };
+    const describe = () => {
+      try { const text = spec.describe?.({ searches: totals.searches, fetches: totals.fetches, sources: sources.size }); if (typeof text === 'string' && text.trim()) return text.trim().slice(0, 500); } catch { /* default */ }
+      return `Researched with ${totals.searches} searches and ${totals.fetches} page reads over ${totals.rounds} rounds.`;
+    };
+    try {
+      runId = await store.startRun(task.id, model, spec.promptVersion);
+      const deadline = AbortSignal.timeout(callDeadlineMs);
+      const startedAt = Date.now();
+      let outcome = 'stopped', stopped = 'rounds';
+      // The text of every response, paused ones included: a turn that pauses or stops at a limit keeps what it wrote so far.
+      const written = [];
+      for (let round = 0; round < spec.maxRounds; round++) {
+        // Every round, the first included, fits what the ceiling leaves (the bound of the untrimmed body is the larger one).
+        const fit = fitResearchRound(model, spec, inputTokenBound(bodyNow()), spec.ceilingCents - totals.cents);
+        if (!fit) { stopped = 'ceiling'; break; }
+        const body = bodyNow(fit);
+        const worst = fit.worst;
+        let reply = null, failure = null;
+        try { reply = await client.create(body, { signal: signal ? AbortSignal.any([signal, deadline]) : deadline, timeoutMs: 150_000 }); }
+        catch (error) {
+          failure = classify(error);
+          log(JSON.stringify({ event: 'hub_agent_model_error', agent: agentKey, kind: task.kind, code: failure.code, status: failure.status, request_id: failure.requestId }));
+        }
+        if (failure) {
+          if (failure.status === null) totals.cents += inputOnlyCents(model, inputTokenBound(body));
+          totals.rounds += 1;
+          await finish(failure.code === 'run_aborted' ? 'cancelled' : 'failed', `The research call failed (${failure.code.replaceAll('_', ' ')}).`, failure.code);
+          await afterwards({ task, model, outcome: 'failed', usage: null, latencyMs: Date.now() - startedAt, failure });
+          throw aiError(failure.code, failure.transient, { status: failure.status });
+        }
+        totals.rounds += 1;
+        const usage = usageOf(reply.message);
+        const tools = serverCounts(reply.message);
+        totals.inputTokens += usage.inputTokens; totals.outputTokens += usage.outputTokens;
+        totals.cacheReadTokens += usage.cacheReadTokens; totals.cacheWriteTokens += usage.cacheWriteTokens;
+        totals.searches += tools.searches; totals.fetches += tools.fetches;
+        totals.cents += (usage.reported ? costCents(model, usage) : worst) + tools.searches * searchCents;
+        for (const source of sourcesOf(reply.message?.content)) if (!sources.has(source.url)) sources.set(source.url, source);
+        const stop = reply.message?.stop_reason;
+        if (stop === 'pause_turn' || stop === 'end_turn') { const part = textOf(reply.message).trim(); if (part) written.push(part); }
+        if (stop === 'pause_turn') { messages.push({ role: 'assistant', content: reply.message.content }); continue; }
+        if (stop === 'end_turn') { outcome = 'completed'; stopped = null; break; }
+        if (stop === 'refusal') { outcome = 'refused'; stopped = null; break; }
+        outcome = 'no_result'; stopped = null;
+        await finish('no_result', 'The research stopped before it finished.', stop === 'max_tokens' ? 'output_truncated' : 'output_invalid');
+        await afterwards({ task, model, outcome: 'no_result', usage: totals, latencyMs: Date.now() - startedAt, failure: null });
+        throw aiError(stop === 'max_tokens' ? 'output_truncated' : 'output_invalid', false);
+      }
+      const summary = outcome === 'refused' ? 'The model declined to research.' : `${describe()}${stopped ? ` Stopped: ${stopped === 'ceiling' ? 'the cost ceiling' : 'the round limit'}.` : ''}`;
+      await finish(outcome === 'stopped' ? 'completed' : outcome, summary, null);
+      await afterwards({ task, model, outcome, usage: totals, latencyMs: Date.now() - startedAt, failure: null });
+      const text = outcome === 'refused' ? '' : written.join('\n\n');
+      return { outcome, model, runId, text, sources: [...sources.values()], searches: totals.searches, fetches: totals.fetches, rounds: totals.rounds,
+        costCents: Math.ceil(totals.cents * 10_000) / 10_000, ...(stopped ? { stopped } : {}) };
+    } catch (error) {
+      if (ours.has(error?.code)) throw error;
+      log(JSON.stringify({ event: 'hub_agent_model_unexpected', agent: agentKey, kind: task.kind, name: String(error?.name ?? 'Error').slice(0, 40) }));
+      throw aiError('ai_error', false);
+    } finally {
+      await finish('failed', 'The research ended unexpectedly.', 'ai_error');
+      if (reservation && (booked || runId === null)) {
+        try { await store.releaseBudget(reservation); }
+        catch { owed.set(agentKey, [...(owed.get(agentKey) ?? []), { runId, reservation, day: budgetDay, booked: true }]); }
+      }
+      await admission.release();
+    }
+  }
+
+  return { run, research, reserved: heldFor, owing: owedFor, configured: client.configured };
 }

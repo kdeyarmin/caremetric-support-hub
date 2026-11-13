@@ -188,6 +188,14 @@ export function rankNeeds({ incidents = 0, approvals = null, accounts = null, st
  * states and nullable nonnegative integer counts. The legacy shape without states remains supported; null means no configured reader.
  * @param {object} input.needs the inputs of rankNeeds
  */
+/** Sessions from tagged outreach links this week: the total and the five largest tags, or a plain none. */
+function campaignWords(list) {
+  const kept = list.filter(item => /^[a-z0-9-]{1,60}$/.test(item?.campaign ?? '') && Number.isSafeInteger(item?.sessions) && item.sessions > 0);
+  if (!kept.length) return 'None this week';
+  const total = kept.reduce((sum, item) => sum + item.sessions, 0);
+  return `${total} (${kept.slice(0, 5).map(item => `${item.campaign} ${item.sessions}`).join(', ')}${kept.length > 5 ? ', and others' : ''})`;
+}
+
 export function composeScorecard({ week, facts, billing = null, search = null, ads = null, visitors = null, verifiedLifecycle = false, needs = {}, publicOrigin = null, notes = [] }) {
   const byProduct = list => Object.fromEntries((list ?? []).map(entry => [entry.product, entry]));
   const current = byProduct(facts?.current?.products);
@@ -246,6 +254,9 @@ export function composeScorecard({ week, facts, billing = null, search = null, a
       ['MRR', money ? `${dollars(money.mrrCents)} (a week earlier ${dollars(money.previousMrrCents)})` : 'Billing could not be read'],
       ['Outbound email', `${f.delivered[0]} delivered, ${replies(f.replies[0])}, ${plural(f.bounces[0], 'bounce')}, ${plural(f.complaints[0], 'complaint')} `
         + `(last week ${f.delivered[1]} delivered, ${f.replies[1]} replies, ${f.bounces[1]} bounces, ${f.complaints[1]} complaints)`],
+      // Anonymous sessions that came from a link in the team's own outreach email, by the arms it was written under (links.mjs).
+      ...(key === 'caremetric-intel' && seen.byProduct[key].values && Array.isArray(visitors?.products?.[key]?.campaigns) ? [['Sessions from outreach email links',
+        campaignWords(visitors.products[key].campaigns)]] : []),
       ...(f.clicks ? [['Organic search clicks', `${f.clicks[0]} (the 7 days before ${f.clicks[1]})${search.products[key].failed ? `; ${search.products[key].failed} ${search.products[key].failed === 1 ? 'property' : 'properties'} could not be read` : ''}`]]
         : searchOn && search.products[key]?.failed > 0 ? [['Organic search clicks', 'Search Console could not be read this week']] : []),
     ];

@@ -65,7 +65,9 @@ describe('registration', () => {
   });
 
   it('reads Settings → Creative with safe defaults, and HeyGen only with its key', () => {
-    expect(creativeConfig({})).toEqual({ enabled: false, dailyRenderCap: 40, videoProvider: 'internal', heygenKey: '' });
+    expect(creativeConfig({})).toEqual({ enabled: false, dailyRenderCap: 40, countySnapshotsPerWeek: 3, videoProvider: 'internal', heygenKey: '' });
+    expect(creativeConfig({}, settingsOf({ 'creative.county_snapshots_per_week': 0 })).countySnapshotsPerWeek).toBe(0);
+    expect(creativeConfig({}, settingsOf({ 'creative.county_snapshots_per_week': 9 })).countySnapshotsPerWeek).toBe(3);
     expect(creativeConfig({}, settingsOf({ 'creative.daily_render_cap': 12, 'creative.video_provider': 'heygen' })).videoProvider).toBe('internal');
     expect(creativeConfig({ HUB_HEYGEN_API_KEY: 'k'.repeat(20) }, settingsOf({ 'creative.daily_render_cap': 12, 'creative.video_provider': 'heygen' }))).toMatchObject({ dailyRenderCap: 12, videoProvider: 'heygen' });
     expect(creativeConfig({}, settingsOf({ 'creative.daily_render_cap': -1 })).dailyRenderCap).toBe(40);
@@ -220,5 +222,58 @@ describe('no side effect without an approved action', () => {
     await actions.executeReady();
     expect(executor).not.toHaveBeenCalled();
     expect(store.completeExecution).not.toHaveBeenCalled();
+  });
+});
+
+describe('county snapshots', () => {
+  const counties = [{ countyFips: '42003', state: 'PA', agencies: 9 }, { countyFips: '42101', state: 'PA', agencies: 7 }];
+  const answer = { counties: [
+    { county_fips: '42003', county_name: 'Allegheny', state: 'PA', figures: [{ key: 'medicare_beneficiaries', label: 'x', value: 250000, unit: 'count', data_year: '2026', period: '2026-06',
+      dataset: 'CMS Medicare Monthly Enrollment', source_line: 's', short_source: 'CMS Medicare Monthly Enrollment, 2026' }] },
+    { county_fips: '42101', county_name: 'Philadelphia', state: 'PA', figures: [] },
+  ] };
+  const setup = ({ perWeek = 3, configured = true, fail = false } = {}) => {
+    const h = harness({ model: modelOf() });
+    h.store.creativeDataCounties = vi.fn(async () => counties);
+    const feed = { configured, countyFigures: vi.fn(async () => { if (fail) throw Object.assign(new Error('x'), { code: 'feed_unavailable', transient: true }); return answer; }) };
+    const handlers = creativeHandlers({ store: h.store, notifier: h.notifier, model: modelOf(), feed, settings: { dailyRenderCap: 40, videoProvider: 'internal', countySnapshotsPerWeek: perWeek },
+      publicOrigin: 'https://help.caremetric.ai', log: () => {} });
+    return { ...h, handlers, feed };
+  };
+
+  it('opens one brief for each county the data can picture, within the week\'s number, keyed to the county and week', async () => {
+    const { handlers, store, feed, task: make } = setup();
+    const done = await handlers['creative.plan'](make('creative.plan'), { now });
+    expect(store.creativeDataCounties).toHaveBeenCalledWith(3, '2026-11-09T05:00:00.000Z');
+    expect(feed.countyFigures).toHaveBeenCalledWith({ countyFips: ['42003', '42101'] });
+    const opened = store.creativeBriefCreate.mock.calls.map(([item]) => item).filter(item => item.source === 'data.county');
+    expect(opened).toHaveLength(1);
+    expect(opened[0]).toMatchObject({ requestKey: 'data:county:42003:2026-11-09', facts: { stat: '250,000', statSource: 'CMS Medicare Monthly Enrollment, 2026' } });
+    expect(done.result.snapshots).toBe(1);
+  });
+
+  it('opens none while the number is 0, the feed is not set up or cannot answer', async () => {
+    for (const options of [{ perWeek: 0 }, { configured: false }, { fail: true }]) {
+      const { handlers, store, task: make } = setup(options);
+      const done = await handlers['creative.plan'](make('creative.plan'), { now });
+      expect(store.creativeBriefCreate.mock.calls.some(([item]) => item.source === 'data.county')).toBe(false);
+      expect(done.result.snapshots).toBeUndefined();
+    }
+  });
+
+  it('draws every draft of a snapshot brief as the data\'s figure, and the model\'s own numbers block it', async () => {
+    const snapshotBrief = { ...brief, source: 'data.county', facts: { stat: '250,000', statLabel: 'people on Medicare in Allegheny County, PA', statSource: 'CMS Medicare Monthly Enrollment, 2026',
+      dataYear: '2026', place: 'Allegheny County, PA' } };
+    const { handlers, store, task: make } = setup();
+    store.creativeBriefContext.mockResolvedValue({ brief: snapshotBrief, brandKit: fullKit, parent: null, learnings: [], recentHeadlines: [] });
+    const model = modelOf();
+    const withModel = creativeHandlers({ store, notifier: { send: vi.fn() }, model, settings: { dailyRenderCap: 40, videoProvider: 'internal' }, publicOrigin: 'https://help.caremetric.ai', log: () => {} });
+    await withModel['creative.request'](make('creative.request', { payload: { briefId } }), { now });
+    expect(JSON.parse(model.run.mock.calls[0][1].user).data).toEqual({ place: 'Allegheny County, PA', figure: '250,000 people on Medicare in Allegheny County, PA', source: 'CMS Medicare Monthly Enrollment, 2026' });
+    const rows = store.creativeDraftsSave.mock.calls[0][2];
+    expect(rows.every(row => row.layout === 'stat' && row.overlay.stat === '250,000' && row.overlay.statSource === 'CMS Medicare Monthly Enrollment, 2026')).toBe(true);
+    // The plain hero passes; the variant promising referrals is blocked as before.
+    expect(rows.some(row => row.compliance.verdict !== 'block')).toBe(true);
+    void handlers;
   });
 });

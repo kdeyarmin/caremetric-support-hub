@@ -13,20 +13,20 @@
  */
 import { echoCandidates, quotesCustomer, wordsOf } from '../concierge/draft.mjs';
 import { screenIdentifiers } from '../concierge/screen.mjs';
-import { factSheetText, factsRevision } from '../content/facts.mjs';
+import { articleHomeUrl, factSheetText, factsRevision } from '../content/facts.mjs';
 import { catalogGuidance, catalogNumbers, featuresTexts } from '../content/features.mjs';
 import { allowedNumbers, normalizeTerms, textProblems, unclearCopy } from '../content/validate.mjs';
 import { productAmounts } from '../../growth/draft.mjs';
 import { linkablePages, offersMeeting, playbookFor, playbookText } from '../../growth/playbook.mjs';
 import { linkTags, tagLinks, untagLinks } from '../links.mjs';
 
-export const planPromptVersion = 'social-plan.5';
+export const planPromptVersion = 'social-plan.7';
 export const adPromptVersion = 'social-ads.5';
 export const replyPromptVersion = 'social-reply.4';
 
 export const platforms = ['facebook', 'instagram', 'linkedin'];
 export const socialProducts = ['carebase', 'caremetric-intel'];
-export const pillars = ['tip', 'capability', 'engagement', 'offer', 'resource'];
+export const pillars = ['tip', 'capability', 'engagement', 'offer', 'resource', 'data'];
 // `ad_headline` and `ad_description` are Meta's (where the feed cuts them off). LinkedIn shows more, and the Creative Director writes
 // LinkedIn creative to LinkedIn's lengths (creative/specs.mjs `textLimits.linkedin`): the two `ad_linkedin_*` surfaces match them, so
 // an approved LinkedIn creative is not dropped as an ad for being longer than a Meta headline.
@@ -54,9 +54,11 @@ What makes a post work:
 - One idea per post, short paragraphs, useful before promotional, and one clear call to action at the end: answer in a comment, read the linked page, or start the free trial.
 - Mix the week: about two in five practical tips (from the playbook's likely problems, written as tips or questions, never as claims about readers), one in five product capability (the playbook's "what we may say"), one in five engagement (a question the audience can answer in a comment), one in five at most an offer (the free trial or the Founders Sale, exactly as written), or a resource (one of the product's own guide pages).
 - Platform style: Facebook is conversational, 40 to 120 words, and may carry one link. Instagram is visual and warm, 50 to 150 words, carries no link (say the link is in the bio), and ends with three to six hashtags. LinkedIn is professional and practical, 80 to 200 words, may carry one link and two to four hashtags.
+- Founder posts (platform "founder", only when "postsToWrite" asks for them) are for the founder's own LinkedIn profile, written in the first person as CareMetric's founder: an observation about the home health, hospice or senior-care market drawn from the request's "events" or the fact sheet, a lesson from building CareMetric, or a new public data release. 80 to 200 words, professional and plain; useful first, the product mentioned at most once, near the end. Set product to the product it relates to. One link at most, two or three hashtags. Never invite a call, a meeting, a message or a connection.
 - Write only about the products listed in the request's "products"; the others are not marketed yet.
 - Learn from the performance data in the request: write more like the posts that earned engagement and less like those that did not, but never copy a post, and never repeat a recent post's opening.
-- Links: only by id, from the list in the request for that post's product. Hashtags: plain words without the # sign, no spaces.
+- Links: only by id, from the list in the request for that post's product. The list may include articles the team published recently (ids starting "article-"): link one when a post is about its topic. Hashtags: plain words without the # sign, no spaces.
+- When the request has "events", you may write at most one post in the week about one of them, with pillar "data": a public data release CareMetric Intel has just loaded (name it as given, say what it covers and its year, and that Intel's market views use it) or a healthcare observance starting soon (recognize the people or the cause it honors, with its dates as given). State no statistic. Without "events", never use the "data" pillar.
 
 ${rules}
 
@@ -118,7 +120,7 @@ ${playbookText()}`;
 export const planSchema = {
   type: 'object', additionalProperties: false, required: ['posts'],
   properties: { posts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['platform', 'product', 'pillar', 'day', 'text', 'linkId', 'hashtags'], properties: {
-    platform: { type: 'string', enum: platforms }, product: { type: 'string', enum: socialProducts }, pillar: { type: 'string', enum: pillars }, day: { type: 'integer' },
+    platform: { type: 'string', enum: [...platforms, 'founder'] }, product: { type: 'string', enum: socialProducts }, pillar: { type: 'string', enum: pillars }, day: { type: 'integer' },
     text: { type: 'string' }, linkId: { type: 'string' }, hashtags: { type: 'array', items: { type: 'string' } } } } } },
 };
 export const adSchema = {
@@ -152,6 +154,13 @@ const personalAttribute = /\b(?:are you|do you (?:have|suffer)|you(?:'re| are)) 
 const aiMention = /\b(?:as an ai|language model|artificial intelligence|ai assistant|automated (?:reply|response|post)|chatbot|i am an? (?:ai|assistant|bot|model))\b|\bsystem prompt\b|\b(?:my|these|the) instructions\b/i;
 const surfaces = new Set(Object.keys(limits));
 
+/** True when `url` is the canonical address of one of the product's articles (Intel's website for Intel, the help center for CareBase). */
+export function ownArticleUrl(product, url) {
+  if (!socialProducts.includes(product) || typeof url !== 'string') return false;
+  const slug = url.match(/\/(?:resources|help\/articles)\/([a-z0-9-]{1,120})$/)?.[1];
+  return Boolean(slug) && articleHomeUrl(product, slug) === url;
+}
+
 /** The product's own pages a post or reply may link to; with no product, both software products' pages. */
 export const socialLinks = product => (product ? linkablePages(product) : socialProducts.flatMap(key => linkablePages(key))).map(page => ({ id: page.id, label: page.label, url: page.url }));
 
@@ -160,7 +169,7 @@ export const socialLinks = product => (product ? linkablePages(product) : social
  * @param {{ surface: keyof limits, product?: string|null, theirText?: string }} options
  * @returns {{ ok: true, text: string } | { ok: false, reason: string }}
  */
-export function checkSocialText(value, { surface, product = null, theirText = '' }) {
+export function checkSocialText(value, { surface, product = null, theirText = '', extraLinks = [] }) {
   if (!surfaces.has(surface)) return { ok: false, reason: 'surface' };
   const terms = normalizeTerms(String(value ?? '').replace(/\r\n?/g, '\n').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim());
   if (terms.ambiguous) return { ok: false, reason: 'vocabulary' };
@@ -172,7 +181,8 @@ export function checkSocialText(value, { surface, product = null, theirText = ''
   if (markup.test(plain)) return { ok: false, reason: 'markup' };
   const links = (plain.match(linkPattern) ?? []).map(url => url.replace(trailing, ''));
   if (links.length && (surface === 'instagram' || surface.startsWith('ad_'))) return { ok: false, reason: 'link' };
-  const allowed = new Set(socialLinks(product).map(link => link.url));
+  // Besides the product's pages: a published article of the product's own (`extraLinks`, each checked by ownArticleUrl).
+  const allowed = new Set([...socialLinks(product).map(link => link.url), ...extraLinks.filter(url => ownArticleUrl(product, url))]);
   if (links.length > 1 || links.some(url => !allowed.has(url))) return { ok: false, reason: 'link' };
   const tags = [...plain.matchAll(hashtag)];
   if (tags.length > (surface === 'instagram' ? 8 : 5) || (surface.startsWith('ad_') && tags.length) || (['comment', 'message'].includes(surface) && tags.length)) return { ok: false, reason: 'hashtags' };

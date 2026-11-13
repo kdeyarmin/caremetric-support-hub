@@ -15,6 +15,7 @@
  * starts and the schedules stay due instead of failing.
  */
 import { createHmac } from 'node:crypto';
+import { live } from '../../live.mjs';
 import { delivered } from '../notify.mjs';
 import { easternDate, easternMidnight, weekStart } from '../accounts/week.mjs';
 import { composeGrowthReport } from '../growth/report.mjs';
@@ -25,6 +26,10 @@ import { shortFailure } from './probe.mjs';
 import { dueMoment, heldForScorecard, heldResult, mustHaveReached, plural, recordRun } from './shared.mjs';
 
 export const growthFeature = 'platform.agents.growth.v1';
+/** Website leads followed up through the growth pipeline (20261113171000_growth_inbound.sql). */
+export const growthInboundFeature = 'platform.agents.growth-inbound.v1';
+/** The lead kinds the growth pipeline follows up, and the trial sign-up that stops cold email to its business. */
+export const capturedLeadKinds = Object.freeze(['county_report', 'savings_model', 'contact', 'newsletter', 'trial_signup']);
 const declared = features => (features instanceof Set ? features.has(growthFeature) : Array.isArray(features) && features.includes(growthFeature));
 
 const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' });
@@ -114,9 +119,10 @@ const formWords = ({ target, check }) => (check.ok ? `${target.label} passed`
 
 export function growthHandlers({
   store, notifier, publicOrigin, features = null, leadSecrets = {}, formTargets = defaultFormTargets, fetchImpl = fetch,
-  threshold = failureThreshold, log = line => console.warn(line),
+  threshold = failureThreshold, log = line => console.warn(line), inboundFollowup = false,
 }) {
   if (!declared(features)) return {};
+  const inbound = () => (features instanceof Set ? features.has(growthInboundFeature) : Array.isArray(features) && features.includes(growthInboundFeature)) && live(inboundFollowup) === true;
 
   /**
    * `growth.leads`: each lead is looked at once. Only a trial sign-up alerts here, by email, under its own key. A lead whose alert the
@@ -128,6 +134,8 @@ export function growthHandlers({
     const answer = await store.growthPending({ limit: pendingLimit, windowHours: pendingWindowHours });
     const pending = Array.isArray(answer) ? answer : [];
     const counts = { trials: 0, conversations: 0, digest: 0 };
+    const capturing = inbound() && typeof store.growthLeadCapture === 'function';
+    let captured = 0;
     const seen = [];
     const delivery = [];
     const refusals = [];
@@ -154,6 +162,12 @@ export function growthHandlers({
       } else {
         counts.digest += 1;
       }
+      // Settings → Customer growth → Follow up website leads by email: the lead becomes a qualified opportunity (or, for a trial
+      // sign-up, stops cold email to its business). Drafting, approval and every send check stay the growth pipeline's.
+      if (capturing && capturedLeadKinds.includes(item.kind)) {
+        const outcome = await store.growthLeadCapture(item.id);
+        if (outcome?.captured) captured += 1;
+      }
       seen.push(item.id);
     }
     if (seen.length) await store.growthMarkSeen(seen);
@@ -163,14 +177,14 @@ export function growthHandlers({
         promptVersion: 'growth.1',
         summary: pending.length
           ? `Looked at ${plural(pending.length, 'new lead')}: ${plural(counts.trials, 'trial')} alerted${delivery.length ? ` (${delivery.join(', ')})` : ''}, `
-            + `${counts.conversations} left to the Support Concierge, ${counts.digest} for the brief${refused ? `; ${plural(refused, 'alert')} refused, tried again shortly` : ''}.`
+            + `${counts.conversations} left to the Support Concierge, ${counts.digest} for the brief${captured ? `; ${plural(captured, 'lead')} handed to the Marketing Manager to follow up` : ''}${refused ? `; ${plural(refused, 'alert')} refused, tried again shortly` : ''}.`
           : 'No new leads.',
         outcome: refused || unsent ? 'failed' : 'completed', errorCode: refused || unsent ? 'not_delivered' : null,
       });
     }
     // A refused alert is tried again by the scheduler; the run above stays as the record of this attempt.
     mustHaveReached(refusals);
-    return { result: { seen: seen.length, ...counts, delivery } };
+    return { result: { seen: seen.length, ...counts, ...(captured ? { captured } : {}), delivery } };
   }
 
   /**

@@ -18,8 +18,8 @@ import { offerFor } from './offers.mjs';
 import { placementsFor, videoLengths, videoPlacement } from './specs.mjs';
 import { themeFor } from './themes.mjs';
 
-export const conceptPromptVersion = 'creative-concept.6';
-export const variantsPromptVersion = 'creative-variants.6';
+export const conceptPromptVersion = 'creative-concept.7';
+export const variantsPromptVersion = 'creative-variants.7';
 export const hooks = Object.freeze(['problem', 'proof', 'offer', 'curiosity', 'demo']);
 const labels = ['A', 'B', 'C', 'D', 'E'];
 
@@ -83,7 +83,8 @@ const craft = `How good ad creative works here:
 - Write for the brand voice in the request, and in the product's brand theme (brandTheme): every asset is drawn in that theme's own colors, type and logo, so the words should suit it. CareMetric Intel's theme is Emberline, and its tagline "Set your marketing on FIRE!" may be used exactly as written; CareBase's theme is calm and plain, with no tagline.
 - Sell what the product does, one thing per asset, and why it matters to this audience. The product's own catalog follows these instructions: for CareMetric Intel every published feature by area, why each part matters, the data behind it (what is included, its source, the decision it helps make and its limit), each care setting and the manager view; for CareMetric CareBase every capability by module, why it matters, the tools that set it apart, a resident's record from inquiry to move-out, what each role sees and does, and each chapter's requirements. Pick one feature or capability (or one kind of data) and show the decision it helps make or the work it saves, in those terms; when the brief names a feature focus, lead with it. Across a brief's variants, show different features rather than the same one reworded. Plain specifics beat broad claims: "track each physician against the Stark annual limit", "import referrals from your EMR's reports as CSV", "open Survey Day Mode when the surveyor walks in", "a binder PDF built from your live records".
 - Stay inside what the catalog says. ${catalogGuidance} For Intel, the free trial includes everything Pro does, in one county; results come from what the team records or imports; the expense tools support a compliance program and are not legal advice.
-- Learn from the learnings: lean toward what won, away from what lost, and never repeat a recent headline.`;
+- Learn from the learnings: lean toward what won, away from what lost, and never repeat a recent headline.
+- When the request has "data", the asset is a county snapshot: one public figure about one county, drawn with the stat layout. Code prints the figure, its label and its source exactly as "data" gives them, whatever the overlay says. Write the headline and the text around it: why that number matters to a home health agency or hospice in that county, and that the free county report shows the rest of the county's market. Write no number, share, year or amount yourself, never say the figure is about the reader's own agency, and never call it a ranking or a score.`;
 
 export const conceptSystem = `You are the Creative Director at CareMetric, a small company that makes software for healthcare and senior-care organizations. You turn a marketing brief into one ad concept and its final copy. CareMetric's owner approves every asset before it runs; code checks every word either way.
 
@@ -151,6 +152,8 @@ export function briefUserMessage(context, { screenshots = [] } = {}) {
     careSetting: (() => { const named = (segments[brief.product] ?? []).filter(segment => String(brief.audience ?? '').toLowerCase().includes(segment)); return named.length === 1 ? careSettingText(brief.product, named[0]) : null; })(),
     videoLengths: brief.formats.includes('video') ? brief.videoLengths : [], offer: offer ? { name: offer.name, terms: offer.terms } : null,
     planText: context.planText ?? null,
+    // A county snapshot's figure (data.mjs): code prints it; the words around it are the model's.
+    data: brief.facts?.stat ? { place: brief.facts.place, figure: `${brief.facts.stat} ${brief.facts.statLabel}`, source: brief.facts.statSource } : null,
     brandVoice: kit.voiceNotes || null, bannedPhrases: kit.bannedPhrases ?? [], requiredDisclaimers: kit.requiredDisclaimers ?? [],
     pages: landingPages(brief.product).map(({ id, label }) => ({ id, label })),
     screenshots: screenshots.map(({ id, label }) => ({ id, label })),

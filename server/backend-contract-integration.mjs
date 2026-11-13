@@ -54,6 +54,17 @@ const marketingConnectionContracts=await Promise.all([
   ['platform.agents.app-growth.v1','20261111032205_growth_app_lifecycle_contract.sql'],
   ['platform.agents.visitor-metrics.v1','20261111040100_visitor_metrics_contract.sql'],
   ['platform.social-connections.v1','20261111060001_social_connections_contract.sql'],
+  ['platform.agents.growth-roster.v1','20261113170600_growth_roster_contract.sql'],
+  ['platform.agents.growth-inbound.v1','20261113171100_growth_inbound_contract.sql'],
+  ['platform.agents.growth-reengage.v1','20261113172100_growth_reengage_contract.sql'],
+  ['platform.agents.growth-people.v1','20261113180100_growth_people_contract.sql'],
+  ['platform.agents.growth-research.v1','20261113190100_growth_research_contract.sql'],
+  ['platform.agents.growth-learning.v1','20261113200100_growth_learning_contract.sql'],
+  ['platform.agents.creative-data.v1','20261113210100_creative_data_contract.sql'],
+  ['platform.agents.founder-posts.v1','20261113220100_founder_posts_contract.sql'],
+  ['platform.agents.ads.v1','20261113230100_ads_buildout_contract.sql'],
+  ['platform.agents.watchdog.v1','20261113240100_agent_watchdog_contract.sql'],
+  ['platform.agents.creative-uploads.v1','20261113250100_creative_uploads_contract.sql'],
 ].map(async([feature,file])=>({feature,sql:await readFile(new URL(`../supabase/migrations/${file}`,import.meta.url),'utf8')})));
 const diagnosticSupportContract=diagnosticSupportMigration.slice(diagnosticSupportMigration.indexOf('do $$ declare contract'));
 assert.ok(selfServiceContract.startsWith('-- Contract publication is last:'),'Recognize the self-service contract declaration');

@@ -98,3 +98,56 @@ it('clears a load error after a successful refresh',async()=>{
  await screen.findByText(/Sending: disabled/);
  expect(screen.queryByRole('alert')).toBeNull();
 });
+
+it('shows the Medicare roster once its migration is live: what is missing, the read and the best-ranked agencies',async()=>{
+ const roster={sync:{period:'2026Q3',states:['PA'],complete:true,syncedAt:'2026-11-12T12:00:00Z',rows:2},counts:{new:1,graduated:1},total:2,
+  items:[{ccn:'391501',name:'Valley Hospice, Inc.',setting:'hospice',city:'Philadelphia',state:'PA',rank:75,reasons:['Change of ownership (2026-03-01)'],status:'graduated',reason:null,attempts:1,resolveAfter:null,confirmation:'phone',domain:'valleyhospice.org',organizationId:'org-1'},
+   {ccn:'397001',name:'County Home Health',setting:'home_health',city:'Pittsburgh',state:'PA',rank:40,reasons:[],status:'unresolved',reason:'no_site',attempts:1,resolveAfter:'2026-11-20T12:00:00Z',confirmation:null,domain:null,organizationId:null}],
+  services:{feed:{declared:true,enabled:true,signing:false},states:['PA'],daily:25,research:true}};
+ const request=vi.fn(async(_url:unknown,init:RequestInit)=>new Response(JSON.stringify(JSON.parse(String(init.body)).operation==='roster'?roster:{...empty,services:{...empty.services,roster:true}})));
+ vi.stubGlobal('fetch',request);render(<MemoryRouter><Growth/></MemoryRouter>);
+ expect(await screen.findByText(/Medicare roster · 2 agencies/)).toBeTruthy();
+ expect(screen.getByText(/set HUB_INTEL_FEED_SECRET/)).toBeTruthy();
+ expect(screen.getByText(/In the pipeline: 1/)).toBeTruthy();
+ expect(screen.getByText(/confirmed by its CMS telephone number/)).toBeTruthy();
+ expect(screen.getByText(/no website matched/)).toBeTruthy();
+ expect(screen.queryByRole('button',{name:'Next agencies'})).toBeNull();
+});
+it('leaves the roster out until its migration is live',async()=>{
+ const request=vi.fn<(url:unknown,init:RequestInit)=>Promise<Response>>(async()=>new Response(JSON.stringify(empty)));
+ vi.stubGlobal('fetch',request);render(<MemoryRouter><Growth/></MemoryRouter>);
+ await screen.findByText(/Sending: disabled/);
+ expect(screen.queryByText(/Medicare roster/)).toBeNull();
+ expect(request.mock.calls.every(([,init])=>JSON.parse(String(init.body)).operation!=='roster')).toBe(true);
+});
+it('reads a CSV of prospects, quoted fields included, and refuses one without its key columns',async()=>{
+ const {importRows}=await import('./growthClient');
+ expect(importRows('Name,Website,Email,Contact Name,Title\n"Valley Hospice, Inc.",valleyhospice.org,jane@valleyhospice.org,Jane Doe,Administrator\nCounty Care,countycare.org,,,\n')).toEqual({error:null,rows:[
+  {name:'Valley Hospice, Inc.',domain:'valleyhospice.org',email:'jane@valleyhospice.org',contactName:'Jane Doe',role:'Administrator'},{name:'County Care',domain:'countycare.org'}]});
+ expect(importRows('email\njane@x.org').error).toMatch(/name and domain/);
+ expect(importRows('name,domain').error).toMatch(/at least one/);
+});
+it('lists found people for the owner to permit, once the people migration is live',async()=>{
+ const people={waiting:1,creditsToday:3,creditCap:10,items:[{id:'c1',name:'Jane Doe',role:'Administrator',email:'jane@valleyhospice.org',source:'enriched',organization:'Valley Hospice',domain:'valleyhospice.org',foundAt:'2026-11-13T12:00:00Z'}],services:{provider:'apollo',configured:true}};
+ const request=vi.fn(async(_url:unknown,init:RequestInit)=>{const op=JSON.parse(String(init.body)).operation;return new Response(JSON.stringify(op==='people'?people:op==='peopleDecide'?{decided:1}:{...empty,services:{...empty.services,people:true}}));});
+ vi.stubGlobal('fetch',request);render(<MemoryRouter><Growth/></MemoryRouter>);
+ expect(await screen.findByText(/Decision-makers to review · 1/)).toBeTruthy();
+ expect(screen.getByText(/Contact lookups today: 3 of 10 \(apollo\)/)).toBeTruthy();
+ fireEvent.click(screen.getByRole('checkbox',{name:'Choose Jane Doe'}));
+ fireEvent.click(screen.getByRole('button',{name:'Permit chosen'}));
+ await waitFor(()=>expect(request.mock.calls.some(([,init])=>JSON.parse(String(init.body)).operation==='peopleDecide')).toBe(true));
+ const decided=request.mock.calls.map(([,init])=>JSON.parse(String(init.body))).find(body=>body.operation==='peopleDecide');
+ expect(decided.data).toEqual({ids:['c1'],decision:'permit'});
+});
+it('shows the weekly memos and uses one only when the owner chooses it, once the learning migration is live',async()=>{
+ const learning={memos:[{id:'m1',product:'caremetric-intel',version:2,memo:'What the last 90 days show.\n- The owner turned down recent drafts with these notes: "Too long".',status:'proposed',createdAt:'2026-11-16T12:00:00Z',stats:{sent:40,replied:5}}],services:{enabled:false}};
+ const request=vi.fn(async(_url:unknown,init:RequestInit)=>{const op=JSON.parse(String(init.body)).operation;return new Response(JSON.stringify(op==='learning'?learning:op==='learningDecide'?{status:'active',version:2}:{...empty,services:{...empty.services,learning:true}}));});
+ vi.stubGlobal('fetch',request);render(<MemoryRouter><Growth/></MemoryRouter>);
+ expect(await screen.findByText(/CareMetric Intel · memo 2 · Waiting for you/)).toBeTruthy();
+ expect(screen.getByText(/from 40 emails and 5 replies/)).toBeTruthy();
+ expect(screen.getByText(/turn on Settings → Customer growth → Write from what is working/)).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Use this memo'}));
+ await waitFor(()=>expect(request.mock.calls.some(([,init])=>JSON.parse(String(init.body)).operation==='learningDecide')).toBe(true));
+ const decided=request.mock.calls.map(([,init])=>JSON.parse(String(init.body))).find(body=>body.operation==='learningDecide');
+ expect(decided.data).toEqual({id:'m1',decision:'activate'});
+});

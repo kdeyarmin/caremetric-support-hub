@@ -6,7 +6,7 @@ select ok(hub.get_backend_contract() -> 'features' @> '["platform.agents.social.
 select is((select jsonb_build_array(display_name, status, autonomy, model_tier, daily_budget_cents, config -> 'auto_approve_kinds') from private.agents where key = 'social_manager'),
   '["Social Media Manager", "paused", "propose", "draft", 400, []]'::jsonb, 'The Social Media Manager starts paused, in Propose, trusted with nothing');
 
-select is((select array_agg(task_kind order by task_kind) from private.agent_schedules where agent_key = 'social_manager' and not requires_session),
+select is((select array_agg(task_kind order by task_kind) from private.agent_schedules where agent_key = 'social_manager' and not requires_session and task_kind like 'social.%'),
   array['social.ads', 'social.inbox', 'social.plan', 'social.report'], 'Its inbox, plan, ad review and report are scheduled');
 
 select is((select jsonb_object_agg(category, jsonb_build_array(status, changes -> 0 -> 'values')) from private.agent_autonomy_steps where category in ('social_posts', 'social_replies', 'ad_tuning')),

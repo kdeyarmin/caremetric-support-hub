@@ -1,3 +1,5 @@
+import { watchdogFindings } from './watchdog.mjs';
+import { live } from '../../live.mjs';
 /**
  * The Chief of Staff's morning brief: one email at 07:00 Eastern that says what needs the owner,
  * what the team did yesterday and what is worth knowing. It uses no model: it is composed from
@@ -64,7 +66,7 @@ function growthSection(growth) {
 const creativePlatforms = { meta: 'Meta', linkedin: 'LinkedIn', google: 'Google display', youtube: 'YouTube' };
 const creativeProducts = { carebase: 'CareBase', 'caremetric-intel': 'Intel' };
 /** Turns the facts into { subject, body, blocks, needsYou }. Pure: the same facts always give the same email. */
-export function composeBrief(facts, { now = new Date(), publicOrigin, services = {}, labels = {}, growth = null } = {}) {
+export function composeBrief(facts, { now = new Date(), publicOrigin, services = {}, labels = {}, growth = null, watchdog = [] } = {}) {
   const generated = facts?.generatedAt ?? now;
   const approvals = count(facts?.approvals?.count);
   const incidents = Array.isArray(facts?.incidents) ? facts.incidents : [];
@@ -111,6 +113,8 @@ export function composeBrief(facts, { now = new Date(), publicOrigin, services =
   const overBudget = agents.filter(agent => agent.hitBudget === true).map(agent => agent.name);
   if (overBudget.length) watch.push(`Reached the daily budget yesterday: ${overBudget.join(', ')}.`);
   if (services.sms === false) watch.push('Text alerts are not set up, so urgent items reach you by email only.');
+  // The watchdog (watchdog.mjs): parts of the team that went quiet, with the likely cause.
+  for (const finding of Array.isArray(watchdog) ? watchdog : []) watch.push(`Watchdog: ${finding.text}`);
 
   const headline = headlineFor(needs.length);
   const link = /^https:\/\//i.test(publicOrigin ?? '') ? `${publicOrigin.replace(/\/+$/, '')}/admin/team` : null;
@@ -147,7 +151,18 @@ const dayBefore = date => {
   return new Date(Date.UTC(year, month - 1, day - 1)).toISOString().slice(0, 10);
 };
 
-export function briefHandlers({ store, notifier, publicOrigin, services = {}, labels = {}, features = null, log = line => console.warn(line) }) {
+export function briefHandlers({ store, notifier, publicOrigin, services = {}, labels = {}, features = null, toolkit = null, watchdogIdleDays = 3, log = line => console.warn(line) }) {
+  // The watchdog's findings (20261113240000_agent_watchdog.sql), never holding back the brief when they cannot be read.
+  async function watchdog(moment) {
+    if (typeof store.watchdogFacts !== 'function') return [];
+    try {
+      const days = Number(live(watchdogIdleDays));
+      return watchdogFindings(await store.watchdogFacts(), { idleDays: Number.isInteger(days) && days >= 1 ? days : 3, now: moment, toolkit: typeof toolkit === 'function' ? toolkit() : [] });
+    } catch {
+      log(JSON.stringify({ event: 'hub_agent_brief_watchdog_unread' }));
+      return [];
+    }
+  }
   const withGrowth = features instanceof Set ? features.has(growthFeature) : Array.isArray(features) && features.includes(growthFeature);
 
   // Yesterday's growth figures. A failure to read them never holds back the brief: the section says they could not be read.
@@ -168,7 +183,7 @@ export function briefHandlers({ store, notifier, publicOrigin, services = {}, la
     // midnight keeps its key. A brief the owner asks for is sent once per request (its own task), whatever day a retry falls on.
     const owner = task.sourceKind === 'owner';
     const date = dayKey.format(owner ? moment : dueMoment(task) ?? moment);
-    const content = composeBrief(facts, { now: moment, publicOrigin, services, labels, growth: await growthFacts(date) });
+    const content = composeBrief(facts, { now: moment, publicOrigin, services, labels, growth: await growthFacts(date), watchdog: await watchdog(moment) });
     const dedupeKey = owner ? `brief:owner:${task.id}` : `brief:${date}`;
     const results = await notifier.send({
       severity: content.needsYou > 0 ? 'warning' : 'info', subject: content.subject, body: content.body, blocks: content.blocks,

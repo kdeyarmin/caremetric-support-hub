@@ -47,7 +47,7 @@ A brief names the product, a goal, an audience (organizations and roles, never a
 platforms, images and/or videos with their lengths, an optional angle and an optional offer code. The model is given the brief, the
 product's own pages (by id), the brand kit's voice, banned phrases and required disclaimers, the owner's screenshots (by id and label), the
 product's learnings and its recent headlines (not to repeat), and, for a revision, the asset it replaces and the owner's note. Its system
-prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.6` and `creative-variants.6`) carry the fact sheet and the sales
+prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.7` and `creative-variants.7`) carry the fact sheet and the sales
 playbook (the Sales Executive's fact source) and are cached. The answers are closed JSON schemas.
 
 **What each product does** (`server/agents/content/features.mjs`, data in `intel-features.json` and `carebase-features.json`). Each brief's
@@ -250,6 +250,25 @@ with a transparent background, which fits every layout) and product screenshots
 change needs a current command session, is audited (`creative.brand_kit`, `creative.brand_file`, `creative.brief`), and is refused from a
 stale screen.
 
+### Your own finished videos (Creative → Add a finished video)
+
+A video made outside the Hub (a product intro, a commercial) joins the library the team uses. The owner picks an MP4 of at most 60 MB and
+two minutes, names it, ticks where it may be used and attests that it shows no patient, resident or personal information. The server
+reads the length and picture size from the file itself (`server/agents/creative/mp4.mjs`) and checks each placement (`specs.mjs`):
+
+| Size | Placements |
+| --- | --- |
+| 1080 x 1920 (9:16) | Instagram Reels and Facebook (`meta.video_vertical`, at most 60 seconds); LinkedIn (`linkedin.video_vertical`) |
+| 1080 x 1080 (1:1) | Facebook feed (`meta.video_square`); LinkedIn (`linkedin.video_square`) |
+| 1080 x 1350 (4:5) | Facebook feed (`meta.video_portrait`); LinkedIn (`linkedin.video_portrait`) |
+| 1920 x 1080 (16:9) | Facebook feed (`meta.video_landscape`); LinkedIn (`linkedin.video_landscape`) |
+
+The 16:9 placements are for uploads only: the Creative Director does not render them. Adding the video approves it, one asset per
+placement (one per platform), each with its own public token, `provider` `owner` and an `upload` brief
+(`20261113250000_creative_uploads.sql`, `hub.add_creative_video`, audited as `creative.video_upload`; the same upload sent twice is stored
+once). Nothing is published by the upload: the Social Media Manager uses the video in its next weekly plan, once per placement, and each post
+still waits for the owner's approval. Retire it like any approved asset.
+
 ## Autonomy steps (both off)
 
 | Step | Hands over | Never |
@@ -294,3 +313,13 @@ where id = '<id>';` (the weekly refresh also proposes retiring tired creative).
 Two model calls per brief: the concept and final copy on the quality tier (up to 4,000 output tokens) and the variants on the draft tier (up
 to 5,000). The seeded daily budget is $3.00; a used-up budget puts the brief off to the next Eastern day. Rendering uses no model. HeyGen
 renders are billed by HeyGen and logged in the AI usage ledger.
+
+## County snapshots (2026-11-13)
+
+With Settings → Creative → County snapshots a week above 0 (default 3), the daily plan opens briefs for counties where the Medicare
+roster's prospects are, most first and none pictured in the last eight weeks, each about one public figure from Intel's county figures
+(Medicare beneficiaries aged 85 and over, home health or hospice users, growth in residents aged 65 and over, Medicare Advantage
+share and others, in turn by week). Code fixes the figure, its label and its short source (`server/agents/creative/data.mjs`) and
+every variant is drawn with the stat layout; the model writes only the words around it. A draft that changes the figure, or writes a
+number of its own (the data's year aside), is blocked (`data_figure`, `data_number`), and any stat image now needs its source
+(`stat_source`). The figures are Medicare fee-for-service unless their label says otherwise.

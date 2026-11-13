@@ -56,7 +56,7 @@ describe('the trial alert', () => {
     expect(alert.subject).toBe('New CareBase trial: Sunrise Assisted Living Facility');
     expect(alert.body).toBe('Sunrise Assisted Living Facility started a CareBase trial (received Nov 3, 9:05 AM Eastern).\n\n'
       + 'Product: CareBase. Plan: complete. Came from google (cpc), landing page /pricing.\n\n'
-      + 'Nothing has been sent to them. Open Leads for their details and follow up while the trial is fresh.');
+      + 'Any cold email to their business has stopped. The Account Manager drafts the welcome and trial check-ins (for your approval until you hand them over). Open Leads for their details.');
     expect(alert.blocks[1]).toEqual({ type: 'details', rows: [['Product', 'CareBase'], ['Plan', 'complete'], ['Facility count', '2'], ['Came from', 'google (cpc), landing page /pricing']] });
     expect(alert.blocks.at(-1)).toEqual({ type: 'button', label: 'Open Leads', url: 'https://hub.example.test/admin/leads' });
   });
