@@ -30,6 +30,10 @@ export const growthSoftBounceFeature='platform.agents.growth-soft-bounce.v1';
 export function growthService({store,research,contacts=null,roster=null,people=null,deepResearch=null,learning=null,importKey='',features,enabled=false,signingKey='',eventKeys={},webhookPublicKey='',sesEvents=null,sesEventsReady=()=>false,publicOrigin,postalAddress=''}) {
   // The sending switch and the footer's postal address are Hub settings; either may be a function, read on each use.
   const sending=()=>live(enabled)===true; const postal=()=>String(live(postalAddress)??'');
+  // How far the people step goes for an address (Settings → Customer growth → Finding people's addresses), and whether the businesses'
+  // mail servers can be reached from here. Before the finder's migration only CMS owners are recorded.
+  const peopleServices=()=>{const finder=features?.has('platform.agents.growth-people-finder.v1')===true,mode=live(people?.mode);
+    return {finder,mode:finder&&['none','published','verify'].includes(mode)?mode:'none',mailServer:people?.mailbox?.state?.()??'unknown'};};
   const ready=()=>{if(!features?.has('platform.agents.customer-growth.v1'))throw new HttpError(503,'Apply the growth database migration first.');};
   const safe=async work=>{try{return await work();}catch(e){if(e instanceof HttpError)throw e; if(['22023','22007','23514','23503','23505'].includes(e?.code))throw new HttpError(400,'Check the growth record and its references.'); if(e?.code==='40001')throw new HttpError(409,'This record changed. Refresh and review it again.'); if(e?.code==='28000')throw new HttpError(401,'Sign in again.'); if(e?.code==='42501')throw new HttpError(403,'Not permitted.'); throw e;}};
   const parse=(schema,input)=>{const parsed=schema.safeParse(input); if(!parsed.success)throw new HttpError(400,'Invalid growth request.');return parsed.data;};
@@ -67,7 +71,7 @@ export function growthService({store,research,contacts=null,roster=null,people=n
       if(['people','peopleDecide','import'].includes(operation)) {
         if(!features?.has('platform.agents.growth-people.v1'))throw new HttpError(503,'Apply the people database migration first.');
         if(operation==='people')return safe(async()=>({...await store.people(token,parse(z.object({offset:z.number().int().min(0).max(100000).default(0)}).strict(),data).offset),
-          services:{provider:live(people?.provider)?.provider??null,configured:live(people?.provider)?.configured===true}}));
+          services:peopleServices()}));
         if(operation==='peopleDecide'){const parsed=parse(z.object({ids:z.array(uuid).min(1).max(200),decision:z.enum(['permit','refuse'])}).strict(),data);return safe(async()=>({decided:await store.peopleDecide(token,parsed.ids,parsed.decision)}));}
         return safe(()=>store.importList(token,parse(importSchema,data).rows));
       }

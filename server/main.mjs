@@ -33,7 +33,8 @@ import { growthService } from './growth/service.mjs';
 import { growthResearch } from './growth/research.mjs';
 import { growthContactFinder } from './growth/contacts.mjs';
 import { intelFeedReader } from './growth/intel-feed.mjs';
-import { peopleProvider } from './growth/people-provider.mjs';
+import { npiRegistry } from './growth/npi-registry.mjs';
+import { mailboxChecker } from './growth/mailbox.mjs';
 import { growthSender } from './growth/sender.mjs';
 import { socialConfig } from './agents/social/index.mjs';
 import { nativeVisitorReader } from './agents/scorecard/visitors.mjs';
@@ -94,9 +95,10 @@ const messaging=communications({pool,delegations:capabilities,publicOrigin,
 // The Medicare roster from Intel's signed marketing feed (Settings → Customer growth; the shared secret HUB_INTEL_FEED_SECRET in Railway).
 const roster={feed:intelFeedReader({features,enabled:setting('growth.roster'),key:process.env.HUB_INTEL_FEED_SECRET}),
   states:setting('growth.roster_states'),daily:setting('growth.roster_daily_resolutions')};
-// The contact-data service that finds decision-makers' work addresses (Settings → Customer growth; HUB_APOLLO_API_KEY in Railway).
-let peopleChoice={choice:undefined,provider:null};
-const people={provider:()=>{const choice=settings.get('growth.enrichment_provider');if(choice!==peopleChoice.choice)peopleChoice={choice,provider:peopleProvider(choice,{apolloKey:process.env.HUB_APOLLO_API_KEY})};return peopleChoice.provider;}};
+// Decision-makers and their work addresses, found by the Hub itself: the NPI registry, the business's own website and, when the owner
+// chooses it, the business's own mail server (Settings → Customer growth → Finding people's addresses). No key: nothing to set in Railway.
+const people={mode:setting('growth.enrichment_provider'),registry:npiRegistry(),
+  mailbox:mailboxChecker({heloName:(()=>{try{return new URL(publicOrigin).hostname;}catch{return '';}})()})};
 const growth=growthService({store:growthStore(pool),research:growthResearch({apiKey:process.env.HUB_GROWTH_SEARCH_API_KEY}),contacts:growthContactFinder(),roster,people,
   // Deeper research with web tools (Settings → Customer growth → Research prospects with web search).
   deepResearch:{enabled:setting('growth.deep_research'),perDay:setting('growth.deep_research_per_day'),cents:setting('growth.deep_research_cents')},

@@ -82,7 +82,7 @@ Settings added with the AI workforce build-out (2026-11-13), all settings from t
 | Customer growth | Find prospects from the Medicare roster; States to prospect in; Most roster agencies to look up a day | Prospecting from Intel's roster of home health agencies and hospices |
 | Customer growth | Follow up website leads by email | County report, contact and savings-model leads get a two-email follow-up, after your approval |
 | Customer growth | Days before asking again | When a "not now" or a silent prospect is asked once more (at least 30) |
-| Customer growth | Contact-data service; Most contact lookups a day | Named decision-makers (Apollo); every address waits for your review |
+| Customer growth | Finding people's addresses; Most address checks a day | Named decision-makers from the CMS owners file, the NPI registry and their own websites; an address they publish, or one their mail server confirms; every address waits for your review |
 | Customer growth | Research prospects with web search; Most prospects to research a day; Most to spend researching one prospect | Deeper research within a cost ceiling |
 | Customer growth | Write from what is working | Drafts use the weekly memo you approve on Growth |
 | Creative | County snapshots a week | Images of one public number for a county your prospects are in (0 turns them off) |
@@ -94,8 +94,8 @@ Settings added with the AI workforce build-out (2026-11-13), all settings from t
 | Paid ads | Google Ads customer id; Google Ads manager account id; Google Ads OAuth client id; Google Ads API version | The Google Ads API |
 | Paid ads | Bid on competitor names | Competitor names as search keywords only, never in ad text |
 
-`HUB_BULK_EMAIL_FROM` and `HUB_BOOKING_URL` are no longer used at all (CareMetric offers no demos, calls or meetings); the
-Hub warns at start while either is set. Delete them.
+`HUB_BULK_EMAIL_FROM` and `HUB_BOOKING_URL` are no longer used at all (CareMetric offers no demos, calls or meetings), nor is
+`HUB_APOLLO_API_KEY` (the Hub finds people and their addresses itself); the Hub warns at start while any of them is set. Delete them.
 
 ## What stays in Railway
 
@@ -118,7 +118,6 @@ Secrets, which are never shown on screen or stored in the database:
 - `HUB_VISITOR_METRICS_KEY` (dedicated shared key for Intel’s aggregate website session reports)
 - `HUB_HEYGEN_API_KEY` (only for HeyGen presenter videos, Settings → Creative)
 - `HUB_INTEL_FEED_SECRET` (Intel's marketing feed: the same value as Intel's `HUB_MARKETING_FEED_SECRET`)
-- `HUB_APOLLO_API_KEY` (only when Settings → Customer growth → Contact-data service is Apollo)
 - `HUB_GROWTH_IMPORT_SECRET` (signs prospect lists sent to `/api/growth/import`)
 - `HUB_GOOGLE_ADS_DEVELOPER_TOKEN`, `HUB_GOOGLE_ADS_CLIENT_SECRET`, `HUB_GOOGLE_ADS_REFRESH_TOKEN` (only for creating Google
   search campaigns through the API; without them approved campaigns are emailed as an import file)

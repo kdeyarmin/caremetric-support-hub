@@ -47,12 +47,14 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
       [feed.signing === true, 'Set HUB_INTEL_FEED_SECRET on the Hub to the same value as HUB_MARKETING_FEED_SECRET on Intel (at least 32 characters).'],
       [growth?.research?.configured === true, 'Set HUB_GROWTH_SEARCH_API_KEY on the Hub service.'],
     ], '/admin/growth');
-  const peopleSource = live(growth?.people?.provider) ?? null;
+  const addressMode = live(growth?.people?.mode);
   add('decision_makers', 'Named decision-makers', ['marketing_manager'],
-    'Finds who CMS lists as owning or managing your best prospects and, with a contact-data service, the owner, administrator or business development lead and a verified work address. Every address waits for your review on Growth.', [
+    'Finds the owner, administrator or business development lead at your best prospects from the CMS owners file, the NPI registry and their own websites, and their work address: one the business publishes or, if you choose, one its mail server confirms. Every address waits for your review on Growth.', [
       [has(features, 'platform.agents.growth-people.v1'), schemaStep('decision-makers')],
-      [peopleSource !== null, 'Choose Settings → Customer growth → Contact-data service (Apollo).'],
-      [peopleSource?.configured === true || peopleSource === null, 'Set HUB_APOLLO_API_KEY on the Hub service.'],
+      [has(features, 'platform.agents.growth-people-finder.v1'), schemaStep('people finder')],
+      [addressMode !== 'verify' || growth?.people?.mailbox?.configured === true, 'Configure an HTTPS public origin: the Hub introduces itself to mail servers by its name.'],
+      [addressMode !== 'verify' || growth?.people?.mailbox?.state?.() !== 'unreachable',
+        'Businesses\' mail servers cannot be reached from the Hub: Railway allows outbound mail connections (port 25) on its Pro plan only. Upgrade the plan, or choose Settings → Customer growth → Finding people\'s addresses → Addresses businesses publish on their own websites.'],
     ], '/admin/growth');
   add('prospect_deep_research', 'Prospect research with web search', ['marketing_manager'],
     'Researches one prospect at a time with the model\'s web search and page reading, within a daily number and a cost ceiling per prospect, and keeps what it finds as dated evidence.', [
