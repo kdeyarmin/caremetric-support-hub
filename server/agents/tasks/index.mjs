@@ -25,12 +25,12 @@ import { seoHandlers } from './seo.mjs';
  */
 export function builtInHandlers({ store, notifier, model = null }, {
   publicOrigin, fetchImpl = fetch, log, services = {}, communications = null, features = null, guides = null, customerTextToAi = false, leadSecrets = {}, lifecycle = {},
-  marketed = null, searchConsoleSites = undefined, inboundFollowup = false,
+  marketed = null, searchConsoleSites = undefined, inboundFollowup = false, toolkit = null, watchdogIdleDays = 3,
 } = {}) {
   const targets = probeTargets({ publicOrigin });
   return {
     ...probeHandlers({ store, notifier, targets, alertTargets: formTargets, fetchImpl, log }),
-    ...briefHandlers({ store, notifier, publicOrigin, services, features, labels: Object.fromEntries([...targets, ...formTargets].map(target => [target.key, target.label])), log }),
+    ...briefHandlers({ store, notifier, publicOrigin, services, features, toolkit, watchdogIdleDays, labels: Object.fromEntries([...targets, ...formTargets].map(target => [target.key, target.label])), log }),
     ...seoHandlers({ store, notifier, model, publicOrigin, fetchImpl, searchConsoleSites, log }),
     ...accountsHandlers({ store, notifier, publicOrigin, features, log }),
     ...lifecycleHandlers({ store, features, lifecycle, log }),

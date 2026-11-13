@@ -1,3 +1,4 @@
+import { adsConfig } from './agents/ads/index.mjs';
 import pg from 'pg';
 import { smsProvider } from './sms-provider.mjs';
 import { smsAuth, ownerAccess } from './sms-auth.mjs';
@@ -120,6 +121,10 @@ const team=agentTeam({pool,growth,growthMail,postalAddress,sms:textSender,email:
   inboundFollowup:setting('growth.inbound_followup'),
   // How many agent tasks may run side by side (Settings → AI team → Tasks at once).
   concurrentTasks:setting('agents.concurrent_tasks'),
+  // Paid ads: Settings → Paid ads, with the Google Ads secrets from Railway.
+  ads:()=>adsConfig(process.env,settings.get),
+  // Days before the watchdog flags an agent that has not run (Settings → AI team).
+  watchdogIdleDays:setting('agents.watchdog_idle_days'),
   // The social media tokens from Railway, with the page ids, ad accounts, images and ad limits from Settings → Social media.
   social:()=>socialConfig(connections.resolvedEnv(),connections.getSetting),
   // The Creative Director: Settings → Creative, with HeyGen's key from Railway.

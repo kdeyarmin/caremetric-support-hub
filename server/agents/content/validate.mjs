@@ -138,6 +138,9 @@ export const allowedNumbers = (facts = []) => new Set([...sheet().numbers, ...fa
 const competitors = ['Trella', 'Definitive Healthcare', 'Marketware', 'Aline', 'WelcomeHome', 'PointClickCare', 'MatrixCare', 'Yardi', 'Eldermark', 'ALIS',
   'Relias', 'Caremerge', 'August Systems', 'Experience Care', 'eMARLink', 'Netsmart', 'Homecare Homebase', 'WellSky', 'Axxess', 'HCHB'];
 const competitorPattern = new RegExp(String.raw`\b(?:${competitors.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\b`);
+const competitorAnyCase = new RegExp(competitorPattern.source, 'i');
+/** True when the text names a competitor in any letter case (search keywords are written in lower case). */
+export const namesCompetitor = text => competitorAnyCase.test(String(text ?? ''));
 
 /** Each rule is a reason code and what it finds. They run over everything that would be published. */
 const claimRules = [

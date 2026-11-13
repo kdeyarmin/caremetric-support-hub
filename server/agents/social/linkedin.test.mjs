@@ -411,3 +411,26 @@ describe('the founder\'s own profile', () => {
     await expect(linkedinClient({}).publishMemberPost({ message: 'x' })).rejects.toMatchObject({ code: 'linkedin_not_configured' });
   });
 });
+
+describe('new campaigns and lead reports on LinkedIn', () => {
+  it('creates a draft campaign group and campaign with the health care audience, and reports a lead by hash and click ID', async () => {
+    const calls = [];
+    const fetchImpl = vi.fn(async (url, init) => {
+      calls.push([url, init]);
+      const id = url.endsWith('/adCampaignGroups') ? 'urn:li:sponsoredCampaignGroup:701' : url.endsWith('/adCampaigns') ? 'urn:li:sponsoredCampaign:702' : null;
+      return new Response('{}', { status: 201, headers: id ? { 'x-restli-id': id } : {} });
+    });
+    const li = linkedinClient({ adsToken: 'AQV-ads-token-0123456789abc', adAccountId: '5080001', fetchImpl });
+    expect(await li.createCampaign({ name: 'Intel prospecting', dailyBudgetCents: 3000, startAt: '2026-11-17T00:00:00Z' })).toEqual({ campaignGroupId: '701', campaignId: '702' });
+    expect(calls[0][0]).toBe('https://api.linkedin.com/rest/adAccounts/5080001/adCampaignGroups');
+    const campaign = JSON.parse(calls[1][1].body);
+    expect(campaign).toMatchObject({ campaignGroup: 'urn:li:sponsoredCampaignGroup:701', status: 'DRAFT', objectiveType: 'WEBSITE_VISIT', dailyBudget: { amount: '30.00', currencyCode: 'USD' } });
+    expect(JSON.stringify(campaign.targetingCriteria)).toContain('urn:li:geo:103644278');
+    await expect(li.createCampaign({ name: 'x', dailyBudgetCents: 500 })).rejects.toMatchObject({ code: 'linkedin_invalid_request' });
+    const hash = 'b'.repeat(64);
+    await li.sendConversion({ conversionId: '123456', eventId: 'l2', happenedAt: 1794225600000, emailHash: hash, liFatId: '0f1e2d3c-1234-4abc-8def-001122334455' });
+    expect(calls[2][0]).toBe('https://api.linkedin.com/rest/conversionEvents');
+    expect(JSON.parse(calls[2][1].body)).toEqual({ conversion: 'urn:lla:llaPartnerConversion:123456', conversionHappenedAt: 1794225600000, eventId: 'l2',
+      user: { userIds: [{ idType: 'SHA256_EMAIL', idValue: hash }, { idType: 'LINKEDIN_FIRST_PARTY_ADS_TRACKING_UUID', idValue: '0f1e2d3c-1234-4abc-8def-001122334455' }] } });
+  });
+});

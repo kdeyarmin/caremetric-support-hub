@@ -119,7 +119,7 @@ select n, coalesce(source, 'carebase'), doc, description from (values
   (27, null, (select doc || jsonb_build_object('details', jsonb_build_object('notes', repeat('d', 201))) from lead_base), 'A detail over 200 characters'),
   (28, null, (select doc || jsonb_build_object('message', repeat('m', 4001)) from lead_base), 'A message over 4,000 characters'),
   (29, null, (select doc || '{"message": ["hello"]}' from lead_base), 'A message that is not text'),
-  (30, null, (select jsonb_set(doc, '{attribution,gclid}', '"abc"') from lead_base), 'An unknown attribution field'),
+  (30, null, (select jsonb_set(doc, '{attribution,msclkid}', '"abc"') from lead_base), 'An unknown attribution field'),
   (31, null, (select jsonb_set(doc, '{attribution,referrerHost}', '"www.google.com/search?q=alf"') from lead_base), 'A referrer that is more than a host name'),
   (32, null, (select jsonb_set(doc, '{attribution,landingPath}', '"/pricing?plan=complete"') from lead_base), 'A landing path with a query string'),
   (33, null, (select jsonb_set(doc, '{attribution,landingPath}', '"pricing"') from lead_base), 'A landing path that is not a path'),

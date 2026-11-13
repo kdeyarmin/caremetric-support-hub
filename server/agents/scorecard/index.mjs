@@ -1,3 +1,4 @@
+import { watchdogFindings } from '../tasks/watchdog.mjs';
 /**
  * `scorecard.weekly`: the Chief of Staff's Monday scorecard (supabase/migrations/20261109120000_monday_scorecard.sql). One email at
  * 07:50 Eastern in place of the five weekly reports: six numbers per product beside last week's, what changed, and at most three
@@ -146,6 +147,8 @@ export function scorecardHandlers({
       optional('websites', () => siteProblems(signal), signal),
       visitors ? optional('visitors', () => visitors({ before, since, until, signal }), signal).then(value => value ?? { state: 'unavailable' }) : null,
     ]);
+    // The watchdog's findings for the week (watchdog.mjs), as notes; none when they cannot be read.
+    const watched = typeof store.watchdogFacts === 'function' ? watchdogFindings(await optional('watchdog', () => store.watchdogFacts(), signal), { now: moment }) : [];
     // The scheduler may have stopped waiting while the figures were read: the scorecard is not sent after that.
     if (signal?.aborted) throw stopped();
 
@@ -156,6 +159,7 @@ export function scorecardHandlers({
       snapshot ? null : 'Billing could not be read this morning, so MRR and accounts needing attention are missing.',
       growth?.store?.snapshot && !pipeline ? 'The pipeline could not be read this morning, so deals waiting on you are missing.' : null,
       urgent === null ? 'The websites could not be checked this morning.' : null,
+      ...watched.map(finding => `Watchdog: ${finding.text}`),
     ].filter(Boolean);
     const card = composeScorecard({
       week, facts: { current, previous }, billing: billingFigures(snapshot, { now: moment }), search, ads: adFigures, visitors: seen, publicOrigin, notes,

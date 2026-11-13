@@ -52,7 +52,14 @@ export function growthService({store,research,contacts=null,roster=null,people=n
         if(!features?.has('platform.agents.growth-roster.v1'))throw new HttpError(503,'Apply the roster database migration first.');
         const {offset}=parse(z.object({offset:z.number().int().min(0).max(100000).default(0)}).strict(),data);
         return safe(async()=>({...await store.roster(token,offset),services:{feed:roster?.feed?.readiness?.()??{declared:false,enabled:false,signing:false},
-          states:(()=>{const value=live(roster?.states);return Array.isArray(value)?value:[];})(),daily:live(roster?.daily)??25,research:Boolean(research?.configured)}}));
+          states:(()=>{const value=live(roster?.states);return Array.isArray(value)?value:[];})(),daily:live(roster?.daily)??25,research:Boolean(research?.configured),
+          companyList:features?.has('platform.agents.ads.v1')===true}}));
+      }
+      if(operation==='rosterCompanies') {
+        // The roster's agencies as rows for LinkedIn's company-list template (Growth → Medicare roster → Download).
+        if(!features?.has('platform.agents.ads.v1'))throw new HttpError(503,'Apply the paid ads database migration first.');
+        parse(z.object({}).strict(),data);
+        return safe(async()=>({companies:await store.rosterCompanies(token)}));
       }
       if(['people','peopleDecide','import'].includes(operation)) {
         if(!features?.has('platform.agents.growth-people.v1'))throw new HttpError(503,'Apply the people database migration first.');

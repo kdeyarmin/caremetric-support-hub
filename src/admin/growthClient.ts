@@ -10,7 +10,14 @@ export const workspaceSchema=z.object({content:z.array(z.object({id,status:z.str
 export const detailSchema=z.object({evidence:z.array(z.object({id,source_url:z.string(),claim:z.string(),confidence:z.string(),observed_at:z.string()})),messages:z.array(z.object({id,subject:z.string(),body:z.string(),status:z.string(),model_generated:z.boolean(),variant:z.string()})),events:z.array(z.object({kind:z.string(),occurred_at:z.string(),facts:z.record(z.string(),z.unknown())}))});
 export const rosterSchema=z.object({sync:z.object({period:z.string().nullable(),states:z.array(z.string()),complete:z.boolean(),syncedAt:z.string().nullable(),rows:z.number()}),counts:z.record(z.string(),z.number()),total:z.number(),
  items:z.array(z.object({ccn:z.string(),name:z.string(),setting:z.string(),city:z.string().nullable(),state:z.string(),rank:z.number(),reasons:z.array(z.string()),status:z.string(),reason:z.string().nullable(),attempts:z.number(),resolveAfter:z.string().nullable(),confirmation:z.string().nullable(),domain:z.string().nullable(),organizationId:z.string().nullable()})),
- services:z.object({feed:z.object({declared:z.boolean(),enabled:z.boolean(),signing:z.boolean()}),states:z.array(z.string()),daily:z.number(),research:z.boolean()})});
+ services:z.object({feed:z.object({declared:z.boolean(),enabled:z.boolean(),signing:z.boolean()}),states:z.array(z.string()),daily:z.number(),research:z.boolean(),companyList:z.boolean().default(false)})});
+export const companiesSchema=z.object({companies:z.array(z.object({name:z.string(),domain:z.string().nullable(),city:z.string().nullable(),state:z.string(),zip:z.string().nullable()}))});
+const csvCell=(value:string|null)=>/[",\n]/.test(value??'')?`"${String(value).replace(/"/g,'""')}"`:(value??'');
+/** The roster's agencies in LinkedIn's company-list template (Campaign Manager → Audiences → Upload a list → Company). */
+export function companyListCsv(rows:z.infer<typeof companiesSchema>['companies']):string {
+ const header=['companyname','companywebsite','companyemaildomain','city','state','zipcode','companycountry'];
+ return [header.join(','),...rows.map(row=>[row.name,row.domain?`https://${row.domain}`:'',row.domain??'',row.city,row.state,row.zip,'US'].map(csvCell).join(','))].join('\n');
+}
 export const peopleSchema=z.object({waiting:z.number(),creditsToday:z.number(),creditCap:z.number(),
  items:z.array(z.object({id:z.string(),name:z.string(),role:z.string(),email:z.string(),source:z.string(),organization:z.string(),domain:z.string(),foundAt:z.string().nullable()})),
  services:z.object({provider:z.string().nullable(),configured:z.boolean()})});

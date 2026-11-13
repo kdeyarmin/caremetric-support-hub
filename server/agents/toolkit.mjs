@@ -16,7 +16,7 @@ const schemaStep = name => `Release the ${name} database feature through the nor
 
 export function marketingToolkit({ features = null, growth = null, growthMail = null, model = null, customerTextToAi = false,
   communications = null, email = null, leadSecrets = {}, lifecycle = {}, social = null, socialWork = null, creativeWork = null,
-  searchConsoleCredentials = '', searchConsoleSites = [], visitorMetrics = null, marketed = defaultMarketed } = {}) {
+  searchConsoleCredentials = '', searchConsoleSites = [], visitorMetrics = null, marketed = defaultMarketed, adsWork = null } = {}) {
   const tools = [];
   const add = (key, label, agents, detail, checks, settingsPath = '/admin/settings') => {
     const missing = checks.filter(([ok]) => !ok).map(([, action]) => action);
@@ -156,6 +156,35 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
       [visitors.declared === true, schemaStep('website session measurement')],
       [visitors.enabled === true, 'Turn on Settings → Website analytics → Read Intel website sessions.'],
       [visitors.signing === true, 'Set the same HUB_VISITOR_METRICS_KEY (at least 32 characters) on the Hub and Intel services, and release Intel’s measurement endpoint.'],
+    ]);
+  // The 2026-11-13 additions: founder posts, county snapshots, new paid campaigns and lead reports.
+  const li = socialWork?.linkedin?.configured ?? {};
+  const adsSettings = adsWork?.config?.() ?? {};
+  add('founder_posts', 'Posts for your own LinkedIn profile', ['social_manager'],
+    'Writes a few posts a week in your voice for your personal LinkedIn profile. You approve each one; none is ever published automatically. Without your personal token they are emailed for you to copy.', [
+      [has(features, 'platform.agents.founder-posts.v1'), schemaStep('founder posts')],
+      [socialSettings.settings?.founderPosts === true, 'Turn on Settings → Social media → Write posts for my LinkedIn profile.'],
+      [li.member === true, 'Save your personal LinkedIn access token on the LinkedIn connection card (Settings → Social media), or copy the posts from the weekly plan email.'],
+    ]);
+  add('county_snapshots', 'County snapshot images', ['creative_director'],
+    'Images that each show one public Medicare or Census number for a county where your roster prospects are. Code prints the number and its source; you approve each image.', [
+      [has(features, 'platform.agents.creative-data.v1'), schemaStep('county snapshots')],
+      [creativeWork?.enabled?.() === true, 'Turn on Settings → Creative → Turn on the Creative Director.'],
+      [(creativeWork?.config?.().countySnapshotsPerWeek ?? 0) > 0, 'Set Settings → Creative → County snapshots a week above 0.'],
+      [live(growth?.roster?.feed)?.configured === true || growth?.roster?.feed?.configured === true, 'Set up Intel\'s marketing feed (Settings → Customer growth → Find prospects from the Medicare roster, and HUB_INTEL_FEED_SECRET).'],
+    ]);
+  add('paid_campaigns', 'New paid campaigns', ['social_manager'],
+    'Proposes, once a month, a LinkedIn campaign, a Meta retargeting campaign and a Google search campaign. Each is created paused after you approve it, within your monthly number.', [
+      [has(features, 'platform.agents.ads.v1'), schemaStep('paid ads')],
+      [(adsSettings.monthlyBudgetCents ?? 0) > 0, 'Set Settings → Paid ads → Most to spend on new campaigns a month.'],
+      [li.ads === true || meta.ads === true, 'Connect a LinkedIn or Meta ad account (Settings → Social media).'],
+      [adsWork?.google?.().configured === true, 'For Google: set Settings → Paid ads → Google Ads customer id and OAuth client id, and HUB_GOOGLE_ADS_DEVELOPER_TOKEN, HUB_GOOGLE_ADS_CLIENT_SECRET and HUB_GOOGLE_ADS_REFRESH_TOKEN on the Hub service. Until then approved search campaigns are emailed as an import file.'],
+    ]);
+  add('ad_conversions', 'Leads reported to the ad platforms', ['social_manager'],
+    'Tells Meta and LinkedIn, by a hashed work email and the ad click ID, when a county report or trial request came from their ad, so their reports and bidding see it.', [
+      [has(features, 'platform.agents.ads.v1'), schemaStep('paid ads')],
+      [adsSettings.serverConversions === true, 'Turn on Settings → Paid ads → Report leads to the ad platforms.'],
+      [/^[0-9]{5,30}$/.test(adsSettings.metaPixelId ?? '') || /^[0-9]{3,30}$/.test(adsSettings.linkedinConversionId ?? ''), 'Set Settings → Paid ads → Meta Pixel (dataset) id or LinkedIn conversion rule id.'],
     ]);
   return tools;
 }

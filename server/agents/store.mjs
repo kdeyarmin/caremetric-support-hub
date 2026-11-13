@@ -14,7 +14,7 @@ import { transaction } from '../sms-auth.mjs';
  * work can be handed back. Against a database without those operations the calls keep their old shape
  * and the extras are ignored, so a server can be deployed before the migration is applied.
  */
-export function sqlAgentStore(pool, { fenced = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false, creativeData = false } = {}) {
+export function sqlAgentStore(pool, { fenced = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false, creativeData = false, ads = false, watchdog = false } = {}) {
   const call = (operation, args = []) => transaction(pool, async client =>
     (await client.query(`select ${operation}(${args.map((_, index) => `$${index + 1}`).join(', ')}) as result`, args)).rows[0].result);
   return {
@@ -42,6 +42,14 @@ export function sqlAgentStore(pool, { fenced = false, growth = false, social = f
       creativeBriefCreate: brief => call('private.creative_brief_create', [JSON.stringify(brief)]),
       creativeBriefContext: id => call('private.creative_brief_context', [id]),
       // County snapshots and article links (20261113210000_creative_data.sql); absent until the database declares them.
+      // The watchdog (20261113240000_agent_watchdog.sql).
+      ...(watchdog ? { watchdogFacts: () => call('private.agent_watchdog_facts') } : {}),
+      // Paid ads (20261113230000_ads_buildout.sql).
+      ...(ads ? {
+        adsConversionCandidates: (platform, limit) => call('private.ads_conversion_candidates', [platform, limit]),
+        adsConversionRecord: (lead, platform, status, code) => call('private.ads_conversion_record', [lead, platform, status, code]),
+        socialCampaignProposed: (kind, target) => call('private.social_campaign_proposed', [kind, target]),
+      } : {}),
       ...(creativeData ? {
         creativeDataCounties: (perWeek, weekStart) => call('private.creative_data_counties', [perWeek, weekStart]),
         socialRecentArticles: days => call('private.social_recent_articles', [days]),

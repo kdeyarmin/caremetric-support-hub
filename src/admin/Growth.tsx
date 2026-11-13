@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { growthPost, growthMutation, workspaceSchema, detailSchema, rosterSchema, peopleSchema, learningSchema, importRows } from './growthClient';
+import { growthPost, growthMutation, workspaceSchema, detailSchema, rosterSchema, peopleSchema, learningSchema, companiesSchema, companyListCsv, importRows } from './growthClient';
 import type { GrowthOpportunity, GrowthPolicy } from './growthClient';
 import type { z } from 'zod';
 import './admin.css';
@@ -52,6 +52,10 @@ function RosterPanel({revision}:{revision:number}) {
   <p>Roster {data.sync.period??'not read yet'}{data.sync.syncedAt?` · read ${new Date(data.sync.syncedAt).toLocaleDateString()}`:''}{data.sync.period&&!data.sync.complete?' · reading':''} · {Object.entries(rosterStatus).map(([key,label])=>`${label}: ${data.counts[key]??0}`).join(' · ')}</p>
   {data.items.length>0&&<table><thead><tr><th>Agency</th><th>Place</th><th>Rank</th><th>Status</th><th>Website</th></tr></thead><tbody>{data.items.map(t=><tr key={t.ccn}><td>{t.name}<br/><small>{t.setting==='hospice'?'Hospice':'Home health'} · CCN {t.ccn}</small></td><td>{[t.city,t.state].filter(Boolean).join(', ')}</td><td>{t.rank}{t.reasons.length>0&&<><br/><small>{t.reasons.join('; ')}</small></>}</td><td>{rosterStatus[t.status]??t.status}{t.reason&&<><br/><small>{rosterReason[t.reason]??t.reason}{t.resolveAfter?` · again ${new Date(t.resolveAfter).toLocaleDateString()}`:''}</small></>}</td><td>{t.domain??''}{t.confirmation&&<><br/><small>confirmed by {t.confirmation==='phone'?'its CMS telephone number':'its name and place'}</small></>}</td></tr>)}</tbody></table>}
   {data.total>50&&<><button disabled={!offset} onClick={()=>setOffset(Math.max(0,offset-50))}>Previous agencies</button><button disabled={offset+50>=data.total} onClick={()=>setOffset(offset+50)}>Next agencies</button></>}
+  {data.services.companyList&&data.total>0&&<p><button className="button" onClick={()=>{void growthPost('rosterCompanies',{},companiesSchema).then(answer=>{
+   const url=URL.createObjectURL(new Blob([companyListCsv(answer.companies)],{type:'text/csv'}));const link=document.createElement('a');link.href=url;link.download='caremetric-roster-companies.csv';link.click();URL.revokeObjectURL(url);
+  }).catch(e=>setFailure(e instanceof Error?e.message:'The company list could not be built.'));}}>Download the LinkedIn company list</button>
+   <br/><small>Every roster agency in LinkedIn's company-list format. Upload it in Campaign Manager → Audiences to show LinkedIn ads to people who work there.</small></p>}
  </section>;
 }
 /** Decision-makers the team found or the owner imported, waiting for the owner before anything is sent to them. */

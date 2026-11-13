@@ -138,3 +138,26 @@ describe('the Meta client', () => {
     expect(overview.current).toEqual([{ adId: '50', impressions: 2000, clicks: 40, spendCents: 2550, frequency: 1.8, results: 3 }]);
   });
 });
+
+describe('new campaigns and lead reports', () => {
+  it('creates a paused traffic campaign and a paused ad set for the retargeting audience, and reports a lead by hash and click', async () => {
+    const seen = [];
+    const fetchImpl = vi.fn(async (url, init) => {
+      const path = new URL(url).pathname;
+      const params = new URLSearchParams(init.body);
+      seen.push([path, params]);
+      return new Response(JSON.stringify(path.endsWith('/campaigns') ? { id: '601' } : path.endsWith('/adsets') ? { id: '602' } : { events_received: 1 }), { status: 200 });
+    });
+    const meta = client(fetchImpl);
+    expect(await meta.createCampaign({ name: 'Intel retargeting', dailyBudgetCents: 3000, audienceId: '1234567' })).toEqual({ campaignId: '601', adsetId: '602' });
+    expect(Object.fromEntries(seen[0][1])).toMatchObject({ objective: 'OUTCOME_TRAFFIC', status: 'PAUSED', special_ad_categories: '[]' });
+    expect(Object.fromEntries(seen[1][1])).toMatchObject({ campaign_id: '601', status: 'PAUSED', daily_budget: '3000' });
+    expect(JSON.parse(seen[1][1].get('targeting')).custom_audiences).toEqual([{ id: '1234567' }]);
+    await expect(meta.createCampaign({ name: 'x', dailyBudgetCents: 3000, audienceId: 'none' })).rejects.toMatchObject({ code: 'meta_invalid_request' });
+    const hash = 'a'.repeat(64);
+    expect(await meta.sendConversion({ pixelId: '7654321', eventName: 'Lead', eventId: 'l1', eventTime: 1794225600, emailHash: hash, fbclid: 'IwAR0abc', clickedAt: 1794139200000 })).toEqual({ received: 1 });
+    expect(seen[2][0]).toBe('/v23.0/7654321/events');
+    expect(JSON.parse(seen[2][1].get('data'))[0]).toEqual({ event_name: 'Lead', event_time: 1794225600, event_id: 'l1', action_source: 'website',
+      user_data: { em: [hash], fbc: 'fb.1.1794139200000.IwAR0abc' } });
+  });
+});

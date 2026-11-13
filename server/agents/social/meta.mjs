@@ -292,6 +292,30 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
       return { id: String(data.id ?? ''), dailyBudget: data.daily_budget ? Number(data.daily_budget) : null, active: data.effective_status === 'ACTIVE' };
     },
     // An image is the base ad's image hash or, for an approved Creative Director asset, its address (Meta fetches it: link_data.picture).
+    /**
+     * A new campaign and its ad set, both PAUSED: traffic to the landing page, shown only to the retargeting audience (website visitors),
+     * with the approved daily budget on the ad set. The owner starts it in Ads Manager or by approving an ad into it.
+     */
+    async createCampaign({ name, dailyBudgetCents, audienceId }, { signal } = {}) {
+      if (!configured.ads) throw failure('meta_not_configured');
+      if (!Number.isInteger(dailyBudgetCents) || dailyBudgetCents < 100 || !/^[0-9]{5,30}$/.test(String(audienceId ?? ''))) throw failure('meta_invalid_request');
+      const campaign = await post(`act_${account}/campaigns`, { name: name.slice(0, 100), objective: 'OUTCOME_TRAFFIC', status: 'PAUSED',
+        special_ad_categories: [], is_adset_budget_sharing_enabled: false }, { signal });
+      const adset = await post(`act_${account}/adsets`, { name: name.slice(0, 100), campaign_id: campaign.id, status: 'PAUSED', daily_budget: dailyBudgetCents,
+        billing_event: 'IMPRESSIONS', optimization_goal: 'LINK_CLICKS', bid_strategy: 'LOWEST_COST_WITHOUT_CAP', destination_type: 'WEBSITE',
+        targeting: { custom_audiences: [{ id: String(audienceId) }], geo_locations: { countries: ['US'] } } }, { signal });
+      return { campaignId: String(campaign.id ?? ''), adsetId: String(adset.id ?? '') };
+    },
+
+    /** One lead from a Meta ad click, reported to the Pixel's dataset by a hashed email and the click (Conversions API). */
+    async sendConversion({ pixelId, eventName, eventId, eventTime, emailHash, fbclid, clickedAt }, { signal } = {}) {
+      if (!/^[0-9]{5,30}$/.test(String(pixelId ?? '')) || !/^[a-f0-9]{64}$/.test(emailHash ?? '')) throw failure('meta_invalid_request');
+      const data = [{ event_name: eventName, event_time: eventTime, event_id: eventId, action_source: 'website',
+        user_data: { em: [emailHash], ...(fbclid ? { fbc: `fb.1.${clickedAt}.${fbclid}` } : {}) } }];
+      const answer = await post(`${pixelId}/events`, { data }, { signal });
+      return { received: Number(answer.events_received ?? 0) };
+    },
+
     async createAd({ adsetId, name, message, headline, description, link, imageHash, imageUrl = null, callToAction }, { signal } = {}) {
       const creative = await post(`act_${account}/adcreatives`, {
         name: name.slice(0, 100),

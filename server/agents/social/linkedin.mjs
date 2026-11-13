@@ -467,6 +467,43 @@ export function linkedinClient({
      * A new creative in a campaign: a sponsored-only post (not on the Page's feed) carrying the copy, the link and the image (the image
      * URN of the ad it is based on, or an approved brand image uploaded now), then the creative.
      */
+    /**
+     * A new campaign group and campaign, both DRAFT (not running): website visits, automated bidding, the approved daily budget, and the
+     * audience: people in the United States working in Hospitals and Health Care, at manager level or above. The owner reviews the
+     * targeting (a state, a matched company list) in Campaign Manager and starts it there.
+     */
+    async createCampaign({ name, dailyBudgetCents, currency = 'USD', startAt }, { signal } = {}) {
+      needAds();
+      if (!Number.isInteger(dailyBudgetCents) || dailyBudgetCents < 1000 || !/^[A-Z]{3}$/.test(currency)) throw failure('linkedin_invalid_request');
+      const start = Number.isFinite(Date.parse(startAt ?? '')) ? Date.parse(startAt) : Date.now() + 86_400_000;
+      const group = await call('POST', `adAccounts/${account}/adCampaignGroups`, { signal, auth: adsAuth, body: {
+        account: accountUrn, name: name.slice(0, 100), status: 'DRAFT', runSchedule: { start } } });
+      const groupId = bareId(group.id, /^urn:li:sponsoredCampaignGroup:/);
+      if (!groupId) throw failure('linkedin_unconfirmed');
+      const amount = (dailyBudgetCents / 100).toFixed(2);
+      const campaign = await call('POST', `adAccounts/${account}/adCampaigns`, { signal, auth: adsAuth, body: {
+        account: accountUrn, campaignGroup: `urn:li:sponsoredCampaignGroup:${groupId}`, name: name.slice(0, 100), status: 'DRAFT', type: 'SPONSORED_UPDATES',
+        objectiveType: 'WEBSITE_VISIT', costType: 'CPM', optimizationTargetType: 'MAX_CLICK', dailyBudget: { amount, currencyCode: currency },
+        locale: { country: 'US', language: 'en' }, offsiteDeliveryEnabled: false, runSchedule: { start },
+        targetingCriteria: { include: { and: [
+          { or: { 'urn:li:adTargetingFacet:locations': ['urn:li:geo:103644278'] } },
+          { or: { 'urn:li:adTargetingFacet:industries': ['urn:li:industry:14'] } },
+          { or: { 'urn:li:adTargetingFacet:seniorities': ['urn:li:seniority:5', 'urn:li:seniority:6', 'urn:li:seniority:7', 'urn:li:seniority:8', 'urn:li:seniority:9', 'urn:li:seniority:10'] } },
+        ] } },
+      } });
+      return { campaignGroupId: groupId, campaignId: bareId(campaign.id, /^urn:li:sponsoredCampaign:/) ?? '' };
+    },
+
+    /** One lead from a LinkedIn ad click, reported to the conversion rule by a hashed email and the click ID (Conversions API). */
+    async sendConversion({ conversionId, eventId, happenedAt, emailHash, liFatId }, { signal } = {}) {
+      if (!/^[0-9]{3,30}$/.test(String(conversionId ?? '')) || !/^[a-f0-9]{64}$/.test(emailHash ?? '')) throw failure('linkedin_invalid_request');
+      await call('POST', 'conversionEvents', { signal, auth: adsAuth, body: {
+        conversion: `urn:lla:llaPartnerConversion:${conversionId}`, conversionHappenedAt: happenedAt, eventId,
+        user: { userIds: [{ idType: 'SHA256_EMAIL', idValue: emailHash }, ...(liFatId ? [{ idType: 'LINKEDIN_FIRST_PARTY_ADS_TRACKING_UUID', idValue: liFatId }] : [])] },
+      } });
+      return { received: 1 };
+    },
+
     async createAd({ adsetId, message, headline, description, link, imageHash = null, imageUrl = null }, { signal } = {}) {
       needAds();
       if (!org) throw failure('linkedin_not_configured');
