@@ -54,6 +54,12 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
       [peopleSource !== null, 'Choose Settings → Customer growth → Contact-data service (Apollo).'],
       [peopleSource?.configured === true || peopleSource === null, 'Set HUB_APOLLO_API_KEY on the Hub service.'],
     ], '/admin/growth');
+  add('prospect_deep_research', 'Prospect research with web search', ['marketing_manager'],
+    'Researches one prospect at a time with the model\'s web search and page reading, within a daily number and a cost ceiling per prospect, and keeps what it finds as dated evidence.', [
+      [has(features, 'platform.agents.growth-research.v1'), schemaStep('prospect research')],
+      [live(growth?.deepResearch?.enabled) === true, 'Turn on Settings → Customer growth → Research prospects with web search.'],
+      [ai && typeof model?.research === 'function', modelStep],
+    ], '/admin/growth');
   add('growth_email', 'Prospect email and follow-ups', ['marketing_manager'],
     'Drafts outreach and sends eligible, reviewed messages. Campaign policy, contact eligibility, frequency limits and approvals still apply.', [
       growthFeature, [growthState.sending === true, 'Turn on Settings → Customer growth → Send growth email when ready to send.'],

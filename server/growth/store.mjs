@@ -43,6 +43,8 @@ export function growthStore(pool) {
     enrichmentReserve:credits=>server('private.growth_enrichment_reserve',[credits]),
     enrichedContact:(person,email,name)=>server('private.growth_enriched_contact',[person,email,name??null]),
     importServer:rows=>server('private.growth_import_server',[JSON.stringify(rows)]),
+    // Deeper research with web tools (20261113190000_growth_research.sql).
+    researchNext:daily=>server('private.growth_research_next',[daily]),
     people:(token,offset=0)=>withSession(pool,token,db=>run(db,'hub.growth_people',[offset])),
     peopleDecide:(token,ids,decision)=>withSession(pool,token,db=>run(db,'hub.growth_people_decide',[ids,decision])),
     importList:(token,rows)=>withSession(pool,token,db=>run(db,'hub.growth_import',[JSON.stringify(rows)])),

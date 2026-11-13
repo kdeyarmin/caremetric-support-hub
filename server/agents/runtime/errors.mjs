@@ -13,7 +13,7 @@ import Anthropic from '@anthropic-ai/sdk';
 export const transientCodes = Object.freeze(['rate_limited', 'provider_outage', 'provider_unreachable', 'run_aborted']);
 export const permanentCodes = Object.freeze([
   'request_rejected', 'ai_auth_failed', 'ai_not_permitted', 'model_not_found', 'unknown_model', 'ai_not_configured',
-  'output_truncated', 'output_invalid', 'ai_error',
+  'output_truncated', 'output_invalid', 'ai_error', 'tool_not_allowed',
 ]);
 
 /** An error the scheduler understands: a code, a fixed message and whether it is worth retrying. */

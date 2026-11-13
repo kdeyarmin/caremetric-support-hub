@@ -94,7 +94,19 @@ try {
   assert.equal((await store.importServer([{ name: 'Server Agency', domain: domainOf('server') }])).organizations, 1);
   await assert.rejects(ownerCall('hub.growth_import', [JSON.stringify(Array.from({ length: 501 }, () => ({ name: 'x', domain: 'x.org' })))]), refused('22023'));
 
-  // ---- 7. The gate refuses drift ------------------------------------------------------------------------------------------------
+  // ---- 7. Deeper research: one prospect at a time, within the daily number, not again for 30 days -------------------------------
+  const researchDomain = domainOf('research-agency');
+  await store.discover('caremetric-intel', [{ name: 'Synthetic Research Agency', domain: researchDomain, url: `https://${researchDomain}/`, claim: 'A home health agency.' }]);
+  const researchOpp = (await row('select o.id from private.growth_opportunities o join private.growth_organizations g on g.id=o.organization_id where g.domain=$1', [researchDomain])).id;
+  await admin.query("update private.growth_opportunities set fit=74,stage='researched',updated_at=now()-interval '10 years' where id=$1", [researchOpp]);
+  const used = Number((await row('select count(*) n from private.growth_research_log where researched_at>=private.agent_day_start()')).n);
+  assert.equal(await store.researchNext(used), null, 'The day\'s number is spent');
+  const picked = await store.researchNext(used + 1);
+  assert.equal(picked.id, researchOpp); assert.equal(picked.domain, researchDomain);
+  assert.notEqual((await store.researchNext(used + 5))?.id, researchOpp, 'Not again for 30 days');
+  await assert.rejects(store.researchNext(51), refused('22023'));
+
+  // ---- 8. The gate refuses drift ------------------------------------------------------------------------------------------------
   const client = await admin.connect();
   const rewrite = (signature, from, to) => `do $$ declare d text := pg_get_functiondef('${signature}'::regprocedure); begin
     if position($q$${from}$q$ in d) = 0 then raise exception 'fixture text missing'; end if; execute replace(d, $q$${from}$q$, $q$${to}$q$); end $$`;
@@ -118,6 +130,7 @@ try {
     const org = (await row('select id from private.growth_organizations where domain=$1', [domain]))?.id;
     if (!org) continue;
     await admin.query('delete from private.growth_people where organization_id=$1', [org]);
+    await admin.query('delete from private.growth_research_log where opportunity_id in(select id from private.growth_opportunities where organization_id=$1)', [org]);
     await admin.query('delete from private.growth_evidence where opportunity_id in(select id from private.growth_opportunities where organization_id=$1)', [org]);
     await admin.query('delete from private.growth_opportunities where organization_id=$1', [org]);
     await admin.query('delete from private.growth_contacts where organization_id=$1', [org]);
