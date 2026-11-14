@@ -48,6 +48,8 @@ This sheet covers these commercial offerings; it is not a feature sheet for the 
 - **To update capabilities:** run `npm run refresh:features`, review the changes against the product pages, and update this document's
   feature reference and summaries in the same change. Preserve plan, role and setup conditions. Keep `whyChoose`, `capabilities`
   and `whoUses` in `facts.mjs` aligned with the corresponding sections here. Published feature counts do not override the claim rules.
+- Keep Intel's industry table and its access conditions aligned with `industryUseCases` and `industryGuidance` in `facts.mjs`.
+  Both are included in `factSheetText()`, so the AI workforce receives the industry guidance alongside the other product facts.
 
 ## Sources read
 
@@ -275,6 +277,36 @@ CareMetric Intel runs a healthcare organization's whole marketing program in one
 - Marketers and community liaisons: a planned day and route, a focused visit list with a reason for each stop, notes, follow-ups and expenses logged from a phone, and the history of every account they own.
 
 **How to present it.** Owner direction: show the bigger picture. Intel runs the whole marketing program, and sending emails to referral sources is not the point of it. Email campaigns are one feature, on the Growth and Pro plans. Never describe Intel as an email tool, never lead with emailing referral sources, and never make email the whole subject of a message, post, ad, article or answer: when email comes up, show it as one part of the workspace, beside the research, relationships, visits, spend and recorded results it serves. Intel is a marketing workspace, not a compliance product: its expense tools keep marketing spend in view of policy and the Stark limit, and they are a small part of the program. Never describe Intel as a compliance tool, and never lead with compliance, the Stark limit or expense tracking: when spend comes up, show it as part of the field work and relationships it serves (owner direction 2026-11-14). Across your work, cover the whole range above rather than one feature again and again, and pick the part that answers the reader. What a feature needs (a plan in brackets) still applies.
+
+### Intel: top 10 industries and their most useful features
+
+Added at the owner's request on 2026-11-14. This use-case mapping was checked against
+`kdeyarmin/intel@393b9b3cd5b19de0ede7f09846313ac11a929f60`: `src/content/featureCatalog.json`,
+`src/lib/businessLine.ts`, `src/lib/planCatalog.ts` and `src/content/marketingCopy.json`.
+It does not refresh the saved feature inventory or verify a live deployment. The machine copy is
+`industryUseCases` and `industryGuidance` in `server/agents/content/facts.mjs`.
+
+**Industry fit and access conditions:**
+
+- These industries are ordered by fit with the current product. The feature priorities describe likely uses, not measured customer usage or proven demand.
+- Home health and hospice have the strongest combination of daily CRM use and market intelligence. Standard plans support home health and hospice CRM workflows within each plan's allowances.
+- Other care settings can use market and territory research within the subscribed territory. Their care-specific CRM workflows require an Enterprise agreement. Home health and hospice workflow support does not imply equivalent CRM support for every industry.
+- Research coverage varies by dataset, geography and reporting period. State-licensed residential coverage depends on which state files are loaded. Feature access also depends on the plan, role and configured services.
+- Public provider and market data supports research and planning; it does not establish confirmed referral relationships. Referral and admission results come from what the organization records or imports.
+- For each audience, lead with its relevant features and main purpose below, within these conditions. This guidance does not change prospecting eligibility, campaign audiences or outreach permissions.
+
+| Industry | Most useful features, in priority order | Main purpose |
+| --- | --- | --- |
+| **1. Home health agencies** | Referral-source rankings for physicians certifying home health; marketing book and call plans; referral and admission reports and drop-off alerts; competitor rankings. | Focus marketers on promising sources and maintain productive referral relationships. |
+| **2. Hospice agencies** | Physician and facility research; relationship history and follow-up tasks; referral and admission tracking; county demand and hospice competitor analysis. | Develop consistent professional relationships and research underserved territories. |
+| **3. Skilled nursing facilities and nursing homes** | Hospital-source research; facility profiles covering ratings, staffing, inspections and ownership; county utilization and supply analysis; account and outreach tracking under the appropriate Enterprise agreement. | Prioritize hospital relationships and understand the facility's competitive position. |
+| **4. Assisted Living Facilities and memory care communities** | Site finder; county and ZIP-area demographics, especially older residents and people living alone; licensed-home and bed-supply research; nearby provider and facility directories. | Evaluate local demand, competition, expansion locations and community partners. |
+| **5. Personal care and residential care homes** | Local demographic research; licensed-home directories and bed counts; hospital and physician searches; territory maps. | Understand the local service area and identify professional relationships worth developing. |
+| **6. Hospitals and health systems** | Hospital service-area analysis; post-discharge spending by care setting; physician and practice directories; post-acute facility profiles and quality information. | Plan physician outreach and research potential post-acute partners. |
+| **7. Durable medical equipment suppliers** | DME supplier and referring-provider data; clinician searches and lead lists; territory maps; DME report exports. | Find potential ordering clinicians, assess competing suppliers and organize sales territories. |
+| **8. Inpatient rehabilitation facilities** | Hospital and physician research; rehabilitation facility profiles and available utilization data; county market analysis; target lists. | Identify hospital relationships and evaluate regional rehabilitation markets. |
+| **9. Long-term care hospitals** | Hospital-market research; LTCH facility profiles and available utilization data; provider directories; territory analysis and reports. | Research potential hospital partners and understand regional competition and activity. |
+| **10. Physician practices and medical groups** | Provider and specialty searches; territory maps; demographic and community-needs analysis; facility and partner research. | Evaluate practice locations, surrounding specialties and potential professional partners. |
 
 ### Intel: what to lead with, why now, and what it is not
 
