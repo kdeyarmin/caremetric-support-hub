@@ -78,6 +78,10 @@ describe('the cancellation and win-back emails', () => {
     expect(dueTemplates(ended({ trialEnd: ahead(1) }), now)).toEqual([], 'cancelled during its trial: not ended yet');
     expect(dueTemplates(ended({ firstPaidAt: ago(40) }), now)).toEqual([], 'a customer who paid is not a lost trial');
     expect(dueTemplates(ended({ trialEnd: null }), now)).toEqual([]);
+    // Stripe keeps the cancellation fields on a trial that was set to cancel and then ended: it is an ended trial all the same.
+    expect(dueTemplates(ended({ cancelling: true }), now)).toEqual(['trial_ended']);
+    expect(stillApplies('trial_ended', ended({ cancelling: true }))).toBe(true);
+    expect(stillApplies('cancel_save', ended({ cancelling: true }))).toBe(false);
   });
   it('is planned only when the run may send them', () => {
     const accounts = [trial({ tenant: 'a-leaving', cancelling: true }), ended({ tenant: 'b-ended' })];

@@ -25,7 +25,8 @@ begin
   end if;
   if position('''cancel_save''' in pg_get_functiondef(helper::regprocedure)) = 0
      or position('''trial_ended''' in pg_get_functiondef(helper::regprocedure)) = 0
-     or position('interval ''14 days''' in pg_get_functiondef(helper::regprocedure)) = 0 then
+     or position('interval ''14 days''' in pg_get_functiondef(helper::regprocedure)) = 0
+     or position('n.stripe_created >= paid.stripe_created' in pg_get_functiondef(helper::regprocedure)) = 0 then
     raise exception 'The customer facts must include cancelling plans and recently ended trials' using errcode = '55000';
   end if;
   foreach r in array array['anon', 'authenticated', 'service_role', 'hub_app_server'] loop

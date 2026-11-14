@@ -11,8 +11,8 @@
 -- 1. The setting row.
 -- 2. agent_actions_email_send_check and the send ledger's template and period checks accept the two templates.
 -- 3. private.agent_lifecycle_json (same signature; no role may run it) also returns a plan being cancelled, however long it was
---    paid for, and a trial that ended unpaid in the last 14 days (its subscription canceled, expired or paused), and reports what
---    became of the two new emails. Every other row and fact is unchanged.
+--    paid for, and a trial that ended unpaid in the last 14 days (its subscription canceled, expired or paused, and no newer
+--    subscription of any status since), and reports what became of the two new emails. Every other row and fact is unchanged.
 --
 -- 20261113300100_lifecycle_save_contract.sql declares platform.agents.lifecycle-save.v1; the Hub proposes the two emails only then.
 set local lock_timeout = '10s';
@@ -73,7 +73,11 @@ begin
         -- A plan being cancelled, however long it was paid for, and a trial that ended unpaid in the last 14 days.
         or (status in ('trialing', 'active') and cancelling)
         or (status in ('canceled', 'incomplete_expired', 'paused') and first_paid_at is null
-            and trial_end is not null and trial_end <= now() and trial_end > now() - interval '14 days')
+            and trial_end is not null and trial_end <= now() and trial_end > now() - interval '14 days'
+            -- The newest subscription of any status decides: one started since (incomplete, past due or unpaid included) means
+            -- the customer came back, so the ended trial is not theirs to be asked about.
+            and not exists (select 1 from private.billing_subscriptions n where n.tenant_id = paid.tenant_id and n.product_id = paid.product_id
+              and n.livemode and n.stripe_subscription_id <> paid.stripe_subscription_id and n.stripe_created >= paid.stripe_created))
     ), contact as (
       -- The address is read only to say whether it is usable and whether it unsubscribed; it never leaves this statement.
       select c.tenant_id,

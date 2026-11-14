@@ -93,8 +93,9 @@ export const periodKey = ({ template, tenant, product }) => `account:${template}
  */
 export function dueTemplates(fact, now = new Date()) {
   if (!fact || !Object.hasOwn(lifecycleProducts, fact.product)) return [];
-  // A trial or plan set to cancel gets the cancellation check-in only, never a welcome or a testimonial request.
-  if (fact.cancelling === true) return ['trialing', 'active'].includes(fact.status) ? ['cancel_save'] : [];
+  // A live trial or plan set to cancel gets the cancellation check-in only, never a welcome or a testimonial request. A subscription
+  // that has ended keeps Stripe's cancellation fields, so the flag is read only while it is still trialing or active.
+  if (fact.cancelling === true && ['trialing', 'active'].includes(fact.status)) return ['cancel_save'];
   const moment = now.getTime();
   if (endedStatuses.includes(fact.status)) {
     const end = at(fact.trialEnd);

@@ -450,11 +450,14 @@ try {
 
   // ---- Cancellation and win-back (20261113300000_lifecycle_save.sql): only with the owner's switch on, always for approval -------------
   await makeAccount('leaving', { subscriptions: [{ status: 'active', started: 200, ends: -170, paid: 170, cancelling: true }] });
-  await makeAccount('ended', { subscriptions: [{ status: 'canceled', started: 35, ends: -5 }] });
+  // Set to cancel at the end of its trial, then ended: Stripe keeps the cancellation fields on it.
+  await makeAccount('ended', { subscriptions: [{ status: 'canceled', started: 35, ends: -5, cancelling: true }] });
   await makeAccount('longended', { subscriptions: [{ status: 'canceled', started: 60, ends: -30 }] });
+  // An ended trial with a newer subscription of any status (here still awaiting its first payment): the customer came back.
+  await makeAccount('cameback', { subscriptions: [{ status: 'canceled', started: 35, ends: -5 }, { status: 'incomplete', started: 1, ends: -1 }] });
   const saveFacts = Object.fromEntries(mine((await call('private.agent_lifecycle_snapshot', [500, null, null])).accounts).map(entry => [entry.tenant, entry]));
-  assert.deepEqual([saveFacts[slugs.leaving]?.cancelling, saveFacts[slugs.ended]?.status, saveFacts[slugs.longended]], [true, 'canceled', undefined],
-    'a long-paid plan being cancelled and a trial that ended 5 days ago are in the facts; one that ended a month ago is not');
+  assert.deepEqual([saveFacts[slugs.leaving]?.cancelling, saveFacts[slugs.ended]?.status, saveFacts[slugs.longended], saveFacts[slugs.cameback]], [true, 'canceled', undefined, undefined],
+    'a long-paid plan being cancelled and a trial that ended 5 days ago are in the facts; one that ended a month ago, or whose customer started a new subscription since, is not');
   assert.deepEqual(Object.keys(saveFacts[slugs.ended].emails).sort(), ['cancel_save', 'setup_nudge', 'testimonial_ask', 'trial_checkin', 'trial_ended', 'welcome']);
   await fire();
   assert.ok(!(await emailActions()).some(action => ['cancel_save', 'trial_ended'].includes(action.input.template)), 'nothing is proposed while the switch is off');
@@ -482,7 +485,7 @@ try {
     await rows('select to_jsonb(e) as r from private.agent_lifecycle_emails e'), await rows("select to_jsonb(e) as r from private.audit_events e where action like 'agent.%'"),
     logs, texts, ownerMail,
   ]);
-  for (const key of ['welcome', 'setup', 'checkin', 'testimonial', 'refused', 'silent', 'crash', 'replay', 'autowelcome', 'autosetup', 'autooff', 'noemail', 'unsubscribed', 'paged', 'zerousage', 'leaving', 'ended', 'longended']) {
+  for (const key of ['welcome', 'setup', 'checkin', 'testimonial', 'refused', 'silent', 'crash', 'replay', 'autowelcome', 'autosetup', 'autooff', 'noemail', 'unsubscribed', 'paged', 'zerousage', 'leaving', 'ended', 'longended', 'cameback']) {
     assert.ok(!everything.includes(canary(key)), `${key}'s address appears in no agent table, ledger, audit event, log line or alert`);
   }
   for (const secret of [contactName, `cus_lc${run}`, `sub_lc${run}`, ...tokens]) assert.ok(!everything.includes(secret), `${secret.slice(0, 18)}… is kept nowhere`);
