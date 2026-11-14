@@ -9,9 +9,11 @@
  * The owner confirmed every fact and claim here on 2026-11-08, and on 2026-11-12 directed how Intel is presented (`present`: a whole
  * marketing workspace, never an email tool). The owner requested the Founders Sale on 2026-11-08;
  * its coupon, duration and product scope were verified in the live CareMetric billing account.
+ * The 2026-11-14 expansion adds CareBase's functional overview and each product's reasons to choose it, from the reviewed
+ * feature catalogs and Advisors' service scope. It does not re-verify prices, certify outcomes or extend the approved claims.
  */
 
-export const factsVersion = '2026-11-12';
+export const factsVersion = '2026-11-14';
 
 /**
  * Where public help articles live. An article's help-center address is `${helpCenterOrigin}/help/articles/<slug>`; that is its
@@ -107,6 +109,31 @@ export const products = deepFreeze({
     source: 'kdeyarmin/PennTrain@b9da4e1 artifacts/caremetric-carebase/src/components/marketing/marketingPricing.ts',
     forWhom: 'Pennsylvania personal care homes (55 Pa. Code Chapter 2600) and Assisted Living Facilities (55 Pa. Code Chapter 2800), single or multi-site.',
     does: 'Staff training, resident records, daily tasks and survey documentation in one place, with optional eMAR, workforce, survey and compliance, and resident billing modules. Its AI copilot is text only.',
+    bigPicture: 'CareBase connects the records and daily work a care organization needs to manage staff, residents and facilities. Managers see missing requirements, assign follow-up and prepare documentation from the same records staff use. Available modules depend on the subscription; CareMetric Train provides training separately.',
+    capabilities: [
+      'Training and requirements: maintained courses, graded quizzes, competency checklists, role-based assignments, custom requirements, reminders, a compliance matrix, reports, document storage and eligible offline training.',
+      'Reviewed AI assistance and live classes: the CareMetric team prepares courses from source documents for human review, with optional presenter videos. The text copilot answers from facility records and regulatory references and drafts follow-up for approval. Trainers schedule classes, manage rosters, record attendance and retain signed attendance sheets.',
+      'Resident care and operations: inquiries, admissions, census, room readiness, agreements, assessments, support plans, clinical notes and vitals, change-of-condition follow-up, daily services, dietary checks, transportation and resident financial records. Compatible clinical systems can supply records through configured FHIR connections. Imported medication events are read-only; native eMAR requires enrollment, clinical approval and a documented switch.',
+      'Credentials and workforce: clearances, qualifications, licenses, provisional-employment deadlines, continuing education, medication authorization, policy acknowledgments, shift scheduling, cross-facility staff and time-off coverage.',
+      'Survey, safety and facilities: binder exports, a readiness score for prioritizing recorded gaps, Survey Day Mode, documentation rooms, incidents, complaints, reporting deadlines, corrective work, fire drills, emergency operations, maintenance, quality projects and assigned work queues. The readiness score does not predict survey results.',
+      'Access and onboarding: organization and facility roles, scoped guest links, certificate verification, staff roster imports, invitations, online signup, configured reminders and an installable employee training player. Employees see their own records; surveyors receive scoped documentation links without a CareBase sign-in.',
+    ],
+    whyChoose: [
+      'Keep daily work and survey documentation together. Training, credentials, resident records and follow-up tasks give managers a shared view of what needs attention.',
+      'Spend less effort chasing records. Due dates, reminders, assigned owners and overdue alerts make responsibilities visible instead of relying on separate calendars and messages.',
+      'Bring training into the operating workflow. Maintained courses, reviewed policy-based lessons, live attendance, quizzes and certificates keep learning and its records together.',
+      'Manage across facilities without giving everyone the same access. Organization leaders can review the portfolio while managers and employees work within their assigned scope.',
+      'Keep continuity when people change roles. Shared records, retained history and reassigned responsibilities help the next administrator continue the work.',
+      'Choose the modules that match the work. Compare existing training trackers, schedules, incident logs and ledgers with the relevant CareBase modules before retiring a tool. Potential savings depend on actual use.',
+    ],
+    whoUses: [
+      'Owners and organization administrators: review facilities, compare priorities, configure requirements and manage access across the organization.',
+      'Facility managers: resolve overdue work, review staff coverage, validate outside training and prepare requested survey documentation for their assigned sites.',
+      'Trainers: assign courses, schedule classes, record attendance and manage practicum documentation.',
+      'Employees: complete their own training, view published shifts, sign policies and upload records from a browser or phone.',
+      'Surveyors: review only the documentation shared through a scoped, time-limited link, without editing records or receiving a CareBase sign-in.',
+      'Guests and designated persons: use time-limited links for shared move-in records, agreements and documentation without a full user account.',
+    ],
     trialDays: 30,
     pricing: [
       'CareBase Core: $199 per facility per month, or $1,990 per facility per year. Unlimited residents and staff; nobody is counted per person.',
@@ -151,6 +178,16 @@ export const products = deepFreeze({
       'Marketers and community liaisons: a planned day and route, a focused visit list with a reason for each stop, notes, follow-ups and expenses logged from a phone, and the history of every account they own.',
     ],
     present: 'Owner direction: show the bigger picture. Intel runs the whole marketing program, and sending emails to referral sources is not the point of it. Email campaigns are one feature, on the Growth and Pro plans. Never describe Intel as an email tool, never lead with emailing referral sources, and never make email the whole subject of a message, post, ad, article or answer: when email comes up, show it as one part of the workspace, beside the research, relationships, visits, spend and recorded results it serves. Across your work, cover the whole range above rather than one feature again and again, and pick the part that answers the reader. What a feature needs (a plan in brackets) still applies.',
+    whyChoose: [
+      'Put the whole marketing program in one workspace. Research, account relationships, visits, follow-ups, expenses and recorded results share the same working context.',
+      'Direct time and budget toward a reasoned target list. Territory demographics, provider profiles, public utilization signals and account coverage help teams decide where to focus.',
+      'Keep relationships from depending on one person. Named account owners, healthcare contacts, stages, shared history and book hand-offs preserve context when responsibilities change.',
+      'Give field work a purpose and a next step. Pre-visit cards, call plans, routes, mobile visit logs and dated follow-ups connect preparation with the work after a visit.',
+      'See what recorded activity led to. Referral funnels, admissions, response times and lost reasons let managers review results alongside visits and outreach without treating public data as confirmed referrals.',
+      'Review marketing spend with the supporting records. Account-linked expenses, receipts, per-person values, policy flags, approvals and reimbursement records help managers examine spending. These tools are not legal advice.',
+      'Bring market changes and team priorities into management reviews. Competitor alerts, goals, coaching, scoped reports and scheduled briefs support decisions across people and branches, subject to plan and role.',
+      'Reduce repeated research and report assembly. Saved lists, account history, supported reporting questions, file imports and reusable reports bring the work together. Any time or cost benefit depends on use.',
+    ],
     // Prices, the trial and Intel's offers come from Intel's own catalog once the Hub has read it.
     get trialDays() { return intelFacts().trialDays; },
     get pricing() { return intelFacts().pricing; },
@@ -161,6 +198,11 @@ export const products = deepFreeze({
     source: 'kdeyarmin/advisors@fe46d1d site-content.mjs',
     forWhom: 'Owners, operators, leadership teams and investors in home health, hospice, skilled nursing, personal care homes and assisted living.',
     does: 'Consulting on strategy and operations, clinical quality and compliance, financial performance and reimbursement, acquisition advisory and due diligence, education and leadership, technology and workflow, and personal care home and ALF operations. Led by founder and principal advisor Dr. Kevin C. Deyarmin.',
+    whyChoose: [
+      'Get advice scoped to a specific healthcare business problem. An engagement can focus on the strategy, operations, quality, financial or workflow question the organization needs to address.',
+      'Bring an advisory perspective to a significant decision. Acquisition advisory and due diligence support owners, operators and investors evaluating an opportunity.',
+      'Support leaders as they change how the organization works. Education, leadership and technology consulting can be scoped alongside operational needs. Deliverables depend on the agreed engagement.',
+    ],
     trialDays: null,
     pricing: ['No published prices: engagements are scoped to the problem. A conversation starts with the consultation request form at caremetricadvisors.com/contact.'],
     offers: ['A consultation request through caremetricadvisors.com/contact, with no obligation to move forward. Business consulting only: never send patient information through the site.'],
@@ -403,6 +445,7 @@ export function factSheetText() {
   for (const product of Object.values(products)) {
     lines.push('', `${product.name} (${product.site})`, `Who it is for: ${product.forWhom}`, `What it does: ${product.does}`);
     if (product.bigPicture) lines.push(`The bigger picture: ${product.bigPicture}`);
+    if (product.whyChoose?.length) lines.push('Top reasons a company would choose it:', ...product.whyChoose.map(line => `- ${line}`));
     if (product.capabilities?.length) lines.push('Everything it does, by area (from its own published features page; a plan in brackets is needed for that part):', ...product.capabilities.map(line => `- ${line}`));
     if (product.whoUses?.length) lines.push('Who uses it, and for what:', ...product.whoUses.map(line => `- ${line}`));
     if (product.present) lines.push(`How to present it: ${product.present}`);
