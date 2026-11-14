@@ -109,7 +109,7 @@ export const usageReportSchema = z.object({
 }).strict();
 // An application opens one of its own customers' Stripe billing; the customer returns to the application's https page.
 const httpsReturn = z.string().max(2048).refine(value => { try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password; } catch { return false; } });
-export const appPortalRequestSchema = z.object({ account: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/), return_url: httpsReturn }).strict();
+export const appPortalRequestSchema = z.object({ account: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/), return_url: httpsReturn, payment_method_only: z.boolean().optional() }).strict();
 // An application changes one of its own customers' plans and add-ons for that organization's administrator. The
 // application vouches for the administrator and reports the facilities it bills and their plan-size facts, as it does
 // for the Hub customer center's purchasing authority; the customer returns from Stripe Checkout to its https page.
@@ -128,4 +128,6 @@ export type AppBillingRequest = z.infer<typeof appBillingRequestSchema>;
 export const trialRequestSchema = z.object({
   account: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/), name: plain(180).trim().min(2), email: z.email().max(320).nullable(),
   plan: z.string().regex(/^[a-z0-9_.-]{1,64}$/).nullable(),
+  interval: z.enum(['month', 'year']).optional(),
+  require_payment_method: z.boolean().optional(),
 }).strict();
