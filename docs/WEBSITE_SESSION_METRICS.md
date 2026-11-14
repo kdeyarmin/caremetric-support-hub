@@ -75,5 +75,5 @@ Analytics only while that is off or not set up. Advisors is not a scorecard prod
    (and **Intel Google Analytics property ID** if Intel's own measurement is not used).
 
 The Hub asks only for the active-user count of each week (no pages, referrers, users or events), signs in with the read-only
-Analytics scope, and logs only a fixed failure code. A week Google has no data for (before the tag was installed) shows as unavailable,
-never zero, and a property that cannot be read does not hide another product's figures (`server/agents/scorecard/google-analytics.mjs`).
+Analytics scope, and logs only a fixed failure code. A week that began before the first day Google has data for (the tag was installed during or after it) shows
+as unavailable, never a short week's count or zero, and a property that cannot be read does not hide another product's figures (`server/agents/scorecard/google-analytics.mjs`).

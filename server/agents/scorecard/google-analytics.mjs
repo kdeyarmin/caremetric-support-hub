@@ -10,8 +10,8 @@
  * seconds. Only aggregate counts are requested: no dimension but the date range, no user, page, referrer or event. Nothing Google sends
  * back in an error is kept; a failure is a fixed code. The key, the assertion and the token never reach a log line, an error or a result.
  *
- * A period Google returns no row for is unknown (null), never zero: a week before the site's tag was installed has no data, and the
- * scorecard does not count missing data as no visitors.
+ * A period Google returns no row for is unknown (null), never zero, and so is a period that began before the first day the property has
+ * any data for: a week the tag was installed partway through is not reported as a short week's total.
  */
 import { readCredentials, signAssertion, tokenUrl } from '../seo/search-console.mjs';
 import { live } from '../../live.mjs';
@@ -70,6 +70,19 @@ async function readText(response) {
 const statusCode = status => (status === 401 || status === 403 ? 'analytics_not_permitted' : status === 404 ? 'analytics_property_not_found'
   : status === 429 ? 'analytics_rate_limited' : status === 400 ? 'analytics_request_rejected' : 'analytics_unavailable');
 
+// GA4's earliest reportable day: asking from it finds the first day a property has data for.
+export const earliestDate = '2015-08-14';
+
+/** The first day (YYYY-MM-DD) a date-ordered runReport answer has a row for, or null when it has none. */
+export function firstDay(body) {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) throw failure('analytics_response_invalid');
+  const value = body.rows?.[0]?.dimensionValues?.[0]?.value;
+  if (value === undefined) return null;
+  const match = typeof value === 'string' ? /^(\d{4})(\d{2})(\d{2})$/.exec(value) : null;
+  if (!match) throw failure('analytics_response_invalid');
+  return `${match[1]}-${match[2]}-${match[3]}`;
+}
+
 /** Active users per named date range, from a runReport answer. A range without a row is null. */
 export function countsOf(body) {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) throw failure('analytics_response_invalid');
@@ -120,15 +133,27 @@ export function googleAnalyticsReader({ credentials = '', properties = {}, fetch
     return token;
   }
 
-  async function readProperty(id, ranges, token, signal) {
+  async function report(id, request, token, signal) {
     const url = `${analyticsDataOrigin}/v1beta/properties/${id}:runReport`;
-    const request = { dateRanges: ranges, metrics: [{ name: 'activeUsers' }], keepEmptyRows: false };
     const answer = await send(url, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify(request) }, signal);
     if (!answer.ok) throw failure(statusCode(answer.status));
-    let body;
-    try { body = JSON.parse(answer.text); } catch { throw failure('analytics_response_invalid'); }
-    return countsOf(body);
+    try { return JSON.parse(answer.text); } catch { throw failure('analytics_response_invalid'); }
+  }
+
+  /**
+   * The week's counts, kept only for a period the property measured from its first day: the first day Google has any data for is when
+   * collection began, so a week the tag was installed partway through (or before it) is unknown, never a short week's count.
+   */
+  async function readProperty(id, ranges, token, signal) {
+    const [counts, first] = await Promise.all([
+      report(id, { dateRanges: ranges, metrics: [{ name: 'activeUsers' }], keepEmptyRows: false }, token, signal).then(countsOf),
+      report(id, { dateRanges: [{ startDate: earliestDate, endDate: ranges[0].endDate }], dimensions: [{ name: 'date' }], metrics: [{ name: 'activeUsers' }],
+        orderBys: [{ dimension: { dimensionName: 'date' }, desc: false }], limit: 1, keepEmptyRows: false }, token, signal).then(firstDay),
+    ]);
+    const covered = range => first !== null && first <= range.startDate;
+    const byName = Object.fromEntries(ranges.map(range => [range.name, range]));
+    return { current: covered(byName.current) ? counts.current : null, previous: covered(byName.previous) ? counts.previous : null };
   }
 
   async function read({ before, since, until, signal, products = analyticsProducts } = {}) {

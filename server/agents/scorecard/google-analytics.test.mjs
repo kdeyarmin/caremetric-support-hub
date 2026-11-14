@@ -1,6 +1,6 @@
 import { generateKeyPairSync, verify } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
-import { analyticsDataOrigin, analyticsProperty, analyticsRanges, analyticsScope, countsOf, googleAnalyticsReader, websiteVisitors } from './google-analytics.mjs';
+import { analyticsDataOrigin, analyticsProperty, analyticsRanges, analyticsScope, countsOf, earliestDate, firstDay, googleAnalyticsReader, websiteVisitors } from './google-analytics.mjs';
 import { tokenUrl } from '../seo/search-console.mjs';
 import { composeScorecard } from './compose.mjs';
 
@@ -13,12 +13,19 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), { status
 const report = (current, previous) => ({ kind: 'analyticsData#runReport', dimensionHeaders: [{ name: 'dateRange' }], metricHeaders: [{ name: 'activeUsers', type: 'TYPE_INTEGER' }],
   rows: [...(current === null ? [] : [{ dimensionValues: [{ value: 'current' }], metricValues: [{ value: String(current) }] }]),
     ...(previous === null ? [] : [{ dimensionValues: [{ value: 'previous' }], metricValues: [{ value: String(previous) }] }])] });
-const fakeGoogle = (answers = {}) => vi.fn(async (url, init) => {
+// `firsts` is the first day each property has data for (YYYYMMDD, or null for none); collection began long before by default.
+const fakeGoogle = (answers = {}, firsts = {}) => vi.fn(async (url, init) => {
   if (url === tokenUrl) return json({ access_token: 'ya29.synthetic-access-token-value', expires_in: 3600 });
   const id = /properties\/(\d+):runReport$/.exec(url)?.[1];
   const answer = answers[id] ?? report(120, 95);
-  return typeof answer === 'number' ? json({ error: { message: 'secret detail from Google' } }, answer) : json(answer);
+  if (typeof answer === 'number') return json({ error: { message: 'secret detail from Google' } }, answer);
+  if (JSON.parse(init.body).dimensions) {
+    const first = Object.hasOwn(firsts, id) ? firsts[id] : '20260901';
+    return json(first === null ? {} : { rows: [{ dimensionValues: [{ value: first }], metricValues: [{ value: '3' }] }] });
+  }
+  return json(answer);
 });
+const weekly = calls => calls.filter(([url, init]) => url !== tokenUrl && !JSON.parse(init.body).dimensions);
 
 describe('Google Analytics reader', () => {
   it('reads a property as its number or properties/<number>, and nothing else', () => {
@@ -61,7 +68,8 @@ describe('Google Analytics reader', () => {
     expect(reader.configured).toBe(true);
     const result = await reader.read(window);
     expect(result.products).toEqual({ carebase: { state: 'read', visitors: 120, previous: 95 } });
-    const [tokenCall, reportCall] = fetchImpl.mock.calls;
+    const [tokenCall] = fetchImpl.mock.calls;
+    const [reportCall] = weekly(fetchImpl.mock.calls);
     expect(tokenCall[0]).toBe(tokenUrl);
     expect(tokenCall[1]).toMatchObject({ method: 'POST', redirect: 'error' });
     const assertion = new URLSearchParams(tokenCall[1].body).get('assertion');
@@ -71,6 +79,23 @@ describe('Google Analytics reader', () => {
     expect(reportCall[0]).toBe(`${analyticsDataOrigin}/v1beta/properties/564318607:runReport`);
     expect(reportCall[1]).toMatchObject({ method: 'POST', redirect: 'error' });
     expect(JSON.parse(reportCall[1].body)).toEqual({ dateRanges: analyticsRanges(window), metrics: [{ name: 'activeUsers' }], keepEmptyRows: false });
+    const coverage = fetchImpl.mock.calls.find(([url, init]) => url !== tokenUrl && JSON.parse(init.body).dimensions);
+    expect(JSON.parse(coverage[1].body)).toMatchObject({ dateRanges: [{ startDate: earliestDate, endDate: '2026-11-01' }], dimensions: [{ name: 'date' }], limit: 1 });
+  });
+
+  it('leaves a week the tag was installed partway through unknown, never a short week', async () => {
+    expect(firstDay({ rows: [{ dimensionValues: [{ value: '20261028' }] }] })).toBe('2026-10-28');
+    expect(firstDay({})).toBeNull();
+    expect(() => firstDay({ rows: [{ dimensionValues: [{ value: 'Oct 28' }] }] })).toThrow();
+    const read = async first => (await googleAnalyticsReader({ credentials, properties: { carebase: '564318607' },
+      fetchImpl: fakeGoogle({ 564318607: report(40, 12) }, { 564318607: first }) }).read(window)).products.carebase;
+    // Installed on the Wednesday of the reported week: neither week was measured in full.
+    expect(await read('20261028')).toEqual({ state: 'unavailable', visitors: null, previous: null });
+    // Installed on the reported week's Monday: that week is whole, the week before is not.
+    expect(await read('20261026')).toEqual({ state: 'partial', visitors: 40, previous: null });
+    // Installed before both weeks began.
+    expect(await read('20261019')).toEqual({ state: 'read', visitors: 40, previous: 12 });
+    expect(await read(null)).toEqual({ state: 'unavailable', visitors: null, previous: null });
   });
 
   it('keeps one failing property from hiding another and never logs what Google said', async () => {
