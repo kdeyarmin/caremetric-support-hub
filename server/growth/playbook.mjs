@@ -205,6 +205,8 @@ export const salesPlaybook = deepFreeze({
       { key: 'authority', when: 'They must ask an owner or a corporate office.', answer: 'Offer a short summary they can forward and ask who else should see it.' },
       { key: 'demo', when: 'They ask for a demo, a call or a meeting.', answer: `CareMetric does not do live demos or sales calls. Offer the written walkthrough instead: the resource or guide that shows what they want to see, the ${facts.intel.trialDays}-day free trial (no credit card) on one county, and answers to any question by email.` },
       { key: 'results', when: 'They ask for proof of results or case studies.', answer: 'There are no approved customer results to share. Suggest the free trial on one county so they can judge it on their own market.' },
+      { key: 'integration', when: 'They ask whether Intel connects to their EHR or another system.', answer: 'Be exact: Intel imports referral and admission reports from the EHR as files (an upload, an SFTP folder or email), with saved layouts for common EHR reports. It is not a live connection. Never name an EHR vendor and never imply a live link.' },
+      { key: 'security', when: 'They ask about HIPAA, a BAA, security or a contract.', answer: 'Say only that the research uses no patient-level data, that imports drop patient-identifying columns and that notes should never name a patient. Tell them the owner answers security, BAA and contract questions in writing, and hand the conversation to the owner.' },
     ],
   },
 });
@@ -234,7 +236,9 @@ export const inboundAngle = touch => inboundSequence[Math.min(Math.max(Number(to
 export const reaskAngle = 'One brief, friendly check-in, months after the last message. Acknowledge the time that has passed in a few words, mention one thing that is new or relevant (a change the sources show, or the free trial still being there), and ask whether now is a better time. Three or four sentences. Easy to ignore, no pressure, and never a reproach for not answering.';
 /** What a message may lead with when the product policy runs experiments (draft.mjs arms): one part of the product, chosen per organization. */
 export const experimentAngles = deepFreeze({
-  'caremetric-intel': ['referral_sources', 'territory', 'competitors'],
+  // The last three come from the Intel marketing playbook (docs/INTEL_MARKETING_PLAYBOOK.md, owner request 2026-11-14): visit
+  // preparation, the hospital outcomes packet and catching a slipping referral source. Expenses never lead (owner direction 2026-11-14).
+  'caremetric-intel': ['referral_sources', 'territory', 'competitors', 'visit_prep', 'hospital_outcomes', 'slipping_sources'],
   carebase: ['staff_training', 'survey_ready', 'daily_records'],
 });
 

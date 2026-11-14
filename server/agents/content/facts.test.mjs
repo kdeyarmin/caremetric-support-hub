@@ -5,7 +5,7 @@ import {
   allowedAmounts, allowedHost, allowedPercents, articleUrl, citationHosts, claims, factSheetText, intelFactsFromCatalog, intelReviewedFacts, legalDisclaimer,
   officialSources, productPages, products, resetAppCatalogFacts, useAppCatalogFacts, articleHomeUrl, intelArticleOrigin, intelArticleUrl, servedElsewhere,
 } from './facts.mjs';
-import { allowedNumbers, textProblems } from './validate.mjs';
+import { allowedNumbers, namesCompetitor, textProblems } from './validate.mjs';
 import { parseAppCatalog } from '../../app-catalog-sync.mjs';
 
 const doc = readFileSync(new URL('../../../docs/GTM_FACTS.md', import.meta.url), 'utf8');
@@ -112,6 +112,25 @@ describe('the fact sheet', () => {
     const added = [intel.bigPicture, ...intel.capabilities, ...intel.whoUses, intel.present].join('\n');
     expect(added).not.toMatch(/\d/);
     expect(textProblems(added, { product: 'intel' }).filter(code => code !== 'personal_information')).toEqual([]);
+  });
+
+  it('gives every agent Intel\'s lead order, market context and boundaries from the research, with no number and no company name', () => {
+    const text = factSheetText();
+    const intel = products.intel;
+    for (const line of [...intel.leadWith, ...intel.whyNow, ...intel.boundaries]) {
+      expect(text).toContain(`- ${line}`);
+      expect(doc, line).toContain(line);
+    }
+    expect(intel.leadWith).toHaveLength(5);
+    // A number here would become one every draft may state (validate.mjs allowedNumbers); a company name would fail every draft.
+    const added = [...intel.leadWith, ...intel.whyNow, ...intel.boundaries].join('\n');
+    expect(added).not.toMatch(/\d/);
+    expect(namesCompetitor(added)).toBe(false);
+    expect(added.toLowerCase()).not.toMatch(/the best|the leading|number one|#1/);
+    expect(textProblems(added, { product: 'intel' }).filter(code => code !== 'personal_information')).toEqual([]);
+    // Owner direction 2026-11-14: expenses never lead, and the AI is text only.
+    expect(intel.leadWith.join(' ')).not.toMatch(/expense|stark|compliance|email/i);
+    expect(intel.leadWith.join(' ')).not.toMatch(/spoken|voice|dictat/i);
   });
 
   it('gives the founder\'s story in the owner\'s own words, with nothing a draft could not repeat', () => {

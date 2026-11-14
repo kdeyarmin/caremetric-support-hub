@@ -29,6 +29,7 @@ const armNames = {
   length: { control: 'the usual length (under 120 words)', concise: 'short emails (under 80 words)' },
   subject: { question: 'subjects phrased as a question', plain: 'plain subjects' },
   angle: { referral_sources: 'leading with referral sources', territory: 'leading with territory planning', competitors: 'leading with the competitive picture',
+    visit_prep: 'leading with visit preparation', hospital_outcomes: 'leading with the hospital outcomes packet', slipping_sources: 'leading with slipping referral sources',
     staff_training: 'leading with staff training', survey_ready: 'leading with survey readiness', daily_records: 'leading with daily records' },
 };
 const armOrder = ['angle', 'subject', 'length'];

@@ -276,6 +276,43 @@ CareMetric Intel runs a healthcare organization's whole marketing program in one
 
 **How to present it.** Owner direction: show the bigger picture. Intel runs the whole marketing program, and sending emails to referral sources is not the point of it. Email campaigns are one feature, on the Growth and Pro plans. Never describe Intel as an email tool, never lead with emailing referral sources, and never make email the whole subject of a message, post, ad, article or answer: when email comes up, show it as one part of the workspace, beside the research, relationships, visits, spend and recorded results it serves. Intel is a marketing workspace, not a compliance product: its expense tools keep marketing spend in view of policy and the Stark limit, and they are a small part of the program. Never describe Intel as a compliance tool, and never lead with compliance, the Stark limit or expense tracking: when spend comes up, show it as part of the field work and relationships it serves (owner direction 2026-11-14). Across your work, cover the whole range above rather than one feature again and again, and pick the part that answers the reader. What a feature needs (a plan in brackets) still applies.
 
+### Intel: what to lead with, why now, and what it is not
+
+Added 2026-11-14 at the owner's request, from the competitor and market research in
+[INTEL_MARKETING_PLAYBOOK.md](INTEL_MARKETING_PLAYBOOK.md) (`leadWith`, `whyNow` and `boundaries` in `facts.mjs`). The research found that
+the large products in this market lead with the size of their data, customer results, AI for field reps, time saved and EHR
+connections, and sell through demo requests with private quotes. Intel answers with what it can honestly show. These lines state no number
+and name no company: a number would become one every draft may state, and every EHR vendor is on the competitor list in `validate.mjs`.
+The playbook keeps the vendor detail and figures for people, not for prompts.
+
+**What to lead with, one at a time** (rotate them across your work; email and expenses never lead):
+
+- Finding referral sources: which physicians, hospitals and facilities in the territory matter, from public Medicare data, with the release behind every figure.
+- Knowing the competition: who serves each county, how they rank on Medicare share and star ratings, and an alert when a competitor's rating, owner or service area changes.
+- One workspace for the whole program: research, accounts, visits, follow-ups and recorded results in one shared record.
+- Walking into every visit prepared: a pre-visit card before each visit, and on Growth and Pro a written visit debrief, where the AI proposes the visit note and next step for the marketer to check.
+- Showing what the work led to: the referral funnel, response time and a quarterly outcomes packet for a hospital, with hospitals in CMS's TEAM model flagged.
+
+**Why now** (market context; check any rule, model or date on cms.gov before you state it):
+
+- CMS froze new home health and hospice Medicare enrollments nationwide in May, so most agencies grow by winning referral sources in the markets they already serve. Check cms.gov or the Federal Register for the freeze's current status before you mention it.
+- Hospitals in CMS's TEAM model answer for what happens to patients after discharge, so they look for post-acute partners who answer referrals quickly and can show public quality scores.
+- CMS now publishes a Service and Spending Variation Index for each hospice. It is an outlier index, not a quality rating, and is always described that way.
+- Field marketers now expect software to help them prepare for visits and write up notes. Say in plain words what Intel's AI does for the marketer, and that a person checks every draft.
+- Medicare fee-for-service figures leave out people in Medicare Advantage plans. Say which population a figure covers.
+
+**What it is not, and how to say so:**
+
+- Intel imports referral and admission reports from the EHR as files: an upload, an SFTP folder or email. It is not a live connection to any EHR, and no message names an EHR vendor.
+- Intel works in a phone's web browser and can be added to the home screen, where it opens like an app. It is not an app in the app stores.
+- Public Medicare data shows which physicians certify home health patients and which agencies serve a county. It does not show who referred which patient to whom.
+- Intel has no approved customer results and states no counts about its data. Name the publishers behind its data (CMS, NPPES, the U.S. Census Bureau and state licensing files), and point to the free county report and the free trial instead.
+- Intel is evaluated with a free trial, its prices are on its website, and questions get written answers. Describe what Intel does; never describe or compare what other products do.
+
+The sales playbook gained matching written answers for EHR connection and security questions (`integration` and `security` in
+`server/growth/playbook.mjs`), and three outreach angles that follow the lead order: visit preparation, the hospital outcomes packet and
+slipping referral sources (`experimentAngles`).
+
 ## Founders Sale — CareBase, Train and Intel
 
 Owner-requested 2026-11-08. **50% off eligible subscription charges for the first 12 months of paid service.**
@@ -520,6 +557,9 @@ Confirmed by the owner on 2026-11-08 from the review copy of this sheet.
 - [x] CareBase's avoidance of "evidence" applies to articles and everything else the AI team writes, as well as the landing page.
 - [x] 2026-11-12: Intel's bigger picture and "How to present it" (sending emails to referral sources is never the point), the plain-language
   rules, and outreach written and signed as the founder.
+- [ ] 2026-11-14: Intel's lead order, market context and boundaries from the competitor research ("Intel: what to lead with, why now,
+  and what it is not"), the `integration` and `security` written answers, and the three new outreach angles. Requested by the owner;
+  tick this box when you approve the pull request that adds them.
 - [x] 2026-11-14: Intel is a marketing workspace, not a compliance product; expense tracking (spend in view of policy and the Stark
   limit) is a small part of it and never leads.
 - [x] 2026-11-12: the founder's story wording. The owner confirmed: the founder built Intel, and currently runs a home health and

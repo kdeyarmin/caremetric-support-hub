@@ -161,7 +161,7 @@ it('records the arms a message was written under and follows a website lead or a
  const lead={...opportunity,product:'caremetric-intel',policy:{...opportunity.policy,experiment_enabled:true},memory:{lead:{kind:'county_report',place:'Allegheny, PA',at:now}}};
  const draft=await draftMessage({opportunity:lead,work,task:{},model});
  expect(draft.arms).toMatchObject({trigger:'inbound'});
- expect(['referral_sources','territory','competitors']).toContain(draft.arms.angle);
+ expect(['referral_sources','territory','competitors','visit_prep','hospital_outcomes','slipping_sources']).toContain(draft.arms.angle);
  const input=JSON.parse(run.mock.calls[0][1].user);
  expect(input).toMatchObject({lead:{kind:'county_report',place:'Allegheny, PA'},focus:draft.arms.angle.replace(/_/g,' ')});
  expect(input.touchPlan).toMatch(/They asked for it/);
