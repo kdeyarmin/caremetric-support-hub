@@ -23,3 +23,9 @@ Ask the organization's policy administrator for an approved connection method. B
 If the administrator approves a temporary exception, record the original policy source, rules and inheritance first. Use the narrowest supported scope and preserve unrelated rules. A project-wide exception removes these policy restrictions for every service account in that project while it is active; IAM permissions still apply. Create only the intended reader key, transfer its complete JSON directly to the Hub's private secret, then restore the original restrictions and confirm both effective policies. Do not broaden the exception if a step fails; restore the original policy and report the blocker.
 
 Saving the credential does not require an ad hoc deployment. Include it in the next reviewed main-branch release, then use **Weekly SEO check** to verify access. Keep the website verification token deployed: restoring key-creation restrictions does not replace Google's ongoing ownership check.
+
+## The same key reads Google Analytics
+
+The Monday scorecard's website visitors use this service account too. Enable the **Google Analytics Data API** in the same Google
+Cloud project, add the service account's email as a **Viewer** in Google Analytics (Admin → Account access management), and enter the
+property numbers in **Settings → Website analytics**. See [Website session metrics](WEBSITE_SESSION_METRICS.md#google-analytics).

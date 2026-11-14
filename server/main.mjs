@@ -38,6 +38,7 @@ import { mailboxChecker } from './growth/mailbox.mjs';
 import { growthSender } from './growth/sender.mjs';
 import { socialConfig } from './agents/social/index.mjs';
 import { nativeVisitorReader } from './agents/scorecard/visitors.mjs';
+import { googleAnalyticsReader, websiteVisitors } from './agents/scorecard/google-analytics.mjs';
 import { creativeConfig } from './agents/creative/index.mjs';
 import { creativeAdmin } from './agents/creative/admin.mjs';
 import { learningMediaImport, mediaImportFeature, mediaImportHosts } from './learning-media-import.mjs';
@@ -132,7 +133,10 @@ const team=agentTeam({pool,growth,growthMail,postalAddress,sms:textSender,email:
   // The Creative Director: Settings → Creative, with HeyGen's key from Railway.
   creative:()=>creativeConfig(process.env,settings.get),searchConsoleSites:setting('seo.search_console_sites'),
   searchConsoleCredentials:process.env.HUB_SEARCH_CONSOLE_CREDENTIALS,
-  visitorMetrics:nativeVisitorReader({features,enabled:setting('analytics.intel_visitors'),key:process.env.HUB_VISITOR_METRICS_KEY}),
+  // Website visitors for the Monday scorecard: Intel's own session measurement, and Google Analytics (Settings → Website analytics) with
+  // the Search Console service account key from Railway.
+  visitorMetrics:websiteVisitors({native:nativeVisitorReader({features,enabled:setting('analytics.intel_visitors'),key:process.env.HUB_VISITOR_METRICS_KEY}),
+    analytics:googleAnalyticsReader({credentials:process.env.HUB_SEARCH_CONSOLE_CREDENTIALS,properties:{carebase:setting('analytics.google_carebase_property'),'caremetric-intel':setting('analytics.google_intel_property')}})}),
   lifecycle:{mail:customerMail,get postalAddress(){return postalAddress().trim();},saveEmails:setting('growth.save_emails')},
   // Offers from the owner's menu: platform billing (created below) makes them, so the call is deferred until an offer is approved.
   offerBilling:{agentOffer:input=>billing.agentOffer(input)}});
