@@ -1194,8 +1194,10 @@ owner's direction lives there (`server/agents/content/facts.mjs`, docs/GTM_FACTS
 - **CareMetric Intel is a whole marketing workspace, and email is never the point of it.** The fact sheet gives Intel's bigger picture,
   everything it does in each of the eleven areas its features page publishes, who uses it and for what, and "How to present it": never
   describe Intel as an email tool, never lead with emailing referral sources, never make email the whole subject of anything, and cover
-  the whole range across the team's work. The catalog guidance says the same, the Creative Director never leads a brief with the email
-  campaigns pillar, and the sales playbook's value points name the whole workspace.
+  the whole range across the team's work. Intel is not a compliance product either (owner direction 2026-11-14): its expense tracking
+  is a small part of the workspace, and nothing leads with compliance, the Stark limit or expenses. The catalog guidance says the same,
+  the Creative Director never leads a brief with the email campaigns or expenses pillar, and the sales playbook's value points name the
+  whole workspace.
 - **The founder's story.** The fact sheet carries the founder's story in the owner's own words. Prospect outreach (the Marketing Manager)
   and the Content Marketer's partnership pitches are written in the founder's first person, touch 1 tells the story in one or two
   sentences, and prospect outreach is signed with the founder's name and title. The story is told only about Intel, with no results,

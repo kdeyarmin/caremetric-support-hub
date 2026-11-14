@@ -46,13 +46,12 @@ describe('CareMetric Intel\'s published feature catalog', () => {
   });
 
   it('leads a planned brief with the part of Intel its text is about, else the next in turn, never twice in one plan', () => {
-    expect(focusFor('caremetric-intel', 'Log the lunch against the Stark limit', 0).title).toBe('Spend with compliance in view');
     expect(focusFor('caremetric-intel', 'Which competitors gained market share?', 0).title).toBe('Know the competition');
     expect(focusFor('caremetric-intel', 'Referrals and admissions by source', 0).title).toBe('Connect effort to outcomes');
     const titles = intel.pillars.map(pillar => pillar.title);
     expect([0, 1, 2].map(turn => focusFor('caremetric-intel', 'A tip for the week', turn).title)).toEqual(titles.slice(0, 3));
     expect(focusFor('caremetric-intel', 'A tip for the week', 0, new Set([titles[0]])).title).toBe(titles[1]);
-    expect(focusFor('caremetric-intel', 'Log the lunch against the Stark limit', 0, new Set(['Spend with compliance in view'])).title).toBe(titles[0]);
+    expect(focusFor('caremetric-intel', 'Which competitors gained market share?', 0, new Set(['Know the competition'])).title).toBe(titles[0]);
     expect(focusFor('advisors', 'anything', 0)).toBeNull();
   });
 
@@ -62,10 +61,22 @@ describe('CareMetric Intel\'s published feature catalog', () => {
     expect(focusFor('caremetric-intel', 'Send an email campaign to your referral sources', 0).title).not.toBe(email.title);
     const led = new Set(Array.from({ length: intel.pillars.length * 2 }, (_, turn) => focusFor('caremetric-intel', 'A tip for the week', turn).title));
     expect(led.has(email.title)).toBe(false);
-    expect(led.size).toBe(intel.pillars.length - 1);
+    expect(led.size).toBe(intel.pillars.length - 2);
     // Even with every other part used this week, the next brief does not fall back to email.
     const others = new Set(intel.pillars.filter(pillar => pillar !== email).map(pillar => pillar.title));
     expect(focusFor('caremetric-intel', 'A tip for the week', 3, others).title).not.toBe(email.title);
+  });
+
+  it('never leads a brief with expense tracking: Intel is a marketing workspace, not a compliance product (owner direction 2026-11-14)', () => {
+    const expenses = intel.pillars.find(pillar => /expenses, mileage/i.test(pillar.area));
+    expect(expenses).toBeTruthy();
+    expect(focusFor('caremetric-intel', 'Log the lunch against the Stark limit', 0).title).not.toBe(expenses.title);
+    const led = new Set(Array.from({ length: intel.pillars.length * 2 }, (_, turn) => focusFor('caremetric-intel', 'A tip for the week', turn).title));
+    expect(led.has(expenses.title)).toBe(false);
+    // Field activity, which logs expenses among much else, still leads.
+    expect(led.has(intel.pillars.find(pillar => /field activity/i.test(pillar.area)).title)).toBe(true);
+    const others = new Set(intel.pillars.filter(pillar => pillar !== expenses).map(pillar => pillar.title));
+    expect(focusFor('caremetric-intel', 'A tip for the week', 3, others).title).not.toBe(expenses.title);
   });
 
   it('tells every catalog prompt that one feature never stands for the product', () => {

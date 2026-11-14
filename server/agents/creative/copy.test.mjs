@@ -24,9 +24,19 @@ describe('creative copy', () => {
     }
   });
 
-  it('asks for copy that sells, and shows better lines that pass every copy rule a draft must', () => {
-    expect(craftExamples.map(item => item.product).sort()).toEqual(['carebase', 'caremetric-intel']);
+  it('asks for copy that stops the scroll and sells, and shows better lines that pass every copy rule a draft must', () => {
+    expect(new Set(craftExamples.map(item => item.product))).toEqual(new Set(['carebase', 'caremetric-intel']));
+    for (const example of craftExamples) {
+      // The examples follow the prompt's own hook rules: short headlines, and nothing opens on the brand, the product or a feature.
+      expect(example.headline.length).toBeLessThanOrEqual(40);
+      expect(example.headline.split(/\s+/).length).toBeLessThanOrEqual(7);
+      for (const line of [example.headline, example.primaryText]) expect(line).not.toMatch(/^(CareMetric|CareBase|Intel|Survey Day Mode)\b/);
+    }
     for (const system of [conceptSystem, variantsSystem]) {
+      expect(system).toContain('Stop the scroll first');
+      // Owner direction 2026-11-14: Intel is a marketing workspace, not a compliance product.
+      expect(system).toContain('Intel is a marketing workspace, not a compliance product');
+      expect(system).toContain('Never open the headline or the primary text with CareMetric');
       expect(system).toContain('Benefit first, feature second');
       expect(system).toContain('reads like a product manual, a feature list or a slogan');
       for (const example of craftExamples) {
@@ -36,7 +46,8 @@ describe('creative copy', () => {
     }
     // The bar the model is shown must clear the same checks as its drafts: no warning or block on the feed placements.
     for (const example of craftExamples) {
-      const copy = variant('problem', 'headline', { headline: example.headline, primaryText: example.primaryText, description: '', cta: 'Start free trial', altText: '' });
+      const copy = variant('problem', 'headline', { headline: example.headline, primaryText: example.primaryText, description: '', cta: 'Start free trial', altText: '',
+        overlay: { ...variant().overlay, kicker: example.product === 'carebase' ? 'For personal care home administrators' : 'For home health and hospice marketers' } });
       for (const platform of ['meta', 'linkedin']) {
         expect(verdictOf([...checkCopy({ product: example.product, platform, copy }), ...checkText(platform, copy)])).toMatchObject({ verdict: 'pass' });
       }

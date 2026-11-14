@@ -104,6 +104,10 @@ describe('the fact sheet', () => {
     for (const line of [...intel.capabilities, ...intel.whoUses]) expect(text).toContain(`- ${line}`);
     expect(intel.present).toMatch(/sending emails to referral sources is not the point/);
     expect(intel.capabilities.find(line => line.startsWith('Email campaigns'))).toMatch(/never the point/);
+    // Owner direction 2026-11-14: Intel is not a compliance product; expense tracking is a small part of it.
+    expect(intel.present).toMatch(/not a compliance product/);
+    expect(intel.present).toMatch(/never lead with compliance, the Stark limit or expense tracking/);
+    expect(intel.capabilities.find(line => line.startsWith('Expenses, mileage'))).toMatch(/A small part of the workspace, never the point of it/);
     // The new text states no number, so it lets no draft state one (validate.mjs allowedNumbers) and makes no claim.
     const added = [intel.bigPicture, ...intel.capabilities, ...intel.whoUses, intel.present].join('\n');
     expect(added).not.toMatch(/\d/);
