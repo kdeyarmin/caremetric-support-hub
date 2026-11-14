@@ -70,7 +70,9 @@ export function foundersAmounts(lines) {
 }
 
 export async function verifyFoundersCoupon(live) {
-  const coupon = await live.get(`/v1/coupons/${FOUNDERS_COUPON}`);
+  // Stripe omits the restricted products unless this field is expanded.
+  // Read the scope explicitly so a valid offer is not mistaken for an unscoped coupon.
+  const coupon = await live.get(`/v1/coupons/${FOUNDERS_COUPON}`, { expand: ['applies_to'] });
   const expected = [...new Set(Object.values(foundersCatalog).map(price => price.product))].sort();
   if (!coupon.valid || coupon.percent_off !== 50 || coupon.duration !== 'repeating' || coupon.duration_in_months !== 12
     || JSON.stringify([...(coupon.applies_to?.products ?? [])].sort()) !== JSON.stringify(expected)) {
