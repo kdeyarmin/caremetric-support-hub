@@ -9,6 +9,7 @@ import { FOR_PLAN_KEY, appCatalogSources, deterministicKey, parseAppCatalog, pla
 import { useAppCatalogFacts } from './agents/content/facts.mjs';
 import { facilityEntitlementRequest, facilityEntitlementSnapshot } from '../src/billing/facilityEntitlements.ts';
 import { selfServiceApps } from '../src/self-service/protocol.ts';
+import { trialCardOnFile } from './trial-card.mjs';
 
 /**
  * Platform billing for CareMetric applications that accept payments. Stripe is the source of
@@ -642,10 +643,14 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
   async function entitlements(authorization, input) {
     const parsed = entitlementRequestSchema.safeParse(input);
     if (!parsed.success) throw new HttpError(400, 'Send the application account id.');
-    return transaction(pool, async db => {
+    const answer = await transaction(pool, async db => {
       const app = await authenticateApp(db, authorization);
       return appResponse((await one(db, 'select private.scoped_app_billing_entitlements($1,$2) as e', [app.product_id, parsed.data.account])).e);
     });
+    if (answer.app === 'caremetric-intel' && answer.status === 'trialing' && answer.entitled) {
+      answer.payment_method_on_file = await trialCardOnFile(await stripe(), answer);
+    }
+    return answer;
   }
 
   // Customers manage billing inside their own application: it opens the Stripe customer portal for one of its own
@@ -660,6 +665,8 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         const { tenant, customer } = (await one(db, 'select private.app_billing_portal_customer($1,$2) as c', [app.product_id, parsed.data.account])).c;
         const session = await live.post('/v1/billing_portal/sessions', {
           customer, return_url: parsed.data.return_url, ...(portal() ? { configuration: portal() } : {}),
+          ...(parsed.data.payment_method_only ? { flow_data: { type: 'payment_method_update',
+            after_completion: { type: 'redirect', redirect: { return_url: parsed.data.return_url } } } } : {}),
         });
         await audit(db, null, 'billing.portal.app', tenant, app.product_id, { customer });
         return { url: session.url };
@@ -784,7 +791,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         const tenant = (await one(db, 'select private.billing_app_tenant($1,$2,$3) as t', [app.product_id, request.account, request.name])).t;
         const current = (await one(db, 'select private.billing_app_entitlements($1,$2) as e', [app.product_id, request.account])).e;
         const context = (await one(db, 'select private.billing_context($1) as c', [tenant])).c;
-        const price = current.status === 'none' ? await lookup(db, 'trial_price', `${app.slug}:${request.plan ?? ''}`) : null;
+        const price = current.status === 'none' ? await lookup(db, request.interval ? 'trial_price_interval' : 'trial_price', `${app.slug}:${request.plan ?? ''}${request.interval ? `:${request.interval}` : ''}`) : null;
         return { app, tenant, current, context, price };
       });
       if (prepared.current.status !== 'none') return appResponse(prepared.current);
@@ -813,9 +820,10 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         }
         const subscription = await live.post('/v1/subscriptions', {
           customer, items: [{ price: prepared.price.price, quantity: 1 }],
+          collection_method: 'charge_automatically',
           trial_period_days: prepared.price.trial_days ?? catalogTrialDays.get(prepared.app.slug) ?? trialDays[prepared.app.slug] ?? 14,
           trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
-          payment_settings: { save_default_payment_method: 'on_subscription' },
+          payment_settings: { save_default_payment_method: 'on_subscription', ...(request.require_payment_method ? { payment_method_types: ['card'] } : {}) },
           metadata: { app: prepared.app.slug, hub_tenant_id: prepared.tenant, hub_source: 'app_trial' }, expand: ['discounts'],
         }, { idempotencyKey: `hub-trial-subscription-${accountKey}` });
         await mirror(db, 'subscription', subscription, new Date(now()), { live });
