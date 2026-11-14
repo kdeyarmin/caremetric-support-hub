@@ -114,6 +114,34 @@ describe('the fact sheet', () => {
     expect(textProblems(added, { product: 'intel' }).filter(code => code !== 'personal_information')).toEqual([]);
   });
 
+  it('delivers all priority industries and their access conditions to agents and keeps the human sheet aligned', () => {
+    const text = factSheetText();
+    const { industryUseCases, industryGuidance } = products.intel;
+    expect(industryUseCases.map(item => item.industry)).toEqual([
+      'Home health agencies', 'Hospice agencies', 'Skilled nursing facilities and nursing homes',
+      'Assisted Living Facilities and memory care communities', 'Personal care and residential care homes',
+      'Hospitals and health systems', 'Durable medical equipment suppliers', 'Inpatient rehabilitation facilities',
+      'Long-term care hospitals', 'Physician practices and medical groups',
+    ]);
+    for (const item of industryUseCases) {
+      for (const value of Object.values(item)) {
+        expect(text, item.industry).toContain(value);
+        expect(doc, item.industry).toContain(value);
+      }
+    }
+    for (const line of industryGuidance) {
+      expect(text).toContain(line);
+      expect(doc).toContain(line);
+    }
+    expect(industryGuidance.join(' ')).toMatch(/not measured customer usage/);
+    expect(industryGuidance.join(' ')).toMatch(/care-specific CRM workflows require an Enterprise agreement/);
+    expect(industryGuidance.join(' ')).toMatch(/State-licensed residential coverage depends on which state files are loaded/);
+    // New targeting guidance must not expand allowed numeric claims or conflict with the shared draft checks.
+    const added = [...industryGuidance, ...industryUseCases.flatMap(item => Object.values(item))].join('\n');
+    expect(added).not.toMatch(/\d/);
+    expect(textProblems(added, { product: 'intel' }).filter(code => code !== 'personal_information')).toEqual([]);
+  });
+
   it('gives every agent Intel\'s lead order, market context and boundaries from the research, with no number and no company name', () => {
     const text = factSheetText();
     const intel = products.intel;

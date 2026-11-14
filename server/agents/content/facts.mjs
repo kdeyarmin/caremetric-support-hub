@@ -15,7 +15,7 @@
  * `whyNow`, `boundaries`), from the competitor research in docs/INTEL_MARKETING_PLAYBOOK.md. They state no number and name no company.
  */
 
-export const factsVersion = '2026-11-14';
+export const factsVersion = '2026-11-14.1';
 
 /**
  * Where public help articles live. An article's help-center address is `${helpCenterOrigin}/help/articles/<slug>`; that is its
@@ -178,6 +178,68 @@ export const products = deepFreeze({
       'Owners and administrators: where to focus a small marketing team and its budget, how the market and the competition are moving, and what the team\'s work led to in recorded referrals and admissions.',
       'Directors of business development and marketing managers: territory plans, goals, account ownership across branches, a review of each marketer\'s week, coaching, expense approval and the reports they bring to leadership.',
       'Marketers and community liaisons: a planned day and route, a focused visit list with a reason for each stop, notes, follow-ups and expenses logged from a phone, and the history of every account they own.',
+    ],
+    // Owner-requested industry priorities, checked against kdeyarmin/intel@393b9b3: featureCatalog.json, businessLine.ts,
+    // planCatalog.ts and marketingCopy.json. Keep the matching table and conditions in docs/GTM_FACTS.md together.
+    industryGuidance: [
+      'These industries are ordered by fit with the current product. The feature priorities describe likely uses, not measured customer usage or proven demand.',
+      'Home health and hospice have the strongest combination of daily CRM use and market intelligence. Standard plans support home health and hospice CRM workflows within each plan\'s allowances.',
+      'Other care settings can use market and territory research within the subscribed territory. Their care-specific CRM workflows require an Enterprise agreement. Home health and hospice workflow support does not imply equivalent CRM support for every industry.',
+      'Research coverage varies by dataset, geography and reporting period. State-licensed residential coverage depends on which state files are loaded. Feature access also depends on the plan, role and configured services.',
+      'Public provider and market data supports research and planning; it does not establish confirmed referral relationships. Referral and admission results come from what the organization records or imports.',
+      'For each audience, lead with its relevant features and main purpose below, within these conditions. This guidance does not change prospecting eligibility, campaign audiences or outreach permissions.',
+    ],
+    industryUseCases: [
+      {
+        industry: 'Home health agencies',
+        priorityFeatures: 'Referral-source rankings for physicians certifying home health; marketing book and call plans; referral and admission reports and drop-off alerts; competitor rankings.',
+        purpose: 'Focus marketers on promising sources and maintain productive referral relationships.',
+      },
+      {
+        industry: 'Hospice agencies',
+        priorityFeatures: 'Physician and facility research; relationship history and follow-up tasks; referral and admission tracking; county demand and hospice competitor analysis.',
+        purpose: 'Develop consistent professional relationships and research underserved territories.',
+      },
+      {
+        industry: 'Skilled nursing facilities and nursing homes',
+        priorityFeatures: 'Hospital-source research; facility profiles covering ratings, staffing, inspections and ownership; county utilization and supply analysis; account and outreach tracking under the appropriate Enterprise agreement.',
+        purpose: 'Prioritize hospital relationships and understand the facility\'s competitive position.',
+      },
+      {
+        industry: 'Assisted Living Facilities and memory care communities',
+        priorityFeatures: 'Site finder; county and ZIP-area demographics, especially older residents and people living alone; licensed-home and bed-supply research; nearby provider and facility directories.',
+        purpose: 'Evaluate local demand, competition, expansion locations and community partners.',
+      },
+      {
+        industry: 'Personal care and residential care homes',
+        priorityFeatures: 'Local demographic research; licensed-home directories and bed counts; hospital and physician searches; territory maps.',
+        purpose: 'Understand the local service area and identify professional relationships worth developing.',
+      },
+      {
+        industry: 'Hospitals and health systems',
+        priorityFeatures: 'Hospital service-area analysis; post-discharge spending by care setting; physician and practice directories; post-acute facility profiles and quality information.',
+        purpose: 'Plan physician outreach and research potential post-acute partners.',
+      },
+      {
+        industry: 'Durable medical equipment suppliers',
+        priorityFeatures: 'DME supplier and referring-provider data; clinician searches and lead lists; territory maps; DME report exports.',
+        purpose: 'Find potential ordering clinicians, assess competing suppliers and organize sales territories.',
+      },
+      {
+        industry: 'Inpatient rehabilitation facilities',
+        priorityFeatures: 'Hospital and physician research; rehabilitation facility profiles and available utilization data; county market analysis; target lists.',
+        purpose: 'Identify hospital relationships and evaluate regional rehabilitation markets.',
+      },
+      {
+        industry: 'Long-term care hospitals',
+        priorityFeatures: 'Hospital-market research; LTCH facility profiles and available utilization data; provider directories; territory analysis and reports.',
+        purpose: 'Research potential hospital partners and understand regional competition and activity.',
+      },
+      {
+        industry: 'Physician practices and medical groups',
+        priorityFeatures: 'Provider and specialty searches; territory maps; demographic and community-needs analysis; facility and partner research.',
+        purpose: 'Evaluate practice locations, surrounding specialties and potential professional partners.',
+      },
     ],
     present: 'Owner direction: show the bigger picture. Intel runs the whole marketing program, and sending emails to referral sources is not the point of it. Email campaigns are one feature, on the Growth and Pro plans. Never describe Intel as an email tool, never lead with emailing referral sources, and never make email the whole subject of a message, post, ad, article or answer: when email comes up, show it as one part of the workspace, beside the research, relationships, visits, spend and recorded results it serves. Intel is a marketing workspace, not a compliance product: its expense tools keep marketing spend in view of policy and the Stark limit, and they are a small part of the program. Never describe Intel as a compliance tool, and never lead with compliance, the Stark limit or expense tracking: when spend comes up, show it as part of the field work and relationships it serves. Across your work, cover the whole range above rather than one feature again and again, and pick the part that answers the reader. What a feature needs (a plan in brackets) still applies.',
     // From the competitor and market research the owner asked to add on 2026-11-14 (docs/INTEL_MARKETING_PLAYBOOK.md). Words only, for
@@ -473,6 +535,9 @@ export function factSheetText() {
     if (product.whyChoose?.length) lines.push('Top reasons a company would choose it:', ...product.whyChoose.map(line => `- ${line}`));
     if (product.capabilities?.length) lines.push('Everything it does, by area (from its own published features page; a plan in brackets is needed for that part):', ...product.capabilities.map(line => `- ${line}`));
     if (product.whoUses?.length) lines.push('Who uses it, and for what:', ...product.whoUses.map(line => `- ${line}`));
+    if (product.industryGuidance?.length) lines.push('Industry fit and access conditions:', ...product.industryGuidance.map(line => `- ${line}`));
+    if (product.industryUseCases?.length) lines.push('Priority industries and their most useful features, in fit order:',
+      ...product.industryUseCases.map(item => `- ${item.industry}: ${item.priorityFeatures} Main purpose: ${item.purpose}`));
     if (product.present) lines.push(`How to present it: ${product.present}`);
     if (product.leadWith?.length) lines.push('What to lead with, one at a time (rotate them across your work; email and expenses never lead):', ...product.leadWith.map(line => `- ${line}`));
     if (product.whyNow?.length) lines.push('Why now (market context; check any rule, model or date on cms.gov before you state it):', ...product.whyNow.map(line => `- ${line}`));
