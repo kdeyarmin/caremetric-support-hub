@@ -11,6 +11,8 @@
  * its coupon, duration and product scope were verified in the live CareMetric billing account.
  * The 2026-11-14 expansion adds CareBase's functional overview and each product's reasons to choose it, from the reviewed
  * feature catalogs and Advisors' service scope. It does not re-verify prices, certify outcomes or extend the approved claims.
+ * Also on 2026-11-14, at the owner's request, Intel gained what to lead with, the market context and what it is not (`leadWith`,
+ * `whyNow`, `boundaries`), from the competitor research in docs/INTEL_MARKETING_PLAYBOOK.md. They state no number and name no company.
  */
 
 export const factsVersion = '2026-11-14';
@@ -178,6 +180,29 @@ export const products = deepFreeze({
       'Marketers and community liaisons: a planned day and route, a focused visit list with a reason for each stop, notes, follow-ups and expenses logged from a phone, and the history of every account they own.',
     ],
     present: 'Owner direction: show the bigger picture. Intel runs the whole marketing program, and sending emails to referral sources is not the point of it. Email campaigns are one feature, on the Growth and Pro plans. Never describe Intel as an email tool, never lead with emailing referral sources, and never make email the whole subject of a message, post, ad, article or answer: when email comes up, show it as one part of the workspace, beside the research, relationships, visits, spend and recorded results it serves. Intel is a marketing workspace, not a compliance product: its expense tools keep marketing spend in view of policy and the Stark limit, and they are a small part of the program. Never describe Intel as a compliance tool, and never lead with compliance, the Stark limit or expense tracking: when spend comes up, show it as part of the field work and relationships it serves. Across your work, cover the whole range above rather than one feature again and again, and pick the part that answers the reader. What a feature needs (a plan in brackets) still applies.',
+    // From the competitor and market research the owner asked to add on 2026-11-14 (docs/INTEL_MARKETING_PLAYBOOK.md). Words only, for
+    // the same reason as above, and no company names: an EHR vendor is on validate.mjs's competitor list, so the sheet names none.
+    leadWith: [
+      'Finding referral sources: which physicians, hospitals and facilities in the territory matter, from public Medicare data, with the release behind every figure.',
+      'Knowing the competition: who serves each county, how they rank on Medicare share and star ratings, and an alert when a competitor\'s rating, owner or service area changes.',
+      'One workspace for the whole program: research, accounts, visits, follow-ups and recorded results in one shared record.',
+      'Walking into every visit prepared: a pre-visit card before each visit, and on Growth and Pro a written visit debrief, where the AI proposes the visit note and next step for the marketer to check.',
+      'Showing what the work led to: the referral funnel, response time and a quarterly outcomes packet for a hospital, with hospitals in CMS\'s TEAM model flagged.',
+    ],
+    whyNow: [
+      'CMS froze new home health and hospice Medicare enrollments nationwide in May, so most agencies grow by winning referral sources in the markets they already serve. Check cms.gov or the Federal Register for the freeze\'s current status before you mention it.',
+      'Hospitals in CMS\'s TEAM model answer for what happens to patients after discharge, so they look for post-acute partners who answer referrals quickly and can show public quality scores.',
+      'CMS now publishes a Service and Spending Variation Index for each hospice. It is an outlier index, not a quality rating, and is always described that way.',
+      'Field marketers now expect software to help them prepare for visits and write up notes. Say in plain words what Intel\'s AI does for the marketer, and that a person checks every draft.',
+      'Medicare fee-for-service figures leave out people in Medicare Advantage plans. Say which population a figure covers.',
+    ],
+    boundaries: [
+      'Intel imports referral and admission reports from the EHR as files: an upload, an SFTP folder or email. It is not a live connection to any EHR, and no message names an EHR vendor.',
+      'Intel works in a phone\'s web browser and can be added to the home screen, where it opens like an app. It is not an app in the app stores.',
+      'Public Medicare data shows which physicians certify home health patients and which agencies serve a county. It does not show who referred which patient to whom.',
+      'Intel has no approved customer results and states no counts about its data. Name the publishers behind its data (CMS, NPPES, the U.S. Census Bureau and state licensing files), and point to the free county report and the free trial instead.',
+      'Intel is evaluated with a free trial, its prices are on its website, and questions get written answers. Describe what Intel does; never describe or compare what other products do.',
+    ],
     whyChoose: [
       'Put the whole marketing program in one workspace. Research, account relationships, visits, follow-ups, expenses and recorded results share the same working context.',
       'Direct time and budget toward a reasoned target list. Territory demographics, provider profiles, public utilization signals and account coverage help teams decide where to focus.',
@@ -449,6 +474,9 @@ export function factSheetText() {
     if (product.capabilities?.length) lines.push('Everything it does, by area (from its own published features page; a plan in brackets is needed for that part):', ...product.capabilities.map(line => `- ${line}`));
     if (product.whoUses?.length) lines.push('Who uses it, and for what:', ...product.whoUses.map(line => `- ${line}`));
     if (product.present) lines.push(`How to present it: ${product.present}`);
+    if (product.leadWith?.length) lines.push('What to lead with, one at a time (rotate them across your work; email and expenses never lead):', ...product.leadWith.map(line => `- ${line}`));
+    if (product.whyNow?.length) lines.push('Why now (market context; check any rule, model or date on cms.gov before you state it):', ...product.whyNow.map(line => `- ${line}`));
+    if (product.boundaries?.length) lines.push('What it is not, and how to say so:', ...product.boundaries.map(line => `- ${line}`));
     if (product.trialDays) lines.push(`Free trial: ${product.trialDays} days.`);
     lines.push('Pricing:', ...product.pricing.map(line => `- ${line}`), 'Offers:', ...product.offers.map(line => `- ${line}`));
   }

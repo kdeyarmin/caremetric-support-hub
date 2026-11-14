@@ -88,7 +88,8 @@ weekly totals. Use engagement, clicks, and generated assets as diagnostic measur
 
 Review a sample of evidence, sales drafts, public content, and results before expanding autonomy. Existing approvals, suppression,
 contact eligibility, product claims, and spending limits remain in effect. Keep one shared
-[go-to-market fact sheet](GTM_FACTS.md) and [sales playbook](../server/growth/playbook.mjs) across the revenue team.
+[go-to-market fact sheet](GTM_FACTS.md) and [sales playbook](../server/growth/playbook.mjs) across the revenue team. The
+[Intel marketing playbook](INTEL_MARKETING_PLAYBOOK.md) (2026-11-14) adds the competitor research, what to lead with, and plays for each agent.
 
 **Current commercial scope remains CareMetric Intel only.** CareBase stays in the owner-selected pilot; Advisors marketing stays
 off. The team sells through self-serve pages, trials, guides, and written answers. It does not offer calls, meetings, or demos. See
