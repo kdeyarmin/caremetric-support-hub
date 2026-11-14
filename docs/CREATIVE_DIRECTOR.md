@@ -47,7 +47,7 @@ A brief names the product, a goal, an audience (organizations and roles, never a
 platforms, images and/or videos with their lengths, an optional angle and an optional offer code. The model is given the brief, the
 product's own pages (by id), the brand kit's voice, banned phrases and required disclaimers, the owner's screenshots (by id and label), the
 product's learnings and its recent headlines (not to repeat), and, for a revision, the asset it replaces and the owner's note. Its system
-prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.7` and `creative-variants.7`) carry the fact sheet and the sales
+prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.8` and `creative-variants.8`) carry the fact sheet and the sales
 playbook (the Sales Executive's fact source) and are cached. The answers are closed JSON schemas.
 
 **What each product does** (`server/agents/content/features.mjs`, data in `intel-features.json` and `carebase-features.json`). Each brief's
@@ -72,8 +72,12 @@ respect plan and module labels, and never to imply that public data confirms ref
 or that a readiness score predicts a survey. Planned briefs each lead with a different pillar (the one the plan post is about, else the
 next in turn), except Intel's email campaigns pillar, which never leads a brief: on 2026-11-12 the owner directed that sending emails to
 referral sources is not the point of Intel and never the whole focus (`focusFor` in `server/agents/content/features.mjs`; the fact sheet's
-"How to present it"). Copy is clear before clever: a headline that makes sense on its own and complete sentences that say who it is for and
-what the product does (the fact sheet's "How everything must read"), and the `plain_language` rule below refuses the worst of it. A catalog's numbers are allowed in copy about its own product only ("up to 2,000 accounts" for Intel, "16 hours of annual
+"How to present it"). Copy is clear and compelling at once (owner direction 2026-11-14: the plain copy was accurate but weak as marketing).
+The model writes like a direct-response copywriter: it starts from the reader's week, puts the benefit in the headline and uses the feature
+as the reason to believe, names real things (the surveyor, the binder, the referral source), and sounds like a confident peer, not a
+brochure. It is shown flat lines beside better ones on the same facts (`craftExamples`; `copy.test.mjs` holds every better line to the
+copy rules) and rereads its lines as a busy reader before it answers. It must still be clear: a headline that makes sense on its own
+and complete sentences (the fact sheet's "How everything must read"), and the `plain_language` rule below refuses the worst of it. A catalog's numbers are allowed in copy about its own product only ("up to 2,000 accounts" for Intel, "16 hours of annual
 training" for CareBase); a catalog vouches for no claim, and its percentages are not allowed. The Content Marketer, the Sales Executive and
 the Social Media Manager use the same catalogs (docs/AI_TEAM.md, "What each product does"). Refresh them with `npm run refresh:features`
 when a product's pages change (`npm run refresh:features -- --check` says whether they have). Other products' names are written

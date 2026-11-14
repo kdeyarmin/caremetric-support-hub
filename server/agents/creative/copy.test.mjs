@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { schemaDefects } from '../runtime/schema.mjs';
 import { products as facts } from '../content/facts.mjs';
-import { audienceFor, briefUserMessage, chooseVariants, conceptSchema, conceptSystem, landingFor, normalizeVariant, planPlacements, segmentFor, segments, variantsSchema, variantsSystem } from './copy.mjs';
+import { checkCopy, checkText, verdictOf } from './compliance.mjs';
+import { audienceFor, briefUserMessage, chooseVariants, conceptSchema, conceptSystem, craftExamples, landingFor, normalizeVariant, planPlacements, segmentFor, segments, variantsSchema, variantsSystem } from './copy.mjs';
 import { heygenClient, heygenScript } from './heygen.mjs';
 
 const variant = (hook, layout = 'headline', over = {}) => ({ hook, layout, headline: `A ${hook} headline`, primaryText: 'Primary text.', description: 'Desc', cta: 'Start free trial', altText: 'Alt',
@@ -20,6 +21,25 @@ describe('creative copy', () => {
       expect(system).toContain('The product\'s own catalog follows these instructions');
       expect(system).toContain('Quote none of its percentages');
       expect(system).toContain('a readiness score as a prediction of survey results');
+    }
+  });
+
+  it('asks for copy that sells, and shows better lines that pass every copy rule a draft must', () => {
+    expect(craftExamples.map(item => item.product).sort()).toEqual(['carebase', 'caremetric-intel']);
+    for (const system of [conceptSystem, variantsSystem]) {
+      expect(system).toContain('Benefit first, feature second');
+      expect(system).toContain('reads like a product manual, a feature list or a slogan');
+      for (const example of craftExamples) {
+        expect(system).toContain(`"${example.headline}"`);
+        expect(system).toContain(`"${example.primaryText}"`);
+      }
+    }
+    // The bar the model is shown must clear the same checks as its drafts: no warning or block on the feed placements.
+    for (const example of craftExamples) {
+      const copy = variant('problem', 'headline', { headline: example.headline, primaryText: example.primaryText, description: '', cta: 'Start free trial', altText: '' });
+      for (const platform of ['meta', 'linkedin']) {
+        expect(verdictOf([...checkCopy({ product: example.product, platform, copy }), ...checkText(platform, copy)])).toMatchObject({ verdict: 'pass' });
+      }
     }
   });
 
