@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FOUNDERS_COUPON, FOUNDERS_OFFER, applyFoundersToInvoice, foundersAmounts, foundersEligibility, foundersWindow } from './founders-sale.mjs';
+import { FOUNDERS_COUPON, FOUNDERS_OFFER, applyFoundersToInvoice, foundersAmounts, foundersEligibility, foundersWindow, verifyFoundersCoupon } from './founders-sale.mjs';
 import { foundersCatalog } from './founders-catalog.mjs';
 
 const price = 'price_1UUyUyB06O2UFlNzdfXwJUXW';
@@ -13,7 +13,16 @@ function fixture() {
   const invoice = { id: 'in_first', subscription: sub.id, status: 'draft', subtotal: 19900, total: 19900, billing_reason: 'subscription_cycle', discounts: [] };
   let history = [sub], paid = [], invoiceLines = [{ price: { id: price }, amount: 19900, period: { start, end: start + 31 * 86400 } }];
   const live = {
-    get: vi.fn(async path => structuredClone(path.includes('/coupons/') ? coupon : path.includes('/customers/') ? { id: 'cus_owner' } : path.includes('/invoices/') ? invoice : sub)),
+    get: vi.fn(async (path, params) => {
+      // Stripe omits this include-dependent field unless explicitly expanded.
+      // Always returning it hid failures when verifying the live coupon.
+      if (path.includes('/coupons/')) {
+        const result = structuredClone(coupon);
+        if (!params?.expand?.includes('applies_to')) delete result.applies_to;
+        return result;
+      }
+      return structuredClone(path.includes('/customers/') ? { id: 'cus_owner' } : path.includes('/invoices/') ? invoice : sub);
+    }),
     list: vi.fn(async path => path.endsWith('/lines') ? invoiceLines : path === '/v1/invoices' ? paid : history),
     post: vi.fn(async (path, body) => {
       const target = path.includes('/subscriptions/') ? sub : invoice;
@@ -26,6 +35,51 @@ function fixture() {
     history: rows => { history = rows; }, paid: rows => { paid = rows; }, invoiceLines: rows => { invoiceLines = rows; } };
 }
 describe('automatic Founders Sale', () => {
+  it('requests the restricted product scope when verifying a Stripe coupon', async () => {
+    const t = fixture();
+    await expect(verifyFoundersCoupon(t.live)).resolves.toBeUndefined();
+    expect(t.live.get).toHaveBeenCalledWith(`/v1/coupons/${FOUNDERS_COUPON}`, { expand: ['applies_to'] });
+  });
+  it.each([
+    ['invalid', { valid: false }],
+    ['different percentage', { percent_off: 25 }],
+    ['different duration', { duration: 'forever' }],
+    ['different month count', { duration_in_months: 6 }],
+    ['missing product scope', { applies_to: undefined }],
+    ['missing allowed product', { applies_to: { products: coupon.applies_to.products.slice(1) } }],
+    ['extra product', { applies_to: { products: [...coupon.applies_to.products, 'prod_not_eligible'] } }],
+  ])('refuses a coupon with %s before mutating a trial conversion', async (_reason, changed) => {
+    const t = fixture(), get = t.live.get.getMockImplementation();
+    t.live.get.mockImplementation((path, params) => path.includes('/coupons/') ? structuredClone({ ...coupon, ...changed }) : get(path, params));
+    await expect(applyFoundersToInvoice(t.live, t.invoice.id)).rejects.toMatchObject({ status: 503 });
+    expect(t.live.post).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['month', 'price_1URvziB06O2UFlNzzVpLGAIv', 89900, 44950],
+    ['year', 'price_1URvziB06O2UFlNzfHPKmesB', 898800, 449400],
+  ])('applies the verified offer to the first paid Intel Growth %s invoice after its full trial', async (cadence, selectedPrice, standard, discounted) => {
+    const t = fixture();
+    t.sub.metadata.app = 'caremetric-intel'; t.sub.metadata.hub_source = 'app_trial';
+    t.sub.items.data[0].price.id = selectedPrice;
+    t.sub.status = 'trialing'; t.invoice.subtotal = 0;
+    await applyFoundersToInvoice(t.live, t.invoice.id);
+    expect(t.live.post).not.toHaveBeenCalled();
+    t.sub.status = 'active'; t.invoice.subtotal = standard; t.invoice.total = standard;
+    const end = new Date(start * 1000); end.setUTCMonth(end.getUTCMonth() + (cadence === 'year' ? 12 : 1));
+    t.invoiceLines([{ pricing: { price_details: { price: selectedPrice } }, amount: standard,
+      period: { start, end: end.getTime() / 1000 } }]);
+    await applyFoundersToInvoice(t.live, t.invoice.id);
+    expect(t.live.post).toHaveBeenCalledWith('/v1/subscriptions/sub_trial', {
+      discounts: [{ coupon: FOUNDERS_COUPON }], proration_behavior: 'none',
+      metadata: { hub_founders_sale: FOUNDERS_OFFER, hub_founders_origin: 'paid', hub_founders_start: String(start) },
+    }, { idempotencyKey: 'hub-founders-subscription-sub_trial' });
+    expect(t.live.post).toHaveBeenCalledWith('/v1/invoices/in_first', { discounts: [{ coupon: FOUNDERS_COUPON }] },
+      { idempotencyKey: 'hub-founders-invoice-in_first' });
+    expect(foundersAmounts([{ price: selectedPrice, quantity: 1 }])).toMatchObject({
+      standard_recurring_subtotal: standard, recurring_subtotal: discounted,
+    });
+    expect(foundersWindow(t.sub)).toEqual({ start, end: Date.parse('2027-12-08T12:00:00Z') / 1000 });
+  });
   it('preserves the original paid year if an administrator later adds a trial, including leap-day anniversaries', () => {
     const paid = Date.parse('2028-02-29T12:00:00Z') / 1000;
     expect(foundersWindow({ start_date: paid, trial_end: paid + 30 * 86400, metadata: { hub_founders_sale: FOUNDERS_OFFER, hub_founders_origin: 'paid' } }))
