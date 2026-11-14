@@ -59,3 +59,21 @@ Before any collection, `collectionStartedAt` is null and both periods have `coun
 never contributes a count. The Hub validates nonnegative safe integers, coverage dates, response size and timeout. A malformed
 response, missing native release, rejected signature or network error leaves counts unavailable; raw responses and credentials are
 never logged. This endpoint returns no browser-session identifiers.
+
+## Google Analytics
+
+The scorecard's **Website visitors** row can also come from Google Analytics 4: active users on the product's public site for the same
+Monday-to-Sunday Eastern weeks. CareBase is read this way; Intel keeps its own session measurement above and falls back to Google
+Analytics only while that is off or not set up. Advisors is not a scorecard product.
+
+1. Each site loads the GA4 tag on its public marketing pages only when its measurement ID is set: `VITE_GA_MEASUREMENT_ID` on Intel
+   and CareBase (build-time), `GA_MEASUREMENT_ID` on Advisors.
+2. The Hub reads Google Analytics with the Search Console service account (`HUB_SEARCH_CONSOLE_CREDENTIALS`). In its Google Cloud
+   project, enable the **Google Analytics Data API**; in Google Analytics, **Admin → Account access management**, add the service
+   account's email as a **Viewer**.
+3. Enter each property's number (Admin → Property details) in **Settings → Website analytics → CareBase Google Analytics property ID**
+   (and **Intel Google Analytics property ID** if Intel's own measurement is not used).
+
+The Hub asks only for the active-user count of each week (no pages, referrers, users or events), signs in with the read-only
+Analytics scope, and logs only a fixed failure code. A week Google has no data for (before the tag was installed) shows as unavailable,
+never zero, and a property that cannot be read does not hide another product's figures (`server/agents/scorecard/google-analytics.mjs`).

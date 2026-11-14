@@ -208,6 +208,10 @@ export const settingsCatalog = Object.freeze([
     label: 'Search Console properties', help: 'One per line, exactly as Search Console names them: sc-domain:cmcarebase.com for a domain property, https://www.caremetricintel.com/ (with its final /) for an address prefix. At most 10.' },
   { key: 'analytics.intel_visitors', group: 'analytics', kind: 'flag', input: 'toggle', default: true, env: null,
     label: 'Read Intel website sessions', help: 'Adds anonymous public-site session counts to the Monday scorecard. Requires the native Intel measurement endpoint and the same HUB_VISITOR_METRICS_KEY on both services. Counts begin when collection starts; missing historical weeks stay unavailable.' },
+  { key: 'analytics.google_carebase_property', group: 'analytics', kind: 'text', input: 'text', default: null, env: null, valid: matches(/^(properties\/)?\d{4,20}$/),
+    label: 'CareBase Google Analytics property ID', help: 'The number in Google Analytics → Admin → Property details (for example 564318607). The Monday scorecard reads CareBase\'s weekly website visitors from it with the Search Console service account, which needs Viewer access in Google Analytics. Empty: CareBase visitors are not read.' },
+  { key: 'analytics.google_intel_property', group: 'analytics', kind: 'text', input: 'text', default: null, env: null, valid: matches(/^(properties\/)?\d{4,20}$/),
+    label: 'Intel Google Analytics property ID', help: 'Intel\'s property number in Google Analytics. Used for Intel\'s weekly website visitors only while Read Intel website sessions is off or not set up. Empty: Intel is read from its own measurement alone.' },
 ]);
 
 const byKey = new Map(settingsCatalog.map(entry => [entry.key, entry]));
