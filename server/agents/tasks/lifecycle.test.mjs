@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { lifecycleInput, lifecyclePreview, parseLifecycleInput, wordingHash } from '../accounts/lifecycle.mjs';
+import { lifecycleInput, lifecyclePreview, lifecycleSaveFeature, parseLifecycleInput, wordingHash } from '../accounts/lifecycle.mjs';
 import { lifecycleFeature, lifecycleHandlers, pageLimit, pageSize } from './lifecycle.mjs';
 
 const now = new Date('2026-11-03T13:20:00Z');
@@ -30,6 +30,24 @@ const fixture = ({ accounts = [fact('alpha')], lifecycle = ready, features = new
   return { store, logs, handlers, run: (over = {}, context = {}) => handlers['accounts.lifecycle'](task(over), { now: () => now, ...context }) };
 };
 const summary = store => store.finishRun.mock.calls.at(-1)[3];
+
+describe('the cancellation and win-back emails', () => {
+  const accounts = [fact('leaving', { cancelling: true }), fact('ended', { status: 'canceled', trialStart: ago(35), trialEnd: ago(5) }), fact('alpha')];
+  it('are proposed only with their database feature and the owner\'s switch on', async () => {
+    for (const [features, saveEmails] of [[new Set([lifecycleFeature]), true], [new Set([lifecycleFeature, lifecycleSaveFeature]), false],
+      [new Set([lifecycleFeature, lifecycleSaveFeature]), () => false]]) {
+      const { run, store } = fixture({ accounts, features, lifecycle: { ...ready, saveEmails } });
+      const outcome = await run();
+      expect(store.proposeAction.mock.calls.map(call => call[0].targetId)).toEqual(['alpha']);
+      expect(Object.keys(outcome.result.byTemplate)).toEqual(['welcome', 'setup_nudge', 'trial_checkin', 'testimonial_ask']);
+    }
+    const { run, store } = fixture({ accounts, features: new Set([lifecycleFeature, lifecycleSaveFeature]), lifecycle: { ...ready, saveEmails: () => true } });
+    const outcome = await run();
+    expect(store.proposeAction.mock.calls.map(call => `${call[0].targetId}:${call[0].input.template}`).sort()).toEqual(['alpha:welcome', 'ended:trial_ended', 'leaving:cancel_save']);
+    expect(outcome.result.byTemplate).toEqual({ welcome: 1, setup_nudge: 0, trial_checkin: 0, testimonial_ask: 0, cancel_save: 1, trial_ended: 1 });
+    expect(summary(store)).toContain('1 cancellation check-in, 1 ended-trial check-in');
+  });
+});
 
 describe('the customer email run', () => {
   it('is registered only when the database declares the feature', () => {

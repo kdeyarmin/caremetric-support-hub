@@ -133,7 +133,7 @@ const team=agentTeam({pool,growth,growthMail,postalAddress,sms:textSender,email:
   creative:()=>creativeConfig(process.env,settings.get),searchConsoleSites:setting('seo.search_console_sites'),
   searchConsoleCredentials:process.env.HUB_SEARCH_CONSOLE_CREDENTIALS,
   visitorMetrics:nativeVisitorReader({features,enabled:setting('analytics.intel_visitors'),key:process.env.HUB_VISITOR_METRICS_KEY}),
-  lifecycle:{mail:customerMail,get postalAddress(){return postalAddress().trim();}},
+  lifecycle:{mail:customerMail,get postalAddress(){return postalAddress().trim();},saveEmails:setting('growth.save_emails')},
   // Offers from the owner's menu: platform billing (created below) makes them, so the call is deferred until an offer is approved.
   offerBilling:{agentOffer:input=>billing.agentOffer(input)}});
 const announcements=bulkEmail({pool,delegations:capabilities,publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin,postalAddress,

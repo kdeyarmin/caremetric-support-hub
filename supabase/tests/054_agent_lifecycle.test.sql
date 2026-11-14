@@ -214,7 +214,7 @@ select ok((select j::text !~ '(canary\.|Canary|example\.test|requester@|A subjec
   'No address, contact name, case subject or Stripe identifier is anywhere in the facts');
 select is((select jsonb_build_object('hasEmail', a -> 'hasEmail', 'suppressed', a -> 'suppressed', 'emails', a -> 'emails', 'status', a -> 'status', 'productName', a -> 'productName')
     from lifecycle_rows where tenant = 'lifecycle-alpha'),
-  '{"hasEmail": true, "suppressed": false, "status": "trialing", "productName": "CareMetric CareBase", "emails": {"welcome": "rejected", "setup_nudge": null, "trial_checkin": null, "testimonial_ask": null}}'::jsonb,
+  '{"hasEmail": true, "suppressed": false, "status": "trialing", "productName": "CareMetric CareBase", "emails": {"welcome": "rejected", "setup_nudge": null, "trial_checkin": null, "testimonial_ask": null, "cancel_save": null, "trial_ended": null}}'::jsonb,
   'A trial says it has an address, and what became of each template''s email (read by its period key)');
 select is((select a -> 'hasEmail' from lifecycle_rows where tenant = 'lifecycle-beta'), 'false'::jsonb, 'A blank billing address is no address');
 select is((select a -> 'hasUsage' from lifecycle_rows where tenant = 'lifecycle-beta'), 'false'::jsonb,

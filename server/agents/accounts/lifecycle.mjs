@@ -1,5 +1,5 @@
 /**
- * The Account Manager's customer emails: four short, fixed emails to the billing contact of a trial or a new paying account, written
+ * The Account Manager's customer emails: short, fixed emails to the billing contact of a trial or a new paying account, written
  * once, here, and reviewed like any other copy. Pure: facts go in, words come out, and the same facts always give the same words.
  *
  * - welcome          days 0 to 2 of a trial: what to do first, with a link to the product's getting-started help.
@@ -11,6 +11,13 @@
  * - testimonial_ask  45 to 60 days after the account's first paid invoice for the product (across every subscription it has had for
  *                    it, so a replaced subscription changes nothing), with no open high or urgent case: would they share a
  *                    sentence, with consent wording, and a reply is how they say yes.
+ * - cancel_save      a trial or a paid plan the customer has set to cancel: what did not work, told by reply.
+ * - trial_ended      a trial that ended in the last 14 days with no payment ever made for the product: thanks for trying, and what got
+ *                    in the way, told by reply.
+ *
+ * The last two (`saveTemplates`) are proposed only while the database declares `lifecycleSaveFeature` and the owner has turned on
+ * Settings → Customer growth → "Win-back and cancellation emails"; neither is ever approved on its own. Payment failures stay with
+ * Stripe's own emails.
  *
  * Each is proposed at most once per account and product (its period key, account:<template>:<tenant>:<product>). The emails say
  * nothing about AI, quote no price (the trial check-in states the Founders Sale's percentage and term only), promise no time or outcome, never mention a phone call or voicemail, and use the company's
@@ -28,11 +35,17 @@ import { createHash } from 'node:crypto';
 import { renderEmail, themeFor } from '../../email-layout.mjs';
 
 export const lifecycleFeature = 'platform.agents.lifecycle.v1';
-export const lifecycleTemplates = Object.freeze(['welcome', 'setup_nudge', 'trial_checkin', 'testimonial_ask']);
+export const lifecycleTemplates = Object.freeze(['welcome', 'setup_nudge', 'trial_checkin', 'testimonial_ask', 'cancel_save', 'trial_ended']);
+/** The cancellation and win-back emails (20261113300000_lifecycle_save.sql), proposed only with their feature and the owner's switch. */
+export const saveTemplates = Object.freeze(['cancel_save', 'trial_ended']);
+export const lifecycleSaveFeature = 'platform.agents.lifecycle-save.v1';
+// A subscription that ended: Stripe cancels, expires or pauses a trial that ends unpaid, depending on the account's settings.
+const endedStatuses = Object.freeze(['canceled', 'incomplete_expired', 'paused']);
 /** At most this many emails are proposed in one run. The database sends at most `dailySendLimit` a day across every account. */
 export const proposalLimit = 20;
 export const dailySendLimit = 20;
-export const templateWords = Object.freeze({ welcome: 'welcome', setup_nudge: 'setup help', trial_checkin: 'trial check-in', testimonial_ask: 'testimonial request' });
+export const templateWords = Object.freeze({ welcome: 'welcome', setup_nudge: 'setup help', trial_checkin: 'trial check-in', testimonial_ask: 'testimonial request',
+  cancel_save: 'cancellation check-in', trial_ended: 'ended-trial check-in' });
 export const unsubscribeLabel = 'Unsubscribe from CareMetric check-in emails';
 /** Customer emails sign off as the product's own team, with its website. */
 export const signatureFor = (productName, site) => Object.freeze([`The ${productName} team`, ...(site ? [site] : [])]);
@@ -79,8 +92,15 @@ export const periodKey = ({ template, tenant, product }) => `account:${template}
  * (private.agent_lifecycle_snapshot). Templates already proposed are not removed here; see `planEmails`.
  */
 export function dueTemplates(fact, now = new Date()) {
-  if (!fact || !Object.hasOwn(lifecycleProducts, fact.product) || fact.cancelling === true) return [];
+  if (!fact || !Object.hasOwn(lifecycleProducts, fact.product)) return [];
+  // A live trial or plan set to cancel gets the cancellation check-in only, never a welcome or a testimonial request. A subscription
+  // that has ended keeps Stripe's cancellation fields, so the flag is read only while it is still trialing or active.
+  if (fact.cancelling === true && ['trialing', 'active'].includes(fact.status)) return ['cancel_save'];
   const moment = now.getTime();
+  if (endedStatuses.includes(fact.status)) {
+    const end = at(fact.trialEnd);
+    return end !== null && at(fact.firstPaidAt) === null && end <= moment && moment - end < 14 * day ? ['trial_ended'] : [];
+  }
   if (fact.status === 'trialing') {
     const start = at(fact.trialStart) ?? at(fact.created);
     const end = at(fact.trialEnd);
@@ -107,7 +127,11 @@ export function dueTemplates(fact, now = new Date()) {
  * plan that is being cancelled fits nothing.
  */
 export function stillApplies(template, fact) {
-  if (!fact || fact.cancelling === true) return false;
+  if (!fact) return false;
+  if (template === 'cancel_save') return fact.cancelling === true && ['trialing', 'active'].includes(fact.status);
+  // A new subscription (a second trial, or a paid plan) is the newest one the facts show, and ends this email's moment.
+  if (template === 'trial_ended') return endedStatuses.includes(fact.status) && at(fact.firstPaidAt) === null;
+  if (fact.cancelling === true) return false;
   if (template === 'testimonial_ask') return fact.status === 'active' && Number(fact.openUrgentCases ?? 0) === 0;
   if (!['welcome', 'setup_nudge', 'trial_checkin'].includes(template)) return false;
   return fact.status === 'trialing' && (template !== 'setup_nudge' || fact.hasUsage !== true);
@@ -118,11 +142,11 @@ export function stillApplies(template, fact) {
  * email per account a run (a second one waits for the next run), never to an account without a usable address or one that
  * unsubscribed. Returns the candidates in order (most pressing template first, then the database's order: newest first) and counts.
  */
-export function planEmails(accounts, now = new Date()) {
+export function planEmails(accounts, now = new Date(), { save = false } = {}) {
   const entries = [];
   const skipped = { noAddress: 0, suppressed: 0, sameAccount: 0 };
   for (const fact of accounts ?? []) {
-    const due = dueTemplates(fact, now).filter(template => (fact.emails ?? {})[template] == null);
+    const due = dueTemplates(fact, now).filter(template => (save || !saveTemplates.includes(template)) && (fact.emails ?? {})[template] == null);
     if (due.length === 0) continue;
     if (fact.hasEmail !== true) { skipped.noAddress += 1; continue; }
     if (fact.suppressed === true) { skipped.suppressed += 1; continue; }
@@ -190,6 +214,34 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
         { type: 'paragraph', text: 'Reply to this email and let us know. We will answer here.' },
         // Owner decision 2026-11-08: the trial check-in names the Founders Sale, in its exact terms (docs/GTM_FACTS.md).
         { type: 'callout', tone: 'success', title: 'The Founders Sale.', text: foundersWords(productName) },
+      ],
+      signature,
+    };
+  }
+  if (template === 'cancel_save') {
+    return {
+      subject: `Before your ${productName} plan ends`,
+      preheader: 'What did not work, in a line or two, helps us fix it.',
+      heading: 'Before your plan ends',
+      blocks: [
+        { type: 'paragraph', text: `We saw that ${tenantName} has chosen to end its ${productName} plan. Thank you for using ${productName}.` },
+        { type: 'paragraph', text: 'Before it ends, would you tell us what did not work? A step that was unclear, something you needed and did not find, or a problem we could fix. Reply to this email: a line or two is enough, and we read every reply.' },
+        help,
+        { type: 'paragraph', text: 'If you would rather not, there is no need to reply.' },
+      ],
+      signature,
+    };
+  }
+  if (template === 'trial_ended') {
+    return {
+      subject: `Thank you for trying ${productName}`,
+      preheader: 'What got in the way, in a line or two, helps us make it better.',
+      heading: `Thank you for trying ${productName}`,
+      blocks: [
+        { type: 'paragraph', text: `Your ${productName} trial for ${tenantName} has ended. Thank you for taking the time to try it.` },
+        { type: 'paragraph', text: 'Would you tell us what got in the way? A step that was unclear, something you expected to find and did not, or simply the timing. Reply to this email: a line or two is enough, and we read every reply.' },
+        { type: 'paragraph', text: 'If you would like to pick up where you left off, reply and we will help you get going again.' },
+        help,
       ],
       signature,
     };
