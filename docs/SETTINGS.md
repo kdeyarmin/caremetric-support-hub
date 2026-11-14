@@ -117,13 +117,17 @@ Secrets, which are never shown on screen or stored in the database:
 - `HUB_LINKEDIN_ACCESS_TOKEN`, `HUB_LINKEDIN_REFRESH_TOKEN`, `HUB_LINKEDIN_CLIENT_SECRET`,
   `HUB_LINKEDIN_ADS_ACCESS_TOKEN`, `HUB_LINKEDIN_ADS_REFRESH_TOKEN`, `HUB_LINKEDIN_ADS_CLIENT_SECRET`
   (legacy fallbacks until the LinkedIn card is first saved)
-- `HUB_SEARCH_CONSOLE_CREDENTIALS` (also reads Google Analytics for the Monday scorecard's website visitors)
+- `HUB_SEARCH_CONSOLE_CREDENTIALS` (also reads Google Analytics for the Monday scorecard's website visitors, and signs in to
+  Google Ads to create approved search campaigns once Settings → Paid ads → Google Ads customer id is set and the service
+  account is a Standard user on that account or its manager)
 - `HUB_VISITOR_METRICS_KEY` (dedicated shared key for Intel’s aggregate website session reports)
 - `HUB_HEYGEN_API_KEY` (only for HeyGen presenter videos, Settings → Creative)
 - `HUB_INTEL_FEED_SECRET` (Intel's marketing feed: the same value as Intel's `HUB_MARKETING_FEED_SECRET`)
 - `HUB_GROWTH_IMPORT_SECRET` (signs prospect lists sent to `/api/growth/import`)
-- `HUB_GOOGLE_ADS_DEVELOPER_TOKEN`, `HUB_GOOGLE_ADS_CLIENT_SECRET`, `HUB_GOOGLE_ADS_REFRESH_TOKEN` (only for creating Google
-  search campaigns through the API; without them approved campaigns are emailed as an import file)
+- `HUB_GOOGLE_ADS_CLIENT_SECRET`, `HUB_GOOGLE_ADS_REFRESH_TOKEN` (optional: only to sign in to Google Ads as a person instead
+  of the service account). `HUB_GOOGLE_ADS_DEVELOPER_TOKEN` is optional too; Google stopped requiring developer tokens on
+  September 9, 2026, and the Hub sends one only when it is set. Without any Google Ads sign-in, approved campaigns are
+  emailed as an import file.
 - Your personal LinkedIn token is not a Railway variable: save it on the LinkedIn connection card (Settings → Social media).
 - `CAREBASE_DISTRIBUTION_OBSERVER_TOKEN`
 

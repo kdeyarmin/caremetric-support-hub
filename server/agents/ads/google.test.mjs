@@ -1,5 +1,6 @@
+import { generateKeyPairSync, verify } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
-import { checkGooglePlan, editorCsv, googleAdsClient } from './google.mjs';
+import { adwordsScope, checkGooglePlan, editorCsv, googleAdsClient } from './google.mjs';
 import { campaignDailyBudget } from './index.mjs';
 
 const plan = (over = {}) => ({
@@ -58,6 +59,33 @@ describe('the Google search plan', () => {
     expect(operations.filter(op => op.adGroupCriterionOperation)).toHaveLength(checked.keywords.length);
     expect(operations.at(-1).adGroupAdOperation.create.ad.responsiveSearchAd.headlines).toHaveLength(checked.headlines.length);
     expect(googleAdsClient({ customerId: '1234567890' }).configured).toBe(false);
+  });
+
+  it('signs in as the Hub\'s service account when no refresh token is set, and sends no retired developer token', async () => {
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const serviceAccount = JSON.stringify({ type: 'service_account', private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }),
+      client_email: 'hub@caremetric-hub.iam.gserviceaccount.com' });
+    const fetchImpl = vi.fn(async url => (String(url).includes('oauth2') ? new Response(JSON.stringify({ access_token: 'ya29.service' }))
+      : new Response(JSON.stringify({ mutateOperationResponses: [{}, { campaignResult: { resourceName: 'customers/7579556529/campaigns/9' } }] }))));
+    const client = googleAdsClient({ serviceAccount, customerId: '7579556529', loginCustomerId: '1840441372', fetchImpl });
+    expect(client).toMatchObject({ configured: true, auth: 'service_account' });
+    const checked = checkGooglePlan(plan(), { factsKey: 'intel' }).plan;
+    expect(await client.createSearchCampaign({ name: 'Intel search', dailyBudgetCents: 1500, finalUrl: 'https://www.caremetricintel.com/county-report', plan: checked }))
+      .toEqual({ campaign: 'customers/7579556529/campaigns/9' });
+    const [tokenUrl, tokenInit] = fetchImpl.mock.calls[0];
+    expect(tokenUrl).toBe('https://oauth2.googleapis.com/token');
+    const form = new URLSearchParams(tokenInit.body);
+    expect(form.get('grant_type')).toBe('urn:ietf:params:oauth:grant-type:jwt-bearer');
+    const [header, claims, signature] = form.get('assertion').split('.');
+    expect(JSON.parse(Buffer.from(claims, 'base64url'))).toMatchObject({ iss: 'hub@caremetric-hub.iam.gserviceaccount.com', scope: adwordsScope });
+    expect(verify('RSA-SHA256', Buffer.from(`${header}.${claims}`), publicKey, Buffer.from(signature, 'base64url'))).toBe(true);
+    const [, init] = fetchImpl.mock.calls[1];
+    expect(init.headers).toMatchObject({ Authorization: 'Bearer ya29.service', 'login-customer-id': '1840441372' });
+    expect(init.headers).not.toHaveProperty('developer-token');
+    // An OAuth client with a refresh token still wins; a key that does not parse configures nothing.
+    expect(googleAdsClient({ serviceAccount, clientId: 'client.apps', clientSecret: 'secret-0123456789', refreshToken: '1//refresh-token-0123456789', customerId: '7579556529' }).auth).toBe('oauth');
+    expect(googleAdsClient({ serviceAccount: '{"type":"service_account"}', customerId: '7579556529' }).configured).toBe(false);
+    expect(googleAdsClient({ serviceAccount }).configured).toBe(false);
   });
 });
 
