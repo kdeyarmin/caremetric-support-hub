@@ -39,7 +39,8 @@ line per county figure; public website sessions record the outreach email tag th
 
 1. **Railway secrets** on the Hub: `HUB_INTEL_FEED_SECRET` (the same value as Intel's `HUB_MARKETING_FEED_SECRET`, set on Intel too);
    `HUB_GROWTH_IMPORT_SECRET` if lists will be sent to the import endpoint; for Google search
-   through the API, `HUB_GOOGLE_ADS_DEVELOPER_TOKEN`, `HUB_GOOGLE_ADS_CLIENT_SECRET` and `HUB_GOOGLE_ADS_REFRESH_TOKEN`.
+   through the API, nothing new: the Hub signs in as its Google service account (`HUB_SEARCH_CONSOLE_CREDENTIALS`) once it
+   is a Standard user in Google Ads and Settings → Paid ads → Google Ads customer id is set.
 2. **Email sender**: set and warm the growth sender (Settings → Email → Growth email sender). Raise "Most cold emails a day" in steps,
    10, then 25, then 50, while bounces stay under 2% and there are no complaints.
 3. **Settings → Customer growth**, in this order: choose the roster states and turn on the roster; then website lead follow-up; then

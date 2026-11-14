@@ -180,7 +180,7 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
       [has(features, 'platform.agents.ads.v1'), schemaStep('paid ads')],
       [(adsSettings.monthlyBudgetCents ?? 0) > 0, 'Set Settings → Paid ads → Most to spend on new campaigns a month.'],
       [li.ads === true || meta.ads === true, 'Connect a LinkedIn or Meta ad account (Settings → Social media).'],
-      [adsWork?.google?.().configured === true, 'For Google: set Settings → Paid ads → Google Ads customer id and OAuth client id, and HUB_GOOGLE_ADS_DEVELOPER_TOKEN, HUB_GOOGLE_ADS_CLIENT_SECRET and HUB_GOOGLE_ADS_REFRESH_TOKEN on the Hub service. Until then approved search campaigns are emailed as an import file.'],
+      [adsWork?.google?.().configured === true, 'For Google: set Settings → Paid ads → Google Ads customer id, and add the Hub\'s Google service account (the Search Console key\'s email) as a Standard user in Google Ads, with the Google Ads API enabled in its Google Cloud project. Until then approved search campaigns are emailed as an import file.'],
     ]);
   add('ad_conversions', 'Leads reported to the ad platforms', ['social_manager'],
     'Tells Meta and LinkedIn, by a hashed work email and the ad click ID, when a county report or trial request came from their ad, so their reports and bidding see it.', [

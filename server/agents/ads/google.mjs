@@ -1,11 +1,12 @@
 /**
  * Google search ads (owner decision 2026-11-13): the Social Media Manager writes one search campaign a month per marketed product (keywords,
  * negative keywords and a responsive search ad, from the fact sheet), proposed for the owner's approval. On approval it is created PAUSED
- * through the Google Ads API when the API is set up (Settings → Paid ads, with the developer token, client secret and refresh token in
- * Railway); until then the same plan is emailed as an import file for Google Ads Editor. Competitors' names may be keywords only with
+ * through the Google Ads API when the API is set up (Settings → Paid ads → Google Ads customer id, and the Hub's Google service account
+ * added as a Standard user in Google Ads); until then the same plan is emailed as an import file for Google Ads Editor. Competitors' names may be keywords only with
  * Settings → Paid ads → "Bid on competitor names" on, and never appear in ad text.
  */
 import { namesCompetitor, textProblems } from '../content/validate.mjs';
+import { readCredentials, signAssertion, tokenUrl } from '../seo/search-console.mjs';
 import { factSheetText } from '../content/facts.mjs';
 import { playbookText } from '../../growth/playbook.mjs';
 
@@ -79,29 +80,41 @@ export function editorCsv(plan, { name, finalUrl, dailyBudgetCents }) {
 
 const failure = (code, transient = false) => Object.assign(new Error('Google Ads refused the request.'), { code, transient });
 
+export const adwordsScope = 'https://www.googleapis.com/auth/adwords';
+
 /**
- * The Google Ads API: an access token renewed from the refresh token, and one atomic mutate that creates a PAUSED search campaign (its
- * budget, United States targeting, negative keywords, one ad group with its keywords and the responsive search ad). Nothing runs until the
- * owner enables it in Google Ads.
+ * The Google Ads API: an access token, and one atomic mutate that creates a PAUSED search campaign (its budget, United States targeting,
+ * negative keywords, one ad group with its keywords and the responsive search ad). Nothing runs until the owner enables it in Google Ads.
+ *
+ * The token comes from an OAuth client's refresh token when all three are set, else from the Hub's Google service account
+ * (`serviceAccount`, the HUB_SEARCH_CONSOLE_CREDENTIALS key) added as a Standard user in Google Ads, which needs no refresh token. API
+ * access follows the Google Cloud project whose credentials make the call; developer tokens were retired on September 9, 2026, so one is
+ * sent only when it is still set.
  */
-export function googleAdsClient({ developerToken = '', clientId = '', clientSecret = '', refreshToken = '', customerId = '', loginCustomerId = '', version = 'v26', fetchImpl = fetch, timeoutMs = 20_000 } = {}) {
+export function googleAdsClient({ developerToken = '', clientId = '', clientSecret = '', refreshToken = '', serviceAccount = '', customerId = '', loginCustomerId = '', version = 'v26', fetchImpl = fetch, timeoutMs = 20_000, clock = () => Date.now() } = {}) {
   const customer = /^[0-9]{10}$/.test(customerId) ? customerId : null;
   const login = /^[0-9]{10}$/.test(loginCustomerId) ? loginCustomerId : null;
   const apiVersion = /^v[0-9]{2}$/.test(version) ? version : 'v26';
-  const configured = Boolean(customer && developerToken.length >= 10 && clientId && clientSecret.length >= 10 && refreshToken.length >= 20);
+  const oauth = Boolean(clientId && clientSecret.length >= 10 && refreshToken.length >= 20);
+  const account = oauth ? { state: 'unused' } : readCredentials(serviceAccount);
+  const auth = oauth ? 'oauth' : account.state === 'ready' ? 'service_account' : null;
+  const configured = Boolean(customer && auth);
+  const devToken = developerToken.length >= 10 ? developerToken : '';
   async function accessToken(signal) {
+    const body = auth === 'oauth'
+      ? new URLSearchParams({ grant_type: 'refresh_token', client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken }).toString()
+      : new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: signAssertion(account, { issuedAt: Math.floor(clock() / 1000), scope: adwordsScope }) }).toString();
     let response;
     try {
-      response = await fetchImpl('https://oauth2.googleapis.com/token', { method: 'POST', redirect: 'error', signal: AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(timeoutMs)]),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ grant_type: 'refresh_token', client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken }).toString() });
+      response = await fetchImpl(tokenUrl, { method: 'POST', redirect: 'error', signal: AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(timeoutMs)]),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
     } catch (error) { if (signal?.aborted) throw error; throw failure('google_unavailable', true); }
     const data = await response.json().catch(() => ({}));
     if (!response.ok || typeof data?.access_token !== 'string') throw failure(response.status === 400 || response.status === 401 ? 'google_token_invalid' : 'google_unavailable', response.status >= 500);
     return data.access_token;
   }
   return {
-    configured,
+    configured, auth,
     /** Creates the campaign PAUSED in one mutate; returns its resource name. */
     async createSearchCampaign({ name, dailyBudgetCents, finalUrl, plan }, { signal } = {}) {
       if (!configured) throw failure('google_not_configured');
@@ -124,7 +137,7 @@ export function googleAdsClient({ developerToken = '', clientId = '', clientSecr
       try {
         response = await fetchImpl(`https://googleads.googleapis.com/${apiVersion}/${base}/googleAds:mutate`, { method: 'POST', redirect: 'error',
           signal: AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(timeoutMs)]),
-          headers: { Authorization: `Bearer ${token}`, 'developer-token': developerToken, 'Content-Type': 'application/json', ...(login ? { 'login-customer-id': login } : {}) },
+          headers: { Authorization: `Bearer ${token}`, ...(devToken ? { 'developer-token': devToken } : {}), 'Content-Type': 'application/json', ...(login ? { 'login-customer-id': login } : {}) },
           body: JSON.stringify({ mutateOperations }) });
       } catch (error) { if (signal?.aborted) throw error; throw failure('google_unconfirmed'); }
       const data = await response.json().catch(() => ({}));

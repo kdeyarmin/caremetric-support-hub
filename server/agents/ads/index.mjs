@@ -39,7 +39,7 @@ export function adsConfig(env = {}, setting = null) {
     competitorKeywords: value('ads.google_competitor_keywords') === true,
     google: { customerId: text('ads.google_customer_id'), loginCustomerId: text('ads.google_login_customer_id'), clientId: text('ads.google_client_id'),
       version: text('ads.google_api_version') || 'v26', developerToken: env.HUB_GOOGLE_ADS_DEVELOPER_TOKEN ?? '', clientSecret: env.HUB_GOOGLE_ADS_CLIENT_SECRET ?? '',
-      refreshToken: env.HUB_GOOGLE_ADS_REFRESH_TOKEN ?? '' },
+      refreshToken: env.HUB_GOOGLE_ADS_REFRESH_TOKEN ?? '', serviceAccount: env.HUB_SEARCH_CONSOLE_CREDENTIALS ?? '' },
   };
 }
 
