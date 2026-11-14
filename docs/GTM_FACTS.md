@@ -16,6 +16,7 @@ tool), gave the founder's story for warmer outreach, and asked that everything t
 now included in this document. The inventory uses the product-page snapshots reviewed on 2026-11-09. A live refresh was attempted
 on 2026-11-14 but blocked by the network proxy; this expansion is not a new verification of production availability or pricing.
 New benefit wording describes how the documented tools can help, not measured customer results or a new owner approval of claims.
+Buying guidance covers plan selection, rollout, trial evaluation, ongoing costs, exports and support, using the same reviewed sources.
 
 ## Which offering fits the company
 
@@ -31,6 +32,9 @@ This sheet covers these commercial offerings; it is not a feature sheet for the 
 
 **Read by need:** [CareBase and Train](#caremetric-carebase) · [Intel](#caremetric-intel) ·
 [Advisors](#caremetric-healthcare-advisors) · [Founders Sale](#founders-sale--carebase-train-and-intel) ·
+[Choosing a plan](#choosing-a-plan) · [Getting started](#getting-started) ·
+[Evaluating the business case](#evaluating-the-business-case) · [Data and exports](#data-ownership-and-exports) ·
+[Support and next steps](#support-and-next-steps) ·
 [Full feature and function reference](#feature-and-function-reference) · [Claim rules](#claims).
 
 ## Keeping the fact sheet current
@@ -328,6 +332,115 @@ and [the verified live configuration](evidence/founders-sale-20261108.json) are 
 **How to start:** submit the consultation request form with the business problem and organization context, without patient information.
 Scope, deliverables and price are agreed for the engagement. Advisors is consulting, not a software plan, free software trial or
 guarantee of regulatory, financial or acquisition results.
+
+## Choosing a plan
+
+Choose by the work the company needs to complete, then check the price and capacity for that scope.
+This is a guide to the existing packages, not a recommendation to buy features the company will not use.
+
+| Need | Package to evaluate | Important distinction |
+| --- | --- | --- |
+| Resident records and daily facility operations, with selected additional workflows. | CareBase Core plus the needed add-ons. | General Core does not include eMAR. Staff Training, Workforce, Survey & Compliance and Resident Billing & Payments are also separately priced add-ons. |
+| Core and every listed CareBase add-on. | CareBase Complete. | Compare the bundle with the modules actually needed, using the per-facility price. |
+| Training, workforce and survey work without resident-operations Core. | Compliance Suite. | Includes Staff Training, Workforce and Survey & Compliance; does not include Core. |
+| A facility with fewer than 20 licensed beds. | Small Home or Small Home Complete. | Small Home includes Core and eMAR. Eligibility uses licensed beds, not current occupancy; complete native eMAR enrollment and clinical approval before use. |
+| Staff education as a separate purchase. | CareMetric Train or Train Single Facility. | Train is per organization with unlimited learners; Single Facility is for a one-facility organization. It is not the complete resident-operations product. |
+| One office working one line of business in a county-based territory. | Intel Starter. | Select home health or hospice, within the published seat, branch and county limits. Campaigns and other labeled Growth/Pro features are not included. |
+| Both home health and hospice, more branches, campaigns and manager tools. | Intel Growth. | Check included seats, branches, state coverage and the access labels on each needed feature. |
+| Several territories, admissions forecasting and book balancing. | Intel Pro. | Forecasting and book balance are Pro features. Territory, team capacity and owner/manager permissions still apply. |
+| A larger footprint requiring an individually agreed scope. | Intel Enterprise. | Annual custom agreement; confirm included services and requirements in the contract. Custom contracts are excluded from the Founders Sale. |
+
+The Intel trial provides broader feature access within a smaller territory than some paid plans.
+Evaluate the intended paid plan before relying on a trial feature for ongoing work.
+The [CareBase pricing](#carebase-and-train-pricing), [Intel pricing](#caremetric-intel) and
+[feature reference](#feature-and-function-reference) give the actual limits; purchasing extra capacity does not remove role restrictions.
+
+## Getting started
+
+The following is a suggested rollout sequence using documented workflows. It is not a promised implementation timetable or a migration-service commitment.
+Name an internal administrator, choose a representative workflow and agree who will keep the records current.
+
+| Offering | What the company should prepare | A useful first workflow |
+| --- | --- | --- |
+| CareBase | Organization and facility details, facility types, a staff roster, employee duties and the requirements to track. Identify the modules and records needed for the first workflow. | Start online, verify email and set a password. Preview the staff CSV, resolve flagged entries, configure requirements and assign work. Review the resulting status and documentation with the facility manager. |
+| CareMetric Train | A roster, relevant roles and training requirements, and a course or live class to assign. Gather supporting records for any outside training to be reviewed. | Assign training, complete a course or finalize reviewed class attendance, and check the resulting hours and certificates. Confirm that required accredited or external training still comes from an eligible provider. |
+| Intel | The intended county or territory, team roles, relevant accounts and contacts, and the company's marketing priorities. For referral reporting, prepare a supported export without patient-identifying information. | Create the organization account, select the trial county in Billing, and use the labeled sample book or reviewed account data. Build a focused list, assign an account, log activity and a dated next step, then review a report. |
+| Advisors | The business question, desired deliverables, operating context and the people responsible for the work. Keep patient information out of the request. | Submit the consultation request form and agree the engagement scope and deliverables before work begins. |
+
+**Staff and devices:** CareBase works in a supported browser; installing an app is not required. Eligible downloaded employee training can
+work offline and synchronize later. Trainers can record class attendance without every employee using a phone.
+Intel can be added to a phone's home screen for field work. That does not establish offline availability for Intel or for all CareBase functions.
+Check the actual devices and connectivity the team uses during the trial.
+
+**Moving existing information:** CareBase documents a reviewed CSV staff-roster import. Intel documents account/contact CSV import and
+supported referral/admission report imports, including column mapping and preview. These capabilities do not establish a full migration
+of every record from another system. Identify the fields, historical records and attachments the company needs, and verify what transfers
+before retiring the old process. Use only the applicable product's documented imports and configured connections.
+
+## Evaluating the business case
+
+Use the trial to complete real, representative work within the included scope. Record the current process before comparing it with the trial.
+The checks below are suggested evaluation criteria, not published customer results or additional product promises.
+
+| Business question | What to check during evaluation | How the company can judge the result |
+| --- | --- | --- |
+| Can managers find and follow up on missing CareBase requirements? | Review assigned requirements, overdue work, responsible staff and the supporting records. | Compare time spent finding records and assigning follow-up with the current process. Note gaps that still need manual work. |
+| Will training records reflect what staff actually completed? | Follow an assigned course or a reviewed live class through to recorded hours and certificates. Check outside-training approval separately. | Reconcile the records with attendance and completion, using the correct facility, role and credit rules. |
+| Can staff and managers work within their intended access? | Use the relevant CareBase roles or Intel owner, branch-manager and marketer views. Review shared documentation or reports within their scope. | Confirm that each person can complete their job with the records they are meant to see. |
+| Does Intel's research cover the territory and accounts that matter? | Search representative providers and facilities, inspect source dates and missing fields, and save a focused list. | Judge the usefulness and coverage for the actual market; public signals are not confirmed referrals. |
+| Will Intel help the team follow through on relationships? | Prepare an account, plan a visit, log activity and set a dated next step. Review open tasks and account ownership. | Compare preparation and follow-up work with the current process, including how responsibility transfers between people. |
+| Can leadership reconcile recorded marketing results? | Enter or import supported referral facts, review the funnel and lost reasons, and export a scoped report. | Check figures against the input records for the same period. Separate entered outcomes from public market estimates. |
+| Does expense administration fit the company's process? | Log an account-linked expense and receipt, review per-person values and flags, and follow the approval and reimbursement records. | Check the information required by the company's policy and payroll process. Mileage uses straight-line distance; reimbursement recording does not send payment. |
+| Does the Advisors engagement answer the business question? | Agree the scope, expected deliverables and how leadership will review them. | Evaluate delivery against the agreed work, not a promised financial or regulatory outcome. |
+
+For an internal cost comparison, value only time the team reasonably expects to avoid and subscriptions it can actually retire.
+Use the company's own labor costs and observations. Include implementation effort, data preparation, staff training and tools that must remain.
+An exported report or completed task demonstrates a workflow; it does not establish a guaranteed financial return, survey result or referral increase.
+
+**Budget for the ongoing scope:** all published prices here are USD, before applicable taxes. Count billed facilities for CareBase,
+the applicable organization or single-facility basis for Train, and the plan plus needed extra seats, branches and states for Intel.
+Compare the actual annual payment with monthly billing; Intel's displayed annual monthly equivalent is not a monthly payment schedule.
+Evaluate the first paid year and the regular renewal price separately. The Founders Sale excludes Intel expansion add-ons and other listed charges.
+Intel onboarding is free on every plan; this does not establish free custom migration, integration work or onboarding terms for another product.
+
+## Data ownership and exports
+
+| Offering | Documented capability | What to establish before relying on it |
+| --- | --- | --- |
+| CareBase | The published FAQ says the organization owns its records and can export them during the wind-down period after cancellation. Reports and documentation exports support ongoing review. | Check current retention and export terms before closing an account. This sheet does not specify the wind-down duration or promise permanent access after cancellation. |
+| Intel | Export the marketing book or selected rows as CSV; download supported results reports as PDF, Excel or CSV. Other exports are listed by feature and role. | Verify that the needed fields and history are in the applicable export. The reviewed sources do not establish an export window after cancellation or a complete export of every underlying dataset. |
+| Advisors | Deliverables depend on the agreed consulting engagement. | Agree the deliverables, permitted use and handling of company materials in the engagement terms. |
+
+Keep organization contacts, account ownership and permissions current when employees change roles or leave.
+CareBase's shared records support an administrator transition; Intel can hand an account book to a teammate while retaining credit for previously logged work.
+Export availability does not replace the company's own record-retention process.
+
+**Data boundaries:** CareBase includes resident clinical and operational records within its configured access controls.
+Intel uses public provider/facility research and the organization's marketing activity; keep patient names, diagnoses and other patient information out of its notes.
+Do not send patient information through support or Advisors' consultation form. These product distinctions matter when deciding where a record belongs.
+The [claim rules](#claims) still govern security, privacy and certification statements.
+
+## Support and next steps
+
+| Need | Documented starting point |
+| --- | --- |
+| Evaluate CareBase. | [Start the free trial](https://cmcarebase.com/signup), review [plans](https://cmcarebase.com/#pricing) or read the [FAQ](https://cmcarebase.com/faq). |
+| Evaluate Intel. | Start from the [Intel website](https://www.caremetricintel.com/), review [plans](https://www.caremetricintel.com/#pricing), or explore the [county report](https://www.caremetricintel.com/county-report) and [resource library](https://www.caremetricintel.com/resources/). |
+| Explore a consulting engagement. | Use the [Advisors consultation request form](https://caremetricadvisors.com/contact); there is no obligation to move forward. |
+| Find product help. | Use the [CareMetric help center](https://help.caremetric.ai), Intel's in-app help and user guides, or the public support contacts listed under [The company](#the-company). |
+
+Start in the product's own signup and billing flow. Intel's free trial does not become a paid subscription by itself.
+Automatic application of the Founders Sale means the eligible discount is applied when paid service begins; it does not enroll a trial user automatically.
+Do not extend Intel's no-credit-card or trial-expiry terms to CareBase without a product-specific source.
+
+Before purchasing, review the applicable agreement for renewal and cancellation timing, refunds, data retention and deletion, and any required data-processing terms.
+Support hours and response commitments are not established by the presence of a support address, telephone number or help center.
+Confirm any required service level in the agreement; this sheet does not promise round-the-clock support, a response deadline or an uptime commitment.
+
+Sources for this buying guidance: the reviewed product catalogs' FAQ, role, import and export entries; the plan and trial facts above;
+and the currency and tax basis in [the pricing review](PRICING_RESEARCH_AND_FOUNDERS_SALE.md).
+Use the current Intel catalog and this sheet's reviewed terms over older onboarding-fee examples in that historical pricing review.
+The evaluation and rollout suggestions are planning guidance; they do not add contractual commitments or new approved marketing claims.
 
 ## Claims
 
@@ -733,11 +846,3 @@ Control who can see what, keep a record of it, and know where every figure comes
 
 Research coverage is not universal: an absent field or an unscored provider is not a negative assessment of that organization.
 Results reflect the source reporting period or the organization’s recorded activity, not a real-time census of the whole market.
-
-### Evaluating the business case
-
-Use the free trial to work through a representative workflow within the included scope. Compare the applicable subscription and add-ons with the tools and work the company uses today.
-For CareBase, review time spent tracking requirements, chasing records, preparing reports and maintaining tools that the selected modules could replace.
-For Intel, review repeated research, account hand-offs, visit preparation, follow-up completion, expense administration and report preparation.
-Use the company’s own baseline, adoption assumptions and actual trial observations. Do not turn these possible benefits into a promised saving, referral increase or survey outcome.
-For Advisors, agree the business question, scope and deliverables before comparing the engagement with other ways to address the problem.
